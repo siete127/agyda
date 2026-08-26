@@ -1,0 +1,37 @@
+# Dependencias
+node_modules/
+__pycache__/
+*.pyc
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Backups y temporales
+*.bak
+*.bak-*
+__MACOSX/
+.DS_Store
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+
+# Repos de terceros clonados dentro del proyecto (no son código propio)
+/claude-ollama-agents/
+/contexto/
+
+# Backups empaquetados pesados (binarios sin valor de historial en git)
+*.zip
+*.rar

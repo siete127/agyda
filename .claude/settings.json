@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"c:\\\\Users\\\\diazj\\\\OneDrive\\\\Escritorio\\\\INTRANET\\\\INTRANET V2.3\\\\intranet - copia\")",
+      "PowerShell(Head -20)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\diazj\\\\OneDrive\\\\Escritorio\\\\INTRANET\\\\intranet-react\\\\src\\\\pages\\\\noticias\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\diazj\\\\OneDrive\\\\Escritorio\\\\INTRANET\\\\intranet-react\\\\src\\\\pages\\\\tickets\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\diazj\\\\OneDrive\\\\Escritorio\\\\INTRANET\\\\intranet-react\\\\src\\\\pages\\\\proyectos\")",
+      "PowerShell(if \\(-not $?\\) { \"NO EXISTE\" })",
+      "Read(//c/Sistemas/SSL_intranet/**)",
+      "PowerShell(Head-Object -Count 20)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\diazj\\\\OneDrive\\\\Escritorio\\\\INTRANET\\\\intranet-react\\\\src\" -Recurse | Where-Object { $_.Name -match \"acceso|module|sidebar\" -and $_.Extension -match \"\\\\.ts|\\\\.tsx\" } | Select-Object FullName)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(grep -E \"\\\\.dart$\")",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

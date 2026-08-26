@@ -1,0 +1,18 @@
+CORRECCION FILTROS ESTRICTOS + REGISTROS UNICOS POR ENTRYDATE
+
+Reemplazar respetando las carpetas:
+- app/lead_export_service.py
+- static/dashboard.js
+- templates/dashboard.html
+
+Cambio principal:
+1. Los filtros se aplican primero sobre la tabla maestra.
+2. Despues se normaliza el telefono.
+3. Se conserva un unico registro por TelefonoNormalizado + EntryDate.
+4. La vista previa y el CSV usan exactamente el mismo CTE y los mismos filtros.
+5. Se agrega version al JS/CSS para evitar que el navegador use archivos viejos.
+
+Reiniciar:
+uvicorn web:app --host 0.0.0.0 --port 8000 --reload
+
+Recargar con Cmd+Shift+R.

@@ -1,0 +1,46 @@
+================================================================
+COMANDOS /plugin PENDIENTES — pegar uno por uno en una sesión
+interactiva de Claude Code (no se pueden correr desde bash/npx)
+================================================================
+
+# 1. webapp-testing (oficial Anthropic)
+/plugin marketplace add anthropics/skills
+/plugin install webapp-testing@skills
+
+# 2. frontend-design (oficial Anthropic, mismo marketplace que arriba,
+#    no hace falta repetir el "marketplace add" si ya lo corriste)
+/plugin install frontend-design@skills
+
+# 3. Trail of Bits security skills
+/plugin marketplace add trailofbits/claude-skills
+(verifica el nombre exacto del repo primero, puede variar)
+
+# 4. agamm/claude-code-owasp — SOLO testing autorizado en tus propios
+#    sistemas/lab, nunca contra terceros sin permiso
+/plugin marketplace add agamm/claude-code-owasp
+
+# 5. VibeSec-Skill
+/plugin marketplace add VibeSec-Skill
+
+# 6. Cloudflare security-audit-skill
+/plugin marketplace add cloudflare/security-audit-skill
+
+# 7. ui-ux-pro-max
+/plugin marketplace add nextlevelbuilder/ui-ux-pro-max-skill
+/plugin install ui-ux-pro-max@ui-ux-pro-max-skill
+
+# 8. jakubkrehel/skills (animación UI, accesibilidad, product writing)
+/plugin marketplace add jakubkrehel/skills
+
+# 9. Dimillian Skills (refactor, bug investigation swarm, perf React)
+/plugin marketplace add Dimillian/skills
+
+# 10. excalidraw-diagram-skill
+/plugin marketplace add excalidraw-diagram-skill
+
+================================================================
+Nota: para varias de estas el nombre exacto del repo puede haber
+cambiado desde que se escribió la lista original. Si un
+"marketplace add" falla, corre primero una búsqueda o pídele a
+Claude Code que verifique el nombre correcto antes de reintentar.
+================================================================

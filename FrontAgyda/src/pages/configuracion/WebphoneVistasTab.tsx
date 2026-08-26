@@ -1,0 +1,91 @@
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Trash2, ShieldCheck } from 'lucide-react'
+import { configuracionService } from '@/services/configuracion.service'
+
+export function WebphoneVistasTab() {
+  const qc = useQueryClient()
+  const [label, setLabel] = useState('')
+  const [url, setUrl] = useState('')
+  const [requiereVpn, setRequiereVpn] = useState(false)
+
+  const { data: vistas = [], isLoading } = useQuery({
+    queryKey: ['webphone-vistas'],
+    queryFn: () => configuracionService.getVistas(),
+  })
+
+  const crearMutation = useMutation({
+    mutationFn: () => configuracionService.crearVista({ label: label.trim(), url: url.trim(), requiereVpn }),
+    onSuccess: () => {
+      setLabel('')
+      setUrl('')
+      setRequiereVpn(false)
+      qc.invalidateQueries({ queryKey: ['webphone-vistas'] })
+    },
+  })
+
+  const eliminarMutation = useMutation({
+    mutationFn: (id: number) => configuracionService.eliminarVista(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webphone-vistas'] }),
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+        <p className="mb-3 text-sm font-semibold text-ink">Nueva vista</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Nombre"
+            className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
+          />
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://..."
+            className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
+          />
+          <label className="flex items-center gap-1.5 px-2 text-xs text-ink-secondary">
+            <input type="checkbox" checked={requiereVpn} onChange={(e) => setRequiereVpn(e.target.checked)} />
+            Requiere VPN
+          </label>
+          <button
+            onClick={() => crearMutation.mutate()}
+            disabled={crearMutation.isPending || !label.trim() || !url.trim()}
+            className="flex items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand transition-colors hover:bg-brand/10 disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" /> Agregar
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+        <p className="mb-3 text-sm font-semibold text-ink">Vistas configuradas</p>
+        {isLoading && <p className="text-xs text-ink-tertiary">Cargando...</p>}
+        <div className="space-y-2">
+          {vistas.map((v) => (
+            <div key={v.id} className="flex items-center gap-2 rounded-xl border border-gray-100 bg-surface px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink-secondary">{v.label}</p>
+                <p className="truncate text-xs text-ink-tertiary">{v.url}</p>
+              </div>
+              {v.requiereVpn && (
+                <span className="flex items-center gap-1 chip bg-amber-100 text-amber-700">
+                  <ShieldCheck className="h-3 w-3" /> VPN
+                </span>
+              )}
+              <button
+                onClick={() => eliminarMutation.mutate(v.id)}
+                disabled={eliminarMutation.isPending}
+                className="flex-shrink-0 rounded-lg p-1 text-ink-tertiary transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

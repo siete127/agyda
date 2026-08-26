@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar sesión - ARDABYTEC</title>
+
+    <link rel="icon" href="assets/logos-empresa/logoABT.png" type="image/png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+    <link rel="stylesheet" href="css/login.css?v=20260803a">
+</head>
+
+<body>
+
+    <div class="login-page">
+        <div class="page-shape page-shape-1"></div>
+        <div class="page-shape page-shape-2"></div>
+        <div class="page-shape page-shape-3"></div>
+        <div class="page-shape page-shape-4"></div>
+
+        <div class="login-card">
+
+            <div class="login-side">
+                <div class="login-side-shape shape-1"></div>
+                <div class="login-side-shape shape-2"></div>
+                <div class="login-side-shape shape-3"></div>
+                <div class="login-side-shape shape-4"></div>
+
+                <img src="assets/logos-empresa/logo1-modo-oscuro.png" alt="ARDABYTEC" class="login-side-logo">
+            </div>
+
+            <div class="login-main">
+                <h1 class="login-title">Iniciar sesión</h1>
+                <p class="login-subtitle">Ingresa tus credenciales para acceder a tu cuenta.</p>
+
+                <form class="login-form" id="loginForm" novalidate>
+                    <div class="input-wrapper">
+                        <i class="fa-regular fa-user field-icon"></i>
+                        <input type="text" id="username" name="username" placeholder="Usuario" autocomplete="username" required>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-lock field-icon"></i>
+                        <input type="password" id="password" name="password" placeholder="Contraseña" autocomplete="current-password" required>
+                    </div>
+
+                    <div class="login-status-message" id="loginStatusMessage" role="status" aria-live="polite"></div>
+
+                    <button type="submit" class="btn-login" id="btnLogin">INICIAR SESIÓN</button>
+
+                    <div class="login-links">
+                        <a href="#">¿Olvidaste tu usuario o contraseña?</a>
+                    </div>
+                </form>
+
+                <div class="login-footer">
+                    <a href="/" class="btn-back">
+                        <i class="fa-solid fa-arrow-left"></i> Volver al inicio
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const form = document.getElementById('loginForm');
+            const statusEl = document.getElementById('loginStatusMessage');
+            const btnLogin = document.getElementById('btnLogin');
+            const btnDefaultHTML = btnLogin.innerHTML;
+
+            function setStatus(message, type) {
+                statusEl.textContent = message;
+                statusEl.className = 'login-status-message ' + (type || '');
+            }
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+
+                if (!form.checkValidity()) {
+                    form.reportValidity();
+                    return;
+                }
+
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+
+                btnLogin.disabled = true;
+                btnLogin.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> INGRESANDO...';
+                setStatus('', '');
+
+                try {
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ usuario: username, password }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+
+                    if (res.ok && data.success) {
+                        setStatus('Inicio de sesión correcto. Redirigiendo...', 'success');
+                        sessionStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
+                        window.location.href = 'https://agyda.ardabytec.vip/dashboard';
+                    } else {
+                        setStatus(data.message || 'Usuario o contraseña incorrectos.', 'error');
+                    }
+                } catch (err) {
+                    setStatus('Ocurrió un error de conexión. Intenta de nuevo más tarde.', 'error');
+                } finally {
+                    btnLogin.disabled = false;
+                    btnLogin.innerHTML = btnDefaultHTML;
+                }
+            });
+        })();
+    </script>
+
+</body>
+
+</html>

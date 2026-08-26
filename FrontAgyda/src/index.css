@@ -1,0 +1,215 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { font-size: 14px; scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Instrument Sans', 'Inter', system-ui, sans-serif;
+    @apply bg-[#F7F9FC] text-ink antialiased;
+  }
+
+  ::-webkit-scrollbar        { @apply w-1.5 h-1.5; }
+  ::-webkit-scrollbar-track  { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb  { @apply rounded-full bg-gray-300/80; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400; }
+
+  /* Prose para contenido HTML de noticias */
+  .prose h1, .prose h2, .prose h3 { @apply font-bold text-gray-900 leading-tight; }
+  .prose h1 { @apply text-2xl mb-3; }
+  .prose h2 { @apply text-xl mb-2 mt-5; }
+  .prose h3 { @apply text-base mb-2 mt-4; }
+  .prose p  { @apply text-sm text-gray-600 leading-relaxed mb-3; }
+  .prose ul  { @apply list-disc pl-5 space-y-1 text-sm text-gray-600 mb-3; }
+  .prose ol  { @apply list-decimal pl-5 space-y-1 text-sm text-gray-600 mb-3; }
+  .prose a   { @apply text-brand underline hover:text-brand-dark; }
+  .prose img { @apply rounded-xl my-4 w-full object-cover; }
+  .prose strong { @apply font-semibold text-gray-800; }
+  .prose blockquote { @apply border-l-4 border-brand/30 pl-4 italic text-gray-500 my-3; }
+}
+
+@layer components {
+
+  /* ── Tipografía de acento (portada de la referencia de diseño) ── */
+  .font-display {
+    font-family: 'Instrument Serif', Georgia, serif;
+  }
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  .kicker {
+    @apply font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-gray-400;
+  }
+
+  /* ── Card estándar intranet ── */
+  .card {
+    @apply rounded-2xl bg-white border border-gray-200/60 shadow-sm;
+  }
+  .card-hover {
+    @apply card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-md hover:border-gray-300/60;
+  }
+
+  /* ── Encabezado de página ── */
+  .page-title {
+    @apply text-[1.35rem] font-bold tracking-tight text-gray-900;
+  }
+
+  /* ── Etiqueta de sección (sidebar, encabezados) ── */
+  .section-label {
+    @apply text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-gray-400;
+  }
+
+  /* ── Input / campo de formulario ── */
+  .field {
+    @apply w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900
+           placeholder-gray-400 outline-none transition
+           focus:border-brand focus:ring-2 focus:ring-brand/15;
+  }
+  .field-dark {
+    @apply w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-white
+           placeholder-white/30 outline-none transition
+           focus:border-brand/50 focus:ring-2 focus:ring-brand/20;
+  }
+
+  /* ── Botón principal corporativo ── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold
+           text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* ── Chip / badge de estado ── */
+  .chip {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[0.7rem] font-semibold;
+  }
+
+  /* ── Divider con etiqueta ── */
+  .divider-label {
+    @apply flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-widest text-gray-300;
+  }
+  .divider-label::before,
+  .divider-label::after {
+    content: '';
+    @apply flex-1 border-t border-gray-100;
+  }
+
+  /* ── Avatar stack ── */
+  .avatar-stack > * { @apply -ml-2 ring-2 ring-white first:ml-0; }
+
+  /* ── Highlight row en tablas / listas ── */
+  .row-hover {
+    @apply transition-colors hover:bg-brand/[0.03];
+  }
+
+  /* ── Stat card ── */
+  .stat-card {
+    @apply card flex items-center gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-md;
+  }
+
+  /* ── Badge de categoría de noticia ── */
+  .news-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[0.7rem] font-semibold ring-1 ring-inset;
+  }
+
+  /* ── Barra de navegación intranet activa ── */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2 text-[0.82rem] font-medium transition-all duration-150 cursor-pointer select-none;
+  }
+  .nav-item-default {
+    @apply nav-item text-gray-400 hover:bg-white/[0.06] hover:text-gray-100;
+  }
+  .nav-item-active {
+    @apply nav-item bg-brand/[0.18] text-brand-muted;
+  }
+}
+
+/* ── Transición de página (route change) ── */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: page-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Fade-in genérico (usado en DashboardPage) ── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Flyout del sidebar colapsado (SidebarFlyout) ── */
+@keyframes flyout-in {
+  from { opacity: 0; transform: translateX(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.animate-flyout-in {
+  animation: flyout-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Pulse dot (indicador online) ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.75); }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes carousel-progress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+@keyframes music-bar {
+  from { height: 30%; }
+  to   { height: 90%; }
+}
+
+/* ── Efecto de flujo de agua (sidebar) ── */
+@keyframes water-flow-a {
+  0%   { transform: translate(-8%, -6%) scale(1);    }
+  50%  { transform: translate(6%, 8%) scale(1.15);   }
+  100% { transform: translate(-8%, -6%) scale(1);    }
+}
+@keyframes water-flow-b {
+  0%   { transform: translate(6%, 10%) scale(1.1);   }
+  50%  { transform: translate(-10%, -4%) scale(1);   }
+  100% { transform: translate(6%, 10%) scale(1.1);   }
+}
+.animate-water-a { animation: water-flow-a 14s ease-in-out infinite; }
+.animate-water-b { animation: water-flow-b 18s ease-in-out infinite; }
+
+/* Burbujas: suben desde el fondo del sidebar hasta salir por arriba, con un
+   leve balanceo lateral. La distancia usa vh para cubrir cualquier alto de viewport. */
+@keyframes bubble-rise {
+  0%   { transform: translate(0, 0) scale(0.8);        opacity: 0; }
+  10%  { opacity: 1; }
+  50%  { transform: translate(10px, -50vh) scale(1);   }
+  90%  { opacity: 1; }
+  100% { transform: translate(-6px, -105vh) scale(0.9); opacity: 0; }
+}
+.animate-bubble-rise { animation-name: bubble-rise; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
+
+/* ── Degradado cromático horizontal (banners) ── */
+@keyframes gradient-x {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.animate-gradient-x { animation: gradient-x 8s linear infinite; }

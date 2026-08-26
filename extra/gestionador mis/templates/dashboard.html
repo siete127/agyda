@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestión Vicidial</title>
+  <link rel="stylesheet" href="/static/dashboard.css?v=2.7.3">
+</head>
+<body>
+<header class="topbar">
+  <div><h1>Gestión Vicidial</h1><p>Resultados diarios y generación controlada de lotes CSV</p></div>
+  <nav class="tabs">
+    <button class="tab-button active" data-tab="dashboardTab">Dashboard</button>
+    <button class="tab-button" data-tab="leadsTab">Generar lote</button>
+    <button class="tab-button" data-tab="universeTab">Importar universo</button>
+  </nav>
+</header>
+<main class="container">
+  <div id="message" class="message hidden"></div>
+
+  <section id="dashboardTab" class="tab-content active">
+    <div class="section-toolbar">
+      <div><h2>Resultados del día</h2><p>Ventas fusionadas por teléfono con Call Report</p></div>
+      <div class="dashboard-refresh-controls">
+        <div id="autoRefreshStatus" class="auto-refresh-status checking">
+          <span id="autoRefreshDot" class="auto-refresh-dot"></span>
+          <div class="auto-refresh-copy">
+            <strong id="autoRefreshTitle">Automático cada 30 min</strong>
+            <small id="autoRefreshDetail">Consultando próxima ejecución...</small>
+          </div>
+          <button id="autoRefreshToggle" type="button" disabled>Pausar</button>
+        </div>
+        <div class="actions"><input id="dateFilter" type="date"><button id="refreshButton" class="primary">Actualizar desde Vicidial</button></div>
+      </div>
+    </div>
+    <section class="cards cards-six">
+      <article class="card"><span>Total registros</span><strong id="totalResults">0</strong></article>
+      <article class="card approved"><span>Aprobadas</span><strong id="totalApproved">0</strong></article>
+      <article class="card rejected"><span>Rechazadas</span><strong id="totalRejected">0</strong></article>
+      <article class="card"><span>Agentes</span><strong id="totalAgents">0</strong></article>
+      <article class="card"><span>Lotes identificados</span><strong id="totalLots">0</strong></article>
+      <article class="card"><span>Último registro</span><strong id="lastResult">--:--</strong></article>
+    </section>
+    <section class="grid two">
+      <article class="panel"><div class="panel-title"><h2>Resultados por agente</h2></div><div id="agentChart" class="bars"></div></article>
+      <article class="panel"><div class="panel-title"><h2>Resultados por lote</h2></div><div id="lotChart" class="bars"></div></article>
+    </section>
+    <section class="panel"><div class="panel-title"><h2>Aprobadas y rechazadas por hora</h2><span id="matchInfo"></span></div><div id="hourChart" class="hour-chart"></div></section>
+    <section class="panel">
+      <div class="panel-title"><h2>Detalle fusionado</h2><span id="syncInfo"></span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID venta</th><th>Fecha venta</th><th>Resultado</th><th>Cliente</th><th>Teléfono</th><th>Agente venta</th><th>Nombre de lista</th><th>LeadID</th><th>Fecha llamada</th><th>Agente llamada</th><th>Status llamada</th><th>Campaña llamada</th><th>Diferencia min.</th><th>Cruce</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+    </section>
+  </section>
+
+  <section id="leadsTab" class="tab-content">
+    <div class="section-toolbar"><div><h2>Generar lote para Vicidial</h2><p>Los teléfonos descargados quedan bloqueados hasta que se revisen o se reciclen.</p></div></div>
+    <section class="panel">
+      <div class="form-grid">
+        <label>Cantidad<input id="leadQuantity" type="number" min="1" max="50000" value="5000"></label>
+        <label>Modo<select id="leadMode"><option value="NUEVOS">Solo nuevos / disponibles</option><option value="RECICLAJE">Reciclaje de marcados</option></select></label>
+        <label>Nombre del lote<input id="leadBatchName" placeholder="LOTE_JULIO_01"></label>
+        <label>Campaña destino<input id="leadDestinationCampaign" value="ARDABYTE"></label>
+        <label>Lista destino<input id="leadDestinationList" placeholder="Nombre o ID que usarás en Vicidial"></label>
+        <div class="filter-field"><span class="filter-label">Campaña origen</span><div class="multi-select" id="leadCampaignFilter" data-field="campaign_id" data-placeholder="Seleccionar campañas"></div></div>
+        <div class="filter-field"><span class="filter-label">Lista origen</span><div class="multi-select" id="leadListFilter" data-field="list_name" data-placeholder="Seleccionar nombres de lista"></div></div>
+        <div class="filter-field"><span class="filter-label">Status origen</span><div class="multi-select" id="leadStatusFilter" data-field="status" data-placeholder="Seleccionar estatus"></div></div>
+        <div class="filter-field"><span class="filter-label">Estado</span><div class="multi-select" id="leadStateFilter" data-field="state" data-placeholder="Seleccionar estados"></div></div>
+        <div class="filter-field"><span class="filter-label">Ciudad</span><div class="multi-select" id="leadCityFilter" data-field="city" data-placeholder="Seleccionar ciudades"></div></div>
+        <div class="filter-field"><span class="filter-label">Mes de alta (EntryDate)</span><div class="multi-select" id="leadManagementMonthFilter" data-field="management_month" data-placeholder="Seleccionar mes de EntryDate"></div></div>
+      </div>
+      <div class="export-actions">
+        <div class="export-note">
+          <strong>Control de duplicados activo</strong>
+          <span>Los teléfonos exportados quedan bloqueados y no volverán a aparecer en otro lote normal.</span>
+        </div>
+        <div class="actions form-actions">
+          <button id="previewLeadsButton">Vista previa</button>
+          <button id="generateLeadsButton" class="primary generate-csv-button" type="button">Generar lote y descargar CSV</button>
+        </div>
+      </div>
+    </section>
+    <section id="listStatusSummaryPanel" class="panel list-status-panel hidden">
+      <div class="panel-title">
+        <div><h2>Resumen histórico de la lista</h2><span id="listStatusSummaryTitle">Selecciona una lista para consultar su comportamiento.</span></div>
+        <span id="listStatusSummaryUpdated"></span>
+      </div>
+      <section class="cards cards-six list-status-cards">
+        <article class="card"><span>Registros históricos</span><strong id="listStatusTotal">0</strong></article>
+        <article class="card"><span>Teléfonos únicos</span><strong id="listStatusPhones">0</strong></article>
+        <article class="card success-card"><span>Ventas</span><strong id="listStatusSales">0</strong></article>
+        <article class="card warning-card"><span>Buzones</span><strong id="listStatusVoicemails">0</strong></article>
+        <article class="card"><span>Contactados</span><strong id="listStatusContacted">0</strong></article>
+        <article class="card"><span>Estatus distintos</span><strong id="listStatusCount">0</strong></article>
+        <article class="card success-card"><span>Conversión</span><strong id="listStatusConversion">0%</strong></article>
+      </section>
+      <div class="table-wrap list-status-table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Detalle</th><th>Registros</th><th>Teléfonos únicos</th><th>Ventas</th><th>Buzones</th><th>Contactados</th><th>% de la lista</th></tr></thead>
+          <tbody id="listStatusTable"><tr><td colspan="8">Selecciona una lista.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="cards cards-four">
+      <article class="card"><span>Disponibles</span><strong id="previewAvailable">0</strong></article>
+      <article class="card"><span>Nunca marcados</span><strong id="previewNeverCalled">0</strong></article>
+      <article class="card"><span>Calidad promedio</span><strong id="previewQuality">0</strong></article>
+      <article class="card"><span>Estados / ciudades</span><strong id="previewGeo">0 / 0</strong></article>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2>Vista previa de candidatos</h2><span id="previewCountInfo">Presiona Vista previa para consultar.</span></div>
+      <div class="table-wrap preview-table-wrap"><table><thead><tr><th>LeadID</th><th>Teléfono</th><th>Nombre</th><th>Estado</th><th>Ciudad</th><th>Campaña</th><th>Lista</th><th>Status</th><th>Llamadas</th><th>Calidad</th><th>Mes EntryDate</th><th>Fecha alta</th></tr></thead><tbody id="previewTable"><tr><td colspan="12">Sin consulta previa.</td></tr></tbody></table></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2>Historial de lotes</h2><button id="reloadBatchesButton">Actualizar historial</button></div>
+      <p class="help">“Anular de forma segura” primero actualiza Call Report. Los teléfonos que ya fueron marcados permanecen bloqueados; únicamente se liberan los que no registran llamadas posteriores a la generación del lote.</p>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>Lote</th><th>Fecha</th><th>Modo</th><th>Exportados</th><th>Estado</th><th>Marcados</th><th>Liberados</th><th>CSV</th><th>Acciones</th></tr></thead><tbody id="batchesTable"></tbody></table></div>
+    </section>
+  </section>
+
+  <section id="universeTab" class="tab-content">
+    <div class="section-toolbar">
+      <div>
+        <h2>Importar universo histórico</h2>
+        <p>Carga un ZIP, un archivo de Excel o un texto separado por comas.</p>
+      </div>
+    </div>
+    <section class="panel universe-upload-panel">
+      <form id="universeImportForm">
+        <div class="universe-form-grid">
+          <label>Archivo de universo
+            <input id="universeZipFile" type="file" accept=".zip,.xlsx,.xlsm,.xls,.xlsb,.csv,.txt,application/zip,text/csv,text/plain" required>
+          </label>
+          <label>Año para archivos sin fecha completa
+            <input id="universeYear" type="number" min="2000" max="2100" value="2026" required>
+          </label>
+          <button id="universeImportButton" class="primary" type="submit">Seleccionar e importar</button>
+        </div>
+      </form>
+      <p class="help">Formatos: ZIP, XLSX, XLSM, XLS, XLSB, CSV y TXT separado por comas. Las campañas vacías o que comienzan con 1006/1009 se guardan como 60035. Volver a cargar el mismo archivo no duplica sus filas.</p>
+    </section>
+
+    <section id="universeStatusPanel" class="hidden">
+      <section class="cards universe-cards">
+        <article class="card"><span>Estado</span><strong id="universeStatus">--</strong></article>
+        <article class="card"><span>Avance</span><strong id="universePercent">0%</strong></article>
+        <article class="card"><span>Filas procesadas</span><strong id="universeRead">0</strong></article>
+        <article class="card"><span>Nuevas en staging</span><strong id="universeStaged">0</strong></article>
+        <article class="card"><span>Insertadas / actualizadas</span><strong id="universeTarget">0 / 0</strong></article>
+      </section>
+      <section class="panel">
+        <div class="panel-title">
+          <div><h2 id="universeFilename">Importación</h2><span id="universeTimes"></span></div>
+          <div class="universe-status-actions"><span id="universePhase">Preparando...</span><button id="universeCancelButton" class="danger-button hidden" type="button">Detener proceso</button></div>
+        </div>
+        <div class="universe-steps">
+          <div id="universeStepUpload"><b>1</b><span>Archivo</span></div>
+          <div id="universeStepRead"><b>2</b><span>Lectura</span></div>
+          <div id="universeStepStage"><b>3</b><span>Staging</span></div>
+          <div id="universeStepTarget"><b>4</b><span>Universo SQL</span></div>
+        </div>
+        <div id="universeProgress" class="universe-progress"><span></span></div>
+        <div class="universe-progress-detail"><span id="universeProgressLabel">0%</span><span id="universeSpeed">Calculando velocidad...</span></div>
+        <pre id="universeLogs" class="universe-logs">Esperando información...</pre>
+      </section>
+    </section>
+  </section>
+</main>
+<div id="globalLoader" class="loading-overlay hidden" role="status" aria-live="polite" aria-busy="true">
+  <div class="loading-card">
+    <div class="loading-visual">
+      <img src="/static/loading-1.gif" alt="Cargando" class="loading-gif">
+      <span class="loading-orbit" aria-hidden="true"></span>
+      <span class="loading-scan" aria-hidden="true"></span>
+    </div>
+    <p id="globalLoaderText">Procesando información...</p>
+    <small>Espera a que termine el proceso. La pantalla final se mostrará automáticamente.</small>
+  </div>
+</div>
+<script src="/static/dashboard.js?v=2.7.3"></script>
+</body>
+</html>

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contacto - ARDABYTEC</title>
+
+    <link rel="icon" href="assets/logos-empresa/logoABT.png" type="image/png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+    <link rel="stylesheet" href="css/contacto.css?v=20260729f">
+</head>
+
+<body>
+
+    <section class="form-section-container">
+      <div class="form-wrapper">
+
+        <div class="form-sidebar">
+          <div class="sidebar-content">
+            <span class="sidebar-subtitle">ESTAMOS LISTOS PARA</span>
+            <h2 class="sidebar-title">AYUDARTE</h2>
+            <div class="title-underline"></div>
+
+            <p class="sidebar-desc">
+              Completa el formulario y uno de nuestros asesores se pondrá en contacto contigo a la brevedad.
+            </p>
+
+            <div class="info-bullets">
+              <div class="bullet-item">
+                <div class="bullet-icon">
+                  <i class="fa-solid fa-headset"></i>
+                </div>
+                <div class="bullet-text">
+                  <h3>ATENCIÓN PERSONALIZADA</h3>
+                  <p>Te asesoramos para encontrar la mejor solución para tu negocio.</p>
+                </div>
+              </div>
+
+              <div class="bullet-item">
+                <div class="bullet-icon">
+                  <i class="fa-solid fa-lock"></i>
+                </div>
+                <div class="bullet-text">
+                  <h3>INFORMACIÓN SEGURA</h3>
+                  <p>Tus datos están protegidos con los más altos estándares de seguridad.</p>
+                </div>
+              </div>
+
+              <div class="bullet-item">
+                <div class="bullet-icon">
+                  <i class="fa-solid fa-clock"></i>
+                </div>
+                <div class="bullet-text">
+                  <h3>RESPUESTA RÁPIDA</h3>
+                  <p>Nos comprometemos a responder tu solicitud en el menor tiempo posible.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="sidebar-footer">
+              <img src="assets/logos-empresa/logo1-modo-oscuro.png" alt="ARDABYTEC" class="sidebar-footer-logo">
+              <a href="/" class="btn-back">
+                <i class="fa-solid fa-arrow-left"></i> REGRESAR
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-main-content">
+          <div class="form-header">
+            <div class="form-header-icon">
+              <i class="fa-regular fa-file-lines"></i>
+            </div>
+            <div>
+              <h1 class="form-main-title">FORMULARIO DE CONTACTO</h1>
+              <p class="form-main-subtitle">Cuéntanos sobre tu empresa y tus necesidades. Será un gusto atenderte.</p>
+              <div class="header-blue-line"></div>
+            </div>
+          </div>
+
+          <form class="interactive-form" id="contactoForm" novalidate>
+            <div class="form-grid-2">
+              <div class="input-group">
+                <label for="nombreCompleto">Nombre completo <span class="required">*</span></label>
+                <div class="input-wrapper">
+                  <i class="fa-regular fa-user field-icon"></i>
+                  <input type="text" id="nombreCompleto" name="nombreCompleto" placeholder="Escribe tu nombre completo" required>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="puesto">Puesto / Cargo <span class="required">*</span></label>
+                <div class="input-wrapper">
+                  <i class="fa-solid fa-briefcase field-icon"></i>
+                  <input type="text" id="puesto" name="puesto" placeholder="Escribe tu puesto o cargo" required>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="input-group">
+                <label for="empresa">Empresa / Razón social <span class="required">*</span></label>
+                <div class="input-wrapper">
+                  <i class="fa-regular fa-building field-icon"></i>
+                  <input type="text" id="empresa" name="empresa" placeholder="Nombre de tu empresa" required>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="giroEmpresa">Giro de la empresa <span class="required">*</span></label>
+                <div class="input-wrapper">
+                  <i class="fa-solid fa-cubes field-icon"></i>
+                  <select id="giroEmpresa" name="giroEmpresa" required>
+                    <option value="" disabled selected hidden>Selecciona el giro de tu empresa</option>
+                    <option value="tecnologia">Tecnología / IT</option>
+                    <option value="comercio">Comercio / Retail</option>
+                    <option value="manufactura">Manufactura</option>
+                    <option value="servicios">Servicios Profesionales</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="input-group">
+                <label for="email">Correo electrónico corporativo <span class="required">*</span></label>
+                <div class="input-wrapper">
+                  <i class="fa-regular fa-envelope field-icon"></i>
+                  <input type="email" id="email" name="email" placeholder="ejemplo@empresa.com" required>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="telefono">Teléfono / WhatsApp <span class="required">*</span></label>
+                <div class="input-wrapper">
+                  <i class="fa-solid fa-phone field-icon"></i>
+                  <input type="tel" id="telefono" name="telefono" placeholder="(55) 1234 5678" required>
+                </div>
+              </div>
+            </div>
+
+            <div class="input-group full-width">
+              <label for="tipoRequerimiento">Asunto / Tipo de requerimiento <span class="required">*</span></label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-list-ul field-icon"></i>
+                <select id="tipoRequerimiento" name="tipoRequerimiento" required>
+                  <option value="" disabled selected hidden>Selecciona el tipo de requerimiento</option>
+                  <option value="soporte">Soporte Técnico</option>
+                  <option value="infraestructura">Infraestructura IT</option>
+                  <option value="ciberseguridad">Ciberseguridad</option>
+                  <option value="desarrollo">Desarrollo de Software</option>
+                  <option value="consultoria">Consultoría IT</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="input-group full-width">
+              <label for="mensaje">Cuéntanos más sobre tu proyecto o requerimiento <span class="required">*</span></label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-pen field-icon textarea-icon"></i>
+                <textarea id="mensaje" name="mensaje" rows="4" placeholder="Describe tu proyecto, objetivo, requerimientos o dudas..." required></textarea>
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="input-group">
+                <label for="comoSeEntero">¿Cómo te enteraste de nosotros?</label>
+                <div class="input-wrapper">
+                  <i class="fa-solid fa-globe field-icon"></i>
+                  <select id="comoSeEntero" name="comoSeEntero">
+                    <option value="" disabled selected hidden>Selecciona una opción</option>
+                    <option value="redes">Redes Sociales</option>
+                    <option value="recomendacion">Recomendación</option>
+                    <option value="busqueda">Búsqueda en Google</option>
+                    <option value="aliado">A través de un Aliado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="ubicacion">Ubicación de tu empresa</label>
+                <div class="input-wrapper">
+                  <i class="fa-solid fa-location-dot field-icon"></i>
+                  <input type="text" id="ubicacion" name="ubicacion" placeholder="Ciudad / Estado">
+                </div>
+                <span class="input-tip">Esto nos ayudará a brindarte una mejor atención.</span>
+              </div>
+            </div>
+
+            <div class="form-footer-actions">
+              <div class="privacy-notice">
+                <i class="fa-solid fa-lock"></i>
+                <div>
+                  <p><strong>Tus datos están seguros con nosotros.</strong></p>
+                  <p>Consulta nuestro Aviso de Privacidad en <a href="https://www.ardabytec.com" target="_blank">www.ardabytec.com</a></p>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-submit" id="btnSubmitContacto">
+                <i class="fa-solid fa-paper-plane"></i> ENVIAR MENSAJE
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+
+      <div class="bottom-decorative-bar">
+        <span class="decorative-text">TECNOLOGÍA QUE IMPULSA TU NEGOCIO</span>
+      </div>
+    </section>
+
+    <div class="form-modal-overlay" id="formModalOverlay" role="alertdialog" aria-modal="true" aria-labelledby="formModalTitle" aria-describedby="formModalMessage" hidden>
+      <div class="form-modal" role="document">
+        <div class="form-modal-icon" id="formModalIcon">
+          <svg class="form-modal-icon-check" viewBox="0 0 52 52" aria-hidden="true">
+            <circle class="form-modal-icon-check-circle" cx="26" cy="26" r="24" fill="none"/>
+            <path class="form-modal-icon-check-mark" fill="none" d="M14 27l7 7 17-17"/>
+          </svg>
+          <i class="fa-solid fa-triangle-exclamation form-modal-icon-error"></i>
+        </div>
+        <h2 class="form-modal-title" id="formModalTitle">¡Mensaje enviado!</h2>
+        <p class="form-modal-message" id="formModalMessage"></p>
+        <ul class="form-modal-steps" id="formModalSteps">
+          <li><i class="fa-solid fa-inbox"></i> Revisamos tu solicitud</li>
+          <li><i class="fa-solid fa-user-check"></i> Un asesor te contacta en menos de 24&nbsp;hrs</li>
+        </ul>
+        <div class="form-modal-actions">
+          <button type="button" class="form-modal-close" id="formModalClose">Aceptar</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+        (function () {
+            const form = document.getElementById('contactoForm');
+            const btnSubmit = document.getElementById('btnSubmitContacto');
+            const btnDefaultHTML = btnSubmit.innerHTML;
+
+            const modalOverlay = document.getElementById('formModalOverlay');
+            const modalTitle = document.getElementById('formModalTitle');
+            const modalMessage = document.getElementById('formModalMessage');
+            const modalSteps = document.getElementById('formModalSteps');
+            const modalClose = document.getElementById('formModalClose');
+            let lastFocusedEl = null;
+
+            const MODAL_CONTENT = {
+                success: {
+                    title: '¡Mensaje enviado!',
+                    message: '¡Gracias! Tu mensaje fue enviado correctamente.',
+                    primaryLabel: 'Ir al inicio',
+                },
+                error: {
+                    title: 'No se pudo enviar',
+                    message: 'No se pudo enviar el formulario. Verifica los datos e intenta de nuevo.',
+                    primaryLabel: 'Aceptar',
+                },
+            };
+
+            function showModal(type, customMessage) {
+                const content = MODAL_CONTENT[type];
+                lastFocusedEl = document.activeElement;
+                modalOverlay.className = 'form-modal-overlay ' + type;
+                modalTitle.textContent = content.title;
+                modalMessage.textContent = customMessage || content.message;
+                modalSteps.hidden = type !== 'success';
+                modalClose.textContent = content.primaryLabel;
+                modalOverlay.hidden = false;
+                modalClose.focus();
+            }
+
+            function hideModal() {
+                modalOverlay.hidden = true;
+                if (lastFocusedEl) lastFocusedEl.focus();
+            }
+
+            modalClose.addEventListener('click', function () {
+                const goHome = modalOverlay.classList.contains('success');
+                hideModal();
+                if (goHome) window.location.href = '/';
+            });
+
+            modalOverlay.addEventListener('click', function (e) {
+                if (e.target === modalOverlay) hideModal();
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && !modalOverlay.hidden) hideModal();
+            });
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+
+                if (!form.checkValidity()) {
+                    form.reportValidity();
+                    return;
+                }
+
+                const payload = {
+                    nombreCompleto: document.getElementById('nombreCompleto').value.trim(),
+                    puesto: document.getElementById('puesto').value.trim(),
+                    empresa: document.getElementById('empresa').value.trim(),
+                    giroEmpresa: document.getElementById('giroEmpresa').value,
+                    email: document.getElementById('email').value.trim(),
+                    telefono: document.getElementById('telefono').value.trim(),
+                    tipoRequerimiento: document.getElementById('tipoRequerimiento').value,
+                    mensaje: document.getElementById('mensaje').value.trim(),
+                    comoSeEntero: document.getElementById('comoSeEntero').value || null,
+                    ubicacion: document.getElementById('ubicacion').value.trim() || null,
+                };
+
+                btnSubmit.disabled = true;
+                btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ENVIANDO...';
+
+                try {
+                    const res = await fetch('/api/contacto', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await res.json().catch(() => ({}));
+
+                    if (res.ok && data.ok) {
+                        showModal('success');
+                        form.reset();
+                    } else {
+                        showModal('error');
+                    }
+                } catch (err) {
+                    showModal('error', 'Ocurrió un error de conexión. Por favor intenta de nuevo más tarde.');
+                } finally {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = btnDefaultHTML;
+                }
+            });
+        })();
+    </script>
+
+</body>
+</html>

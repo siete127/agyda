@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestión Vicidial</title>
+  <link rel="stylesheet" href="/static/dashboard.css?v=3.8.0">
+  <link rel="stylesheet" href="/static/enterprise.css?v=3.8.0">
+</head>
+<body>
+<div class="ambient ambient-one" aria-hidden="true"></div>
+<div class="ambient ambient-two" aria-hidden="true"></div>
+<header class="topbar">
+  <div class="brand-lockup">
+    <div class="brand-mark" aria-hidden="true">
+      <span class="brand-mark-orbit"></span>
+      <strong>V</strong>
+    </div>
+    <div class="brand-copy">
+      <span class="brand-kicker">Operations intelligence</span>
+      <h1>Gestión Vicidial</h1>
+      <p>Control de resultados, marcación y universo de datos</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="topbar-context" aria-label="Contexto del sistema">
+      <span class="context-pulse" aria-hidden="true"></span>
+      <div><strong>Centro de operaciones</strong><small>Monitoreo y control comercial</small></div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Módulos principales">
+      <button id="dashboardTabButton" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="dashboardTab" data-tab="dashboardTab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+        <span>Resumen</span>
+      </button>
+      <button id="leadsTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="leadsTab" data-tab="leadsTab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v3H4V5Zm0 5h16v3H4v-3Zm0 5h10v3H4v-3Zm14 0 3 2-3 2v-4Z"/></svg>
+        <span>Generación de lotes</span>
+      </button>
+      <button id="universeTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="universeTab" data-tab="universeTab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3Zm-8 7c1.8 1.3 4.8 2 8 2s6.2-.7 8-2v4c0 1.7-3.6 3-8 3s-8-1.3-8-3v-4Zm0 8c1.8 1.3 4.8 2 8 2s6.2-.7 8-2v1c0 1.7-3.6 3-8 3s-8-1.3-8-3v-1Z"/></svg>
+        <span>Carga mensual</span>
+      </button>
+    </nav>
+  </div>
+</header>
+<main class="container">
+  <div id="message" class="message hidden" role="status" aria-live="polite" aria-hidden="true">
+    <span id="messageText"></span>
+    <button id="messageClose" class="message-close" type="button" aria-label="Cerrar notificación" title="Cerrar notificación">
+      <span aria-hidden="true">&times;</span>
+    </button>
+  </div>
+
+  <section id="dashboardTab" class="tab-content active" role="tabpanel" aria-labelledby="dashboardTabButton">
+    <div class="section-toolbar">
+      <div class="section-heading">
+        <span class="section-eyebrow">Resumen operativo</span>
+        <h2>Resultados del día</h2>
+        <p>Ventas fusionadas por teléfono con Call Report</p>
+      </div>
+      <div class="dashboard-refresh-controls">
+        <div class="source-status-stack">
+          <div id="autoRefreshStatus" class="auto-refresh-status checking">
+            <span id="autoRefreshDot" class="auto-refresh-dot"></span>
+            <div class="auto-refresh-copy">
+              <strong id="autoRefreshTitle">AzulCC SQL en vivo</strong>
+              <small id="autoRefreshDetail">Consultando próxima ejecución...</small>
+            </div>
+            <span id="sqlLiveIndicator" class="live-indicator" aria-label="Estado de sincronización automática">En vivo</span>
+          </div>
+          <div id="reportRefreshStatus" class="auto-refresh-status paused">
+            <span class="auto-refresh-dot"></span>
+            <div class="auto-refresh-copy">
+              <strong id="reportRefreshTitle">Reporte Vicidial pausado</strong>
+              <small id="reportRefreshDetail">Solo se descargará manualmente</small>
+            </div>
+            <button id="reportAutoToggle" type="button" disabled>Activar</button>
+          </div>
+        </div>
+        <div class="actions"><input id="dateFilter" type="date"><button id="refreshButton" class="primary">Descargar reporte Vicidial</button></div>
+      </div>
+    </div>
+    <section class="cards cards-six">
+      <article class="card"><span>Total registros</span><strong id="totalResults">0</strong></article>
+      <article class="card approved"><span>Aprobadas</span><strong id="totalApproved">0</strong></article>
+      <article class="card rejected"><span>Rechazadas</span><strong id="totalRejected">0</strong></article>
+      <article class="card"><span>Agentes</span><strong id="totalAgents">0</strong></article>
+      <article class="card"><span>Lotes identificados</span><strong id="totalLots">0</strong></article>
+      <article class="card"><span>Último registro</span><strong id="lastResult">--:--</strong></article>
+    </section>
+    <section class="grid two">
+      <article class="panel"><div class="panel-title"><h2>Resultados por agente</h2></div><div id="agentChart" class="bars"></div></article>
+      <article class="panel"><div class="panel-title"><h2>Resultados por lote</h2></div><div id="lotChart" class="bars"></div></article>
+    </section>
+    <section class="panel"><div class="panel-title"><h2>Aprobadas y rechazadas por hora</h2><span id="matchInfo"></span></div><div id="hourChart" class="hour-chart"></div></section>
+    <section class="panel">
+      <div class="panel-title"><h2>Detalle fusionado</h2><span id="syncInfo"></span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID venta</th><th>Fecha venta</th><th>Resultado</th><th>Cliente</th><th>Teléfono</th><th>Agente venta</th><th>Nombre de lista</th><th>LeadID</th><th>Fecha llamada</th><th>Agente llamada</th><th>Status llamada</th><th>Campaña llamada</th><th>Diferencia min.</th><th>Cruce</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+    </section>
+  </section>
+
+  <section id="leadsTab" class="tab-content" role="tabpanel" aria-labelledby="leadsTabButton">
+    <div class="section-toolbar">
+      <div class="section-heading">
+        <span class="section-eyebrow">Preparación de cartera</span>
+        <h2>Generar lote para Vicidial</h2>
+        <p>Los teléfonos descargados quedan bloqueados hasta que se revisen o se reciclen.</p>
+      </div>
+      <div class="lead-layout-controls" aria-label="Personalizar agrupadores">
+        <span>Mi vista</span>
+        <button id="leadExpandAllGroups" type="button">Mostrar todos</button>
+        <button id="leadCollapseAllGroups" type="button">Minimizar todos</button>
+        <button id="leadExportOnlyView" class="lead-layout-primary" type="button">Solo exportar lote</button>
+      </div>
+    </div>
+    <section id="leadGlobalScope" class="lead-global-scope" aria-labelledby="leadGlobalScopeTitle">
+      <div class="lead-global-scope-heading">
+        <span class="section-eyebrow">Alcance global guardado</span>
+        <h3 id="leadGlobalScopeTitle">Campaña y periodos de trabajo</h3>
+        <p>Se aplican automáticamente a los catálogos, la vista previa y la exportación del lote.</p>
+      </div>
+      <div class="lead-global-scope-fields">
+        <div class="filter-field lead-global-filter">
+          <span class="filter-label">Campaña origen</span>
+          <div class="multi-select" id="leadCampaignFilter" data-field="campaign_id" data-placeholder="Todas las campañas"></div>
+        </div>
+        <div class="filter-field lead-global-filter">
+          <span class="filter-label">Mes y año de EntryDate</span>
+          <div class="multi-select" id="leadManagementMonthFilter" data-field="management_month" data-placeholder="Todos los periodos"></div>
+        </div>
+        <div class="filter-field lead-global-filter">
+          <span class="filter-label">Mes de última gestión</span>
+          <div class="multi-select" id="leadLastManagementMonthFilter" data-field="last_management_month" data-placeholder="Cualquier última gestión"></div>
+        </div>
+        <button id="leadGlobalScopeClear" class="lead-global-scope-clear" type="button">Limpiar alcance</button>
+      </div>
+      <div id="leadGlobalScopeStatus" class="lead-global-scope-status" role="status" aria-live="polite">
+        Sin alcance global: las consultas pueden revisar todo el universo.
+      </div>
+    </section>
+    <section id="decisionDashboard" class="decision-dashboard" aria-labelledby="decisionTitle" data-lead-view-group data-group-title="Recomendación ejecutiva">
+      <div class="decision-toolbar">
+        <div>
+          <span class="section-eyebrow">Inteligencia de cartera</span>
+          <h2 id="decisionTitle">Qué lote conviene tocar</h2>
+          <p>Priorización por capacidad, conversión, contactabilidad, enfriamiento y riesgo de solapamiento.</p>
+        </div>
+        <div class="decision-controls">
+          <label>Objetivo
+            <input id="decisionTargetQuantity" type="number" min="100" max="50000" step="100" value="5000">
+          </label>
+          <label>Universo
+            <select id="decisionPolicy">
+              <option value="LIBERADOS">Solo liberados</option>
+              <option value="POLITICA">Todo reciclable</option>
+            </select>
+          </label>
+          <button id="decisionAnalyzeButton" type="button">Actualizar análisis</button>
+        </div>
+      </div>
+
+      <div id="decisionLoading" class="decision-loading">
+        <span></span><span></span><span></span>
+        <strong>Preparando recomendación ejecutiva…</strong>
+      </div>
+
+      <div id="decisionContent" class="decision-content hidden">
+        <article class="decision-hero">
+          <div class="decision-hero-copy">
+            <div class="decision-hero-meta">
+              <span id="decisionLevel" class="decision-level">—</span>
+              <span id="decisionFreshness">Corte de datos: —</span>
+            </div>
+            <p class="decision-overline">Recomendación principal</p>
+            <h3 id="decisionRecommendationName">Sin recomendación</h3>
+            <p id="decisionHeadline">Analizando la cartera disponible.</p>
+            <ul id="decisionReasons" class="decision-reasons"></ul>
+          </div>
+          <div class="decision-score-block">
+            <div class="decision-score-ring"><strong id="decisionScore">0</strong><span>/ 100</span></div>
+            <button id="decisionUseButton" class="decision-use-button" type="button">Usar este lote</button>
+            <small>Prepara los filtros; no genera el archivo automáticamente.</small>
+          </div>
+        </article>
+
+        <div class="decision-primary-kpis">
+          <article class="decision-kpi">
+            <span class="decision-kpi-icon capacity">01</span>
+            <div><small>Capacidad elegible</small><strong id="decisionEligible">0</strong><p id="decisionCoverage">0% del objetivo</p></div>
+          </article>
+          <article class="decision-kpi">
+            <span class="decision-kpi-icon potential">02</span>
+            <div><small>Potencial histórico</small><strong id="decisionConversion">0%</strong><p id="decisionContact">0% contactabilidad</p></div>
+          </article>
+          <article class="decision-kpi">
+            <span class="decision-kpi-icon risk">03</span>
+            <div><small>Riesgo de saturación</small><strong id="decisionRisk">0%</strong><p id="decisionOverlap">0% compartidos</p></div>
+          </article>
+        </div>
+
+        <div class="decision-secondary-kpis">
+          <div><span>Exclusivos</span><strong id="decisionExclusive">0</strong></div>
+          <div><span>Compartidos</span><strong id="decisionShared">0</strong></div>
+          <div><span>Días sin gestión</span><strong id="decisionMedianDays">0</strong></div>
+          <div><span>Intentos promedio</span><strong id="decisionAttempts">0</strong></div>
+          <div><span>Oportunidades históricas</span><strong id="decisionOpportunities">0</strong></div>
+          <div><span>Confianza</span><strong id="decisionConfidence">—</strong></div>
+        </div>
+
+        <section class="decision-ranking">
+          <div class="panel-title">
+            <div><h3>Ranking de lotes</h3><span>El score compara desempeño relativo y disponibilidad real por teléfono único.</span></div>
+            <span id="decisionPortfolioSummary"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="decision-table">
+              <thead><tr><th>#</th><th>Lote</th><th>Prioridad</th><th>Elegibles</th><th>Cobertura</th><th>Venta</th><th>Contacto</th><th>Compartidos</th><th>Última gestión</th><th>Acción</th></tr></thead>
+              <tbody id="decisionRankingTable"><tr><td colspan="10">Preparando ranking…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+    <section id="universePriorityDashboard" class="panel universe-priority-panel" aria-labelledby="universePriorityTitle" data-lead-view-group data-group-title="Ranking por mes y lista">
+      <div class="universe-priority-header">
+        <div>
+          <span class="section-eyebrow">Inteligencia del universo</span>
+          <h2 id="universePriorityTitle">Mejores meses de EntryDate para marcar</h2>
+          <p>Compara capacidad, contacto y ventas por teléfono único dentro de una misma ventana de análisis.</p>
+        </div>
+        <button id="universePriorityRefresh" type="button">Actualizar ranking</button>
+      </div>
+      <div id="universePriorityLoading" class="decision-loading">
+        <span></span><span></span><span></span>
+        <strong>Preparando desempeño por mes…</strong>
+      </div>
+      <div id="universePriorityContent" class="hidden">
+        <article class="universe-recommendation">
+          <div>
+            <div class="decision-hero-meta">
+              <span id="universePriorityLevel" class="decision-level">—</span>
+              <span id="universePriorityWindow">Ventana comparable: —</span>
+            </div>
+            <p class="decision-overline">Mes recomendado</p>
+            <h3 id="universePriorityMonth">—</h3>
+            <p id="universePriorityAction">Analizando la oportunidad disponible.</p>
+            <ul id="universePriorityReasons" class="decision-reasons"></ul>
+          </div>
+          <div class="universe-score">
+            <strong id="universePriorityScore">0</strong><span>/ 100</span>
+            <button id="universePriorityUse" type="button">Usar este mes</button>
+          </div>
+        </article>
+        <div class="universe-kpi-grid">
+          <article><span>Elegibles</span><strong id="universePriorityEligible">0</strong></article>
+          <article><span>Nunca marcados</span><strong id="universePriorityNever">0</strong></article>
+          <article><span>Contactabilidad</span><strong id="universePriorityContact">0%</strong></article>
+          <article><span>Aprobados / 1,000</span><strong id="universePrioritySales">0</strong></article>
+          <article><span>Cobertura de muestra</span><strong id="universePriorityCoverage">0%</strong></article>
+          <article><span>Confianza</span><strong id="universePriorityConfidence">—</strong></article>
+        </div>
+        <div class="universe-insight-note">
+          <strong id="universePrioritySummary">—</strong>
+          <span>Los meses con tasas altas y cobertura baja se clasifican como piloto para evitar conclusiones engañosas.</span>
+        </div>
+        <div class="table-wrap">
+          <table class="decision-table universe-month-table">
+            <thead><tr><th>#</th><th>EntryDate</th><th>Recomendación</th><th>Elegibles</th><th>Nunca marcados</th><th>Muestra marcada</th><th>Cobertura</th><th>Contacto</th><th>Aprobados / 1,000</th><th>Confianza</th><th>Acción</th></tr></thead>
+            <tbody id="universeMonthTable"><tr><td colspan="11">Preparando ranking mensual…</td></tr></tbody>
+          </table>
+        </div>
+        <section class="universe-list-ranking" aria-labelledby="universeListTitle">
+          <div class="universe-list-heading">
+            <div>
+              <span class="section-eyebrow">Detalle accionable</span>
+              <h3 id="universeListTitle">Listas con mejor contacto y ventas</h3>
+              <p id="universeListSummary">Los nombres se consultan en el catálogo Vicidial.</p>
+            </div>
+            <span class="catalog-source">vicidial_lists</span>
+          </div>
+          <div class="table-wrap">
+            <table class="decision-table universe-list-table">
+              <thead><tr><th>#</th><th>Lista</th><th>EntryDate</th><th>Señal</th><th>Marcados</th><th>Contacto</th><th>Aprobados / 1,000</th><th>Intentos / teléfono</th><th>Última gestión</th><th>Acción</th></tr></thead>
+              <tbody id="universeListTable"><tr><td colspan="10">Preparando ranking por lista…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+    <section id="lead-config-panel" class="panel lead-config-panel" data-lead-view-group data-group-title="Exportar lote">
+      <div id="decisionSourceBanner" class="decision-source-banner hidden">
+        <div><span>Origen recomendado activo</span><strong id="decisionSourceName">—</strong><small>La generación se limitará a los teléfonos elegibles de este lote.</small></div>
+        <button id="decisionClearSource" type="button">Quitar selección</button>
+      </div>
+      <div class="form-grid">
+        <label>Cantidad<input id="leadQuantity" type="number" min="1" max="50000" value="5000"></label>
+        <label>Modo<select id="leadMode"><option value="NUEVOS">Solo nuevos / disponibles</option><option value="RECICLAJE">Reciclaje (excepto ventas y DNC)</option></select></label>
+        <label id="pendingRecycleOption" class="pending-recycle-option">
+          Incluir lotes pendientes
+          <span class="pending-recycle-check"><input id="leadIncludePendingRecycle" type="checkbox" disabled><span>Volver a marcar pendientes</span></span>
+          <small>Puede colocar el mismo teléfono en más de un lote activo.</small>
+        </label>
+        <label>Nombre del lote<input id="leadBatchName" placeholder="Se usa si Lista destino está vacía"></label>
+        <label>Campaña destino<input id="leadDestinationCampaign" value="ARDABYTE"></label>
+        <label>Lista destino<input id="leadDestinationList" placeholder="Será el nombre del lote y del CSV"></label>
+        <div class="filter-field"><span class="filter-label">Lista origen</span><div class="multi-select" id="leadListFilter" data-field="list_name" data-placeholder="Seleccionar nombres de lista"></div></div>
+        <div class="filter-field"><span class="filter-label">Status origen</span><div class="multi-select" id="leadStatusFilter" data-field="status" data-placeholder="Seleccionar estatus"></div></div>
+        <div class="filter-field"><span class="filter-label">Estado</span><div class="multi-select" id="leadStateFilter" data-field="state" data-placeholder="Seleccionar estados"></div></div>
+        <div class="filter-field"><span class="filter-label">Ciudad</span><div class="multi-select" id="leadCityFilter" data-field="city" data-placeholder="Seleccionar ciudades"></div></div>
+      </div>
+      <div class="export-actions">
+        <div class="export-note">
+          <strong>Control de duplicados activo</strong>
+          <span>Los teléfonos exportados quedan bloqueados y no volverán a aparecer en otro lote normal.</span>
+        </div>
+        <div class="actions form-actions">
+          <button id="previewLeadsButton">Vista previa</button>
+          <button id="generateLeadsButton" class="primary generate-csv-button" type="button">Generar lote y descargar CSV</button>
+        </div>
+      </div>
+    </section>
+    <section id="listStatusSummaryPanel" class="panel list-status-panel hidden" data-lead-view-group data-group-title="Resumen histórico de la lista">
+      <div class="panel-title">
+        <div><h2>Resumen histórico de la lista</h2><span id="listStatusSummaryTitle">Selecciona una lista para consultar su comportamiento.</span></div>
+        <span id="listStatusSummaryUpdated"></span>
+      </div>
+      <section class="cards cards-six list-status-cards">
+        <article class="card"><span>Registros históricos</span><strong id="listStatusTotal">0</strong></article>
+        <article class="card"><span>Teléfonos únicos</span><strong id="listStatusPhones">0</strong></article>
+        <article class="card success-card"><span>Ventas</span><strong id="listStatusSales">0</strong></article>
+        <article class="card warning-card"><span>Buzones</span><strong id="listStatusVoicemails">0</strong></article>
+        <article class="card"><span>Contactados</span><strong id="listStatusContacted">0</strong></article>
+        <article class="card"><span>Estatus distintos</span><strong id="listStatusCount">0</strong></article>
+        <article class="card success-card"><span>Conversión</span><strong id="listStatusConversion">0%</strong></article>
+      </section>
+      <div class="table-wrap list-status-table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Detalle</th><th>Registros</th><th>Teléfonos únicos</th><th>Ventas</th><th>Buzones</th><th>Contactados</th><th>% de la lista</th></tr></thead>
+          <tbody id="listStatusTable"><tr><td colspan="8">Selecciona una lista.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section id="leadPreviewGroup" class="lead-view-group-shell" data-lead-view-group data-group-title="Vista previa de candidatos">
+      <section class="cards cards-four">
+        <article class="card"><span>Disponibles</span><strong id="previewAvailable">0</strong></article>
+        <article class="card"><span>Nunca marcados</span><strong id="previewNeverCalled">0</strong></article>
+        <article class="card"><span>Calidad promedio</span><strong id="previewQuality">0</strong></article>
+        <article class="card"><span>Estados / ciudades</span><strong id="previewGeo">0 / 0</strong></article>
+      </section>
+      <section class="panel">
+        <div class="panel-title"><h2>Vista previa de candidatos</h2><span id="previewCountInfo">Presiona Vista previa para consultar.</span></div>
+        <div class="table-wrap preview-table-wrap"><table><thead><tr><th>LeadID</th><th>Teléfono</th><th>Nombre</th><th>Estado</th><th>Ciudad</th><th>Campaña</th><th>Lista</th><th>Último status</th><th>Fecha último status</th><th>Llamadas</th><th>Calidad</th><th>Mes de carga</th><th>EntryDate original</th></tr></thead><tbody id="previewTable"><tr><td colspan="13">Sin consulta previa.</td></tr></tbody></table></div>
+      </section>
+    </section>
+    <section id="leadBatchHistoryGroup" class="panel" data-lead-view-group data-group-title="Historial de lotes">
+      <div class="panel-title"><h2>Historial de lotes</h2><button id="reloadBatchesButton">Actualizar historial</button></div>
+      <p class="help">“Anular de forma segura” consulta siempre las llamadas recientes de AzulCC SQL y también la última descarga disponible del otro Vicidial. Los teléfonos marcados permanecen bloqueados; únicamente se liberan los que no registran llamadas posteriores a la generación del lote.</p>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>Lote</th><th>Fecha</th><th>Modo</th><th>Exportados</th><th>Estado</th><th>Marcados</th><th>Liberados</th><th>CSV</th><th>Acciones</th></tr></thead><tbody id="batchesTable"></tbody></table></div>
+    </section>
+  </section>
+
+  <section id="universeTab" class="tab-content" role="tabpanel" aria-labelledby="universeTabButton">
+    <div class="section-toolbar">
+      <div class="section-heading">
+        <span class="section-eyebrow">Gobierno de datos</span>
+        <h2>Importar registros mensuales</h2>
+        <p>Carga un CSV, Excel, TXT o ZIP, asigna su mes de EntryDate y consulta su historial.</p>
+      </div>
+    </div>
+    <section class="panel universe-upload-panel">
+      <form id="universeImportForm">
+        <div class="universe-form-grid">
+          <label>Archivo de universo
+            <input id="universeZipFile" type="file" accept=".zip,.xlsx,.xlsm,.xls,.xlsb,.csv,.txt,application/zip,text/csv,text/plain" required>
+          </label>
+          <label>Mes de EntryDate
+            <input id="universeEntryMonth" type="month" min="2000-01" max="2100-12" required>
+          </label>
+          <button id="universeImportButton" class="primary" type="submit">Seleccionar e importar</button>
+        </div>
+      </form>
+      <p class="help">El mes elegido se asigna al EntryDate de los registros cargados. Antes de actualizar se comparan los teléfonos contra meses anteriores; las coincidencias se informan pero no se bloquean ni se eliminan. Las campañas vacías o 1006/1009 se guardan como 60035.</p>
+    </section>
+
+    <section id="universeStatusPanel" class="hidden">
+      <section class="cards universe-cards universe-history-cards">
+        <article class="card"><span>Estado</span><strong id="universeStatus">--</strong></article>
+        <article class="card"><span>Avance</span><strong id="universePercent">0%</strong></article>
+        <article class="card"><span>Interacciones leídas</span><strong id="universeRead">0</strong></article>
+        <article class="card"><span>Teléfonos únicos</span><strong id="universeUnique">0</strong></article>
+        <article class="card approved"><span>Nuevos en el universo</span><strong id="universeNew">0</strong></article>
+        <article class="card"><span>Ya existían en meses anteriores</span><strong id="universePrevious">0</strong></article>
+        <article class="card rejected"><span>Ya se habían marcado</span><strong id="universeDialed">0</strong></article>
+        <article class="card"><span>Teléfonos insertados / actualizados</span><strong id="universeTarget">0 / 0</strong></article>
+      </section>
+      <p id="universeHistoryBreakdown" class="help universe-history-breakdown">Esperando el análisis de historial.</p>
+      <section class="panel">
+        <div class="panel-title">
+          <div><h2 id="universeFilename">Importación</h2><span id="universeTimes"></span></div>
+          <div class="universe-status-actions"><span id="universePhase">Preparando...</span><button id="universeCancelButton" class="danger-button hidden" type="button">Detener proceso</button></div>
+        </div>
+        <div class="universe-steps">
+          <div id="universeStepUpload"><b>1</b><span>Archivo</span></div>
+          <div id="universeStepRead"><b>2</b><span>Lectura</span></div>
+          <div id="universeStepStage"><b>3</b><span>Staging</span></div>
+          <div id="universeStepTarget"><b>4</b><span>Universo SQL</span></div>
+        </div>
+        <div id="universeProgress" class="universe-progress"><span></span></div>
+        <div class="universe-progress-detail"><span id="universeProgressLabel">0%</span><span id="universeSpeed">Calculando velocidad...</span></div>
+        <pre id="universeLogs" class="universe-logs">Esperando información...</pre>
+      </section>
+    </section>
+  </section>
+</main>
+<div id="globalLoader" class="loading-overlay hidden" role="status" aria-live="polite" aria-busy="true" tabindex="-1">
+  <div class="loading-card">
+    <span class="loading-kicker">Operación en curso</span>
+    <div class="loading-visual">
+      <img src="/static/loading-1.gif" alt="Cargando" class="loading-gif">
+      <span class="loading-orbit" aria-hidden="true"></span>
+      <span class="loading-scan" aria-hidden="true"></span>
+    </div>
+    <p id="globalLoaderText">Procesando información...</p>
+    <div id="globalLoaderProgress" class="global-loader-progress hidden"><span></span></div>
+    <div id="globalLoaderProgressDetail" class="global-loader-progress-detail hidden">
+      <span id="globalLoaderPercent">0%</span>
+      <span id="globalLoaderStage">Preparando...</span>
+    </div>
+    <small id="globalLoaderHelp">Espera a que termine el proceso. La pantalla final se mostrará automáticamente.</small>
+    <button id="globalLoaderCancel" class="loader-cancel-button hidden" type="button">Detener proceso</button>
+  </div>
+</div>
+<script src="/static/dashboard.js?v=3.8.0"></script>
+</body>
+</html>

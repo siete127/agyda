@@ -1,0 +1,3171 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-es="ARDABYTEC - Soluciones en Tecnología" data-en="ARDABYTEC - Technology Solutions">ARDABYTEC - Soluciones en Tecnología</title>
+
+    <link rel="icon" href="assets/logos-empresa/logoABT.png" type="image/png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css?v=20260819b">
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+        (function () {
+            var theme = localStorage.getItem('ardabytec-theme');
+            if (!theme) {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+</head>
+
+<body>
+
+    <header class="main-header">
+        <div class="header-container">
+
+            <a href="https://ardabytec.vip/" class="logo">
+                <img src="assets/logos-empresa/logo1.png" alt="ARDABYTEC" class="logo-img" id="headerLogoImg">
+            </a>
+
+            <nav class="nav-menu">
+                <a href="#inicio" class="nav-link active" data-i18n="nav.inicio">Inicio</a>
+                <a href="#nosotros" class="nav-link" data-i18n="nav.nosotros">Nosotros</a>
+                <a href="#soluciones" class="nav-link" data-i18n="nav.soluciones">Soluciones</a>
+                <a href="#aliados" class="nav-link" data-i18n="nav.aliados">Aliados</a>
+                <a href="#servicios" class="nav-link" data-i18n="nav.servicios">Servicios</a>
+                <a href="#portafolio" class="nav-link" data-i18n="nav.portafolio">Portafolio</a>
+                <a href="#vacantes" class="nav-link" data-i18n="nav.vacantes">Vacantes</a>
+                <a href="#contacto" class="nav-link" data-i18n="nav.contacto">Contacto</a>
+            </nav>
+
+            <div class="social-media">
+                <a target="_blank" href="https://www.facebook.com/ArdabyTec2021?locale=es_LA" class="social-icon"
+                    aria-label="Facebook">
+                    <img src="assets/redes-sociales/facebook.png" alt="Facebook">
+                </a>
+                <a target="_blank" href="https://www.instagram.com/ardaby_tec?igsh=MTUzMDFzMHRrYjVyZQ=="
+                    class="social-icon" aria-label="Instagram">
+                    <img src="assets/redes-sociales/insta.png" alt="Instagram">
+                </a>
+                <a target="_blank" href="https://www.tiktok.com/@ardaby_tec?_r=1&_t=ZS-985I9TqTWEv" class="social-icon"
+                    aria-label="TikTok">
+                    <img src="assets/redes-sociales/tiktok.png" alt="TikTok">
+                </a>
+            </div>
+
+            <div class="header-controls">
+                <div class="lang-toggle">
+                    <button type="button" class="lang-btn active" id="langEsBtn" data-lang="es">ES</button>
+                    <button type="button" class="lang-btn" id="langEnBtn" data-lang="en">EN</button>
+                </div>
+                <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Cambiar tema">
+                    <span class="icon-sun">☀️</span>
+                    <span class="icon-moon">🌙</span>
+                </button>
+                <a href="#" class="nav-link" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
+                <button type="button" class="nav-link logout-btn" id="logoutBtn" style="display:none;">Cerrar sesión</button>
+                <a href="https://agyda.ardabytec.vip/login?tenant=demo" target="_blank" rel="noopener" class="demo-btn" id="demoBtn" style="display:none;">
+                    <span class="demo-btn-dot" aria-hidden="true"></span>
+                    Demo
+                    <span class="demo-btn-arrow" aria-hidden="true">&rarr;</span>
+                </a>
+                <button type="button" class="menu-toggle-btn" id="menuToggleBtn" aria-label="Abrir menú" aria-expanded="false">
+                    <span class="menu-toggle-bar"></span>
+                    <span class="menu-toggle-bar"></span>
+                    <span class="menu-toggle-bar"></span>
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <section id="inicio" class="hero-section">
+        <div class="code-bg-mascot" aria-hidden="true"></div>
+        <div class="hero-container">
+
+            <div class="hero-text-content">
+                <h1 class="hero-title" data-i18n-html="hero.title">
+                    Soluciones <br>tecnológicas <br>a la medida de <span class="highlight-blue">tu empresa</span>
+                </h1>
+                <p class="hero-description" data-i18n="hero.desc">
+                    Impulsamos el crecimiento y la eficiencia de tu negocio con tecnología confiable, innovadora y
+                    escalable.
+                </p>
+
+                <a href="#nosotros" class="btn-primary">
+                    <span data-i18n="hero.cta">Conócenos</span> <span class="arrow">&rarr;</span>
+                </a>
+
+                <div class="hero-badges">
+                    <div class="badge-item">
+                        <span class="badge-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                        </span>
+                        <div>
+                            <strong data-i18n="hero.badge1.title">Confianza</strong>
+                            <p data-i18n="hero.badge1.desc">y Seguridad</p>
+                        </div>
+                    </div>
+
+                    <div class="badge-item">
+                        <span class="badge-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M4.5 16.5c-1.5 1.26-2 3.5-2 3.5s2.24-.5 3.5-2L17 7l-3.5-3.5L4.5 16.5z" />
+                                <path d="m14 2 4 4 4-4-4 4z" />
+                                <path d="M9 12l-1.5 1.5" />
+                                <path d="M12 9l1.5-1.5" />
+                            </svg>
+                        </span>
+                        <div>
+                            <strong data-i18n="hero.badge2.title">Innovación</strong>
+                            <p data-i18n="hero.badge2.desc">Constante</p>
+                        </div>
+                    </div>
+
+                    <div class="badge-item">
+                        <span class="badge-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10" />
+                                <line x1="12" y1="20" x2="12" y2="4" />
+                                <line x1="6" y1="20" x2="6" y2="14" />
+                            </svg>
+                        </span>
+                        <div>
+                            <strong data-i18n="hero.badge3.title">Resultados</strong>
+                            <p data-i18n="hero.badge3.desc">Medibles</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hero-mascot-container">
+                <div class="tech-marco">
+                    <img src="assets/mascota-empresa/mascotas.png" alt="Zorro Robot Inteligencia Artificial"
+                        class="mascot-img-marco">
+                </div>
+            </div>
+
+        </div>
+
+        <div class="wave-separator">
+            <svg data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120"
+                preserveAspectRatio="none">
+                <path
+                    d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V0C26.9,8.75,53.05,18.3,79.8,27.7,143.77,50.3,207.25,67.49,321.39,56.44Z"
+                    class="shape-fill"></path>
+            </svg>
+        </div>
+    </section>
+
+    <section id="nosotros" class="nosotros-section">
+        <div class="nosotros-circle nosotros-circle-1" aria-hidden="true"></div>
+        <div class="nosotros-circle nosotros-circle-2" aria-hidden="true"></div>
+        <div class="nosotros-circle nosotros-circle-3" aria-hidden="true"></div>
+        <div class="nosotros-circle nosotros-circle-4" aria-hidden="true"></div>
+        <div class="nosotros-container">
+
+            <div class="nosotros-main-card">
+                <div class="nosotros-badge" data-i18n="nosotros.badge">Sobre Nosotros</div>
+                <h2 data-i18n-html="nosotros.title">¿Quiénes <span class="highlight-blue">somos?</span></h2>
+                <p class="section-desc" data-i18n-html="nosotros.desc">
+                    En <strong>ARDABYTEC</strong> Somos una firma de consultoría especializada en Tecnologías
+                    de la Información, con amplia experiencia en soluciones de
+                    Contact Center, desarrollo web, aplicaciones móviles y
+                    soporte técnico integral.
+                    Impulsamos la transformación digital de nuestros clientes
+                    mediante soluciones innovadoras, personalizadas y
+                    alineadas con sus objetivos estratégicos. Nuestro enfoque se
+                    centra en brindar atención cercana, excelencia operativa y
+                    tecnología de alto valor para optimizar procesos, mejorar la
+                    experiencia del usuario y acelerar el crecimiento del negocio.
+                </p>
+            </div>
+
+            <div class="nosotros-grid">
+                <div class="nosotros-item-card">
+                    <div class="card-icon">🎯</div>
+                    <h3 data-i18n="nosotros.mision.title">Misión</h3>
+                    <p data-i18n="nosotros.mision.desc">Soporte TI, marcación y software que hacen crecer tu negocio.</p>
+                </div>
+
+                <div class="nosotros-item-card">
+                    <div class="card-icon">👁️‍</div>
+                    <h3 data-i18n="nosotros.vision.title">Visión</h3>
+                    <p data-i18n="nosotros.vision.desc">Liderar la automatización con IA en soluciones empresariales</p>
+                </div>
+
+                <div class="nosotros-item-card">
+                    <div class="card-icon">💎</div>
+                    <h3 data-i18n="nosotros.valores.title">Valores</h3>
+                    <ul class="valores-list">
+                        <li data-i18n="nosotros.valores.v1">Innovación</li>
+                        <li data-i18n="nosotros.valores.v2">Calidad</li>
+                        <li data-i18n="nosotros.valores.v3">Enfoque al cliente</li>
+                        <li data-i18n="nosotros.valores.v4">Integridad</li>
+                        <li data-i18n="nosotros.valores.v5">Trabajo en equipo</li>
+                        <li data-i18n="nosotros.valores.v6">Aprendizaje</li>
+                        <li data-i18n="nosotros.valores.v7">Confianza</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <section id="soluciones" class="soluciones-section">
+        <div class="soluciones-circle soluciones-circle-1" aria-hidden="true"></div>
+        <div class="soluciones-circle soluciones-circle-2" aria-hidden="true"></div>
+        <div class="soluciones-circle soluciones-circle-3" aria-hidden="true"></div>
+        <div class="soluciones-circle soluciones-circle-4" aria-hidden="true"></div>
+        <div class="soluciones-header">
+            <span class="soluciones-badge" data-i18n="soluciones.badge">Ecosistema Tecnológico</span>
+            <h2 class="section-title-center" data-i18n-html="soluciones.title">Nuestras <span class="highlight-blue">Soluciones</span></h2>
+            <p class="section-desc-center" data-i18n="soluciones.desc">
+                Desarrollamos e implementamos herramientas robustas a la medida para automatizar tus procesos, potenciar
+                tus canales de comunicación y llevar el rendimiento de tu empresa al siguiente nivel.
+            </p>
+        </div>
+
+        <div class="soluciones-container">
+            <div class="soluciones-grid">
+
+                <!-- 1. Tarificador -->
+                <div class="solucion-card">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">🪙</div>
+                        <h3 data-i18n="sol.tarificador.title">Tarificador</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.tarificador.desc">Controla, analiza y gestiona consumos telefónicos en tiempo real
+                            de tu PBX o Asterisk, transformándolos en decisiones estratégicas de negocio.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.tarificador.f1">Control de costos y presupuestos</li>
+                            <li data-i18n="sol.tarificador.f2">Monitoreo en tiempo real (CDR)</li>
+                            <li data-i18n="sol.tarificador.f3">Reportes y gráficos automatizados</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('tarificador')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/Tarificador_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 2. Soporte Técnico -->
+                <div class="solucion-card">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">🛠️</div>
+                        <h3 data-i18n="sol.soporte.title">Soporte Técnico</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.soporte.desc">Asistencia proactiva para mantener tu infraestructura TI
+                            operativa, segura y libre de interrupciones imprevistas.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.soporte.f1">Soporte 24/7 Remoto/En sitio</li>
+                            <li data-i18n="sol.soporte.f2">Mantenimiento preventivo</li>
+                            <li data-i18n="sol.soporte.f3">Optimización y escalabilidad</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('soporte')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/Soporte_Tecnico_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 3. PBX Cloud -->
+                <div class="solucion-card">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">☁️</div>
+                        <h3 data-i18n="sol.pbx.title">PBX Cloud</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.pbx.desc">Telefonía empresarial de última generación en la nube. Conecta a
+                            tus colaboradores dondequiera que estén de manera centralizada.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.pbx.f1">Extensiones móviles/remotas</li>
+                            <li data-i18n="sol.pbx.f2">Cero costos de hardware físico</li>
+                            <li data-i18n="sol.pbx.f3">Administración centralizada</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('pbx')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/PBX_Cloud_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 4. Marcador de Call Center -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">📞</div>
+                        <h3 data-i18n="sol.marcador.title">Marcador de Call Center</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.marcador.desc">Sistemas de marcación predictiva, progresiva y manual que
+                            incrementan sustancialmente la productividad de tus agentes.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.marcador.f1">Marcación predictiva con IA</li>
+                            <li data-i18n="sol.marcador.f2">Integración inmediata con CRMs</li>
+                            <li data-i18n="sol.marcador.f3">Detección inteligente de contestadoras</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('marcador')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/Marcador_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf"
+                            target="_blank" class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 5. Kiosko de Call Center -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">🖥️</div>
+                        <h3 data-i18n="sol.kiosko.title">Kiosko de Call Center</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.kiosko.desc">Módulos interactivos personalizados para la gestión de turnos,
+                            monitoreo de colas y desempeño de agentes en tiempo real.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.kiosko.f1">Pantallas táctiles intuitivas</li>
+                            <li data-i18n="sol.kiosko.f2">Monitoreo de colas de atención</li>
+                            <li data-i18n="sol.kiosko.f3">Estadísticas de agentes en vivo</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('kiosko')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/Kiosko_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 6. IVR's -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">🤖</div>
+                        <h3 data-i18n="sol.ivr.title">IVR's</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.ivr.desc">Sistemas de Respuesta de Voz Interactiva multinivel que guían
+                            eficientemente al usuario final hacia el área indicada.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.ivr.f1">Reconocimiento de voz avanzado</li>
+                            <li data-i18n="sol.ivr.f2">Rutas de atención inteligentes</li>
+                            <li data-i18n="sol.ivr.f3">Atención automatizada 24/7</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('ivr')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/IVR_Ardaby_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 7. Intranet -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">🏢</div>
+                        <h3 data-i18n="sol.intranet.title">Intranet</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.intranet.desc">Plataforma interna privada para centralizar la comunicación,
+                            almacenar documentos de forma segura y mejorar la colaboración.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.intranet.f1">Gestión documental centralizada</li>
+                            <li data-i18n="sol.intranet.f2">Directorio y noticias internas</li>
+                            <li data-i18n="sol.intranet.f3">Trámites y flujos de trabajo internos</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('intranet')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/INTRANET_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 8. Integraciones de APIs -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">🔗</div>
+                        <h3 data-i18n="sol.api.title">Integraciones de APIs</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.api.desc">Interconectamos tus sistemas de software actuales para asegurar
+                            que los datos fluyan de manera rápida, segura y automática.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.api.f1">Sincronización en tiempo real</li>
+                            <li data-i18n="sol.api.f2">Seguridad de datos en tránsito</li>
+                            <li data-i18n="sol.api.f3">Automatización de procesos entre plataformas</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('api')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/Integraciones_APIs_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 9. ERP -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">📊</div>
+                        <h3 data-i18n="sol.erp.title">ERP</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.erp.desc">Planificación de recursos empresariales para el control integral
+                            de inventarios, finanzas, ventas y administración.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.erp.f1">Módulos de control a la medida</li>
+                            <li data-i18n="sol.erp.f2">Dashboard de métricas clave</li>
+                            <li data-i18n="sol.erp.f3">Automatización contable y operativa</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('erp')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/ERP_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 10. Envíos Masivos -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">💬</div>
+                        <h3 data-i18n="sol.envios.title">WhatsApp y SMS Masivos</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.envios.desc">Campañas de mensajería masiva escalables para notificaciones,
+                            cobranza o marketing directo a dispositivos móviles.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.envios.f1">API Oficial de WhatsApp Business</li>
+                            <li data-i18n="sol.envios.f2">Tasa de entrega garantizada</li>
+                            <li data-i18n="sol.envios.f3">Automatización con Chatbots avanzados</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('envios')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/Envios_WhatsApp_SMS_Dossier_Carta_ArdabyTec_Explicado.pdf"
+                            target="_blank" class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 11. Desarrollo Web -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">💻</div>
+                        <h3 data-i18n="sol.web.title">Desarrollo Web</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.web.desc">Construcción de sitios web optimizados, e-commerce, portales
+                            transaccionales y landing pages rápidas y adaptables.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.web.f1">Diseño 100% responsivo y rápido</li>
+                            <li data-i18n="sol.web.f2">Optimización SEO integrada</li>
+                            <li data-i18n="sol.web.f3">Sistemas interactivos dinámicos</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('web')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/Desarrollo_Web_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+                <!-- 12. Asterisk -->
+                <div class="solucion-card solucion-extra">
+                    <div class="solucion-accent"></div>
+                    <div class="solucion-content">
+                        <div class="solucion-icon">⭐</div>
+                        <h3 data-i18n="sol.asterisk.title">Asterisk</h3>
+                        <p class="solucion-short-desc" data-i18n="sol.asterisk.desc">Diseño, configuración y puesta en marcha de servidores basados en
+                            Asterisk para telefonía IP con código abierto.</p>
+                        <ul class="solucion-features">
+                            <li data-i18n="sol.asterisk.f1">Personalización absoluta de dialplan</li>
+                            <li data-i18n="sol.asterisk.f2">Soporte y tuning de seguridad</li>
+                            <li data-i18n="sol.asterisk.f3">Grabaciones integradas e IVRs avanzados</li>
+                        </ul>
+                    </div>
+                    <div class="solucion-actions">
+                        <button class="btn-quick-view" onclick="openModal('asterisk')" data-i18n="common.saberMas">Saber más</button>
+                        <a href="assets/fichas/ASTERISK_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
+                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="soluciones-toggle-wrap">
+                <button type="button" class="btn-toggle-soluciones" id="toggleSolucionesBtn">
+                    <span data-i18n="soluciones.verMas">Ver más soluciones</span>
+                    <span class="toggle-arrow">&darr;</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="soluciones-cta">
+            <p data-i18n="soluciones.ctaText">¿Necesitas una arquitectura o desarrollo específico para tu empresa?</p>
+            <a href="#contacto" class="btn-primary">
+                <span data-i18n="soluciones.ctaBtn">Cotizar Solución Personalizada</span> <span class="arrow">&rarr;</span>
+            </a>
+        </div>
+    </section>
+
+    <!-- VENTANA MODAL FLOTANTE (ESTRUCTURA DINÁMICA ÚNICA) -->
+    <div id="serviceModal" class="modal-overlay">
+        <div class="modal-container">
+            <button class="modal-close-btn" onclick="closeModal()">&times;</button>
+            <div class="modal-body">
+                <div class="modal-header-info">
+                    <span id="modalIcon" class="modal-top-icon">🪙</span>
+                    <h2 id="modalTitle">Título del Servicio</h2>
+                </div>
+                <div class="modal-scroll-area">
+                    <div class="modal-section-block">
+                        <h3 data-i18n="modal.descGeneral">Descripción General</h3>
+                        <p id="modalDesc">Descripción completa del servicio aquí...</p>
+                    </div>
+                    <div class="modal-section-block">
+                        <h3 data-i18n="modal.features">Características Clave</h3>
+                        <ul id="modalFeatures" class="modal-bullet-list">
+                            <!-- Inyectado dinámicamente -->
+                        </ul>
+                    </div>
+                    <div class="modal-section-block">
+                        <h3 data-i18n="modal.benefits">Beneficios para tu Negocio</h3>
+                        <ul id="modalBenefits" class="modal-bullet-list benefits-highlight">
+                            <!-- Inyectado dinámicamente -->
+                        </ul>
+                    </div>
+                    <div class="modal-section-block">
+                        <h3 data-i18n="modal.glossary">Glosario Técnico de Fácil Comprensión</h3>
+                        <div id="modalGlossary" class="modal-glossary-container">
+                            <!-- Inyectado dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer-actions">
+                    <a id="modalPdfLink" href="#" target="_blank" class="modal-btn-pdf" data-i18n="modal.pdfLink">Ver Ficha Técnica PDF</a>
+                    <a href="#contacto" class="modal-btn-contact" onclick="closeModal()" data-i18n="modal.cotizar">Cotizar Servicio</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section id="aliados" class="aliados-section">
+        <div class="aliados-circle aliados-circle-1" aria-hidden="true"></div>
+        <div class="aliados-circle aliados-circle-2" aria-hidden="true"></div>
+        <div class="aliados-circle aliados-circle-3" aria-hidden="true"></div>
+        <div class="aliados-circle aliados-circle-4" aria-hidden="true"></div>
+        <div class="aliados-container">
+
+            <div class="aliados-info">
+                <h2 class="section-title" data-i18n-html="aliados.title">Nuestros <span class="highlight-blue">aliados</span></h2>
+                <p class="section-desc" data-i18n="aliados.desc">
+                    Trabajamos con las mejores marcas para ofrecerte soluciones tecnológicas confiables, innovadoras y
+                    de alto rendimiento.
+                </p>
+                <a href="#contacto" class="btn-primary">
+                    <span data-i18n="hero.cta">Conócenos</span> <span class="arrow">&rarr;</span>
+                </a>
+            </div>
+
+            <div class="aliados-grid-tech">
+                <div class="logo-card-tech" data-index="0"><img src="assets/aliados-comerciales/AT_T_logo_2016.png"
+                        alt="at&t"></div>
+                <div class="logo-card-tech" data-index="1"><img src="assets/aliados-comerciales/BANAMEX.png"
+                        alt="banamex"></div>
+                <div class="logo-card-tech" data-index="2"><img src="assets/aliados-comerciales/CENTRANEG.png"
+                        alt="centraneg"></div>
+                <div class="logo-card-tech" data-index="3"><img src="assets/aliados-comerciales/empaque rema.png"
+                        alt="empaque rema"></div>
+                <div class="logo-card-tech" data-index="4"><img src="assets/aliados-comerciales/GENNEX-Photoroom.png"
+                        alt="gennex-photoroom"></div>
+                <div class="logo-card-tech" data-index="5"><img src="assets/aliados-comerciales/MegaDirect.png"
+                        alt="megadirect"></div>
+            </div>
+
+        </div>
+    </section>
+
+    <section id="servicios" class="servicios-section">
+        <div class="servicios-circle servicios-circle-1" aria-hidden="true"></div>
+        <div class="servicios-circle servicios-circle-2" aria-hidden="true"></div>
+        <div class="servicios-circle servicios-circle-3" aria-hidden="true"></div>
+        <div class="servicios-circle servicios-circle-4" aria-hidden="true"></div>
+        <div class="servicios-header">
+            <h2 class="section-title-center" data-i18n-html="servicios.title">Nuestros <span class="highlight-blue">servicios</span></h2>
+            <p class="section-desc-center" data-i18n="servicios.desc">
+                Ofrecemos soluciones integrales para optimizar y transformar tu infraestructura tecnológica.
+            </p>
+        </div>
+
+        <div class="servicios-grid">
+
+            <div class="servicio-card">
+                <div class="servicio-icon-container">
+                    <img src="assets/iconos-de-servicio/soporte tecnico-Photoroom.png" alt="Soporte">
+                </div>
+                <h3 data-i18n="servicios.soporte.title">Soporte Técnico</h3>
+                <p data-i18n="servicios.soporte.desc">Atención inmediata y eficiente para mantener tu operation siempre activa.</p>
+            </div>
+
+            <div class="servicio-card">
+                <div class="servicio-icon-container">
+                    <img src="assets/iconos-de-servicio/infraestructura Ti-Photoroom.png" alt="Infraestructura">
+                </div>
+                <h3 data-i18n="servicios.infra.title">Infraestructura IT</h3>
+                <p data-i18n="servicios.infra.desc">Diseñamos e implementamos infraestructuras seguras, escalables y confiables.</p>
+            </div>
+
+            <div class="servicio-card">
+                <div class="servicio-icon-container">
+                    <img src="assets/iconos-de-servicio/ciberseguridad-Photoroom.png" alt="Ciberseguridad">
+                </div>
+                <h3 data-i18n="servicios.ciber.title">Ciberseguridad</h3>
+                <p data-i18n="servicios.ciber.desc">Protegemos tu información y sistemas con las mejores prácticas del mercado.</p>
+            </div>
+
+            <div class="servicio-card">
+                <div class="servicio-icon-container">
+                    <img src="assets/iconos-de-servicio/desarrollo de software-Photoroom.png" alt="Desarrollo">
+                </div>
+                <h3 data-i18n="servicios.dev.title">Desarrollo de Software</h3>
+                <p data-i18n="servicios.dev.desc">Soluciones a la medida que impulsan la productividad de tu empresa.</p>
+            </div>
+
+            <div class="servicio-card">
+                <div class="servicio-icon-container">
+                    <img src="assets/iconos-de-servicio/consultoria Ti-Photoroom.png" alt="Consultoría">
+                </div>
+                <h3 data-i18n="servicios.consult.title">Consultoría IT</h3>
+                <p data-i18n="servicios.consult.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
+            </div>
+
+        </div>
+
+        <div class="servicios-footer-btn">
+            <a href="#contacto" class="btn-primary">
+                <span data-i18n="servicios.verTodos">Ver todos los servicios</span> <span class="arrow">&rarr;</span>
+            </a>
+        </div>
+    </section>
+
+    <!-- ==========================================
+       SECCIÓN PORTAFOLIO
+       ========================================== -->
+    <section id="portafolio" class="portafolio-section">
+        <div class="portafolio-circle portafolio-circle-1" aria-hidden="true"></div>
+        <div class="portafolio-circle portafolio-circle-2" aria-hidden="true"></div>
+        <div class="portafolio-circle portafolio-circle-3" aria-hidden="true"></div>
+        <div class="portafolio-circle portafolio-circle-4" aria-hidden="true"></div>
+
+        <div class="servicios-header">
+            <h2 class="section-title-center" data-i18n-html="portafolio.title">Nuestro <span class="highlight-blue">Portafolio</span></h2>
+            <p class="section-desc-center" data-i18n="portafolio.desc">
+                Casos de éxito y proyectos destacados donde hemos implementado tecnología de alto impacto.
+            </p>
+        </div>
+
+        <div class="portafolio-container">
+            <div class="portafolio-grid">
+                
+                <!-- Proyecto 1 -->
+                <div class="portafolio-card">
+                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-1">
+                        <span class="portafolio-placeholder-icon">🛒</span>
+                    </div>
+                    <div class="portafolio-content">
+                        <span class="portafolio-tag" data-i18n="portafolio.tag1">Desarrollo Web</span>
+                        <h3 class="portafolio-title" data-i18n="portafolio.proj1.title">Plataforma E-commerce B2B</h3>
+                        <p class="portafolio-desc" data-i18n="portafolio.proj1.desc">Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.</p>
+                    </div>
+                </div>
+
+                <!-- Proyecto 2 -->
+                <div class="portafolio-card">
+                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-2">
+                        <span class="portafolio-placeholder-icon">☁️</span>
+                    </div>
+                    <div class="portafolio-content">
+                        <span class="portafolio-tag" data-i18n="portafolio.tag2">Call Center</span>
+                        <h3 class="portafolio-title" data-i18n="portafolio.proj2.title">Migración a PBX Cloud</h3>
+                        <p class="portafolio-desc" data-i18n="portafolio.proj2.desc">Implementación de telefonía virtual para 150 agentes remotos, reduciendo los costos operativos mensuales.</p>
+                    </div>
+                </div>
+
+                <!-- Proyecto 3 -->
+                <div class="portafolio-card">
+                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-3">
+                        <span class="portafolio-placeholder-icon">🖥️</span>
+                    </div>
+                    <div class="portafolio-content">
+                        <span class="portafolio-tag" data-i18n="portafolio.tag3">Soporte IT</span>
+                        <h3 class="portafolio-title" data-i18n="portafolio.proj3.title">Renovación de Infraestructura</h3>
+                        <p class="portafolio-desc" data-i18n="portafolio.proj3.desc">Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="vacantes" class="vacantes-section">
+        <div class="vacantes-circle vacantes-circle-1" aria-hidden="true"></div>
+        <div class="vacantes-circle vacantes-circle-2" aria-hidden="true"></div>
+
+        <div class="servicios-header">
+            <h2 class="section-title-center" data-i18n-html="vacantes.title">Únete a <span class="highlight-blue">nuestro equipo</span></h2>
+            <p class="section-desc-center" data-i18n="vacantes.desc">
+                Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.
+            </p>
+        </div>
+
+        <div class="vacantes-container">
+            <div id="vacantesGrid" class="vacantes-grid">
+                <!-- Tarjetas inyectadas dinámicamente por JS desde /api/vacantes -->
+            </div>
+            <p id="vacantesEmpty" class="vacantes-empty" data-i18n="vacantes.empty" style="display:none;">
+                Por el momento no hay vacantes disponibles. ¡Vuelve pronto!
+            </p>
+        </div>
+    </section>
+
+    <div id="vacanteModal" class="modal-overlay">
+        <div class="modal-container">
+            <button class="modal-close-btn" onclick="closeVacanteModal()">&times;</button>
+            <div class="modal-body">
+                <div class="modal-header-info">
+                    <span class="modal-top-icon">💼</span>
+                    <h2 id="vacModalTitulo">Título del puesto</h2>
+                </div>
+                <div class="modal-scroll-area">
+                    <div class="vacante-modal-meta">
+                        <span id="vacModalUbicacion" class="vacante-badge"></span>
+                        <span id="vacModalModalidad" class="vacante-badge"></span>
+                        <span id="vacModalContrato" class="vacante-badge"></span>
+                        <span id="vacModalSalario" class="vacante-badge"></span>
+                    </div>
+
+                    <div class="modal-section-block">
+                        <h3 data-i18n="vacantes.modal.descripcion">Descripción del puesto</h3>
+                        <p id="vacModalDescripcion"></p>
+                    </div>
+                    <div class="modal-section-block" id="vacModalRequisitosBlock">
+                        <h3 data-i18n="vacantes.modal.requisitos">Requisitos</h3>
+                        <p id="vacModalRequisitos"></p>
+                    </div>
+
+                    <div class="modal-section-block">
+                        <h3 data-i18n="vacantes.modal.postular">Postúlate a esta vacante</h3>
+                        <form id="postulacionForm" class="postulacion-form">
+                            <div class="postulacion-field">
+                                <label for="postNombre" data-i18n="vacantes.form.nombre">Nombre completo</label>
+                                <input type="text" id="postNombre" name="nombre" required>
+                            </div>
+                            <div class="postulacion-row">
+                                <div class="postulacion-field">
+                                    <label for="postEmail" data-i18n="vacantes.form.email">Correo electrónico</label>
+                                    <input type="email" id="postEmail" name="email" required>
+                                </div>
+                                <div class="postulacion-field">
+                                    <label for="postTelefono" data-i18n="vacantes.form.telefono">Teléfono</label>
+                                    <input type="tel" id="postTelefono" name="telefono">
+                                </div>
+                            </div>
+                            <div class="postulacion-field">
+                                <label for="postCv" data-i18n="vacantes.form.cv">Currículum (PDF, máx. 5MB)</label>
+                                <input type="file" id="postCv" name="cv" accept="application/pdf" required>
+                            </div>
+                            <div class="postulacion-field">
+                                <label for="postMensaje" data-i18n="vacantes.form.mensaje">Mensaje (opcional)</label>
+                                <textarea id="postMensaje" name="mensaje" rows="3"></textarea>
+                            </div>
+                            <p id="postulacionStatus" class="postulacion-status" aria-live="polite"></p>
+                            <button type="submit" id="postulacionSubmitBtn" class="modal-btn-contact postulacion-submit-btn">
+                                <span data-i18n="vacantes.form.enviar">Enviar postulación</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loginModal" class="modal-overlay">
+        <div class="modal-container login-modal-container">
+            <button class="modal-close-btn" onclick="closeLoginModal()">&times;</button>
+            <div class="login-modal-brand">
+                <img src="assets/logos-empresa/logo1-modo-oscuro.png" alt="ARDABYTEC" class="login-modal-brand-logo">
+                <span class="login-modal-brand-chip">Portal corporativo</span>
+                <p class="login-modal-brand-title">Bienvenido de nuevo</p>
+                <p class="login-modal-brand-subtitle">Accede con tus credenciales para continuar.</p>
+            </div>
+            <div class="login-modal-body">
+                <form id="loginModalForm" class="login-modal-form" novalidate>
+                    <div class="login-modal-field">
+                        <label for="loginModalUsuario" data-i18n="login.usuario">Usuario</label>
+                        <div class="login-modal-input-wrap">
+                            <svg class="login-modal-input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12Zm0 2.5c-3.3 0-9.8 1.6-9.8 4.9v2.4h19.6v-2.4c0-3.3-6.5-4.9-9.8-4.9Z" fill="currentColor"/>
+                            </svg>
+                            <input type="text" id="loginModalUsuario" name="username" autocomplete="username" required>
+                        </div>
+                    </div>
+                    <div class="login-modal-field">
+                        <label for="loginModalPassword" data-i18n="login.password">Contraseña</label>
+                        <div class="login-modal-input-wrap">
+                            <svg class="login-modal-input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M6 10V8a6 6 0 1 1 12 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h8V8a4 4 0 1 0-8 0v2Z" fill="currentColor"/>
+                            </svg>
+                            <input type="password" id="loginModalPassword" name="password" autocomplete="current-password" required>
+                            <button type="button" class="login-modal-toggle-pw" id="loginModalTogglePw" aria-label="Mostrar contraseña">
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" stroke="currentColor" stroke-width="1.6"/>
+                                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p id="loginModalStatus" class="login-modal-status" aria-live="polite"></p>
+                    <button type="submit" id="loginModalSubmitBtn" class="login-modal-submit-btn">
+                        <span data-i18n="login.entrar">Iniciar sesión</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <section id="contacto" class="qr-form-section">
+        <div class="qr-form-circle qr-form-circle-1" aria-hidden="true"></div>
+        <div class="qr-form-circle qr-form-circle-2" aria-hidden="true"></div>
+        <div class="qr-form-circle qr-form-circle-3" aria-hidden="true"></div>
+        <div class="qr-form-circle qr-form-circle-4" aria-hidden="true"></div>
+        <div class="qr-form-container">
+
+            <div class="qr-form-info">
+                <h2 class="section-title" data-i18n-html="contacto.title">¿Listo para <span class="highlight-blue">empezar?</span></h2>
+                <p class="section-desc" data-i18n="contacto.desc">
+                    Escanea el código QR con la cámara de tu celular o haz clic en el botón para responder nuestro
+                    formulario y recibir una cotización personalizada.
+                </p>
+                <a href="contacto" class="btn-primary">
+                    <span data-i18n="contacto.cta">Ir al formulario</span> <span class="arrow">&rarr;</span>
+                </a>
+            </div>
+
+            <div class="qr-display-card">
+                <div class="qr-frame">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=En%20desarrollo...%20Proximamente%20conectado."
+                        alt="Código QR temporal" class="qr-image">
+                </div>
+                <span class="qr-caption" data-i18n="contacto.qrCaption">Escanea con tu celular</span>
+            </div>
+        </div>
+    </section>
+
+    <footer class="main-footer">
+        <div class="footer-container">
+            <div class="footer-brand">
+                <img src="assets/logos-empresa/logo1.png" alt="ARDABYTEC" class="footer-logo-img" id="footerLogoImg">
+                <p class="footer-tagline" data-i18n="footer.tagline">
+                    Soluciones tecnológicas a la medida de tu empresa. Innovación, confianza y resultados medibles.
+                </p>
+                <div class="footer-social">
+                    <a target="_blank" href="https://www.facebook.com/ArdabyTec2021?locale=es_LA" class="social-icon" aria-label="Facebook">
+                        <img src="assets/redes-sociales/facebook.png" alt="Facebook">
+                    </a>
+                    <a target="_blank" href="https://www.instagram.com/ardaby_tec?igsh=MTUzMDFzMHRrYjVyZQ==" class="social-icon" aria-label="Instagram">
+                        <img src="assets/redes-sociales/insta.png" alt="Instagram">
+                    </a>
+                    <a target="_blank" href="https://www.tiktok.com/@ardaby_tec?_r=1&_t=ZS-985I9TqTWEv" class="social-icon" aria-label="TikTok">
+                        <img src="assets/redes-sociales/tiktok.png" alt="TikTok">
+                    </a>
+                </div>
+            </div>
+
+            <div class="footer-col">
+                <h4 class="footer-col-title" data-i18n="footer.navTitle">Navegación</h4>
+                <ul class="footer-links">
+                    <li><a href="#" data-i18n="nav.inicio">Inicio</a></li>
+                    <li><a href="#nosotros" data-i18n="nav.nosotros">Nosotros</a></li>
+                    <li><a href="#soluciones" data-i18n="nav.soluciones">Soluciones</a></li>
+                    <li><a href="#servicios" data-i18n="nav.servicios">Servicios</a></li>
+                    <li><a href="#portafolio" data-i18n="nav.portafolio">Portafolio</a></li>
+                    <li><a href="#vacantes" data-i18n="nav.vacantes">Vacantes</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-col">
+                <h4 class="footer-col-title" data-i18n="footer.contactTitle">Contacto</h4>
+                <ul class="footer-links">
+                    <li><a href="#aliados" data-i18n="nav.aliados">Aliados</a></li>
+                    <li><a href="#contacto" data-i18n="nav.contacto">Contacto</a></li>
+                    <li><a href="contacto" target="_blank" data-i18n="contacto.cta">Ir al formulario</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer-container footer-bottom">
+            <span class="footer-copy">&copy; <span id="footerYear">2026</span> ARDABYTEC. <span data-i18n="footer.rights">Todos los derechos reservados.</span> · AGYDA v20.11.0</span>
+        </div>
+    </footer>
+
+    <button type="button" id="chatToggleBtn" class="floating-mascot-btn" aria-label="Abrir chat">
+        <img src="assets/mascota-empresa/boton flotante mascota.png" alt="Mascota ARDABYTEC">
+    </button>
+
+    <div id="chatPanel" class="chat-panel" aria-hidden="true">
+        <div class="chat-header">
+            <div class="chat-header-info">
+                <img src="assets/mascota-empresa/boton flotante mascota.png" alt="" class="chat-header-avatar">
+                <div>
+                    <strong data-i18n="chat.title">Asistente ARDABYTEC</strong>
+                    <span class="chat-header-status" data-i18n="chat.status">En línea</span>
+                </div>
+            </div>
+            <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Cerrar chat">&times;</button>
+        </div>
+
+        <div id="chatMessages" class="chat-messages"></div>
+
+        <div id="chatQuickReplies" class="chat-quick-replies"></div>
+
+        <form id="chatForm" class="chat-input-row" autocomplete="off">
+            <input type="text" id="chatInput" placeholder="Escribe tu mensaje..." autocomplete="off">
+            <button type="submit" class="chat-send-btn" aria-label="Enviar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </form>
+    </div>
+
+    <!-- LOGIC SCRIPT (ROTACIÓN DE ALIADOS CON EFECTO DE DESVANECIMIENTO SUAVE + CONTROL DEL MODAL) -->
+    <script>
+        // --- CONTROL DE MENÚ DE NAVEGACIÓN ACTIVO ---
+        const navLinks = document.querySelectorAll('.nav-link');
+
+        function setActiveNavLink(targetHash) {
+            navLinks.forEach(link => {
+                link.classList.toggle('active', link.getAttribute('href') === targetHash);
+            });
+        }
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', function() {
+                setActiveNavLink(this.getAttribute('href'));
+                closeMobileMenu();
+            });
+        });
+
+        // --- SCROLL-SPY: RESALTA EL LINK DE LA SECCIÓN VISIBLE ---
+        const spySections = Array.from(navLinks)
+            .map(link => link.getAttribute('href'))
+            .filter(href => href && href.length > 1 && href.startsWith('#'))
+            .map(href => document.querySelector(href))
+            .filter(Boolean);
+
+        if ('IntersectionObserver' in window && spySections.length) {
+            const sectionObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        setActiveNavLink('#' + entry.target.id);
+                    }
+                });
+            }, {
+                rootMargin: '-45% 0px -50% 0px',
+                threshold: 0
+            });
+
+            spySections.forEach(section => sectionObserver.observe(section));
+        }
+
+        // --- MENÚ HAMBURGUESA (MÓVIL) ---
+        const mainHeader = document.querySelector('.main-header');
+        const menuToggleBtn = document.getElementById('menuToggleBtn');
+
+        function closeMobileMenu() {
+            mainHeader.classList.remove('menu-open');
+            menuToggleBtn.setAttribute('aria-expanded', 'false');
+        }
+
+        menuToggleBtn.addEventListener('click', () => {
+            const isOpen = mainHeader.classList.toggle('menu-open');
+            menuToggleBtn.setAttribute('aria-expanded', String(isOpen));
+        });
+
+        // --- TOGGLE DE SOLUCIONES ADICIONALES (VER MÁS / VER MENOS) ---
+        const toggleSolucionesBtn = document.getElementById('toggleSolucionesBtn');
+        const solucionesGrid = document.querySelector('.soluciones-grid');
+
+        toggleSolucionesBtn.addEventListener('click', () => {
+            const isExpanded = solucionesGrid.classList.toggle('expanded');
+            toggleSolucionesBtn.classList.toggle('active', isExpanded);
+            const label = toggleSolucionesBtn.querySelector('[data-i18n]');
+            label.setAttribute('data-i18n', isExpanded ? 'soluciones.verMenos' : 'soluciones.verMas');
+            label.innerText = translations[currentLang][isExpanded ? 'soluciones.verMenos' : 'soluciones.verMas'];
+
+            if (!isExpanded) {
+                document.getElementById('soluciones').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+
+        // --- SISTEMA DE ROTACIÓN DE LOGOS ALIADOS ---
+        const todosLosAliados = [
+            { src: "assets/aliados-comerciales/AT_T_logo_2016.png", alt: "at&t" },
+            { src: "assets/aliados-comerciales/BANAMEX.png", alt: "banamex" },
+            { src: "assets/aliados-comerciales/CENTRANEG.png", alt: "centraneg" },
+            { src: "assets/aliados-comerciales/empaque rema.png", alt: "empaque rema" },
+            { src: "assets/aliados-comerciales/GENNEX-Photoroom.png", alt: "gennex-photoroom" },
+            { src: "assets/aliados-comerciales/MegaDirect.png", alt: "megadirect" },
+            { src: "assets/aliados-comerciales/PLATA.png", alt: "plata" },
+            { src: "assets/aliados-comerciales/ptc.png", alt: "ptc" }
+        ];
+
+        let indicesVisibles = [0, 1, 2, 3, 4, 5];
+
+        function rotarUnAliado() {
+            const tarjetaIndexColor = Math.floor(Math.random() * 6);
+            const tarjetaElemento = document.querySelector(`.logo-card-tech[data-index="${tarjetaIndexColor}"]`);
+
+            if (!tarjetaElemento) return;
+
+            const aliadosNoVisibles = todosLosAliados.filter((_, index) => !indicesVisibles.includes(index));
+
+            if (aliadosNoVisibles.length === 0) return;
+
+            const nuevoAliado = aliadosNoVisibles[Math.floor(Math.random() * aliadosNoVisibles.length)];
+            const nuevoIndiceGlobal = todosLosAliados.indexOf(nuevoAliado);
+
+            const imgElemento = tarjetaElemento.querySelector('img');
+
+            imgElemento.classList.add('fade-out');
+
+            setTimeout(() => {
+                imgElemento.src = nuevoAliado.src;
+                imgElemento.alt = nuevoAliado.alt;
+
+                indicesVisibles[tarjetaIndexColor] = nuevoIndiceGlobal;
+
+                imgElemento.classList.remove('fade-out');
+            }, 350);
+        }
+
+        setInterval(rotarUnAliado, 4000);
+
+
+        // --- BASE DE DATOS DE INFORMACIÓN DETALLADA PARA MODALES (ES/EN) ---
+        const servicesData = {
+            tarificador: {
+                icon: "🪙",
+                pdf: "assets/fichas/Tarificador_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Tarificador Telefónico",
+                    desc: "Solución de software avanzada para la supervisión, análisis y control de consumos telefónicos en tu organización. Te ayuda a auditar el desempeño de tus líneas y a reducir costos de inmediato.",
+                    features: [
+                        "Registro detallado de llamadas entrantes y salientes (CDR).",
+                        "Clasificación automática por departamentos, extensiones o proyectos.",
+                        "Generación de reportes periódicos y análisis presupuestales."
+                    ],
+                    benefits: [
+                        "Detección y eliminación de fugas en gastos telefónicos.",
+                        "Optimización de la asignación de presupuestos a áreas operativas.",
+                        "Transparencia total e información estratégica de consumos."
+                    ],
+                    glossary: [
+                        { term: "CDR (Call Detail Record):", definition: "Registro de datos que detalla la hora, duración, origen y destino de cada llamada telefónica." },
+                        { term: "Tarificación:", definition: "Proceso de asignar un costo monetario aproximado a las llamadas de acuerdo con las tarifas vigentes." }
+                    ]
+                },
+                en: {
+                    title: "Call Rating & Billing System",
+                    desc: "Advanced software solution for monitoring, analyzing and controlling phone usage across your organization. Helps you audit line performance and cut costs immediately.",
+                    features: [
+                        "Detailed logging of inbound and outbound calls (CDR).",
+                        "Automatic classification by department, extension or project.",
+                        "Automated periodic reports and budget analysis."
+                    ],
+                    benefits: [
+                        "Detection and elimination of phone expense leaks.",
+                        "Optimized budget allocation across operational areas.",
+                        "Full transparency and strategic usage insights."
+                    ],
+                    glossary: [
+                        { term: "CDR (Call Detail Record):", definition: "A data record detailing the time, duration, origin and destination of each phone call." },
+                        { term: "Rating:", definition: "The process of assigning an approximate monetary cost to calls based on current rates." }
+                    ]
+                }
+            },
+            soporte: {
+                icon: "🛠️",
+                pdf: "assets/fichas/Soporte_Tecnico_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Soporte Técnico de TI",
+                    desc: "Servicio de asistencia integral para garantizar la estabilidad técnica de tu negocio. Cubrimos desde incidencias básicas de usuario hasta la administración de servidores complejos.",
+                    features: [
+                        "Soporte inmediato remoto o visitas programadas a tus instalaciones.",
+                        "Planes de mantenimiento preventivo y correctivo para hardware y software.",
+                        "Diagnóstico rápido y restablecimiento seguro ante fallas críticas."
+                    ],
+                    benefits: [
+                        "Continuidad absoluta de tu operación diaria libre de caídas.",
+                        "Prevención activa de incidentes técnicos costosos.",
+                        "Disponibilidad de especialistas de primer nivel siempre que lo requieras."
+                    ],
+                    glossary: [
+                        { term: "Soporte 24/7:", definition: "Atención técnica activa y disponible a cualquier hora del día, los 365 días del año." },
+                        { term: "Mantenimiento Preventivo:", definition: "Acciones de limpieza física y lógica ejecutadas periódicamente para evitar fallas en los equipos antes de que ocurran." }
+                    ]
+                },
+                en: {
+                    title: "IT Technical Support",
+                    desc: "Comprehensive assistance service to guarantee your business's technical stability. We cover everything from basic user issues to complex server administration.",
+                    features: [
+                        "Immediate remote support or scheduled on-site visits.",
+                        "Preventive and corrective maintenance plans for hardware and software.",
+                        "Fast diagnosis and safe recovery from critical failures."
+                    ],
+                    benefits: [
+                        "Absolute continuity of your daily operations, free of downtime.",
+                        "Active prevention of costly technical incidents.",
+                        "Access to top-tier specialists whenever you need them."
+                    ],
+                    glossary: [
+                        { term: "24/7 Support:", definition: "Technical assistance active and available any time of day, 365 days a year." },
+                        { term: "Preventive Maintenance:", definition: "Physical and logical cleanup actions performed periodically to avoid equipment failures before they occur." }
+                    ]
+                }
+            },
+            pbx: {
+                icon: "☁️",
+                pdf: "assets/fichas/PBX_Cloud_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "PBX Cloud (Telefonía Virtual)",
+                    desc: "Central telefónica empresarial en la nube que unifica todas tus llamadas sin necesidad de comprar equipos físicos . Conecta sucursales y personal en home office fácilmente.",
+                    features: [
+                        "Llamadas entrantes y salientes simultáneas desde cualquier dispositivo.",
+                        "Configuración interactiva de extensiones y desvíos inteligentes.",
+                        "Menú de bienvenida (IVR) y colas de llamadas integradas."
+                    ],
+                    benefits: [
+                        "Ahorro de hasta un 60% en costos de telefonía corporativa.",
+                        "Movilidad total: tu equipo puede responder llamadas desde su smartphone u laptop.",
+                        "Escalabilidad instantánea conforme crezca tu organización."
+                    ],
+                    glossary: [
+                        { term: "PBX (Private Branch Exchange):", definition: "Sistema telefónico interno que conecta las extensiones de una empresa entre sí y con el exterior." },
+                        { term: "Softphone:", definition: "Aplicación móvil o de escritorio que permite llamar desde internet simulando un teléfono físico." }
+                    ]
+                },
+                en: {
+                    title: "Cloud PBX (Virtual Telephony)",
+                    desc: "Cloud-based business phone system that unifies all your calls without buying physical equipment. Easily connects branches and remote/home-office staff.",
+                    features: [
+                        "Simultaneous inbound and outbound calls from any device.",
+                        "Interactive configuration of extensions and smart call forwarding.",
+                        "Built-in welcome menu (IVR) and call queues."
+                    ],
+                    benefits: [
+                        "Savings of up to 60% on corporate telephony costs.",
+                        "Total mobility: your team can answer calls from their smartphone or laptop.",
+                        "Instant scalability as your organization grows."
+                    ],
+                    glossary: [
+                        { term: "PBX (Private Branch Exchange):", definition: "An internal phone system that connects a company's extensions to each other and to the outside line." },
+                        { term: "Softphone:", definition: "A mobile or desktop app that lets you call over the internet, simulating a physical phone." }
+                    ]
+                }
+            },
+            marcador: {
+                icon: "📞",
+                pdf: "assets/fichas/Marcador_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Marcador de Call Center",
+                    desc: "Herramienta de marcación automática para potenciar las actividades de prospección, venta directa, cobro y encuestas telefónicas masivas.",
+                    features: [
+                        "Algoritmo de marcación predictiva, progresiva y automática.",
+                        "Análisis inteligente de tonos de llamada y detección de buzones (AMD).",
+                        "Monitoreo en tiempo real y opciones de coaching a los agentes."
+                    ],
+                    benefits: [
+                        "Aumento de hasta el 300% en el tiempo efectivo de conversación de tus agentes.",
+                        "Reducción de tiempos muertos y marcaciones fallidas manuales.",
+                        "Estadísticas completas de efectividad y productividad al instante."
+                    ],
+                    glossary: [
+                        { term: "Predictive Dialer:", definition: "Marcador automático que predice cuándo se liberará un agente para iniciar la siguiente llamada antes de tiempo." },
+                        { term: "Whisper Coaching:", definition: "Herramienta que permite a un supervisor dar indicaciones en voz baja al agente sin que el cliente lo escuche." }
+                    ]
+                },
+                en: {
+                    title: "Call Center Dialer",
+                    desc: "Automatic dialing tool to boost prospecting, direct sales, collections and mass phone surveys.",
+                    features: [
+                        "Predictive, progressive and automatic dialing algorithm.",
+                        "Smart call-tone analysis and answering-machine detection (AMD).",
+                        "Real-time monitoring and agent coaching options."
+                    ],
+                    benefits: [
+                        "Up to 300% increase in agents' effective talk time.",
+                        "Reduced idle time and failed manual dials.",
+                        "Instant, complete effectiveness and productivity statistics."
+                    ],
+                    glossary: [
+                        { term: "Predictive Dialer:", definition: "An automatic dialer that predicts when an agent will become available to start the next call ahead of time." },
+                        { term: "Whisper Coaching:", definition: "A tool that lets a supervisor give quiet guidance to an agent without the customer hearing it." }
+                    ]
+                }
+            },
+            kiosko: {
+                icon: "🖥️",
+                pdf: "assets/fichas/Kiosko_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Kiosko de Call Center",
+                    desc: "Dashboard de visualización y monitoreo operativo diseñado para supervisar campañas de voz de forma centralizada y en tiempo real.",
+                    features: [
+                        "Monitoreo de agentes conectados, en pausa y en llamada activa.",
+                        "Gráficos visuales del estatus de las colas de llamadas en cola.",
+                        "Control de asistencia, métricas operativas diarias e incidencias."
+                    ],
+                    benefits: [
+                        "Visibilidad absoluta del comportamiento y desempeño del call center.",
+                        "Toma de decisiones al instante basadas en datos actuales.",
+                        "Detección y corrección ágil de cuellos de botella en la atención."
+                    ],
+                    glossary: [
+                        { term: "Dashboard:", definition: "Interfaz gráfica digital donde se unifican las métricas críticas del sistema para fácil lectura." },
+                        { term: "SLA (Service Level Agreement):", definition: "Compromiso escrito del tiempo y calidad acordado para responder las llamadas de los clientes." }
+                    ]
+                },
+                en: {
+                    title: "Call Center Kiosk",
+                    desc: "Operational monitoring dashboard designed to supervise voice campaigns centrally and in real time.",
+                    features: [
+                        "Monitoring of connected, paused and on-call agents.",
+                        "Visual charts of call queue status.",
+                        "Attendance control, daily operational metrics and incidents."
+                    ],
+                    benefits: [
+                        "Full visibility into call center behavior and performance.",
+                        "Instant decision-making based on current data.",
+                        "Agile detection and correction of service bottlenecks."
+                    ],
+                    glossary: [
+                        { term: "Dashboard:", definition: "A digital graphic interface that consolidates critical system metrics for easy reading." },
+                        { term: "SLA (Service Level Agreement):", definition: "A written commitment on the agreed time and quality for answering customer calls." }
+                    ]
+                }
+            },
+            ivr: {
+                icon: "🤖",
+                pdf: "assets/fichas/IVR_Ardaby_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Sistemas IVR Automatizados",
+                    desc: "Asistente telefónico con respuesta de voz interactiva que recibe a tus clientes, clasifica sus necesidades y los direcciona de forma inteligente.",
+                    features: [
+                        "Menús estructurados de bienvenida multinivel completamente personalizables.",
+                        "Enrutamiento condicional (por horario, departamento o idioma).",
+                        "Compatibilidad con reconocimiento de voz básico e integración de bases de datos."
+                    ],
+                    benefits: [
+                        "Atención automática al cliente 24/7 sin tiempos de espera o recepcionista.",
+                        "Reducción en la carga de trabajo administrativo y de re-enrutamiento manual.",
+                        "Proyección de una imagen corporativa altamente profesional y estructurada."
+                    ],
+                    glossary: [
+                        { term: "IVR (Interactive Voice Response):", definition: "Tecnología de telefonía que interactúa con los usuarios mediante audios grabados y pulsaciones del teclado." },
+                        { term: "Enrutamiento:", definition: "Direccionamiento programático que transfiere una llamada de una extensión a otra área." }
+                    ]
+                },
+                en: {
+                    title: "Automated IVR Systems",
+                    desc: "Interactive voice response phone assistant that greets your customers, classifies their needs and routes them intelligently.",
+                    features: [
+                        "Fully customizable, multi-level structured welcome menus.",
+                        "Conditional routing (by schedule, department or language).",
+                        "Compatible with basic voice recognition and database integration."
+                    ],
+                    benefits: [
+                        "Automatic 24/7 customer service with no wait times or receptionist.",
+                        "Reduced administrative workload and manual call re-routing.",
+                        "A highly professional, well-structured corporate image."
+                    ],
+                    glossary: [
+                        { term: "IVR (Interactive Voice Response):", definition: "Telephony technology that interacts with users through recorded audio and keypad input." },
+                        { term: "Routing:", definition: "Programmatic direction that transfers a call from one extension to another area." }
+                    ]
+                }
+            },
+            intranet: {
+                icon: "🏢",
+                pdf: "assets/fichas/INTRANET_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Intranet Corporativa",
+                    desc: "Plataforma de comunicación interna segura. El punto de reunión digital para unificar documentos, políticas, noticias y trámites de los empleados de tu empresa.",
+                    features: [
+                        "Repositorio de documentos y archivos con control de permisos y carpetas.",
+                        "Portal dinámico de noticias, boletines internos y directorio corporativo.",
+                        "Automatización de formularios (solicitud de vacaciones, gastos, viáticos)."
+                    ],
+                    benefits: [
+                        "Mejora radical en la comunicación interna y clima organizacional.",
+                        "Disminución drástica de correos electrónicos informales y pérdida de archivos.",
+                        "Procesos administrativos internos más rápidos y digitalizados."
+                    ],
+                    glossary: [
+                        { term: "Intranet:", definition: "Red informática de uso exclusivo de una organización, cerrada al público externo por seguridad." },
+                        { term: "Control de Accesos:", definition: "Restricción de secciones e información del sistema para que solo ciertos empleados autorizados puedan verlas." }
+                    ]
+                },
+                en: {
+                    title: "Corporate Intranet",
+                    desc: "Secure internal communication platform. The digital meeting point to unify documents, policies, news and employee workflows across your company.",
+                    features: [
+                        "Document and file repository with permission and folder control.",
+                        "Dynamic portal for news, internal bulletins and a corporate directory.",
+                        "Automated forms (vacation requests, expenses, travel allowances)."
+                    ],
+                    benefits: [
+                        "Radical improvement in internal communication and organizational climate.",
+                        "Drastic reduction of informal emails and lost files.",
+                        "Faster, fully digitized internal administrative processes."
+                    ],
+                    glossary: [
+                        { term: "Intranet:", definition: "A computer network for the exclusive use of an organization, closed off from the outside public for security." },
+                        { term: "Access Control:", definition: "Restriction of system sections and information so only certain authorized employees can view them." }
+                    ]
+                }
+            },
+            api: {
+                icon: "🔗",
+                pdf: "assets/fichas/Integraciones_APIs_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Integraciones de APIs",
+                    desc: "Servicio de desarrollo enfocado en conectar diferentes plataformas informáticas para intercambiar información y automatizar procesos sin intervención manual.",
+                    features: [
+                        "Diseño y desarrollo de conexiones REST y SOAP de alta estabilidad.",
+                        "Sincronización fluida de bases de datos, sistemas CRM, ERP y pasarelas de pago.",
+                        "Implementación de Webhooks y sistemas de alertas automáticas."
+                    ],
+                    benefits: [
+                        "Eliminación total del retrabajo manual de copiar información de un sistema a otro.",
+                        "Prevención de errores humanos y desactualizaciones de información.",
+                        "Unificación operativa de tus plataformas digitales."
+                    ],
+                    glossary: [
+                        { term: "API (Application Programming Interface):", definition: "Conjunto de reglas y especificaciones que permiten que dos aplicaciones interactúen entre sí." },
+                        { term: "Webhook:", definition: "Mensaje automatizado que envía un sistema a otro de manera inmediata cuando ocurre un evento específico." }
+                    ]
+                },
+                en: {
+                    title: "API Integrations",
+                    desc: "Development service focused on connecting different software platforms to exchange information and automate processes without manual intervention.",
+                    features: [
+                        "Design and development of highly stable REST and SOAP connections.",
+                        "Seamless synchronization of databases, CRM, ERP systems and payment gateways.",
+                        "Implementation of webhooks and automated alert systems."
+                    ],
+                    benefits: [
+                        "Total elimination of manual rework copying information between systems.",
+                        "Prevention of human error and outdated information.",
+                        "Operational unification of your digital platforms."
+                    ],
+                    glossary: [
+                        { term: "API (Application Programming Interface):", definition: "A set of rules and specifications that let two applications interact with each other." },
+                        { term: "Webhook:", definition: "An automated message one system sends to another instantly when a specific event occurs." }
+                    ]
+                }
+            },
+            erp: {
+                icon: "📊",
+                pdf: "assets/fichas/ERP_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Sistemas ERP a la Medida",
+                    desc: "Plataforma de planeación que unifica la administración de ventas, inventario, finanzas, compras y nómina bajo un único sistema fácil de usar.",
+                    features: [
+                        "Módulos interconectados diseñados según las reglas operativas de tu empresa.",
+                        "Base de datos unificada para una total trazabilidad de cada movimiento comercial.",
+                        "Dashboard gerencial con indicadores financieros en vivo."
+                    ],
+                    benefits: [
+                        "Control estricto de almacenes, mermas, flujos de caja y facturación.",
+                        "Visión de 360 grados del estado real del negocio para toma de decisiones.",
+                        "Operación alineada que ahorra tiempo de supervisión diaria."
+                    ],
+                    glossary: [
+                        { term: "ERP (Enterprise Resource Planning):", definition: "Sistema que centraliza la administración operativa y financiera de una empresa." },
+                        { term: "Trazabilidad:", definition: "Capacidad de rastrear la historia y ubicación de un registro, venta o producto desde su origen hasta su fin." }
+                    ]
+                },
+                en: {
+                    title: "Custom ERP Systems",
+                    desc: "Planning platform that unifies sales, inventory, finance, purchasing and payroll management under a single easy-to-use system.",
+                    features: [
+                        "Interconnected modules designed around your company's operating rules.",
+                        "Unified database for full traceability of every business transaction.",
+                        "Management dashboard with live financial indicators."
+                    ],
+                    benefits: [
+                        "Strict control of warehouses, shrinkage, cash flow and invoicing.",
+                        "A 360-degree view of the real state of the business for decision-making.",
+                        "Aligned operations that save time on daily supervision."
+                    ],
+                    glossary: [
+                        { term: "ERP (Enterprise Resource Planning):", definition: "A system that centralizes a company's operational and financial administration." },
+                        { term: "Traceability:", definition: "The ability to track the history and location of a record, sale or product from its origin to its end." }
+                    ]
+                }
+            },
+            envios: {
+                icon: "💬",
+                pdf: "assets/fichas/Envios_WhatsApp_SMS_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "WhatsApp y SMS Masivos",
+                    desc: "Solución tecnológica para realizar campañas de envío de notificaciones y recordatorios masivos utilizando los canales con mayor tasa de apertura del mercado.",
+                    features: [
+                        "Conexión con la API Oficial de WhatsApp Business y gateways de SMS robustos.",
+                        "Personalización dinámica de mensajes con datos específicos de los destinatarios.",
+                        "Programación horaria inteligente de envíos y bots de respuesta básica."
+                    ],
+                    benefits: [
+                        "Excelente tasa de lectura (superior al 90%) en comparación con el email marketing tradicional.",
+                        "Agilidad en notificaciones de cobranza, alertas bancarias y confirmaciones.",
+                        "Atención automatizada 24/7 de primeros contactos."
+                    ],
+                    glossary: [
+                        { term: "API de WhatsApp Business:", definition: "Canal oficial y certificado provisto por Meta para la comunicación masiva de empresas." },
+                        { term: "SMS Gateway:", definition: "Servicio que permite traducir correos o conexiones de internet a mensajes de texto tradicionales." }
+                    ]
+                },
+                en: {
+                    title: "Bulk WhatsApp & SMS Messaging",
+                    desc: "Technology solution for sending mass notification and reminder campaigns using the channels with the highest open rates on the market.",
+                    features: [
+                        "Connection with the Official WhatsApp Business API and robust SMS gateways.",
+                        "Dynamic message personalization with recipient-specific data.",
+                        "Smart scheduled sending and basic auto-reply bots."
+                    ],
+                    benefits: [
+                        "Excellent read rate (over 90%) compared to traditional email marketing.",
+                        "Fast collections notifications, bank alerts and confirmations.",
+                        "Automated 24/7 handling of first contacts."
+                    ],
+                    glossary: [
+                        { term: "WhatsApp Business API:", definition: "The official, certified channel provided by Meta for mass business communication." },
+                        { term: "SMS Gateway:", definition: "A service that translates emails or internet connections into traditional text messages." }
+                    ]
+                }
+            },
+            web: {
+                icon: "💻",
+                pdf: "assets/fichas/Desarrollo_Web_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Desarrollo Web Empresarial",
+                    desc: "Diseñamos y programamos sitios web institucionales, plataformas de e-commerce y aplicaciones personalizadas adaptados para vender y posicionar tu marca.",
+                    features: [
+                        "Maquetación y codificación de alto rendimiento y tiempos de carga óptimos.",
+                        "Arquitectura adaptable a pantallas de móviles, tablets y PCs (Responsive).",
+                        "Estructura optimizada para posicionar mejor en motores de búsqueda (SEO)."
+                    ],
+                    benefits: [
+                        "Fuerte presencia digital que genera confianza e incrementa ventas directas.",
+                        "Plataforma propia independiente de terceros para comercializar y prospectar.",
+                        "Experiencia de navegación moderna e interactiva para tus visitantes."
+                    ],
+                    glossary: [
+                        { term: "SEO (Search Engine Optimization):", definition: "Optimización de un sitio para que aparezca en los primeros puestos gratuitos de Google." },
+                        { term: "Diseño Responsivo:", definition: "Técnica de desarrollo que adapta la interfaz de forma armónica según el tamaño de la pantalla." }
+                    ]
+                },
+                en: {
+                    title: "Business Web Development",
+                    desc: "We design and build institutional websites, e-commerce platforms and custom applications tailored to sell and position your brand.",
+                    features: [
+                        "High-performance layout and coding with optimal load times.",
+                        "Architecture adapted to mobile, tablet and desktop screens (Responsive).",
+                        "Structure optimized to rank better in search engines (SEO)."
+                    ],
+                    benefits: [
+                        "A strong digital presence that builds trust and boosts direct sales.",
+                        "Your own platform, independent of third parties, to sell and prospect.",
+                        "A modern, interactive browsing experience for your visitors."
+                    ],
+                    glossary: [
+                        { term: "SEO (Search Engine Optimization):", definition: "Optimizing a site so it ranks in Google's top free results." },
+                        { term: "Responsive Design:", definition: "A development technique that harmoniously adapts the interface to the screen size." }
+                    ]
+                }
+            },
+            asterisk: {
+                icon: "⭐",
+                pdf: "assets/fichas/ASTERISK_Dossier_Carta_ArdabyTec_Explicado.pdf",
+                es: {
+                    title: "Soluciones Asterisk PBX",
+                    desc: "Desarrollo e implementación personalizada de servidores de telefonía basados en Asterisk, ideales para entornos que buscan adaptabilidad absoluta y cero costos de licencia.",
+                    features: [
+                        "Programación detallada de flujos de marcado (Dialplan) según tus necesidades.",
+                        "Grabación integrada de llamadas en alta calidad con almacenamiento seguro.",
+                        "Conexiones de seguridad SIP robustas e integración nativa con CRM de terceros."
+                    ],
+                    benefits: [
+                        "Ahorro de costos al utilizar una tecnología madura de código abierto.",
+                        "Flexibilidad sin restricciones de licencias comerciales por cada usuario.",
+                        "Control total de tus comunicaciones locales y de larga distancia."
+                    ],
+                    glossary: [
+                        { term: "Asterisk:", definition: "Motor de código abierto que convierte una computadora común en un potente conmutador telefónico." },
+                        { term: "Dialplan:", definition: "Conjunto de instrucciones lógicas que deciden el camino que seguirá una llamada desde que entra hasta que se cuelga." }
+                    ]
+                },
+                en: {
+                    title: "Asterisk PBX Solutions",
+                    desc: "Custom development and implementation of Asterisk-based telephony servers, ideal for environments seeking full adaptability and zero licensing costs.",
+                    features: [
+                        "Detailed dialplan programming tailored to your needs.",
+                        "Built-in high-quality call recording with secure storage.",
+                        "Robust SIP security connections and native integration with third-party CRMs."
+                    ],
+                    benefits: [
+                        "Cost savings by using a mature open-source technology.",
+                        "Flexibility with no per-user commercial license restrictions.",
+                        "Full control over your local and long-distance communications."
+                    ],
+                    glossary: [
+                        { term: "Asterisk:", definition: "An open-source engine that turns a regular computer into a powerful telephone switch." },
+                        { term: "Dialplan:", definition: "A set of logical instructions that decide the path a call will follow from entry to hangup." }
+                    ]
+                }
+            }
+        };
+
+        // --- DICCIONARIO DE TRADUCCIÓN GENERAL DEL SITIO ---
+        const translations = {
+            es: {
+                "nav.inicio": "Inicio", "nav.nosotros": "Nosotros", "nav.soluciones": "Soluciones",
+                "nav.aliados": "Aliados", "nav.servicios": "Servicios", "nav.contacto": "Contacto",
+                "nav.portafolio": "Portafolio", "nav.vacantes": "Vacantes", "nav.login": "Iniciar sesión",
+
+                "hero.title": 'Soluciones <br>tecnológicas <br>a la medida de <span class="highlight-blue">tu empresa</span>',
+                "hero.desc": "Impulsamos el crecimiento y la eficiencia de tu negocio con tecnología confiable, innovadora y escalable.",
+                "hero.cta": "Conócenos",
+                "hero.badge1.title": "Confianza", "hero.badge1.desc": "y Seguridad",
+                "hero.badge2.title": "Innovación", "hero.badge2.desc": "Constante",
+                "hero.badge3.title": "Resultados", "hero.badge3.desc": "Medibles",
+
+                "nosotros.badge": "Sobre Nosotros",
+                "nosotros.title": '¿Quiénes <span class="highlight-blue">somos?</span>',
+                "nosotros.desc": "En <strong>ARDABYTEC</strong> Somos una firma de consultoría especializada en Tecnologías de la Información, con amplia experiencia en soluciones de Contact Center, desarrollo web, aplicaciones móviles y soporte técnico integral. Impulsamos la transformación digital de nuestros clientes mediante soluciones innovadoras, personalizadas y alineadas con sus objetivos estratégicos. Nuestro enfoque se centra en brindar atención cercana, excelencia operativa y tecnología de alto valor para optimizar procesos, mejorar la experiencia del usuario y acelerar el crecimiento del negocio.",
+                "nosotros.mision.title": "Misión",
+                "nosotros.mision.desc": "Soporte TI, marcación y software que hacen crecer tu negocio.",
+                "nosotros.vision.title": "Visión",
+                "nosotros.vision.desc": "Liderar la automatización con IA en soluciones empresariales",
+                "nosotros.valores.title": "Valores",
+                "nosotros.valores.v1": "Innovación", "nosotros.valores.v2": "Calidad",
+                "nosotros.valores.v3": "Enfoque al cliente", "nosotros.valores.v4": "Integridad",
+                "nosotros.valores.v5": "Trabajo en equipo", "nosotros.valores.v6": "Aprendizaje",
+                "nosotros.valores.v7": "Confianza",
+
+                "soluciones.badge": "Ecosistema Tecnológico",
+                "soluciones.title": 'Nuestras <span class="highlight-blue">Soluciones</span>',
+                "soluciones.desc": "Desarrollamos e implementamos herramientas robustas a la medida para automatizar tus procesos, potenciar tus canales de comunicación y llevar el rendimiento de tu empresa al siguiente nivel.",
+                "soluciones.ctaText": "¿Necesitas una arquitectura o desarrollo específico para tu empresa?",
+                "soluciones.ctaBtn": "Cotizar Solución Personalizada",
+                "soluciones.verMas": "Ver más soluciones",
+                "soluciones.verMenos": "Ver menos soluciones",
+
+                "common.saberMas": "Saber más", "common.fichaPdf": "Ficha PDF",
+
+                "sol.tarificador.title": "Tarificador",
+                "sol.tarificador.desc": "Controla, analiza y gestiona consumos telefónicos en tiempo real de tu PBX o Asterisk, transformándolos en decisiones estratégicas de negocio.",
+                "sol.tarificador.f1": "Control de costos y presupuestos", "sol.tarificador.f2": "Monitoreo en tiempo real (CDR)", "sol.tarificador.f3": "Reportes y gráficos automatizados",
+
+                "sol.soporte.title": "Soporte Técnico",
+                "sol.soporte.desc": "Asistencia proactiva para mantener tu infraestructura TI operativa, segura y libre de interrupciones imprevistas.",
+                "sol.soporte.f1": "Soporte 24/7 Remoto/En sitio", "sol.soporte.f2": "Mantenimiento preventivo", "sol.soporte.f3": "Optimización y escalabilidad",
+
+                "sol.pbx.title": "PBX Cloud",
+                "sol.pbx.desc": "Telefonía empresarial de última generación en la nube. Conecta a tus colaboradores dondequiera que estén de manera centralizada.",
+                "sol.pbx.f1": "Extensiones móviles/remotas", "sol.pbx.f2": "Cero costos de hardware físico", "sol.pbx.f3": "Administración centralizada",
+
+                "sol.marcador.title": "Marcador de Call Center",
+                "sol.marcador.desc": "Sistemas de marcación predictiva, progresiva y manual que incrementan sustancialmente la productividad de tus agentes.",
+                "sol.marcador.f1": "Marcación predictiva con IA", "sol.marcador.f2": "Integración inmediata con CRMs", "sol.marcador.f3": "Detección inteligente de contestadoras",
+
+                "sol.kiosko.title": "Kiosko de Call Center",
+                "sol.kiosko.desc": "Módulos interactivos personalizados para la gestión de turnos, monitoreo de colas y desempeño de agentes en tiempo real.",
+                "sol.kiosko.f1": "Pantallas táctiles intuitivas", "sol.kiosko.f2": "Monitoreo de colas de atención", "sol.kiosko.f3": "Estadísticas de agentes en vivo",
+
+                "sol.ivr.title": "IVR's",
+                "sol.ivr.desc": "Sistemas de Respuesta de Voz Interactiva multinivel que guían eficientemente al usuario final hacia el área indicada.",
+                "sol.ivr.f1": "Reconocimiento de voz avanzado", "sol.ivr.f2": "Rutas de atención inteligentes", "sol.ivr.f3": "Atención automatizada 24/7",
+
+                "sol.intranet.title": "Intranet",
+                "sol.intranet.desc": "Plataforma interna privada para centralizar la comunicación, almacenar documentos de forma segura y mejorar la colaboración.",
+                "sol.intranet.f1": "Gestión documental centralizada", "sol.intranet.f2": "Directorio y noticias internas", "sol.intranet.f3": "Trámites y flujos de trabajo internos",
+
+                "sol.api.title": "Integraciones de APIs",
+                "sol.api.desc": "Interconectamos tus sistemas de software actuales para asegurar que los datos fluyan de manera rápida, segura y automática.",
+                "sol.api.f1": "Sincronización en tiempo real", "sol.api.f2": "Seguridad de datos en tránsito", "sol.api.f3": "Automatización de procesos entre plataformas",
+
+                "sol.erp.title": "ERP",
+                "sol.erp.desc": "Planificación de recursos empresariales para el control integral de inventarios, finanzas, ventas y administración.",
+                "sol.erp.f1": "Módulos de control a la medida", "sol.erp.f2": "Dashboard de métricas clave", "sol.erp.f3": "Automatización contable y operativa",
+
+                "sol.envios.title": "WhatsApp y SMS Masivos",
+                "sol.envios.desc": "Campañas de mensajería masiva escalables para notificaciones, cobranza o marketing directo a dispositivos móviles.",
+                "sol.envios.f1": "API Oficial de WhatsApp Business", "sol.envios.f2": "Tasa de entrega garantizada", "sol.envios.f3": "Automatización con Chatbots avanzados",
+
+                "sol.web.title": "Desarrollo Web",
+                "sol.web.desc": "Construcción de sitios web optimizados, e-commerce, portales transaccionales y landing pages rápidas y adaptables.",
+                "sol.web.f1": "Diseño 100% responsivo y rápido", "sol.web.f2": "Optimización SEO integrada", "sol.web.f3": "Sistemas interactivos dinámicos",
+
+                "sol.asterisk.title": "Asterisk",
+                "sol.asterisk.desc": "Diseño, configuración y puesta en marcha de servidores basados en Asterisk para telefonía IP con código abierto.",
+                "sol.asterisk.f1": "Personalización absoluta de dialplan", "sol.asterisk.f2": "Soporte y tuning de seguridad", "sol.asterisk.f3": "Grabaciones integradas e IVRs avanzados",
+
+                "modal.descGeneral": "Descripción General", "modal.features": "Características Clave",
+                "modal.benefits": "Beneficios para tu Negocio", "modal.glossary": "Glosario Técnico de Fácil Comprensión",
+                "modal.pdfLink": "Ver Ficha Técnica PDF", "modal.cotizar": "Cotizar Servicio",
+
+                "aliados.title": 'Nuestros <span class="highlight-blue">aliados</span>',
+                "aliados.desc": "Trabajamos con las mejores marcas para ofrecerte soluciones tecnológicas confiables, innovadoras y de alto rendimiento.",
+
+                "servicios.title": 'Nuestros <span class="highlight-blue">servicios</span>',
+                "servicios.desc": "Ofrecemos soluciones integrales para optimizar y transformar tu infraestructura tecnológica.",
+                "servicios.soporte.title": "Soporte Técnico", "servicios.soporte.desc": "Atención inmediata y eficiente para mantener tu operación siempre activa.",
+                "servicios.infra.title": "Infraestructura IT", "servicios.infra.desc": "Diseñamos e implementamos infraestructuras seguras, escalables y confiables.",
+                "servicios.ciber.title": "Ciberseguridad", "servicios.ciber.desc": "Protegemos tu información y sistemas con las mejores prácticas del mercado.",
+                "servicios.dev.title": "Desarrollo de Software", "servicios.dev.desc": "Soluciones a la medida que impulsan la productividad de tu empresa.",
+                "servicios.consult.title": "Consultoría IT", "servicios.consult.desc": "Te asesoramos para tomar decisiones tecnológicas inteligentes.",
+                "servicios.verTodos": "Ver todos los servicios",
+                
+                "portafolio.title": 'Nuestro <span class="highlight-blue">Portafolio</span>',
+                "portafolio.desc": "Casos de éxito y proyectos destacados donde hemos implementado tecnología de alto impacto.",
+                "portafolio.tag1": "Desarrollo Web",
+                "portafolio.proj1.title": "Plataforma E-commerce B2B",
+                "portafolio.proj1.desc": "Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.",
+                "portafolio.tag2": "Call Center",
+                "portafolio.proj2.title": "Migración a PBX Cloud",
+                "portafolio.proj2.desc": "Implementación de telefonía virtual para 150 agentes remotos, reduciendo los costos operativos mensuales.",
+                "portafolio.tag3": "Soporte IT",
+                "portafolio.proj3.title": "Renovación de Infraestructura",
+                "portafolio.proj3.desc": "Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.",
+
+                "contacto.title": '¿Listo para <span class="highlight-blue">empezar?</span>',
+                "contacto.desc": "Escanea el código QR con la cámara de tu celular o haz clic en el botón para responder nuestro formulario y recibir una cotización personalizada.",
+                "contacto.cta": "Ir al formulario",
+                "contacto.qrCaption": "Escanea con tu celular",
+
+                "vacantes.title": 'Únete a <span class="highlight-blue">nuestro equipo</span>',
+                "vacantes.desc": "Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.",
+                "vacantes.empty": "Por el momento no hay vacantes disponibles. ¡Vuelve pronto!",
+                "vacantes.verDetalle": "Ver detalle y postular",
+                "vacantes.modal.descripcion": "Descripción del puesto",
+                "vacantes.modal.requisitos": "Requisitos",
+                "vacantes.modal.postular": "Postúlate a esta vacante",
+                "vacantes.form.nombre": "Nombre completo",
+                "vacantes.form.email": "Correo electrónico",
+                "vacantes.form.telefono": "Teléfono",
+                "vacantes.form.cv": "Currículum (PDF, máx. 5MB)",
+                "vacantes.form.mensaje": "Mensaje (opcional)",
+                "vacantes.form.enviar": "Enviar postulación",
+
+                "footer.tagline": "Soluciones tecnológicas a la medida de tu empresa. Innovación, confianza y resultados medibles.",
+                "footer.navTitle": "Navegación", "footer.contactTitle": "Contacto",
+                "footer.rights": "Todos los derechos reservados.",
+
+                "chat.title": "Asistente ARDABYTEC",
+                "chat.status": "En línea"
+            },
+            en: {
+                "nav.inicio": "Home", "nav.nosotros": "About", "nav.soluciones": "Solutions",
+                "nav.aliados": "Partners", "nav.servicios": "Services", "nav.contacto": "Contact",
+                "nav.portafolio": "Portfolio", "nav.vacantes": "Careers", "nav.login": "Login",
+
+                "hero.title": 'Technology <br>solutions <br>built for <span class="highlight-blue">your business</span>',
+                "hero.desc": "We drive your business growth and efficiency with reliable, innovative and scalable technology.",
+                "hero.cta": "Learn more",
+                "hero.badge1.title": "Trust", "hero.badge1.desc": "& Security",
+                "hero.badge2.title": "Constant", "hero.badge2.desc": "Innovation",
+                "hero.badge3.title": "Measurable", "hero.badge3.desc": "Results",
+
+                "nosotros.badge": "About Us",
+                "nosotros.title": 'Who <span class="highlight-blue">we are</span>',
+                "nosotros.desc": "At <strong>ARDABYTEC</strong> we are a consulting firm specialized in Information Technology, with extensive experience in Contact Center solutions, web development, mobile applications and comprehensive technical support. We drive our clients' digital transformation through innovative, personalized solutions aligned with their strategic goals. Our approach focuses on close attention, operational excellence and high-value technology to optimize processes, improve user experience and accelerate business growth.",
+                "nosotros.mision.title": "Mission",
+                "nosotros.mision.desc": "IT support, dialing and software that grow your business.",
+                "nosotros.vision.title": "Vision",
+                "nosotros.vision.desc": "Leading AI-driven automation in enterprise solutions",
+                "nosotros.valores.title": "Values",
+                "nosotros.valores.v1": "Innovation", "nosotros.valores.v2": "Quality",
+                "nosotros.valores.v3": "Customer focus", "nosotros.valores.v4": "Integrity",
+                "nosotros.valores.v5": "Teamwork", "nosotros.valores.v6": "Learning",
+                "nosotros.valores.v7": "Trust",
+
+                "soluciones.badge": "Technology Ecosystem",
+                "soluciones.title": 'Our <span class="highlight-blue">Solutions</span>',
+                "soluciones.desc": "We develop and implement robust, tailor-made tools to automate your processes, boost your communication channels and take your company's performance to the next level.",
+                "soluciones.ctaText": "Need a specific architecture or development for your company?",
+                "soluciones.ctaBtn": "Quote a Custom Solution",
+                "soluciones.verMas": "View more solutions",
+                "soluciones.verMenos": "View fewer solutions",
+
+                "common.saberMas": "Learn more", "common.fichaPdf": "PDF Sheet",
+
+                "sol.tarificador.title": "Call Rating System",
+                "sol.tarificador.desc": "Monitor, analyze and manage real-time phone usage from your PBX or Asterisk, turning it into strategic business decisions.",
+                "sol.tarificador.f1": "Cost and budget control", "sol.tarificador.f2": "Real-time monitoring (CDR)", "sol.tarificador.f3": "Automated reports and charts",
+
+                "sol.soporte.title": "Technical Support",
+                "sol.soporte.desc": "Proactive assistance to keep your IT infrastructure operational, secure and free of unexpected disruptions.",
+                "sol.soporte.f1": "24/7 Remote/On-site support", "sol.soporte.f2": "Preventive maintenance", "sol.soporte.f3": "Optimization and scalability",
+
+                "sol.pbx.title": "Cloud PBX",
+                "sol.pbx.desc": "Next-generation business telephony in the cloud. Connect your team centrally, wherever they are.",
+                "sol.pbx.f1": "Mobile/remote extensions", "sol.pbx.f2": "Zero physical hardware costs", "sol.pbx.f3": "Centralized administration",
+
+                "sol.marcador.title": "Call Center Dialer",
+                "sol.marcador.desc": "Predictive, progressive and manual dialing systems that substantially increase your agents' productivity.",
+                "sol.marcador.f1": "AI-driven predictive dialing", "sol.marcador.f2": "Instant CRM integration", "sol.marcador.f3": "Smart answering-machine detection",
+
+                "sol.kiosko.title": "Call Center Kiosk",
+                "sol.kiosko.desc": "Custom interactive modules for shift management, queue monitoring and real-time agent performance.",
+                "sol.kiosko.f1": "Intuitive touchscreens", "sol.kiosko.f2": "Call queue monitoring", "sol.kiosko.f3": "Live agent statistics",
+
+                "sol.ivr.title": "IVR Systems",
+                "sol.ivr.desc": "Multi-level interactive voice response systems that efficiently guide end users to the right department.",
+                "sol.ivr.f1": "Advanced voice recognition", "sol.ivr.f2": "Smart routing paths", "sol.ivr.f3": "24/7 automated attention",
+
+                "sol.intranet.title": "Intranet",
+                "sol.intranet.desc": "Private internal platform to centralize communication, securely store documents and improve collaboration.",
+                "sol.intranet.f1": "Centralized document management", "sol.intranet.f2": "Internal directory and news", "sol.intranet.f3": "Internal forms and workflows",
+
+                "sol.api.title": "API Integrations",
+                "sol.api.desc": "We interconnect your existing software systems to ensure data flows quickly, securely and automatically.",
+                "sol.api.f1": "Real-time synchronization", "sol.api.f2": "Data-in-transit security", "sol.api.f3": "Cross-platform process automation",
+
+                "sol.erp.title": "ERP",
+                "sol.erp.desc": "Enterprise resource planning for comprehensive control of inventory, finance, sales and administration.",
+                "sol.erp.f1": "Custom control modules", "sol.erp.f2": "Key metrics dashboard", "sol.erp.f3": "Accounting and operational automation",
+
+                "sol.envios.title": "Bulk WhatsApp & SMS",
+                "sol.envios.desc": "Scalable mass messaging campaigns for notifications, collections or direct marketing to mobile devices.",
+                "sol.envios.f1": "Official WhatsApp Business API", "sol.envios.f2": "Guaranteed delivery rate", "sol.envios.f3": "Advanced chatbot automation",
+
+                "sol.web.title": "Web Development",
+                "sol.web.desc": "Building optimized websites, e-commerce, transactional portals and fast, adaptable landing pages.",
+                "sol.web.f1": "100% responsive, fast design", "sol.web.f2": "Built-in SEO optimization", "sol.web.f3": "Dynamic interactive systems",
+
+                "sol.asterisk.title": "Asterisk",
+                "sol.asterisk.desc": "Design, configuration and deployment of Asterisk-based servers for open-source IP telephony.",
+                "sol.asterisk.f1": "Full dialplan customization", "sol.asterisk.f2": "Security support and tuning", "sol.asterisk.f3": "Built-in recordings and advanced IVRs",
+
+                "modal.descGeneral": "General Description", "modal.features": "Key Features",
+                "modal.benefits": "Benefits for Your Business", "modal.glossary": "Easy-to-Understand Technical Glossary",
+                "modal.pdfLink": "View PDF Data Sheet", "modal.cotizar": "Request a Quote",
+
+                "aliados.title": 'Our <span class="highlight-blue">partners</span>',
+                "aliados.desc": "We work with the best brands to offer you reliable, innovative and high-performance technology solutions.",
+
+                "servicios.title": 'Our <span class="highlight-blue">services</span>',
+                "servicios.desc": "We offer comprehensive solutions to optimize and transform your technology infrastructure.",
+                "servicios.soporte.title": "Technical Support", "servicios.soporte.desc": "Immediate, efficient attention to keep your operation always active.",
+                "servicios.infra.title": "IT Infrastructure", "servicios.infra.desc": "We design and implement secure, scalable and reliable infrastructures.",
+                "servicios.ciber.title": "Cybersecurity", "servicios.ciber.desc": "We protect your information and systems with market best practices.",
+                "servicios.dev.title": "Software Development", "servicios.dev.desc": "Custom solutions that boost your company's productivity.",
+                "servicios.consult.title": "IT Consulting", "servicios.consult.desc": "We advise you in making smart technology decisions.",
+                "servicios.verTodos": "See all services",
+                
+                "portafolio.title": 'Our <span class="highlight-blue">Portfolio</span>',
+                "portafolio.desc": "Success stories and featured projects where we have implemented high-impact technology.",
+                "portafolio.tag1": "Web Development",
+                "portafolio.proj1.title": "B2B E-commerce Platform",
+                "portafolio.proj1.desc": "Creation of a wholesale sales portal with real-time ERP integration, optimizing the supply chain.",
+                "portafolio.tag2": "Call Center",
+                "portafolio.proj2.title": "Cloud PBX Migration",
+                "portafolio.proj2.desc": "Implementation of virtual telephony for 150 remote agents, reducing monthly operational costs.",
+                "portafolio.tag3": "IT Support",
+                "portafolio.proj3.title": "Infrastructure Renewal",
+                "portafolio.proj3.desc": "Design and update of local servers and structured network for a corporate client in the financial sector.",
+
+                "contacto.title": 'Ready to <span class="highlight-blue">get started?</span>',
+                "contacto.desc": "Scan the QR code with your phone's camera or click the button to fill out our form and receive a personalized quote.",
+                "contacto.cta": "Go to the form",
+                "contacto.qrCaption": "Scan with your phone",
+
+                "vacantes.title": 'Join <span class="highlight-blue">our team</span>',
+                "vacantes.desc": "Check out the current job openings at ARDABYTEC and apply today.",
+                "vacantes.empty": "There are no open positions right now. Check back soon!",
+                "vacantes.verDetalle": "View details & apply",
+                "vacantes.modal.descripcion": "Job description",
+                "vacantes.modal.requisitos": "Requirements",
+                "vacantes.modal.postular": "Apply for this position",
+                "vacantes.form.nombre": "Full name",
+                "vacantes.form.email": "Email address",
+                "vacantes.form.telefono": "Phone",
+                "vacantes.form.cv": "Resume (PDF, max. 5MB)",
+                "vacantes.form.mensaje": "Message (optional)",
+                "vacantes.form.enviar": "Submit application",
+
+                "footer.tagline": "Technology solutions built for your business. Innovation, trust and measurable results.",
+                "footer.navTitle": "Navigation", "footer.contactTitle": "Contact",
+                "footer.rights": "All rights reserved.",
+
+                "chat.title": "ARDABYTEC Assistant",
+                "chat.status": "Online"
+            }
+        };
+
+        // --- SISTEMA DE IDIOMA (ES/EN) ---
+        const STORAGE_LANG_KEY = 'ardabytec-lang';
+        let currentLang = localStorage.getItem(STORAGE_LANG_KEY) || 'es';
+
+        function applyTranslations(lang) {
+            const dict = translations[lang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (dict[key] !== undefined) el.innerText = dict[key];
+            });
+            document.querySelectorAll('[data-i18n-html]').forEach(el => {
+                const key = el.getAttribute('data-i18n-html');
+                if (dict[key] !== undefined) el.innerHTML = dict[key];
+            });
+
+            const titleEl = document.querySelector('title[data-es]');
+            if (titleEl) titleEl.innerText = titleEl.getAttribute(lang === 'en' ? 'data-en' : 'data-es');
+
+            document.documentElement.setAttribute('lang', lang);
+
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+            });
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem(STORAGE_LANG_KEY, lang);
+            applyTranslations(lang);
+
+            const openServiceKey = document.getElementById('serviceModal').dataset.currentService;
+            if (openServiceKey) openModal(openServiceKey);
+
+            if (typeof window.refreshVacantesLang === 'function') window.refreshVacantesLang();
+            if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
+            if (typeof window.refreshChatLang === 'function') window.refreshChatLang();
+        }
+
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.addEventListener('click', () => setLanguage(btn.getAttribute('data-lang')));
+        });
+
+        applyTranslations(currentLang);
+
+        // --- SISTEMA DE MODO OSCURO ---
+        const STORAGE_THEME_KEY = 'ardabytec-theme';
+
+        const LOGO_LIGHT_SRC = 'assets/logos-empresa/logo1.png';
+        const LOGO_DARK_SRC = 'assets/logos-empresa/logo1-modo-oscuro.png';
+
+        function updateLogo(theme) {
+            const logoSrc = theme === 'dark' ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
+            const headerLogo = document.getElementById('headerLogoImg');
+            if (headerLogo) {
+                headerLogo.src = logoSrc;
+            }
+            const footerLogo = document.getElementById('footerLogoImg');
+            if (footerLogo) {
+                footerLogo.src = logoSrc;
+            }
+        }
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem(STORAGE_THEME_KEY, theme);
+            updateLogo(theme);
+        }
+
+        updateLogo(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+
+        document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        });
+
+        // --- AÑO ACTUAL EN EL FOOTER ---
+        const footerYearEl = document.getElementById('footerYear');
+        if (footerYearEl) footerYearEl.innerText = new Date().getFullYear();
+
+        // --- BOTÓN LOGIN / INTRANET / CERRAR SESIÓN SEGÚN SESIÓN ---
+        (function () {
+            const loginLink = document.getElementById('loginNavLink');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const demoBtn = document.getElementById('demoBtn');
+            if (!loginLink || !logoutBtn) return;
+
+            // En desarrollo local (dev-server en :8080) AGYDA corre en localhost:5173 (Vite).
+            // En producción, apunta al dominio real.
+            const INTRANET_BASE_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+                ? 'http://localhost:5173'
+                : 'https://agyda.ardabytec.vip';
+
+            function getUsuario() {
+                try {
+                    return JSON.parse(sessionStorage.getItem('ardabytec_usuario'));
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            window.renderSessionUI = function renderSessionUI() {
+                const usuario = getUsuario();
+                if (usuario) {
+                    loginLink.textContent = 'AGYDA';
+                    loginLink.href = `${INTRANET_BASE_URL}/dashboard`;
+                    loginLink.removeAttribute('data-i18n');
+                    loginLink.target = '_blank';
+                    loginLink.rel = 'noopener';
+                    logoutBtn.style.display = '';
+                    if (demoBtn) demoBtn.style.display = '';
+                } else {
+                    loginLink.textContent = currentLang === 'en' ? 'Login' : 'Iniciar sesión';
+                    loginLink.href = '#';
+                    loginLink.onclick = function () { window.openLoginModal(); return false; };
+                    loginLink.setAttribute('data-i18n', 'nav.login');
+                    loginLink.removeAttribute('target');
+                    loginLink.removeAttribute('rel');
+                    logoutBtn.style.display = 'none';
+                    if (demoBtn) demoBtn.style.display = 'none';
+                }
+            }
+
+            logoutBtn.addEventListener('click', function () {
+                sessionStorage.removeItem('ardabytec_usuario');
+                renderSessionUI();
+            });
+
+            renderSessionUI();
+        })();
+
+        // --- MODAL DE LOGIN (ventana emergente en vez de página completa) ---
+        (function () {
+            const loginModal = document.getElementById('loginModal');
+            const loginModalForm = document.getElementById('loginModalForm');
+            const loginModalStatus = document.getElementById('loginModalStatus');
+            const loginModalSubmitBtn = document.getElementById('loginModalSubmitBtn');
+
+            window.openLoginModal = function () {
+                if (!loginModal) return;
+                loginModalForm.reset();
+                loginModalStatus.innerText = '';
+                loginModalStatus.className = 'login-modal-status';
+                loginModal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+                document.getElementById('loginModalUsuario').focus();
+            };
+
+            window.closeLoginModal = function () {
+                if (!loginModal) return;
+                loginModal.classList.remove('active');
+                document.body.style.overflow = '';
+            };
+
+            loginModal.addEventListener('click', function (event) {
+                if (event.target === loginModal) closeLoginModal();
+            });
+
+            const togglePwBtn = document.getElementById('loginModalTogglePw');
+            const pwInput = document.getElementById('loginModalPassword');
+            if (togglePwBtn && pwInput) {
+                togglePwBtn.addEventListener('click', function () {
+                    const showing = pwInput.type === 'text';
+                    pwInput.type = showing ? 'password' : 'text';
+                    togglePwBtn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+                });
+            }
+
+            if (loginModalForm) {
+                loginModalForm.addEventListener('submit', async function (e) {
+                    e.preventDefault();
+                    if (!loginModalForm.checkValidity()) {
+                        loginModalForm.reportValidity();
+                        return;
+                    }
+
+                    const username = document.getElementById('loginModalUsuario').value.trim();
+                    const password = document.getElementById('loginModalPassword').value;
+
+                    loginModalSubmitBtn.disabled = true;
+                    loginModalStatus.innerText = '';
+                    loginModalStatus.className = 'login-modal-status';
+
+                    try {
+                        const res = await fetch('/api/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ usuario: username, password }),
+                        });
+                        const data = await res.json().catch(() => ({}));
+
+                        if (res.ok && data.success) {
+                            sessionStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
+                            loginModalStatus.innerText = 'Inicio de sesión correcto. Redirigiendo...';
+                            loginModalStatus.className = 'login-modal-status success';
+
+                            const target = 'https://agyda.ardabytec.vip/dashboard';
+
+                            setTimeout(function () {
+                                closeLoginModal();
+                                window.open(target, '_blank', 'noopener');
+                                if (typeof window.renderSessionUI === 'function') window.renderSessionUI();
+                            }, 600);
+                        } else {
+                            loginModalStatus.innerText = data.message || 'Usuario o contraseña incorrectos.';
+                            loginModalStatus.className = 'login-modal-status error';
+                        }
+                    } catch (err) {
+                        loginModalStatus.innerText = 'Ocurrió un error de conexión. Intenta de nuevo más tarde.';
+                        loginModalStatus.className = 'login-modal-status error';
+                    } finally {
+                        loginModalSubmitBtn.disabled = false;
+                    }
+                });
+            }
+        })();
+
+        // --- SISTEMA DE MANEJO DE VENTANAS MODALES ---
+        function openModal(serviceKey) {
+            const data = servicesData[serviceKey];
+            if (!data) return;
+            const text = data[currentLang];
+
+            const modal = document.getElementById('serviceModal');
+            modal.dataset.currentService = serviceKey;
+
+            document.getElementById('modalIcon').innerText = data.icon;
+            document.getElementById('modalTitle').innerText = text.title;
+            document.getElementById('modalDesc').innerText = text.desc;
+            document.getElementById('modalPdfLink').href = data.pdf;
+
+            const featuresContainer = document.getElementById('modalFeatures');
+            featuresContainer.innerHTML = '';
+            text.features.forEach(feat => {
+                const li = document.createElement('li');
+                li.innerText = feat;
+                featuresContainer.appendChild(li);
+            });
+
+            const benefitsContainer = document.getElementById('modalBenefits');
+            benefitsContainer.innerHTML = '';
+            text.benefits.forEach(ben => {
+                const li = document.createElement('li');
+                li.innerText = ben;
+                benefitsContainer.appendChild(li);
+            });
+
+            const glossaryContainer = document.getElementById('modalGlossary');
+            glossaryContainer.innerHTML = '';
+            text.glossary.forEach(item => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'modal-glossary-item';
+                itemDiv.innerHTML = `<strong>${item.term}</strong> <p>${item.definition}</p>`;
+                glossaryContainer.appendChild(itemDiv);
+            });
+
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('serviceModal');
+            modal.classList.remove('active');
+            delete modal.dataset.currentService;
+            document.body.style.overflow = '';
+        }
+
+        window.onclick = function (event) {
+            const modal = document.getElementById('serviceModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        };
+
+        // --- MÓDULO DE VACANTES ---
+        (function () {
+            const MODALIDAD_LABELS = {
+                es: { remoto: 'Remoto', presencial: 'Presencial', hibrido: 'Híbrido' },
+                en: { remoto: 'Remote', presencial: 'On-site', hibrido: 'Hybrid' }
+            };
+
+            let vacantesCache = [];
+
+            function escapeHtml(str) {
+                const div = document.createElement('div');
+                div.innerText = str == null ? '' : String(str);
+                return div.innerHTML;
+            }
+
+            async function cargarVacantes() {
+                const grid = document.getElementById('vacantesGrid');
+                const empty = document.getElementById('vacantesEmpty');
+                if (!grid) return;
+
+                try {
+                    const res = await fetch('/api/vacantes');
+                    const json = await res.json();
+                    const vacantes = Array.isArray(json) ? json : (json.data || []);
+                    vacantesCache = vacantes;
+
+                    if (!vacantes.length) {
+                        grid.innerHTML = '';
+                        if (empty) empty.style.display = '';
+                        return;
+                    }
+                    if (empty) empty.style.display = 'none';
+
+                    grid.innerHTML = vacantes.map(v => {
+                        const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[v.modalidad] || '';
+                        return `
+                            <div class="vacante-card">
+                                <div class="vacante-card-banner"><span class="vacante-card-banner-icon">💼</span></div>
+                                <div class="vacante-card-content">
+                                    <h3 class="vacante-title">${escapeHtml(v.titulo)}</h3>
+                                    <div class="vacante-meta">
+                                        ${v.ubicacion ? `<span class="vacante-badge">📍 ${escapeHtml(v.ubicacion)}</span>` : ''}
+                                        ${modalidadLabel ? `<span class="vacante-badge">💼 ${escapeHtml(modalidadLabel)}</span>` : ''}
+                                    </div>
+                                    <p class="vacante-short-desc">${escapeHtml((v.descripcion || '').slice(0, 130))}${(v.descripcion || '').length > 130 ? '…' : ''}</p>
+                                    <button type="button" class="btn-quick-view" onclick="openVacanteModal(${v.id})" data-i18n="vacantes.verDetalle">Ver detalle y postular</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    applyTranslations(currentLang);
+                    if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
+                    if (typeof window.revealVacantesCards === 'function') window.revealVacantesCards();
+                } catch (e) {
+                    console.warn('No se pudieron cargar las vacantes:', e);
+                    if (empty) empty.style.display = '';
+                }
+            }
+
+            window.openVacanteModal = function (id) {
+                const vacante = vacantesCache.find(v => v.id === id);
+                if (!vacante) return;
+
+                const modal = document.getElementById('vacanteModal');
+                modal.dataset.currentVacanteId = id;
+
+                document.getElementById('vacModalTitulo').innerText = vacante.titulo || '';
+                document.getElementById('vacModalDescripcion').innerText = vacante.descripcion || '';
+
+                const requisitosBlock = document.getElementById('vacModalRequisitosBlock');
+                if (vacante.requisitos) {
+                    document.getElementById('vacModalRequisitos').innerText = vacante.requisitos;
+                    requisitosBlock.style.display = '';
+                } else {
+                    requisitosBlock.style.display = 'none';
+                }
+
+                const ubicacionEl = document.getElementById('vacModalUbicacion');
+                ubicacionEl.innerText = vacante.ubicacion ? `📍 ${vacante.ubicacion}` : '';
+                ubicacionEl.style.display = vacante.ubicacion ? '' : 'none';
+
+                const modalidadEl = document.getElementById('vacModalModalidad');
+                const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[vacante.modalidad] || '';
+                modalidadEl.innerText = modalidadLabel ? `💼 ${modalidadLabel}` : '';
+                modalidadEl.style.display = modalidadLabel ? '' : 'none';
+
+                const contratoEl = document.getElementById('vacModalContrato');
+                contratoEl.innerText = vacante.tipoContrato ? `📄 ${vacante.tipoContrato}` : '';
+                contratoEl.style.display = vacante.tipoContrato ? '' : 'none';
+
+                const salarioEl = document.getElementById('vacModalSalario');
+                salarioEl.innerText = vacante.salario ? `💰 ${vacante.salario}` : '';
+                salarioEl.style.display = vacante.salario ? '' : 'none';
+
+                document.getElementById('postulacionForm').reset();
+                document.getElementById('postulacionStatus').innerText = '';
+                document.getElementById('postulacionStatus').className = 'postulacion-status';
+
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            };
+
+            window.closeVacanteModal = function () {
+                const modal = document.getElementById('vacanteModal');
+                modal.classList.remove('active');
+                delete modal.dataset.currentVacanteId;
+                document.body.style.overflow = '';
+            };
+
+            window.addEventListener('click', function (event) {
+                const modal = document.getElementById('vacanteModal');
+                if (event.target === modal) closeVacanteModal();
+            });
+
+            function fileToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            const postulacionForm = document.getElementById('postulacionForm');
+            if (postulacionForm) {
+                postulacionForm.addEventListener('submit', async function (e) {
+                    e.preventDefault();
+
+                    const modal = document.getElementById('vacanteModal');
+                    const vacanteId = modal.dataset.currentVacanteId;
+                    if (!vacanteId) return;
+
+                    const statusEl = document.getElementById('postulacionStatus');
+                    const submitBtn = document.getElementById('postulacionSubmitBtn');
+                    const cvInput = document.getElementById('postCv');
+                    const file = cvInput.files[0];
+
+                    statusEl.className = 'postulacion-status';
+                    statusEl.innerText = '';
+
+                    if (!file) {
+                        statusEl.innerText = 'Selecciona tu CV en formato PDF.';
+                        statusEl.className = 'postulacion-status error';
+                        return;
+                    }
+                    if (file.type !== 'application/pdf') {
+                        statusEl.innerText = 'El archivo debe ser un PDF.';
+                        statusEl.className = 'postulacion-status error';
+                        return;
+                    }
+                    if (file.size > 5 * 1024 * 1024) {
+                        statusEl.innerText = 'El archivo no debe superar los 5MB.';
+                        statusEl.className = 'postulacion-status error';
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    statusEl.innerText = 'Enviando postulación…';
+
+                    try {
+                        const base64 = await fileToBase64(file);
+                        const uploadRes = await fetch('/api/uploads/vacante-cv', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ base64, filename: file.name })
+                        });
+                        const uploadJson = await uploadRes.json();
+                        if (!uploadRes.ok || !uploadJson.url) {
+                            throw new Error(uploadJson.message || 'No se pudo subir el CV');
+                        }
+
+                        const postRes = await fetch(`/api/vacantes/${vacanteId}/postulantes`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                nombre: document.getElementById('postNombre').value.trim(),
+                                email: document.getElementById('postEmail').value.trim(),
+                                telefono: document.getElementById('postTelefono').value.trim(),
+                                mensaje: document.getElementById('postMensaje').value.trim(),
+                                cvUrl: uploadJson.url
+                            })
+                        });
+                        const postJson = await postRes.json();
+                        if (!postRes.ok || !postJson.success) {
+                            throw new Error(postJson.message || 'No se pudo enviar la postulación');
+                        }
+
+                        statusEl.innerText = '¡Postulación enviada! Nos pondremos en contacto contigo pronto.';
+                        statusEl.className = 'postulacion-status success';
+                        postulacionForm.reset();
+                        setTimeout(closeVacanteModal, 2200);
+                    } catch (err) {
+                        statusEl.innerText = err.message || 'Ocurrió un error al enviar tu postulación.';
+                        statusEl.className = 'postulacion-status error';
+                    } finally {
+                        submitBtn.disabled = false;
+                    }
+                });
+            }
+
+            window.refreshVacantesLang = cargarVacantes;
+            cargarVacantes();
+        })();
+
+        // --- EFECTOS DINÁMICOS: SCROLL-REVEAL + PARALLAX ---
+        (function () {
+            const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (prefersReducedMotion) return;
+
+            // 1) Marca automáticamente los elementos a revelar al hacer scroll,
+            //    sin necesidad de tocar cada bloque del HTML manualmente.
+            function markRevealTargets() {
+                const sectionTitles = document.querySelectorAll(
+                    '.section-title, .section-title-center, .section-desc, .section-desc-center, ' +
+                    '.nosotros-main-card, .nosotros-badge, .soluciones-badge, .aliados-info, .qr-form-info, .vacantes-container > p'
+                );
+                sectionTitles.forEach(el => {
+                    if (!el.hasAttribute('data-reveal')) el.setAttribute('data-reveal', '');
+                });
+
+                const cardGrids = document.querySelectorAll(
+                    '.nosotros-grid, .soluciones-grid, .servicios-grid, .portafolio-grid, .vacantes-grid, .aliados-grid-tech'
+                );
+                cardGrids.forEach(grid => {
+                    grid.setAttribute('data-reveal-group', '');
+                    Array.from(grid.children).forEach(card => {
+                        if (!card.hasAttribute('data-reveal')) card.setAttribute('data-reveal', 'zoom');
+                    });
+                });
+
+                const qrCard = document.querySelector('.qr-display-card');
+                if (qrCard) qrCard.setAttribute('data-reveal', 'right');
+            }
+            markRevealTargets();
+
+            // 1.5) TEXTO TROCEADO: envuelve cada palabra (o letra, para "typewriter")
+            //      en un <span class="split-unit"> con --i para escalonar el delay.
+            //      Se reaplica en cada cambio de idioma porque applyTranslations()
+            //      sobreescribe el innerHTML de los elementos con data-i18n[-html].
+            const SPLIT_TARGETS = [
+                { selector: '.hero-title', mode: 'cascade', unit: 'word', stagger: 60 },
+                { selector: '.hero-description', mode: 'blur-focus', unit: 'word', stagger: 35 },
+                { selector: '#nosotros h2', mode: 'typewriter', unit: 'letter', stagger: 28 },
+                { selector: '#soluciones h2', mode: 'flip', unit: 'word', stagger: 90 },
+                { selector: '#aliados h2, #servicios h2', mode: 'scale-pop', unit: 'word', stagger: 70 },
+                { selector: '#portafolio h2, #contacto h2', mode: 'slide-side', unit: 'word', stagger: 65 },
+                { selector: '#vacantes h2', mode: 'cascade', unit: 'word', stagger: 60 },
+                { selector: '.section-desc, .section-desc-center', mode: 'blur-focus', unit: 'word', stagger: 20 },
+            ];
+
+            function splitTextInto(el, unit) {
+                // Preserva nodos que no son texto plano (ej. <span class="highlight-blue">) tratándolos
+                // como una sola unidad, para no romper su propio estilo/color.
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL, null);
+                const frag = document.createDocumentFragment();
+                let unitIndex = 0;
+
+                function wrapUnit(text) {
+                    const span = document.createElement('span');
+                    span.className = 'split-unit';
+                    span.style.setProperty('--i', unitIndex++);
+                    span.textContent = text;
+                    return span;
+                }
+
+                function processTextNode(node) {
+                    const parts = unit === 'letter'
+                        ? node.textContent.split('')
+                        : node.textContent.split(/(\s+)/).filter(s => s !== '');
+                    const pieces = document.createDocumentFragment();
+                    parts.forEach(part => {
+                        if (/^\s+$/.test(part)) {
+                            pieces.appendChild(document.createTextNode(part));
+                        } else if (part) {
+                            pieces.appendChild(wrapUnit(part));
+                        }
+                    });
+                    return pieces;
+                }
+
+                Array.from(el.childNodes).forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        frag.appendChild(processTextNode(node));
+                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Elemento hijo completo (ej. <br>, <span class="highlight-blue">) como una unidad.
+                        const clone = node.cloneNode(true);
+                        if (node.tagName === 'BR') {
+                            frag.appendChild(clone);
+                        } else {
+                            const span = document.createElement('span');
+                            span.className = 'split-unit';
+                            span.style.setProperty('--i', unitIndex++);
+                            span.appendChild(clone);
+                            frag.appendChild(span);
+                        }
+                    }
+                });
+
+                el.innerHTML = '';
+                el.appendChild(frag);
+            }
+
+            const splitObserverCache = [];
+
+            function applyTextSplits() {
+                SPLIT_TARGETS.forEach(({ selector, mode, unit, stagger }) => {
+                    document.querySelectorAll(selector).forEach(el => {
+                        el.classList.remove('is-split-visible');
+                        el.setAttribute('data-split', mode);
+                        splitTextInto(el, unit);
+                        el.querySelectorAll(':scope .split-unit').forEach(span => {
+                            const i = parseInt(span.style.getPropertyValue('--i'), 10) || 0;
+                            span.style.transitionDelay = (i * stagger) + 'ms';
+                        });
+                    });
+                });
+            }
+            applyTextSplits();
+
+            if ('IntersectionObserver' in window) {
+                const splitObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('is-split-visible');
+                            splitObserver.unobserve(entry.target);
+                        }
+                    });
+                }, { threshold: 0.2, rootMargin: '0px 0px -30px 0px' });
+
+                document.querySelectorAll('[data-split]').forEach(el => splitObserver.observe(el));
+                splitObserverCache.push(splitObserver);
+            } else {
+                document.querySelectorAll('[data-split]').forEach(el => el.classList.add('is-split-visible'));
+            }
+
+            // Reaplica el troceo cuando cambia el idioma (el texto nuevo necesita nuevos <span>).
+            window.reapplyTextSplits = function () {
+                splitObserverCache.forEach(obs => obs.disconnect());
+                splitObserverCache.length = 0;
+                applyTextSplits();
+                if ('IntersectionObserver' in window) {
+                    const obs = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting) {
+                                entry.target.classList.add('is-split-visible');
+                                obs.unobserve(entry.target);
+                            }
+                        });
+                    }, { threshold: 0.2, rootMargin: '0px 0px -30px 0px' });
+                    document.querySelectorAll('[data-split]').forEach(el => obs.observe(el));
+                    splitObserverCache.push(obs);
+                } else {
+                    document.querySelectorAll('[data-split]').forEach(el => el.classList.add('is-split-visible'));
+                }
+            };
+
+            // 2) IntersectionObserver: agrega la clase is-visible cuando el elemento entra en pantalla.
+            const revealTargets = document.querySelectorAll('[data-reveal]');
+            if ('IntersectionObserver' in window && revealTargets.length) {
+                const revealObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('is-visible');
+                            revealObserver.unobserve(entry.target);
+                        }
+                    });
+                }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+                revealTargets.forEach(el => revealObserver.observe(el));
+            } else {
+                // Sin soporte: mostrar todo de inmediato
+                revealTargets.forEach(el => el.classList.add('is-visible'));
+            }
+
+            // Vacantes se cargan de forma asíncrona (fetch a /api/vacantes) y se inyectan después
+            // de que este observer ya corrió, así que cargarVacantes() llama a esta función
+            // directamente cuando termina de construir las tarjetas nuevas.
+            window.revealVacantesCards = function () {
+                const vacantesGrid = document.getElementById('vacantesGrid');
+                if (!vacantesGrid) return;
+                vacantesGrid.setAttribute('data-reveal-group', '');
+                Array.from(vacantesGrid.children).forEach((card, idx) => {
+                    card.setAttribute('data-reveal', 'zoom');
+                    // Forzar reflow antes de activar la transición (si no, el navegador puede
+                    // saltarse la animación al ir directo de "sin atributo" a "visible").
+                    void card.offsetWidth;
+                    if ('IntersectionObserver' in window) {
+                        const obs = new IntersectionObserver((entries) => {
+                            entries.forEach(entry => {
+                                if (entry.isIntersecting) {
+                                    setTimeout(() => entry.target.classList.add('is-visible'), idx * 70);
+                                    obs.unobserve(entry.target);
+                                }
+                            });
+                        }, { threshold: 0.1, rootMargin: '0px 0px -20px 0px' });
+                        obs.observe(card);
+                    } else {
+                        card.classList.add('is-visible');
+                    }
+                });
+            };
+
+            // 3) Parallax sutil en el hero: la mascota y el fondo siguen levemente el cursor.
+            const heroSection = document.querySelector('.hero-section');
+            if (heroSection && window.matchMedia('(min-width: 901px)').matches) {
+                heroSection.addEventListener('mousemove', (e) => {
+                    const rect = heroSection.getBoundingClientRect();
+                    const relX = (e.clientX - rect.left) / rect.width - 0.5;
+                    const relY = (e.clientY - rect.top) / rect.height - 0.5;
+                    heroSection.style.setProperty('--parallax-x', (relX * 22).toFixed(2));
+                    heroSection.style.setProperty('--parallax-y', (relY * 16).toFixed(2));
+                });
+                heroSection.addEventListener('mouseleave', () => {
+                    heroSection.style.setProperty('--parallax-x', 0);
+                    heroSection.style.setProperty('--parallax-y', 0);
+                });
+            }
+
+            // 4) Tilt 3D en las tarjetas de vacantes (delegado en el grid: las tarjetas
+            //    se recrean dinámicamente cada vez que se recargan las vacantes).
+            const vacantesGridEl = document.getElementById('vacantesGrid');
+            if (vacantesGridEl && window.matchMedia('(min-width: 901px)').matches && window.matchMedia('(hover: hover)').matches) {
+                vacantesGridEl.addEventListener('mousemove', (e) => {
+                    const card = e.target.closest('.vacante-card');
+                    if (!card) return;
+                    const rect = card.getBoundingClientRect();
+                    const relX = (e.clientX - rect.left) / rect.width - 0.5;
+                    const relY = (e.clientY - rect.top) / rect.height - 0.5;
+                    card.style.setProperty('--tilt-x', (relX * 10).toFixed(2) + 'deg');
+                    card.style.setProperty('--tilt-y', (relY * -10).toFixed(2) + 'deg');
+                });
+                vacantesGridEl.addEventListener('mouseout', (e) => {
+                    const card = e.target.closest('.vacante-card');
+                    if (!card) return;
+                    card.style.setProperty('--tilt-x', '0deg');
+                    card.style.setProperty('--tilt-y', '0deg');
+                });
+            }
+        })();
+
+        // --- CHATBOT (diccionario de respuestas + captura de lead) ---
+        (function () {
+            const panel = document.getElementById('chatPanel');
+            const toggleBtn = document.getElementById('chatToggleBtn');
+            const closeBtn = document.getElementById('chatCloseBtn');
+            const messagesEl = document.getElementById('chatMessages');
+            const quickRepliesEl = document.getElementById('chatQuickReplies');
+            const formEl = document.getElementById('chatForm');
+            const inputEl = document.getElementById('chatInput');
+            if (!panel || !toggleBtn || !formEl) return;
+
+            const CHAT_STORAGE_KEY = 'ardabytec-chat-lead';
+
+            const TEXTOS = {
+                es: {
+                    saludo: '¡Hola! 👋 Soy el asistente virtual de ARDABYTEC. ¿En qué puedo ayudarte hoy?',
+                    sinMatch: 'No estoy seguro de haber entendido eso. Puedes elegir una de estas opciones o contarme un poco más:',
+                    menuInicial: ['Conocer servicios', 'Precios y cotización', 'Hablar con alguien'],
+                    pedirNombre: '¡Con gusto! Para ponerte en contacto con nuestro equipo, ¿me compartes tu nombre completo?',
+                    pedirContacto: (nombre) => `Gracias, ${nombre}. ¿A qué correo o teléfono te contactamos?`,
+                    yaTeTengo: (nombre) => `¡Ya te tengo registrado, ${nombre}! Un momento mientras comparto esto con nuestro equipo.`,
+                    contactoInvalido: 'Ese dato no parece un correo ni un teléfono válido. ¿Puedes intentar de nuevo?',
+                    pedirEmpresa: '¿De qué empresa nos escribes y cuál es tu puesto? (Si prefieres no decirlo, escribe "omitir".)',
+                    pedirPresupuesto: '¿Qué rango de presupuesto tienes contemplado para este proyecto?',
+                    rangosPresupuesto: ['Menos de $10,000', '$10,000 – $50,000', '$50,000 – $150,000', 'Más de $150,000', 'Prefiero no decir'],
+                    pedirConfirmacion: (nombre, contacto, empresaCargo, presupuesto) => `Perfecto. Voy a compartir tus datos con nuestro equipo:\n\n👤 ${nombre}\n📞 ${contacto}${empresaCargo ? `\n🏢 ${empresaCargo}` : ''}${presupuesto ? `\n💰 ${presupuesto}` : ''}\n\n¿Está todo correcto? Escribe "sí" para confirmar o "no" para corregir.`,
+                    enviando: 'Enviando tus datos...',
+                    enviado: '¡Listo! Un asesor de ARDABYTEC te contactará muy pronto. Gracias por escribirnos. 🙌',
+                    errorEnvio: 'Hubo un problema enviando tus datos. Por favor intenta de nuevo en unos minutos, o escríbenos directo a través del formulario de contacto.',
+                    reiniciar: 'Sin problema, empecemos de nuevo. ¿A qué correo o teléfono te contactamos?',
+                    placeholder: 'Escribe tu mensaje...',
+                    liveChatConectando: 'Un momento, te estoy conectando con un agente...',
+                    liveChatSinAgentes: 'En este momento no hay agentes disponibles. Mejor dejemos tus datos para que te contactemos.',
+                    liveChatCerrado: 'El agente cerró la conversación. Si necesitas algo más, aquí estoy. 🙂',
+                    liveChatSugerencia: 'Parece que no estoy resolviendo tu duda. ¿Quieres hablar con un agente?',
+                    liveChatAsignado: (nombre) => `¡${nombre || 'Un agente'} se unió a la conversación! 👋`,
+                    liveChatSalirCola: 'Prefiero dejar mis datos',
+                },
+                en: {
+                    saludo: 'Hi! 👋 I\'m ARDABYTEC\'s virtual assistant. How can I help you today?',
+                    sinMatch: 'I\'m not sure I understood that. You can pick one of these options or tell me a bit more:',
+                    menuInicial: ['Our services', 'Pricing & quote', 'Talk to someone'],
+                    pedirNombre: 'Sure! To connect you with our team, could you share your full name?',
+                    pedirContacto: (nombre) => `Thanks, ${nombre}. What email or phone number should we reach you at?`,
+                    yaTeTengo: (nombre) => `I already have your info, ${nombre}! One moment while I share this with our team.`,
+                    contactoInvalido: 'That doesn\'t look like a valid email or phone number. Could you try again?',
+                    pedirEmpresa: 'What company are you writing from, and what\'s your role? (Type "skip" if you\'d rather not say.)',
+                    pedirPresupuesto: 'What budget range do you have in mind for this project?',
+                    rangosPresupuesto: ['Under $10,000', '$10,000 – $50,000', '$50,000 – $150,000', 'Over $150,000', 'Prefer not to say'],
+                    pedirConfirmacion: (nombre, contacto, empresaCargo, presupuesto) => `Great. I\'ll share your details with our team:\n\n👤 ${nombre}\n📞 ${contacto}${empresaCargo ? `\n🏢 ${empresaCargo}` : ''}${presupuesto ? `\n💰 ${presupuesto}` : ''}\n\nIs everything correct? Type "yes" to confirm or "no" to fix it.`,
+                    enviando: 'Sending your info...',
+                    enviado: 'All set! An ARDABYTEC advisor will reach out soon. Thanks for writing to us. 🙌',
+                    errorEnvio: 'There was a problem sending your info. Please try again in a few minutes, or reach us through the contact form.',
+                    reiniciar: 'No problem, let\'s start again. What email or phone number should we reach you at?',
+                    placeholder: 'Type your message...',
+                    liveChatConectando: 'One moment, connecting you with an agent...',
+                    liveChatSinAgentes: 'No agents are available right now. Let\'s leave your details so we can reach out.',
+                    liveChatCerrado: 'The agent closed the conversation. Let me know if you need anything else. 🙂',
+                    liveChatSugerencia: 'Looks like I\'m not solving your question. Would you like to talk to an agent?',
+                    liveChatAsignado: (nombre) => `${nombre || 'An agent'} joined the conversation! 👋`,
+                    liveChatSalirCola: 'I\'d rather leave my details',
+                },
+            };
+
+            function t() {
+                return TEXTOS[currentLang] || TEXTOS.es;
+            }
+
+            let diccionario = [];
+            let cargandoDiccionario = false;
+
+            async function cargarDiccionario() {
+                if (cargandoDiccionario || diccionario.length) return;
+                cargandoDiccionario = true;
+                try {
+                    const res = await fetch('/api/chatbot/respuestas/publicas');
+                    const json = await res.json();
+                    diccionario = Array.isArray(json) ? json : (json.data || []);
+                } catch (e) {
+                    console.warn('No se pudo cargar el diccionario del chatbot:', e);
+                    diccionario = [];
+                } finally {
+                    cargandoDiccionario = false;
+                }
+            }
+
+            function normalizar(str) {
+                return String(str || '')
+                    .toLowerCase()
+                    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                    .trim();
+            }
+
+            function buscarRespuesta(mensaje) {
+                const textoNorm = normalizar(mensaje);
+                let mejorMatch = null;
+                let mejorPuntaje = 0;
+
+                diccionario.forEach(r => {
+                    const keywords = Array.isArray(r.keywords) ? r.keywords : [];
+                    keywords.forEach(kw => {
+                        const kwNorm = normalizar(kw);
+                        if (kwNorm && textoNorm.includes(kwNorm) && kwNorm.length > mejorPuntaje) {
+                            mejorPuntaje = kwNorm.length;
+                            mejorMatch = r;
+                        }
+                    });
+                });
+
+                return mejorMatch;
+            }
+
+            // --- Estado de la conversación ---
+            let estado = 'explorar'; // explorar | pedir_nombre | pedir_contacto | pedir_empresa | pedir_presupuesto | confirmar
+            let turnosSinLead = 0;
+            let leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
+            let chatIniciado = false;
+
+            // Persistencia de la conversación en sessionStorage: si el visitante recarga la página
+            // (o navega entre secciones con anclas), el chat se restaura tal cual estaba — burbujas,
+            // estado del flujo, datos ya capturados y la conversación de chat en vivo si había una —
+            // en vez de reiniciar y volver a pedir los mismos datos. Vive solo por pestaña
+            // (sessionStorage, no localStorage): un visitante nuevo en otra pestaña no hereda nada.
+            const CHAT_ESTADO_KEY = 'ardabytec-chat-estado';
+
+            function guardarEstadoChat() {
+                try {
+                    const mensajes = Array.from(messagesEl.querySelectorAll('.chat-bubble')).map(b => ({
+                        texto: b.textContent,
+                        tipo: b.classList.contains('chat-bubble-user') ? 'user' : 'bot',
+                    }));
+                    sessionStorage.setItem(CHAT_ESTADO_KEY, JSON.stringify({
+                        estado, leadData, turnosSinLead, quickRepliesTipo, mensajes,
+                        liveChatConversacionId, chatIniciado, panelAbierto: panel.classList.contains('active'),
+                    }));
+                } catch (e) { /* almacenamiento no disponible (modo privado, cuota llena): sin persistencia, no rompe el chat */ }
+            }
+
+            function leerEstadoChatGuardado() {
+                try {
+                    const raw = sessionStorage.getItem(CHAT_ESTADO_KEY);
+                    return raw ? JSON.parse(raw) : null;
+                } catch (e) { return null; }
+            }
+
+            // Rango de presupuesto elegido -> valor numérico representativo para OPO_VALOR (mismo orden que rangosPresupuesto).
+            const PRESUPUESTO_VALORES = [5000, 30000, 100000, 200000, null];
+
+            // Cada burbuja del BOT guarda, además del texto ya renderizado, una función que sabe
+            // regenerar ese mismo mensaje en el idioma actual (closure sobre t() y los datos usados
+            // en ese momento). Así refreshChatLang() puede reescribir toda la conversación visible
+            // sin tener que adivinar qué texto corresponde a qué clave.
+            const bubbleRegenerators = new WeakMap();
+
+            function addBubble(texto, tipo, regenerar) {
+                const bubble = document.createElement('div');
+                bubble.className = 'chat-bubble ' + (tipo === 'user' ? 'chat-bubble-user' : 'chat-bubble-bot');
+                bubble.textContent = texto;
+                messagesEl.appendChild(bubble);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+                if (tipo === 'bot' && regenerar) bubbleRegenerators.set(bubble, regenerar);
+                return bubble;
+            }
+
+            function showTyping() {
+                const typing = document.createElement('div');
+                typing.className = 'chat-typing';
+                typing.id = 'chatTypingIndicator';
+                typing.innerHTML = '<span></span><span></span><span></span>';
+                messagesEl.appendChild(typing);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+
+            function hideTyping() {
+                const typing = document.getElementById('chatTypingIndicator');
+                if (typing) typing.remove();
+            }
+
+            // `contenido` puede ser un string (mensaje fijo, no se retraduce) o una función
+            // () => string (se reevalúa cada vez que cambia el idioma, ej. () => t().saludo).
+            function botDice(contenido, delay) {
+                return new Promise(resolve => {
+                    showTyping();
+                    setTimeout(() => {
+                        hideTyping();
+                        const esFuncion = typeof contenido === 'function';
+                        const texto = esFuncion ? contenido() : contenido;
+                        addBubble(texto, 'bot', esFuncion ? contenido : null);
+                        resolve();
+                    }, delay || 500);
+                });
+            }
+
+            // Recuerda qué grupo de quick-replies fijas está mostrado ('menu' | 'presupuesto' | null)
+            // para poder regenerarlas traducidas si el usuario cambia de idioma sin haber respondido aún.
+            let quickRepliesTipo = null;
+
+            function setQuickReplies(opciones, tipo) {
+                quickRepliesTipo = tipo || null;
+                quickRepliesEl.innerHTML = '';
+                (opciones || []).forEach(op => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'chat-quick-reply-btn';
+                    btn.textContent = op;
+                    btn.addEventListener('click', () => handleUserMessage(op));
+                    quickRepliesEl.appendChild(btn);
+                });
+            }
+
+            function validarContacto(texto) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                const telRegex = /^[\d\s()+-]{7,20}$/;
+                const limpio = texto.trim();
+                if (emailRegex.test(limpio)) return { tipo: 'email', valor: limpio };
+                if (telRegex.test(limpio)) return { tipo: 'telefono', valor: limpio };
+                return null;
+            }
+
+            async function enviarLead() {
+                await botDice(() => t().enviando, 300);
+                let enviadoOk = false;
+                try {
+                    const payload = {
+                        nombre: leadData.nombre,
+                        email: leadData.email || undefined,
+                        telefono: leadData.telefono || undefined,
+                        interes: leadData.interes || undefined,
+                        empresa: leadData.empresa || undefined,
+                        cargo: leadData.cargo || undefined,
+                        presupuesto: leadData.presupuestoValor != null ? leadData.presupuestoValor : undefined,
+                        resumen: Array.from(messagesEl.querySelectorAll('.chat-bubble'))
+                            .map(b => b.textContent).join(' | ').slice(0, 1500),
+                    };
+                    const res = await fetch('/api/crm/lead-chatbot', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok || json.ok === false) throw new Error(json.mensaje || 'Error al enviar');
+                    enviadoOk = true;
+                    await botDice(() => t().enviado, 500);
+                    try { sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ enviado: true })); } catch (e) {}
+                } catch (e) {
+                    await botDice(() => t().errorEnvio, 400);
+                }
+                estado = 'explorar';
+                // Si el envío falló, se conserva leadData (nombre/contacto ya capturados) para no
+                // volver a pedirlos en el siguiente intento — solo se limpia tras un envío exitoso.
+                if (enviadoOk) {
+                    leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
+                }
+                setQuickReplies(t().menuInicial, 'menu');
+            }
+
+            // Micro "sesión" del visitante dentro de esta pestaña: si ya tenemos su nombre y un
+            // dato de contacto (de un intento anterior en la misma conversación — completado o
+            // no), no se le vuelve a pedir nada. Directo a confirmar con lo que ya sabemos, o a
+            // reenviar el lead si ya se había confirmado antes.
+            function tieneIdentidad() {
+                return !!(leadData.nombre && (leadData.email || leadData.telefono));
+            }
+
+            async function iniciarCapturaLead(interesDetectado) {
+                leadData.interes = interesDetectado || leadData.interes;
+                setQuickReplies([]);
+
+                if (tieneIdentidad()) {
+                    estado = 'confirmar';
+                    await botDice(() => t().pedirConfirmacion(leadData.nombre, leadData.email || leadData.telefono, leadData.empresaCargo, leadData.presupuestoLabel), 400);
+                    return;
+                }
+
+                estado = 'pedir_nombre';
+                await botDice(() => t().pedirNombre, 400);
+            }
+
+            // --- Chat en vivo con agente humano (escalación desde el diccionario) ---
+            let liveChatSocket = null;
+            let liveChatConversacionId = null;
+            let liveChatColaPollTimer = null;
+
+            function conectarSocketLiveChat() {
+                if (liveChatSocket) return liveChatSocket;
+                liveChatSocket = io();
+                liveChatSocket.on('receive_livechat_message', (msg) => {
+                    if (!msg || msg.conversacionId !== liveChatConversacionId) return;
+                    if (msg.emisor === 'agente') {
+                        addBubble(msg.contenido, 'bot');
+                    }
+                });
+                liveChatSocket.on('livechat:conversacion_tomada', (payload) => {
+                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    if (estado === 'chat_vivo_cola') {
+                        detenerPollingCola();
+                        estado = 'chat_vivo';
+                        botDice(() => t().liveChatAsignado(payload.agenteNombre || ''), 300);
+                        setQuickReplies([]);
+                    }
+                });
+                liveChatSocket.on('livechat:conversacion_cerrada', (payload) => {
+                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    finalizarChatVivo(() => t().liveChatCerrado);
+                });
+                return liveChatSocket;
+            }
+
+            function detenerPollingCola() {
+                if (liveChatColaPollTimer) {
+                    clearInterval(liveChatColaPollTimer);
+                    liveChatColaPollTimer = null;
+                }
+            }
+
+            async function finalizarChatVivo(mensajeFn) {
+                detenerPollingCola();
+                if (liveChatSocket && liveChatConversacionId) {
+                    liveChatSocket.emit('leave_livechat_conversation', { conversacionId: liveChatConversacionId });
+                }
+                liveChatConversacionId = null;
+                if (mensajeFn) await botDice(mensajeFn, 400);
+                estado = 'explorar';
+                setQuickReplies(t().menuInicial, 'menu');
+            }
+
+            async function salirDeLaCola() {
+                detenerPollingCola();
+                if (liveChatConversacionId) {
+                    try {
+                        await fetch(`/api/livechat/conversaciones/${liveChatConversacionId}/cola`, { method: 'DELETE' });
+                    } catch (e) {}
+                }
+                await iniciarCapturaLead(leadData.interes);
+            }
+
+            function iniciarPollingCola() {
+                detenerPollingCola();
+                liveChatColaPollTimer = setInterval(async () => {
+                    if (!liveChatConversacionId || estado !== 'chat_vivo_cola') { detenerPollingCola(); return; }
+                    try {
+                        const res = await fetch(`/api/livechat/conversaciones/${liveChatConversacionId}/cola`);
+                        const json = await res.json().catch(() => ({}));
+                        if (json.success && json.data && json.data.enCola === false) {
+                            // Ya no está en cola: o fue asignado (el socket lo maneja) o se cerró.
+                            detenerPollingCola();
+                        }
+                    } catch (e) {}
+                }, 15000);
+            }
+
+            // Intenta escalar a un agente humano en vivo. Si no hay agente disponible pero hay cola
+            // configurada, el visitante espera con posición visible; si no, cae a captura de lead.
+            async function iniciarChatEnVivo(motivo) {
+                setQuickReplies([]);
+                await botDice(() => t().liveChatConectando, 300);
+                try {
+                    const res = await fetch('/api/livechat/conversaciones', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            nombre: leadData.nombre || undefined,
+                            email: leadData.email || undefined,
+                            telefono: leadData.telefono || undefined,
+                            motivo: motivo || leadData.interes || undefined,
+                            origen: 'chatbot_escalado',
+                        }),
+                    });
+                    const json = await res.json().catch(() => ({}));
+
+                    if (res.status === 503) {
+                        await botDice(() => (json.message || t().liveChatSinAgentes), 400);
+                        await iniciarCapturaLead(motivo);
+                        return;
+                    }
+                    if (!res.ok || !json.success) throw new Error(json.message || 'Error al iniciar chat en vivo');
+
+                    const data = json.data;
+                    liveChatConversacionId = data.conversacionId;
+                    guardarEstadoChat();
+                    conectarSocketLiveChat().emit('join_livechat_conversation', { conversacionId: liveChatConversacionId });
+
+                    if (!data.agenteAsignado) {
+                        if (data.cola) {
+                            estado = 'chat_vivo_cola';
+                            await botDice(() => data.cola.mensaje || t().liveChatSinAgentes, 400);
+                            setQuickReplies([t().liveChatSalirCola], null);
+                            iniciarPollingCola();
+                        } else {
+                            await botDice(() => data.mensajeSinAgentes || t().liveChatSinAgentes, 400);
+                            await iniciarCapturaLead(motivo);
+                        }
+                        return;
+                    }
+
+                    estado = 'chat_vivo';
+                    (data.mensajes || []).forEach(m => {
+                        if (m.emisor === 'sistema' || m.emisor === 'agente') addBubble(m.contenido, 'bot');
+                    });
+                    setQuickReplies([]);
+                } catch (e) {
+                    await botDice(() => t().liveChatSinAgentes, 400);
+                    await iniciarCapturaLead(motivo);
+                }
+            }
+
+            // Botones del menú inicial que además detonan captura directa de lead.
+            function esBotonDeContacto(texto) {
+                const n = normalizar(texto);
+                return n.includes('hablar con alguien') || n.includes('cotizacion') || n.includes('cotización') ||
+                       n.includes('talk to someone') || n.includes('quote') || n.includes('contactenme') || n.includes('contáctenme');
+            }
+
+            async function handleUserMessage(mensajeCrudo) {
+                const mensaje = String(mensajeCrudo || '').trim();
+                if (!mensaje) return;
+                try {
+                    await handleUserMessageInterno(mensaje);
+                } finally {
+                    guardarEstadoChat();
+                }
+            }
+
+            async function handleUserMessageInterno(mensaje) {
+                addBubble(mensaje, 'user');
+                inputEl.value = '';
+                setQuickReplies([]);
+
+                if (estado === 'chat_vivo_cola') {
+                    if (normalizar(mensaje) === normalizar(t().liveChatSalirCola)) {
+                        await salirDeLaCola();
+                        return;
+                    }
+                    setQuickReplies([t().liveChatSalirCola], null);
+                    return;
+                }
+
+                if (estado === 'chat_vivo') {
+                    if (liveChatSocket && liveChatConversacionId) {
+                        try {
+                            await fetch(`/api/livechat/conversaciones/${liveChatConversacionId}/mensajes`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ contenido: mensaje, emisor: 'visitante' }),
+                            });
+                        } catch (e) {}
+                    }
+                    return;
+                }
+
+                if (estado === 'explorar' && esBotonDeContacto(mensaje)) {
+                    await iniciarChatEnVivo(mensaje);
+                    return;
+                }
+
+                if (estado === 'pedir_nombre') {
+                    leadData.nombre = mensaje.slice(0, 150);
+                    estado = 'pedir_contacto';
+                    await botDice(() => t().pedirContacto(leadData.nombre), 450);
+                    return;
+                }
+
+                if (estado === 'pedir_contacto') {
+                    const contacto = validarContacto(mensaje);
+                    if (!contacto) {
+                        await botDice(() => t().contactoInvalido, 350);
+                        return;
+                    }
+                    if (contacto.tipo === 'email') leadData.email = contacto.valor;
+                    else leadData.telefono = contacto.valor;
+                    estado = 'pedir_empresa';
+                    await botDice(() => t().pedirEmpresa, 450);
+                    return;
+                }
+
+                if (estado === 'pedir_empresa') {
+                    const normalizado = normalizar(mensaje);
+                    const omitido = ['omitir', 'skip', 'no', 'ninguna', 'none'].includes(normalizado);
+                    if (!omitido) {
+                        leadData.empresaCargo = mensaje.slice(0, 200);
+                        // Intento simple de separar "Empresa, Cargo" o "Empresa - Cargo"; si no hay separador claro, se guarda todo en empresa.
+                        const partes = mensaje.split(/[,–-]/).map(s => s.trim()).filter(Boolean);
+                        leadData.empresa = (partes[0] || '').slice(0, 150);
+                        leadData.cargo = (partes[1] || '').slice(0, 100);
+                    }
+                    estado = 'pedir_presupuesto';
+                    setQuickReplies(t().rangosPresupuesto, 'presupuesto');
+                    await botDice(() => t().pedirPresupuesto, 450);
+                    return;
+                }
+
+                if (estado === 'pedir_presupuesto') {
+                    const rangos = t().rangosPresupuesto;
+                    const idx = rangos.findIndex(r => normalizar(r) === normalizar(mensaje));
+                    if (idx >= 0) {
+                        leadData.presupuestoLabel = rangos[idx] === rangos[rangos.length - 1] ? '' : rangos[idx];
+                        leadData.presupuestoValor = PRESUPUESTO_VALORES[idx];
+                    } else {
+                        // Texto libre: se guarda como etiqueta pero sin valor numérico confiable.
+                        leadData.presupuestoLabel = mensaje.slice(0, 100);
+                        leadData.presupuestoValor = null;
+                    }
+                    estado = 'confirmar';
+                    await botDice(() => t().pedirConfirmacion(leadData.nombre, leadData.email || leadData.telefono, leadData.empresaCargo, leadData.presupuestoLabel), 450);
+                    return;
+                }
+
+                if (estado === 'confirmar') {
+                    const normalizado = normalizar(mensaje);
+                    const esSi = ['si', 'sí', 'yes', 'ok', 'correcto'].some(w => normalizado.includes(w));
+                    const esNo = ['no', 'incorrecto'].some(w => normalizado === w || normalizado.includes(w));
+                    if (esSi) {
+                        await enviarLead();
+                    } else if (esNo) {
+                        estado = 'pedir_contacto';
+                        await botDice(() => t().reiniciar, 350);
+                    } else {
+                        await botDice(() => t().pedirConfirmacion(leadData.nombre, leadData.email || leadData.telefono, leadData.empresaCargo, leadData.presupuestoLabel), 350);
+                    }
+                    return;
+                }
+
+                // estado === 'explorar'
+                await cargarDiccionario();
+                const match = buscarRespuesta(mensaje);
+
+                if (match) {
+                    turnosSinLead = 0;
+                    await botDice(() => (currentLang === 'en' && match.textoEn) ? match.textoEn : match.textoEs, 500);
+                    if (match.senalInteres) {
+                        await iniciarCapturaLead(match.id);
+                    } else {
+                        setQuickReplies(match.botones && match.botones.length ? match.botones : t().menuInicial, match.botones && match.botones.length ? null : 'menu');
+                    }
+                } else {
+                    turnosSinLead++;
+                    await botDice(() => t().sinMatch, 450);
+                    if (turnosSinLead >= 3) {
+                        turnosSinLead = 0;
+                        await botDice(() => t().liveChatSugerencia, 400);
+                        setQuickReplies([t().menuInicial[2]], null);
+                    } else {
+                        setQuickReplies(t().menuInicial, 'menu');
+                    }
+                }
+            }
+
+            async function abrirChat() {
+                panel.classList.add('active');
+                panel.setAttribute('aria-hidden', 'false');
+                toggleBtn.setAttribute('aria-expanded', 'true');
+                if (!chatIniciado) {
+                    chatIniciado = true;
+                    await cargarDiccionario();
+                    await botDice(() => t().saludo, 350);
+                    setQuickReplies(t().menuInicial, 'menu');
+                }
+                guardarEstadoChat();
+                inputEl.focus();
+            }
+
+            function cerrarChat() {
+                panel.classList.remove('active');
+                panel.setAttribute('aria-hidden', 'true');
+                toggleBtn.setAttribute('aria-expanded', 'false');
+                guardarEstadoChat();
+            }
+
+            // Repinta el historial guardado y reconstruye el estado del flujo tal cual estaba antes
+            // de la recarga — solo corre una vez, al cargar el script. Si había un chat en vivo activo,
+            // reconecta el socket a esa misma conversación en vez de perder el hilo con el agente.
+            function restaurarEstadoChat() {
+                const guardado = leerEstadoChatGuardado();
+                if (!guardado) return;
+
+                estado = guardado.estado || 'explorar';
+                leadData = guardado.leadData || leadData;
+                turnosSinLead = guardado.turnosSinLead || 0;
+                quickRepliesTipo = guardado.quickRepliesTipo || null;
+                liveChatConversacionId = guardado.liveChatConversacionId || null;
+                chatIniciado = !!guardado.chatIniciado;
+
+                (guardado.mensajes || []).forEach(m => addBubble(m.texto, m.tipo));
+
+                if (quickRepliesTipo === 'menu') setQuickReplies(t().menuInicial, 'menu');
+                else if (quickRepliesTipo === 'presupuesto') setQuickReplies(t().rangosPresupuesto, 'presupuesto');
+                else if (estado === 'chat_vivo_cola') setQuickReplies([t().liveChatSalirCola], null);
+
+                if (liveChatConversacionId && (estado === 'chat_vivo' || estado === 'chat_vivo_cola')) {
+                    conectarSocketLiveChat().emit('join_livechat_conversation', { conversacionId: liveChatConversacionId });
+                    if (estado === 'chat_vivo_cola') iniciarPollingCola();
+                }
+
+                if (guardado.panelAbierto) {
+                    panel.classList.add('active');
+                    panel.setAttribute('aria-hidden', 'false');
+                    toggleBtn.setAttribute('aria-expanded', 'true');
+                }
+            }
+            restaurarEstadoChat();
+
+            toggleBtn.addEventListener('click', () => {
+                if (panel.classList.contains('active')) cerrarChat();
+                else abrirChat();
+            });
+            closeBtn.addEventListener('click', cerrarChat);
+
+            formEl.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const valor = inputEl.value;
+                if (valor.trim()) handleUserMessage(valor);
+            });
+
+            // Refresca los textos visibles del chat (header, placeholder, quick-replies fijas, y toda
+            // la conversación del BOT ya mostrada) cuando el usuario cambia de idioma sin recargar la
+            // página. Los mensajes que escribió el propio usuario no se traducen (son texto libre suyo).
+            window.refreshChatLang = function () {
+                if (inputEl) inputEl.placeholder = t().placeholder;
+                if (quickRepliesTipo === 'menu') setQuickReplies(t().menuInicial, 'menu');
+                else if (quickRepliesTipo === 'presupuesto') setQuickReplies(t().rangosPresupuesto, 'presupuesto');
+
+                messagesEl.querySelectorAll('.chat-bubble-bot').forEach(bubble => {
+                    const regenerar = bubbleRegenerators.get(bubble);
+                    if (regenerar) bubble.textContent = regenerar();
+                });
+            };
+            window.refreshChatLang();
+        })();
+    </script>
+</body>
+
+</html>

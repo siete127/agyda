@@ -1,0 +1,16 @@
+{
+  "name": "pagina-agyda",
+  "version": "20.11.0",
+  "private": true,
+  "description": "Sitio web de Ardaby Tec",
+  "copyright": "Copyright (c) 2026 ArdaBytec. Todos los derechos reservados.",
+  "scripts": {
+    "qr": "node scripts/generar-qr.js",
+    "dev": "node scripts/dev-server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.2",
+    "http-proxy-middleware": "^2.0.10",
+    "qrcode": "^1.5.4"
+  }
+}

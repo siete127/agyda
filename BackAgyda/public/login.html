@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Ventas</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #999;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #667eea;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            display: none;
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            border: 1px solid #fcc;
+        }
+
+        .success-message {
+            display: none;
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            border: 1px solid #cfc;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>Ventas</h1>
+            <p>Sistema de Gestión</p>
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Usuario</label>
+                <input 
+                    type="text" 
+                    id="username" 
+                    name="username" 
+                    placeholder="Ingresa tu usuario" 
+                    required
+                    autocomplete="username"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Contraseña</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    name="password" 
+                    placeholder="Ingresa tu contraseña" 
+                    required
+                    autocomplete="current-password"
+                >
+            </div>
+
+            <button type="submit" class="btn" id="loginBtn">
+                Iniciar Sesión
+            </button>
+
+            <div id="loadingMessage" class="loading">
+                <span class="spinner"></span>
+                Iniciando sesión...
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Función para buscar y auto-completar los inputs de Ventas
+        function autoCompleteVentasForm() {
+            const username = localStorage.getItem('ventas_user');
+            const password = localStorage.getItem('ventas_password');
+            
+            if (!username || !password) {
+                return false;
+            }
+            
+            // Buscar inputs del formulario
+            const usernameInput = document.querySelector('input[name="username"]') || 
+                                 document.querySelector('input[type="text"]');
+            const passwordInput = document.querySelector('input[name="password"]') || 
+                                 document.querySelector('input[type="password"]');
+            
+            if (usernameInput && passwordInput) {
+                // Auto-llenar
+                usernameInput.value = username;
+                passwordInput.value = password;
+                
+                // Disparar eventos
+                usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                usernameInput.dispatchEvent(new Event('change', { bubbles: true }));
+                passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+                passwordInput.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Buscar botón de login
+                const loginBtn = document.querySelector('button[type="submit"]') || 
+                               Array.from(document.querySelectorAll('button')).find(btn => 
+                                 btn.textContent.toLowerCase().includes('acceder') ||
+                                 btn.textContent.toLowerCase().includes('login') ||
+                                 btn.textContent.toLowerCase().includes('iniciar')
+                               );
+                
+                if (loginBtn) {
+                    setTimeout(() => {
+                        loginBtn.click();
+                    }, 300);
+                }
+                
+                // Limpiar después
+                setTimeout(() => {
+                    localStorage.removeItem('ventas_user');
+                    localStorage.removeItem('ventas_password');
+                    localStorage.removeItem('ventas_auth');
+                }, 1000);
+                
+                return true;
+            }
+            
+            return false;
+        }
+        
+        // Intentar auto-completar cuando el DOM esté listo
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', autoCompleteVentasForm);
+        } else {
+            autoCompleteVentasForm();
+        }
+        
+        // Intentar cada 500ms por 5 segundos (por si el formulario carga después)
+        let attempts = 0;
+        const autoLoginInterval = setInterval(() => {
+            if (autoCompleteVentasForm() || attempts >= 10) {
+                clearInterval(autoLoginInterval);
+            }
+            attempts++;
+        }, 500);
+
+        // Función para realizar el login
+        async function performLogin(username, password) {
+            const loginBtn = document.getElementById('loginBtn');
+            const loadingMessage = document.getElementById('loadingMessage');
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+
+            // Resetear mensajes
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+
+            // Validaciones
+            if (!username || !password) {
+                errorMessage.textContent = 'Por favor, completa todos los campos';
+                errorMessage.style.display = 'block';
+                return false;
+            }
+
+            // Mostrar estado de carga
+            loginBtn.disabled = true;
+            loginBtn.style.opacity = '0.7';
+            loadingMessage.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/auth/ventas-login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ventasUsuario: username,
+                        ventasPassword: password
+                    }),
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    successMessage.textContent = 'Autenticación exitosa. Redirigiendo a Ventas...';
+                    successMessage.style.display = 'block';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'https://ventas.ardabytec.vip/';
+                    }, 1500);
+                } else {
+                    const errorText = data.message || 'Error al iniciar sesión';
+                    errorMessage.textContent = errorText;
+                    errorMessage.style.display = 'block';
+                    
+                    loginBtn.disabled = false;
+                    loginBtn.style.opacity = '1';
+                    loadingMessage.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                errorMessage.textContent = 'Error de conexión. Intenta de nuevo.';
+                errorMessage.style.display = 'block';
+                
+                loginBtn.disabled = false;
+                loginBtn.style.opacity = '1';
+                loadingMessage.style.display = 'none';
+            }
+            
+            return false;
+        }
+
+        // Manejar el formulario de login
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+
+            return performLogin(username, password);
+        });
+    </script>
+    <script src="/ventas-auto-login.js"></script>
+</body>
+</html>
