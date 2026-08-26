@@ -17,6 +17,9 @@ build/
 *.log
 logs/
 
+# Archivos subidos por usuarios en runtime (no son código)
+BackAgyda/public/uploads/
+
 # Backups y temporales
 *.bak
 *.bak-*
