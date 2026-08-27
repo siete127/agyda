@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, ShieldCheck, Star } from 'lucide-react'
+import { Plus, Trash2, ShieldCheck, Star, CheckCircle2 } from 'lucide-react'
 import { configuracionService, type WebphoneProvider } from '@/services/configuracion.service'
 
 const PROVIDERS: { value: WebphoneProvider; label: string }[] = [
@@ -95,18 +95,33 @@ export function WebphoneVistasTab() {
         <p className="mb-3 text-sm font-semibold text-ink">Vistas configuradas</p>
         {isLoading && <p className="text-xs text-ink-tertiary">Cargando...</p>}
         <div className="space-y-2">
-          {vistasOrdenadas.map((v) => (
-            <div key={v.id} className="flex items-center gap-2 rounded-xl border border-gray-100 bg-surface px-3 py-2">
+          {vistasOrdenadas.map((v) => {
+            const esPredeterminada = v.id === predeterminadaId
+            return (
+            <div
+              key={v.id}
+              className={
+                'flex items-center gap-2 rounded-xl border px-3 py-2 ' +
+                (esPredeterminada ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-100 bg-surface')
+              }
+            >
               <button
                 onClick={() => predeterminadaMutation.mutate(v.id)}
-                disabled={v.id === predeterminadaId || predeterminadaMutation.isPending}
-                title={v.id === predeterminadaId ? 'Vista predeterminada' : 'Hacer predeterminada'}
+                disabled={esPredeterminada || predeterminadaMutation.isPending}
+                title={esPredeterminada ? 'Vista predeterminada' : 'Hacer predeterminada'}
                 className="flex-shrink-0 rounded-lg p-1 text-ink-tertiary transition-colors hover:bg-amber-50 hover:text-amber-500 disabled:cursor-default disabled:opacity-100"
               >
-                <Star className={v.id === predeterminadaId ? 'h-3.5 w-3.5 fill-amber-400 text-amber-400' : 'h-3.5 w-3.5'} />
+                <Star className={esPredeterminada ? 'h-3.5 w-3.5 fill-amber-400 text-amber-400' : 'h-3.5 w-3.5'} />
               </button>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink-secondary">{v.label}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium text-ink-secondary">{v.label}</p>
+                  {esPredeterminada && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[0.6rem] font-semibold text-emerald-700">
+                      <CheckCircle2 className="h-3 w-3" /> Predeterminada
+                    </span>
+                  )}
+                </div>
                 <p className="truncate text-xs text-ink-tertiary">{v.url}</p>
               </div>
               <select
@@ -134,7 +149,8 @@ export function WebphoneVistasTab() {
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
