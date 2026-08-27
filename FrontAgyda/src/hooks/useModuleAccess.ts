@@ -27,7 +27,11 @@ export function useModuleAccess() {
       qc.invalidateQueries({ queryKey: ['accesos-self', userId] })
     }
     socket.on('accesos-updated', handler)
-    return () => { socket.off('accesos-updated', handler) }
+    socket.on('empresa-modulos-updated', handler)
+    return () => {
+      socket.off('accesos-updated', handler)
+      socket.off('empresa-modulos-updated', handler)
+    }
   }, [isAuthenticated, userId, qc])
 
   function isAllowed(moduleKey: string): boolean {

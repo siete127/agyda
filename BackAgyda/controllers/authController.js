@@ -4,6 +4,7 @@ const databaseService = require('../services/databaseService');
 const socketService = require('../services/socketService');
 const { buildCookieHeaderFromSetCookieArray, rewriteVentasContent } = require('../utils/helpers');
 const { DEFAULT_TENANT, listTenants } = require('../config/tenants');
+const { revokeToken } = require('../middleware/tokenDenylist');
 const logger = global.logger || require('../utils/logger');
 
 exports.getEmpresas = async (req, res) => {
@@ -188,7 +189,7 @@ exports.login = async (req, res) => {
         empresa: empresaResuelta
       },
       process.env.JWT_SECRET || 'AKOLATRONIC',
-      { expiresIn: '9h' }
+      { expiresIn: '12h' }
     );
 
     const response = {
@@ -584,6 +585,20 @@ exports.ventasStatus = (req, res) => {
 exports.logout = async (req, res) => {
   try {
     logger.debug('🔓 LOGOUT - Session ID:', req.sessionID);
+
+    // Revocar el token con el que se llamó a /logout. A partir de aquí, cualquier
+    // pestaña de AGYDA que siguiera abierta con ese mismo token cae al login en
+    // su siguiente request. Lo dispara "Cerrar sesión" en la página pública.
+    try {
+      const authHeader = req.headers['authorization'] || '';
+      const bearer = authHeader.replace(/^Bearer\s+/i, '').trim();
+      const token = bearer || req.headers['x-access-token'] || req.headers['token']
+        || (req.query && (req.query.token || req.query.access_token)) || '';
+      if (token) revokeToken(token);
+    } catch (e) {
+      console.warn('⚠️ No se pudo revocar el token en logout:', e && e.message);
+    }
+
     // Limpiar sesión de proxy/ventas
     req.session.ventasSessionCookie = null;
     req.session.ventasSessionData = null;

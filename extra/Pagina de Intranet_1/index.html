@@ -74,11 +74,29 @@
                 </button>
                 <a href="#" class="nav-link" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
                 <button type="button" class="nav-link logout-btn" id="logoutBtn" style="display:none;">Cerrar sesión</button>
-                <a href="https://agyda.ardabytec.vip/login?tenant=demo" target="_blank" rel="noopener" class="demo-btn" id="demoBtn" style="display:none;">
-                    <span class="demo-btn-dot" aria-hidden="true"></span>
-                    Demo
-                    <span class="demo-btn-arrow" aria-hidden="true">&rarr;</span>
-                </a>
+                <div class="demo-btn-wrap">
+                    <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="true" aria-expanded="false">
+                        <span class="demo-btn-dot" aria-hidden="true"></span>
+                        Demo
+                        <span class="demo-btn-arrow" aria-hidden="true">&rarr;</span>
+                    </button>
+                    <div class="demo-popover" id="demoPopover">
+                        <p class="demo-popover-title">Prueba AGYDA con estas credenciales</p>
+                        <div class="demo-popover-cred">
+                            <span class="demo-popover-role">Administrador</span>
+                            <span class="demo-popover-line"><strong>Usuario:</strong> admindemo</span>
+                            <span class="demo-popover-line"><strong>Contraseña:</strong> AdminDemo2026</span>
+                        </div>
+                        <div class="demo-popover-cred">
+                            <span class="demo-popover-role">Agente</span>
+                            <span class="demo-popover-line"><strong>Usuario:</strong> agente</span>
+                            <span class="demo-popover-line"><strong>Contraseña:</strong> Demo2026</span>
+                        </div>
+                        <a href="https://agyda.ardabytec.vip/login?tenant=demo" target="_blank" rel="noopener" class="demo-popover-go">
+                            Ir al login <span aria-hidden="true">&rarr;</span>
+                        </a>
+                    </div>
+                </div>
                 <button type="button" class="menu-toggle-btn" id="menuToggleBtn" aria-label="Abrir menú" aria-expanded="false">
                     <span class="menu-toggle-bar"></span>
                     <span class="menu-toggle-bar"></span>
@@ -1915,9 +1933,32 @@
                 ? 'http://localhost:5173'
                 : 'https://agyda.ardabytec.vip';
 
+            // La sesión se guarda en localStorage (no sessionStorage) para que
+            // sobreviva al cierre de la pestaña: si ya iniciaste sesión aquí,
+            // el botón sigue diciendo "AGYDA" al volver, sin pedir login otra vez.
+            const SESSION_KEY = 'ardabytec_usuario';
+
+            // Lee la expiración (exp, en segundos) del JWT sin librerías.
+            function tokenExpirado(jwt) {
+                try {
+                    const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                    if (!payload || !payload.exp) return false; // sin exp: lo tratamos como válido
+                    return Date.now() >= payload.exp * 1000;
+                } catch (e) {
+                    return false;
+                }
+            }
+
             function getUsuario() {
                 try {
-                    return JSON.parse(sessionStorage.getItem('ardabytec_usuario'));
+                    const usuario = JSON.parse(localStorage.getItem(SESSION_KEY));
+                    if (!usuario) return null;
+                    // El JWT de AGYDA dura 9h. Si ya expiró, limpiamos y pedimos login.
+                    if (usuario.accessToken && tokenExpirado(usuario.accessToken)) {
+                        localStorage.removeItem(SESSION_KEY);
+                        return null;
+                    }
+                    return usuario;
                 } catch (e) {
                     return null;
                 }
@@ -1927,12 +1968,14 @@
                 const usuario = getUsuario();
                 if (usuario) {
                     loginLink.textContent = 'AGYDA';
-                    loginLink.href = `${INTRANET_BASE_URL}/dashboard`;
+                    loginLink.href = usuario.accessToken
+                        ? `${INTRANET_BASE_URL}/auth-bridge?token=${encodeURIComponent(usuario.accessToken)}`
+                        : `${INTRANET_BASE_URL}/dashboard`;
+                    loginLink.onclick = null;
                     loginLink.removeAttribute('data-i18n');
                     loginLink.target = '_blank';
                     loginLink.rel = 'noopener';
                     logoutBtn.style.display = '';
-                    if (demoBtn) demoBtn.style.display = '';
                 } else {
                     loginLink.textContent = currentLang === 'en' ? 'Login' : 'Iniciar sesión';
                     loginLink.href = '#';
@@ -1941,16 +1984,56 @@
                     loginLink.removeAttribute('target');
                     loginLink.removeAttribute('rel');
                     logoutBtn.style.display = 'none';
-                    if (demoBtn) demoBtn.style.display = 'none';
                 }
             }
 
             logoutBtn.addEventListener('click', function () {
-                sessionStorage.removeItem('ardabytec_usuario');
+                const usuario = getUsuario();
+                // Revocar el token en el backend para que cualquier pestaña de
+                // AGYDA que siga abierta se cierre también. No esperamos la
+                // respuesta: la UI se actualiza de inmediato.
+                if (usuario && usuario.accessToken) {
+                    fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + usuario.accessToken,
+                        },
+                    }).catch(function () { /* offline: el token caduca solo en 12h */ });
+                }
+                localStorage.removeItem(SESSION_KEY);
                 renderSessionUI();
             });
 
+            // Si se inicia o cierra sesión en otra pestaña de la página pública,
+            // mantener el botón sincronizado en esta.
+            window.addEventListener('storage', function (e) {
+                if (e.key === SESSION_KEY) renderSessionUI();
+            });
+
             renderSessionUI();
+        })();
+
+        // --- POPOVER DE CREDENCIALES DEMO ---
+        (function () {
+            const demoBtn = document.getElementById('demoBtn');
+            const demoPopover = document.getElementById('demoPopover');
+            if (!demoBtn || !demoPopover) return;
+
+            function closeDemoPopover() {
+                demoPopover.classList.remove('active');
+                demoBtn.setAttribute('aria-expanded', 'false');
+            }
+
+            demoBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const isOpen = demoPopover.classList.toggle('active');
+                demoBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+
+            document.addEventListener('click', function (e) {
+                if (!demoPopover.contains(e.target) && e.target !== demoBtn) closeDemoPopover();
+            });
         })();
 
         // --- MODAL DE LOGIN (ventana emergente en vez de página completa) ---
@@ -2014,15 +2097,12 @@
                         const data = await res.json().catch(() => ({}));
 
                         if (res.ok && data.success) {
-                            sessionStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
-                            loginModalStatus.innerText = 'Inicio de sesión correcto. Redirigiendo...';
+                            localStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
+                            loginModalStatus.innerText = 'Inicio de sesión correcto.';
                             loginModalStatus.className = 'login-modal-status success';
-
-                            const target = 'https://agyda.ardabytec.vip/dashboard';
 
                             setTimeout(function () {
                                 closeLoginModal();
-                                window.open(target, '_blank', 'noopener');
                                 if (typeof window.renderSessionUI === 'function') window.renderSessionUI();
                             }, 600);
                         } else {
@@ -2825,7 +2905,11 @@
                 liveChatSocket = io();
                 liveChatSocket.on('receive_livechat_message', (msg) => {
                     if (!msg || msg.conversacionId !== liveChatConversacionId) return;
-                    if (msg.emisor === 'agente') {
+                    // 'sistema' incluido a propósito: es como llega el motivo cuando el
+                    // agente cierra el chat ("El agente cerró la conversación. Motivo: ...")
+                    // y avisos de transferencia — antes solo se mostraban mensajes del
+                    // agente, así que el visitante nunca veía por qué se cerró su chat.
+                    if (msg.emisor === 'agente' || msg.emisor === 'sistema') {
                         addBubble(msg.contenido, 'bot');
                     }
                 });
@@ -2841,6 +2925,14 @@
                 liveChatSocket.on('livechat:conversacion_cerrada', (payload) => {
                     if (!payload || payload.conversacionId !== liveChatConversacionId) return;
                     finalizarChatVivo(() => t().liveChatCerrado);
+                });
+                // El agente cerró desde su lado (motivo incluido) — el backend ya manda
+                // un mensaje de sistema con el motivo por receive_livechat_message, así
+                // que aquí solo se cierra el modo chat_vivo y vuelve al menú; no hace
+                // falta repetir el motivo en una segunda burbuja.
+                liveChatSocket.on('livechat:pendiente_calificacion', (payload) => {
+                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    finalizarChatVivo(null);
                 });
                 return liveChatSocket;
             }
@@ -2886,6 +2978,23 @@
                         }
                     } catch (e) {}
                 }, 15000);
+            }
+
+            // Punto de entrada real de "Hablar con alguien": antes solo llamaba a
+            // iniciarChatEnVivo directo, mandando leadData.nombre/email/telefono
+            // vacíos si el visitante no los había dado ya — así el agente recibía
+            // conversaciones de "Visitante anónimo" sin ningún dato de contacto.
+            // Ahora pide nombre y contacto primero (ver estados pedir_nombre_livechat
+            // / pedir_contacto_livechat) y solo entonces escala.
+            async function iniciarChatEnVivoConDatos(motivo) {
+                leadData.interes = motivo || leadData.interes;
+                if (tieneIdentidad()) {
+                    await iniciarChatEnVivo(motivo);
+                    return;
+                }
+                setQuickReplies([]);
+                estado = 'pedir_nombre_livechat';
+                await botDice(() => t().pedirNombre, 400);
             }
 
             // Intenta escalar a un agente humano en vivo. Si no hay agente disponible pero hay cola
@@ -2988,7 +3097,32 @@
                 }
 
                 if (estado === 'explorar' && esBotonDeContacto(mensaje)) {
-                    await iniciarChatEnVivo(mensaje);
+                    await iniciarChatEnVivoConDatos(mensaje);
+                    return;
+                }
+
+                // Camino corto antes de escalar a un agente: solo nombre + contacto,
+                // sin pasar por empresa/presupuesto/confirmación del lead completo —
+                // quien pide hablar con alguien quiere avanzar rápido, no llenar un
+                // formulario largo. Al terminar, escala directo (ver
+                // iniciarChatEnVivoConDatos).
+                if (estado === 'pedir_nombre_livechat') {
+                    leadData.nombre = mensaje.slice(0, 150);
+                    estado = 'pedir_contacto_livechat';
+                    await botDice(() => t().pedirContacto(leadData.nombre), 450);
+                    return;
+                }
+
+                if (estado === 'pedir_contacto_livechat') {
+                    const contacto = validarContacto(mensaje);
+                    if (!contacto) {
+                        await botDice(() => t().contactoInvalido, 350);
+                        return;
+                    }
+                    if (contacto.tipo === 'email') leadData.email = contacto.valor;
+                    else leadData.telefono = contacto.valor;
+                    estado = 'explorar';
+                    await iniciarChatEnVivo(leadData.interes);
                     return;
                 }
 

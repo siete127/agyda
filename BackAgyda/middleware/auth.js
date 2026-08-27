@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const logger = global.logger || require('../utils/logger');
+const { isRevoked } = require('./tokenDenylist');
 
 // Middleware para verificar token (alias: verificarAutenticacion)
 const authenticateToken = (req, res, next) => {
@@ -55,6 +56,12 @@ const authenticateToken = (req, res, next) => {
       }
       return res.status(403).json({ success: false, message: 'Token inválido' });
     }
+    // Token revocado por un "Cerrar sesión" explícito (ver tokenDenylist.js).
+    // Aunque la firma y la fecha sigan siendo válidas, ya no debe servir.
+    if (isRevoked(token)) {
+      logger.warn('[auth] Token revocado (logout) - devolviendo 403');
+      return res.status(403).json({ success: false, message: 'Token inválido, reinicia sesión' });
+    }
     // Mostrar info mínima del usuario para depuración (sin imprimir token)
     try {
       const debugUser = { id: user && (user.id || user.sub || user.userId), username: user && (user.username || user.user), tipoUsuario: user && (user.tipoUsuario || user.role || user.tipousuario) };
@@ -92,6 +99,9 @@ const authenticateTokenOptional = (req, res, next) => {
         return res.status(403).json({ success: false, message: 'Token expirado, reinicia sesión' });
       }
       return res.status(403).json({ success: false, message: 'Token inválido' });
+    }
+    if (isRevoked(token)) {
+      return res.status(403).json({ success: false, message: 'Token inválido, reinicia sesión' });
     }
     req.user = user;
     next();

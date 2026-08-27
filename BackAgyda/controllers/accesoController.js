@@ -41,6 +41,7 @@ const MODULOS_DISPONIBLES = [
   { key: 'quejas',      nombre: 'Quejas',              descripcion: 'Registro y seguimiento de quejas' },
   { key: 'reglamento',  nombre: 'Reglamento',          descripcion: 'Políticas y reglamento interno' },
   { key: 'clientes',    nombre: 'Clientes',            descripcion: 'Gestión de clientes' },
+  { key: 'productos-servicios', nombre: 'Productos y Servicios', descripcion: 'Catálogo de productos y servicios' },
   { key: 'crm',         nombre: 'CRM',                 descripcion: 'Pipeline de ventas, contactos y seguimiento a clientes' },
   { key: 'usuarios',    nombre: 'Usuarios',            descripcion: 'Administración de usuarios del sistema' },
   { key: 'encuestas',   nombre: 'Encuestas',           descripcion: 'Creación y gestión de encuestas' },
@@ -252,6 +253,12 @@ const ACCIONES_POR_MODULO = {
     { key: 'eliminar',             nombre: 'Eliminar cliente',      descripcion: 'Borrar un cliente' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
+  'productos-servicios': [
+    { key: 'ver',      nombre: 'Ver catálogo',              descripcion: 'Consultar productos y servicios' },
+    { key: 'crear',    nombre: 'Crear producto/servicio',   descripcion: 'Alta de un nuevo producto o servicio en el catálogo' },
+    { key: 'editar',   nombre: 'Editar producto/servicio',  descripcion: 'Modificar nombre, precio o recurrencia' },
+    { key: 'eliminar', nombre: 'Eliminar producto/servicio', descripcion: 'Borrar del catálogo (o desactivar si tiene clientes asignados)' },
+  ],
   usuarios: [
     { key: 'ver',                nombre: 'Ver usuarios',          descripcion: 'Consultar listado, perfil, estatus y horarios de usuarios' },
     { key: 'crear',               nombre: 'Crear usuario',         descripcion: 'Dar de alta un nuevo usuario' },
@@ -409,14 +416,19 @@ exports.getSelfActions = async (req, res) => {
     const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
     if (!uid) return res.status(401).json({ success: false, message: 'Token inválido' });
 
-    if (esSuperAdminFijo(req)) {
+    const { getEmpresaModulosBloqueados, esSuperAdminInmuneEmpresa } = require('../middleware/moduleAccess');
+    const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+
+    if (esSuperAdminInmuneEmpresa(req)) {
       const todas = {};
       for (const mod of Object.keys(ACCIONES_POR_MODULO)) todas[mod] = ['*'];
       return res.json({ success: true, data: { usuarioId: parseInt(uid), acciones: todas } });
     }
-
-    const { getEmpresaModulosBloqueados } = require('../middleware/moduleAccess');
-    const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+    if (esSuperAdminFijo(req)) {
+      const todas = {};
+      for (const mod of Object.keys(ACCIONES_POR_MODULO)) todas[mod] = bloqueados.has(mod) ? [] : ['*'];
+      return res.json({ success: true, data: { usuarioId: parseInt(uid), acciones: todas } });
+    }
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request()
@@ -555,17 +567,26 @@ exports.getSelfAccess = async (req, res) => {
     const tipo = (req.user && (req.user.tipoUsuario || req.user.role || req.user.tipousuario) || '').toString().toLowerCase();
     if (!uid) return res.status(401).json({ success:false, message:'Token inválido' });
 
-    // Solo super-admins fijos reciben comodín — el resto de ADs respeta permisos normales
-    if (esSuperAdminFijo(req)) {
-      return res.json({ success:true, data: { usuarioId: parseInt(uid), modules: ['*'] } });
-    }
-
     // Módulos desactivados a nivel empresa completa (tabla exclusiva de la BD
     // maestra 'agyda') — se intersectan con lo que el usuario tiene permitido
     // más abajo. Un módulo bloqueado para la empresa nunca se devuelve, sin
     // importar lo que diga INTRANET_USUARIOS_MODULOS.
-    const { getEmpresaModulosBloqueados } = require('../middleware/moduleAccess');
+    const { getEmpresaModulosBloqueados, esSuperAdminInmuneEmpresa } = require('../middleware/moduleAccess');
     const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+
+    // Super-admin fijo con inmunidad al bloqueo de empresa: comodín total.
+    // ADM_0001 (id 1) y TI_0110 (id 64) ya no son inmunes aquí — reciben el
+    // catálogo completo menos lo bloqueado para su empresa, igual que el
+    // resto del flujo de abajo.
+    if (esSuperAdminInmuneEmpresa(req)) {
+      return res.json({ success:true, data: { usuarioId: parseInt(uid), modules: ['*'] } });
+    }
+    if (esSuperAdminFijo(req)) {
+      const finalModules = bloqueados.size > 0
+        ? MODULOS_DISPONIBLES.map((m) => m.key).filter((k) => !bloqueados.has(k))
+        : ['*'];
+      return res.json({ success:true, data: { usuarioId: parseInt(uid), modules: finalModules } });
+    }
 
     const pool2 = await databaseService.getPool(req.user?.empresa);
     const rs = await pool2.request()

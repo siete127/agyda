@@ -3694,6 +3694,7 @@ async function ensureAllSchemas(pool) {
   await ensureProteccionDatosSchema(pool);
   await ensureCumplimientoNormativoSchema(pool);
   await ensureControlDocumentalSchema(pool);
+  await ensureProductosServiciosSchema(pool);
 }
 
 // Expediente extendido (tabs "Persona", "Adicionales", "Familiares", "Formación", "Talento")
@@ -4914,6 +4915,64 @@ async function ensureEncuestaSatisfaccionClienteSeed(pool) {
   }
 }
 
+// Catálogo unificado de productos/servicios (con precio y recurrencia) y su
+// relación con clientes. Reemplaza en uso a las tablas legado PRODUCTOS/
+// SERVICIOS/CLIENTE_PRODUCTOS/CLIENTE_SERVICIOS (que se dejan intactas por
+// compatibilidad con clienteController.getProductos/getServicios), migrando
+// su contenido una sola vez al crear la tabla nueva.
+async function ensureProductosServiciosSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.PRODUCTOS_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.PRODUCTOS_SERVICIOS (
+    PS_ID             INT IDENTITY(1,1) PRIMARY KEY,
+    PS_TIPO           NVARCHAR(20)  NOT NULL,
+    PS_NOMBRE         NVARCHAR(200) NOT NULL,
+    PS_DESCRIPCION    NVARCHAR(500) NULL,
+    PS_PRECIO         DECIMAL(18,2) NOT NULL DEFAULT 0,
+    PS_RECURRENCIA    NVARCHAR(20)  NOT NULL DEFAULT 'UNICO',
+    PS_ACTIVO         BIT           NOT NULL DEFAULT 1,
+    PS_FECHA_REGISTRO DATETIME      NOT NULL DEFAULT GETDATE()
+  );
+
+  IF OBJECT_ID('dbo.PRODUCTOS', 'U') IS NOT NULL
+  BEGIN
+    INSERT INTO dbo.PRODUCTOS_SERVICIOS (PS_TIPO, PS_NOMBRE, PS_ACTIVO)
+      SELECT 'PRODUCTO', PROD_NOMBRE, PROD_ACTIVO FROM dbo.PRODUCTOS;
+  END
+
+  IF OBJECT_ID('dbo.SERVICIOS', 'U') IS NOT NULL
+  BEGIN
+    INSERT INTO dbo.PRODUCTOS_SERVICIOS (PS_TIPO, PS_NOMBRE, PS_ACTIVO)
+      SELECT 'SERVICIO', SERV_NOMBRE, SERV_ACTIVO FROM dbo.SERVICIOS;
+  END
+END
+`);
+  } catch (err) {
+    console.warn('⚠️ ProductosServiciosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.CLIENTE_PRODUCTOS_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CLIENTE_PRODUCTOS_SERVICIOS (
+    CPS_ID         INT IDENTITY(1,1) PRIMARY KEY,
+    CL_ID          INT NOT NULL,
+    PS_ID          INT NOT NULL,
+    CPS_FECHA_ALTA DATETIME NOT NULL DEFAULT GETDATE(),
+    CPS_ACTIVO     BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_CLIENTE_PS UNIQUE (CL_ID, PS_ID)
+  );
+  CREATE INDEX IX_CPS_CLIENTE ON dbo.CLIENTE_PRODUCTOS_SERVICIOS(CL_ID);
+END
+`);
+  } catch (err) {
+    console.warn('⚠️ ClienteProductosServiciosSchema:', err.message);
+  }
+}
+
 async function ensureAuditoriaSchema(pool) {
   try {
     await pool.request().batch(`
@@ -4964,6 +5023,7 @@ module.exports = {
     ensureExpedienteCompletoSchema,
     removeClientesUniqueConstraint,
     ensureAuditoriaSchema,
+    ensureProductosServiciosSchema,
     ensureVacantesSchema,
     ensureCapacitacionSchema,
     ensureIncapacidadesSchema,

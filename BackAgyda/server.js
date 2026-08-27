@@ -85,6 +85,7 @@ app.use('/api/organigrama', require('./routes/organigrama'));
 app.use('/api/drive', require('./routes/drive'));
 app.use('/api/checklists', require('./routes/checklists'));
 app.use('/api/clientes', require('./routes/clientes'));
+app.use('/api/productos-servicios', require('./routes/productosServicios'));
 app.use('/api/expedientes', require('./routes/expedientes'));
 app.use('/api/vacaciones', require('./routes/vacaciones'));
 app.use('/api/legales', require('./routes/legales'));

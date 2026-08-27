@@ -106,7 +106,7 @@
 
                     if (res.ok && data.success) {
                         setStatus('Inicio de sesión correcto. Redirigiendo...', 'success');
-                        sessionStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
+                        localStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
                         window.location.href = 'https://agyda.ardabytec.vip/dashboard';
                     } else {
                         setStatus(data.message || 'Usuario o contraseña incorrectos.', 'error');

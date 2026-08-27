@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, ToggleLeft, ToggleRight, Package } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
+import { productoServicioService } from '@/services/productoServicio.service'
 
 interface Cliente {
   id: number
@@ -44,6 +45,79 @@ function parseCliente(r: Record<string, unknown>): Cliente {
 const EMPTY_FORM = {
   empresa: '', nombre: '', rfc: '', telefono: '',
   correo: '', ciudad: '', calle: '', colonia: '', cp: '',
+}
+
+/* ── Productos/servicios contratados (solo al editar un cliente existente) ── */
+function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
+  const qc = useQueryClient()
+  const [seleccion, setSeleccion] = useState('')
+
+  const { data: catalogo = [] } = useQuery({
+    queryKey: ['productos-servicios', 'activos'],
+    queryFn: () => productoServicioService.getAll(),
+  })
+
+  const { data: asignados = [], isLoading } = useQuery({
+    queryKey: ['cliente-productos-servicios', clienteId],
+    queryFn: () => productoServicioService.getByCliente(clienteId),
+  })
+
+  const asignar = useMutation({
+    mutationFn: (psId: number) => productoServicioService.asignarACliente(clienteId, psId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] })
+      setSeleccion('')
+    },
+    onError: () => toast.error('No se pudo asignar'),
+  })
+
+  const quitar = useMutation({
+    mutationFn: (psId: number) => productoServicioService.quitarDeCliente(clienteId, psId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] }),
+    onError: () => toast.error('No se pudo quitar'),
+  })
+
+  const disponibles = catalogo.filter((c) => c.activo && !asignados.some((a) => a.productoServicioId === c.id))
+
+  return (
+    <div className="space-y-2 border-t border-gray-100 pt-3">
+      <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Productos y servicios contratados</label>
+      {isLoading ? (
+        <p className="text-xs text-gray-400">Cargando...</p>
+      ) : asignados.length === 0 ? (
+        <p className="text-xs text-gray-400">Sin productos ni servicios asignados</p>
+      ) : (
+        <div className="space-y-1.5">
+          {asignados.map((a) => (
+            <div key={a.productoServicioId} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <Package className="h-3.5 w-3.5 text-brand flex-shrink-0" />
+                <span className="text-xs font-medium text-gray-700 truncate">{a.nombre}</span>
+              </div>
+              <button onClick={() => quitar.mutate(a.productoServicioId)} className="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0">
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className="field text-sm flex-1">
+          <option value="">Agregar producto/servicio...</option>
+          {disponibles.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+        <Button
+          variant="ghost"
+          disabled={!seleccion || asignar.isPending}
+          onClick={() => seleccion && asignar.mutate(Number(seleccion))}
+        >
+          Agregar
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 /* ── Modal ── */
@@ -92,6 +166,9 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
             </div>
           ))}
         </div>
+
+        {cliente && <ProductosServiciosCliente clienteId={cliente.id} />}
+
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button isLoading={guardar.isPending} disabled={!form.empresa.trim()} onClick={() => guardar.mutate()}>

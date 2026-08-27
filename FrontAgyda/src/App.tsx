@@ -39,6 +39,14 @@ function AppInitializer() {
 
   useEffect(() => {
     async function init() {
+      // En /auth-bridge, esa página es la dueña de la autenticación: valida el
+      // ?token= de la URL contra el backend y navega. Si aquí lanzáramos
+      // /auth/validate en paralelo con un token viejo del store, su 401 podría
+      // (según quién gane la carrera) tumbar el puente y mandar a /login.
+      if (window.location.pathname === '/auth-bridge') {
+        setInitialized()
+        return
+      }
       if (token && isAuthenticated) {
         const valid = await authService.validate()
         if (!valid) clearSession()

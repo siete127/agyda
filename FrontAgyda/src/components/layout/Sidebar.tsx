@@ -14,7 +14,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { ROUTES } from '@/router/routes.config'
 import { disconnectSocket } from '@/lib/socket'
 import { clsx } from 'clsx'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 
 // Burbujas del efecto de agua: posición horizontal (%), tamaño (px), opacidad,
 // duración del ascenso (s) y retraso inicial (s) — variados para que no suban en fila.
@@ -53,7 +53,7 @@ const GROUPS = [
   },
   {
     label: 'Ventas',
-    keys: ['ventas-area', 'clientes', 'crm', 'email-marketing'],
+    keys: ['ventas-area', 'clientes', 'productos-servicios', 'crm', 'email-marketing'],
   },
   {
     label: 'Contact Center',
@@ -90,6 +90,8 @@ const GROUPS = [
 ]
 
 export function Sidebar() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const { sidebarCollapsed, isMobileMenuOpen, setMobileMenuOpen } = useUIStore()
   const clearSession  = useAuthStore((s) => s.clearSession)
   const user          = useCurrentUser()
@@ -252,11 +254,51 @@ export function Sidebar() {
           {GROUPS.map((group) => {
             const routes = getGroupRoutes(group.keys)
             if (routes.length === 0) return null
-            const isOpen = openGroup === group.label
             const GroupIcon = routes[0].icon
               ? (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[routes[0].icon]
               : undefined
 
+            // Grupo con un solo módulo (ej. Configuración) — link directo, sin
+            // toggle ni submenú duplicando la misma etiqueta. Mismo estilo
+            // visual que un grupo normal (círculo grande, sin chevron).
+            if (routes.length === 1) {
+              const isActive = location.pathname === routes[0].path || location.pathname.startsWith(routes[0].path + '/')
+              return (
+                <button
+                  key={group.label}
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    navigate(routes[0].path)
+                  }}
+                  title={sidebarCollapsed ? group.label : undefined}
+                  className={clsx(
+                    'group flex w-full items-center gap-3 rounded-xl transition-colors',
+                    sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-3.5 py-3',
+                    isActive ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]',
+                  )}
+                >
+                  <span className={clsx(
+                    'flex flex-shrink-0 items-center justify-center rounded-full',
+                    sidebarCollapsed ? 'h-11 w-11' : 'h-9 w-9',
+                    isActive ? 'bg-brand/25 text-brand-muted' : 'text-[#B8C2E0] group-hover:text-white',
+                  )}>
+                    {GroupIcon && <GroupIcon className={sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]'} />}
+                  </span>
+                  {!sidebarCollapsed && (
+                    <span className={clsx('flex-1 text-left text-[0.9rem] font-medium', isActive ? 'text-white' : 'text-[#DCE3F5]')}>
+                      {group.label}
+                    </span>
+                  )}
+                  {!sidebarCollapsed && !!BADGES[routes[0].path] && BADGES[routes[0].path] > 0 && (
+                    <span className="flex-shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[0.6rem] font-bold text-white leading-none">
+                      {BADGES[routes[0].path] > 99 ? '99+' : BADGES[routes[0].path]}
+                    </span>
+                  )}
+                </button>
+              )
+            }
+
+            const isOpen = openGroup === group.label
             const isFlyoutOpen = flyoutGroup === group.label
 
             return (

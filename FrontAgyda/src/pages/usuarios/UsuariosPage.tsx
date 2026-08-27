@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, RefreshCw, UserPlus, Edit2, Trash2, Users, ShieldCheck, UserX, UserCheck } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Edit2, Trash2, Users, UserX, UserCheck } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Avatar } from '@/components/ui/Avatar'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { PermisosUsuarioModal } from './PermisosUsuarioModal'
 
 interface Usuario {
   id: number
@@ -215,7 +214,6 @@ export function UsuariosPage() {
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState<Usuario | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Usuario | null>(null)
-  const [accesoUsuario, setAccesoUsuario] = useState<Usuario | null>(null)
   const qc = useQueryClient()
 
   const { data: usuarios = [], isLoading, refetch, isRefetching } = useQuery({
@@ -475,13 +473,6 @@ export function UsuariosPage() {
                         </button>
                       ) : (
                         <>
-                          <button
-                            onClick={() => setAccesoUsuario(u)}
-                            title="Permisos y accesos"
-                            className="rounded-xl p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                          >
-                            <ShieldCheck className="h-4 w-4" />
-                          </button>
                           <button onClick={() => { setSelected(u); setShowModal(true) }} className="rounded-xl p-1.5 text-gray-400 hover:text-brand hover:bg-brand/8 transition-colors">
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
@@ -499,18 +490,6 @@ export function UsuariosPage() {
         </div>
       )}
 
-      {accesoUsuario && (
-        <PermisosUsuarioModal
-          usuarioId={accesoUsuario.id}
-          nombre={`${accesoUsuario.nombres} ${accesoUsuario.apellidos}`.trim()}
-          tipoUsuario={accesoUsuario.tipoUsuario}
-          login={accesoUsuario.login}
-          fotoPerfil={accesoUsuario.fotoPerfil}
-          activo={accesoUsuario.activo}
-          status={accesoUsuario.status}
-          onClose={() => setAccesoUsuario(null)}
-        />
-      )}
       {showModal && <UsuarioModal usuario={selected} onClose={() => setShowModal(false)} />}
 
       {confirmDelete && (

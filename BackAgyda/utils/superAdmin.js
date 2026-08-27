@@ -1,7 +1,8 @@
 const { DEFAULT_TENANT } = require('../config/tenants');
 
-// ADM_0001 (Edgar Montoya), TI_0117 (Abner Diaz) — ambos en la BD 'agyda'.
-const SUPER_ADMIN_IDS = new Set([1, 96]);
+// ADM_0001 (Edgar Montoya), TI_0117 (Abner Diaz), TI_0110 (Ines Jessica Ramos
+// Meneses) — los tres en la BD 'agyda'.
+const SUPER_ADMIN_IDS = new Set([1, 96, 64]);
 
 // El ID por sí solo no basta: cada empresa numera su propio NEUS_ID desde 1,
 // así que el primer usuario de CUALQUIER empresa nueva tendría id=1 y

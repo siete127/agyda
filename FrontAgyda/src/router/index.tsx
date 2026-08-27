@@ -46,6 +46,7 @@ const UsuariosPage    = lz(() => import('@/pages/usuarios/UsuariosPage'),      '
 const PermisosPage         = lz(() => import('@/pages/permisos/PermisosPage'),              'PermisosPage')
 const ExpedientePage       = lz(() => import('@/pages/expediente/ExpedientePage'),          'ExpedientePage')
 const ClientesPage         = lz(() => import('@/pages/clientes/ClientesPage'),              'ClientesPage')
+const ProductosServiciosPage = lz(() => import('@/pages/productos-servicios/ProductosServiciosPage'), 'ProductosServiciosPage')
 const WebphonePage             = lz(() => import('@/pages/webphone/WebphonePage'),                   'WebphonePage')
 const NotificacionesPage       = lz(() => import('@/pages/notificaciones/NotificacionesPage'),       'NotificacionesPage')
 const MusicaPage               = lz(() => import('@/pages/musica/MusicaPage'),                         'MusicaPage')
@@ -212,6 +213,7 @@ export const router = createBrowserRouter([
           { element: <ModuleRoute moduleKey="organigrama" />,         children: [{ path: '/organigrama',      element: wrap(<OrganigramaPage />) }] },
           { element: <ModuleRoute moduleKey="musica" />,              children: [{ path: '/musica',           element: wrap(<MusicaPage />) }] },
           { element: <ModuleRoute moduleKey="clientes" />,            children: [{ path: '/clientes',         element: wrap(<ClientesPage />) }] },
+          { element: <ModuleRoute moduleKey="productos-servicios" />, children: [{ path: '/productos-servicios', element: wrap(<ProductosServiciosPage />) }] },
           { element: <ModuleRoute moduleKey="gastos" />,              children: [{ path: '/gastos',           element: wrap(<GastosPage />) }] },
           { element: <ModuleRoute moduleKey="mi-area" />,             children: [{ path: '/mi-area',          element: wrap(<MiAreaPage />) }] },
           { element: <ModuleRoute moduleKey="proyectos" />,           children: [{ path: '/proyectos',        element: wrap(<ProyectosPage />) }] },

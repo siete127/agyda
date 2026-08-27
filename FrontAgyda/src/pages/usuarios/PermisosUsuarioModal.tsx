@@ -1,19 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ShieldCheck, Shield, ChevronDown, ChevronRight, CheckSquare, Square, Monitor, Phone, Megaphone, Building2, Plus } from 'lucide-react'
-import { api, getApiError } from '@/lib/axios'
+import { ShieldCheck, Shield, ChevronDown, ChevronRight, CheckSquare, Square, Monitor, Phone, Megaphone } from 'lucide-react'
+import { api } from '@/lib/axios'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useActionAccess } from '@/hooks/useActionAccess'
-import { useAuthStore } from '@/stores/auth.store'
-
-// Mismos 2 IDs que el backend restringe en accesoController.esSuperAdminEmpresas
-// — aquí solo controla si se MUESTRA la sección; la autorización real vive en
-// el servidor (403 si no coincide, aunque alguien fuerce la UI).
-const SUPER_ADMIN_EMPRESAS_IDS = new Set([1, 96])
 
 const ROLES_LABEL: Record<string, string> = {
   AD: 'Administración', TI: 'Tecnología', CC: 'Call Center', CL: 'Clientes', ST: 'Staff', VE: 'Ventas',
@@ -46,66 +40,10 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
   const qc = useQueryClient()
   const { can } = useActionAccess()
   const puedeGestionar = can('accesos', 'gestionar')
-  const { user: usuarioActual } = useAuthStore()
-  const esSuperAdmin = SUPER_ADMIN_EMPRESAS_IDS.has(usuarioActual?.id ?? -1)
 
   const [activoLocal, setActivoLocal] = useState(activo)
   const [statusLocal, setStatusLocal] = useState(status)
   const [expandedMod, setExpandedMod] = useState<string | null>(null)
-  const [mostrarFormEmpresa, setMostrarFormEmpresa] = useState(false)
-  const [formEmpresa, setFormEmpresa] = useState({ codigo: '', nombre: '', adminUsuario: '', adminPassword: '', adminNombre: '' })
-
-  const { data: empresas = [], isLoading: loadingEmpresas } = useQuery({
-    queryKey: ['accesos-empresas'],
-    queryFn: async () => {
-      const { data } = await api.get('/accesos/empresas')
-      return (data?.data ?? []) as { key: string; nombre: string }[]
-    },
-    enabled: esSuperAdmin,
-  })
-
-  const crearEmpresa = useMutation({
-    mutationFn: () => api.post('/accesos/empresas', formEmpresa),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['accesos-empresas'] })
-      toast.success('Empresa creada correctamente')
-      setFormEmpresa({ codigo: '', nombre: '', adminUsuario: '', adminPassword: '', adminNombre: '' })
-      setMostrarFormEmpresa(false)
-    },
-    onError: (e) => toast.error(getApiError(e)),
-  })
-
-  const handleCrearEmpresa = () => {
-    const { codigo, nombre: nombreEmp, adminUsuario, adminPassword, adminNombre } = formEmpresa
-    if (!codigo.trim() || !nombreEmp.trim() || !adminUsuario.trim() || !adminPassword.trim() || !adminNombre.trim()) {
-      toast.error('Completa todos los campos')
-      return
-    }
-    crearEmpresa.mutate()
-  }
-
-  // Módulos activos por empresa completa — solo super-admins fijos, mismo
-  // criterio que el resto de la sección Empresas.
-  const [empresaModulosExpandida, setEmpresaModulosExpandida] = useState<string | null>(null)
-
-  const { data: modulosEmpresa = [], isLoading: loadingModulosEmpresa } = useQuery({
-    queryKey: ['empresa-modulos', empresaModulosExpandida],
-    queryFn: async () => {
-      const { data } = await api.get(`/accesos/empresas/${empresaModulosExpandida}/modulos`)
-      return (data?.data?.modulos ?? []) as { key: string; nombre: string; descripcion: string; allow: boolean }[]
-    },
-    enabled: esSuperAdmin && !!empresaModulosExpandida,
-  })
-
-  const toggleModuloEmpresa = useMutation({
-    mutationFn: ({ empKey, moduloKey, allow }: { empKey: string; moduloKey: string; allow: boolean }) =>
-      api.put(`/accesos/empresas/${empKey}/modulos/${moduloKey}`, { allow }),
-    onSuccess: (_, { empKey }) => {
-      qc.invalidateQueries({ queryKey: ['empresa-modulos', empKey] })
-      toast.success('Módulo actualizado para la empresa')
-    },
-    onError: (e) => toast.error(getApiError(e)),
-  })
 
   const toggleIntranet = useMutation({
     mutationFn: (v: boolean) => api.put(`/usuarios/${usuarioId}/activo`, { activo: v }),
@@ -338,139 +276,6 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Empresas (multi-tenant) — solo visible para los 2 super-admins fijos */}
-        {esSuperAdmin && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="section-label">Empresas</span>
-              <button
-                onClick={() => setMostrarFormEmpresa((v) => !v)}
-                className="flex items-center gap-1 text-[0.7rem] font-semibold text-brand hover:underline"
-              >
-                <Plus className="h-3.5 w-3.5" /> Nueva empresa
-              </button>
-            </div>
-
-            {loadingEmpresas ? (
-              <div className="flex justify-center py-4"><Building2 className="h-5 w-5 animate-pulse text-gray-300" /></div>
-            ) : (
-              <div className="space-y-1.5">
-                {empresas.map((e) => (
-                  <div key={e.key} className="rounded-xl border border-gray-100 px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => setEmpresaModulosExpandida((prev) => (prev === e.key ? null : e.key))}
-                      className="flex w-full items-center gap-2.5 text-left"
-                    >
-                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100">
-                        <Building2 className="h-3.5 w-3.5 text-gray-500" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[0.78rem] font-semibold text-gray-800">{e.nombre}</p>
-                        <p className="text-[0.65rem] text-gray-400">{e.key}</p>
-                      </div>
-                      {empresaModulosExpandida === e.key ? (
-                        <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
-                      )}
-                    </button>
-
-                    {empresaModulosExpandida === e.key && (
-                      <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3 space-y-1.5 animate-fade-in">
-                        {loadingModulosEmpresa ? (
-                          <div className="flex justify-center py-4"><Shield className="h-5 w-5 animate-pulse text-gray-300" /></div>
-                        ) : (
-                          modulosEmpresa.map((m) => (
-                            <div key={m.key} className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5">
-                              <div className="min-w-0">
-                                <p className="text-[0.75rem] font-medium text-gray-800">{m.nombre}</p>
-                                {m.descripcion && <p className="text-[0.65rem] text-gray-400 truncate">{m.descripcion}</p>}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleModuloEmpresa.mutate({ empKey: e.key, moduloKey: m.key, allow: !m.allow })}
-                                className={clsx(
-                                  'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
-                                  m.allow ? 'bg-blue-600' : 'bg-gray-200',
-                                )}
-                              >
-                                <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', m.allow ? 'translate-x-4' : 'translate-x-0')} />
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {mostrarFormEmpresa && (
-              <div className="rounded-xl border border-brand/30 bg-brand/[0.02] p-3 space-y-2.5 animate-fade-in">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-[0.65rem] font-semibold text-gray-500 uppercase tracking-wider">Código</label>
-                    <input
-                      value={formEmpresa.codigo}
-                      onChange={(e) => setFormEmpresa((f) => ({ ...f, codigo: e.target.value.toLowerCase() }))}
-                      placeholder="ej. clientex"
-                      className="field py-1.5 text-[0.78rem]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[0.65rem] font-semibold text-gray-500 uppercase tracking-wider">Nombre</label>
-                    <input
-                      value={formEmpresa.nombre}
-                      onChange={(e) => setFormEmpresa((f) => ({ ...f, nombre: e.target.value }))}
-                      placeholder="ej. Cliente X"
-                      className="field py-1.5 text-[0.78rem]"
-                    />
-                  </div>
-                </div>
-                <p className="text-[0.68rem] font-semibold text-gray-500 uppercase tracking-wider pt-1">Administrador inicial</p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <label className="text-[0.65rem] font-semibold text-gray-500 uppercase tracking-wider">Nombre</label>
-                    <input
-                      value={formEmpresa.adminNombre}
-                      onChange={(e) => setFormEmpresa((f) => ({ ...f, adminNombre: e.target.value }))}
-                      placeholder="Nombre completo"
-                      className="field py-1.5 text-[0.78rem]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[0.65rem] font-semibold text-gray-500 uppercase tracking-wider">Usuario</label>
-                    <input
-                      value={formEmpresa.adminUsuario}
-                      onChange={(e) => setFormEmpresa((f) => ({ ...f, adminUsuario: e.target.value }))}
-                      placeholder="usuario"
-                      className="field py-1.5 text-[0.78rem]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[0.65rem] font-semibold text-gray-500 uppercase tracking-wider">Contraseña</label>
-                    <input
-                      type="password"
-                      value={formEmpresa.adminPassword}
-                      onChange={(e) => setFormEmpresa((f) => ({ ...f, adminPassword: e.target.value }))}
-                      placeholder="••••••••"
-                      className="field py-1.5 text-[0.78rem]"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 pt-1">
-                  <Button variant="ghost" onClick={() => setMostrarFormEmpresa(false)}>Cancelar</Button>
-                  <Button onClick={handleCrearEmpresa} disabled={crearEmpresa.isPending}>
-                    {crearEmpresa.isPending ? 'Creando…' : 'Crear empresa'}
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
