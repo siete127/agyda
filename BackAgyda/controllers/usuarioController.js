@@ -16,6 +16,10 @@ exports.getUsuarios = async (req, res) => {
         ISNULL(u.NEUS_BASE,0) as cartera,
         u.NEUS_FECHA_INGRESO as fechaIngreso,
         u.NEUS_FOTO_URL as fotoUrl,
+        ISNULL(u.NEUS_CORREO,'') as correo,
+        ISNULL(u.NEUS_PUESTO,'') as puesto,
+        ISNULL(u.NEUS_DEPARTAMENTO,'') as departamento,
+        ISNULL(u.NEUS_GENERO,'') as genero,
         a.ACA_VENTAS_CAMPANA_NOMBRE as campana
       FROM NEUS_USUARIOS u
       LEFT JOIN AC_CAMPANIAS_AGENTES a ON a.ACA_NEUS_ID = u.NEUS_ID
@@ -46,7 +50,10 @@ exports.getUsuariosDesactivados = async (req, res) => {
         NEUS_ACTIVO as activo,
         NEUS_FECHA_INGRESO as fechaIngreso,
         NEUS_FOTO_URL as fotoUrl,
-        ISNULL(NEUS_PUESTO,'') as puesto
+        ISNULL(NEUS_CORREO,'') as correo,
+        ISNULL(NEUS_PUESTO,'') as puesto,
+        ISNULL(NEUS_DEPARTAMENTO,'') as departamento,
+        ISNULL(NEUS_GENERO,'') as genero
       FROM NEUS_USUARIOS
       WHERE NEUS_ACTIVO = 0
       ORDER BY NEUS_NOMBRES
@@ -92,7 +99,7 @@ exports.getUsuarioById = async (req, res) => {
     const result = await pool.request()
       .input('id', sql.Int, parseInt(id))
       .query(`
-        SELECT 
+        SELECT
           NEUS_ID as id,
           NEUS_NOMBRES as nombre,
           NEUS_USUARIO as usuario,
@@ -102,7 +109,11 @@ exports.getUsuarioById = async (req, res) => {
           ISNULL(NEUS_BASE,0) as cartera,
           NEUS_FECHA_REGISTRO as fechaRegistro,
           NEUS_FECHA_INGRESO as fechaIngreso,
-          NEUS_FOTO_URL as fotoUrl
+          NEUS_FOTO_URL as fotoUrl,
+          ISNULL(NEUS_CORREO,'') as correo,
+          ISNULL(NEUS_PUESTO,'') as puesto,
+          ISNULL(NEUS_DEPARTAMENTO,'') as departamento,
+          ISNULL(NEUS_GENERO,'') as genero
         FROM NEUS_USUARIOS
         WHERE NEUS_ID = @id
       `);
@@ -121,7 +132,10 @@ exports.getUsuarioById = async (req, res) => {
 
 exports.createUsuario = async (req, res) => {
   try {
-    let { nombres, usuario, contra, tipoUsuario, activo, status, base, ventasUsuario, ventasPassword, fechaIngreso } = req.body;
+    let { nombres, usuario, contra, tipoUsuario, activo, status, base, ventasUsuario, ventasPassword, fechaIngreso, correo, puesto, departamento, genero, rolId, idHorario } = req.body;
+    // Días de vacaciones/permisos NO se setean aquí: el trigger
+    // trg_NEUS_USUARIOS_SetDiasIniciales los calcula por antigüedad tras el INSERT.
+    idHorario = (idHorario === '' || idHorario === null || idHorario === undefined || Number.isNaN(Number(idHorario))) ? null : Number(idHorario);
 
     if (!ventasUsuario && req.body && typeof req.body.username !== 'undefined') {
       ventasUsuario = req.body.username;
@@ -129,13 +143,33 @@ exports.createUsuario = async (req, res) => {
     if (!ventasPassword && req.body && typeof req.body.password !== 'undefined') {
       ventasPassword = req.body.password;
     }
-    
+
+    // Si viene rolId (plantilla de rol), su ROL_BASE define el NEUS_TIPOUSUARIO.
+    // Se resuelve aquí para que la validación de "faltan campos" pase igual.
+    let rolBaseDesdeRol = null;
+    if (rolId) {
+      try {
+        const poolRol = await databaseService.getPool(req.user?.empresa);
+        const rs = await poolRol.request()
+          .input('id', sql.Int, parseInt(rolId))
+          .query(`SELECT ROL_BASE FROM dbo.INTRANET_ROLES WHERE ROL_ID = @id AND ACTIVO = 1`);
+        if (rs.recordset.length) {
+          rolBaseDesdeRol = rs.recordset[0].ROL_BASE;
+          tipoUsuario = rolBaseDesdeRol;
+        }
+      } catch (e) {
+        console.warn('⚠️ No se pudo resolver rolId, se usa tipoUsuario del body:', e.message);
+      }
+    }
+
     if (!nombres || !usuario || !contra || !tipoUsuario) {
       return res.status(400).json({ success: false, message: 'Faltan campos obligatorios' });
     }
 
     const activoValue = activo === true || activo === 1 || activo === '1';
     const statusValue = status === true || status === 1 || status === '1';
+    // NEUS_GENERO es char(1): solo 'M' / 'F', si no queda NULL
+    const generoValue = (genero === 'M' || genero === 'F') ? genero : null;
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
@@ -159,12 +193,17 @@ exports.createUsuario = async (req, res) => {
       .input('base', sql.NVarChar, base || '1')
       .input('ventasUsuario', sql.NVarChar, ventasUsuario ? String(ventasUsuario).trim() : null)
       .input('ventasPassword', sql.NVarChar, ventasPassword ? String(ventasPassword).trim() : null)
-      .input('fechaIngreso', sql.Date, fechaIngreso ? new Date(fechaIngreso) : null);
+      .input('fechaIngreso', sql.Date, fechaIngreso ? new Date(fechaIngreso) : null)
+      .input('correo', sql.NVarChar, correo ? String(correo).trim() : null)
+      .input('puesto', sql.NVarChar, puesto ? String(puesto).trim() : null)
+      .input('departamento', sql.NVarChar, departamento ? String(departamento).trim() : null)
+      .input('genero', sql.Char(1), generoValue)
+      .input('idHorario', sql.Int, idHorario);
 
     const insertResult = await request.query(`
       INSERT INTO NEUS_USUARIOS
-      (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password], NEUS_FECHA_INGRESO)
-      VALUES (@nombres, @usuario, @contra, @tipoUsuario, @activo, @status, @base, GETDATE(), @ventasUsuario, @ventasPassword, @fechaIngreso);
+      (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password], NEUS_FECHA_INGRESO, NEUS_CORREO, NEUS_PUESTO, NEUS_DEPARTAMENTO, NEUS_GENERO, id_horario)
+      VALUES (@nombres, @usuario, @contra, @tipoUsuario, @activo, @status, @base, GETDATE(), @ventasUsuario, @ventasPassword, @fechaIngreso, @correo, @puesto, @departamento, @genero, @idHorario);
       SELECT SCOPE_IDENTITY() AS NEUS_ID;
     `);
 
@@ -184,6 +223,18 @@ exports.createUsuario = async (req, res) => {
       } catch (carpetaErr) {
         // Si la tabla no existe todavía, no fallar el create del usuario
         console.warn('⚠️ No se pudo crear carpeta expediente (tabla puede no existir):', carpetaErr.message);
+      }
+    }
+
+    // Copiar los permisos del rol (plantilla) a las tablas del nuevo usuario.
+    // Es una copia one-shot: después el usuario se edita individualmente sin
+    // afectar al rol ni a otros usuarios.
+    if (newUserId && rolId && rolBaseDesdeRol) {
+      try {
+        const { aplicarRolAUsuario } = require('./rolController');
+        await aplicarRolAUsuario(pool, rolId, newUserId, req.user?.id || null);
+      } catch (rolErr) {
+        console.warn('⚠️ No se pudieron copiar los permisos del rol al usuario:', rolErr.message);
       }
     }
 
@@ -240,6 +291,49 @@ exports.toggleStatus = async (req, res) => {
   }
 };
 
+// Cambiar el rol de un usuario existente.
+//  - Siempre actualiza NEUS_TIPOUSUARIO al ROL_BASE del rol nuevo (acceso a rutas).
+//  - Si reaplicarPermisos=true, además borra los permisos actuales del usuario y
+//    copia los del rol nuevo. Si es false, solo cambia el código y los permisos
+//    de módulos/acciones del usuario quedan como estaban.
+exports.cambiarRol = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rolId, reaplicarPermisos } = req.body;
+    if (!rolId) return res.status(400).json({ success: false, message: 'rolId requerido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rolRs = await pool.request()
+      .input('rid', sql.Int, parseInt(rolId))
+      .query(`SELECT ROL_BASE, NOMBRE FROM dbo.INTRANET_ROLES WHERE ROL_ID = @rid AND ACTIVO = 1`);
+    if (rolRs.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Rol no encontrado' });
+    }
+    const rolBase = rolRs.recordset[0].ROL_BASE;
+
+    await pool.request()
+      .input('id', sql.Int, parseInt(id))
+      .input('tipo', sql.NVarChar, rolBase)
+      .query(`UPDATE NEUS_USUARIOS SET NEUS_TIPOUSUARIO = @tipo WHERE NEUS_ID = @id`);
+
+    if (reaplicarPermisos === true || reaplicarPermisos === 1 || reaplicarPermisos === '1') {
+      const { aplicarRolAUsuario } = require('./rolController');
+      await aplicarRolAUsuario(pool, rolId, parseInt(id), req.user?.id || null, true);
+    }
+
+    await logAudit(pool, {
+      userId: req.user?.id || null, userName: req.user?.nombre || null,
+      modulo: 'usuarios', accion: 'cambiar-rol', entidadId: id,
+      detalle: { rolId, rolBase, reaplicarPermisos: !!reaplicarPermisos }, ip: req.ip,
+    });
+
+    return res.json({ success: true, message: 'Rol actualizado', data: { rolBase } });
+  } catch (e) {
+    console.error('Error cambiarRol:', e);
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.toggleActivo = async (req, res) => {
   try {
     const { id } = req.params;
@@ -274,7 +368,7 @@ exports.toggleActivo = async (req, res) => {
 exports.updateUsuario = async (req, res) => {
   try {
     const { id } = req.params;
-    let { nombres, usuario, contra, tipoUsuario, activo, status, base, ventasUsuario, ventasPassword, fechaIngreso } = req.body;
+    let { nombres, usuario, contra, tipoUsuario, activo, status, base, ventasUsuario, ventasPassword, fechaIngreso, correo, puesto, departamento, genero } = req.body;
 
     if (!ventasUsuario && req.body && typeof req.body.username !== 'undefined') {
       ventasUsuario = req.body.username;
@@ -284,13 +378,14 @@ exports.updateUsuario = async (req, res) => {
     }
 
     console.log('🛠️ PUT /api/usuarios/:id', id);
-    
+
     if (!nombres || !usuario || !tipoUsuario) {
       return res.status(400).json({ success: false, message: 'Faltan campos obligatorios' });
     }
 
     const activoValue = activo === true || activo === 1 || activo === '1';
     const statusValue = status === true || status === 1 || status === '1';
+    const generoValue = (genero === 'M' || genero === 'F') ? genero : null;
 
     const pool = await databaseService.getPool(req.user?.empresa);
     
@@ -303,7 +398,7 @@ exports.updateUsuario = async (req, res) => {
     }
 
     let updateQuery = `
-      UPDATE NEUS_USUARIOS SET 
+      UPDATE NEUS_USUARIOS SET
         NEUS_NOMBRES = @nombres,
         NEUS_USUARIO = @usuario,
         NEUS_TIPOUSUARIO = @tipoUsuario,
@@ -312,9 +407,13 @@ exports.updateUsuario = async (req, res) => {
         NEUS_BASE = @base,
         username = @ventasUsuario,
         [password] = @ventasPassword,
-        NEUS_FECHA_INGRESO = @fechaIngreso
+        NEUS_FECHA_INGRESO = @fechaIngreso,
+        NEUS_CORREO = @correo,
+        NEUS_PUESTO = @puesto,
+        NEUS_DEPARTAMENTO = @departamento,
+        NEUS_GENERO = @genero
     `;
-    
+
     const request = pool.request()
       .input('id', sql.Int, id)
       .input('nombres', sql.NVarChar, nombres)
@@ -325,7 +424,11 @@ exports.updateUsuario = async (req, res) => {
       .input('base', sql.NVarChar, base || '1')
       .input('ventasUsuario', sql.NVarChar, ventasUsuario ? String(ventasUsuario).trim() : null)
       .input('ventasPassword', sql.NVarChar, ventasPassword ? String(ventasPassword).trim() : null)
-      .input('fechaIngreso', sql.Date, fechaIngreso ? new Date(fechaIngreso) : null);
+      .input('fechaIngreso', sql.Date, fechaIngreso ? new Date(fechaIngreso) : null)
+      .input('correo', sql.NVarChar, correo ? String(correo).trim() : null)
+      .input('puesto', sql.NVarChar, puesto ? String(puesto).trim() : null)
+      .input('departamento', sql.NVarChar, departamento ? String(departamento).trim() : null)
+      .input('genero', sql.Char(1), generoValue);
     
     if (contra && String(contra).trim() !== '') {
       updateQuery += ', NEUS_CONTRA = @contra';

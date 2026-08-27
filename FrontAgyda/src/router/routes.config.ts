@@ -45,7 +45,7 @@ export const ROUTES: RouteConfig[] = [
   // ── Gestión ────────────────────────────────────────────────────────────
   { path: '/reportes',         label: 'Reportes',        icon: 'BarChart2',            moduleKey: 'reports',          roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/banio',            label: 'Reporte Baño',    icon: 'Footprints',           moduleKey: 'reports',          roles: ['AD','TI'],          showInSidebar: true  },
-  { path: '/usuarios',         label: 'Usuarios',        icon: 'Users',                moduleKey: 'usuarios',         roles: ['AD','TI'],          showInSidebar: true  },
+  { path: '/usuarios',         label: 'Usuarios',        icon: 'Users',                moduleKey: 'usuarios',         roles: ['AD','TI'],          showInSidebar: false },
   { path: '/staff-ti',         label: 'Staff TI',        icon: 'MonitorCheck',         moduleKey: 'staff-ti',         roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/activos',          label: 'Activos',         icon: 'Boxes',                moduleKey: 'activos',          roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/vacantes',         label: 'Vacantes',        icon: 'UserPlus',             moduleKey: 'vacantes',         roles: ['AD','TI'],          showInSidebar: true  },

@@ -21,6 +21,7 @@ router.post('/:id/status', authenticateToken, usuarioController.changeStatus);
 router.post('/', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.createUsuario);
 router.put('/:id/activo', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.toggleActivo);
 router.put('/:id/status-ventas', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.toggleStatus);
+router.put('/:id/rol', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.cambiarRol);
 router.put('/:id/puesto', authenticateToken, verificarRol(['AD']), requireActionAccess('mi-area', 'editar-puesto'), usuarioController.updatePuesto);
 router.put('/:id', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.updateUsuario);
 router.delete('/:id', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.deleteUsuario);

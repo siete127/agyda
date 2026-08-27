@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, CheckCircle2, FileText, X, ChevronLeft } from 'lucide-react'
 import { api } from '@/lib/axios'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
 import toast from 'react-hot-toast'
 
 function usePdfBlob(enabled: boolean) {
@@ -36,7 +37,13 @@ function usePdfBlob(enabled: boolean) {
 
 export function ReglamentoAlertModal() {
   const qc = useQueryClient()
+  const { isAllowed } = useModuleAccess()
   const [showPdf, setShowPdf] = useState(false)
+
+  // Si el módulo 'reglamento' está desactivado para la empresa, /accept
+  // devolvería 403 y el modal encerraría al usuario sin salida. En ese caso
+  // no se consulta el estado ni se muestra el modal.
+  const reglamentoActivo = isAllowed('reglamento')
 
   const { data, isLoading } = useQuery({
     queryKey: ['reglamento-status'],
@@ -46,6 +53,7 @@ export function ReglamentoAlertModal() {
       return payload as { pending: boolean | number; currentVersion?: number; acceptedVersion?: number }
     },
     staleTime: 60_000,
+    enabled: reglamentoActivo,
   })
 
   const { blobUrl, loading: pdfLoading, error: pdfError } = usePdfBlob(showPdf)
@@ -60,7 +68,7 @@ export function ReglamentoAlertModal() {
   })
 
   // Mostrar para TODOS los roles si tienen reglamento pendiente
-  const pendiente = !isLoading && data != null && (data.pending === true || data.pending === 1)
+  const pendiente = reglamentoActivo && !isLoading && data != null && (data.pending === true || data.pending === 1)
   if (!pendiente) return null
 
   return createPortal(

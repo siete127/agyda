@@ -7,50 +7,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Avatar } from '@/components/ui/Avatar'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-
-interface Usuario {
-  id: number
-  nombres: string
-  apellidos: string
-  login: string
-  correo: string
-  tipoUsuario: string
-  genero: 'M' | 'F' | ''
-  activo: boolean
-  status: boolean
-  puesto: string
-  departamento: string
-  fotoPerfil: string | null
-  campana: string | null
-}
-
-function parseUsuario(r: Record<string, unknown>): Usuario {
-  const s = (keys: string[]) => String(keys.reduce((v, k) => v ?? r[k], undefined as unknown) ?? '')
-  return {
-    id: Number(r['id'] ?? r['ID'] ?? r['usuarioId'] ?? 0),
-    nombres: s(['nombres', 'NOMBRES', 'nombre', 'firstName']),
-    apellidos: s(['apellidos', 'APELLIDOS', 'lastName']),
-    login: s(['usuario', 'USUARIO', 'login', 'username']),
-    correo: s(['correo', 'CORREO', 'email', 'EMAIL']),
-    tipoUsuario: s(['tipoUsuario', 'tipo_usuario', 'TIPO_USUARIO', 'rol', 'role']),
-    genero: (s(['genero', 'GENERO', 'gender']).toUpperCase() === 'F' ? 'F' : s(['genero', 'GENERO', 'gender']).toUpperCase() === 'M' ? 'M' : ''),
-    activo: Boolean(r['activo'] ?? r['ACTIVO'] ?? r['active'] ?? true),
-    status: Boolean(r['status'] ?? r['STATUS'] ?? r['NEUS_STATUS'] ?? false),
-    puesto: s(['puesto', 'PUESTO', 'cargo', 'position']),
-    departamento: s(['departamento', 'DEPARTAMENTO', 'area', 'department']),
-    fotoPerfil: s(['fotoPerfil', 'foto_perfil', 'FOTO_PERFIL', 'foto']) || null,
-    campana: s(['campana', 'CAMPANA']) || null,
-  }
-}
-
-const ROL_COLORS: Record<string, string> = {
-  AD: 'bg-red-100 text-red-700',
-  TI: 'bg-blue-100 text-blue-700',
-  CC: 'bg-purple-100 text-purple-700',
-  CL: 'bg-gray-100 text-gray-600',
-  ST: 'bg-green-100 text-green-700',
-  VE: 'bg-amber-100 text-amber-700',
-}
+import { type Usuario, parseUsuario, ROL_COLORS } from './usuario.model'
+import { UsuarioModal } from './UsuarioModal'
 
 /* ── Skeleton ── */
 function SkeletonRow() {
@@ -70,139 +28,6 @@ function SkeletonRow() {
       <td className="px-4 py-3"><div className="h-5 w-14 rounded-full bg-gray-100 animate-pulse" /></td>
       <td className="px-4 py-3" />
     </tr>
-  )
-}
-
-/* ── Modal usuario ── */
-function UsuarioModal({ usuario, onClose }: { usuario: Usuario | null; onClose: () => void }) {
-  const qc = useQueryClient()
-  const [form, setForm] = useState({
-    nombres:      usuario?.nombres ?? '',
-    apellidos:    usuario?.apellidos ?? '',
-    usuario:      usuario?.login ?? '',
-    correo:       usuario?.correo ?? '',
-    tipoUsuario:  usuario?.tipoUsuario ?? 'CC',
-    genero:       usuario?.genero ?? '',
-    puesto:       usuario?.puesto ?? '',
-    departamento: usuario?.departamento ?? '',
-    contra:       '',
-  })
-
-  const guardar = useMutation({
-    mutationFn: () => {
-      if (usuario) {
-        // En edición: enviar nombres completo y el campo usuario (login)
-        const payload = {
-          nombres:     `${form.nombres} ${form.apellidos}`.trim(),
-          usuario:     form.usuario.trim() || usuario.login,
-          correo:      form.correo,
-          tipoUsuario: form.tipoUsuario,
-          genero:      form.genero || null,
-          puesto:      form.puesto,
-          departamento: form.departamento,
-          activo:      true,
-          status:      false,
-          ...(form.contra.trim() ? { contra: form.contra.trim() } : {}),
-        }
-        return api.put(`/usuarios/${usuario.id}`, payload)
-      }
-      // Al crear: nombres completo = nombres + apellidos, usuario = login
-      const payload = {
-        nombres:     `${form.nombres} ${form.apellidos}`.trim(),
-        usuario:     form.usuario.trim(),
-        contra:      form.contra,
-        tipoUsuario: form.tipoUsuario,
-        genero:      form.genero || null,
-        activo:      true,
-        status:      false,
-      }
-      return api.post('/usuarios', payload)
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['usuarios'] })
-      toast.success(usuario ? 'Usuario actualizado' : 'Usuario creado')
-      onClose()
-    },
-    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar'),
-  })
-
-  const editFields: { label: string; key: keyof typeof form; colSpan?: boolean; type?: string }[] = [
-    { label: 'Nombres',      key: 'nombres' },
-    { label: 'Apellidos',    key: 'apellidos' },
-    { label: 'Usuario (login)', key: 'usuario', colSpan: true },
-    { label: 'Correo',       key: 'correo',      colSpan: true },
-    { label: 'Puesto',       key: 'puesto' },
-    { label: 'Departamento', key: 'departamento' },
-    { label: 'Nueva contraseña (opcional)', key: 'contra', colSpan: true, type: 'password' },
-  ]
-
-  return (
-    <Modal isOpen onClose={onClose} title={usuario ? 'Editar usuario' : 'Nuevo usuario'} size="md">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          {usuario ? (
-            editFields.map(({ label, key, colSpan, type }) => (
-              <div key={key} className={colSpan ? 'col-span-2' : ''}>
-                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">{label}</label>
-                <input
-                  type={type ?? 'text'}
-                  value={form[key] as string}
-                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                  className="field"
-                />
-              </div>
-            ))
-          ) : (
-            <>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Nombre(s)</label>
-                <input type="text" value={form.nombres} onChange={(e) => setForm({ ...form, nombres: e.target.value })} className="field" />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Apellidos</label>
-                <input type="text" value={form.apellidos} onChange={(e) => setForm({ ...form, apellidos: e.target.value })} className="field" />
-              </div>
-              <div className="col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Usuario (login)</label>
-                <input type="text" value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value })} className="field" placeholder="Ej: CC 0299" />
-              </div>
-            </>
-          )}
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Rol</label>
-            <select value={form.tipoUsuario} onChange={(e) => setForm({ ...form, tipoUsuario: e.target.value })} className="field">
-              <option value="AD">AD — Administrador</option>
-              <option value="TI">TI — Técnico</option>
-              <option value="CC">CC — Call Center</option>
-              <option value="ST">ST — Staff</option>
-              <option value="VE">VE — Ventas</option>
-              <option value="CL">CL — Cliente</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Género</label>
-            <select value={form.genero} onChange={(e) => setForm({ ...form, genero: e.target.value as 'M' | 'F' | '' })} className="field">
-              <option value="">Sin especificar</option>
-              <option value="M">Masculino</option>
-              <option value="F">Femenino</option>
-            </select>
-          </div>
-          {!usuario && (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Contraseña inicial</label>
-              <input type="password" value={form.contra} onChange={(e) => setForm({ ...form, contra: e.target.value })} className="field" />
-            </div>
-          )}
-          {/* El campo de contraseña en edición se muestra vía editFields */}
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button isLoading={guardar.isPending} onClick={() => guardar.mutate()}>
-            {usuario ? 'Guardar cambios' : 'Crear usuario'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
   )
 }
 
@@ -287,7 +112,7 @@ export function UsuariosPage() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { tab === 'activos' ? refetch() : refetchDesact() }}
+                onClick={() => { if (tab === 'activos') refetch(); else refetchDesact() }}
                 className={clsx('flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors', (isRefetching) && 'animate-spin')}
               >
                 <RefreshCw className="h-3.5 w-3.5" />

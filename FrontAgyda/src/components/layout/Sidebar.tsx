@@ -69,7 +69,7 @@ const GROUPS = [
   },
   {
     label: 'Tecnología / TI',
-    keys: ['tecnologia', 'tickets', 'activos', 'staff-ti', 'usuarios'],
+    keys: ['tecnologia', 'tickets', 'activos', 'staff-ti'],
   },
   {
     label: 'Atención al Cliente',

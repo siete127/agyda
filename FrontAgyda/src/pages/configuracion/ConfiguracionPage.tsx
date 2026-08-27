@@ -11,6 +11,9 @@ import { WebphoneVistasTab } from './WebphoneVistasTab'
 import { WebphoneCredencialesTab } from './WebphoneCredencialesTab'
 import { NotificacionesCorreoTab } from './NotificacionesCorreoTab'
 import { MensajeriaConfigTab } from './MensajeriaConfigTab'
+import { UsuariosTab } from './UsuariosTab'
+import { RolesTab } from './RolesTab'
+import { PerfilesTab } from './PerfilesTab'
 
 const SUPER_ADMIN_EMPRESAS_IDS = new Set([1, 96, 64])
 
@@ -18,6 +21,9 @@ const SCREENS: Record<string, ComponentType> = {
   empresas: EmpresasTab,
   'modulos-empresa': ModulosEmpresaTab,
   permisos: PermisosTab,
+  usuarios: UsuariosTab,
+  roles: RolesTab,
+  perfiles: PerfilesTab,
   'webphone-vistas': WebphoneVistasTab,
   'webphone-credenciales': WebphoneCredencialesTab,
   notificaciones: NotificacionesCorreoTab,
@@ -114,12 +120,23 @@ export function ConfiguracionPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-br from-[#0D1B3E] via-[#1a2f5e] to-[#0D1B3E] p-6 text-white">
-        <div className="flex items-center gap-3">
-          <Settings className="h-6 w-6 text-blue-300" />
-          <div>
-            <h1 className="text-lg font-bold">Configuración</h1>
-            <p className="text-xs text-blue-200/70">Mapa completo de configuración del sistema</p>
+      <div className="relative overflow-hidden rounded-2xl text-white">
+        <div
+          className="animate-gradient-x px-6 py-6"
+          style={{
+            backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)',
+            backgroundSize: '200% 100%',
+          }}
+        >
+          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+          <div className="relative flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+              <Settings className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">Configuración</h1>
+              <p className="mt-0.5 text-xs text-blue-200/80">Mapa completo de configuración del sistema</p>
+            </div>
           </div>
         </div>
       </div>

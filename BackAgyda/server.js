@@ -106,6 +106,8 @@ app.use('/api/rh-area', require('./routes/rhArea'));
 app.use('/api/notificaciones-correo', require('./routes/notificacionesCorreo'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/accesos', require('./routes/accesos'));
+app.use('/api/roles', require('./routes/roles'));
+app.use('/api/perfiles', require('./routes/perfiles'));
 app.use('/api/ui', require('./routes/ui'));
 app.use('/api/webphone', require('./routes/webphone'));
 app.use('/api/playlist', require('./routes/playlist'));

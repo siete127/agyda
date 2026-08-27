@@ -92,6 +92,8 @@ exports.getModules = async (req, res) => {
 // Catálogo canónico de módulos, reusado por empresaModulosController para
 // validar moduloKey contra la lista real (evita togglear un módulo inexistente).
 exports.MODULOS_DISPONIBLES = MODULOS_DISPONIBLES;
+// Reusados por rolController (validar acciones) y schemaService (seed de roles).
+exports.DEFAULT_MODULES_BY_ROLE = DEFAULT_MODULES_BY_ROLE;
 
 /* ══════════════════════════════════════════════════════
    PERMISOS GRANULARES POR ACCIÓN
@@ -399,6 +401,9 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
 };
+
+// Reusado por rolController para validar que cada acción de un rol exista.
+exports.ACCIONES_POR_MODULO = ACCIONES_POR_MODULO;
 
 exports.getModuleActions = async (req, res) => {
   const { moduloKey } = req.params;

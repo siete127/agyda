@@ -1336,6 +1336,123 @@ async function loadDynamicTenants(pool) {
   }
 }
 
+// Roles = plantillas nombradas de permisos (módulos + acciones). Al crear un
+// usuario se elige un rol y sus permisos se COPIAN a INTRANET_USUARIOS_MODULOS /
+// INTRANET_USUARIOS_ACCIONES. El rol lleva ROL_BASE (AD/TI/CC/ST/VE/CL) que es lo
+// que se guarda en NEUS_TIPOUSUARIO para no romper verificarRol ni el login.
+async function ensureRolesSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.INTRANET_ROLES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.INTRANET_ROLES (
+          ROL_ID       INT IDENTITY(1,1) PRIMARY KEY,
+          NOMBRE       NVARCHAR(80)  NOT NULL,
+          DESCRIPCION  NVARCHAR(255) NULL,
+          ROL_BASE     NVARCHAR(10)  NOT NULL,
+          ES_SISTEMA   BIT           NOT NULL DEFAULT 0,
+          ACTIVO       BIT           NOT NULL DEFAULT 1,
+          CREADO_EN    DATETIME      NOT NULL DEFAULT GETDATE(),
+          CREADO_POR   INT           NULL,
+          CONSTRAINT UQ_INTRANET_ROLES_NOMBRE UNIQUE (NOMBRE)
+        );
+      END
+
+      IF OBJECT_ID('dbo.INTRANET_ROLES_PERMISOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.INTRANET_ROLES_PERMISOS (
+          ID          INT IDENTITY(1,1) PRIMARY KEY,
+          ROL_ID      INT           NOT NULL,
+          MODULO_KEY  NVARCHAR(100) NOT NULL,
+          ACCION_KEY  NVARCHAR(100) NOT NULL,
+          CONSTRAINT UQ_INTRANET_ROLES_PERMISOS UNIQUE (ROL_ID, MODULO_KEY, ACCION_KEY)
+        );
+        CREATE INDEX IX_INTRANET_ROLES_PERMISOS_ROL ON dbo.INTRANET_ROLES_PERMISOS(ROL_ID);
+      END
+    `);
+
+    // Seed de los 6 roles de sistema — SOLO en el primer arranque (tabla vacía).
+    // Si el usuario borra un rol de sistema después, no reaparece.
+    const cnt = await pool.request().query(`SELECT COUNT(*) AS n FROM dbo.INTRANET_ROLES`);
+    if (cnt.recordset[0].n > 0) {
+      logger.info('✅ Esquema de roles asegurado');
+      return;
+    }
+
+    // Permisos = los módulos por defecto de ese rol, con ACCION_KEY='*' (acceso al módulo).
+    const { DEFAULT_MODULES_BY_ROLE, MODULOS_DISPONIBLES } = require('../controllers/accesoController');
+    const SISTEMA = [
+      { base: 'AD', nombre: 'Administrador',  desc: 'Acceso completo de administracion' },
+      { base: 'TI', nombre: 'Tecnologia',     desc: 'Acceso completo del equipo de TI' },
+      { base: 'CC', nombre: 'Call Center',    desc: 'Agente de Call Center' },
+      { base: 'ST', nombre: 'Staff',          desc: 'Personal interno' },
+      { base: 'VE', nombre: 'Ventas',         desc: 'Equipo de ventas' },
+      { base: 'CL', nombre: 'Cliente',        desc: 'Cliente externo - acceso minimo' },
+    ];
+    const todosLosModulos = MODULOS_DISPONIBLES.map((m) => m.key);
+    for (const r of SISTEMA) {
+      const ins = await pool.request()
+        .input('nombre', require('mssql').NVarChar, r.nombre)
+        .input('desc', require('mssql').NVarChar, r.desc)
+        .input('base', require('mssql').NVarChar, r.base)
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM dbo.INTRANET_ROLES WHERE ROL_BASE=@base AND ES_SISTEMA=1)
+          BEGIN
+            INSERT INTO dbo.INTRANET_ROLES (NOMBRE, DESCRIPCION, ROL_BASE, ES_SISTEMA, ACTIVO)
+            VALUES (@nombre, @desc, @base, 1, 1);
+            SELECT SCOPE_IDENTITY() AS ROL_ID;
+          END
+          ELSE SELECT NULL AS ROL_ID;
+        `);
+      const rolId = ins.recordset && ins.recordset[0] ? ins.recordset[0].ROL_ID : null;
+      if (!rolId) continue; // ya existía
+      const defaults = DEFAULT_MODULES_BY_ROLE[r.base.toLowerCase()] ?? [];
+      const mods = defaults[0] === '*' ? todosLosModulos : defaults;
+      for (const modKey of mods) {
+        await pool.request()
+          .input('rolId', require('mssql').Int, rolId)
+          .input('modKey', require('mssql').NVarChar, modKey)
+          .query(`
+            IF NOT EXISTS (SELECT 1 FROM dbo.INTRANET_ROLES_PERMISOS WHERE ROL_ID=@rolId AND MODULO_KEY=@modKey AND ACCION_KEY='*')
+              INSERT INTO dbo.INTRANET_ROLES_PERMISOS (ROL_ID, MODULO_KEY, ACCION_KEY) VALUES (@rolId, @modKey, '*')
+          `);
+      }
+    }
+    logger.info('✅ Esquema de roles asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de roles:', err.message);
+  }
+}
+
+// Perfiles = plantillas de datos de usuario. Predefinen puesto, departamento,
+// horario, vacaciones/permisos y el ROL de permisos. Al crear un usuario se
+// elige un perfil y esos campos se autocompletan (quedan editables).
+async function ensurePerfilesSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.INTRANET_PERFILES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.INTRANET_PERFILES (
+          PERFIL_ID       INT IDENTITY(1,1) PRIMARY KEY,
+          NOMBRE          NVARCHAR(80)  NOT NULL,
+          DESCRIPCION     NVARCHAR(255) NULL,
+          ROL_ID          INT           NULL,
+          PUESTO          NVARCHAR(150) NULL,
+          DEPARTAMENTO    NVARCHAR(150) NULL,
+          ID_HORARIO      INT           NULL,
+          ACTIVO          BIT           NOT NULL DEFAULT 1,
+          CREADO_EN       DATETIME      NOT NULL DEFAULT GETDATE(),
+          CREADO_POR      INT           NULL,
+          CONSTRAINT UQ_INTRANET_PERFILES_NOMBRE UNIQUE (NOMBRE)
+        );
+      END
+    `);
+    logger.info('✅ Esquema de perfiles asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de perfiles:', err.message);
+  }
+}
+
 async function ensureAccesosSchema(pool) {
   try {
     await pool.request().batch(`
@@ -3666,6 +3783,8 @@ async function ensureAllSchemas(pool) {
   await ensureCrmSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
   await ensureEmailMarketingSchema(pool);
+  await ensureRolesSchema(pool);
+  await ensurePerfilesSchema(pool);
   await ensureAccesosSchema(pool);
   await ensureAreasSchema(pool);
   await ensureCalidadSchema(pool);
@@ -5033,5 +5152,7 @@ module.exports = {
     ensureLivechatCampanasSchema,
     ensureEmailMarketingSchema,
     ensureMensajeriaSchema,
-    ensureEncuestasSchema
+    ensureEncuestasSchema,
+    ensureRolesSchema,
+    ensurePerfilesSchema
 };

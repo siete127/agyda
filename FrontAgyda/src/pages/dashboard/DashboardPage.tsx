@@ -13,6 +13,7 @@ import {
   PlaneTakeoff,
 } from 'lucide-react'
 import { useVentasAutoLogin } from '@/hooks/useVentasAutoLogin'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
 import { noticiasService } from '@/services/noticias.service'
@@ -256,6 +257,7 @@ export function DashboardPage() {
 
   const isAdmin    = ['AD', 'ADMIN'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
   const { openVentas, loading: ventasLoading } = useVentasAutoLogin()
+  const { isAllowed } = useModuleAccess()
 
   const now   = new Date()
   const mes   = now.getMonth() + 1
@@ -263,9 +265,9 @@ export function DashboardPage() {
   const hour  = now.getHours()
   const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'
 
-  const { data: noticias   = [] } = useQuery({ queryKey: ['noticias'],            queryFn: () => noticiasService.getAll(), staleTime: 60_000 })
-  const { data: tickets    = [] } = useQuery({ queryKey: ['tickets'],             queryFn: () => ticketsService.getAll(), staleTime: 60_000 })
-  const { data: proyectos  = [] } = useQuery({ queryKey: ['proyectos'],           queryFn: () => proyectosService.getAll(), staleTime: 60_000 })
+  const { data: noticias   = [] } = useQuery({ queryKey: ['noticias'],            queryFn: () => noticiasService.getAll(), staleTime: 60_000, enabled: isAllowed('noticias') })
+  const { data: tickets    = [] } = useQuery({ queryKey: ['tickets'],             queryFn: () => ticketsService.getAll(), staleTime: 60_000, enabled: isAllowed('tickets') })
+  const { data: proyectos  = [] } = useQuery({ queryKey: ['proyectos'],           queryFn: () => proyectosService.getAll(), staleTime: 60_000, enabled: isAllowed('proyectos') })
 
   const { data: cumpleanos = [] } = useQuery({
     queryKey: ['cumpleanos-dashboard', mes, anio],
@@ -306,10 +308,10 @@ export function DashboardPage() {
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
   const RESUMEN = [
-    { icon: Megaphone,    value: noticias.length,  label: 'Noticias nuevas',    sub: noticias.length > 0 ? 'Revisa lo último' : 'Sin novedades', to: '/noticias'        },
-    { icon: CheckSquare,  value: ticketsAbiertos,  label: 'Tickets abiertos',   sub: ticketsAbiertos > 0 ? 'En proceso' : 'Todo al día',          to: '/tickets'         },
-    { icon: FolderOpenIcon, value: proyectosActivos, label: 'Proyectos activos', sub: proyectosActivos > 0 ? 'En curso' : 'Sin proyectos activos', to: '/proyectos'     },
-  ]
+    isAllowed('noticias')  && { icon: Megaphone,      value: noticias.length,   label: 'Noticias nuevas',   sub: noticias.length > 0 ? 'Revisa lo último' : 'Sin novedades',    to: '/noticias'  },
+    isAllowed('tickets')   && { icon: CheckSquare,    value: ticketsAbiertos,   label: 'Tickets abiertos',  sub: ticketsAbiertos > 0 ? 'En proceso' : 'Todo al día',           to: '/tickets'   },
+    isAllowed('proyectos') && { icon: FolderOpenIcon, value: proyectosActivos,  label: 'Proyectos activos', sub: proyectosActivos > 0 ? 'En curso' : 'Sin proyectos activos',  to: '/proyectos' },
+  ].filter(Boolean) as { icon: typeof Megaphone; value: number; label: string; sub: string; to: string }[]
 
   return (
     <div className="space-y-5 animate-fade-in">

@@ -12,12 +12,17 @@ import { WebphoneFrame } from '@/components/ui/WebphoneFrame'
 import { useUIStore } from '@/stores/ui.store'
 import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { useAuthStore } from '@/stores/auth.store'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
 
 export function AppLayout() {
   const setActiveRoute = useUIStore((s) => s.setActiveRoute)
   const location = useLocation()
   const tipoUsuario = useAuthStore((s) => s.user?.tipoUsuario?.toUpperCase())
-  const showMusic = tipoUsuario !== 'CC' && tipoUsuario !== 'CL'
+  const { isAllowed } = useModuleAccess()
+  // Las burbujas flotantes solo se montan si el módulo está activo para la
+  // empresa — así no disparan llamadas a /api que devolverían 403.
+  const showMusic = tipoUsuario !== 'CC' && tipoUsuario !== 'CL' && isAllowed('musica')
+  const showMensajeria = isAllowed('mensajeria')
 
   useInactivityTimer()
 
@@ -44,7 +49,7 @@ export function AppLayout() {
       <ActaRetardosModal />
       <ActivoTerminosModal />
       <QuejasAlertBubble />
-      <MensajeriaFloatingBubble />
+      {showMensajeria && <MensajeriaFloatingBubble />}
       <WebphoneFrame />
     </div>
   )
