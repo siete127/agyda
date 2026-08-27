@@ -1,17 +1,17 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Timer, Plus, Trash2, Pencil, Power, ArrowLeft, BarChart3 } from 'lucide-react'
+import { Timer, Plus, Trash2, Pencil, Power, BarChart3 } from 'lucide-react'
 import { ticketSlaService } from '@/services/ticketSla.service'
 import { DashboardStatRow } from '@/components/ui/DashboardStatRow'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import type { ReglaSla } from '@/types/ticketSla.types'
+import { PRIORIDAD_LABELS, type TicketPrioridad } from '@/types/ticket.types'
 
-const PRIORIDADES = ['BAJA', 'MEDIA', 'ALTA']
+const PRIORIDADES = ['P1', 'P2', 'P3', 'P4'] as const
 const AREAS = ['TI', 'ST']
 
 function formatMinutos(min: number) {
@@ -23,7 +23,7 @@ function formatMinutos(min: number) {
 
 function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose: () => void }) {
   const qc = useQueryClient()
-  const [prioridad, setPrioridad] = useState(regla?.prioridad ?? 'MEDIA')
+  const [prioridad, setPrioridad] = useState(regla?.prioridad ?? 'P3')
   const [area, setArea] = useState(regla?.area ?? '')
   const [minPrimeraRespuesta, setMinPrimeraRespuesta] = useState<number | ''>(regla?.minPrimeraRespuesta ?? '')
   const [minResolucion, setMinResolucion] = useState<number | ''>(regla?.minResolucion ?? '')
@@ -48,14 +48,14 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Prioridad</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {PRIORIDADES.map((p) => (
               <button
                 key={p}
                 onClick={() => setPrioridad(p)}
                 className={clsx('rounded-xl border px-2 py-2 text-xs font-semibold transition-colors', prioridad === p ? 'border-brand bg-brand/10 text-brand' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}
               >
-                {p}
+                {PRIORIDAD_LABELS[p]}
               </button>
             ))}
           </div>
@@ -86,7 +86,7 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
   )
 }
 
-export function TicketsSlaPage() {
+export function SlaTab() {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'crear' | ReglaSla | null>(null)
 
@@ -121,17 +121,13 @@ export function TicketsSlaPage() {
   })
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      <Link to="/tickets" className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="h-3.5 w-3.5" /> Volver a Tickets
-      </Link>
-
+    <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Timer className="h-5 w-5 text-brand" /> SLA de Tickets
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Reglas de tiempo de respuesta y resolución, configurables por prioridad y área</p>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+            <Timer className="h-4 w-4 text-brand" /> SLA de Tickets
+          </h2>
+          <p className="mt-0.5 text-xs text-ink-tertiary">Reglas de tiempo de respuesta y resolución, configurables por prioridad y área</p>
         </div>
         <Button size="sm" onClick={() => setModal('crear')}><Plus className="h-3.5 w-3.5" /> Nueva regla</Button>
       </div>
@@ -149,7 +145,7 @@ export function TicketsSlaPage() {
       {reporte && reporte.totalEvaluados > 0 && (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="card p-4">
-            <h2 className="mb-3 text-sm font-bold text-ink">Cumplimiento por área</h2>
+            <h3 className="mb-3 text-sm font-bold text-ink">Cumplimiento por área</h3>
             <div className="space-y-2">
               {reporte.porArea.map((g) => (
                 <div key={g.key} className="flex items-center justify-between text-xs">
@@ -160,7 +156,7 @@ export function TicketsSlaPage() {
             </div>
           </div>
           <div className="card p-4">
-            <h2 className="mb-3 text-sm font-bold text-ink">Cumplimiento por prioridad</h2>
+            <h3 className="mb-3 text-sm font-bold text-ink">Cumplimiento por prioridad</h3>
             <div className="space-y-2">
               {reporte.porPrioridad.map((g) => (
                 <div key={g.key} className="flex items-center justify-between text-xs">
@@ -186,7 +182,7 @@ export function TicketsSlaPage() {
             <div key={r.id} className={clsx('card p-4', !r.activa && 'opacity-50')}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">{r.prioridad}</p>
+                  <p className="text-sm font-semibold text-gray-900">{PRIORIDAD_LABELS[r.prioridad as TicketPrioridad] ?? r.prioridad}</p>
                   <p className="text-xs text-gray-500">{r.area ?? 'Todas las áreas'}</p>
                 </div>
                 <div className="flex gap-1">

@@ -1,30 +1,94 @@
-import { Settings, HardHat } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Settings } from 'lucide-react'
+import { ConfiguracionNav, CONFIGURACION_SECCIONES } from './ConfiguracionNav'
+import { GeneralTab } from './tecnologia/GeneralTab'
+import { MesaServicioTab } from './tecnologia/MesaServicioTab'
+import { CategoriasTab } from './tecnologia/CategoriasTab'
+import { TecnicosTab } from './tecnologia/TecnicosTab'
+import { CatalogosTab } from './tecnologia/CatalogosTab'
+import { NotificacionesTecTab } from './tecnologia/NotificacionesTecTab'
+import { GruposSoporteTab } from './tecnologia/GruposSoporteTab'
+import { SlaTab } from './tecnologia/SlaTab'
+import { CampaniaSoporteTITab } from './tecnologia/CampaniaSoporteTITab'
+import { ChatEnVivoTab } from './tecnologia/ChatEnVivoTab'
+import { ChatbotConfigTab } from './tecnologia/ChatbotConfigTab'
+import { ReglasNegocioTab } from './tecnologia/ReglasNegocioTab'
+import { EscalamientosTab } from './tecnologia/EscalamientosTab'
+import { AutomatizacionesTab } from './tecnologia/AutomatizacionesTab'
+import { KbConfigTab } from './tecnologia/KbConfigTab'
+import { EncuestasTab } from './tecnologia/EncuestasTab'
+import { PlantillasTab } from './tecnologia/PlantillasTab'
+import { SeguridadTab } from './tecnologia/SeguridadTab'
+import { IntegracionesTab } from './tecnologia/IntegracionesTab'
+import { ProximamenteTab } from './tecnologia/ProximamenteTab'
+import { WebphoneVistasTab } from './WebphoneVistasTab'
+import { WebphoneCredencialesTab } from './WebphoneCredencialesTab'
+import { NotificacionesCorreoTab } from './NotificacionesCorreoTab'
+import { MensajeriaConfigTab } from './MensajeriaConfigTab'
 
-// Tabs originales (Vistas de Webphone, Credenciales VICIdial, Notificaciones
-// por Correo, Mensajería) desactivados temporalmente — módulo en construcción.
-// Los componentes siguen existiendo en este mismo folder para reactivarlos
-// después sin tener que reescribirlos.
+const DEFAULT_TAB = 'general'
+
 export function ConfiguracionPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') ?? DEFAULT_TAB
+
+  const setTab = (key: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('tab', key)
+      return next
+    })
+  }
+
+  const seccionActual = CONFIGURACION_SECCIONES.find((s) => s.key === tab)
+
+  const renderContenido = () => {
+    switch (tab) {
+      case 'general':                return <GeneralTab />
+      case 'mesa-servicio':          return <MesaServicioTab />
+      case 'categorias':             return <CategoriasTab />
+      case 'tecnicos':               return <TecnicosTab />
+      case 'catalogos':              return <CatalogosTab />
+      case 'grupos-soporte':         return <GruposSoporteTab />
+      case 'sla':                    return <SlaTab />
+      case 'campanias':              return <CampaniaSoporteTITab />
+      case 'chat-vivo':              return <ChatEnVivoTab />
+      case 'chatbot':                return <ChatbotConfigTab />
+      case 'reglas':                 return <ReglasNegocioTab />
+      case 'escalamientos':          return <EscalamientosTab />
+      case 'automatizaciones':       return <AutomatizacionesTab />
+      case 'kb':                     return <KbConfigTab />
+      case 'encuestas':              return <EncuestasTab />
+      case 'plantillas':             return <PlantillasTab />
+      case 'seguridad':              return <SeguridadTab />
+      case 'integraciones':          return <IntegracionesTab />
+      case 'notificaciones':         return <NotificacionesTecTab />
+      case 'webphone-vistas':        return <WebphoneVistasTab />
+      case 'webphone-credenciales':  return <WebphoneCredencialesTab />
+      case 'mensajeria':             return <MensajeriaConfigTab />
+      case 'notificaciones-correo':  return <NotificacionesCorreoTab />
+      default:
+        return <ProximamenteTab seccion={seccionActual?.label ?? 'Sección'} />
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl bg-gradient-to-br from-[#0D1B3E] via-[#1a2f5e] to-[#0D1B3E] p-6 text-white">
         <div className="flex items-center gap-3">
           <Settings className="h-6 w-6 text-blue-300" />
           <div>
-            <h1 className="text-lg font-bold">Configuración</h1>
-            <p className="text-xs text-blue-200/70">Vistas de Webphone y notificaciones por correo</p>
+            <h1 className="text-lg font-bold">Configuración — Tecnología/TI</h1>
+            <p className="text-xs text-blue-200/70">
+              Catálogos, técnicos, reglas de asignación, canales de soporte y ciclo de vida de tickets
+            </p>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-gray-200/60 bg-white py-20 shadow-sm">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
-          <HardHat className="h-8 w-8 text-amber-500" />
-        </div>
-        <div className="text-center">
-          <p className="text-base font-bold text-gray-800">Módulo en construcción</p>
-          <p className="mt-1 max-w-sm text-sm text-gray-400">Estamos trabajando en esta sección. Vuelve pronto.</p>
-        </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_1fr]">
+        <ConfiguracionNav activa={tab} onChange={setTab} />
+        <div>{renderContenido()}</div>
       </div>
     </div>
   )

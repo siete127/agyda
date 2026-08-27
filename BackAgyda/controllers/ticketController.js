@@ -7,6 +7,11 @@ const fs = require('fs');
 const path = require('path');
 const { EVIDENCIA_DIR } = require('../middleware/evidenceUpload');
 const { logAudit } = require('../services/auditService');
+const ticketPrioridad = require('../constants/ticketPrioridad');
+const TICKET_CATEGORIAS = require('../constants/ticketCategorias');
+const TICKET_CODIGOS_CIERRE = require('../constants/ticketCierre');
+const reglasAsignacionService = require('../services/reglasAsignacionService');
+const TICKET_MOTIVOS_ESPERA = require('../constants/ticketMotivosEspera');
 
 /* ── SLA: reglas configurables (por prioridad + área opcional) evaluadas contra los
    tiempos que este controller ya calcula (tiempoAtencionMinutos / tiempoPrimeraRespuestaMinutos).
@@ -53,13 +58,23 @@ function enriquecerConSla(tickets, reglas) {
       else slaRespuesta = 'en_tiempo';
     }
 
+    // El reloj de SLA de resolución se pausa mientras el ticket está en_espera:
+    // se descuenta el tiempo ya acumulado (MINUTOS_TOTAL_ESPERA) y, si está
+    // actualmente en espera, también el tramo en curso desde FECHA_INICIO_ESPERA.
+    const minutosTotalEspera = t.MINUTOS_TOTAL_ESPERA ?? t.minutosTotalEspera ?? 0;
+    const estadoTicket = t.ESTADO ?? t.estado;
+    const fechaInicioEspera = t.FECHA_INICIO_ESPERA ?? t.fechaInicioEspera;
+    const minutosEsperaEnCurso = (estadoTicket === 'en_espera' && fechaInicioEspera)
+      ? Math.round((ahora - new Date(fechaInicioEspera).getTime()) / 60000)
+      : 0;
+
     let slaResolucion = null;
     const cierre = t.FECHA_CIERRE ?? t.fechaCierre;
     if (cierre) {
-      const minutos = Math.round((new Date(cierre).getTime() - creacion) / 60000);
+      const minutos = Math.round((new Date(cierre).getTime() - creacion) / 60000) - minutosTotalEspera;
       slaResolucion = minutos <= regla.minResolucion ? 'cumplido' : 'incumplido';
     } else {
-      const minutosTranscurridos = Math.round((ahora - creacion) / 60000);
+      const minutosTranscurridos = Math.round((ahora - creacion) / 60000) - minutosTotalEspera - minutosEsperaEnCurso;
       if (minutosTranscurridos > regla.minResolucion) slaResolucion = 'incumplido';
       else if (minutosTranscurridos >= regla.minResolucion * 0.85) slaResolucion = 'en_riesgo';
       else slaResolucion = 'en_tiempo';
@@ -195,27 +210,24 @@ exports.getReporteSla = async (req, res) => {
   }
 };
 
-// Función auxiliar para autoasignar ticket — asignación aleatoria entre agentes disponibles del área
-async function autoAssignTicket(pool, area) {
+// Valida que un usuario sea un agente activo del pool de soporte de un área
+// (opcionalmente restringido a un nivel). Reemplaza whitelists hardcodeadas.
+async function validarAgentePool(pool, area, userId, nivel = null) {
+  if (!userId) return false;
   const a = normalizeArea(area);
-
-  // Obtener todos los agentes activos y disponibles del área
-  const rs = await pool.request()
-    .input('area', sql.NVarChar, a)
-    .query(`
-      SELECT u.NEUS_ID AS userId
-      FROM NEUS_USUARIOS u
-      INNER JOIN TI_STAFF_STATUS s ON s.USER_ID = u.NEUS_ID
-      WHERE u.NEUS_ACTIVO = 1
-        AND s.DISPONIBLE = 1
-        AND s.AREA = @area
-      ORDER BY NEWID()
-    `);
-
-  if (rs.recordset.length === 0) return null;
-
-  // NEWID() ya aleatoriza en SQL, tomamos el primero
-  return rs.recordset[0].userId;
+  const req = pool.request()
+    .input('uid', sql.Int, userId)
+    .input('area', sql.NVarChar, a);
+  let query = `
+    SELECT 1 FROM NEUS_USUARIOS u
+    INNER JOIN TI_STAFF_STATUS s ON s.USER_ID = u.NEUS_ID
+    WHERE u.NEUS_ID = @uid AND u.NEUS_ACTIVO = 1 AND s.AREA = @area`;
+  if (nivel != null) {
+    req.input('nivel', sql.TinyInt, nivel);
+    query += ' AND s.NIVEL = @nivel';
+  }
+  const rs = await req.query(query);
+  return rs.recordset.length > 0;
 }
 
 exports.getTickets = async (req, res) => {
@@ -236,6 +248,9 @@ exports.getTickets = async (req, res) => {
           SELECT TOP 200
             t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
             t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
+            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
             su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
             au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
             s.RATING as rating,
@@ -255,6 +270,9 @@ exports.getTickets = async (req, res) => {
         SELECT TOP 200
           t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
           t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
+            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
           su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
           au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
           s.RATING as rating,
@@ -277,6 +295,9 @@ exports.getTickets = async (req, res) => {
           SELECT TOP 200
             t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
             t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
+            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
             su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
             au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
             s.RATING as rating,
@@ -302,6 +323,9 @@ exports.getTickets = async (req, res) => {
     const rs = await pool.request().input('uid', sql.Int, usuarioId)
       .query(`SELECT TOP 200 t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
                      t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
+            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
                      su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
                      au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
                      s.RATING as rating,
@@ -328,6 +352,11 @@ exports.getTicketById = async (req, res) => {
       SELECT 
         t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.DESCRIPCION, t.ESTADO,
         t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
+        t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
+        t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
+        t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
+        t.FECHA_RESOLUCION_PROPUESTA, t.FECHA_VALIDACION, t.ARTICULO_KB_ID,
         au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
         CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos,
         CASE WHEN t.FECHA_PRIMERA_RESPUESTA IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_PRIMERA_RESPUESTA) ELSE NULL END AS tiempoPrimeraRespuestaMinutos
@@ -370,33 +399,43 @@ exports.getTicketById = async (req, res) => {
   }
 };
 
-exports.createTicket = async (req, res) => {
-  try {
-    const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
-    const solicitanteId = req.body.solicitanteId ?? req.body.usuarioId ?? Number(req.headers['usuarioid']);
-    let { area, titulo, descripcion, prioridad, categoria, asignadoA } = req.body;
-    console.warn(`[createTicket] solicitante=${solicitanteId} area=${area} tipo=${tipoUsuario}`);
-
+// Lógica de negocio de creación de ticket, separada del handler HTTP para que
+// tanto el portal (createTicket) como la API pública (createTicketFromApi)
+// la reusen sin duplicar código, siguiendo el mismo patrón que escalarTicketInterno.
+async function crearTicketInterno(pool, {
+  solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
+  clasificacion, subcategoria, sede, departamento, activoAfectado,
+  impacto, urgencia, prioridadManual: prioridadManualFlag, esAD,
+  tenantKey,
+}) {
     area = normalizeArea(area || 'TI');
     const tituloTrim = (titulo ?? '').toString().trim();
-    
+
     if (!solicitanteId || !tituloTrim) {
       const missing = [
         !solicitanteId ? 'solicitanteId' : null,
         !tituloTrim ? 'titulo' : null,
       ].filter(Boolean);
-      return res.status(400).json({ success: false, message: `Campos faltantes: ${missing.join(', ')}` });
+      return { ok: false, status: 400, message: `Campos faltantes: ${missing.join(', ')}` };
     }
-    
-    if (!['CC','ADM','AD','ADMIN'].includes(tipoUsuario)) {
-      console.warn('Creación de ticket sin rol CC/ADM/AD explícito. Cabecera x-user-tipo:', tipoUsuario);
-    }
-    
-    const pool = await databaseService.getPool(req.user?.empresa);
-    const sql = require('mssql');
-    
+
     const a = area;
-    const prio = (prioridad || 'NORMAL').toString().toUpperCase();
+    // La prioridad se deriva SIEMPRE de impacto×urgencia cuando ambos vienen.
+    // Un AD puede forzarla manualmente enviando prioridad + prioridadManual=true.
+    const clasif = (clasificacion || '').toString().toLowerCase();
+    const clasifValida = ticketPrioridad.CLASIFICACIONES.includes(clasif) ? clasif : null;
+    const impactoNorm = (impacto || '').toString().toUpperCase() || null;
+    const urgenciaNorm = (urgencia || '').toString().toUpperCase() || null;
+
+    const prioridadManual = !!esAD && !!prioridadManualFlag && !!prioridad;
+    let prio;
+    if (prioridadManual) {
+      prio = prioridad.toString().toUpperCase();
+    } else if (impactoNorm && urgenciaNorm) {
+      prio = ticketPrioridad.calcularPrioridad(impactoNorm, urgenciaNorm);
+    } else {
+      prio = (prioridad || 'P3').toString().toUpperCase();
+    }
 
     const ins = await pool.request()
       .input('sol', sql.Int, solicitanteId)
@@ -404,9 +443,24 @@ exports.createTicket = async (req, res) => {
       .input('prio', sql.NVarChar, prio)
       .input('tit', sql.NVarChar, tituloTrim)
       .input('desc', sql.NVarChar, descripcion || null)
-      .query(`INSERT INTO TICKETS (SOLICITANTE_ID, AREA, PRIORIDAD, TITULO, DESCRIPCION, ESTADO)
-              VALUES (@sol, @area, @prio, @tit, @desc, 'abierto'); SELECT SCOPE_IDENTITY() as id;`);
-              
+      .input('clasif', sql.NVarChar, clasifValida)
+      .input('cat', sql.NVarChar, categoria || null)
+      .input('subcat', sql.NVarChar, subcategoria || null)
+      .input('sede', sql.NVarChar, sede || null)
+      .input('depto', sql.NVarChar, departamento || null)
+      .input('activo', sql.NVarChar, activoAfectado || null)
+      .input('impacto', sql.NVarChar, impactoNorm)
+      .input('urgencia', sql.NVarChar, urgenciaNorm)
+      .input('prioManual', sql.Bit, prioridadManual ? 1 : 0)
+      .query(`INSERT INTO TICKETS
+                (SOLICITANTE_ID, AREA, PRIORIDAD, TITULO, DESCRIPCION, ESTADO,
+                 CLASIFICACION, CATEGORIA, SUBCATEGORIA, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO,
+                 IMPACTO, URGENCIA, PRIORIDAD_MANUAL, NIVEL_ACTUAL)
+              VALUES (@sol, @area, @prio, @tit, @desc, 'abierto',
+                 @clasif, @cat, @subcat, @sede, @depto, @activo,
+                 @impacto, @urgencia, @prioManual, 1);
+              SELECT SCOPE_IDENTITY() as id;`);
+
     const ticketId = Number(ins.recordset[0].id);
 
     // Historial: creado
@@ -416,20 +470,33 @@ exports.createTicket = async (req, res) => {
       .input('det', sql.NVarChar, categoria ? `categoria:${categoria}` : null)
       .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE, USER_ID) VALUES (@tid, 'creado', @det, @uid)`);
 
-    // Si se provee un asignado específico, validar que sea uno del pool TI permitido
-    // IDs reales: Eliud=10 (TI_0103), Inés=64 (TI_0110), Alan=117 (TI_1005)
+    // Si se provee un asignado específico, validar que sea un agente real del pool TI/ST
     let finalAsignado = null;
     if (asignadoA) {
       const aid = Number(asignadoA);
-      const validIds = [10, 64, 117];
-      if (validIds.includes(aid)) {
+      if (await validarAgentePool(pool, a, aid)) {
         finalAsignado = aid;
       }
     }
-    
-    // Si no hay asignación manual, autoasignar
+
+    // Si no hay asignación manual válida, aplicar el motor de reglas de asignación
+    // (especialidad/categoría/sede/carga real) dentro del Nivel 1. categoria/sede
+    // llegan como texto (compatibilidad hacia atrás) — se resuelve el ID del
+    // catálogo por nombre; si no matchea, el motor cae a comodín sin romper la creación.
     if (!finalAsignado) {
-      finalAsignado = await autoAssignTicket(pool, a);
+      let categoriaId = null, sedeId = null;
+      if (categoria) {
+        const rsCat = await pool.request().input('nombre', sql.NVarChar, categoria).query(`SELECT CAT_ID FROM TICKET_CATEGORIAS WHERE CAT_NOMBRE=@nombre`);
+        categoriaId = rsCat.recordset[0]?.CAT_ID ?? null;
+      }
+      if (sede) {
+        const rsSede = await pool.request().input('nombre', sql.NVarChar, sede).query(`SELECT SEDE_ID FROM SEDES WHERE SEDE_NOMBRE=@nombre`);
+        sedeId = rsSede.recordset[0]?.SEDE_ID ?? null;
+      }
+      const seleccion = await reglasAsignacionService.seleccionarTecnico(pool, {
+        area: a, nivel: 1, categoriaId, subcategoriaId: null, sedeId, prioridad: prio, tipoCarga: 'ticket',
+      });
+      finalAsignado = seleccion?.userId ?? null;
     }
     
     if (finalAsignado) {
@@ -458,7 +525,7 @@ exports.createTicket = async (req, res) => {
           mensaje: `Nuevo ticket #${ticketId} asignado`,
           tipo: 'ticket_nuevo',
           dataExtra: { ticketId },
-          tenantKey: req.user?.empresa,
+          tenantKey,
         });
       } catch (e) {
         console.warn('⚠️ Error creando notificacion via notificationService:', e?.message || e);
@@ -475,7 +542,7 @@ exports.createTicket = async (req, res) => {
           ticketId: ticketId,
           action: 'ver_ticket'
         },
-        tenantKey: req.user?.empresa,
+        tenantKey,
       });
     } catch (e) {
       console.warn('⚠️ Error enviando notificación de ticket creado:', e?.message || e);
@@ -487,9 +554,9 @@ exports.createTicket = async (req, res) => {
       const rsSolicitante = await pool.request()
         .input('uid', sql.Int, solicitanteId)
         .query(`SELECT NEUS_NOMBRES FROM NEUS_USUARIOS WHERE NEUS_ID = @uid`);
-      
-      const nombreSolicitante = rsSolicitante.recordset.length > 0 
-        ? rsSolicitante.recordset[0].NEUS_NOMBRES 
+
+      const nombreSolicitante = rsSolicitante.recordset.length > 0
+        ? rsSolicitante.recordset[0].NEUS_NOMBRES
         : 'Usuario';
 
       // Determinar el líder según el área
@@ -510,7 +577,7 @@ exports.createTicket = async (req, res) => {
             ticketId: ticketId,
             action: 'ver_ticket'
           },
-          tenantKey: req.user?.empresa,
+          tenantKey,
         });
       }
     } catch (e) {
@@ -520,12 +587,15 @@ exports.createTicket = async (req, res) => {
     const header = await pool.request().input('tid', sql.Int, ticketId).query(`
       SELECT TICKET_ID as id, SOLICITANTE_ID as solicitanteId, AREA as area, PRIORIDAD as prioridad, TITULO as titulo,
              DESCRIPCION as descripcion, ESTADO as estado, FECHA_CREACION as fechaCreacion, FECHA_ASIGNACION as fechaAsignacion,
-             FECHA_PRIMERA_RESPUESTA as fechaPrimeraRespuesta, FECHA_CIERRE as fechaCierre, ASIGNADO_A as asignadoA
+             FECHA_PRIMERA_RESPUESTA as fechaPrimeraRespuesta, FECHA_CIERRE as fechaCierre, ASIGNADO_A as asignadoA,
+             CLASIFICACION as clasificacion, CATEGORIA as categoria, SUBCATEGORIA as subcategoria,
+             SEDE as sede, DEPARTAMENTO as departamento, ACTIVO_AFECTADO as activoAfectado,
+             IMPACTO as impacto, URGENCIA as urgencia, NIVEL_ACTUAL as nivelActual
       FROM TICKETS WHERE TICKET_ID=@tid`);
 
     // Emitir evento en tiempo real sobre creación de ticket
     try {
-      const io = socketService.getIO(req.user?.empresa);
+      const io = socketService.getIO(tenantKey);
       const ticketData = header.recordset[0];
       if (ticketData) {
         // Emitir al room del ticket y a los usuarios implicados
@@ -538,15 +608,80 @@ exports.createTicket = async (req, res) => {
       // No bloquear la respuesta si socket no está disponible
     }
 
-    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'crear', entidadId: String(ticketId||''), detalle:{ titulo: tituloTrim, area: a }, ip:req.ip });
-    return res.status(201).json({ success: true, data: header.recordset[0] });
+    return { ok: true, status: 201, data: header.recordset[0] };
+}
+
+exports.createTicket = async (req, res) => {
+  try {
+    const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
+    const solicitanteId = req.body.solicitanteId ?? req.body.usuarioId ?? Number(req.headers['usuarioid']);
+    const {
+      area, titulo, descripcion, prioridad, categoria, asignadoA,
+      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      impacto, urgencia,
+    } = req.body;
+    console.warn(`[createTicket] solicitante=${solicitanteId} area=${area} tipo=${tipoUsuario}`);
+
+    if (!['CC','ADM','AD','ADMIN'].includes(tipoUsuario)) {
+      console.warn('Creación de ticket sin rol CC/ADM/AD explícito. Cabecera x-user-tipo:', tipoUsuario);
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const esAD = ['AD', 'ADMIN'].includes(tipoUsuario);
+
+    const result = await crearTicketInterno(pool, {
+      solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
+      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      impacto, urgencia, prioridadManual: req.body.prioridadManual, esAD,
+      tenantKey: req.user?.empresa,
+    });
+
+    if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
+
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'crear', entidadId: String(result.data?.id||''), detalle:{ titulo, area }, ip:req.ip });
+    return res.status(result.status).json({ success: true, data: result.data });
   } catch (e) {
     console.error('Error creando ticket:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };
 
-// ... continuaré con los métodos restantes del controlador de tickets en la siguiente respuesta
+// POST público (autenticado por API-key, ver middleware/apiKeyAuth.js) para que
+// sistemas externos creen tickets sin sesión JWT. El solicitante se resuelve por
+// email en vez de por usuarioId de header, ya que no hay usuario humano logueado.
+exports.createTicketFromApi = async (req, res) => {
+  try {
+    const {
+      email, area, titulo, descripcion, categoria, clasificacion,
+      subcategoria, sede, departamento, activoAfectado, impacto, urgencia,
+    } = req.body;
+
+    if (!email) return res.status(400).json({ success: false, message: 'email requerido' });
+
+    const pool = req.dbPool || await databaseService.getPool(req.query.empresa);
+    const rsUser = await pool.request().input('email', sql.NVarChar, email)
+      .query(`SELECT NEUS_ID FROM NEUS_USUARIOS WHERE NEUS_CORREO=@email AND NEUS_ACTIVO=1`);
+    if (!rsUser.recordset.length) {
+      return res.status(400).json({ success: false, message: `No existe un usuario activo con email ${email}` });
+    }
+    const solicitanteId = rsUser.recordset[0].NEUS_ID;
+
+    const result = await crearTicketInterno(pool, {
+      solicitanteId, area, titulo, descripcion, categoria,
+      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      impacto, urgencia, prioridadManual: false, esAD: false,
+      tenantKey: req.query.empresa,
+    });
+
+    if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
+
+    await logAudit(pool, { userId: null, userName: `API:${req.apiClient?.nombre || ''}`, modulo:'tickets', accion:'crear-api', entidadId: String(result.data?.id||''), detalle:{ titulo, area, apiKeyId: req.apiClient?.keyId }, ip:req.ip });
+    return res.status(result.status).json({ success: true, data: result.data });
+  } catch (e) {
+    console.error('Error creando ticket vía API:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
 
 exports.updateTicket = async (req, res) => {
   try {
@@ -1043,6 +1178,78 @@ exports.transferirTicket = async (req, res) => {
   }
 };
 
+// POST /api/tickets/:id/espera — sub-estado de espera aditivo (D4 del plan):
+// no reemplaza el modelo de ESTADO existente, solo agrega 'en_espera' como
+// valor nuevo. El SLA se pausa mientras dure (ver ticketSlaCronController.js
+// y enriquecerConSla, que descuentan MINUTOS_TOTAL_ESPERA).
+exports.ponerEnEspera = async (req, res) => {
+  try {
+    const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
+    if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
+
+    const { id } = req.params;
+    const { motivo } = req.body;
+    const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
+
+    if (!TICKET_MOTIVOS_ESPERA.includes(motivo)) {
+      return res.status(400).json({ success: false, message: `Motivo inválido. Valores permitidos: ${TICKET_MOTIVOS_ESPERA.join(', ')}` });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
+    if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
+    if (['resuelto', 'cerrado', 'en_espera'].includes(hdr.recordset[0].ESTADO)) {
+      return res.status(400).json({ success: false, message: 'El ticket no puede pasar a espera desde su estado actual' });
+    }
+
+    await pool.request().input('tid', sql.Int, id).input('motivo', sql.NVarChar, motivo)
+      .query(`UPDATE TICKETS SET ESTADO='en_espera', MOTIVO_ESPERA=@motivo, FECHA_INICIO_ESPERA=GETDATE() WHERE TICKET_ID=@tid`);
+
+    await pool.request().input('tid', sql.Int, id).input('det', sql.NVarChar, `Motivo: ${motivo}`).input('uid', sql.Int, actorId)
+      .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE, USER_ID) VALUES (@tid, 'en_espera', @det, @uid)`);
+
+    res.json({ success: true, estado: 'en_espera', motivoEspera: motivo });
+  } catch (e) {
+    console.error('Error poniendo ticket en espera:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /api/tickets/:id/salir-espera — vuelve a 'en_proceso' y acumula el
+// tiempo pausado en MINUTOS_TOTAL_ESPERA (para que el cálculo de SLA lo descuente).
+exports.salirDeEspera = async (req, res) => {
+  try {
+    const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
+    if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
+
+    const { id } = req.params;
+    const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
+    if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
+    if (hdr.recordset[0].ESTADO !== 'en_espera') {
+      return res.status(400).json({ success: false, message: 'El ticket no está en espera' });
+    }
+
+    await pool.request().input('tid', sql.Int, id)
+      .query(`UPDATE TICKETS SET
+                ESTADO='en_proceso',
+                MINUTOS_TOTAL_ESPERA = MINUTOS_TOTAL_ESPERA + DATEDIFF(MINUTE, FECHA_INICIO_ESPERA, GETDATE()),
+                MOTIVO_ESPERA = NULL,
+                FECHA_INICIO_ESPERA = NULL
+              WHERE TICKET_ID=@tid`);
+
+    await pool.request().input('tid', sql.Int, id).input('uid', sql.Int, actorId)
+      .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, USER_ID) VALUES (@tid, 'salio_espera', @uid)`);
+
+    res.json({ success: true, estado: 'en_proceso' });
+  } catch (e) {
+    console.error('Error saliendo de espera:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.cambiarEstado = async (req, res) => {
   try {
     const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
@@ -1053,29 +1260,32 @@ exports.cambiarEstado = async (req, res) => {
     const nota = req.body.nota ?? req.body.detalle ?? req.body.descripcion ?? null;
     const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
     const nuevo = String(estado || '').toLowerCase();
-    const validos = ['abierto','asignado','en_proceso','resuelto','cerrado'];
-    
+    // 'resuelto' se maneja vía POST /:id/resolver (captura diagnóstico/acciones/causa raíz
+    // estructurados); 'reabierto' se dispara vía POST /:id/validar cuando el usuario rechaza
+    // la solución. Este endpoint solo cubre las transiciones simples sin datos adicionales.
+    const validos = ['abierto','asignado','en_proceso','cerrado','reabierto'];
+
     if (!validos.includes(nuevo)) return res.status(400).json({ success: false, message: 'Estado inválido' });
-    
+
     const pool = await databaseService.getPool(req.user?.empresa);
 
-    // Solo el solicitante puede cerrar el ticket
-    if (nuevo === 'cerrado') {
-      if (!actorId) return res.status(400).json({ success: false, message: 'usuarioId requerido para cerrar' });
-      
+    // Solo el solicitante puede cerrar o reabrir el ticket
+    if (nuevo === 'cerrado' || nuevo === 'reabierto') {
+      if (!actorId) return res.status(400).json({ success: false, message: 'usuarioId requerido' });
+
       const rsOwn = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID FROM TICKETS WHERE TICKET_ID=@tid`);
       if (!rsOwn.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
-      
+
       const ownerId = Number(rsOwn.recordset[0].SOLICITANTE_ID);
       if (ownerId !== actorId) {
-        return res.status(403).json({ success: false, message: 'Solo el solicitante puede cerrar el ticket' });
+        return res.status(403).json({ success: false, message: `Solo el solicitante puede ${nuevo === 'cerrado' ? 'cerrar' : 'reabrir'} el ticket` });
       }
     }
 
     let setExtra = '';
-    if (nuevo === 'resuelto') setExtra = ', FECHA_CIERRE = COALESCE(FECHA_CIERRE, GETDATE())';
     if (nuevo === 'cerrado') setExtra = ', FECHA_CIERRE = COALESCE(FECHA_CIERRE, GETDATE())';
-    
+    if (nuevo === 'reabierto') setExtra = ", FECHA_CIERRE = NULL, VALIDADO_USUARIO = NULL, REABIERTO_VECES = REABIERTO_VECES + 1";
+
     await pool.request().input('tid', sql.Int, id).input('est', sql.NVarChar, nuevo)
       .query(`UPDATE TICKETS SET ESTADO=@est ${setExtra} WHERE TICKET_ID=@tid`);
       
@@ -1105,16 +1315,15 @@ exports.cambiarEstado = async (req, res) => {
 
     const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
     const estadoActual = hdr.recordset[0]?.ESTADO;
-    const encuesta = estadoActual === 'resuelto';
-    
-    // Notificar al solicitante si se resolvió
-    if (estadoActual === 'resuelto') {
-      const rsOwner = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID FROM TICKETS WHERE TICKET_ID=@tid`);
-      if (rsOwner.recordset.length) {
-        const ownerId = rsOwner.recordset[0].SOLICITANTE_ID;
-        const insertRs = await pool.request().input('uid', sql.Int, ownerId)
+
+    // Notificar al asignado si el solicitante reabrió el ticket
+    if (estadoActual === 'reabierto') {
+      const rsAsig = await pool.request().input('tid', sql.Int, id).query(`SELECT ASIGNADO_A FROM TICKETS WHERE TICKET_ID=@tid`);
+      const asignadoId = rsAsig.recordset[0]?.ASIGNADO_A;
+      if (asignadoId) {
+        const insertRs = await pool.request().input('uid', sql.Int, asignadoId)
           .input('tid', sql.Int, id)
-          .input('msg', sql.NVarChar, `Tu ticket #${id} fue marcado como resuelto`)
+          .input('msg', sql.NVarChar, `El ticket #${id} fue reabierto por el solicitante`)
           .query(`
             DECLARE @newId TABLE (ID INT);
             INSERT INTO NOTIFICACIONES (USER_ID, TIPO, TICKET_ID, MENSAJE)
@@ -1124,10 +1333,10 @@ exports.cambiarEstado = async (req, res) => {
           `);
         try {
           const newId = insertRs.recordset?.[0]?.ID || null;
-          const payload = { id: newId ? Number(newId) : null, usuarioId: ownerId, mensaje: `Tu ticket #${id} fue marcado como resuelto`, tipo: 'ticket_estado', leida: 0, fecha: new Date().toISOString(), dataExtra: { ticketId: id, nota: nota || null } };
+          const payload = { id: newId ? Number(newId) : null, usuarioId: asignadoId, mensaje: `El ticket #${id} fue reabierto por el solicitante`, tipo: 'ticket_estado', leida: 0, fecha: new Date().toISOString(), dataExtra: { ticketId: id, nota: nota || null } };
           const io = socketService.getIO(req.user?.empresa);
-          io.to(`user:${ownerId}`).emit('notificacion', payload);
-          try { io.to(`user:${ownerId}`).emit('chat:notify', payload); } catch(e) {}
+          io.to(`user:${asignadoId}`).emit('notificacion', payload);
+          try { io.to(`user:${asignadoId}`).emit('chat:notify', payload); } catch(e) {}
         } catch (emitErr) { /* non-fatal */ }
       }
     }
@@ -1146,7 +1355,7 @@ exports.cambiarEstado = async (req, res) => {
     } catch (e) {}
 
     await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'cambiar-estado', entidadId: req.params.id, detalle:{ estado: nuevo }, ip:req.ip });
-    res.json({ success: true, estado: estadoActual, encuesta });
+    res.json({ success: true, estado: estadoActual });
   } catch (e) {
     console.error('Error cambiando estado de ticket:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -1168,11 +1377,15 @@ exports.registrarSatisfaccion = async (req, res) => {
     if (!(rt >= 1 && rt <= 5)) return res.status(400).json({ success: false, message: 'rating debe ser 1..5' });
 
     // Validar que el solicitante sea dueño del ticket
-    const rs = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID FROM TICKETS WHERE TICKET_ID=@tid`);
+    const rs = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, VALIDADO_USUARIO FROM TICKETS WHERE TICKET_ID=@tid`);
     if (!rs.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
-    
+
     if (Number(rs.recordset[0].SOLICITANTE_ID) !== Number(solicitanteId)) {
       return res.status(403).json({ success: false, message: 'Solo el solicitante puede contestar la encuesta' });
+    }
+
+    if (rs.recordset[0].VALIDADO_USUARIO !== true) {
+      return res.status(400).json({ success: false, message: 'Primero debes confirmar si la solución funcionó (POST /:id/validar)' });
     }
 
     await pool.request().input('tid', sql.Int, id).input('r', sql.Int, rt).input('c', sql.NVarChar, comentario || null)
@@ -1226,28 +1439,442 @@ WHEN NOT MATCHED THEN INSERT (TICKET_ID, RATING, COMENTARIO) VALUES (@tid, @r, @
   }
 };
 
+// ── Escalamiento N1→N2→N3 ────────────────────────────────────────────────
+// Lógica de negocio separada del handler HTTP para que el cron de SLA
+// (ticketSlaCronController.js) pueda invocarla directamente sin simular
+// un req/res de Express.
+async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, actorId, tenantKey, tipo = 'manual' }) {
+  const hdr = await pool.request().input('tid', sql.Int, ticketId)
+    .query(`SELECT AREA, ASIGNADO_A, NIVEL_ACTUAL, ESTADO, SOLICITANTE_ID, CATEGORIA, SEDE, PRIORIDAD FROM TICKETS WHERE TICKET_ID=@tid`);
+  if (!hdr.recordset.length) return { ok: false, message: 'Ticket no encontrado' };
+
+  const t = hdr.recordset[0];
+  if (['cerrado', 'resuelto'].includes(t.ESTADO)) {
+    return { ok: false, message: 'No se puede escalar un ticket resuelto o cerrado' };
+  }
+
+  const nivelOrigen = t.NIVEL_ACTUAL || 1;
+  const destino = nivelDestino || Math.min(nivelOrigen + 1, 3);
+  if (destino <= nivelOrigen) return { ok: false, message: 'El nivel destino debe ser mayor al actual' };
+
+  const prevAsignado = t.ASIGNADO_A;
+  // Si no hay agente disponible en el nivel destino, el ticket escala igual
+  // y queda sin asignar — se notifica a todo el pool de ese nivel/área para
+  // que alguien lo tome, en vez de bloquear el escalamiento.
+  let categoriaId = null, sedeId = null;
+  if (t.CATEGORIA) {
+    const rsCat = await pool.request().input('nombre', sql.NVarChar, t.CATEGORIA).query(`SELECT CAT_ID FROM TICKET_CATEGORIAS WHERE CAT_NOMBRE=@nombre`);
+    categoriaId = rsCat.recordset[0]?.CAT_ID ?? null;
+  }
+  if (t.SEDE) {
+    const rsSede = await pool.request().input('nombre', sql.NVarChar, t.SEDE).query(`SELECT SEDE_ID FROM SEDES WHERE SEDE_NOMBRE=@nombre`);
+    sedeId = rsSede.recordset[0]?.SEDE_ID ?? null;
+  }
+  const seleccionEscalamiento = await reglasAsignacionService.seleccionarTecnico(pool, {
+    area: t.AREA, nivel: destino, categoriaId, subcategoriaId: null, sedeId, prioridad: t.PRIORIDAD, tipoCarga: 'ticket',
+  });
+  const nuevoAsignado = seleccionEscalamiento?.userId ?? null;
+
+  await pool.request()
+    .input('tid', sql.Int, ticketId)
+    .input('nivel', sql.TinyInt, destino)
+    .input('asid', sql.Int, nuevoAsignado)
+    .query(`UPDATE TICKETS SET NIVEL_ACTUAL=@nivel, ASIGNADO_A=@asid,
+              ESTADO = CASE WHEN @asid IS NOT NULL THEN 'asignado' ELSE ESTADO END,
+              FECHA_ASIGNACION = CASE WHEN @asid IS NOT NULL THEN GETDATE() ELSE FECHA_ASIGNACION END
+            WHERE TICKET_ID=@tid`);
+
+  await pool.request()
+    .input('tid', sql.Int, ticketId)
+    .input('no', sql.TinyInt, nivelOrigen)
+    .input('nd', sql.TinyInt, destino)
+    .input('tipo', sql.NVarChar, tipo)
+    .input('motivo', sql.NVarChar, motivo || null)
+    .input('prev', sql.Int, prevAsignado)
+    .input('nuevo', sql.Int, nuevoAsignado)
+    .input('actor', sql.Int, actorId || null)
+    .query(`INSERT INTO TICKET_ESCALAMIENTOS
+              (TICKET_ID, NIVEL_ORIGEN, NIVEL_DESTINO, TIPO, MOTIVO, ASIGNADO_ANTERIOR, ASIGNADO_NUEVO, ACTOR_ID)
+            VALUES (@tid, @no, @nd, @tipo, @motivo, @prev, @nuevo, @actor)`);
+
+  await pool.request()
+    .input('tid', sql.Int, ticketId)
+    .input('det', sql.NVarChar, `Escalado de N${nivelOrigen} a N${destino}${motivo ? ` — ${motivo}` : ''} (${tipo})`)
+    .input('uid', sql.Int, actorId || null)
+    .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE, USER_ID) VALUES (@tid, 'escalado', @det, @uid)`);
+
+  if (nuevoAsignado) {
+    await pool.request().input('uid', sql.Int, nuevoAsignado).query(`UPDATE TI_STAFF_STATUS SET LAST_ASSIGNED_AT=GETDATE() WHERE USER_ID=@uid`);
+  }
+
+  // Notificar: al nuevo agente si hay uno; si no, a todo el pool disponible del nivel/área destino
+  const mensaje = `Ticket #${ticketId} escalado a Nivel ${destino}${tipo === 'automatico' ? ' (SLA vencido)' : ''}`;
+  try {
+    if (nuevoAsignado) {
+      await notificationService.createNotification({
+        usuarioId: nuevoAsignado, mensaje, tipo: 'ticket_escalado',
+        dataExtra: { ticketId, nivel: destino }, tenantKey,
+      });
+    } else {
+      const pool2 = pool;
+      const rsPool = await pool2.request().input('area', sql.NVarChar, normalizeArea(t.AREA)).input('nivel', sql.TinyInt, destino)
+        .query(`SELECT u.NEUS_ID as userId FROM NEUS_USUARIOS u
+                INNER JOIN TI_STAFF_STATUS s ON s.USER_ID = u.NEUS_ID
+                WHERE u.NEUS_ACTIVO = 1 AND s.AREA = @area AND s.NIVEL = @nivel`);
+      for (const row of rsPool.recordset) {
+        await notificationService.createNotification({
+          usuarioId: row.userId, mensaje: `${mensaje} — sin agente disponible, requiere atención`,
+          tipo: 'ticket_escalado', dataExtra: { ticketId, nivel: destino }, tenantKey,
+        });
+      }
+    }
+    if (t.SOLICITANTE_ID) {
+      await notificationService.createNotification({
+        usuarioId: t.SOLICITANTE_ID, mensaje: `Tu ticket #${ticketId} fue escalado a Nivel ${destino}`,
+        tipo: 'ticket_escalado', dataExtra: { ticketId, nivel: destino }, tenantKey,
+      });
+    }
+  } catch (e) {
+    console.warn('⚠️ Error notificando escalamiento:', e?.message || e);
+  }
+
+  try {
+    const io = socketService.getIO(tenantKey);
+    io.to(`ticket:${ticketId}`).emit('ticket:updated', { ticketId, nivelActual: destino, tipo: 'escalado' });
+    if (nuevoAsignado) io.to(`user:${nuevoAsignado}`).emit('ticket:updated', { ticketId, nivelActual: destino });
+    if (prevAsignado) io.to(`user:${prevAsignado}`).emit('ticket:updated', { ticketId, nivelActual: destino });
+  } catch (e) {}
+
+  await logAudit(pool, {
+    userId: actorId || null, userName: null, modulo: 'tickets', accion: 'escalar',
+    entidadId: String(ticketId), detalle: { nivelOrigen, nivelDestino: destino, tipo, motivo }, ip: null,
+  });
+
+  return { ok: true, nivelActual: destino, asignadoA: nuevoAsignado };
+}
+
+// POST /api/tickets/:id/escalar
+exports.escalarTicket = async (req, res) => {
+  try {
+    const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
+    if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
+
+    const { id } = req.params;
+    const { nivelDestino, motivo } = req.body;
+    const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const result = await escalarTicketInterno(pool, {
+      ticketId: Number(id),
+      nivelDestino: nivelDestino ? Number(nivelDestino) : null,
+      motivo, actorId, tenantKey: req.user?.empresa, tipo: 'manual',
+    });
+
+    if (!result.ok) return res.status(400).json({ success: false, message: result.message });
+    res.json({ success: true, nivelActual: result.nivelActual, asignadoA: result.asignadoA });
+  } catch (e) {
+    console.error('Error escalando ticket:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ── Resolución estructurada ──────────────────────────────────────────────
+// POST /api/tickets/:id/resolver
+exports.resolverTicket = async (req, res) => {
+  try {
+    const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
+    if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
+
+    const { id } = req.params;
+    const { diagnostico, accionesRealizadas, causaRaiz, codigoCierre, articuloKbId } = req.body;
+    const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
+
+    if (!diagnostico || !accionesRealizadas) {
+      return res.status(400).json({ success: false, message: 'diagnostico y accionesRealizadas son requeridos' });
+    }
+    const codigo = codigoCierre && TICKET_CODIGOS_CIERRE.includes(codigoCierre)
+      ? codigoCierre
+      : TICKET_CODIGOS_CIERRE[0];
+    const artId = Number(articuloKbId) || null;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
+    if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
+    if (['cerrado'].includes(hdr.recordset[0].ESTADO)) {
+      return res.status(400).json({ success: false, message: 'El ticket ya está cerrado' });
+    }
+
+    await pool.request()
+      .input('tid', sql.Int, id)
+      .input('diag', sql.NVarChar, diagnostico)
+      .input('acc', sql.NVarChar, accionesRealizadas)
+      .input('causa', sql.NVarChar, causaRaiz || null)
+      .input('cod', sql.NVarChar, codigo)
+      .input('art', sql.Int, artId)
+      .query(`UPDATE TICKETS SET
+                ESTADO = 'resuelto',
+                DIAGNOSTICO = @diag,
+                ACCIONES_REALIZADAS = @acc,
+                CAUSA_RAIZ = @causa,
+                CODIGO_CIERRE = @cod,
+                ARTICULO_KB_ID = @art,
+                FECHA_RESOLUCION_PROPUESTA = GETDATE(),
+                VALIDADO_USUARIO = NULL
+              WHERE TICKET_ID=@tid`);
+
+    const detalle = `Diagnóstico: ${diagnostico}\nAcciones: ${accionesRealizadas}${causaRaiz ? `\nCausa raíz: ${causaRaiz}` : ''}${artId ? `\nArtículo KB: #${artId}` : ''}`;
+    await pool.request().input('tid', sql.Int, id).input('det', sql.NVarChar, detalle).input('uid', sql.Int, actorId)
+      .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE, USER_ID) VALUES (@tid, 'resolucion', @det, @uid)`);
+
+    const ownerId = hdr.recordset[0].SOLICITANTE_ID;
+    try {
+      await notificationService.createNotification({
+        usuarioId: ownerId,
+        mensaje: `Tu ticket #${id} fue resuelto. Confirma si la solución funcionó.`,
+        tipo: 'ticket_resuelto',
+        dataExtra: { ticketId: Number(id), action: 'validar_ticket' },
+        tenantKey: req.user?.empresa,
+      });
+    } catch (e) {
+      console.warn('⚠️ Error notificando resolución:', e?.message || e);
+    }
+
+    try {
+      const io = socketService.getIO(req.user?.empresa);
+      io.to(`ticket:${id}`).emit('ticket:updated', { ticketId: Number(id), nuevoEstado: 'resuelto' });
+      if (ownerId) io.to(`user:${ownerId}`).emit('ticket:updated', { ticketId: Number(id), nuevoEstado: 'resuelto' });
+    } catch (e) {}
+
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'resolver', entidadId: String(id), detalle:{ codigoCierre: codigo }, ip:req.ip });
+    res.json({ success: true, estado: 'resuelto' });
+  } catch (e) {
+    console.error('Error resolviendo ticket:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ── Validación de la solución por el solicitante ─────────────────────────
+// POST /api/tickets/:id/validar
+exports.validarResolucion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const solicitanteId = req.body.solicitanteId ?? req.body.usuarioId ?? Number(req.headers['usuarioid']);
+    const { confirma, comentario } = req.body;
+
+    if (!solicitanteId || typeof confirma !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'solicitanteId y confirma (boolean) son requeridos' });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO, ASIGNADO_A FROM TICKETS WHERE TICKET_ID=@tid`);
+    if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
+
+    const t = hdr.recordset[0];
+    if (Number(t.SOLICITANTE_ID) !== Number(solicitanteId)) {
+      return res.status(403).json({ success: false, message: 'Solo el solicitante puede validar la solución' });
+    }
+    if (t.ESTADO !== 'resuelto') {
+      return res.status(400).json({ success: false, message: 'El ticket debe estar en estado resuelto para validarse' });
+    }
+
+    if (confirma) {
+      await pool.request().input('tid', sql.Int, id)
+        .query(`UPDATE TICKETS SET VALIDADO_USUARIO = 1, FECHA_VALIDACION = GETDATE() WHERE TICKET_ID=@tid`);
+      await pool.request().input('tid', sql.Int, id).input('uid', sql.Int, solicitanteId)
+        .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, USER_ID) VALUES (@tid, 'validado', @uid)`);
+    } else {
+      await pool.request().input('tid', sql.Int, id)
+        .query(`UPDATE TICKETS SET
+                  VALIDADO_USUARIO = 0, FECHA_VALIDACION = GETDATE(), ESTADO = 'reabierto',
+                  REABIERTO_VECES = REABIERTO_VECES + 1, FECHA_CIERRE = NULL,
+                  FECHA_RESOLUCION_PROPUESTA = NULL
+                WHERE TICKET_ID=@tid`);
+      await pool.request().input('tid', sql.Int, id).input('det', sql.NVarChar, comentario || null).input('uid', sql.Int, solicitanteId)
+        .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE, USER_ID) VALUES (@tid, 'reabierto', @det, @uid)`);
+
+      if (t.ASIGNADO_A) {
+        try {
+          await notificationService.createNotification({
+            usuarioId: t.ASIGNADO_A,
+            mensaje: `El solicitante indicó que el ticket #${id} no quedó resuelto`,
+            tipo: 'ticket_reabierto',
+            dataExtra: { ticketId: Number(id) },
+            tenantKey: req.user?.empresa,
+          });
+        } catch (e) {
+          console.warn('⚠️ Error notificando reapertura:', e?.message || e);
+        }
+      }
+    }
+
+    try {
+      const io = socketService.getIO(req.user?.empresa);
+      const nuevoEstado = confirma ? 'resuelto' : 'reabierto';
+      io.to(`ticket:${id}`).emit('ticket:updated', { ticketId: Number(id), nuevoEstado, validadoUsuario: confirma });
+      if (t.ASIGNADO_A) io.to(`user:${t.ASIGNADO_A}`).emit('ticket:updated', { ticketId: Number(id), nuevoEstado });
+    } catch (e) {}
+
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'validar', entidadId: String(id), detalle:{ confirma }, ip:req.ip });
+    res.json({ success: true, confirma });
+  } catch (e) {
+    console.error('Error validando resolución:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.getCategorias = async (req, res) => {
+  res.json({ success: true, data: TICKET_CATEGORIAS });
+};
+
+exports.getCodigosCierre = async (req, res) => {
+  res.json({ success: true, data: TICKET_CODIGOS_CIERRE });
+};
+
+// ── API keys para creación pública de tickets (solo AD) ──────────────────
+exports.listApiKeys = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT KEY_ID as id, NOMBRE as nombre, ACTIVA as activa, FECHA_CREACION as fechaCreacion, ULTIMO_USO as ultimoUso
+      FROM TICKETS_API_KEYS ORDER BY KEY_ID DESC`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando API keys:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createApiKey = async (req, res) => {
+  try {
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+
+    const crypto = require('crypto');
+    const rawKey = crypto.randomBytes(24).toString('hex');
+    const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('hash', sql.NVarChar, hash)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('creadoPor', sql.Int, req.user?.id || null)
+      .query(`INSERT INTO TICKETS_API_KEYS (KEY_HASH, NOMBRE, CREADO_POR) VALUES (@hash, @nombre, @creadoPor);
+              SELECT SCOPE_IDENTITY() as id;`);
+
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'crear-api-key', entidadId: String(ins.recordset[0].id), detalle:{ nombre }, ip:req.ip });
+    // La key en texto plano solo se muestra esta vez — no se puede recuperar después
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, key: rawKey } });
+  } catch (e) {
+    console.error('Error creando API key:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.revokeApiKey = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKETS_API_KEYS SET ACTIVA=0 WHERE KEY_ID=@id`);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'revocar-api-key', entidadId: String(id), detalle:{}, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error revocando API key:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ── Grupos de soporte (nombre descriptivo para AREA+NIVEL) ───────────────
+exports.getGruposSoporte = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`SELECT GRUPO_ID as id, AREA as area, NIVEL as nivel, NOMBRE as nombre FROM GRUPOS_SOPORTE ORDER BY AREA, NIVEL`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando grupos de soporte:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createGrupoSoporte = async (req, res) => {
+  try {
+    const { area, nivel, nombre } = req.body;
+    if (!area || !nivel || !nombre) return res.status(400).json({ success: false, message: 'area, nivel y nombre son requeridos' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('area', sql.NVarChar, area)
+      .input('nivel', sql.TinyInt, nivel)
+      .input('nombre', sql.NVarChar, nombre)
+      .query(`INSERT INTO GRUPOS_SOPORTE (AREA, NIVEL, NOMBRE) VALUES (@area, @nivel, @nombre); SELECT SCOPE_IDENTITY() as id;`);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'crear-grupo-soporte', entidadId: String(ins.recordset[0].id), detalle:{ area, nivel, nombre }, ip:req.ip });
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), area, nivel, nombre } });
+  } catch (e) {
+    console.error('Error creando grupo de soporte:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.actualizarGrupoSoporte = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { area, nivel, nombre } = req.body;
+    if (!area || !nivel || !nombre) return res.status(400).json({ success: false, message: 'area, nivel y nombre son requeridos' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('area', sql.NVarChar, area)
+      .input('nivel', sql.TinyInt, nivel)
+      .input('nombre', sql.NVarChar, nombre)
+      .query(`UPDATE GRUPOS_SOPORTE SET AREA=@area, NIVEL=@nivel, NOMBRE=@nombre WHERE GRUPO_ID=@id`);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'actualizar-grupo-soporte', entidadId: String(id), detalle:{ area, nivel, nombre }, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando grupo de soporte:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.eliminarGrupoSoporte = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`DELETE FROM GRUPOS_SOPORTE WHERE GRUPO_ID=@id`);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'eliminar-grupo-soporte', entidadId: String(id), detalle:{}, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error eliminando grupo de soporte:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Wrapper fino sobre tecnicosController.getTecnicos (superset con perfil rico) —
+// se mantiene por compatibilidad con callers existentes (ej. selector de
+// técnico en TicketsPage) que solo necesitan userId/nombre/area/disponible/nivel/grupoNombre.
 exports.getStaffTI = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
-      SELECT 
+      SELECT
         u.NEUS_ID as userId,
         u.NEUS_NOMBRES as nombre,
         COALESCE(s.AREA, CASE WHEN u.NEUS_TIPOUSUARIO IN ('TI','ST') THEN u.NEUS_TIPOUSUARIO ELSE 'TI' END) as area,
         COALESCE(s.DISPONIBLE,1) as disponible,
+        COALESCE(s.NIVEL,1) as nivel,
+        g.NOMBRE as grupoNombre,
         s.LAST_ASSIGNED_AT as lastAssignedAt
       FROM NEUS_USUARIOS u
       LEFT JOIN TI_STAFF_STATUS s ON s.USER_ID=u.NEUS_ID
+      LEFT JOIN GRUPOS_SOPORTE g ON g.AREA = COALESCE(s.AREA, CASE WHEN u.NEUS_TIPOUSUARIO IN ('TI','ST') THEN u.NEUS_TIPOUSUARIO ELSE 'TI' END)
+                                 AND g.NIVEL = COALESCE(s.NIVEL,1)
       WHERE u.NEUS_ACTIVO=1
         AND (
           u.NEUS_TIPOUSUARIO IN ('TI','ST')
           OR EXISTS (
-            SELECT 1 FROM TI_STAFF_STATUS x 
+            SELECT 1 FROM TI_STAFF_STATUS x
             WHERE x.USER_ID = u.NEUS_ID AND x.AREA IN ('TI','ST')
           )
         )
       ORDER BY u.NEUS_NOMBRES`);
-      
+
     res.json({ success: true, data: rs.recordset });
   } catch (e) {
     console.error('Error listando staff TI:', e);
@@ -1255,29 +1882,66 @@ exports.getStaffTI = async (req, res) => {
   }
 };
 
+// Solo AD puede reasignar área/nivel de un agente (ruta protegida con verificarRol(['AD'])).
+// disponible sí lo puede tocar el propio agente vía otra ruta sin esa restricción.
+// NOTA: NO delega a tecnicosController.actualizarPerfilTecnico — ese endpoint hace un
+// reemplazo total (DELETE+INSERT) de especialidades/categorías/sedes permitidas, y este
+// endpoint legado solo conoce area/disponible/nivel. Delegar borraría esas listas.
 exports.actualizarStaffTI = async (req, res) => {
   try {
     const userId = req.body.userId ?? req.body.usuarioId ?? req.body.uid ?? Number(req.headers['usuarioid']);
-    const { area, disponible } = req.body;
-    
+    const { area, disponible, nivel } = req.body;
+
     if (!userId) return res.status(400).json({ success: false, message: 'userId requerido' });
-    
+
     const pool = await databaseService.getPool(req.user?.empresa);
     const a = normalizeArea(area || 'TI');
     const disp = disponible === undefined ? 1 : (disponible ? 1 : 0);
-    
+    const niv = [1, 2, 3].includes(Number(nivel)) ? Number(nivel) : 1;
+
     await pool.request()
       .input('uid', sql.Int, userId)
       .input('area', sql.NVarChar, a)
       .input('disp', sql.Bit, disp)
+      .input('nivel', sql.TinyInt, niv)
       .query(`
 MERGE TI_STAFF_STATUS AS tgt
 USING (SELECT @uid AS USER_ID) AS src
 ON (tgt.USER_ID = src.USER_ID)
-WHEN MATCHED THEN UPDATE SET AREA=@area, DISPONIBLE=@disp
-WHEN NOT MATCHED THEN INSERT(USER_ID, AREA, DISPONIBLE) VALUES(@uid, @area, @disp);
+WHEN MATCHED THEN UPDATE SET AREA=@area, DISPONIBLE=@disp, NIVEL=@nivel
+WHEN NOT MATCHED THEN INSERT(USER_ID, AREA, DISPONIBLE, NIVEL) VALUES(@uid, @area, @disp, @nivel);
       `);
-      
+
+    // Auto-sync con el grupo de la campaña de chat "Soporte TI": cualquier
+    // alta/baja/cambio de disponibilidad de un agente de área TI pasa por acá,
+    // así que es el único punto que necesita mantener sincronizada la tabla
+    // puente LIVECHAT_GRUPO_AGENTES, sin cron ni job adicional.
+    if (a === 'TI') {
+      try {
+        const livechatInternoController = require('./livechatInternoController');
+        const camp = await livechatInternoController.resolverCampaniaGrupoSoporteTI(pool);
+        if (camp) {
+          if (disp === 1) {
+            await pool.request()
+              .input('grupoId', sql.Int, camp.grupoId)
+              .input('uid', sql.Int, userId)
+              .query(`
+MERGE LIVECHAT_GRUPO_AGENTES AS tgt
+USING (SELECT @grupoId AS LGA_GRUPO_ID, @uid AS LGA_USUARIO_ID) AS src
+ON (tgt.LGA_GRUPO_ID = src.LGA_GRUPO_ID AND tgt.LGA_USUARIO_ID = src.LGA_USUARIO_ID)
+WHEN MATCHED THEN UPDATE SET LGA_ACTIVO=1
+WHEN NOT MATCHED THEN INSERT (LGA_GRUPO_ID, LGA_USUARIO_ID, LGA_ACTIVO) VALUES (@grupoId, @uid, 1);
+              `);
+          } else {
+            await pool.request().input('grupoId', sql.Int, camp.grupoId).input('uid', sql.Int, userId)
+              .query(`UPDATE LIVECHAT_GRUPO_AGENTES SET LGA_ACTIVO=0 WHERE LGA_GRUPO_ID=@grupoId AND LGA_USUARIO_ID=@uid`);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ No se pudo sincronizar el grupo de Soporte TI:', e?.message || e);
+      }
+    }
+
     res.json({ success: true });
   } catch (e) {
     console.error('Error guardando staff TI:', e);
@@ -1436,3 +2100,46 @@ exports.getReporteSatisfaccionCSV = async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+
+// ── Configuración de escalamiento automático (fila única global) ────────
+exports.getEscalamientoConfig = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`SELECT TOP 1 TEC_ID as id, TEC_AUTO_ESCALAMIENTO as autoEscalamiento, TEC_UMBRAL_RIESGO as umbralRiesgo FROM TICKETS_ESCALAMIENTO_CONFIG ORDER BY TEC_ID`);
+    res.json({ success: true, data: rs.recordset[0] || { autoEscalamiento: true, umbralRiesgo: 0.8 } });
+  } catch (e) {
+    console.error('Error obteniendo configuración de escalamiento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.actualizarEscalamientoConfig = async (req, res) => {
+  try {
+    const { autoEscalamiento, umbralRiesgo } = req.body;
+    if (umbralRiesgo !== undefined && (umbralRiesgo <= 0 || umbralRiesgo > 1)) {
+      return res.status(400).json({ success: false, message: 'umbralRiesgo debe estar entre 0 y 1' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const existente = await pool.request().query(`SELECT TOP 1 TEC_ID as id FROM TICKETS_ESCALAMIENTO_CONFIG ORDER BY TEC_ID`);
+    if (!existente.recordset[0]) {
+      return res.status(404).json({ success: false, message: 'Configuración no inicializada' });
+    }
+    await pool.request()
+      .input('id', sql.Int, existente.recordset[0].id)
+      .input('auto', sql.Bit, autoEscalamiento !== undefined ? !!autoEscalamiento : true)
+      .input('umbral', sql.Decimal(4, 2), umbralRiesgo !== undefined ? umbralRiesgo : 0.8)
+      .query(`UPDATE TICKETS_ESCALAMIENTO_CONFIG SET TEC_AUTO_ESCALAMIENTO=@auto, TEC_UMBRAL_RIESGO=@umbral, TEC_FECHA_ACTUALIZACION=GETDATE() WHERE TEC_ID=@id`);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'actualizar-escalamiento-config', entidadId: String(existente.recordset[0].id), detalle:{ autoEscalamiento, umbralRiesgo }, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando configuración de escalamiento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Reutilizado por ticketSlaCronController.js: evita duplicar la carga de
+// reglas SLA y la lógica de escalamiento fuera de un ciclo request/response.
+exports.cargarReglasSlaActivas = cargarReglasSlaActivas;
+exports.buscarReglaSla = buscarReglaSla;
+exports.escalarTicketInterno = escalarTicketInterno;
+exports.crearTicketInterno = crearTicketInterno;
