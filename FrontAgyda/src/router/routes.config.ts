@@ -36,7 +36,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/drive',            label: 'Drive',           icon: 'HardDrive',            moduleKey: 'drive',            roles: NO_CC,                showInSidebar: true  },
   { path: '/organigrama',      label: 'Organigrama',     icon: 'GitBranch',            moduleKey: 'organigrama',      roles: NO_CC,                showInSidebar: true  },
   { path: '/musica',           label: 'Música',          icon: 'Music2',               moduleKey: 'musica',           roles: NO_CC,                showInSidebar: true  },
-  { path: '/webphone',         label: 'Marcador',        icon: 'Phone',                moduleKey: 'webphone',         roles: ['AD','CC'],          showInSidebar: true  },
+  { path: '/webphone',         label: 'Marcador',        icon: 'Phone',                moduleKey: 'webphone',         roles: [],                   showInSidebar: true  },
   { path: '/clientes',         label: 'Clientes',        icon: 'TrendingUp',           moduleKey: 'clientes',         roles: NO_CC,                showInSidebar: true  },
   { path: '/productos-servicios', label: 'Productos y Servicios', icon: 'Package',     moduleKey: 'productos-servicios', roles: NO_CC,             showInSidebar: true  },
   { path: '/crm-interno',      label: 'CRM',             icon: 'LineChart',            moduleKey: 'crm',              roles: ['AD','TI'],          showInSidebar: true  },

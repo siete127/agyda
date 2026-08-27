@@ -328,9 +328,14 @@ export const router = createBrowserRouter([
             ],
           },
           {
+            // Marcador: el acceso lo controla el permiso 'webphone' del usuario
+            // (editable en Configuración → Permisos), no un rol fijo.
+            element: <ModuleRoute moduleKey="webphone" />,
+            children: [{ path: '/webphone', element: wrap(<WebphonePage />) }],
+          },
+          {
             element: <RoleRoute allowedRoles={['AD', 'CC']} />,
             children: [
-              { element: <ModuleRoute moduleKey="webphone" />, children: [{ path: '/webphone', element: wrap(<WebphonePage />) }] },
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
             ],
           },
