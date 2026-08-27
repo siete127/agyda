@@ -1080,6 +1080,73 @@ exports.getAgentesEstado = async (req, res) => {
 // Recorre todos los tenants registrados — igual que el resto de crons de
 // AGYDA — para que el ajuste de horario aplique en cada empresa, no solo en
 // el tenant por defecto.
+// Corre cada minuto (ver cron.schedule al final del archivo). Los chats de la
+// campaña "Soporte TI" ya crean su ticket vinculado desde el momento en que
+// se inician (ver livechatInternoController.js), tengan o no agente disponible
+// de inmediato — así que no hace falta "crear el ticket por timeout". Lo que sí
+// falta es reforzar ese ticket si el chat sigue sin agente después de
+// LCF_TIMEOUT_COLA_MINUTOS: se sube su prioridad a P1 y se notifica al técnico
+// asignado (si ya lo hay) o, si no hay técnico, queda con prioridad máxima
+// visible para cualquiera que revise la bandeja de Tickets. Se marca
+// LCO_ESPERA_ESCALADA=1 para no repetir el aviso cada minuto.
+async function escalarChatsSoporteTiEnEsperaCron() {
+  const { listTenants } = require('../config/tenants');
+  const notificationService = require('../services/notificationService');
+  for (const { key } of listTenants()) {
+    try {
+      const pool = await databaseService.getPool(key);
+      const config = await getConfig(pool);
+      const timeoutMin = config?.LCF_TIMEOUT_COLA_MINUTOS || 15;
+
+      const rs = await pool.request().input('timeoutMin', sql.Int, timeoutMin).query(`
+        SELECT lco.LCO_ID as colaId, lco.LCO_CONVERSACION_ID as conversacionId,
+               c.LC_TICKET_ID as ticketId, c.LC_SOLICITANTE_ID as solicitanteId,
+               t.ASIGNADO_A as asignadoA
+        FROM dbo.LIVECHAT_COLA lco
+        JOIN dbo.LIVECHAT_CONVERSACIONES c ON c.LC_ID = lco.LCO_CONVERSACION_ID
+        LEFT JOIN dbo.TICKETS t ON t.TICKET_ID = c.LC_TICKET_ID
+        WHERE c.LC_ORIGEN = 'empleado_interno'
+          AND c.LC_ESTADO = 'esperando'
+          AND lco.LCO_ESPERA_ESCALADA = 0
+          AND DATEDIFF(MINUTE, lco.LCO_FECHA_ENTRADA, GETDATE()) >= @timeoutMin
+      `);
+
+      for (const row of rs.recordset) {
+        if (row.ticketId) {
+          await pool.request().input('tid', sql.Int, row.ticketId).query(`
+            UPDATE dbo.TICKETS SET PRIORIDAD = 'P1' WHERE TICKET_ID = @tid AND PRIORIDAD <> 'P1'
+          `);
+          await pool.request().input('tid', sql.Int, row.ticketId).input('det', sql.NVarChar,
+            `Chat de Soporte TI sin atender tras ${timeoutMin} minutos en espera — prioridad escalada automáticamente a P1`)
+            .query(`INSERT INTO dbo.TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE) VALUES (@tid, 'escalado_espera_chat', @det)`);
+        }
+
+        const destinatarioId = row.asignadoA || null;
+        if (destinatarioId) {
+          try {
+            await notificationService.createNotification({
+              usuarioId: destinatarioId,
+              mensaje: row.ticketId
+                ? `Chat de Soporte TI sin atender hace ${timeoutMin}+ min — ticket #${row.ticketId} escalado a P1`
+                : `Chat de Soporte TI sin atender hace ${timeoutMin}+ min`,
+              tipo: 'livechat_espera_escalada',
+              dataExtra: { conversacionId: row.conversacionId, ticketId: row.ticketId || null },
+              tenantKey: key,
+            });
+          } catch (e) {
+            console.warn('⚠️ No se pudo notificar escalamiento de espera de chat Soporte TI:', e?.message || e);
+          }
+        }
+
+        await pool.request().input('id', sql.Int, row.colaId)
+          .query(`UPDATE dbo.LIVECHAT_COLA SET LCO_ESPERA_ESCALADA = 1 WHERE LCO_ID = @id`);
+      }
+    } catch (error) {
+      console.error(`Error en escalarChatsSoporteTiEnEsperaCron (tenant=${key}):`, error);
+    }
+  }
+}
+
 async function ajustarDisponibilidadPorHorarioCron() {
   const { listTenants } = require('../config/tenants');
   for (const { key } of listTenants()) {
@@ -1129,6 +1196,7 @@ exports.getConfig = async (req, res) => {
         mensajeSinAgentes: config.LCF_MSG_SIN_AGENTES,
         mensajeEnCola: config.LCF_MSG_EN_COLA,
         maxChatsPorAgente: config.LCF_MAX_CHATS_POR_AGENTE,
+        timeoutColaMinutos: config.LCF_TIMEOUT_COLA_MINUTOS,
       },
     });
   } catch (error) {
@@ -1142,7 +1210,7 @@ exports.updateConfig = async (req, res) => {
     const {
       horarioInicio, horarioFin, sabadoHorarioInicio, sabadoHorarioFin, diasSemana,
       mensajeBienvenida, mensajeFueraHorario, mensajeSinAgentes, mensajeEnCola,
-      maxChatsPorAgente,
+      maxChatsPorAgente, timeoutColaMinutos,
     } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
     const config = await getConfig(pool);
@@ -1162,6 +1230,7 @@ exports.updateConfig = async (req, res) => {
       .input('mensajeSinAgentes', sql.NVarChar, mensajeSinAgentes || null)
       .input('mensajeEnCola', sql.NVarChar, mensajeEnCola || null)
       .input('maxChatsPorAgente', sql.Int, Number.isFinite(maxChatsPorAgente) ? maxChatsPorAgente : 5)
+      .input('timeoutColaMinutos', sql.Int, Number.isFinite(timeoutColaMinutos) ? timeoutColaMinutos : 15)
       .query(`
         UPDATE dbo.LIVECHAT_CONFIG
         SET LCF_HORARIO_INICIO = @horarioInicio,
@@ -1173,7 +1242,8 @@ exports.updateConfig = async (req, res) => {
             LCF_MSG_FUERA_HORARIO = @mensajeFueraHorario,
             LCF_MSG_SIN_AGENTES = @mensajeSinAgentes,
             LCF_MSG_EN_COLA = @mensajeEnCola,
-            LCF_MAX_CHATS_POR_AGENTE = @maxChatsPorAgente
+            LCF_MAX_CHATS_POR_AGENTE = @maxChatsPorAgente,
+            LCF_TIMEOUT_COLA_MINUTOS = @timeoutColaMinutos
         WHERE LCF_ID = @id
       `);
 
@@ -1421,6 +1491,10 @@ exports.exportHistorialCsv = async (req, res) => {
 // Sábado) — así ya no hace falta darle clic al botón de disponible.
 cron.schedule('* * * * *', () => {
   ajustarDisponibilidadPorHorarioCron();
+}, { timezone: 'America/Mexico_City' });
+
+cron.schedule('* * * * *', () => {
+  escalarChatsSoporteTiEnEsperaCron();
 }, { timezone: 'America/Mexico_City' });
 
 // Reutilizadas por livechatInternoController.js (chat interno de empleados

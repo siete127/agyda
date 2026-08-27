@@ -32,6 +32,7 @@ export interface Ticket {
   sede: string | null
   departamento: string | null
   activoAfectado: string | null
+  servicioAfectado: string | null
   impacto: TicketImpacto | null
   urgencia: TicketUrgencia | null
   nivelActual: number
@@ -47,6 +48,8 @@ export interface Ticket {
   motivoEspera: TicketMotivoEspera | null
   fechaInicioEspera: string | null
   minutosTotalEspera: number
+  chatRelacionadoId: number | null
+  chatRelacionadoEstado: string | null
 }
 
 export type SlaEstado = 'cumplido' | 'incumplido' | 'en_riesgo' | 'en_tiempo'
@@ -181,6 +184,7 @@ export function parseTicket(raw: Record<string, unknown>): Ticket {
     sede: String(p('SEDE', 'sede') ?? '') || null,
     departamento: String(p('DEPARTAMENTO', 'departamento') ?? '') || null,
     activoAfectado: String(p('ACTIVO_AFECTADO', 'activoAfectado') ?? '') || null,
+    servicioAfectado: String(p('SERVICIO_AFECTADO', 'servicioAfectado') ?? '') || null,
     impacto: (String(p('IMPACTO', 'impacto') ?? '') || null) as TicketImpacto | null,
     urgencia: (String(p('URGENCIA', 'urgencia') ?? '') || null) as TicketUrgencia | null,
     nivelActual: Number(p('NIVEL_ACTUAL', 'nivelActual') ?? 1),
@@ -196,6 +200,8 @@ export function parseTicket(raw: Record<string, unknown>): Ticket {
     motivoEspera: (String(p('MOTIVO_ESPERA', 'motivoEspera') ?? '') || null) as TicketMotivoEspera | null,
     fechaInicioEspera: parseDate(p('FECHA_INICIO_ESPERA', 'fechaInicioEspera')),
     minutosTotalEspera: Number(p('MINUTOS_TOTAL_ESPERA', 'minutosTotalEspera') ?? 0),
+    chatRelacionadoId: parseNum(p('chatRelacionadoId', 'CHAT_RELACIONADO_ID')),
+    chatRelacionadoEstado: String(p('chatRelacionadoEstado', 'CHAT_RELACIONADO_ESTADO') ?? '') || null,
   }
 }
 

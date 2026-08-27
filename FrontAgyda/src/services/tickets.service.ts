@@ -27,6 +27,7 @@ export const ticketsService = {
     sede?: string
     departamento?: string
     activoAfectado?: string
+    servicioAfectado?: string
     impacto?: string
     urgencia?: string
   }): Promise<Ticket> {

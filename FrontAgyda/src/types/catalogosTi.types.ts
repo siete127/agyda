@@ -32,3 +32,21 @@ export interface IntegracionConfig {
   valor: string | null
   fechaActualizacion: string
 }
+
+export interface Proveedor {
+  id: number
+  nombre: string
+  contacto: string | null
+  telefono: string | null
+  correo: string | null
+  activo: boolean
+}
+
+export interface Servicio {
+  id: number
+  nombre: string
+  descripcion: string | null
+  proveedorId: number | null
+  proveedorNombre: string | null
+  activo: boolean
+}

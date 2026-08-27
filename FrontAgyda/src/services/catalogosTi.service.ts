@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig } from '@/types/catalogosTi.types'
+import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig, Proveedor, Servicio } from '@/types/catalogosTi.types'
 
 export const catalogosTiService = {
   // Sedes
@@ -57,6 +57,38 @@ export const catalogosTiService = {
   },
   async toggleEspecialidadActiva(id: number): Promise<void> {
     await api.patch(`/catalogos-ti/especialidades/${id}/activa`)
+  },
+
+  // Proveedores
+  async getProveedores(incluirInactivos = false): Promise<Proveedor[]> {
+    const { data } = await api.get('/catalogos-ti/proveedores', { params: incluirInactivos ? { incluirInactivos: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createProveedor(payload: { nombre: string; contacto?: string; telefono?: string; correo?: string }): Promise<Proveedor> {
+    const { data } = await api.post('/catalogos-ti/proveedores', payload)
+    return data.data
+  },
+  async updateProveedor(id: number, payload: { nombre: string; contacto?: string; telefono?: string; correo?: string }): Promise<void> {
+    await api.put(`/catalogos-ti/proveedores/${id}`, payload)
+  },
+  async toggleProveedorActivo(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/proveedores/${id}/activo`)
+  },
+
+  // Servicios
+  async getServicios(incluirInactivos = false): Promise<Servicio[]> {
+    const { data } = await api.get('/catalogos-ti/servicios', { params: incluirInactivos ? { incluirInactivos: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createServicio(payload: { nombre: string; descripcion?: string; proveedorId?: number | null }): Promise<Servicio> {
+    const { data } = await api.post('/catalogos-ti/servicios', payload)
+    return data.data
+  },
+  async updateServicio(id: number, payload: { nombre: string; descripcion?: string; proveedorId?: number | null }): Promise<void> {
+    await api.put(`/catalogos-ti/servicios/${id}`, payload)
+  },
+  async toggleServicioActivo(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/servicios/${id}/activo`)
   },
 
   // Integraciones (placeholder clave/valor, sin cifrado)

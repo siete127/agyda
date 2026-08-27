@@ -28,6 +28,18 @@ router.post('/especialidades', requireActionAccess('configuracion', 'configurar'
 router.put('/especialidades/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateEspecialidad);
 router.patch('/especialidades/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleEspecialidadActiva);
 
+// Proveedores
+router.get('/proveedores', requireActionAccess('configuracion', 'ver'), catalogosTiController.getProveedores);
+router.post('/proveedores', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createProveedor);
+router.put('/proveedores/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateProveedor);
+router.patch('/proveedores/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleProveedorActivo);
+
+// Servicios
+router.get('/servicios', requireActionAccess('configuracion', 'ver'), catalogosTiController.getServicios);
+router.post('/servicios', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createServicio);
+router.put('/servicios/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateServicio);
+router.patch('/servicios/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleServicioActivo);
+
 // Integraciones (placeholder clave/valor, sin cifrado)
 router.get('/integraciones', requireActionAccess('configuracion', 'ver'), catalogosTiController.getIntegraciones);
 router.put('/integraciones', requireActionAccess('configuracion', 'configurar'), catalogosTiController.setIntegracion);

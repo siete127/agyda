@@ -64,6 +64,13 @@ export function ChatEnVivoTab() {
             <label className="text-xs font-medium text-gray-600">Máx. chats por agente</label>
             <input type="number" min={1} className="field mt-1 text-sm" value={form.maxChatsPorAgente} onChange={(e) => setForm({ ...form, maxChatsPorAgente: Number(e.target.value) })} />
           </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Minutos en espera antes de escalar (Soporte TI)</label>
+            <input type="number" min={1} className="field mt-1 text-sm" value={form.timeoutColaMinutos} onChange={(e) => setForm({ ...form, timeoutColaMinutos: Number(e.target.value) })} />
+            <p className="mt-1 text-[0.7rem] text-ink-tertiary">
+              Si un chat interno de Soporte TI espera más de este tiempo sin técnico, su ticket vinculado sube a prioridad P1 y se notifica al técnico asignado.
+            </p>
+          </div>
         </div>
 
         <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">

@@ -236,6 +236,140 @@ exports.toggleEspecialidadActiva = async (req, res) => {
   }
 };
 
+/* ── Proveedores ── */
+exports.getProveedores = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivos = req.query.incluirInactivos === '1';
+    const rs = await pool.request().query(`
+      SELECT PROV_ID as id, PROV_NOMBRE as nombre, PROV_CONTACTO as contacto,
+             PROV_TELEFONO as telefono, PROV_CORREO as correo, PROV_ACTIVO as activo
+      FROM TI_PROVEEDORES ${incluirInactivos ? '' : 'WHERE PROV_ACTIVO = 1'}
+      ORDER BY PROV_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando proveedores:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createProveedor = async (req, res) => {
+  try {
+    const { nombre, contacto, telefono, correo } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('contacto', sql.NVarChar, contacto || null)
+      .input('telefono', sql.NVarChar, telefono || null)
+      .input('correo', sql.NVarChar, correo || null)
+      .query(`INSERT INTO TI_PROVEEDORES (PROV_NOMBRE, PROV_CONTACTO, PROV_TELEFONO, PROV_CORREO)
+              VALUES (@nombre, @contacto, @telefono, @correo); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, contacto: contacto || null, telefono: telefono || null, correo: correo || null, activo: true } });
+  } catch (e) {
+    console.error('Error creando proveedor:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateProveedor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, contacto, telefono, correo } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('contacto', sql.NVarChar, contacto || null)
+      .input('telefono', sql.NVarChar, telefono || null)
+      .input('correo', sql.NVarChar, correo || null)
+      .query(`UPDATE TI_PROVEEDORES SET PROV_NOMBRE=@nombre, PROV_CONTACTO=@contacto, PROV_TELEFONO=@telefono, PROV_CORREO=@correo WHERE PROV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando proveedor:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleProveedorActivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TI_PROVEEDORES SET PROV_ACTIVO = 1 - PROV_ACTIVO WHERE PROV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de proveedor:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Servicios ── */
+exports.getServicios = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivos = req.query.incluirInactivos === '1';
+    const rs = await pool.request().query(`
+      SELECT s.SRV_ID as id, s.SRV_NOMBRE as nombre, s.SRV_DESCRIPCION as descripcion,
+             s.SRV_PROVEEDOR_ID as proveedorId, p.PROV_NOMBRE as proveedorNombre, s.SRV_ACTIVO as activo
+      FROM TI_SERVICIOS s
+      LEFT JOIN TI_PROVEEDORES p ON p.PROV_ID = s.SRV_PROVEEDOR_ID
+      ${incluirInactivos ? '' : 'WHERE s.SRV_ACTIVO = 1'}
+      ORDER BY s.SRV_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando servicios:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createServicio = async (req, res) => {
+  try {
+    const { nombre, descripcion, proveedorId } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('descripcion', sql.NVarChar, descripcion || null)
+      .input('proveedorId', sql.Int, proveedorId || null)
+      .query(`INSERT INTO TI_SERVICIOS (SRV_NOMBRE, SRV_DESCRIPCION, SRV_PROVEEDOR_ID)
+              VALUES (@nombre, @descripcion, @proveedorId); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, descripcion: descripcion || null, proveedorId: proveedorId || null, activo: true } });
+  } catch (e) {
+    console.error('Error creando servicio:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateServicio = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, descripcion, proveedorId } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('descripcion', sql.NVarChar, descripcion || null)
+      .input('proveedorId', sql.Int, proveedorId || null)
+      .query(`UPDATE TI_SERVICIOS SET SRV_NOMBRE=@nombre, SRV_DESCRIPCION=@descripcion, SRV_PROVEEDOR_ID=@proveedorId WHERE SRV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando servicio:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleServicioActivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TI_SERVICIOS SET SRV_ACTIVO = 1 - SRV_ACTIVO WHERE SRV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de servicio:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 /* ── Integraciones (placeholder clave/valor, sin cifrado — ver comentario en schemaService.js) ── */
 exports.getIntegraciones = async (req, res) => {
   try {

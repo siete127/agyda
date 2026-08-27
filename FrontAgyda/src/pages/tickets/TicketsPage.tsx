@@ -43,7 +43,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     titulo: '', descripcion: '', area: 'TI', asignadoA: '',
     clasificacion: '' as TicketClasificacion | '',
     categoria: '', subcategoria: '',
-    sede: '', departamento: '', activoAfectado: '',
+    sede: '', departamento: '', activoAfectado: '', servicioAfectado: '',
     impacto: '' as TicketImpacto | '', urgencia: '' as TicketUrgencia | '',
   })
 
@@ -65,6 +65,11 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     queryFn: () => catalogosTiService.getSedes(),
     staleTime: 5 * 60_000,
   })
+  const { data: servicios = [] } = useQuery({
+    queryKey: ['catalogos-ti-servicios'],
+    queryFn: () => catalogosTiService.getServicios(),
+    staleTime: 5 * 60_000,
+  })
   const subcategoriasDisponibles = categorias.find((c) => c.nombre === form.categoria)?.subcategorias ?? []
 
   const crear = useMutation({
@@ -79,6 +84,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
       sede: form.sede || undefined,
       departamento: form.departamento || undefined,
       activoAfectado: form.activoAfectado || undefined,
+      servicioAfectado: form.servicioAfectado || undefined,
       impacto: form.impacto || undefined,
       urgencia: form.urgencia || undefined,
     }),
@@ -175,6 +181,14 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
             <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Activo afectado</label>
             <input value={form.activoAfectado} onChange={(e) => setForm({ ...form, activoAfectado: e.target.value })} className="field" placeholder="Opcional" />
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Servicio afectado</label>
+          <select value={form.servicioAfectado} onChange={(e) => setForm({ ...form, servicioAfectado: e.target.value })} className="field">
+            <option value="">Ninguno / no aplica</option>
+            {servicios.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -894,6 +908,15 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
             <span className="flex items-center gap-1 text-[0.65rem] text-ink-tertiary">
               <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" /> Calificado
             </span>
+          )}
+          {ticket.chatRelacionadoId && (
+            <Link
+              to="/livechat"
+              title={`Chat #${ticket.chatRelacionadoId} · ${ticket.chatRelacionadoEstado ?? ''}`}
+              className="chip flex items-center gap-1 bg-surface text-[0.65rem] text-ink-secondary hover:bg-brand/10 hover:text-brand"
+            >
+              <MessageCircle className="h-3 w-3" /> Chat relacionado
+            </Link>
           )}
         </div>
         <p className="text-[0.72rem] text-ink-tertiary">

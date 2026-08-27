@@ -19,20 +19,24 @@ const TICKET_MOTIVOS_ESPERA = require('../constants/ticketMotivosEspera');
 
 async function cargarReglasSlaActivas(pool) {
   const rs = await pool.request().query(`
-    SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area,
+    SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area, TSR_SERVICIO as servicio,
            TSR_MIN_PRIMERA_RESPUESTA as minPrimeraRespuesta, TSR_MIN_RESOLUCION as minResolucion
     FROM TICKETS_SLA_REGLAS WHERE TSR_ACTIVA = 1
   `);
   return rs.recordset;
 }
 
-// Busca la regla más específica: prioridad+área exacta, si no existe cae a prioridad
-// sin área (regla general).
-function buscarReglaSla(reglas, prioridad, area) {
+// Busca la regla más específica primero: prioridad+área+servicio exactos.
+// Si no hay match, va cayendo a reglas más genéricas (prioridad+área,
+// prioridad sola) — retrocompatible: si nunca se configuró una regla por
+// servicio, el comportamiento es idéntico al de antes.
+function buscarReglaSla(reglas, prioridad, area, servicio) {
   const prio = (prioridad || '').toString().toUpperCase();
   const ar = (area || '').toString().toUpperCase();
-  return reglas.find((r) => r.prioridad === prio && (r.area || '').toUpperCase() === ar)
-    || reglas.find((r) => r.prioridad === prio && !r.area)
+  const srv = (servicio || '').toString().toLowerCase();
+  return reglas.find((r) => r.prioridad === prio && (r.area || '').toUpperCase() === ar && (r.servicio || '').toLowerCase() === srv && srv)
+    || reglas.find((r) => r.prioridad === prio && (r.area || '').toUpperCase() === ar && !r.servicio)
+    || reglas.find((r) => r.prioridad === prio && !r.area && !r.servicio)
     || null;
 }
 
@@ -41,7 +45,7 @@ function buscarReglaSla(reglas, prioridad, area) {
 function enriquecerConSla(tickets, reglas) {
   const ahora = Date.now();
   return tickets.map((t) => {
-    const regla = buscarReglaSla(reglas, t.PRIORIDAD ?? t.prioridad, t.AREA ?? t.area);
+    const regla = buscarReglaSla(reglas, t.PRIORIDAD ?? t.prioridad, t.AREA ?? t.area, t.SERVICIO_AFECTADO ?? t.servicioAfectado);
     if (!regla) return { ...t, slaRespuesta: null, slaResolucion: null, slaReglaId: null };
 
     const creacion = new Date(t.FECHA_CREACION ?? t.fechaCreacion).getTime();
@@ -89,7 +93,7 @@ exports.listReglasSla = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
-      SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area,
+      SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area, TSR_SERVICIO as servicio,
              TSR_MIN_PRIMERA_RESPUESTA as minPrimeraRespuesta, TSR_MIN_RESOLUCION as minResolucion,
              TSR_ACTIVA as activa
       FROM TICKETS_SLA_REGLAS ORDER BY TSR_PRIORIDAD, TSR_AREA
@@ -104,7 +108,7 @@ exports.listReglasSla = async (req, res) => {
 // POST /api/tickets/sla/reglas
 exports.crearReglaSla = async (req, res) => {
   try {
-    const { prioridad, area, minPrimeraRespuesta, minResolucion } = req.body;
+    const { prioridad, area, servicio, minPrimeraRespuesta, minResolucion } = req.body;
     if (!prioridad || !minPrimeraRespuesta || !minResolucion) {
       return res.status(400).json({ success: false, message: 'Prioridad, minutos de primera respuesta y de resolución son requeridos' });
     }
@@ -112,12 +116,13 @@ exports.crearReglaSla = async (req, res) => {
     await pool.request()
       .input('prioridad', sql.NVarChar, prioridad.toString().toUpperCase())
       .input('area', sql.NVarChar, area ? area.toString().toUpperCase() : null)
+      .input('servicio', sql.NVarChar, servicio || null)
       .input('minRespuesta', sql.Int, minPrimeraRespuesta)
       .input('minResolucion', sql.Int, minResolucion)
       .input('creadoPor', sql.SmallInt, req.headers['usuarioid'] ? Number(req.headers['usuarioid']) : null)
       .query(`
-        INSERT INTO TICKETS_SLA_REGLAS (TSR_PRIORIDAD, TSR_AREA, TSR_MIN_PRIMERA_RESPUESTA, TSR_MIN_RESOLUCION, TSR_CREADO_POR)
-        VALUES (@prioridad, @area, @minRespuesta, @minResolucion, @creadoPor)
+        INSERT INTO TICKETS_SLA_REGLAS (TSR_PRIORIDAD, TSR_AREA, TSR_SERVICIO, TSR_MIN_PRIMERA_RESPUESTA, TSR_MIN_RESOLUCION, TSR_CREADO_POR)
+        VALUES (@prioridad, @area, @servicio, @minRespuesta, @minResolucion, @creadoPor)
       `);
     res.status(201).json({ success: true });
   } catch (e) {
@@ -130,18 +135,19 @@ exports.crearReglaSla = async (req, res) => {
 exports.actualizarReglaSla = async (req, res) => {
   try {
     const { id } = req.params;
-    const { prioridad, area, minPrimeraRespuesta, minResolucion, activa } = req.body;
+    const { prioridad, area, servicio, minPrimeraRespuesta, minResolucion, activa } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
       .input('id', sql.Int, id)
       .input('prioridad', sql.NVarChar, prioridad ? prioridad.toString().toUpperCase() : null)
       .input('area', sql.NVarChar, area ? area.toString().toUpperCase() : null)
+      .input('servicio', sql.NVarChar, servicio || null)
       .input('minRespuesta', sql.Int, minPrimeraRespuesta)
       .input('minResolucion', sql.Int, minResolucion)
       .input('activa', sql.Bit, activa ? 1 : 0)
       .query(`
         UPDATE TICKETS_SLA_REGLAS
-        SET TSR_PRIORIDAD = @prioridad, TSR_AREA = @area, TSR_MIN_PRIMERA_RESPUESTA = @minRespuesta,
+        SET TSR_PRIORIDAD = @prioridad, TSR_AREA = @area, TSR_SERVICIO = @servicio, TSR_MIN_PRIMERA_RESPUESTA = @minRespuesta,
             TSR_MIN_RESOLUCION = @minResolucion, TSR_ACTIVA = @activa
         WHERE TSR_ID = @id
       `);
@@ -248,7 +254,7 @@ exports.getTickets = async (req, res) => {
           SELECT TOP 200
             t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
             t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
             su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -270,7 +276,7 @@ exports.getTickets = async (req, res) => {
         SELECT TOP 200
           t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
           t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
           su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -295,7 +301,7 @@ exports.getTickets = async (req, res) => {
           SELECT TOP 200
             t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
             t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
             su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -323,7 +329,7 @@ exports.getTickets = async (req, res) => {
     const rs = await pool.request().input('uid', sql.Int, usuarioId)
       .query(`SELECT TOP 200 t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
                      t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
                      su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -352,16 +358,18 @@ exports.getTicketById = async (req, res) => {
       SELECT 
         t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.DESCRIPCION, t.ESTADO,
         t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-        t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
         t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-        t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
+        t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.SERVICIO_AFECTADO, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
         t.FECHA_RESOLUCION_PROPUESTA, t.FECHA_VALIDACION, t.ARTICULO_KB_ID,
         au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
+        chat.LC_ID as chatRelacionadoId, chat.LC_ESTADO as chatRelacionadoEstado,
         CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos,
         CASE WHEN t.FECHA_PRIMERA_RESPUESTA IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_PRIMERA_RESPUESTA) ELSE NULL END AS tiempoPrimeraRespuestaMinutos
       FROM TICKETS t
       LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
+      LEFT JOIN LIVECHAT_CONVERSACIONES chat ON chat.LC_TICKET_ID = t.TICKET_ID
       WHERE t.TICKET_ID=@tid`);
       
     if (header.recordset.length === 0) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
@@ -404,7 +412,7 @@ exports.getTicketById = async (req, res) => {
 // la reusen sin duplicar código, siguiendo el mismo patrón que escalarTicketInterno.
 async function crearTicketInterno(pool, {
   solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
-  clasificacion, subcategoria, sede, departamento, activoAfectado,
+  clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
   impacto, urgencia, prioridadManual: prioridadManualFlag, esAD,
   tenantKey,
 }) {
@@ -449,15 +457,16 @@ async function crearTicketInterno(pool, {
       .input('sede', sql.NVarChar, sede || null)
       .input('depto', sql.NVarChar, departamento || null)
       .input('activo', sql.NVarChar, activoAfectado || null)
+      .input('servicio', sql.NVarChar, servicioAfectado || null)
       .input('impacto', sql.NVarChar, impactoNorm)
       .input('urgencia', sql.NVarChar, urgenciaNorm)
       .input('prioManual', sql.Bit, prioridadManual ? 1 : 0)
       .query(`INSERT INTO TICKETS
                 (SOLICITANTE_ID, AREA, PRIORIDAD, TITULO, DESCRIPCION, ESTADO,
-                 CLASIFICACION, CATEGORIA, SUBCATEGORIA, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO,
+                 CLASIFICACION, CATEGORIA, SUBCATEGORIA, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO, SERVICIO_AFECTADO,
                  IMPACTO, URGENCIA, PRIORIDAD_MANUAL, NIVEL_ACTUAL)
               VALUES (@sol, @area, @prio, @tit, @desc, 'abierto',
-                 @clasif, @cat, @subcat, @sede, @depto, @activo,
+                 @clasif, @cat, @subcat, @sede, @depto, @activo, @servicio,
                  @impacto, @urgencia, @prioManual, 1);
               SELECT SCOPE_IDENTITY() as id;`);
 
@@ -617,7 +626,7 @@ exports.createTicket = async (req, res) => {
     const solicitanteId = req.body.solicitanteId ?? req.body.usuarioId ?? Number(req.headers['usuarioid']);
     const {
       area, titulo, descripcion, prioridad, categoria, asignadoA,
-      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
       impacto, urgencia,
     } = req.body;
     console.warn(`[createTicket] solicitante=${solicitanteId} area=${area} tipo=${tipoUsuario}`);
@@ -631,7 +640,7 @@ exports.createTicket = async (req, res) => {
 
     const result = await crearTicketInterno(pool, {
       solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
-      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
       impacto, urgencia, prioridadManual: req.body.prioridadManual, esAD,
       tenantKey: req.user?.empresa,
     });

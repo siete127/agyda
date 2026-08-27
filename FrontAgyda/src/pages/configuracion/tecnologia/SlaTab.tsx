@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { Timer, Plus, Trash2, Pencil, Power, BarChart3 } from 'lucide-react'
 import { ticketSlaService } from '@/services/ticketSla.service'
+import { catalogosTiService } from '@/services/catalogosTi.service'
 import { DashboardStatRow } from '@/components/ui/DashboardStatRow'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -25,13 +26,19 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
   const qc = useQueryClient()
   const [prioridad, setPrioridad] = useState(regla?.prioridad ?? 'P3')
   const [area, setArea] = useState(regla?.area ?? '')
+  const [servicio, setServicio] = useState(regla?.servicio ?? '')
   const [minPrimeraRespuesta, setMinPrimeraRespuesta] = useState<number | ''>(regla?.minPrimeraRespuesta ?? '')
   const [minResolucion, setMinResolucion] = useState<number | ''>(regla?.minResolucion ?? '')
 
+  const { data: servicios = [] } = useQuery({
+    queryKey: ['catalogos-ti-servicios'],
+    queryFn: () => catalogosTiService.getServicios(),
+  })
+
   const guardar = useMutation({
     mutationFn: () => regla
-      ? ticketSlaService.actualizarRegla(regla.id, { prioridad, area: area || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion), activa: regla.activa })
-      : ticketSlaService.crearRegla({ prioridad, area: area || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion) }),
+      ? ticketSlaService.actualizarRegla(regla.id, { prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion), activa: regla.activa })
+      : ticketSlaService.crearRegla({ prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets-sla-reglas'] })
       qc.invalidateQueries({ queryKey: ['tickets-sla-reporte'] })
@@ -65,6 +72,13 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
           <select value={area} onChange={(e) => setArea(e.target.value)} className="field">
             <option value="">Todas las áreas</option>
             {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Servicio (opcional — vacío aplica a todos)</label>
+          <select value={servicio} onChange={(e) => setServicio(e.target.value)} className="field">
+            <option value="">Todos los servicios</option>
+            {servicios.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -101,7 +115,7 @@ export function SlaTab() {
   })
 
   const toggleActiva = useMutation({
-    mutationFn: (r: ReglaSla) => ticketSlaService.actualizarRegla(r.id, { prioridad: r.prioridad, area: r.area ?? undefined, minPrimeraRespuesta: r.minPrimeraRespuesta, minResolucion: r.minResolucion, activa: !r.activa }),
+    mutationFn: (r: ReglaSla) => ticketSlaService.actualizarRegla(r.id, { prioridad: r.prioridad, area: r.area ?? undefined, servicio: r.servicio ?? undefined, minPrimeraRespuesta: r.minPrimeraRespuesta, minResolucion: r.minResolucion, activa: !r.activa }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets-sla-reglas'] })
       qc.invalidateQueries({ queryKey: ['tickets-sla-reporte'] })
@@ -183,7 +197,7 @@ export function SlaTab() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{PRIORIDAD_LABELS[r.prioridad as TicketPrioridad] ?? r.prioridad}</p>
-                  <p className="text-xs text-gray-500">{r.area ?? 'Todas las áreas'}</p>
+                  <p className="text-xs text-gray-500">{r.area ?? 'Todas las áreas'}{r.servicio ? ` · ${r.servicio}` : ''}</p>
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => toggleActiva.mutate(r)} title={r.activa ? 'Desactivar' : 'Activar'} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700">
