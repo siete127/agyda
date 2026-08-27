@@ -15,6 +15,7 @@ router.get('/incoming-call', webphoneController.incomingCall);
 router.get('/vistas', authenticateToken, webphoneVistasController.getVistas);
 router.post('/vistas', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.createVista);
 router.put('/vistas/:id', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.updateVista);
+router.put('/vistas/:id/predeterminada', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.setPredeterminada);
 router.delete('/vistas/:id', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.deleteVista);
 
 // Credenciales de VICIdial por agente y por vista (para auto-login) —

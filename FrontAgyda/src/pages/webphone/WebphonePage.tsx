@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Phone, RefreshCw, Settings, ShieldAlert, ExternalLink, X,
@@ -81,9 +81,21 @@ export function WebphonePage() {
       const list = Array.isArray(data) ? data : (data?.data ?? [])
       return (list as Record<string, unknown>[]).map(parseVista)
     },
+    staleTime: 30_000,
   })
 
   const vista = vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null
+
+  // Si el usuario no eligió una vista a mano en esta sesión, seguir siempre a
+  // la vista predeterminada (la de menor orden) aunque cambie en Configuración
+  // sin necesidad de recargar la página.
+  const vistaElegidaManualmente = useRef(false)
+  useEffect(() => {
+    if (vistaElegidaManualmente.current) return
+    if (!vistas.length) return
+    const predeterminada = vistas[0]
+    if (vistaId !== predeterminada.id) setVistaId(predeterminada.id)
+  }, [vistas, vistaId, setVistaId])
 
   const crear = useMutation({
     mutationFn: (body: { label: string; url: string; requiereVpn: boolean }) => api.post('/webphone/vistas', body),
@@ -113,6 +125,7 @@ export function WebphonePage() {
   })
 
   const cargarVista = (v: VistaWebphone) => {
+    vistaElegidaManualmente.current = true
     setVistaId(v.id)
     setShowConfig(false)
     setVpnCheck('idle')
