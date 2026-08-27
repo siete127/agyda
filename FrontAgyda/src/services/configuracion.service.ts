@@ -1,11 +1,14 @@
 import { api } from '@/lib/axios'
 
+export type WebphoneProvider = 'Azul1' | 'Vici' | 'Integra'
+
 export interface WebphoneVista {
   id: number
   label: string
   url: string
   requiereVpn: boolean
   orden: number
+  provider: WebphoneProvider
 }
 
 export interface ModuloNotificacion {
@@ -48,14 +51,17 @@ export const configuracionService = {
     const { data } = await api.get('/webphone/vistas')
     return data.data
   },
-  async crearVista(payload: { label: string; url: string; requiereVpn: boolean }): Promise<void> {
+  async crearVista(payload: { label: string; url: string; requiereVpn: boolean; provider: WebphoneProvider }): Promise<void> {
     await api.post('/webphone/vistas', payload)
   },
-  async actualizarVista(id: number, payload: Partial<{ label: string; url: string; requiereVpn: boolean }>): Promise<void> {
+  async actualizarVista(id: number, payload: Partial<{ label: string; url: string; requiereVpn: boolean; provider: WebphoneProvider }>): Promise<void> {
     await api.put(`/webphone/vistas/${id}`, payload)
   },
   async eliminarVista(id: number): Promise<void> {
     await api.delete(`/webphone/vistas/${id}`)
+  },
+  async hacerVistaPredeterminada(id: number): Promise<void> {
+    await api.put(`/webphone/vistas/${id}/predeterminada`)
   },
 
   async getConfiguracionCorreo(): Promise<ConfiguracionCorreo> {
