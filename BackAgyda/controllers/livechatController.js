@@ -35,7 +35,9 @@ const SELECT_CONVERSACION = `
     LC_OPO_ID as opoId,
     LC_CAMPANIA_ID as campaniaId,
     LC_GRUPO_ID as grupoId,
-    LC_MOTIVO_CIERRE_ID as motivoCierreId
+    LC_MOTIVO_CIERRE_ID as motivoCierreId,
+    LC_TICKET_ID as ticketId,
+    LC_SOLICITANTE_ID as solicitanteId
   FROM dbo.LIVECHAT_CONVERSACIONES
 `;
 
@@ -110,7 +112,19 @@ function isFueraDeHorario(config) {
 // maxChatsGlobal es el fallback final; la prioridad real de capacidad es
 // LAE_MAX_CHATS_OVERRIDE (por agente) > LCA_MAX_CHATS_POR_AGENTE (por
 // campaña, si se pasó campaniaId) > maxChatsGlobal.
-async function buscarAgenteDisponible(pool, maxChatsGlobal, { grupoId = null, campaniaId = null } = {}) {
+async function buscarAgenteDisponible(pool, maxChatsGlobal, { grupoId = null, campaniaId = null, usarMotorReglas = false, area = 'TI' } = {}) {
+  // Chat interno de Soporte TI: delega al motor de reglas de asignación unificado
+  // (especialidad/categoría/sede/capacidad/carga real), en vez del ruteo simple
+  // "menos ocupado" que usa el resto de campañas de livechat (que no tienen
+  // perfil de "técnico" en TI_STAFF_STATUS).
+  if (usarMotorReglas) {
+    const reglasAsignacionService = require('../services/reglasAsignacionService');
+    const seleccion = await reglasAsignacionService.seleccionarTecnico(pool, { area, nivel: 1, tipoCarga: 'chat' });
+    if (!seleccion) return null;
+    const rsNombre = await pool.request().input('uid', sql.Int, seleccion.userId).query(`SELECT NEUS_NOMBRES as nombre FROM NEUS_USUARIOS WHERE NEUS_ID=@uid`);
+    return { usuarioId: seleccion.userId, nombre: rsNombre.recordset[0]?.nombre || null };
+  }
+
   // Cuenta conversaciones LC_ESTADO='activa' reales en vez de confiar en
   // LAE_CONVERSACIONES_ACTIVAS (contador manual incrementado/decrementado en
   // cada punto del código) — si algún flujo deja una conversación sin cerrar
@@ -1437,3 +1451,14 @@ exports.exportHistorialCsv = async (req, res) => {
 cron.schedule('* * * * *', () => {
   ajustarDisponibilidadPorHorarioCron();
 }, { timezone: 'America/Mexico_City' });
+
+// Reutilizadas por livechatInternoController.js (chat interno de empleados
+// autenticados hacia la campaña "Soporte TI") para no duplicar la lógica de
+// horario/ruteo/mensajes de sistema del flujo público.
+exports.buscarAgenteDisponible = buscarAgenteDisponible;
+exports.getConfig = getConfig;
+exports.isFueraDeHorario = isFueraDeHorario;
+exports.insertarMensajeSistema = insertarMensajeSistema;
+exports.calcularTiempoEsperaEstimado = calcularTiempoEsperaEstimado;
+exports.formatMensajeCola = formatMensajeCola;
+exports.tenantKeyDe = tenantKeyDe;

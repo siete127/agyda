@@ -1,0 +1,284 @@
+const sql = require('mssql');
+const databaseService = require('../services/databaseService');
+const { logAudit } = require('../services/auditService');
+
+/* ── Sedes ── */
+exports.getSedes = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const rs = await pool.request().query(`
+      SELECT SEDE_ID as id, SEDE_NOMBRE as nombre, SEDE_DIRECCION as direccion, SEDE_ACTIVA as activa
+      FROM SEDES ${incluirInactivas ? '' : 'WHERE SEDE_ACTIVA = 1'}
+      ORDER BY SEDE_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando sedes:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createSede = async (req, res) => {
+  try {
+    const { nombre, direccion } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('direccion', sql.NVarChar, direccion || null)
+      .query(`INSERT INTO SEDES (SEDE_NOMBRE, SEDE_DIRECCION) VALUES (@nombre, @direccion); SELECT SCOPE_IDENTITY() as id;`);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'catalogos-ti', accion:'crear-sede', entidadId: String(ins.recordset[0].id), detalle:{ nombre }, ip:req.ip });
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, direccion: direccion || null, activa: true } });
+  } catch (e) {
+    console.error('Error creando sede:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateSede = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, direccion } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('direccion', sql.NVarChar, direccion || null)
+      .query(`UPDATE SEDES SET SEDE_NOMBRE=@nombre, SEDE_DIRECCION=@direccion WHERE SEDE_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando sede:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleSedeActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE SEDES SET SEDE_ACTIVA = 1 - SEDE_ACTIVA WHERE SEDE_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de sede:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Categorías / Subcategorías (árbol) ── */
+exports.getCategorias = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const cats = await pool.request().query(`
+      SELECT CAT_ID as id, CAT_NOMBRE as nombre, CAT_ORDEN as orden, CAT_ACTIVA as activa
+      FROM TICKET_CATEGORIAS ${incluirInactivas ? '' : 'WHERE CAT_ACTIVA = 1'}
+      ORDER BY CAT_ORDEN, CAT_NOMBRE`);
+    const subs = await pool.request().query(`
+      SELECT SUBCAT_ID as id, SUBCAT_CAT_ID as categoriaId, SUBCAT_NOMBRE as nombre, SUBCAT_ORDEN as orden, SUBCAT_ACTIVA as activa
+      FROM TICKET_SUBCATEGORIAS ${incluirInactivas ? '' : 'WHERE SUBCAT_ACTIVA = 1'}
+      ORDER BY SUBCAT_ORDEN, SUBCAT_NOMBRE`);
+
+    const arbol = cats.recordset.map((c) => ({
+      ...c,
+      subcategorias: subs.recordset.filter((s) => s.categoriaId === c.id).map(({ categoriaId, ...rest }) => rest),
+    }));
+    res.json({ success: true, data: arbol });
+  } catch (e) {
+    console.error('Error listando categorías:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createCategoria = async (req, res) => {
+  try {
+    const { nombre, orden } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_CATEGORIAS (CAT_NOMBRE, CAT_ORDEN) VALUES (@nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, orden: orden || 0, activa: true, subcategorias: [] } });
+  } catch (e) {
+    console.error('Error creando categoría:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateCategoria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_CATEGORIAS SET CAT_NOMBRE=@nombre, CAT_ORDEN=@orden WHERE CAT_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando categoría:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleCategoriaActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_CATEGORIAS SET CAT_ACTIVA = 1 - CAT_ACTIVA WHERE CAT_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de categoría:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createSubcategoria = async (req, res) => {
+  try {
+    const { categoriaId, nombre, orden } = req.body;
+    if (!categoriaId || !nombre) return res.status(400).json({ success: false, message: 'categoriaId y nombre son requeridos' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('catId', sql.Int, categoriaId)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_SUBCATEGORIAS (SUBCAT_CAT_ID, SUBCAT_NOMBRE, SUBCAT_ORDEN) VALUES (@catId, @nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando subcategoría:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateSubcategoria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_SUBCATEGORIAS SET SUBCAT_NOMBRE=@nombre, SUBCAT_ORDEN=@orden WHERE SUBCAT_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando subcategoría:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleSubcategoriaActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_SUBCATEGORIAS SET SUBCAT_ACTIVA = 1 - SUBCAT_ACTIVA WHERE SUBCAT_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de subcategoría:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Especialidades ── */
+exports.getEspecialidades = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const rs = await pool.request().query(`
+      SELECT ESP_ID as id, ESP_NOMBRE as nombre, ESP_ACTIVA as activa
+      FROM TI_ESPECIALIDADES ${incluirInactivas ? '' : 'WHERE ESP_ACTIVA = 1'}
+      ORDER BY ESP_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando especialidades:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createEspecialidad = async (req, res) => {
+  try {
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request().input('nombre', sql.NVarChar, nombre)
+      .query(`INSERT INTO TI_ESPECIALIDADES (ESP_NOMBRE) VALUES (@nombre); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, activa: true } });
+  } catch (e) {
+    console.error('Error creando especialidad:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateEspecialidad = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).input('nombre', sql.NVarChar, nombre)
+      .query(`UPDATE TI_ESPECIALIDADES SET ESP_NOMBRE=@nombre WHERE ESP_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando especialidad:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleEspecialidadActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TI_ESPECIALIDADES SET ESP_ACTIVA = 1 - ESP_ACTIVA WHERE ESP_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de especialidad:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Integraciones (placeholder clave/valor, sin cifrado — ver comentario en schemaService.js) ── */
+exports.getIntegraciones = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`SELECT INT_ID as id, INT_CLAVE as clave, INT_VALOR as valor, INT_FECHA_ACTUALIZACION as fechaActualizacion FROM TI_INTEGRACIONES_CONFIG ORDER BY INT_CLAVE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando integraciones:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.setIntegracion = async (req, res) => {
+  try {
+    const { clave, valor } = req.body;
+    if (!clave) return res.status(400).json({ success: false, message: 'clave requerida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('clave', sql.NVarChar, clave)
+      .input('valor', sql.NVarChar, valor || null)
+      .query(`
+        MERGE dbo.TI_INTEGRACIONES_CONFIG AS target
+        USING (SELECT @clave AS clave) AS src
+        ON target.INT_CLAVE = src.clave
+        WHEN MATCHED THEN UPDATE SET INT_VALOR = @valor, INT_FECHA_ACTUALIZACION = GETDATE()
+        WHEN NOT MATCHED THEN INSERT (INT_CLAVE, INT_VALOR) VALUES (@clave, @valor);
+      `);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'catalogos-ti', accion:'set-integracion', entidadId: clave, detalle:{ clave }, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error guardando integración:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.deleteIntegracion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`DELETE FROM TI_INTEGRACIONES_CONFIG WHERE INT_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error eliminando integración:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};

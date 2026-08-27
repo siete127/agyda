@@ -711,10 +711,31 @@ export const CONFIG_TREE: ConfigNode[] = [
   },
   {
     key: 'ti', label: 'TI',
-    description: 'Mesa de servicio, inventario tecnológico y gestión de cambios',
+    description: 'Soporte TI, mesa de servicio, técnicos y reglas de asignación',
     children: [
+      // ── Soporte TI (módulo funcional — Fases 7/8/9) ──
+      { key: 'ti-general',          label: 'General',                 screen: 'ti-general' },
+      { key: 'ti-mesa-servicio',    label: 'Mesa de Servicio',        screen: 'ti-mesa-servicio' },
+      { key: 'ti-categorias',       label: 'Categorías y subcategorías', screen: 'ti-categorias' },
+      { key: 'ti-tecnicos',         label: 'Técnicos',                screen: 'ti-tecnicos' },
+      { key: 'ti-catalogos',        label: 'Sedes y activos',         screen: 'ti-catalogos' },
+      { key: 'ti-grupos-soporte',   label: 'Grupos de soporte',       screen: 'ti-grupos-soporte' },
+      { key: 'ti-reglas',           label: 'Reglas de asignación',    screen: 'ti-reglas' },
+      { key: 'ti-sla',              label: 'SLA',                     screen: 'ti-sla' },
+      { key: 'ti-escalamientos',    label: 'Escalamientos',           screen: 'ti-escalamientos' },
+      { key: 'ti-automatizaciones', label: 'Automatizaciones',        screen: 'ti-automatizaciones' },
+      { key: 'ti-campania-soporte', label: 'Campaña de chat Soporte TI', screen: 'ti-campania-soporte' },
+      { key: 'ti-chat-vivo',        label: 'Chat en vivo',            screen: 'ti-chat-vivo' },
+      { key: 'ti-chatbot',          label: 'Chatbot de diagnóstico',  screen: 'ti-chatbot' },
+      { key: 'ti-kb',               label: 'Base de conocimiento',    screen: 'ti-kb' },
+      { key: 'ti-encuestas',        label: 'Encuestas de satisfacción', screen: 'ti-encuestas' },
+      { key: 'ti-plantillas',       label: 'Plantillas',              screen: 'ti-plantillas' },
+      { key: 'ti-notificaciones',   label: 'Notificaciones de TI',    screen: 'ti-notificaciones' },
+      { key: 'ti-seguridad',        label: 'Seguridad y accesos',     screen: 'ti-seguridad' },
+      { key: 'ti-integraciones',    label: 'Integraciones',           screen: 'ti-integraciones' },
+      // ── Catálogos avanzados (placeholders — mapa a futuro) ──
       {
-        key: 'mesa-servicio', label: 'Mesa de Servicio',
+        key: 'mesa-servicio', label: 'Mesa de Servicio (avanzado)',
         children: [
           { key: 'tipos-ticket', label: 'Tipos de ticket' },
           { key: 'categorias-ticket', label: 'Categorías' },

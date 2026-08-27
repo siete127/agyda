@@ -2,8 +2,13 @@ const express = require('express');
 const router = express.Router();
 const livechatController = require('../controllers/livechatController');
 const livechatCampanasController = require('../controllers/livechatCampanasController');
+const livechatInternoController = require('../controllers/livechatInternoController');
 const { authenticateToken, authenticateTokenOptional } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
+
+// Autenticado — cualquier empleado logueado inicia un chat de Soporte TI con
+// su identidad real (a diferencia del widget público, anónimo).
+router.post('/interno/conversaciones', authenticateToken, livechatInternoController.iniciarConversacionInterna);
 
 // Público — lo usa el chatbot de la página web al escalar a un agente humano.
 router.post('/conversaciones', livechatController.iniciarConversacion);

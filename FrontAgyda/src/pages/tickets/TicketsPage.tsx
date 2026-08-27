@@ -4,16 +4,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, RefreshCw, MessageCircle,
   Send, LifeBuoy, Clock, CheckCircle2, CircleDot, UserCheck, Star,
-  LayoutList, Table2, BarChart2, Timer,
+  LayoutList, Table2, BarChart2, Timer, Paperclip, Trash2, Users, KeyRound,
 } from 'lucide-react'
 import { ticketsService } from '@/services/tickets.service'
+import { kbService } from '@/services/kb.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import {
   type Ticket, type TicketEstado, type TicketPrioridad,
-  PRIORIDAD_COLORS, ESTADO_COLORS, ESTADO_LABELS, SLA_COLORS, SLA_LABELS,
+  type TicketClasificacion, type TicketImpacto, type TicketUrgencia, type TicketMotivoEspera,
+  PRIORIDAD_COLORS, PRIORIDAD_LABELS, ESTADO_COLORS, ESTADO_LABELS, SLA_COLORS, SLA_LABELS,
+  CLASIFICACION_LABELS, MOTIVO_ESPERA_LABELS, calcularPrioridad,
 } from '@/types/ticket.types'
+import { catalogosTiService } from '@/services/catalogosTi.service'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -35,7 +39,15 @@ function SkeletonRow() {
 /* ── Formulario nuevo ticket ── */
 function NuevoTicketModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
-  const [form, setForm] = useState({ titulo: '', descripcion: '', prioridad: 'media', area: 'TI', asignadoA: '' })
+  const [form, setForm] = useState({
+    titulo: '', descripcion: '', area: 'TI', asignadoA: '',
+    clasificacion: '' as TicketClasificacion | '',
+    categoria: '', subcategoria: '',
+    sede: '', departamento: '', activoAfectado: '',
+    impacto: '' as TicketImpacto | '', urgencia: '' as TicketUrgencia | '',
+  })
+
+  const prioridadCalculada = calcularPrioridad(form.impacto, form.urgencia)
 
   const { data: staff = [], isLoading: loadingStaff } = useQuery({
     queryKey: ['staff-ti'],
@@ -43,13 +55,32 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     staleTime: 60_000,
   })
 
+  const { data: categorias = [] } = useQuery({
+    queryKey: ['catalogos-ti-categorias'],
+    queryFn: () => catalogosTiService.getCategorias(),
+    staleTime: 5 * 60_000,
+  })
+  const { data: sedes = [] } = useQuery({
+    queryKey: ['catalogos-ti-sedes'],
+    queryFn: () => catalogosTiService.getSedes(),
+    staleTime: 5 * 60_000,
+  })
+  const subcategoriasDisponibles = categorias.find((c) => c.nombre === form.categoria)?.subcategorias ?? []
+
   const crear = useMutation({
     mutationFn: () => ticketsService.create({
       titulo: form.titulo,
       descripcion: form.descripcion,
-      prioridad: form.prioridad,
       area: form.area,
       asignadoA: form.asignadoA ? Number(form.asignadoA) : undefined,
+      clasificacion: form.clasificacion || undefined,
+      categoria: form.categoria || undefined,
+      subcategoria: form.subcategoria || undefined,
+      sede: form.sede || undefined,
+      departamento: form.departamento || undefined,
+      activoAfectado: form.activoAfectado || undefined,
+      impacto: form.impacto || undefined,
+      urgencia: form.urgencia || undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
@@ -82,13 +113,15 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
             placeholder="Detalla el problema o solicitud..."
           />
         </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Prioridad</label>
-            <select value={form.prioridad} onChange={(e) => setForm({ ...form, prioridad: e.target.value })} className="field">
-              <option value="baja">Baja</option>
-              <option value="media">Media</option>
-              <option value="alta">Alta</option>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Clasificación</label>
+            <select value={form.clasificacion} onChange={(e) => setForm({ ...form, clasificacion: e.target.value as TicketClasificacion })} className="field">
+              <option value="">Seleccionar...</option>
+              {Object.entries(CLASIFICACION_LABELS).map(([k, label]) => (
+                <option key={k} value={k}>{label}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -99,6 +132,78 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Categoría</label>
+            <select
+              value={form.categoria}
+              onChange={(e) => setForm({ ...form, categoria: e.target.value, subcategoria: '' })}
+              className="field"
+            >
+              <option value="">Seleccionar...</option>
+              {categorias.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Subcategoría</label>
+            <select
+              value={form.subcategoria}
+              onChange={(e) => setForm({ ...form, subcategoria: e.target.value })}
+              className="field"
+              disabled={!form.categoria}
+            >
+              <option value="">{form.categoria ? 'Seleccionar...' : 'Elegí una categoría primero'}</option>
+              {subcategoriasDisponibles.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Sede</label>
+            <select value={form.sede} onChange={(e) => setForm({ ...form, sede: e.target.value })} className="field">
+              <option value="">Seleccionar...</option>
+              {sedes.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Departamento</label>
+            <input value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} className="field" placeholder="Opcional" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Activo afectado</label>
+            <input value={form.activoAfectado} onChange={(e) => setForm({ ...form, activoAfectado: e.target.value })} className="field" placeholder="Opcional" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Impacto</label>
+            <select value={form.impacto} onChange={(e) => setForm({ ...form, impacto: e.target.value as TicketImpacto })} className="field">
+              <option value="">Seleccionar...</option>
+              <option value="BAJO">Bajo</option>
+              <option value="MEDIO">Medio</option>
+              <option value="ALTO">Alto</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Urgencia</label>
+            <select value={form.urgencia} onChange={(e) => setForm({ ...form, urgencia: e.target.value as TicketUrgencia })} className="field">
+              <option value="">Seleccionar...</option>
+              <option value="BAJA">Baja</option>
+              <option value="MEDIA">Media</option>
+              <option value="ALTA">Alta</option>
+            </select>
+          </div>
+        </div>
+
+        {prioridadCalculada && (
+          <div className={clsx('flex items-center gap-2 rounded-xl border px-3 py-2 text-sm', PRIORIDAD_COLORS[prioridadCalculada])}>
+            <span className="font-semibold">Prioridad resultante:</span>
+            <span>{PRIORIDAD_LABELS[prioridadCalculada]}</span>
+          </div>
+        )}
 
         {/* Asignar a */}
         <div>
@@ -175,6 +280,9 @@ function PanelSatisfaccion({ ticket }: { ticket: Ticket }) {
     onError: () => toast.error('Error al enviar calificación'),
   })
 
+  /* Solo se puede calificar después de confirmar que la solución funcionó */
+  if (ticket.validadoUsuario !== true) return null
+
   /* Ya calificado */
   if (ticket.rating !== null) {
     return (
@@ -240,6 +348,190 @@ function PanelSatisfaccion({ ticket }: { ticket: Ticket }) {
           </Button>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ── Panel de validación de solución (solicitante) ── */
+function PanelValidacion({ ticket }: { ticket: Ticket }) {
+  const qc = useQueryClient()
+  const [rechazando, setRechazando] = useState(false)
+  const [comentario, setComentario] = useState('')
+
+  const validar = useMutation({
+    mutationFn: (confirma: boolean) => ticketsService.validar(ticket.id, confirma, comentario || undefined),
+    onSuccess: (_data, confirma) => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      toast.success(confirma ? '¡Gracias por confirmar!' : 'Ticket reabierto, el técnico fue notificado')
+    },
+    onError: () => toast.error('Error al registrar tu respuesta'),
+  })
+
+  return (
+    <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 space-y-3">
+      <p className="text-[0.75rem] font-semibold text-blue-800">¿El servicio ya funciona correctamente?</p>
+      {(ticket.diagnostico || ticket.accionesRealizadas) && (
+        <div className="rounded-lg bg-white/60 px-3 py-2 text-[0.72rem] text-ink-secondary space-y-1">
+          {ticket.diagnostico && <p><span className="font-semibold">Diagnóstico:</span> {ticket.diagnostico}</p>}
+          {ticket.accionesRealizadas && <p><span className="font-semibold">Acciones:</span> {ticket.accionesRealizadas}</p>}
+        </div>
+      )}
+      {!rechazando ? (
+        <div className="flex gap-2">
+          <Button size="sm" isLoading={validar.isPending} onClick={() => validar.mutate(true)}>Sí, funciona</Button>
+          <Button size="sm" variant="ghost" onClick={() => setRechazando(true)}>No, sigue el problema</Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <input
+            value={comentario}
+            onChange={(e) => setComentario(e.target.value)}
+            className="field py-2 text-sm"
+            placeholder="Cuéntanos qué sigue fallando..."
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button size="sm" variant="danger" isLoading={validar.isPending} onClick={() => validar.mutate(false)}>Reabrir ticket</Button>
+            <Button size="sm" variant="ghost" onClick={() => setRechazando(false)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Panel de resolución estructurada (TI) ── */
+function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void }) {
+  const qc = useQueryClient()
+  const [diagnostico, setDiagnostico] = useState('')
+  const [accionesRealizadas, setAccionesRealizadas] = useState('')
+  const [causaRaiz, setCausaRaiz] = useState('')
+  const [codigoCierre, setCodigoCierre] = useState<string>('')
+  const [buscarKb, setBuscarKb] = useState('')
+  const [articuloKbId, setArticuloKbId] = useState<number | null>(null)
+
+  const { data: codigos = [] } = useQuery({
+    queryKey: ['ticket-codigos-cierre'],
+    queryFn: () => ticketsService.getCodigosCierre(),
+    staleTime: 5 * 60_000,
+  })
+
+  const { data: articulosKb = [] } = useQuery({
+    queryKey: ['kb-articulos', buscarKb, ticket.categoria],
+    queryFn: () => kbService.getArticulos({ q: buscarKb || undefined, categoria: ticket.categoria || undefined }),
+    staleTime: 30_000,
+  })
+
+  const resolver = useMutation({
+    mutationFn: () => ticketsService.resolver(ticket.id, {
+      diagnostico, accionesRealizadas, causaRaiz: causaRaiz || undefined,
+      codigoCierre: codigoCierre || undefined, articuloKbId: articuloKbId ?? undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      toast.success('Ticket marcado como resuelto')
+      onDone()
+    },
+    onError: () => toast.error('Error al resolver el ticket'),
+  })
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 space-y-3">
+      <p className="text-[0.72rem] font-semibold text-emerald-800 uppercase tracking-wide">Marcar como resuelto</p>
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Diagnóstico</label>
+        <textarea value={diagnostico} onChange={(e) => setDiagnostico(e.target.value)} rows={2} className="field resize-none text-sm" placeholder="¿Cuál era el problema?" />
+      </div>
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Acciones realizadas</label>
+        <textarea value={accionesRealizadas} onChange={(e) => setAccionesRealizadas(e.target.value)} rows={2} className="field resize-none text-sm" placeholder="¿Qué se hizo para resolverlo?" />
+      </div>
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Causa raíz (opcional)</label>
+        <textarea value={causaRaiz} onChange={(e) => setCausaRaiz(e.target.value)} rows={2} className="field resize-none text-sm" placeholder="Causa raíz, si aplica" />
+      </div>
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Código de cierre</label>
+        <select value={codigoCierre} onChange={(e) => setCodigoCierre(e.target.value)} className="field text-sm">
+          <option value="">Seleccionar...</option>
+          {codigos.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Vincular artículo de base de conocimiento (opcional)</label>
+        <input
+          value={buscarKb}
+          onChange={(e) => setBuscarKb(e.target.value)}
+          className="field text-sm mb-1.5"
+          placeholder="Buscar artículo..."
+        />
+        {articulosKb.length > 0 && (
+          <div className="space-y-1 max-h-28 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-1.5">
+            {articulosKb.map((a) => (
+              <div
+                key={a.id}
+                onClick={() => setArticuloKbId(articuloKbId === a.id ? null : a.id)}
+                className={clsx(
+                  'cursor-pointer rounded-md px-2 py-1.5 text-[0.72rem] transition-colors',
+                  articuloKbId === a.id ? 'bg-emerald-100 text-emerald-800 font-semibold' : 'text-ink-secondary hover:bg-surface',
+                )}
+              >
+                {a.titulo}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <Button
+        size="sm"
+        isLoading={resolver.isPending}
+        disabled={!diagnostico.trim() || !accionesRealizadas.trim()}
+        onClick={() => resolver.mutate()}
+      >
+        Marcar como resuelto
+      </Button>
+    </div>
+  )
+}
+
+/* ── Panel de escalamiento N1→N2→N3 (TI/AD) ── */
+function PanelEscalar({ ticket, onDone }: { ticket: Ticket; onDone: () => void }) {
+  const qc = useQueryClient()
+  const [motivo, setMotivo] = useState('')
+  const siguienteNivel = Math.min(ticket.nivelActual + 1, 3)
+
+  const escalar = useMutation({
+    mutationFn: () => ticketsService.escalar(ticket.id, siguienteNivel, motivo || undefined),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      toast.success(`Ticket escalado a Nivel ${siguienteNivel}`)
+      onDone()
+    },
+    onError: () => toast.error('Error al escalar el ticket'),
+  })
+
+  if (ticket.nivelActual >= 3) {
+    return (
+      <div className="rounded-xl border border-surface-border bg-surface px-4 py-3 text-[0.72rem] text-ink-tertiary">
+        Este ticket ya está en el nivel máximo de soporte (N3).
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 space-y-3">
+      <p className="text-[0.72rem] font-semibold text-orange-800 uppercase tracking-wide">
+        Escalar de Nivel {ticket.nivelActual} a Nivel {siguienteNivel}
+      </p>
+      <input
+        value={motivo}
+        onChange={(e) => setMotivo(e.target.value)}
+        className="field py-2 text-sm"
+        placeholder="Motivo del escalamiento (opcional)"
+      />
+      <Button size="sm" isLoading={escalar.isPending} onClick={() => escalar.mutate()}>
+        Escalar a Nivel {siguienteNivel}
+      </Button>
     </div>
   )
 }
@@ -335,6 +627,11 @@ const HIST_CONFIG: Record<string, { label: string; color: string; dot: string }>
   estado:         { label: 'Estado cambiado a',     color: 'text-emerald-600', dot: 'bg-emerald-500' },
   resolucion:     { label: 'Nota de resolución',    color: 'text-green-700',   dot: 'bg-green-500'   },
   encuesta:       { label: 'Encuesta completada',   color: 'text-yellow-600',  dot: 'bg-yellow-400'  },
+  escalado:       { label: 'Escalado de nivel',     color: 'text-orange-600',  dot: 'bg-orange-500'  },
+  validado:       { label: 'Solución confirmada',   color: 'text-blue-600',    dot: 'bg-blue-500'    },
+  reabierto:      { label: 'Ticket reabierto',      color: 'text-red-600',     dot: 'bg-red-500'     },
+  en_espera:      { label: 'Puesto en espera',      color: 'text-amber-600',   dot: 'bg-amber-500'   },
+  salio_espera:   { label: 'Retomado',              color: 'text-emerald-600', dot: 'bg-emerald-500' },
 }
 
 /* ── Tarjeta de ticket (grid) ── */
@@ -389,13 +686,129 @@ function TicketCard({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) 
 }
 
 /* ── Modal de detalle de ticket ── */
+function fmtDuracionMinutos(min: number | null): string {
+  if (min === null || min === undefined) return '—'
+  if (min <= 0) return '0 min'
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const mm = min % 60
+  return mm > 0 ? `${h} h ${mm} min` : `${h} h`
+}
+
+/* ── Resumen de cierre (técnico, código, causa raíz, tiempos, SLA, calificación) ── */
+function ResumenCierre({ ticket }: { ticket: Ticket }) {
+  const fecha = ticket.fechaCierre ?? ticket.fechaResolucionPropuesta
+  const fechaFmt = fecha
+    ? new Date(fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null
+
+  return (
+    <div className="rounded-xl border border-surface-border bg-surface px-4 py-3 space-y-2">
+      <p className="text-[0.65rem] font-bold uppercase tracking-widest text-ink-tertiary">Resumen de cierre</p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[0.78rem]">
+        <div><span className="text-ink-tertiary">Técnico:</span> <span className="text-ink font-medium">{ticket.asignadoNombre ?? '—'}</span></div>
+        <div><span className="text-ink-tertiary">Fecha:</span> <span className="text-ink font-medium">{fechaFmt ?? '—'}</span></div>
+        <div><span className="text-ink-tertiary">Código de cierre:</span> <span className="text-ink font-medium">{ticket.codigoCierre ?? '—'}</span></div>
+        <div><span className="text-ink-tertiary">Tiempo total:</span> <span className="text-ink font-medium">{fmtDuracionMinutos(ticket.tiempoAtencionMinutos)}</span></div>
+      </div>
+      {ticket.causaRaiz && (
+        <div className="text-[0.78rem]"><span className="text-ink-tertiary">Causa raíz:</span> <span className="text-ink">{ticket.causaRaiz}</span></div>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+        {ticket.slaResolucion && (
+          <span className={clsx('chip text-[0.62rem]', SLA_COLORS[ticket.slaResolucion])}>
+            SLA resolución: {SLA_LABELS[ticket.slaResolucion]}
+          </span>
+        )}
+        {ticket.rating !== null && (
+          <span className="flex items-center gap-1 text-[0.72rem] text-ink-tertiary">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Star key={n} className={clsx('h-3 w-3', n <= ticket.rating! ? 'fill-yellow-400 text-yellow-400' : 'text-ink-tertiary')} />
+            ))}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Panel de evidencias (subir/ver/eliminar) ── */
+function PanelEvidencias({ ticket, isTI, userId }: { ticket: Ticket; isTI: boolean; userId: number | null }) {
+  const qc = useQueryClient()
+
+  const { data: historial = [] } = useQuery({
+    queryKey: ['ticket-historial', ticket.id],
+    queryFn: () => ticketsService.getHistorial(ticket.id),
+  })
+  const evidencias = historial.filter((h) => h.tipo === 'evidencia')
+
+  const subir = useMutation({
+    mutationFn: (file: File) => ticketsService.uploadEvidencia(ticket.id, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ticket-historial', ticket.id] })
+      toast.success('Evidencia subida')
+    },
+    onError: () => toast.error('Error al subir evidencia'),
+  })
+
+  const eliminar = useMutation({
+    mutationFn: (histId: number) => ticketsService.deleteEvidencia(ticket.id, histId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ticket-historial', ticket.id] })
+      toast.success('Evidencia eliminada')
+    },
+    onError: () => toast.error('Error al eliminar evidencia'),
+  })
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) subir.mutate(file)
+    e.target.value = ''
+  }
+
+  return (
+    <div className="rounded-xl border border-surface-border bg-surface px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-ink-tertiary">Evidencias</p>
+        {ticket.estado !== 'cerrado' && (
+          <label className="flex cursor-pointer items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-[0.68rem] font-semibold text-teal-700 hover:border-teal-400">
+            <Paperclip className="h-3 w-3" /> Adjuntar
+            <input type="file" className="hidden" onChange={handleFile} disabled={subir.isPending} />
+          </label>
+        )}
+      </div>
+      {evidencias.length === 0 ? (
+        <p className="text-[0.72rem] text-ink-tertiary italic">Sin evidencias adjuntas</p>
+      ) : (
+        <ul className="space-y-1">
+          {evidencias.map((ev) => (
+            <li key={ev.id} className="flex items-center justify-between gap-2 rounded-lg bg-white border border-surface-border px-2.5 py-1.5">
+              <a href={ev.detalle ?? '#'} target="_blank" rel="noreferrer" className="truncate text-[0.72rem] text-brand hover:underline">
+                {ev.detalle?.split('/').pop() ?? `Evidencia #${ev.id}`}
+              </a>
+              {(isTI || userId === ev.userId) && (
+                <button onClick={() => eliminar.mutate(ev.id)} className="text-ink-tertiary hover:text-red-600">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
   const [comentario, setComentario] = useState('')
   const [showTransferir, setShowTransferir] = useState(false)
+  const [showEscalar, setShowEscalar] = useState(false)
+  const [showResolver, setShowResolver] = useState(false)
+  const [showEspera, setShowEspera] = useState(false)
   const [tab, setTab] = useState<'comentarios' | 'historial'>('comentarios')
   const qc = useQueryClient()
   const user = useAuthStore((s) => s.user)
-  const isTI  = ['AD', 'TI'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
+  const isTI  = ['AD', 'TI', 'ST'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
   const esSolicitante = user?.id === ticket.solicitanteId
 
   const { data: comentarios = [], isLoading: loadingComents } = useQuery({
@@ -426,6 +839,25 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
     },
   })
 
+  const ponerEnEspera = useMutation({
+    mutationFn: (motivo: TicketMotivoEspera) => ticketsService.ponerEnEspera(ticket.id, motivo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      toast.success('Ticket puesto en espera')
+      setShowEspera(false)
+    },
+    onError: () => toast.error('Error al poner el ticket en espera'),
+  })
+
+  const salirDeEspera = useMutation({
+    mutationFn: () => ticketsService.salirDeEspera(ticket.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      toast.success('Ticket retomado')
+    },
+    onError: () => toast.error('Error al salir de espera'),
+  })
+
   const fmtFecha = (iso: string | null) => {
     if (!iso) return null
     const d = new Date(iso)
@@ -447,6 +879,7 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
             {ticket.prioridad}
           </span>
           <span className="chip bg-surface text-ink-secondary text-[0.65rem]">{ticket.area}</span>
+          <span className="chip bg-surface text-ink-secondary text-[0.65rem]">N{ticket.nivelActual}</span>
           {ticket.slaRespuesta && (
             <span className={clsx('chip text-[0.65rem]', SLA_COLORS[ticket.slaRespuesta])}>
               Respuesta: {SLA_LABELS[ticket.slaRespuesta]}
@@ -477,11 +910,29 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
           </p>
         </div>
 
+        {/* Resumen de cierre — visible cuando el ticket ya fue resuelto o cerrado */}
+        {['resuelto', 'cerrado'].includes(ticket.estado) && (
+          <ResumenCierre ticket={ticket} />
+        )}
+
+        {/* Evidencias */}
+        <PanelEvidencias ticket={ticket} isTI={isTI} userId={user?.id ?? null} />
+
+        {/* Ticket en espera — TI puede retomarlo (vuelve a en_proceso, se acumula el tiempo pausado) */}
+        {isTI && ticket.estado === 'en_espera' && (
+          <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <span className="text-[0.78rem] text-amber-800">
+              {ticket.motivoEspera ? MOTIVO_ESPERA_LABELS[ticket.motivoEspera] : 'En espera'}
+            </span>
+            <Button size="sm" isLoading={salirDeEspera.isPending} onClick={() => salirDeEspera.mutate()}>Retomar</Button>
+          </div>
+        )}
+
         {/* Cambiar estado — TI */}
-        {isTI && ticket.estado !== 'cerrado' && (
+        {isTI && !['cerrado', 'resuelto', 'en_espera'].includes(ticket.estado) && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[0.68rem] font-semibold text-ink-tertiary uppercase tracking-wide mr-1">Mover a:</span>
-            {(['asignado', 'en_proceso', 'resuelto', 'cerrado'] as TicketEstado[])
+            {(['asignado', 'en_proceso'] as TicketEstado[])
               .filter((e) => e !== ticket.estado)
               .map((e) => (
                 <button
@@ -495,6 +946,47 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
                   {ESTADO_LABELS[e]}
                 </button>
               ))}
+
+            {/* Botón resolver */}
+            <button
+              onClick={() => setShowResolver(!showResolver)}
+              className={clsx(
+                'flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.68rem] font-semibold transition-colors',
+                showResolver
+                  ? 'border-emerald-400 bg-emerald-100 text-emerald-700'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:border-emerald-400',
+              )}
+            >
+              <CheckCircle2 className="h-3 w-3" /> Resolver
+            </button>
+
+            {/* Botón escalar */}
+            {ticket.nivelActual < 3 && (
+              <button
+                onClick={() => setShowEscalar(!showEscalar)}
+                className={clsx(
+                  'flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.68rem] font-semibold transition-colors',
+                  showEscalar
+                    ? 'border-orange-400 bg-orange-100 text-orange-700'
+                    : 'border-orange-200 bg-orange-50 text-orange-600 hover:border-orange-400',
+                )}
+              >
+                Escalar
+              </button>
+            )}
+
+            {/* Botón poner en espera */}
+            <button
+              onClick={() => setShowEspera(!showEspera)}
+              className={clsx(
+                'flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.68rem] font-semibold transition-colors',
+                showEspera
+                  ? 'border-amber-400 bg-amber-100 text-amber-700'
+                  : 'border-amber-200 bg-amber-50 text-amber-600 hover:border-amber-400',
+              )}
+            >
+              En espera
+            </button>
 
             {/* Botón transferir */}
             <button
@@ -511,13 +1003,60 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
           </div>
         )}
 
+        {/* Panel resolver */}
+        {showResolver && isTI && (
+          <PanelResolver ticket={ticket} onDone={() => setShowResolver(false)} />
+        )}
+
+        {/* Panel escalar */}
+        {showEscalar && isTI && (
+          <PanelEscalar ticket={ticket} onDone={() => setShowEscalar(false)} />
+        )}
+
         {/* Panel transferir */}
         {showTransferir && isTI && (
           <PanelTransferir ticket={ticket} onDone={() => setShowTransferir(false)} />
         )}
 
-        {/* Calificación — solicitante, ticket resuelto */}
-        {esSolicitante && (ticket.estado === 'resuelto' || ticket.estado === 'cerrado') && (
+        {/* Panel poner en espera */}
+        {showEspera && isTI && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+            <p className="text-[0.72rem] font-semibold text-amber-800 uppercase tracking-wide">¿Por qué motivo?</p>
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.keys(MOTIVO_ESPERA_LABELS) as TicketMotivoEspera[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => ponerEnEspera.mutate(m)}
+                  disabled={ponerEnEspera.isPending}
+                  className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[0.7rem] font-semibold text-amber-700 hover:border-amber-400 disabled:opacity-50"
+                >
+                  {MOTIVO_ESPERA_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Reabrir — TI puede retomar un ticket reabierto por el solicitante */}
+        {isTI && ticket.estado === 'reabierto' && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[0.68rem] font-semibold text-ink-tertiary uppercase tracking-wide mr-1">Retomar:</span>
+            <button
+              onClick={() => cambiarEstado.mutate('en_proceso')}
+              className={clsx('rounded-full border px-2.5 py-0.5 text-[0.68rem] font-semibold', ESTADO_COLORS['en_proceso'])}
+            >
+              En proceso
+            </button>
+          </div>
+        )}
+
+        {/* Validación de la solución — solicitante, ticket resuelto sin validar */}
+        {esSolicitante && ticket.estado === 'resuelto' && ticket.validadoUsuario === null && (
+          <PanelValidacion ticket={ticket} />
+        )}
+
+        {/* Calificación — solicitante, después de confirmar que la solución funcionó */}
+        {esSolicitante && ticket.validadoUsuario === true && (
           <PanelSatisfaccion ticket={ticket} />
         )}
 
@@ -944,14 +1483,84 @@ function TablaTickets({ tickets }: { tickets: Ticket[] }) {
 }
 
 /* ── Página principal ── */
+/* ── Administración de API keys para creación pública de tickets (solo AD) ── */
+function PanelApiKeys({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
+  const [nombre, setNombre] = useState('')
+  const [nuevaKey, setNuevaKey] = useState<string | null>(null)
+
+  const { data: keys = [], isLoading } = useQuery({
+    queryKey: ['tickets-api-keys'],
+    queryFn: () => ticketsService.getApiKeys(),
+  })
+
+  const crear = useMutation({
+    mutationFn: () => ticketsService.createApiKey(nombre),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['tickets-api-keys'] })
+      setNuevaKey(data.key)
+      setNombre('')
+      toast.success('API key creada')
+    },
+    onError: () => toast.error('Error al crear la API key'),
+  })
+
+  const revocar = useMutation({
+    mutationFn: (id: number) => ticketsService.revokeApiKey(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets-api-keys'] })
+      toast.success('API key revocada')
+    },
+  })
+
+  return (
+    <Modal isOpen onClose={onClose} title="API keys — creación pública de tickets" size="md">
+      <div className="space-y-4">
+        {nuevaKey && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
+            <p className="text-[0.72rem] font-semibold text-amber-800">Guarda esta key ahora — no se puede volver a mostrar</p>
+            <code className="block break-all rounded-lg bg-white px-2 py-1.5 text-[0.75rem] text-ink">{nuevaKey}</code>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="field" placeholder="Nombre del sistema/integración" />
+          <Button isLoading={crear.isPending} disabled={!nombre.trim()} onClick={() => crear.mutate()}>Crear</Button>
+        </div>
+        {isLoading ? (
+          <p className="text-sm text-ink-tertiary">Cargando...</p>
+        ) : (
+          <div className="space-y-1.5">
+            {keys.map((k) => (
+              <div key={k.id} className="flex items-center justify-between rounded-lg border border-surface-border px-3 py-2 text-[0.78rem]">
+                <div>
+                  <p className="font-medium text-ink">{k.nombre}</p>
+                  <p className="text-[0.65rem] text-ink-tertiary">
+                    {k.activa ? 'Activa' : 'Revocada'} · último uso: {k.ultimoUso ? new Date(k.ultimoUso).toLocaleDateString('es-MX') : 'nunca'}
+                  </p>
+                </div>
+                {k.activa && (
+                  <Button size="sm" variant="ghost" onClick={() => revocar.mutate(k.id)}>Revocar</Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 export function TicketsPage() {
   const [searchParams] = useSearchParams()
   const autoOpenId = searchParams.get('id') ? Number(searchParams.get('id')) : null
   const [search, setSearch] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<TicketEstado | 'todos'>('abierto')
   const [showNuevo, setShowNuevo] = useState(false)
+  const [showApiKeys, setShowApiKeys] = useState(false)
   const [vista, setVista] = useState<'lista' | 'tabla' | 'productividad'>('lista')
   const [selected, setSelected] = useState<Ticket | null>(null)
+  const currentUser = useAuthStore((s) => s.user)
+  const esAD = currentUser?.tipoUsuario?.toUpperCase() === 'AD'
 
   const { data: tickets = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['tickets'],
@@ -1043,12 +1652,30 @@ export function TicketsPage() {
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               <Link
-                to="/tickets/sla"
+                to="/configuracion?tab=sla"
                 title="Configurar SLA"
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
               >
                 <Timer className="h-3.5 w-3.5" />
               </Link>
+              {esAD && (
+                <Link
+                  to="/configuracion?tab=tecnicos"
+                  title="Administrar técnicos"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {esAD && (
+                <button
+                  onClick={() => setShowApiKeys(true)}
+                  title="API keys de creación pública"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                </button>
+              )}
               <Button
                 onClick={() => setShowNuevo(true)}
                 className="bg-white !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3"
@@ -1071,7 +1698,7 @@ export function TicketsPage() {
             />
           </div>
           <div className="flex items-center gap-1 overflow-x-auto">
-            {(['todos', 'abierto', 'asignado', 'en_proceso', 'resuelto', 'cerrado'] as const).map((e) => (
+            {(['todos', 'abierto', 'asignado', 'en_proceso', 'en_espera', 'resuelto', 'reabierto', 'cerrado'] as const).map((e) => (
               <button
                 key={e}
                 onClick={() => setFiltroEstado(e)}
@@ -1158,6 +1785,7 @@ export function TicketsPage() {
       )}
 
       {showNuevo && <NuevoTicketModal onClose={() => setShowNuevo(false)} />}
+      {showApiKeys && <PanelApiKeys onClose={() => setShowApiKeys(false)} />}
       {activeTicket && (
         <TicketDetalleModal
           ticket={tickets.find((t) => t.id === activeTicket.id) ?? activeTicket}

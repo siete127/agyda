@@ -28,7 +28,7 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 // Páginas lazy — cada una genera su propio chunk
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
-const TicketsSlaPage  = lz(() => import('@/pages/tickets/TicketsSlaPage'),     'TicketsSlaPage')
+const KbPage          = lz(() => import('@/pages/kb/KbPage'),                  'KbPage')
 const NoticiasPage    = lz(() => import('@/pages/noticias/NoticiasPage'),      'NoticiasPage')
 const ProyectosPage   = lz(() => import('@/pages/proyectos/ProyectosPage'),    'ProyectosPage')
 const PerfilPage      = lz(() => import('@/pages/perfil/PerfilPage'),          'PerfilPage')
@@ -202,7 +202,7 @@ export const router = createBrowserRouter([
 
           // Rutas protegidas por módulo
           { element: <ModuleRoute moduleKey="tickets" />,             children: [{ path: '/tickets',          element: wrap(<TicketsPage />) }] },
-          { element: <ModuleRoute moduleKey="tickets" />,             children: [{ path: '/tickets/sla',      element: wrap(<TicketsSlaPage />) }] },
+          { element: <ModuleRoute moduleKey="tickets" />,             children: [{ path: '/kb',               element: wrap(<KbPage />) }] },
           { element: <ModuleRoute moduleKey="noticias" />,            children: [{ path: '/noticias',         element: wrap(<NoticiasPage />) }] },
           { element: <ModuleRoute moduleKey="mensajeria" />,          children: [{ path: '/mensajeria',       element: wrap(<MensajeriaPage />) }] },
           { element: <ModuleRoute moduleKey="vacaciones" />,          children: [{ path: '/vacaciones',       element: wrap(<VacacionesPage />) }] },

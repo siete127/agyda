@@ -14,6 +14,26 @@ import { MensajeriaConfigTab } from './MensajeriaConfigTab'
 import { UsuariosTab } from './UsuariosTab'
 import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
+// ── Secciones de Configuración > Tecnología/TI (módulo de Soporte TI) ──
+import { GeneralTab } from './tecnologia/GeneralTab'
+import { MesaServicioTab } from './tecnologia/MesaServicioTab'
+import { CategoriasTab } from './tecnologia/CategoriasTab'
+import { TecnicosTab } from './tecnologia/TecnicosTab'
+import { CatalogosTab } from './tecnologia/CatalogosTab'
+import { NotificacionesTecTab } from './tecnologia/NotificacionesTecTab'
+import { GruposSoporteTab } from './tecnologia/GruposSoporteTab'
+import { SlaTab } from './tecnologia/SlaTab'
+import { CampaniaSoporteTITab } from './tecnologia/CampaniaSoporteTITab'
+import { ChatEnVivoTab } from './tecnologia/ChatEnVivoTab'
+import { ChatbotConfigTab } from './tecnologia/ChatbotConfigTab'
+import { ReglasNegocioTab } from './tecnologia/ReglasNegocioTab'
+import { EscalamientosTab } from './tecnologia/EscalamientosTab'
+import { AutomatizacionesTab } from './tecnologia/AutomatizacionesTab'
+import { KbConfigTab } from './tecnologia/KbConfigTab'
+import { EncuestasTab } from './tecnologia/EncuestasTab'
+import { PlantillasTab } from './tecnologia/PlantillasTab'
+import { SeguridadTab } from './tecnologia/SeguridadTab'
+import { IntegracionesTab } from './tecnologia/IntegracionesTab'
 
 const SUPER_ADMIN_EMPRESAS_IDS = new Set([1, 96, 64])
 
@@ -28,6 +48,26 @@ const SCREENS: Record<string, ComponentType> = {
   'webphone-credenciales': WebphoneCredencialesTab,
   notificaciones: NotificacionesCorreoTab,
   mensajeria: MensajeriaConfigTab,
+  // ── Tecnología/TI ──
+  'ti-general': GeneralTab,
+  'ti-mesa-servicio': MesaServicioTab,
+  'ti-categorias': CategoriasTab,
+  'ti-tecnicos': TecnicosTab,
+  'ti-catalogos': CatalogosTab,
+  'ti-notificaciones': NotificacionesTecTab,
+  'ti-grupos-soporte': GruposSoporteTab,
+  'ti-sla': SlaTab,
+  'ti-campania-soporte': CampaniaSoporteTITab,
+  'ti-chat-vivo': ChatEnVivoTab,
+  'ti-chatbot': ChatbotConfigTab,
+  'ti-reglas': ReglasNegocioTab,
+  'ti-escalamientos': EscalamientosTab,
+  'ti-automatizaciones': AutomatizacionesTab,
+  'ti-kb': KbConfigTab,
+  'ti-encuestas': EncuestasTab,
+  'ti-plantillas': PlantillasTab,
+  'ti-seguridad': SeguridadTab,
+  'ti-integraciones': IntegracionesTab,
 }
 
 function findPath(nodes: ConfigNode[], key: string, trail: ConfigNode[] = []): ConfigNode[] | null {
@@ -40,18 +80,6 @@ function findPath(nodes: ConfigNode[], key: string, trail: ConfigNode[] = []): C
     }
   }
   return null
-}
-
-function matchesSearch(node: ConfigNode, q: string): boolean {
-  if (node.label.toLowerCase().includes(q)) return true
-  return node.children?.some((c) => matchesSearch(c, q)) ?? false
-}
-
-function filterTree(nodes: ConfigNode[], q: string): ConfigNode[] {
-  if (!q) return nodes
-  return nodes
-    .filter((n) => matchesSearch(n, q))
-    .map((n) => (n.children ? { ...n, children: filterTree(n.children, q) } : n))
 }
 
 // Todos los resultados hoja que matchean la búsqueda, con su ruta completa —
@@ -85,7 +113,6 @@ export function ConfiguracionPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const q = search.trim().toLowerCase()
-  const displayedTree = useMemo(() => filterTree(tree, q), [tree, q])
   const results = useMemo(() => (q ? searchResults(tree, q) : []), [tree, q])
 
   const category = activeCategory ? CONFIG_NODE_INDEX[activeCategory] : null
