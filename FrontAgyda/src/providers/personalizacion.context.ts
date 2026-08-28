@@ -10,6 +10,10 @@ export const DEFAULT_BRANDING: Branding = {
   faviconId: null,
   loginImagenId: null,
   colorBrand: '#2F6FED',
+  sidebarEstilo: 'degradado-azul',
+  sidebarBurbujas: true,
+  fondoClaro: '#F7F9FC',
+  fondoOscuro: '#0F131B',
 }
 
 export const DEFAULT_CONFIG: PersonalizacionConfig = {

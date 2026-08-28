@@ -102,6 +102,16 @@ export function Sidebar() {
   const { branding }  = usePersonalizacion()
   const logoCompactoSrc = personalizacionService.assetUrl(branding.logoCompactoId)
 
+  // ── Estilo del sidebar (preset por empresa). Los 4 presets son oscuros para
+  //    que el texto claro del menú (text-[#B8C2E0]…) siga legible. ──
+  const estilo = branding.sidebarEstilo ?? 'degradado-azul'
+  const sidebarBg: React.CSSProperties =
+    estilo === 'solido-oscuro'    ? { background: '#0B1730' }
+    : estilo === 'color-marca'    ? { background: 'rgb(var(--color-brand-dark))' }
+    : estilo === 'gradiente-marca' ? { background: 'linear-gradient(180deg, rgb(var(--color-brand-dark)) 0%, rgb(var(--color-brand)) 100%)' }
+    : /* degradado-azul */          { background: 'linear-gradient(180deg, #14225C 0%, #1E3D8F 55%, #2C57C4 100%)' }
+  const mostrarBurbujas = branding.sidebarBurbujas ?? true
+
   const ticketsPendientes = 0
 
   const { data: permisosPendientes = 0 } = useQuery({
@@ -202,35 +212,38 @@ export function Sidebar() {
           'fixed left-0 top-0 z-40 md:relative md:z-auto',
           isMobileMenuOpen ? 'flex' : 'hidden md:flex',
         )}
-        style={{ background: 'linear-gradient(180deg, #14225C 0%, #1E3D8F 55%, #2C57C4 100%)' }}
+        style={sidebarBg}
       >
         {/* ── Efecto de flujo de agua: blobs de luz + burbujas ascendentes ── */}
-        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-          <div
-            className="animate-water-a absolute -left-1/4 -top-1/4 h-[85%] w-[85%] rounded-full opacity-60 blur-2xl"
-            style={{ background: 'radial-gradient(circle, rgba(140,190,255,0.7) 0%, transparent 65%)' }}
-          />
-          <div
-            className="animate-water-b absolute -bottom-1/4 -right-1/4 h-[80%] w-[80%] rounded-full opacity-50 blur-2xl"
-            style={{ background: 'radial-gradient(circle, rgba(110,165,255,0.65) 0%, transparent 65%)' }}
-          />
-          {/* Burbujas — suben flotando de abajo hacia arriba en bucle */}
-          {BUBBLES.map((b, i) => (
-            <span
-              key={i}
-              className="animate-bubble-rise absolute rounded-full bg-card"
-              style={{
-                left: `${b.left}%`,
-                bottom: `-${b.size}px`,
-                width: b.size,
-                height: b.size,
-                opacity: b.opacity,
-                animationDuration: `${b.duration}s`,
-                animationDelay: `${b.delay}s`,
-              }}
+        {mostrarBurbujas && (
+          <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+            <div
+              className="animate-water-a absolute -left-1/4 -top-1/4 h-[85%] w-[85%] rounded-full opacity-60 blur-2xl"
+              style={{ background: 'radial-gradient(circle, rgba(140,190,255,0.7) 0%, transparent 65%)' }}
             />
-          ))}
-        </div>
+            <div
+              className="animate-water-b absolute -bottom-1/4 -right-1/4 h-[80%] w-[80%] rounded-full opacity-50 blur-2xl"
+              style={{ background: 'radial-gradient(circle, rgba(110,165,255,0.65) 0%, transparent 65%)' }}
+            />
+            {/* Burbujas — suben flotando de abajo hacia arriba en bucle */}
+            {BUBBLES.map((b, i) => (
+              <span
+                key={i}
+                className="animate-bubble-rise absolute rounded-full"
+                style={{
+                  left: `${b.left}%`,
+                  bottom: `-${b.size}px`,
+                  width: b.size,
+                  height: b.size,
+                  opacity: b.opacity,
+                  background: 'rgba(255,255,255,0.9)',
+                  animationDuration: `${b.duration}s`,
+                  animationDelay: `${b.delay}s`,
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         {isMobileMenuOpen && (
           <button

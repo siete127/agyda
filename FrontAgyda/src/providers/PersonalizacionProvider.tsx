@@ -41,6 +41,25 @@ function aplicarFavicon(url: string | null) {
   link.href = url
 }
 
+// Sobreescribe el fondo de la app (--surface) por empresa. El :root del CSS
+// trae el default; aquí se inyecta el color elegido para claro/oscuro en un
+// <style id="pers-fondo"> que gana por especificidad y respeta [data-theme].
+function aplicarFondo(claro: string, oscuro: string) {
+  const c = hexToRgb(claro)
+  const o = hexToRgb(oscuro)
+  let el = document.getElementById('pers-fondo') as HTMLStyleElement | null
+  if (!el) {
+    el = document.createElement('style')
+    el.id = 'pers-fondo'
+    document.head.appendChild(el)
+  }
+  el.textContent = `
+    :root { --surface: ${rgbStr(c)}; }
+    :root[data-theme="dark"] { --surface: ${rgbStr(o)}; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --surface: ${rgbStr(o)}; } }
+  `
+}
+
 export function PersonalizacionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
 
@@ -54,6 +73,10 @@ export function PersonalizacionProvider({ children }: { children: ReactNode }) {
   const b = config.branding
 
   useEffect(() => { aplicarColor(b.colorBrand || DEFAULT_BRANDING.colorBrand) }, [b.colorBrand])
+
+  useEffect(() => {
+    aplicarFondo(b.fondoClaro || DEFAULT_BRANDING.fondoClaro, b.fondoOscuro || DEFAULT_BRANDING.fondoOscuro)
+  }, [b.fondoClaro, b.fondoOscuro])
 
   useEffect(() => {
     document.title = b.nombreLargo ? `${b.nombreLargo} · Intranet` : 'Intranet'

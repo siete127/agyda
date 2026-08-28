@@ -3,6 +3,8 @@ import { useAuthStore } from '@/stores/auth.store'
 
 export type AssetTipo = 'logo-principal' | 'logo-compacto' | 'favicon' | 'login'
 
+export type SidebarEstilo = 'degradado-azul' | 'solido-oscuro' | 'color-marca' | 'gradiente-marca'
+
 export interface Branding {
   nombreCorto: string
   nombreLargo: string
@@ -12,6 +14,10 @@ export interface Branding {
   faviconId: number | null
   loginImagenId: number | null
   colorBrand: string
+  sidebarEstilo: SidebarEstilo
+  sidebarBurbujas: boolean
+  fondoClaro: string
+  fondoOscuro: string
 }
 
 export interface HeaderButton {

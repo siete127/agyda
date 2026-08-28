@@ -18,6 +18,8 @@ const DASHBOARD_CARD_IDS = [
   'ultimas-noticias', 'proximos-eventos', 'cumpleanos', 'soporte', 'accesos-rapidos',
 ];
 
+const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];
+
 // Config por defecto — refleja lo que hoy está hardcodeado en el frontend.
 const DEFAULT_CONFIG = {
   branding: {
@@ -29,6 +31,10 @@ const DEFAULT_CONFIG = {
     faviconId: null,
     loginImagenId: null,
     colorBrand: '#2F6FED',
+    sidebarEstilo: 'degradado-azul',
+    sidebarBurbujas: true,
+    fondoClaro: '#F7F9FC',
+    fondoOscuro: '#0F131B',
   },
   headerButtons: [
     { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: true },
@@ -104,19 +110,25 @@ exports.updateBranding = async (req, res) => {
     const b = req.body || {};
     const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
     const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : Number(v) || null);
-    const color = /^#[0-9a-fA-F]{6}$/.test(b.colorBrand) ? b.colorBrand : DEFAULT_CONFIG.branding.colorBrand;
+    const hex = (v, def) => (/^#[0-9a-fA-F]{6}$/.test(v) ? v : def);
+    const D = DEFAULT_CONFIG.branding;
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const config = await readConfig(pool);
     config.branding = {
-      nombreCorto: s(b.nombreCorto, 40) || DEFAULT_CONFIG.branding.nombreCorto,
-      nombreLargo: s(b.nombreLargo, 80) || DEFAULT_CONFIG.branding.nombreLargo,
+      nombreCorto: s(b.nombreCorto, 40) || D.nombreCorto,
+      nombreLargo: s(b.nombreLargo, 80) || D.nombreLargo,
       eslogan: s(b.eslogan, 120),
       logoPrincipalId: numOrNull(b.logoPrincipalId),
       logoCompactoId: numOrNull(b.logoCompactoId),
       faviconId: numOrNull(b.faviconId),
       loginImagenId: numOrNull(b.loginImagenId),
-      colorBrand: color,
+      colorBrand: hex(b.colorBrand, D.colorBrand),
+      sidebarEstilo: SIDEBAR_STYLES.includes(b.sidebarEstilo) ? b.sidebarEstilo : D.sidebarEstilo,
+      // (fin extras sidebar/fondo)
+      sidebarBurbujas: b.sidebarBurbujas !== false,
+      fondoClaro: hex(b.fondoClaro, D.fondoClaro),
+      fondoOscuro: hex(b.fondoOscuro, D.fondoOscuro),
     };
     await writeConfig(pool, config, req.user?.id);
     await logAudit(pool, {

@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Palette, Type, Sparkles, Image as ImageIcon, Upload, Check, RotateCcw, Loader2, IdCard, Droplet, ImagePlus, Info } from 'lucide-react'
+import { Palette, Type, Sparkles, Image as ImageIcon, Upload, Check, RotateCcw, Loader2, IdCard, Droplet, ImagePlus, Info, PanelLeft } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
-  personalizacionService, type Branding, type AssetTipo,
+  personalizacionService, type Branding, type AssetTipo, type SidebarEstilo,
 } from '@/services/personalizacion.service'
 
 const inputCls =
@@ -17,7 +17,15 @@ const PASOS = [
   { n: 1, key: 'identidad', label: 'Identidad',        sub: 'Nombre y eslogan que representan tu empresa.', icon: IdCard },
   { n: 2, key: 'color',     label: 'Color de marca',    sub: 'El color principal del sistema y sus estados.', icon: Droplet },
   { n: 3, key: 'imagenes',  label: 'Logos e imágenes',  sub: 'Sube los activos visuales de tu marca.', icon: ImagePlus },
+  { n: 4, key: 'entorno',   label: 'Menú y fondo',      sub: 'Estilo del sidebar y color de fondo de la app.', icon: PanelLeft },
 ] as const
+
+const SIDEBAR_PRESETS: { key: SidebarEstilo; label: string; bg: string }[] = [
+  { key: 'degradado-azul',  label: 'Degradado azul',   bg: 'linear-gradient(180deg,#14225C,#2C57C4)' },
+  { key: 'solido-oscuro',   label: 'Sólido oscuro',    bg: '#0B1730' },
+  { key: 'color-marca',     label: 'Color de marca',   bg: 'rgb(var(--color-brand-dark))' },
+  { key: 'gradiente-marca', label: 'Degradado marca',  bg: 'linear-gradient(180deg,rgb(var(--color-brand-dark)),rgb(var(--color-brand)))' },
+]
 
 function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -282,6 +290,104 @@ export function BrandingTab() {
               <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500" />
               <p className="text-[0.72rem] text-gray-500">
                 Las imágenes se guardan de inmediato como activos. Puedes reemplazarlas cuando lo necesites. Pulsa "Guardar cambios" para que la marca use el nombre y color.
+              </p>
+            </div>
+          </CardSeccion>
+
+          <CardSeccion anchor="entorno" icon={PanelLeft} titulo="Menú y fondo" subtitulo="Estilo del menú lateral y color de fondo de la aplicación.">
+            {/* Estilo del sidebar */}
+            <p className="mb-2 text-[0.8rem] font-semibold text-gray-700">Estilo del menú lateral</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {SIDEBAR_PRESETS.map((p) => {
+                const activo = (form.sidebarEstilo ?? 'degradado-azul') === p.key
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => set('sidebarEstilo', p.key)}
+                    className={clsx(
+                      'flex flex-col gap-2 rounded-xl border p-2 transition-all',
+                      activo ? 'border-violet-500 ring-2 ring-violet-500/20' : 'border-gray-200 hover:border-gray-300',
+                    )}
+                  >
+                    <span className="relative h-12 w-full overflow-hidden rounded-lg" style={{ background: p.bg }}>
+                      {activo && (
+                        <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-600 text-white">
+                          <Check className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[0.72rem] font-semibold text-gray-700">{p.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <label className="mt-4 flex cursor-pointer items-center gap-2.5 select-none">
+              <span className={clsx(
+                'relative inline-flex h-5 w-9 rounded-full border-2 border-transparent transition-colors',
+                (form.sidebarBurbujas ?? true) ? 'bg-violet-600' : 'bg-gray-200',
+              )}>
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={form.sidebarBurbujas ?? true}
+                  onChange={(e) => set('sidebarBurbujas', e.target.checked)}
+                />
+                <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', (form.sidebarBurbujas ?? true) ? 'translate-x-4' : 'translate-x-0')} />
+              </span>
+              <span className="text-[0.8rem] font-semibold text-gray-700">Burbujas animadas en el menú</span>
+            </label>
+
+            {/* Fondo de la app */}
+            <p className="mb-2 mt-6 text-[0.8rem] font-semibold text-gray-700">Color de fondo de la aplicación</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-[0.75rem] font-medium text-gray-500">Modo claro</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={/^#[0-9a-fA-F]{6}$/.test(form.fondoClaro) ? form.fondoClaro : '#F7F9FC'}
+                    onChange={(e) => set('fondoClaro', e.target.value)}
+                    className="h-10 w-12 cursor-pointer rounded-lg border border-gray-200 bg-card p-1"
+                  />
+                  <input
+                    value={form.fondoClaro}
+                    onChange={(e) => set('fondoClaro', e.target.value)}
+                    className="w-24 rounded-lg border border-gray-200 bg-card px-2 py-2 text-[0.8rem] font-mono outline-none focus:border-violet-500"
+                  />
+                  <button type="button" onClick={() => set('fondoClaro', '#F7F9FC')}
+                    className="rounded-lg border border-gray-200 p-2 text-gray-400 hover:border-gray-300" title="Restablecer">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[0.75rem] font-medium text-gray-500">Modo oscuro</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={/^#[0-9a-fA-F]{6}$/.test(form.fondoOscuro) ? form.fondoOscuro : '#0F131B'}
+                    onChange={(e) => set('fondoOscuro', e.target.value)}
+                    className="h-10 w-12 cursor-pointer rounded-lg border border-gray-200 bg-card p-1"
+                  />
+                  <input
+                    value={form.fondoOscuro}
+                    onChange={(e) => set('fondoOscuro', e.target.value)}
+                    className="w-24 rounded-lg border border-gray-200 bg-card px-2 py-2 text-[0.8rem] font-mono outline-none focus:border-violet-500"
+                  />
+                  <button type="button" onClick={() => set('fondoOscuro', '#0F131B')}
+                    className="rounded-lg border border-gray-200 p-2 text-gray-400 hover:border-gray-300" title="Restablecer">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50/70 px-3 py-2.5">
+              <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+              <p className="text-[0.72rem] text-gray-500">
+                El fondo debe contrastar con las tarjetas (blancas en claro, oscuras en oscuro).
+                Colores muy claros/oscuros pueden hacer que las tarjetas "desaparezcan".
               </p>
             </div>
           </CardSeccion>
