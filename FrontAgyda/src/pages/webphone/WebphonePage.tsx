@@ -214,12 +214,6 @@ export function WebphonePage() {
                   <PictureInPicture2 className="h-3.5 w-3.5" /> {pipActive ? 'Flotando' : 'Modo flotante'}
                 </button>
               )}
-              <button
-                onClick={() => setShowConfig(true)}
-                className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-white/20 transition-colors"
-              >
-                <Settings className="h-3.5 w-3.5" /> Cambiar vista
-              </button>
               {vista && (
                 <a
                   href={vista.url}
