@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { api, getApiError } from '@/lib/axios'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
+import { moduleVisual } from './moduleVisual'
 
 export interface EmpresaRef { key: string; nombre: string }
 interface ModuloEmpresa { key: string; nombre: string; descripcion: string; allow: boolean }
@@ -28,6 +29,7 @@ export function EmpresaModulosPanel({ empresa, embedded = false }: { empresa: Em
       api.put(`/accesos/empresas/${empresa.key}/modulos/${moduloKey}`, { allow }),
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['empresa-modulos', empresa.key] })
+      qc.invalidateQueries({ queryKey: ['accesos-empresas'] })
       toast.success(v.allow ? 'Módulo activado para la empresa' : 'Módulo desactivado para la empresa')
     },
     onError: (e) => toast.error(getApiError(e)),
@@ -42,49 +44,67 @@ export function EmpresaModulosPanel({ empresa, embedded = false }: { empresa: Em
 
   return (
     <div className={clsx(!embedded && 'rounded-2xl border border-gray-100 bg-white shadow-card overflow-hidden')}>
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        {!isLoading && (
-          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[0.68rem] font-semibold text-blue-600">
-            {activos}/{modulos.length} activos
-          </span>
-        )}
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
+      {/* ── Encabezado ── */}
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 pb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-[1.05rem] font-bold text-gray-900">Módulos</h3>
+            {!isLoading && (
+              <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[0.65rem] font-bold text-gray-500">
+                {activos}/{modulos.length}
+              </span>
+            )}
+          </div>
+          <p className="text-[0.78rem] text-gray-400">Activa o desactiva los módulos disponibles para esta empresa.</p>
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar módulo…"
-            className="w-48 rounded-lg border border-gray-200 bg-white py-1.5 pl-8 pr-2 text-[0.75rem] outline-none focus:border-brand"
+            className="w-56 rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-[0.78rem] outline-none focus:border-brand"
           />
         </div>
       </div>
 
-      <div className="border-t border-gray-100 bg-gray-50/40 p-3">
+      {/* ── Grid de módulos ── */}
+      <div className="px-3 pb-4">
         {isLoading ? (
-          <div className="flex justify-center py-8"><Shield className="h-5 w-5 animate-pulse text-gray-300" /></div>
+          <div className="flex justify-center py-10"><Shield className="h-5 w-5 animate-pulse text-gray-300" /></div>
         ) : filtrados.length === 0 ? (
-          <p className="py-6 text-center text-[0.75rem] text-gray-400">Sin módulos que coincidan</p>
+          <p className="py-8 text-center text-[0.8rem] text-gray-400">Sin módulos que coincidan con "{busqueda}"</p>
         ) : (
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {filtrados.map((m) => (
-              <div key={m.key} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                <div className="min-w-0">
-                  <p className="truncate text-[0.76rem] font-medium text-gray-800">{m.nombre}</p>
-                  {m.descripcion && <p className="truncate text-[0.63rem] text-gray-400">{m.descripcion}</p>}
-                </div>
-                <button
-                  type="button"
-                  disabled={toggleModulo.isPending}
-                  onClick={() => toggleModulo.mutate({ moduloKey: m.key, allow: !m.allow })}
-                  className={clsx(
-                    'relative ml-2 inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:opacity-50',
-                    m.allow ? 'bg-blue-600' : 'bg-gray-200',
-                  )}
+          <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
+            {filtrados.map((m) => {
+              const { Icon, soft, text } = moduleVisual(m.key)
+              return (
+                <div
+                  key={m.key}
+                  className="flex items-center gap-3 border-b border-gray-50 px-2 py-3 last:border-0"
                 >
-                  <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', m.allow ? 'translate-x-4' : 'translate-x-0')} />
-                </button>
-              </div>
-            ))}
+                  <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl', soft)}>
+                    <Icon className={clsx('h-4.5 w-4.5', text)} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[0.82rem] font-semibold text-gray-800">{m.nombre}</p>
+                    {m.descripcion && <p className="truncate text-[0.68rem] text-gray-400">{m.descripcion}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={toggleModulo.isPending}
+                    onClick={() => toggleModulo.mutate({ moduloKey: m.key, allow: !m.allow })}
+                    className={clsx(
+                      'relative ml-2 inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:opacity-50',
+                      m.allow ? 'bg-blue-600' : 'bg-gray-200',
+                    )}
+                    aria-pressed={m.allow}
+                  >
+                    <span className={clsx('inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform', m.allow ? 'translate-x-5' : 'translate-x-0')} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
