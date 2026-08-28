@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Building2, Plus, ShieldAlert, Home, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { Building2, Plus, ShieldAlert, Home, ChevronRight, SlidersHorizontal, Users, LayoutGrid, ShieldCheck } from 'lucide-react'
 import { api, getApiError } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
@@ -13,7 +13,17 @@ import { EmpresaModulosPanel } from './EmpresaModulosPanel'
 // el servidor (403 si alguien fuerza la UI).
 const SUPER_ADMIN_EMPRESAS_IDS = new Set([1, 96, 64])
 
-interface Empresa { key: string; nombre: string }
+interface Empresa { key: string; nombre: string; usuarios: number | null; modulosActivos: number; modulosTotal: number }
+
+// Meta-fila del card "Tu Hogar" (usuarios · módulos · estado).
+function MetaItem({ icon: Icon, children }: { icon: typeof Users; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-gray-500">
+      <Icon className="h-3.5 w-3.5 text-gray-400" />
+      {children}
+    </span>
+  )
+}
 
 // Alta y listado de empresas (multi-tenant). La empresa donde el usuario está
 // logueado se muestra destacada como "Tu Hogar"; el resto se lista debajo.
@@ -77,13 +87,21 @@ export function EmpresasTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* ── Encabezado ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[0.8rem] text-gray-400">Empresas (tenants) del sistema. Toca una para gestionar sus módulos.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-[1.35rem] font-bold text-gray-900">Empresas</h2>
+            <p className="text-[0.82rem] text-gray-400">Empresas (tenants) del sistema. Toca una para gestionar sus módulos.</p>
+          </div>
+        </div>
         <button
           onClick={() => setMostrarFormEmpresa((v) => !v)}
-          className="flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-[0.78rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]"
+          className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]"
         >
           <Plus className="h-4 w-4" /> Nueva empresa
         </button>
@@ -95,26 +113,47 @@ export function EmpresasTab() {
         <>
           {/* ── Tu Hogar ── */}
           {propia && (
-            <div className="rounded-2xl border border-brand/25 bg-brand/[0.03] shadow-card overflow-hidden">
+            <div className="overflow-hidden rounded-2xl border border-brand/20 bg-brand/[0.04] shadow-card">
               <button
                 type="button"
                 onClick={() => toggleExpandida(propia.key)}
-                className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-brand/[0.06]"
+                className="relative flex w-full items-center gap-4 p-5 text-left transition-colors hover:bg-brand/[0.07]"
               >
-                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand/15 text-brand">
-                  <Home className="h-5 w-5" />
+                {/* ilustración decorativa de edificio */}
+                <div className="pointer-events-none absolute right-0 top-0 hidden h-full w-2/5 overflow-hidden md:block">
+                  <div className="absolute right-24 bottom-4 h-20 w-14 rounded-t-lg bg-brand/15" />
+                  <div className="absolute right-14 bottom-4 h-28 w-16 rounded-t-lg bg-brand/25" />
+                  <div className="absolute right-3 bottom-4 h-16 w-12 rounded-t-lg bg-brand/15" />
+                  <span className="absolute right-16 bottom-4 h-1 w-40 rounded-full bg-brand/20" />
+                  <span className="absolute right-[4.5rem] top-8 h-2.5 w-2.5 rounded-full bg-brand/30" />
+                  <span className="absolute right-8 top-14 h-2 w-2 rounded-full bg-brand/25" />
                 </div>
-                <div className="min-w-0 flex-1">
+
+                <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-brand/15 text-brand">
+                  <Home className="h-6 w-6" />
+                </div>
+                <div className="relative min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate text-[0.95rem] font-bold text-gray-900">{propia.nombre}</p>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-brand px-2 py-0.5 text-[0.6rem] font-bold text-white">
+                    <p className="truncate text-[1.05rem] font-bold text-gray-900">{propia.nombre}</p>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-brand px-2 py-0.5 text-[0.62rem] font-bold text-white">
                       <Home className="h-2.5 w-2.5" /> Tu Hogar
                     </span>
                   </div>
-                  <p className="text-[0.72rem] text-gray-400">{propia.key} · empresa en la que iniciaste sesión</p>
+                  <p className="text-[0.75rem] text-gray-400">{propia.key} · empresa en la que iniciaste sesión</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <MetaItem icon={Users}>
+                      <b className="font-bold text-gray-700">{propia.usuarios ?? '—'}</b> Usuarios
+                    </MetaItem>
+                    <span className="text-gray-300">·</span>
+                    <MetaItem icon={LayoutGrid}>
+                      <b className="font-bold text-gray-700">{propia.modulosActivos}</b> Módulos
+                    </MetaItem>
+                    <span className="text-gray-300">·</span>
+                    <MetaItem icon={ShieldCheck}><span className="font-semibold text-emerald-600">Activo</span></MetaItem>
+                  </div>
                 </div>
-                <SlidersHorizontal className="h-4 w-4 flex-shrink-0 text-gray-300" />
-                <ChevronRight className={clsx('h-4 w-4 flex-shrink-0 text-gray-300 transition-transform', expandida === propia.key && 'rotate-90')} />
+                <SlidersHorizontal className="relative h-4 w-4 flex-shrink-0 text-gray-300" />
+                <ChevronRight className={clsx('relative h-5 w-5 flex-shrink-0 text-gray-300 transition-transform', expandida === propia.key && 'rotate-90')} />
               </button>
               {expandida === propia.key && (
                 <div className="border-t border-brand/15">
@@ -125,9 +164,9 @@ export function EmpresasTab() {
           )}
 
           {/* ── Otras empresas ── */}
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-card overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-gray-50 px-5 py-3.5">
-              <h3 className="text-[0.9rem] font-bold text-gray-900">Otras empresas</h3>
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
+            <div className="flex items-center gap-2 border-b border-gray-50 px-5 py-4">
+              <h3 className="text-[0.95rem] font-bold text-gray-900">Otras empresas</h3>
               <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[0.65rem] font-bold text-gray-500">{otras.length}</span>
             </div>
             {otras.length === 0 ? (
@@ -139,17 +178,21 @@ export function EmpresasTab() {
                     <button
                       type="button"
                       onClick={() => toggleExpandida(e.key)}
-                      className="flex w-full items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-gray-50/60"
+                      className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50/60"
                     >
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
-                        <Building2 className="h-4 w-4" />
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+                        <Building2 className="h-4.5 w-4.5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[0.88rem] font-semibold text-gray-900">{e.nombre}</p>
-                        <p className="truncate text-[0.72rem] text-gray-400">{e.key}</p>
+                        <p className="truncate text-[0.9rem] font-semibold text-gray-900">{e.nombre}</p>
+                        <p className="truncate text-[0.72rem] text-gray-400">
+                          {e.key}
+                          {e.usuarios != null && <> · {e.usuarios} usuarios</>}
+                          {' · '}{e.modulosActivos} módulos
+                        </p>
                       </div>
                       <SlidersHorizontal className="h-4 w-4 flex-shrink-0 text-gray-300" />
-                      <ChevronRight className={clsx('h-4 w-4 flex-shrink-0 text-gray-200 transition-transform', expandida === e.key && 'rotate-90')} />
+                      <ChevronRight className={clsx('h-5 w-5 flex-shrink-0 text-gray-300 transition-transform', expandida === e.key && 'rotate-90')} />
                     </button>
                     {expandida === e.key && (
                       <div className="border-t border-gray-50 bg-gray-50/30">
