@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Palette, Type, Sparkles, Image as ImageIcon, Upload, Check, RotateCcw, Loader2, IdCard, Droplet, ImagePlus, Info, HelpCircle } from 'lucide-react'
+import { Palette, Type, Sparkles, Image as ImageIcon, Upload, Check, RotateCcw, Loader2, IdCard, Droplet, ImagePlus, Info } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
@@ -175,14 +175,6 @@ export function BrandingTab() {
     <div className="space-y-5">
       {/* Encabezado con ilustración */}
       <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
-        <div className="mb-3 flex justify-end">
-          <button
-            type="button"
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[0.75rem] font-semibold text-gray-500 hover:border-gray-300"
-          >
-            <HelpCircle className="h-3.5 w-3.5" /> Ayuda
-          </button>
-        </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
