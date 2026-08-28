@@ -446,6 +446,43 @@ END
   }
 }
 
+// Personalización de marca por empresa (tenant): logo, colores, favicon, nombre.
+// Una sola fila de config (la última gana, igual que INTRANET_NOTICIAS_LAYOUT) +
+// una tabla de assets (binarios en disco, metadatos aquí).
+async function ensurePersonalizacionSchema(pool) {
+  try {
+    const batchSql = `
+IF OBJECT_ID('dbo.INTRANET_PERSONALIZACION', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_PERSONALIZACION (
+    ID          INT IDENTITY(1,1) PRIMARY KEY,
+    CONFIG_DATA NVARCHAR(MAX) NOT NULL,
+    UPDATED_AT  DATETIME NOT NULL DEFAULT GETDATE(),
+    UPDATED_BY  INT NULL
+  );
+END
+
+IF OBJECT_ID('dbo.INTRANET_PERSONALIZACION_ASSETS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_PERSONALIZACION_ASSETS (
+    ASSET_ID        INT IDENTITY(1,1) PRIMARY KEY,
+    ASSET_TIPO      NVARCHAR(30) NOT NULL,          -- logo-principal | logo-compacto | favicon | login
+    NOMBRE_ARCHIVO  NVARCHAR(300) NOT NULL,
+    NOMBRE_ORIGINAL NVARCHAR(300) NULL,
+    MIME            NVARCHAR(100) NULL,
+    TAMANIO         INT NULL,
+    SUBIDO_POR      INT NULL,
+    CREATED_AT      DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+`;
+    await pool.request().batch(batchSql);
+    logger.info('✅ Esquema de personalización asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de personalización:', err.message);
+  }
+}
+
 async function ensureReglamentoSchema(pool) {
   try {
     const batchSql = `
@@ -4382,6 +4419,7 @@ async function ensureAllSchemas(pool) {
   await ensureCommentsSchema(pool);
   await ensureReaccionesNoticiasSchema(pool);
   await ensureLayoutSchema(pool);
+  await ensurePersonalizacionSchema(pool);
   await ensureReglamentoSchema(pool);
   await ensureCatalogosTiSchema(pool);
   await ensureTicketsSchema(pool);
@@ -5895,6 +5933,7 @@ module.exports = {
     ensureCommentsSchema,
     ensureReaccionesNoticiasSchema,
     ensureLayoutSchema,
+    ensurePersonalizacionSchema,
     ensureReglamentoSchema,
     ensureTicketsSchema,
     ensureProfileSchema,

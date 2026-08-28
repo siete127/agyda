@@ -116,6 +116,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/accesos', require('./routes/accesos'));
 app.use('/api/roles', require('./routes/roles'));
 app.use('/api/perfiles', require('./routes/perfiles'));
+app.use('/api/personalizacion', require('./routes/personalizacion'));
 app.use('/api/ui', require('./routes/ui'));
 app.use('/api/webphone', require('./routes/webphone'));
 app.use('/api/playlist', require('./routes/playlist'));

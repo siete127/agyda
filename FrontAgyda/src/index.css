@@ -5,6 +5,15 @@
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
 
+  /* Color de marca — RGB (sin #), sobreescrito en runtime por
+     PersonalizacionProvider con el color de la empresa. Defaults = azul AGYDA. */
+  :root {
+    --color-brand: 47 111 237;
+    --color-brand-dark: 30 79 196;
+    --color-brand-light: 238 243 254;
+    --color-brand-muted: 127 168 245;
+  }
+
   html { font-size: 14px; scroll-behavior: smooth; }
 
   body {

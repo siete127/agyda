@@ -1,6 +1,6 @@
 import {
   Building2, ShieldCheck, Landmark, Users, Headset, Wrench, Plug, BookOpen,
-  BellRing, ClipboardList, SlidersHorizontal, LayoutGrid,
+  BellRing, ClipboardList, SlidersHorizontal, LayoutGrid, Palette,
 } from 'lucide-react'
 
 export interface CategoryStyle {
@@ -14,6 +14,7 @@ export interface CategoryStyle {
 // propia por sección para que el mapa completo sea fácil de escanear.
 export const CATEGORY_STYLES: Record<string, CategoryStyle> = {
   'modulos-empresa': { icon: LayoutGrid, gradient: 'from-fuchsia-500 to-fuchsia-600', soft: 'bg-fuchsia-50', text: 'text-fuchsia-600' },
+  apariencia: { icon: Palette, gradient: 'from-orange-500 to-orange-600', soft: 'bg-orange-50', text: 'text-orange-600' },
   organizacion: { icon: Building2, gradient: 'from-indigo-500 to-indigo-600', soft: 'bg-indigo-50', text: 'text-indigo-600' },
   'usuarios-seguridad': { icon: ShieldCheck, gradient: 'from-emerald-500 to-emerald-600', soft: 'bg-emerald-50', text: 'text-emerald-600' },
   erp: { icon: Landmark, gradient: 'from-blue-500 to-blue-600', soft: 'bg-blue-50', text: 'text-blue-600' },

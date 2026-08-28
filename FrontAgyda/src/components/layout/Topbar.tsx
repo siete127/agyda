@@ -10,6 +10,8 @@ import { getRouteLabel, ROUTES } from '@/router/routes.config'
 import { type Ticket } from '@/types/ticket.types'
 import { type Noticia } from '@/types/noticia.types'
 import logoAgyda from '@/assets/Logo_AGYDA.png'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { personalizacionService } from '@/services/personalizacion.service'
 
 interface SearchResult {
   id: string
@@ -31,6 +33,9 @@ export function Topbar() {
   const handleSwitchSystem = () => {
     navigate('/ventas')
   }
+
+  const { branding, headerButtons } = usePersonalizacion()
+  const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
 
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -64,6 +69,42 @@ export function Topbar() {
   const openGestionMis = () => {
     window.open('https://mis.ardabytec.vip', '_blank', 'noopener,noreferrer')
   }
+
+  // Acción por defecto (URL interna) de cada botón, por key. Si la config trae
+  // una `url`, se abre esa en pestaña nueva en lugar de la acción interna.
+  const accionInterna: Record<string, () => void> = {
+    marcador: openMarcador,
+    contingencia: openMarcadorContingencia,
+    sistemas: handleSwitchSystem,
+    'gestion-mis': openGestionMis,
+  }
+
+  // Estilo + gate por rol de cada botón. `gate` decide si el usuario puede verlo
+  // (además de `visible` en la config: un admin puede ocultar un botón, pero el
+  // rol sigue restringiendo quién lo ve aunque esté visible).
+  const BUTTON_STYLE: Record<string, { className: string; icon: React.ElementType; gate: boolean }> = {
+    contingencia: {
+      className: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
+      icon: Headset, gate: canUseMarcador,
+    },
+    marcador: {
+      className: 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
+      icon: Headset, gate: canUseMarcador,
+    },
+    sistemas: {
+      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
+      icon: BarChart3, gate: true,
+    },
+    'gestion-mis': {
+      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
+      icon: MonitorCog, gate: canUseGestionMis,
+    },
+  }
+
+  const botonesVisibles = headerButtons.filter((b) => {
+    const style = BUTTON_STYLE[b.key]
+    return style && style.gate && b.visible
+  })
 
   const userRoles = user?.tipoUsuario ? [user.tipoUsuario.toUpperCase()] : []
 
@@ -160,14 +201,16 @@ export function Topbar() {
 
         {/* Logo */}
         <div className="hidden items-center gap-2 md:flex">
-          <img src={logoAgyda} alt="AGYDA" className="h-8 w-8 flex-shrink-0 object-contain" />
+          <img src={logoSrc} alt={branding.nombreCorto} className="h-8 w-auto max-w-[120px] flex-shrink-0 object-contain" />
           <div className="leading-tight">
             <p className="text-[1rem] font-extrabold tracking-tight text-ink">
-              ARDABY<span className="text-brand">TEC</span>
+              {branding.nombreCorto}
             </p>
-            <p className="text-[7.5px] font-semibold -mt-0.5 text-ink-tertiary" style={{ letterSpacing: '0.12em' }}>
-              SOLUCIONES EN TECNOLOGÍA
-            </p>
+            {branding.eslogan && (
+              <p className="text-[7.5px] font-semibold -mt-0.5 text-ink-tertiary uppercase" style={{ letterSpacing: '0.12em' }}>
+                {branding.eslogan}
+              </p>
+            )}
           </div>
         </div>
 
@@ -218,47 +261,25 @@ export function Topbar() {
       {/* Derecha: notificaciones + perfil */}
       <div className="ml-auto flex items-center gap-2.5">
 
-        {/* Botón marcador contingencia (AzulDial) */}
-        {canUseMarcador && (
-          <button
-            onClick={openMarcadorContingencia}
-            title="Marcador AzulDial"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-sm hover:bg-red-700 transition-colors"
-          >
-            <Headset className="h-3.5 w-3.5" />
-          </button>
-        )}
-
-        {/* Botón marcador (Plata) */}
-        {canUseMarcador && (
-          <button
-            onClick={openMarcador}
-            title="Marcador Plata"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 transition-colors"
-          >
-            <Headset className="h-3.5 w-3.5" />
-          </button>
-        )}
-
-        {/* Cambiar de sistema (Intranet / Ventas) */}
-        <button
-          onClick={handleSwitchSystem}
-          title="Cambiar de sistema"
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand transition-colors"
-        >
-          <BarChart3 className="h-3.5 w-3.5" />
-        </button>
-
-        {/* Gestión MIS — solo para usuarios autorizados */}
-        {canUseGestionMis && (
-          <button
-            onClick={openGestionMis}
-            title="Gestión MIS"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand transition-colors"
-          >
-            <MonitorCog className="h-3.5 w-3.5" />
-          </button>
-        )}
+        {/* Botones del encabezado — configurables por empresa (Configuración →
+            Apariencia → Botones del encabezado). URL vacía = acción interna. */}
+        {botonesVisibles.map((b) => {
+          const style = BUTTON_STYLE[b.key]
+          const Icon = style.icon
+          const onClick = b.url
+            ? () => window.open(b.url, '_blank', 'noopener,noreferrer')
+            : accionInterna[b.key]
+          return (
+            <button
+              key={b.key}
+              onClick={onClick}
+              title={b.label}
+              className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors ${style.className}`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          )
+        })}
 
         <div className="mx-0.5 h-5 w-px bg-surface-border hidden md:block" />
 

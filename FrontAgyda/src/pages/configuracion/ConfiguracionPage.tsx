@@ -14,6 +14,8 @@ import { MensajeriaConfigTab } from './MensajeriaConfigTab'
 import { UsuariosTab } from './UsuariosTab'
 import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
+import { BrandingTab } from './BrandingTab'
+import { BotonesHeaderTab } from './BotonesHeaderTab'
 // ── Secciones de Configuración > Tecnología/TI (módulo de Soporte TI) ──
 import { GeneralTab } from './tecnologia/GeneralTab'
 import { MesaServicioTab } from './tecnologia/MesaServicioTab'
@@ -45,6 +47,8 @@ const SCREENS: Record<string, ComponentType> = {
   usuarios: UsuariosTab,
   roles: RolesTab,
   perfiles: PerfilesTab,
+  'pers-branding': BrandingTab,
+  'pers-botones': BotonesHeaderTab,
   'webphone-vistas': WebphoneVistasTab,
   'webphone-credenciales': WebphoneCredencialesTab,
   notificaciones: NotificacionesCorreoTab,

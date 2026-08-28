@@ -13,6 +13,8 @@ import { SidebarFlyout, type FlyoutPosition } from './SidebarFlyout'
 import { Avatar } from '@/components/ui/Avatar'
 import { ROUTES } from '@/router/routes.config'
 import { disconnectSocket } from '@/lib/socket'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { personalizacionService } from '@/services/personalizacion.service'
 import { clsx } from 'clsx'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 
@@ -98,6 +100,8 @@ export function Sidebar() {
   const userRole      = user?.tipoUsuario?.toUpperCase() ?? ''
   const { isAllowed } = useModuleAccess()
   const unreadCount   = useNotificationStore((s) => s.unreadCount)
+  const { branding }  = usePersonalizacion()
+  const logoCompactoSrc = personalizacionService.assetUrl(branding.logoCompactoId)
 
   const ticketsPendientes = 0
 
@@ -241,11 +245,15 @@ export function Sidebar() {
         {/* ── Logo — solo visible en modo colapsado, para no perder identidad ── */}
         {sidebarCollapsed && (
           <div className="relative z-10 flex h-[64px] flex-shrink-0 items-center justify-center">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand">
-              <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 1 L23 13 L13 23" />
-              </svg>
-            </div>
+            {logoCompactoSrc ? (
+              <img src={logoCompactoSrc} alt={branding.nombreCorto} className="h-9 w-9 rounded-lg object-contain" />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand">
+                <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 1 L23 13 L13 23" />
+                </svg>
+              </div>
+            )}
           </div>
         )}
 
@@ -417,7 +425,7 @@ export function Sidebar() {
 
           {!sidebarCollapsed && (
             <p className="mt-3 px-2 text-[0.6rem] text-[#6B79AD]">
-              © {new Date().getFullYear()} ArdaBytec · Todos los derechos reservados · AGYDA v20.11.0
+              © {new Date().getFullYear()} {branding.nombreLargo} · Todos los derechos reservados
             </p>
           )}
         </div>

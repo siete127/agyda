@@ -781,7 +781,39 @@ exports.listEmpresas = async (req, res) => {
   try {
     if (!esSuperAdminFijo(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const { listTenants } = require('../config/tenants');
-    return res.json({ success: true, data: listTenants() });
+    const tenants = listTenants();
+
+    // Overrides ALLOW=0 por empresa (todas viven en el tenant maestro) para
+    // resolver "N módulos activos" sin una query por empresa.
+    const modulosTotal = MODULOS_DISPONIBLES.length;
+    let bloqueadosPorEmpresa = new Map();
+    try {
+      const master = await databaseService.getPool(DEFAULT_TENANT);
+      const rs = await master.request().query(
+        `SELECT EMP_KEY, COUNT(*) AS n FROM INTRANET_EMPRESAS_MODULOS
+         WHERE ALLOW = 0 GROUP BY EMP_KEY`,
+      );
+      bloqueadosPorEmpresa = new Map(rs.recordset.map((r) => [String(r.EMP_KEY).toLowerCase(), r.n]));
+    } catch (_) { /* si falla, todos cuentan como activos */ }
+
+    const data = await Promise.all(tenants.map(async (t) => {
+      let usuarios = null;
+      try {
+        const pool = await databaseService.getPool(t.key);
+        const r = await pool.request().query('SELECT COUNT(*) AS n FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1');
+        usuarios = r.recordset[0]?.n ?? null;
+      } catch (_) { /* empresa sin BD accesible: usuarios = null */ }
+      const bloqueados = bloqueadosPorEmpresa.get(t.key.toLowerCase()) ?? 0;
+      return {
+        key: t.key,
+        nombre: t.nombre,
+        usuarios,
+        modulosActivos: Math.max(0, modulosTotal - bloqueados),
+        modulosTotal,
+      };
+    }));
+
+    return res.json({ success: true, data });
   } catch (e) {
     console.error('Error listEmpresas:', e);
     return res.status(500).json({ success: false, message: 'Error al listar empresas' });
