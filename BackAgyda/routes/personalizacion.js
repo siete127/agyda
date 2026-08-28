@@ -14,6 +14,7 @@ router.get('/assets/:id/ver', authenticateToken, ctrl.verAsset);
 const soloAdminConfig = [authenticateToken, verificarRol(['AD']), requireActionAccess('configuracion', 'configurar')];
 
 router.put('/branding', ...soloAdminConfig, ctrl.updateBranding);
+router.put('/header-buttons', ...soloAdminConfig, ctrl.updateHeaderButtons);
 router.post('/assets', ...soloAdminConfig, uploadPersonalizacion.single('archivo'), ctrl.subirAsset);
 
 module.exports = router;

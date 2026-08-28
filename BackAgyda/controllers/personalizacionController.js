@@ -10,6 +10,7 @@ let socketService;
 try { socketService = require('../services/socketService'); } catch (_) { socketService = null; }
 
 const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login'];
+const HEADER_BUTTON_KEYS = ['marcador', 'contingencia', 'sistemas', 'gestion-mis'];
 
 // Config por defecto — refleja lo que hoy está hardcodeado en el frontend.
 const DEFAULT_CONFIG = {
@@ -122,6 +123,55 @@ exports.updateBranding = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateBranding', e);
     return res.status(500).json({ success: false, message: 'Error al guardar el branding' });
+  }
+};
+
+// PUT /api/personalizacion/header-buttons
+// Body: array de { key, label, url, visible }. Solo se aceptan las keys conocidas;
+// url vacía = conserva la acción interna del botón.
+exports.updateHeaderButtons = async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body) ? req.body : req.body?.headerButtons;
+    if (!Array.isArray(incoming)) {
+      return res.status(400).json({ success: false, message: 'Se espera un array de botones' });
+    }
+
+    const byKey = new Map();
+    for (const raw of incoming) {
+      const key = String(raw?.key || '').trim();
+      if (!HEADER_BUTTON_KEYS.includes(key)) continue;
+      const url = typeof raw?.url === 'string' ? raw.url.trim() : '';
+      if (url && !/^https?:\/\//i.test(url)) {
+        return res.status(400).json({ success: false, message: `URL inválida para "${key}" (debe empezar con http:// o https://)` });
+      }
+      byKey.set(key, {
+        key,
+        label: (typeof raw?.label === 'string' ? raw.label.trim() : '').slice(0, 40),
+        url,
+        visible: raw?.visible !== false,
+      });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    // Mantener el orden de DEFAULT_CONFIG.headerButtons; usar lo entrante o el default.
+    config.headerButtons = DEFAULT_CONFIG.headerButtons.map((def) => {
+      const got = byKey.get(def.key);
+      if (!got) return { ...def };
+      return { ...def, ...got, label: got.label || def.label };
+    });
+
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-header-buttons', detalle: JSON.stringify(config.headerButtons),
+      ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'headerButtons');
+    return res.json({ success: true, data: config.headerButtons });
+  } catch (e) {
+    logger.error('personalizacionController.updateHeaderButtons', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar los botones del encabezado' });
   }
 };
 

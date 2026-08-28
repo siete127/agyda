@@ -38,6 +38,11 @@ export const personalizacionService = {
     return data.data as Branding
   },
 
+  async updateHeaderButtons(buttons: HeaderButton[]): Promise<HeaderButton[]> {
+    const { data } = await api.put('/personalizacion/header-buttons', buttons)
+    return data.data as HeaderButton[]
+  },
+
   async subirAsset(tipo: AssetTipo, file: File): Promise<number> {
     const form = new FormData()
     form.append('archivo', file)
