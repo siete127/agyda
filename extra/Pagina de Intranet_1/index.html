@@ -2558,6 +2558,9 @@
                     arbolError: 'No se pudo iniciar el diagnóstico guiado. Intenta de nuevo más tarde.',
                     arbolTicketCreado: (id) => `Se creó el ticket #${id} para que un técnico le dé seguimiento.`,
                     arbolIniciarSesion: 'Para crear un ticket necesitas iniciar sesión en el portal.',
+                    arbolConsultarIniciarSesion: 'Para consultar tus tickets necesitas iniciar sesión en el portal.',
+                    arbolSinTicketsAbiertos: 'No tienes tickets abiertos en este momento. 🎉',
+                    arbolTicketsAbiertosIntro: (n) => `Tienes ${n} ticket${n === 1 ? '' : 's'} abierto${n === 1 ? '' : 's'}:`,
                     pedirNombre: '¡Con gusto! Para ponerte en contacto con nuestro equipo, ¿me compartes tu nombre completo?',
                     pedirContacto: (nombre) => `Gracias, ${nombre}. ¿A qué correo o teléfono te contactamos?`,
                     yaTeTengo: (nombre) => `¡Ya te tengo registrado, ${nombre}! Un momento mientras comparto esto con nuestro equipo.`,
@@ -2585,6 +2588,9 @@
                     arbolError: 'Could not start the guided diagnosis. Please try again later.',
                     arbolTicketCreado: (id) => `Ticket #${id} was created so a technician can follow up.`,
                     arbolIniciarSesion: 'You need to sign in to the portal to create a ticket.',
+                    arbolConsultarIniciarSesion: 'You need to sign in to the portal to check your tickets.',
+                    arbolSinTicketsAbiertos: 'You have no open tickets right now. 🎉',
+                    arbolTicketsAbiertosIntro: (n) => `You have ${n} open ticket${n === 1 ? '' : 's'}:`,
                     pedirNombre: 'Sure! To connect you with our team, could you share your full name?',
                     pedirContacto: (nombre) => `Thanks, ${nombre}. What email or phone number should we reach you at?`,
                     yaTeTengo: (nombre) => `I already have your info, ${nombre}! One moment while I share this with our team.`,
@@ -3015,6 +3021,18 @@
                             await botDice(() => (accion.error === 'Necesitas iniciar sesión para crear un ticket' ? t().arbolIniciarSesion : accion.error), 300);
                         } else {
                             await botDice(() => t().arbolTicketCreado(accion.ticketId), 400);
+                        }
+                        estado = 'explorar';
+                        setQuickReplies(t().menuInicial, 'menu');
+                    } else if (accion && accion.tipo === 'consultar_tickets') {
+                        if (accion.error) {
+                            await botDice(() => t().arbolConsultarIniciarSesion, 300);
+                        } else if (!accion.tickets || accion.tickets.length === 0) {
+                            await botDice(() => t().arbolSinTicketsAbiertos, 300);
+                        } else {
+                            await botDice(() => t().arbolTicketsAbiertosIntro(accion.tickets.length), 300);
+                            const lista = accion.tickets.map(tk => `#${tk.id} · ${tk.prioridad} · ${tk.titulo}`).join('\n');
+                            addBubble(lista, 'bot');
                         }
                         estado = 'explorar';
                         setQuickReplies(t().menuInicial, 'menu');

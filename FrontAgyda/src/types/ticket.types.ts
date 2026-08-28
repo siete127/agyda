@@ -50,6 +50,7 @@ export interface Ticket {
   minutosTotalEspera: number
   chatRelacionadoId: number | null
   chatRelacionadoEstado: string | null
+  encuestaAplica: boolean
 }
 
 export type SlaEstado = 'cumplido' | 'incumplido' | 'en_riesgo' | 'en_tiempo'
@@ -202,6 +203,7 @@ export function parseTicket(raw: Record<string, unknown>): Ticket {
     minutosTotalEspera: Number(p('MINUTOS_TOTAL_ESPERA', 'minutosTotalEspera') ?? 0),
     chatRelacionadoId: parseNum(p('chatRelacionadoId', 'CHAT_RELACIONADO_ID')),
     chatRelacionadoEstado: String(p('chatRelacionadoEstado', 'CHAT_RELACIONADO_ESTADO') ?? '') || null,
+    encuestaAplica: parseBool(p('encuestaAplica', 'ENCUESTA_APLICA')) ?? true,
   }
 }
 

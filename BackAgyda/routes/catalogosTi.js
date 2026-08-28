@@ -40,6 +40,11 @@ router.post('/servicios', requireActionAccess('configuracion', 'configurar'), ca
 router.put('/servicios/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateServicio);
 router.patch('/servicios/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleServicioActivo);
 
+// Días festivos (excluidos del cálculo de SLA)
+router.get('/dias-festivos', requireActionAccess('configuracion', 'ver'), catalogosTiController.getDiasFestivos);
+router.post('/dias-festivos', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createDiaFestivo);
+router.delete('/dias-festivos/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.deleteDiaFestivo);
+
 // Integraciones (placeholder clave/valor, sin cifrado)
 router.get('/integraciones', requireActionAccess('configuracion', 'ver'), catalogosTiController.getIntegraciones);
 router.put('/integraciones', requireActionAccess('configuracion', 'configurar'), catalogosTiController.setIntegracion);

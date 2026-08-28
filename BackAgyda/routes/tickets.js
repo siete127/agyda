@@ -52,6 +52,13 @@ router.post('/sla/run-cron', verificarRol(['AD']), ticketSlaCron.runNow);
 router.get('/escalamiento-config', requireActionAccess('configuracion', 'ver'), ticketController.getEscalamientoConfig);
 router.put('/escalamiento-config', requireActionAccess('configuracion', 'configurar'), ticketController.actualizarEscalamientoConfig);
 
+// Configuración de envío de encuesta de satisfacción (prioridad mínima por área)
+router.get('/encuesta-config', requireActionAccess('configuracion', 'ver'), ticketController.getEncuestaConfig);
+router.put('/encuesta-config', requireActionAccess('configuracion', 'configurar'), ticketController.actualizarEncuestaConfig);
+
+// Ficha 360° del usuario (identificación al atender ticket/chat)
+router.get('/ficha-usuario/:userId', requireActionAccess('tickets', 'ver'), ticketController.getFichaUsuario);
+
 // Catálogos (clasificación, categorías, códigos de cierre)
 router.get('/categorias', requireActionAccess('tickets', 'ver'), ticketController.getCategorias);
 router.get('/codigos-cierre', requireActionAccess('tickets', 'ver'), ticketController.getCodigosCierre);

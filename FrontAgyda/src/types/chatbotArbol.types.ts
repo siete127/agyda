@@ -1,4 +1,4 @@
-export type ChatbotNodoTipo = 'pregunta' | 'resolucion' | 'escalar_chat' | 'crear_ticket'
+export type ChatbotNodoTipo = 'pregunta' | 'resolucion' | 'escalar_chat' | 'crear_ticket' | 'consultar_tickets'
 
 export interface ChatbotNodoOpcion {
   id: number
@@ -23,4 +23,5 @@ export const NODO_TIPO_LABELS: Record<ChatbotNodoTipo, string> = {
   resolucion: 'Resolución (mensaje final)',
   escalar_chat: 'Escalar a chat en vivo',
   crear_ticket: 'Crear ticket automáticamente',
+  consultar_tickets: 'Consultar mis tickets abiertos',
 }

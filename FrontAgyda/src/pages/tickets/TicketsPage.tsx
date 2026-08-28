@@ -7,6 +7,7 @@ import {
   LayoutList, Table2, BarChart2, Timer, Paperclip, Trash2, Users, KeyRound,
 } from 'lucide-react'
 import { ticketsService } from '@/services/tickets.service'
+import { FichaUsuarioModal } from './FichaUsuarioModal'
 import { kbService } from '@/services/kb.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/Button'
@@ -18,6 +19,7 @@ import {
   CLASIFICACION_LABELS, MOTIVO_ESPERA_LABELS, calcularPrioridad,
 } from '@/types/ticket.types'
 import { catalogosTiService } from '@/services/catalogosTi.service'
+import { camposPersonalizadosService } from '@/services/camposPersonalizados.service'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -46,6 +48,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     sede: '', departamento: '', activoAfectado: '', servicioAfectado: '',
     impacto: '' as TicketImpacto | '', urgencia: '' as TicketUrgencia | '',
   })
+  const [valoresCampos, setValoresCampos] = useState<Record<number, string>>({})
 
   const prioridadCalculada = calcularPrioridad(form.impacto, form.urgencia)
 
@@ -71,6 +74,13 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     staleTime: 5 * 60_000,
   })
   const subcategoriasDisponibles = categorias.find((c) => c.nombre === form.categoria)?.subcategorias ?? []
+  const categoriaSeleccionadaId = categorias.find((c) => c.nombre === form.categoria)?.id ?? null
+
+  const { data: camposPersonalizadosDisponibles = [] } = useQuery({
+    queryKey: ['campos-personalizados-por-categoria', categoriaSeleccionadaId],
+    queryFn: () => camposPersonalizadosService.getCamposPorCategoria(categoriaSeleccionadaId!),
+    enabled: categoriaSeleccionadaId != null,
+  })
 
   const crear = useMutation({
     mutationFn: () => ticketsService.create({
@@ -87,6 +97,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
       servicioAfectado: form.servicioAfectado || undefined,
       impacto: form.impacto || undefined,
       urgencia: form.urgencia || undefined,
+      camposPersonalizados: Object.keys(valoresCampos).length ? valoresCampos : undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
@@ -190,6 +201,35 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
             {servicios.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
           </select>
         </div>
+
+        {camposPersonalizadosDisponibles.length > 0 && (
+          <div className="space-y-3 rounded-xl border border-gray-100 bg-surface/50 p-3">
+            {camposPersonalizadosDisponibles.map((campo) => (
+              <div key={campo.id}>
+                <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">
+                  {campo.nombre} {campo.requerido && <span className="text-red-500">*</span>}
+                </label>
+                {campo.tipo === 'lista' ? (
+                  <select
+                    value={valoresCampos[campo.id] ?? ''}
+                    onChange={(e) => setValoresCampos((v) => ({ ...v, [campo.id]: e.target.value }))}
+                    className="field"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {campo.opciones.map((op) => <option key={op} value={op}>{op}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type={campo.tipo === 'numero' ? 'number' : campo.tipo === 'fecha' ? 'date' : 'text'}
+                    value={valoresCampos[campo.id] ?? ''}
+                    onChange={(e) => setValoresCampos((v) => ({ ...v, [campo.id]: e.target.value }))}
+                    className="field"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -296,6 +336,10 @@ function PanelSatisfaccion({ ticket }: { ticket: Ticket }) {
 
   /* Solo se puede calificar después de confirmar que la solución funcionó */
   if (ticket.validadoUsuario !== true) return null
+
+  /* Este ticket no amerita encuesta según la regla configurada por prioridad/área
+     (Configuración > Encuestas) — no se ofrece, aunque ya haya sido validado. */
+  if (!ticket.encuestaAplica) return null
 
   /* Ya calificado */
   if (ticket.rating !== null) {
@@ -819,6 +863,7 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
   const [showEscalar, setShowEscalar] = useState(false)
   const [showResolver, setShowResolver] = useState(false)
   const [showEspera, setShowEspera] = useState(false)
+  const [showFichaUsuario, setShowFichaUsuario] = useState(false)
   const [tab, setTab] = useState<'comentarios' | 'historial'>('comentarios')
   const qc = useQueryClient()
   const user = useAuthStore((s) => s.user)
@@ -882,6 +927,7 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
   const fechaCierre   = fmtFecha(ticket.fechaCierre)
 
   return (
+    <>
     <Modal isOpen onClose={onClose} size="lg" title={`#${ticket.id} · ${ticket.titulo}`}>
       <div className="space-y-4">
         {/* Metadatos */}
@@ -920,7 +966,15 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
           )}
         </div>
         <p className="text-[0.72rem] text-ink-tertiary">
-          {ticket.solicitanteNombre} · {fechaCreacion}
+          <button
+            type="button"
+            onClick={() => setShowFichaUsuario(true)}
+            className="font-medium text-ink-secondary underline decoration-dotted hover:text-brand"
+            title="Ver ficha del usuario"
+          >
+            {ticket.solicitanteNombre}
+          </button>
+          {' · '}{fechaCreacion}
           {ticket.asignadoNombre && ` · → ${ticket.asignadoNombre}`}
           {fechaCierre && <span className="ml-1">· Cerrado: {fechaCierre}</span>}
         </p>
@@ -1250,6 +1304,10 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
         )}
       </div>
     </Modal>
+    {showFichaUsuario && (
+      <FichaUsuarioModal userId={ticket.solicitanteId} onClose={() => setShowFichaUsuario(false)} />
+    )}
+    </>
   )
 }
 

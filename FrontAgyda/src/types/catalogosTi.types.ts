@@ -50,3 +50,9 @@ export interface Servicio {
   proveedorNombre: string | null
   activo: boolean
 }
+
+export interface DiaFestivo {
+  id: number
+  fecha: string
+  descripcion: string | null
+}

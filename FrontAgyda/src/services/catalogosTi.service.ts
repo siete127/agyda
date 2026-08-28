@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig, Proveedor, Servicio } from '@/types/catalogosTi.types'
+import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig, Proveedor, Servicio, DiaFestivo } from '@/types/catalogosTi.types'
 
 export const catalogosTiService = {
   // Sedes
@@ -89,6 +89,19 @@ export const catalogosTiService = {
   },
   async toggleServicioActivo(id: number): Promise<void> {
     await api.patch(`/catalogos-ti/servicios/${id}/activo`)
+  },
+
+  // Días festivos (excluidos del cálculo de SLA)
+  async getDiasFestivos(): Promise<DiaFestivo[]> {
+    const { data } = await api.get('/catalogos-ti/dias-festivos')
+    return data?.data ?? []
+  },
+  async createDiaFestivo(payload: { fecha: string; descripcion?: string }): Promise<DiaFestivo> {
+    const { data } = await api.post('/catalogos-ti/dias-festivos', payload)
+    return data.data
+  },
+  async deleteDiaFestivo(id: number): Promise<void> {
+    await api.delete(`/catalogos-ti/dias-festivos/${id}`)
   },
 
   // Integraciones (placeholder clave/valor, sin cifrado)

@@ -8,6 +8,10 @@ import { catalogosTiService } from '@/services/catalogosTi.service'
 import type { ReglaAsignacion, ReglaAsignacionPayload } from '@/types/reglasAsignacion.types'
 
 const PRIORIDADES = ['P1', 'P2', 'P3', 'P4']
+const DIAS = [
+  { val: '1', label: 'Lun' }, { val: '2', label: 'Mar' }, { val: '3', label: 'Mié' },
+  { val: '4', label: 'Jue' }, { val: '5', label: 'Vie' }, { val: '6', label: 'Sáb' }, { val: '7', label: 'Dom' },
+]
 
 function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onClose: () => void }) {
   const qc = useQueryClient()
@@ -24,9 +28,19 @@ function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onC
     prioridad: regla?.prioridad ?? null,
     nivelRequerido: regla?.nivelRequerido ?? null,
     especialidadId: regla?.especialidadId ?? null,
+    horarioInicio: regla?.horarioInicio ?? null,
+    horarioFin: regla?.horarioFin ?? null,
+    diasSemana: regla?.diasSemana ? regla.diasSemana.split(',') : [],
   })
 
   const categoriaSeleccionada = categorias.find((c) => c.id === form.categoriaId)
+
+  const toggleDia = (d: string) => {
+    setForm((f) => ({
+      ...f,
+      diasSemana: (f.diasSemana ?? []).includes(d) ? (f.diasSemana ?? []).filter((x) => x !== d) : [...(f.diasSemana ?? []), d],
+    }))
+  }
 
   const guardar = useMutation({
     mutationFn: () => regla
@@ -124,6 +138,44 @@ function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onC
               {especialidades.map((esp) => <option key={esp.id} value={esp.id}>{esp.nombre}</option>)}
             </select>
           </div>
+
+          <div className="rounded-xl border border-gray-100 bg-surface/50 p-3">
+            <p className="mb-2 text-xs font-semibold text-gray-600">
+              Ventana de horario (opcional — ej. reglas de guardia nocturna)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600">Desde</label>
+                <input type="time" className="field mt-1 text-sm" value={form.horarioInicio ?? ''} onChange={(e) => setForm((f) => ({ ...f, horarioInicio: e.target.value || null }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Hasta</label>
+                <input type="time" className="field mt-1 text-sm" value={form.horarioFin ?? ''} onChange={(e) => setForm((f) => ({ ...f, horarioFin: e.target.value || null }))} />
+              </div>
+            </div>
+            <div className="mt-2">
+              <label className="text-xs font-medium text-gray-600">Días (vacío = todos)</label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {DIAS.map((d) => (
+                  <button
+                    key={d.val}
+                    type="button"
+                    onClick={() => toggleDia(d.val)}
+                    className={clsx(
+                      'rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+                      (form.diasSemana ?? []).includes(d.val) ? 'bg-brand text-white' : 'bg-white text-ink-secondary',
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="mt-2 text-[0.68rem] text-ink-tertiary">
+              Si dejas horario y días vacíos, la regla no tiene restricción de horario. Si defines un
+              rango, la regla solo se evalúa dentro de esa ventana (ej. 18:00–08:00 para guardia nocturna).
+            </p>
+          </div>
         </div>
 
         <div className="mt-5 flex justify-end gap-2 border-t border-gray-100 pt-4">
@@ -195,15 +247,26 @@ function SimuladorPanel() {
       </button>
 
       {simular.data && (
-        <div className="mt-3 rounded-xl bg-surface p-3 text-sm">
-          {simular.data.tecnicoId ? (
-            <p>
-              Se asignaría a <span className="font-semibold text-ink">{simular.data.tecnicoNombre}</span>
-              {simular.data.reglaAplicada && <span className="text-ink-tertiary"> (regla #{simular.data.reglaAplicada.id})</span>}
-            </p>
-          ) : (
-            <p className="text-ink-tertiary">Ningún técnico disponible cumple los criterios.</p>
-          )}
+        <div className="mt-3 space-y-2 rounded-xl bg-surface p-3 text-sm">
+          <p>
+            <span className="font-semibold text-ink-secondary">1. Enrutamiento:</span>{' '}
+            {simular.data.enrutamiento.grupoNombre ? (
+              <>
+                iría a <span className="font-semibold text-ink">{simular.data.enrutamiento.grupoNombre}</span> (N{simular.data.enrutamiento.nivel})
+                {simular.data.enrutamiento.reglaAplicada && <span className="text-ink-tertiary"> — regla #{simular.data.enrutamiento.reglaAplicada}</span>}
+              </>
+            ) : (
+              <span className="text-ink-tertiary">no hay grupo configurado para esa área/nivel.</span>
+            )}
+          </p>
+          <p>
+            <span className="font-semibold text-ink-secondary">2. Asignación:</span>{' '}
+            {simular.data.asignacion.tecnicoId ? (
+              <>se asignaría a <span className="font-semibold text-ink">{simular.data.asignacion.tecnicoNombre}</span></>
+            ) : (
+              <span className="text-ink-tertiary">ningún técnico disponible cumple los criterios.</span>
+            )}
+          </p>
         </div>
       )}
     </div>
@@ -220,7 +283,7 @@ export function ReglasNegocioTab() {
   })
 
   const toggleActiva = useMutation({
-    mutationFn: (r: ReglaAsignacion) => reglasAsignacionService.updateRegla(r.id, { nombre: r.nombre, activa: !r.activa, area: r.area, categoriaId: r.categoriaId, subcategoriaId: r.subcategoriaId, sedeId: r.sedeId, prioridad: r.prioridad, nivelRequerido: r.nivelRequerido, especialidadId: r.especialidadId }),
+    mutationFn: (r: ReglaAsignacion) => reglasAsignacionService.updateRegla(r.id, { nombre: r.nombre, activa: !r.activa, area: r.area, categoriaId: r.categoriaId, subcategoriaId: r.subcategoriaId, sedeId: r.sedeId, prioridad: r.prioridad, nivelRequerido: r.nivelRequerido, especialidadId: r.especialidadId, horarioInicio: r.horarioInicio, horarioFin: r.horarioFin, diasSemana: r.diasSemana ? r.diasSemana.split(',') : [] }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reglas-asignacion'] }),
   })
 
@@ -285,6 +348,9 @@ export function ReglasNegocioTab() {
                   <p className="text-xs text-ink-tertiary">
                     {[r.area, r.categoriaNombre, r.subcategoriaNombre, r.sedeNombre, r.prioridad, r.nivelRequerido ? `N${r.nivelRequerido}` : null, r.especialidadNombre]
                       .filter(Boolean).join(' · ') || 'Sin condiciones (comodín)'}
+                    {r.horarioInicio && r.horarioFin && (
+                      <span className="ml-1.5 text-amber-600">⏰ {r.horarioInicio}–{r.horarioFin}</span>
+                    )}
                   </p>
                 </div>
                 <label className="flex items-center gap-1 text-xs">

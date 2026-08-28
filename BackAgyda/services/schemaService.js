@@ -650,6 +650,39 @@ BEGIN
     ALTER TABLE dbo.NOTIFICACIONES ADD DATA_EXTRA NVARCHAR(MAX) NULL;
 END
 
+-- Suscripciones de notificaciones push del navegador (Web Push / VAPID).
+-- Un usuario puede tener varias (una por navegador/dispositivo donde activó
+-- push). PUSH_ENDPOINT es único por navegador — sirve de llave natural para
+-- evitar duplicar la misma suscripción si el usuario la vuelve a activar.
+IF OBJECT_ID('dbo.PUSH_SUSCRIPCIONES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.PUSH_SUSCRIPCIONES (
+    PUSH_ID INT IDENTITY(1,1) PRIMARY KEY,
+    PUSH_USER_ID INT NOT NULL,
+    PUSH_ENDPOINT NVARCHAR(500) NOT NULL,
+    PUSH_P256DH NVARCHAR(300) NOT NULL,
+    PUSH_AUTH NVARCHAR(150) NOT NULL,
+    PUSH_USER_AGENT NVARCHAR(300) NULL,
+    PUSH_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+    PUSH_ULTIMO_USO DATETIME NULL,
+    CONSTRAINT UQ_PUSH_ENDPOINT UNIQUE (PUSH_ENDPOINT)
+  );
+  CREATE INDEX IX_PUSH_USER ON dbo.PUSH_SUSCRIPCIONES(PUSH_USER_ID);
+END
+
+-- Catálogo de días festivos/no laborables para el cálculo de SLA. El SLA de
+-- tickets excluye sábados, domingos y las fechas listadas aquí (día completo,
+-- no franjas horarias) — ver minutosLaborablesEntre() en ticketController.js.
+IF OBJECT_ID('dbo.TI_DIAS_FESTIVOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_DIAS_FESTIVOS (
+    FEST_ID INT IDENTITY(1,1) PRIMARY KEY,
+    FEST_FECHA DATE NOT NULL,
+    FEST_DESCRIPCION NVARCHAR(150) NULL,
+    CONSTRAINT UQ_TI_DIAS_FESTIVOS_FECHA UNIQUE (FEST_FECHA)
+  );
+END
+
 IF OBJECT_ID('dbo.TICKETS_SLA_REGLAS', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.TICKETS_SLA_REGLAS (
@@ -666,6 +699,62 @@ BEGIN
 END
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_SERVICIO')
   ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_SERVICIO NVARCHAR(100) NULL;
+
+-- Campos personalizados por categoría: el AD define campos extra (texto,
+-- número, lista o fecha) que aparecen en el formulario de ticket SOLO cuando
+-- se elige una de las categorías asociadas al campo (TCP_CAMPO_CATEGORIA).
+-- Sin categorías asociadas = el campo no aparece en ningún formulario (evita
+-- que un campo "huérfano" aparezca por accidente en todos los tickets).
+IF OBJECT_ID('dbo.TI_CAMPOS_PERSONALIZADOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_CAMPOS_PERSONALIZADOS (
+    CP_ID INT IDENTITY(1,1) PRIMARY KEY,
+    CP_NOMBRE NVARCHAR(100) NOT NULL,
+    CP_TIPO NVARCHAR(20) NOT NULL, -- 'texto' | 'numero' | 'lista' | 'fecha'
+    CP_OPCIONES NVARCHAR(MAX) NULL, -- CSV de opciones, solo para CP_TIPO='lista'
+    CP_REQUERIDO BIT NOT NULL DEFAULT 0,
+    CP_ORDEN INT NOT NULL DEFAULT 0,
+    CP_ACTIVO BIT NOT NULL DEFAULT 1,
+    CP_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_TI_CAMPOS_PERSONALIZADOS_NOMBRE UNIQUE (CP_NOMBRE)
+  );
+END
+IF OBJECT_ID('dbo.TI_CAMPO_PERSONALIZADO_CATEGORIA', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_CAMPO_PERSONALIZADO_CATEGORIA (
+    TCP_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TCP_CAMPO_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TI_CAMPOS_PERSONALIZADOS(CP_ID) ON DELETE CASCADE,
+    TCP_CAT_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TICKET_CATEGORIAS(CAT_ID),
+    CONSTRAINT UQ_TI_CAMPO_CATEGORIA UNIQUE (TCP_CAMPO_ID, TCP_CAT_ID)
+  );
+  CREATE INDEX IX_TCP_CAT ON dbo.TI_CAMPO_PERSONALIZADO_CATEGORIA(TCP_CAT_ID);
+END
+IF OBJECT_ID('dbo.TICKET_CAMPOS_VALORES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_CAMPOS_VALORES (
+    TCV_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TCV_TICKET_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TICKETS(TICKET_ID) ON DELETE CASCADE,
+    TCV_CAMPO_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TI_CAMPOS_PERSONALIZADOS(CP_ID),
+    TCV_VALOR NVARCHAR(500) NULL, -- texto/número/fecha(ISO)/opción de lista, todos como texto
+    CONSTRAINT UQ_TICKET_CAMPO_VALOR UNIQUE (TCV_TICKET_ID, TCV_CAMPO_ID)
+  );
+  CREATE INDEX IX_TCV_TICKET ON dbo.TICKET_CAMPOS_VALORES(TCV_TICKET_ID);
+END
+
+-- Reglas de envío de encuesta de satisfacción: una fila por área (TI/ST) con
+-- la prioridad MÍNIMA que amerita encuesta. P1 es la más crítica, así que
+-- "prioridad mínima P2" significa que P1 y P2 sí reciben encuesta, P3/P4 no.
+-- Sin fila para un área = comportamiento anterior (siempre se ofrece), para
+-- no romper el flujo si el AD no configuró nada todavía.
+IF OBJECT_ID('dbo.TICKETS_ENCUESTA_CONFIG', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_ENCUESTA_CONFIG (
+    TEN_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TEN_AREA NVARCHAR(10) NOT NULL,
+    TEN_PRIORIDAD_MINIMA NVARCHAR(10) NOT NULL DEFAULT 'P4', -- P4 = todas las prioridades reciben encuesta
+    CONSTRAINT UQ_TICKETS_ENCUESTA_CONFIG_AREA UNIQUE (TEN_AREA)
+  );
+END
 
 -- Catálogo de Servicios y Proveedores (Tecnología/TI). TICKETS.SERVICIO_AFECTADO
 -- sigue siendo texto libre (igual que CATEGORIA/SEDE, decisión D3) para no
@@ -886,6 +975,15 @@ BEGIN
   );
   CREATE INDEX IX_TI_REGLAS_ACTIVA_ORDEN ON dbo.TI_REGLAS_ASIGNACION(REG_ACTIVA, REG_PRIORIDAD_ORDEN);
 END
+-- Condición de horario a nivel de REGLA (distinta del horario por TÉCNICO que ya
+-- existía en TI_STAFF_STATUS): permite reglas tipo "solo aplica de 6pm a 8am" para
+-- rutear a especialistas de guardia nocturna. NULL = sin restricción de horario.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_REGLAS_ASIGNACION' AND COLUMN_NAME='REG_HORARIO_INICIO')
+  ALTER TABLE dbo.TI_REGLAS_ASIGNACION ADD REG_HORARIO_INICIO TIME NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_REGLAS_ASIGNACION' AND COLUMN_NAME='REG_HORARIO_FIN')
+  ALTER TABLE dbo.TI_REGLAS_ASIGNACION ADD REG_HORARIO_FIN TIME NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_REGLAS_ASIGNACION' AND COLUMN_NAME='REG_DIAS_SEMANA')
+  ALTER TABLE dbo.TI_REGLAS_ASIGNACION ADD REG_DIAS_SEMANA NVARCHAR(20) NULL; -- CSV '1,2,3,4,5' (1=lunes); NULL = todos los días
 
 IF OBJECT_ID('dbo.TICKETS_ESCALAMIENTO_CONFIG', 'U') IS NULL
 BEGIN
@@ -910,6 +1008,22 @@ BEGIN
     INT_VALOR NVARCHAR(500) NULL,
     INT_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
     CONSTRAINT UQ_TI_INTEGRACIONES_CLAVE UNIQUE (INT_CLAVE)
+  );
+END
+
+-- Plantillas de correo: texto reutilizable para copiar/pegar en el cliente de
+-- correo del técnico. El sistema NO envía correos automáticamente (Correo no
+-- es un canal real de creación/respuesta de tickets en este proyecto).
+IF OBJECT_ID('dbo.TICKETS_PLANTILLAS_CORREO', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_PLANTILLAS_CORREO (
+    PC_ID INT IDENTITY(1,1) PRIMARY KEY,
+    PC_NOMBRE NVARCHAR(150) NOT NULL,
+    PC_ASUNTO NVARCHAR(300) NULL,
+    PC_CONTENIDO NVARCHAR(MAX) NOT NULL,
+    PC_ACTIVA BIT NOT NULL DEFAULT 1,
+    PC_CREADO_POR INT NULL,
+    PC_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
   );
 END
 `;
@@ -946,6 +1060,7 @@ async function ensureKbSchema(pool) {
           ART_TITULO                NVARCHAR(200) NOT NULL,
           ART_CONTENIDO             NVARCHAR(MAX) NOT NULL,
           ART_CATEGORIA             NVARCHAR(50) NULL,
+          ART_TIPO                  NVARCHAR(10) NOT NULL DEFAULT 'articulo', -- 'articulo' | 'faq'
           ART_AUTOR_ID              INT NULL,
           ART_AUTOR_NOMBRE          NVARCHAR(150) NULL,
           ART_ACTIVO                BIT NOT NULL DEFAULT 1,
@@ -954,6 +1069,8 @@ async function ensureKbSchema(pool) {
         );
         CREATE INDEX IX_KB_CATEGORIA ON dbo.KB_ARTICULOS(ART_CATEGORIA);
       END
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TIPO')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TIPO NVARCHAR(10) NOT NULL DEFAULT 'articulo';
     `);
     logger.info('✅ Esquema de base de conocimiento asegurado');
   } catch (err) {

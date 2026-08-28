@@ -1,5 +1,6 @@
 import { api } from '@/lib/axios'
-import { parseTicket, parseTicketComment, type Ticket, type TicketComment, type TicketEstado } from '@/types/ticket.types'
+import { parseTicket, parseTicketComment, type Ticket, type TicketComment, type TicketEstado, type TicketPrioridad } from '@/types/ticket.types'
+import type { FichaUsuario } from '@/types/fichaUsuario.types'
 
 export const ticketsService = {
   async getAll(): Promise<Ticket[]> {
@@ -30,6 +31,7 @@ export const ticketsService = {
     servicioAfectado?: string
     impacto?: string
     urgencia?: string
+    camposPersonalizados?: Record<number, string>
   }): Promise<Ticket> {
     const { data } = await api.post('/tickets', payload)
     return parseTicket((data?.ticket ?? data?.data ?? data) as Record<string, unknown>)
@@ -148,6 +150,20 @@ export const ticketsService = {
 
   async actualizarEscalamientoConfig(payload: { autoEscalamiento: boolean; umbralRiesgo: number }): Promise<void> {
     await api.put('/tickets/escalamiento-config', payload)
+  },
+
+  async getEncuestaConfig(): Promise<{ id: number; area: string; prioridadMinima: TicketPrioridad }[]> {
+    const { data } = await api.get('/tickets/encuesta-config')
+    return data?.data ?? []
+  },
+
+  async actualizarEncuestaConfig(area: string, prioridadMinima: TicketPrioridad): Promise<void> {
+    await api.put('/tickets/encuesta-config', { area, prioridadMinima })
+  },
+
+  async getFichaUsuario(userId: number): Promise<FichaUsuario> {
+    const { data } = await api.get(`/tickets/ficha-usuario/${userId}`)
+    return data.data
   },
 
   async runSlaCronNow(): Promise<void> {

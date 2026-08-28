@@ -370,6 +370,51 @@ exports.toggleServicioActivo = async (req, res) => {
   }
 };
 
+/* ── Días festivos (excluidos del cálculo de SLA — ver minutosLaborablesEntre en ticketController.js) ── */
+exports.getDiasFestivos = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT FEST_ID as id, CONVERT(varchar(10), FEST_FECHA, 23) as fecha, FEST_DESCRIPCION as descripcion
+      FROM TI_DIAS_FESTIVOS ORDER BY FEST_FECHA`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando días festivos:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createDiaFestivo = async (req, res) => {
+  try {
+    const { fecha, descripcion } = req.body;
+    if (!fecha) return res.status(400).json({ success: false, message: 'fecha requerida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('fecha', sql.Date, fecha)
+      .input('descripcion', sql.NVarChar, descripcion || null)
+      .query(`INSERT INTO TI_DIAS_FESTIVOS (FEST_FECHA, FEST_DESCRIPCION) VALUES (@fecha, @descripcion); SELECT SCOPE_IDENTITY() as id;`);
+    require('./ticketController').invalidarCacheFeriados(req.user?.empresa);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'catalogos-ti', accion:'crear-dia-festivo', entidadId: String(ins.recordset[0].id), detalle:{ fecha, descripcion }, ip:req.ip });
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), fecha, descripcion: descripcion || null } });
+  } catch (e) {
+    console.error('Error creando día festivo:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.deleteDiaFestivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`DELETE FROM TI_DIAS_FESTIVOS WHERE FEST_ID=@id`);
+    require('./ticketController').invalidarCacheFeriados(req.user?.empresa);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error eliminando día festivo:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 /* ── Integraciones (placeholder clave/valor, sin cifrado — ver comentario en schemaService.js) ── */
 exports.getIntegraciones = async (req, res) => {
   try {

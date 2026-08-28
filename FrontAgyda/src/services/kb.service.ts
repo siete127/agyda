@@ -1,10 +1,18 @@
 import { api } from '@/lib/axios'
 
+export type KbTipo = 'articulo' | 'faq'
+
+export const KB_TIPO_LABELS: Record<KbTipo, string> = {
+  articulo: 'Artículo',
+  faq: 'FAQ',
+}
+
 export interface KbArticulo {
   id: number
   titulo: string
   contenido: string
   categoria: string | null
+  tipo: KbTipo
   autorNombre: string | null
   fechaCreacion: string
   fechaActualizacion: string | null
@@ -16,6 +24,7 @@ function parseArticulo(raw: Record<string, unknown>): KbArticulo {
     titulo: String(raw['titulo'] ?? ''),
     contenido: String(raw['contenido'] ?? ''),
     categoria: (raw['categoria'] as string | null) ?? null,
+    tipo: (raw['tipo'] as KbTipo) ?? 'articulo',
     autorNombre: (raw['autorNombre'] as string | null) ?? null,
     fechaCreacion: String(raw['fechaCreacion'] ?? ''),
     fechaActualizacion: (raw['fechaActualizacion'] as string | null) ?? null,
@@ -23,7 +32,7 @@ function parseArticulo(raw: Record<string, unknown>): KbArticulo {
 }
 
 export const kbService = {
-  async getArticulos(params?: { q?: string; categoria?: string }): Promise<KbArticulo[]> {
+  async getArticulos(params?: { q?: string; categoria?: string; tipo?: KbTipo }): Promise<KbArticulo[]> {
     const { data } = await api.get('/kb/articulos', { params })
     const list: Record<string, unknown>[] = data?.data ?? []
     return list.map(parseArticulo)
@@ -34,12 +43,12 @@ export const kbService = {
     return parseArticulo(data?.data ?? {})
   },
 
-  async create(payload: { titulo: string; contenido: string; categoria?: string }): Promise<KbArticulo> {
+  async create(payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo }): Promise<KbArticulo> {
     const { data } = await api.post('/kb/articulos', payload)
     return parseArticulo(data?.data ?? {})
   },
 
-  async update(id: number, payload: { titulo: string; contenido: string; categoria?: string }): Promise<void> {
+  async update(id: number, payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo }): Promise<void> {
     await api.put(`/kb/articulos/${id}`, payload)
   },
 

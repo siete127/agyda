@@ -2,7 +2,16 @@ const databaseService = require('./databaseService');
 const http = require('http');
 let socketService;
 try { socketService = require('./socketService'); } catch (e) { socketService = null; }
+const pushService = require('./pushService');
 const logger = global.logger || require('../utils/logger');
+
+// Tipos de notificación que valen la pena empujar como push del navegador
+// (fuera de la pestaña activa). El resto de tipos (ej. "noticia") se quedan
+// solo como notificación interna — un push por cada noticia sería ruido.
+const TIPOS_CON_PUSH = new Set([
+  'ticket_sla_riesgo', 'ticket_sla_vencido', 'ticket_reabierto',
+  'livechat_espera_escalada', 'ticket_estado',
+]);
 
 // Relay: emitir al back-intra (puerto 8446) que tiene el socket con los clientes reales
 function relayEmit(room, event, payload) {
@@ -68,6 +77,23 @@ const notificationService = {
       newId = result.recordset?.[0]?.id || null;
     } catch (e) {
       console.warn('⚠️ Error persistiendo notificación en BD:', e?.message || e);
+    }
+
+    // Push del navegador: solo para los tipos que realmente ameritan sacar
+    // al usuario de lo que esté haciendo. No bloquea ni afecta el resultado
+    // de createNotification si falla.
+    if (TIPOS_CON_PUSH.has(tipo)) {
+      try {
+        const ticketId = dataExtra && dataExtra.ticketId ? Number(dataExtra.ticketId) : null;
+        await pushService.enviarATodasLasSuscripciones(pool, usuarioId, {
+          titulo: 'AGYDA — Soporte TI',
+          cuerpo: mensaje,
+          url: ticketId ? `/tickets?id=${ticketId}` : '/tickets',
+          tag: ticketId ? `ticket-${ticketId}` : 'agyda',
+        });
+      } catch (e) {
+        logger.warn('⚠️ Error enviando push para notificación:', e?.message || e);
+      }
     }
 
     return newId;

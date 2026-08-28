@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, FileText } from 'lucide-react'
+import { BookOpen, FileText, HelpCircle } from 'lucide-react'
 import { kbService } from '@/services/kb.service'
 import { catalogosTiService } from '@/services/catalogosTi.service'
 
@@ -31,11 +31,19 @@ export function KbConfigTab() {
           La creación y edición de artículos se hace en el módulo de Base de Conocimiento completo.
         </p>
 
-        <div className="mb-4 flex items-center gap-2 rounded-xl bg-surface p-3">
-          <FileText className="h-4 w-4 text-ink-tertiary" />
-          <span className="text-sm text-ink-secondary">
-            {isLoading ? 'Cargando...' : `${articulos.length} artículo(s) activo(s)`}
-          </span>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-2 rounded-xl bg-surface p-3">
+            <FileText className="h-4 w-4 text-ink-tertiary" />
+            <span className="text-sm text-ink-secondary">
+              {isLoading ? '—' : articulos.filter((a) => a.tipo === 'articulo').length} artículos
+            </span>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-surface p-3">
+            <HelpCircle className="h-4 w-4 text-ink-tertiary" />
+            <span className="text-sm text-ink-secondary">
+              {isLoading ? '—' : articulos.filter((a) => a.tipo === 'faq').length} FAQs
+            </span>
+          </div>
         </div>
 
         {!isLoading && (
