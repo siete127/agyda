@@ -5,8 +5,145 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { CampaniaSoporteTITab } from './CampaniaSoporteTITab'
 import { plantillasCorreoService, type PlantillaCorreo } from '@/services/plantillasCorreo.service'
+import { plantillasRespuestaService, type PlantillaRespuesta } from '@/services/plantillasRespuesta.service'
 
 type SubTab = 'chat' | 'tickets' | 'correo'
+
+function PlantillaRespuestaFormModal({ plantilla, onClose }: { plantilla: PlantillaRespuesta | null; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [nombre, setNombre] = useState(plantilla?.nombre ?? '')
+  const [contenido, setContenido] = useState(plantilla?.contenido ?? '')
+
+  const guardar = useMutation({
+    mutationFn: () => {
+      const payload = { nombre: nombre.trim(), contenido }
+      return plantilla ? plantillasRespuestaService.update(plantilla.id, payload) : plantillasRespuestaService.create(payload)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plantillas-respuesta'] })
+      toast.success(plantilla ? 'Plantilla actualizada' : 'Plantilla creada')
+      onClose()
+    },
+    onError: (e) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudo guardar la plantilla'),
+  })
+
+  const puedeGuardar = nombre.trim() && contenido.trim()
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-base font-bold text-ink">{plantilla ? 'Editar plantilla' : 'Nueva plantilla de respuesta'}</p>
+          <button onClick={onClose} className="text-ink-tertiary hover:text-ink"><X className="h-5 w-5" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-600">Nombre</label>
+            <input className="field mt-1 text-sm" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Solicitar más información" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Contenido</label>
+            <textarea
+              className="field mt-1 min-h-[160px] text-sm"
+              value={contenido}
+              onChange={(e) => setContenido(e.target.value)}
+              placeholder="Texto que se inserta directo en un comentario o en la resolución del ticket..."
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2 border-t border-gray-100 pt-4">
+          <button className="px-3 py-1.5 text-xs text-ink-tertiary" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn-primary flex items-center gap-1 px-3 py-1.5 text-xs"
+            disabled={!puedeGuardar || guardar.isPending}
+            onClick={() => guardar.mutate()}
+          >
+            <Save className="h-3.5 w-3.5" /> Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PlantillasRespuestaPanel() {
+  const qc = useQueryClient()
+  const [modal, setModal] = useState<'crear' | PlantillaRespuesta | null>(null)
+
+  const { data: plantillas = [], isLoading } = useQuery({
+    queryKey: ['plantillas-respuesta'],
+    queryFn: () => plantillasRespuestaService.getPlantillas(true),
+  })
+
+  const toggle = useMutation({
+    mutationFn: (id: number) => plantillasRespuestaService.toggleActiva(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plantillas-respuesta'] }),
+  })
+
+  const eliminar = useMutation({
+    mutationFn: (id: number) => plantillasRespuestaService.remove(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plantillas-respuesta'] })
+      toast.success('Plantilla eliminada')
+    },
+    onError: (e) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudo eliminar'),
+  })
+
+  return (
+    <div>
+      <p className="mb-3 text-xs text-ink-tertiary">
+        Texto reutilizable que un técnico puede insertar directo en un comentario o al resolver un
+        ticket (aparece como opción de "Usar plantilla" dentro del ticket).
+      </p>
+
+      <div className="mb-3 flex justify-end">
+        <button className="btn-primary flex items-center gap-1 px-3 py-1.5 text-xs" onClick={() => setModal('crear')}>
+          <Plus className="h-3.5 w-3.5" /> Nueva plantilla
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-ink-tertiary">Cargando...</p>
+      ) : plantillas.length === 0 ? (
+        <p className="py-6 text-center text-sm text-ink-tertiary">Sin plantillas de respuesta configuradas.</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {plantillas.map((p) => (
+            <div key={p.id} className="flex items-center gap-2 py-2.5">
+              <div className="flex-1">
+                <p className={clsx('text-sm font-medium', !p.activa && 'text-ink-tertiary line-through')}>{p.nombre}</p>
+                <p className="truncate text-xs text-ink-tertiary">{p.contenido}</p>
+              </div>
+              <button className="text-ink-tertiary hover:text-brand" onClick={() => setModal(p)} title="Editar">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                className={clsx('hover:opacity-70', p.activa ? 'text-red-400' : 'text-green-500')}
+                onClick={() => toggle.mutate(p.id)}
+                title={p.activa ? 'Desactivar' : 'Activar'}
+              >
+                {p.activa ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                className="text-ink-tertiary hover:text-red-500"
+                onClick={() => { if (confirm(`¿Eliminar la plantilla "${p.nombre}"?`)) eliminar.mutate(p.id) }}
+                title="Eliminar"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modal && (
+        <PlantillaRespuestaFormModal plantilla={modal === 'crear' ? null : modal} onClose={() => setModal(null)} />
+      )}
+    </div>
+  )
+}
 
 function PlantillaCorreoFormModal({ plantilla, onClose }: { plantilla: PlantillaCorreo | null; onClose: () => void }) {
   const qc = useQueryClient()
@@ -208,11 +345,7 @@ export function PlantillasTab() {
           </div>
         )}
 
-        {sub === 'tickets' && (
-          <p className="py-8 text-center text-sm text-ink-tertiary">
-            Las plantillas de respuesta para tickets todavía no están disponibles — próximamente.
-          </p>
-        )}
+        {sub === 'tickets' && <PlantillasRespuestaPanel />}
 
         {sub === 'correo' && <PlantillasCorreoPanel />}
       </div>

@@ -966,6 +966,11 @@ BEGIN
   );
   CREATE INDEX IX_TICKET_ESC_TICKET ON dbo.TICKET_ESCALAMIENTOS(TICKET_ID);
 END
+-- Vínculo real hacia el catálogo de Proveedores (D del diagrama: Nivel 3
+-- puede escalar a "Proveedor"). Aditivo — el resto de escalamientos (a
+-- especialista/desarrollo interno) simplemente dejan esto NULL.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKET_ESCALAMIENTOS' AND COLUMN_NAME='PROVEEDOR_ID')
+  ALTER TABLE dbo.TICKET_ESCALAMIENTOS ADD PROVEEDOR_ID INT NULL FOREIGN KEY REFERENCES dbo.TI_PROVEEDORES(PROV_ID);
 
 IF OBJECT_ID('dbo.TICKETS_API_KEYS', 'U') IS NULL
 BEGIN
@@ -1065,6 +1070,46 @@ END
 IF NOT EXISTS (SELECT 1 FROM dbo.TICKETS_ESCALAMIENTO_CONFIG)
   INSERT INTO dbo.TICKETS_ESCALAMIENTO_CONFIG (TEC_AUTO_ESCALAMIENTO, TEC_UMBRAL_RIESGO) VALUES (1, 0.8);
 
+-- Recordatorios automáticos: notifica al técnico asignado cuando un ticket
+-- abierto lleva N días SIN actividad (sin comentarios ni cambios de historial).
+-- Config global de una sola fila, mismo patrón que TICKETS_ESCALAMIENTO_CONFIG.
+IF OBJECT_ID('dbo.TICKETS_RECORDATORIOS_CONFIG', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_RECORDATORIOS_CONFIG (
+    TRC_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TRC_ACTIVO BIT NOT NULL DEFAULT 1,
+    TRC_DIAS_SIN_ACTIVIDAD INT NOT NULL DEFAULT 3,
+    TRC_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+IF NOT EXISTS (SELECT 1 FROM dbo.TICKETS_RECORDATORIOS_CONFIG)
+  INSERT INTO dbo.TICKETS_RECORDATORIOS_CONFIG (TRC_ACTIVO, TRC_DIAS_SIN_ACTIVIDAD) VALUES (1, 3);
+
+-- Config general de Tecnología/TI (fila única global). ZONA_HORARIA es
+-- puramente INFORMATIVA: el sistema real siempre calcula con la hora del
+-- servidor (America/Mexico_City) en SLA, crons y horarios — cambiar este
+-- valor NO afecta ningún cálculo. Sirve solo para que el admin deje
+-- documentado en qué zona horaria opera la mesa de servicio.
+IF OBJECT_ID('dbo.TI_CONFIG_GENERAL', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_CONFIG_GENERAL (
+    TCG_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TCG_ZONA_HORARIA NVARCHAR(60) NOT NULL DEFAULT 'America/Mexico_City',
+    TCG_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+IF NOT EXISTS (SELECT 1 FROM dbo.TI_CONFIG_GENERAL)
+  INSERT INTO dbo.TI_CONFIG_GENERAL (TCG_ZONA_HORARIA) VALUES ('America/Mexico_City');
+
+-- Fecha del último recordatorio enviado para este ticket — a diferencia de
+-- SLA_RIESGO_NOTIFICADO (un bit, porque el SLA solo empeora con el tiempo),
+-- "sin actividad" puede resetearse: si llega un comentario nuevo, el ticket
+-- vuelve a tener actividad reciente y debe poder disparar OTRO recordatorio
+-- más adelante si vuelve a quedarse inactivo. Guardar la fecha (no un bit)
+-- permite comparar "¿la actividad más reciente es posterior al último aviso?".
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='FECHA_ULTIMO_RECORDATORIO')
+  ALTER TABLE dbo.TICKETS ADD FECHA_ULTIMO_RECORDATORIO DATETIME NULL;
+
 -- Placeholder clave/valor para Integraciones (Configuración > Tecnología/TI).
 -- INT_VALOR es texto plano SIN CIFRAR — no usar para secretos reales (API keys,
 -- contraseñas) hasta implementar cifrado. Solo para flags/URLs no sensibles.
@@ -1092,6 +1137,22 @@ BEGIN
     PC_ACTIVA BIT NOT NULL DEFAULT 1,
     PC_CREADO_POR INT NULL,
     PC_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+
+-- Plantillas de respuesta rápida para tickets: texto reutilizable que un
+-- técnico inserta directo en un comentario o en el diagnóstico/acciones al
+-- resolver (a diferencia de las de correo, que son solo para copiar/pegar
+-- fuera del sistema — estas se insertan dentro de la misma app).
+IF OBJECT_ID('dbo.TICKETS_PLANTILLAS_RESPUESTA', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_PLANTILLAS_RESPUESTA (
+    PR_ID INT IDENTITY(1,1) PRIMARY KEY,
+    PR_NOMBRE NVARCHAR(150) NOT NULL,
+    PR_CONTENIDO NVARCHAR(MAX) NOT NULL,
+    PR_ACTIVA BIT NOT NULL DEFAULT 1,
+    PR_CREADO_POR INT NULL,
+    PR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
   );
 END
 `;
@@ -5004,6 +5065,58 @@ END
         INSERT INTO dbo.CHATBOT_NODOS (NODO_CODIGO, NODO_TEXTO, NODO_TIPO)
         VALUES ('inicio', N'¿En qué te podemos ayudar?', 'pregunta')
       `);
+    }
+
+    // Árbol de ejemplo (3 ramas: Hardware con autoservicio, Contraseña con
+    // resolución directa, y escalamiento a un humano) para que el chatbot
+    // tenga contenido navegable desde el primer arranque, en vez de quedar
+    // con solo el nodo 'inicio' sin opciones. Solo corre si el nodo 'inicio'
+    // sigue sin ninguna opción — así no pisa un árbol que el admin ya haya
+    // personalizado manualmente desde Configuración > Chatbot.
+    const inicioSinOpciones = await pool.request().query(`
+      SELECT n.NODO_ID as id FROM dbo.CHATBOT_NODOS n
+      WHERE n.NODO_CODIGO='inicio' AND NOT EXISTS (SELECT 1 FROM dbo.CHATBOT_NODO_OPCIONES o WHERE o.OPC_NODO_ID = n.NODO_ID)
+    `);
+    if (inicioSinOpciones.recordset.length) {
+      const inicioId = inicioSinOpciones.recordset[0].id;
+      const catHardware = await pool.request().query(`SELECT CAT_ID as id FROM dbo.TICKET_CATEGORIAS WHERE CAT_NOMBRE='Hardware'`);
+      const catAccesos = await pool.request().query(`SELECT CAT_ID as id FROM dbo.TICKET_CATEGORIAS WHERE CAT_NOMBRE='Usuarios y Accesos'`);
+      const catHardwareId = catHardware.recordset[0]?.id ?? null;
+      const catAccesosId = catAccesos.recordset[0]?.id ?? null;
+
+      const crearNodo = async (codigo, texto, tipo, categoriaId = null) => {
+        const ins = await pool.request()
+          .input('cod', sql.NVarChar, codigo).input('txt', sql.NVarChar, texto)
+          .input('tipo', sql.NVarChar, tipo).input('catId', sql.Int, categoriaId)
+          .query(`INSERT INTO dbo.CHATBOT_NODOS (NODO_CODIGO, NODO_TEXTO, NODO_TIPO, NODO_CATEGORIA_ID)
+                  VALUES (@cod, @txt, @tipo, @catId); SELECT SCOPE_IDENTITY() as id;`);
+        return Number(ins.recordset[0].id);
+      };
+      const crearOpcion = async (nodoId, textoBoton, nodoDestinoId, orden) => {
+        await pool.request()
+          .input('nodoId', sql.Int, nodoId).input('txt', sql.NVarChar, textoBoton)
+          .input('destId', sql.Int, nodoDestinoId).input('orden', sql.Int, orden)
+          .query(`INSERT INTO dbo.CHATBOT_NODO_OPCIONES (OPC_NODO_ID, OPC_TEXTO_BOTON, OPC_NODO_DESTINO_ID, OPC_ORDEN)
+                  VALUES (@nodoId, @txt, @destId, @orden)`);
+      };
+
+      // Rama Hardware: pregunta -> pasos de autoservicio -> resuelto o crear ticket
+      const hwNoEnciende = await crearNodo('hw_no_enciende', '¿Probaste desconectar el equipo de la corriente 30 segundos y volver a conectarlo?', 'pregunta', catHardwareId);
+      const hwFuncionaAutoservicio = await crearNodo('hw_resuelto_autoservicio', 'Genial, eso resuelve la mayoría de los casos. Si vuelve a pasar, no dudes en contactarnos de nuevo.', 'resolucion');
+      const hwCrearTicket = await crearNodo('hw_crear_ticket_no_enciende', 'Vamos a crear un ticket para que un técnico revise el equipo en sitio.', 'crear_ticket', catHardwareId);
+      await crearOpcion(hwNoEnciende, 'Sí, ya lo intenté y sigue sin encender', hwCrearTicket, 1);
+      await crearOpcion(hwNoEnciende, 'No lo había intentado, lo voy a probar', hwFuncionaAutoservicio, 2);
+
+      // Rama Contraseña/Acceso: resolución directa con instrucciones de autoservicio
+      const accesoContrasena = await crearNodo('acceso_contrasena', 'Puedes restablecer tu contraseña desde el portal de autoservicio con tu correo institucional. Si el problema persiste después de intentarlo, contáctanos.', 'resolucion', catAccesosId);
+
+      // Rama de escalamiento directo a un humano
+      const hablarTecnico = await crearNodo('hablar_tecnico', 'Te conectamos con un técnico disponible.', 'escalar_chat');
+
+      // Nodo raíz: 3 opciones hacia las ramas anteriores
+      await crearOpcion(inicioId, 'Mi equipo no enciende', hwNoEnciende, 1);
+      await crearOpcion(inicioId, 'Olvidé mi contraseña', accesoContrasena, 2);
+      await crearOpcion(inicioId, 'Quiero hablar con un técnico', hablarTecnico, 3);
     }
 
     logger.info('✅ Esquema de chatbot asegurado');

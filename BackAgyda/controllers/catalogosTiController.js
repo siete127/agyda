@@ -469,6 +469,36 @@ exports.deleteDiaFestivo = async (req, res) => {
   }
 };
 
+/* ── Config general (fila única). ZONA_HORARIA es informativa, no funcional
+   — ver comentario en schemaService.js. ── */
+exports.getConfigGeneral = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`SELECT TOP 1 TCG_ZONA_HORARIA as zonaHoraria FROM TI_CONFIG_GENERAL ORDER BY TCG_ID`);
+    res.json({ success: true, data: rs.recordset[0] || { zonaHoraria: 'America/Mexico_City' } });
+  } catch (e) {
+    console.error('Error obteniendo config general:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateConfigGeneral = async (req, res) => {
+  try {
+    const { zonaHoraria } = req.body;
+    if (!zonaHoraria) return res.status(400).json({ success: false, message: 'zonaHoraria requerida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('zh', sql.NVarChar, zonaHoraria).query(`
+      UPDATE TI_CONFIG_GENERAL SET TCG_ZONA_HORARIA=@zh, TCG_FECHA_ACTUALIZACION=GETDATE()
+      WHERE TCG_ID = (SELECT TOP 1 TCG_ID FROM TI_CONFIG_GENERAL ORDER BY TCG_ID)
+    `);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'catalogos-ti', accion:'actualizar-config-general', entidadId: 'zona-horaria', detalle:{ zonaHoraria }, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando config general:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 /* ── Integraciones (placeholder clave/valor, sin cifrado — ver comentario en schemaService.js) ── */
 exports.getIntegraciones = async (req, res) => {
   try {

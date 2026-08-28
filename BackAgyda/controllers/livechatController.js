@@ -1071,6 +1071,27 @@ exports.getAgentesEstado = async (req, res) => {
   }
 };
 
+// Supervisor/Admin — todas las conversaciones activas de TODOS los agentes
+// (a diferencia de getMisConversaciones, que solo trae las propias del
+// solicitante). Protegido con 'gestionar-campanas' (nivel admin del módulo),
+// más alto que 'atender', porque ver chats ajenos es sensible. El contenido
+// completo de cada conversación se obtiene igual que ya hacía cualquier
+// agente, vía GET /conversaciones/:conversacionId (esa ruta no filtra por
+// dueño — ver getConversacion — así que ya soportaba esto; lo que faltaba
+// era el listado para descubrir qué conversaciones están activas).
+exports.getConversacionesActivasSupervision = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request().query(`
+      ${SELECT_CONVERSACION} WHERE LC_ESTADO IN ('activa', 'esperando') ORDER BY LC_FECHA_INICIO DESC
+    `);
+    res.json({ success: true, data: result.recordset });
+  } catch (error) {
+    console.error('Error obteniendo conversaciones activas (supervisión):', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Corre cada minuto (ver cron.schedule al final del archivo). Pone
 // automáticamente disponible=1 a los agentes en modo automático cuando entra
 // el horario de atención, y disponible=0 cuando sale — así nadie tiene que

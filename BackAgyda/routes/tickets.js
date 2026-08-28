@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ticketController = require('../controllers/ticketController');
 const ticketSlaCron = require('../controllers/ticketSlaCronController');
+const ticketRecordatoriosCron = require('../controllers/ticketRecordatoriosCronController');
 const { uploadEvidence } = require('../middleware/evidenceUpload');
 const { authenticateToken, verificarRol } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
@@ -47,6 +48,11 @@ router.patch('/sla/reglas/:id', requireActionAccess('tickets', 'editar'), ticket
 router.delete('/sla/reglas/:id', requireActionAccess('tickets', 'editar'), ticketController.eliminarReglaSla);
 router.get('/sla/reporte', requireActionAccess('tickets', 'ver'), ticketController.getReporteSla);
 router.post('/sla/run-cron', verificarRol(['AD']), ticketSlaCron.runNow);
+
+// Recordatorios automáticos de tickets sin actividad (config global de una sola fila)
+router.get('/recordatorios-config', requireActionAccess('configuracion', 'ver'), ticketRecordatoriosCron.getConfig);
+router.put('/recordatorios-config', requireActionAccess('configuracion', 'configurar'), ticketRecordatoriosCron.updateConfig);
+router.post('/recordatorios/run-cron', verificarRol(['AD']), ticketRecordatoriosCron.runNow);
 
 // Configuración de escalamiento automático (fila única global)
 router.get('/escalamiento-config', requireActionAccess('configuracion', 'ver'), ticketController.getEscalamientoConfig);

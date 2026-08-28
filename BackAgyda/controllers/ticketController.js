@@ -380,59 +380,97 @@ async function validarAgentePool(pool, area, userId, nivel = null) {
   return rs.recordset.length > 0;
 }
 
+const TICKETS_SELECT_COLUMNAS = `
+  t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
+  t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
+  t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+  t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
+  t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
+  su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
+  au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
+  s.RATING as rating,
+  CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+`;
+
+// Filtros opcionales de listado (estado/prioridad/área/técnico asignado/rango
+// de fechas) + paginación real — aplican igual sobre cualquiera de las 4 ramas
+// de visibilidad por rol de abajo, que ya no cambian (son seguridad, no filtro).
+function aplicarFiltrosYPaginacion(query, req) {
+  const condiciones = [];
+  const request = query.request;
+  if (req.query.estado) {
+    condiciones.push('t.ESTADO = @fEstado');
+    request.input('fEstado', sql.NVarChar, String(req.query.estado));
+  }
+  if (req.query.prioridad) {
+    condiciones.push('t.PRIORIDAD = @fPrioridad');
+    request.input('fPrioridad', sql.NVarChar, String(req.query.prioridad).toUpperCase());
+  }
+  if (req.query.area) {
+    condiciones.push('t.AREA = @fArea');
+    request.input('fArea', sql.NVarChar, normalizeArea(req.query.area));
+  }
+  if (req.query.asignadoA) {
+    condiciones.push('t.ASIGNADO_A = @fAsignadoA');
+    request.input('fAsignadoA', sql.Int, Number(req.query.asignadoA));
+  }
+  if (req.query.fechaDesde) {
+    condiciones.push('t.FECHA_CREACION >= @fFechaDesde');
+    request.input('fFechaDesde', sql.Date, req.query.fechaDesde);
+  }
+  if (req.query.fechaHasta) {
+    condiciones.push('t.FECHA_CREACION < DATEADD(DAY, 1, @fFechaHasta)');
+    request.input('fFechaHasta', sql.Date, req.query.fechaHasta);
+  }
+
+  const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  request.input('fLimit', sql.Int, limit);
+  request.input('fOffset', sql.Int, offset);
+
+  return { extraWhere: condiciones.length ? ` AND ${condiciones.join(' AND ')}` : '', limit, offset };
+}
+
 exports.getTickets = async (req, res) => {
   try {
     const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
     const usuarioId = Number(req.headers['usuarioid'] || req.query.usuarioId || 0) || null;
     const clienteId = Number(req.headers['clienteid'] || req.query.clienteId || 0) || null;
     const areaParam = req.query.area ? normalizeArea(req.query.area) : null;
-    
+
     const pool = await databaseService.getPool(req.user?.empresa);
     const reglasSla = await cargarReglasSlaActivas(pool);
     const feriadosSla = await cargarFeriadosActivos(pool, req.user?.empresa);
 
     // If a clienteId is provided, return only tickets for that solicitante
     if (clienteId) {
-      const rs = await pool.request()
-        .input('clienteId', sql.Int, clienteId)
-        .query(`
-          SELECT TOP 200
-            t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-            t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-            su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-            au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-            s.RATING as rating,
-            CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+      const request = pool.request().input('clienteId', sql.Int, clienteId);
+      const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+      const rs = await request.query(`
+          SELECT ${TICKETS_SELECT_COLUMNAS}
           FROM TICKETS t
           LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
           LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
           LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-          WHERE t.SOLICITANTE_ID = @clienteId
-          ORDER BY t.TICKET_ID DESC`);
+          WHERE t.SOLICITANTE_ID = @clienteId${extraWhere}
+          ORDER BY t.TICKET_ID DESC
+          OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
       return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
     }
 
     // Admins ven todo
     if (['AD','ADMIN','ADM'].includes(tipoUsuario)) {
-      const rs = await pool.request().query(`
-        SELECT TOP 200
-          t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-          t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-          su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-          au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-          s.RATING as rating,
-          CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+      const request = pool.request();
+      const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+      const rs = await request.query(`
+        SELECT ${TICKETS_SELECT_COLUMNAS}
         FROM TICKETS t
         LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
         LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
         LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-        ORDER BY t.TICKET_ID DESC`);
+        WHERE 1=1${extraWhere}
+        ORDER BY t.TICKET_ID DESC
+        OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
       return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
     }
 
@@ -440,52 +478,40 @@ exports.getTickets = async (req, res) => {
     if (['TI','ST'].includes(tipoUsuario)) {
       if (!usuarioId) return res.status(400).json({ success: false, message: 'usuarioId requerido' });
 
-      const rs = await pool.request()
-        .input('uid', sql.Int, usuarioId)
-        .query(`
-          SELECT TOP 200
-            t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-            t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-            su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-            au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-            s.RATING as rating,
-            CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+      const request = pool.request().input('uid', sql.Int, usuarioId);
+      const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+      const rs = await request.query(`
+          SELECT ${TICKETS_SELECT_COLUMNAS}
           FROM TICKETS t
           LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
           LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
           LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-          WHERE t.ASIGNADO_A = @uid
+          WHERE (t.ASIGNADO_A = @uid
              OR EXISTS (
                SELECT 1 FROM TICKET_HISTORIAL h
                WHERE h.TICKET_ID = t.TICKET_ID
                  AND h.TIPO IN ('asignado','transferido','transferido_por','participante')
                  AND h.USER_ID = @uid
-             )
-          ORDER BY t.TICKET_ID DESC`);
+             ))${extraWhere}
+          ORDER BY t.TICKET_ID DESC
+          OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
       return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
     }
 
     // Resto: sólo sus propios tickets
     if (!usuarioId) return res.status(400).json({ success: false, message: 'usuarioId requerido' });
 
-    const rs = await pool.request().input('uid', sql.Int, usuarioId)
-      .query(`SELECT TOP 200 t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-                     t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-                     su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-                     au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-                     s.RATING as rating,
-                     CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+    const request = pool.request().input('uid', sql.Int, usuarioId);
+    const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+    const rs = await request.query(`
+              SELECT ${TICKETS_SELECT_COLUMNAS}
               FROM TICKETS t
               LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
               LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
               LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-              WHERE t.SOLICITANTE_ID=@uid ORDER BY t.TICKET_ID DESC`);
+              WHERE t.SOLICITANTE_ID=@uid${extraWhere}
+              ORDER BY t.TICKET_ID DESC
+              OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
 
     return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
   } catch (e) {
@@ -1638,7 +1664,7 @@ WHEN NOT MATCHED THEN INSERT (TICKET_ID, RATING, COMENTARIO) VALUES (@tid, @r, @
 // Lógica de negocio separada del handler HTTP para que el cron de SLA
 // (ticketSlaCronController.js) pueda invocarla directamente sin simular
 // un req/res de Express.
-async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, actorId, tenantKey, tipo = 'manual' }) {
+async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, actorId, tenantKey, tipo = 'manual', proveedorId = null }) {
   const hdr = await pool.request().input('tid', sql.Int, ticketId)
     .query(`SELECT AREA, ASIGNADO_A, NIVEL_ACTUAL, ESTADO, SOLICITANTE_ID, CATEGORIA, SEDE, PRIORIDAD FROM TICKETS WHERE TICKET_ID=@tid`);
   if (!hdr.recordset.length) return { ok: false, message: 'Ticket no encontrado' };
@@ -1688,13 +1714,20 @@ async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, acto
     .input('prev', sql.Int, prevAsignado)
     .input('nuevo', sql.Int, nuevoAsignado)
     .input('actor', sql.Int, actorId || null)
+    .input('provId', sql.Int, proveedorId || null)
     .query(`INSERT INTO TICKET_ESCALAMIENTOS
-              (TICKET_ID, NIVEL_ORIGEN, NIVEL_DESTINO, TIPO, MOTIVO, ASIGNADO_ANTERIOR, ASIGNADO_NUEVO, ACTOR_ID)
-            VALUES (@tid, @no, @nd, @tipo, @motivo, @prev, @nuevo, @actor)`);
+              (TICKET_ID, NIVEL_ORIGEN, NIVEL_DESTINO, TIPO, MOTIVO, ASIGNADO_ANTERIOR, ASIGNADO_NUEVO, ACTOR_ID, PROVEEDOR_ID)
+            VALUES (@tid, @no, @nd, @tipo, @motivo, @prev, @nuevo, @actor, @provId)`);
+
+  let proveedorNombre = null;
+  if (proveedorId) {
+    const rsProv = await pool.request().input('id', sql.Int, proveedorId).query(`SELECT PROV_NOMBRE FROM TI_PROVEEDORES WHERE PROV_ID=@id`);
+    proveedorNombre = rsProv.recordset[0]?.PROV_NOMBRE ?? null;
+  }
 
   await pool.request()
     .input('tid', sql.Int, ticketId)
-    .input('det', sql.NVarChar, `Escalado de N${nivelOrigen} a N${destino}${motivo ? ` — ${motivo}` : ''} (${tipo})`)
+    .input('det', sql.NVarChar, `Escalado de N${nivelOrigen} a N${destino}${motivo ? ` — ${motivo}` : ''} (${tipo})${proveedorNombre ? ` — Proveedor: ${proveedorNombre}` : ''}`)
     .input('uid', sql.Int, actorId || null)
     .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE, USER_ID) VALUES (@tid, 'escalado', @det, @uid)`);
 
@@ -1745,7 +1778,7 @@ async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, acto
     entidadId: String(ticketId), detalle: { nivelOrigen, nivelDestino: destino, tipo, motivo }, ip: null,
   });
 
-  return { ok: true, nivelActual: destino, asignadoA: nuevoAsignado };
+  return { ok: true, nivelActual: destino, asignadoA: nuevoAsignado, proveedorId: proveedorId || null, proveedorNombre };
 }
 
 // POST /api/tickets/:id/escalar
@@ -1755,7 +1788,7 @@ exports.escalarTicket = async (req, res) => {
     if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
 
     const { id } = req.params;
-    const { nivelDestino, motivo } = req.body;
+    const { nivelDestino, motivo, proveedorId } = req.body;
     const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
     const pool = await databaseService.getPool(req.user?.empresa);
 
@@ -1763,10 +1796,11 @@ exports.escalarTicket = async (req, res) => {
       ticketId: Number(id),
       nivelDestino: nivelDestino ? Number(nivelDestino) : null,
       motivo, actorId, tenantKey: req.user?.empresa, tipo: 'manual',
+      proveedorId: proveedorId ? Number(proveedorId) : null,
     });
 
     if (!result.ok) return res.status(400).json({ success: false, message: result.message });
-    res.json({ success: true, nivelActual: result.nivelActual, asignadoA: result.asignadoA });
+    res.json({ success: true, nivelActual: result.nivelActual, asignadoA: result.asignadoA, proveedorId: result.proveedorId, proveedorNombre: result.proveedorNombre });
   } catch (e) {
     console.error('Error escalando ticket:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -1781,7 +1815,7 @@ exports.resolverTicket = async (req, res) => {
     if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
 
     const { id } = req.params;
-    const { diagnostico, accionesRealizadas, causaRaiz, codigoCierre, articuloKbId } = req.body;
+    const { diagnostico, accionesRealizadas, causaRaiz, codigoCierre, articuloKbId, nuevoArticuloKb } = req.body;
     const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
 
     if (!diagnostico || !accionesRealizadas) {
@@ -1790,13 +1824,30 @@ exports.resolverTicket = async (req, res) => {
     const codigo = codigoCierre && TICKET_CODIGOS_CIERRE.includes(codigoCierre)
       ? codigoCierre
       : TICKET_CODIGOS_CIERRE[0];
-    const artId = Number(articuloKbId) || null;
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
     if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     if (['cerrado'].includes(hdr.recordset[0].ESTADO)) {
       return res.status(400).json({ success: false, message: 'El ticket ya está cerrado' });
+    }
+
+    // Vincular un artículo existente (articuloKbId) o crear uno nuevo desde
+    // el propio cierre (nuevoArticuloKb) — mutuamente excluyentes; si llega
+    // nuevoArticuloKb, se crea primero y se usa su ID resultante.
+    let artId = Number(articuloKbId) || null;
+    if (!artId && nuevoArticuloKb?.titulo && nuevoArticuloKb?.contenido) {
+      const kbController = require('./kbController');
+      const kbResult = await kbController.crearArticuloInterno(pool, {
+        titulo: nuevoArticuloKb.titulo,
+        contenido: nuevoArticuloKb.contenido,
+        categoria: nuevoArticuloKb.categoria,
+        tipo: nuevoArticuloKb.tipo,
+        autorId: req.user?.id || actorId,
+        autorNombre: req.user?.nombre || null,
+        ip: req.ip,
+      });
+      if (kbResult.ok) artId = kbResult.data.id;
     }
 
     await pool.request()
@@ -2189,14 +2240,15 @@ exports.getReporteSatisfaccion = async (req, res) => {
     
     const pool = await databaseService.getPool(req.user?.empresa);
     const { from, to, area } = req.query;
-    let where = '1=1';
-    
-    if (from) where += ` AND t.FECHA_CREACION >= CONVERT(datetime, '${from}')`;
-    if (to) where += ` AND t.FECHA_CREACION <= CONVERT(datetime, '${to}')`;
-    if (area) where += ` AND t.AREA = '${normalizeArea(area)}'`;
-    
-    const rs = await pool.request().query(`
-      SELECT 
+    const condiciones = ['1=1'];
+    const request = pool.request();
+
+    if (from) { condiciones.push('t.FECHA_CREACION >= @rsFrom'); request.input('rsFrom', sql.DateTime, from); }
+    if (to) { condiciones.push('t.FECHA_CREACION <= @rsTo'); request.input('rsTo', sql.DateTime, to); }
+    if (area) { condiciones.push('t.AREA = @rsArea'); request.input('rsArea', sql.NVarChar, normalizeArea(area)); }
+
+    const rs = await request.query(`
+      SELECT
         t.TICKET_ID as id,
         t.TITULO as titulo,
         t.AREA as area,
@@ -2212,7 +2264,7 @@ exports.getReporteSatisfaccion = async (req, res) => {
       LEFT JOIN NEUS_USUARIOS owner ON owner.NEUS_ID = t.SOLICITANTE_ID
       LEFT JOIN NEUS_USUARIOS asg ON asg.NEUS_ID = t.ASIGNADO_A
       LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-      WHERE ${where}
+      WHERE ${condiciones.join(' AND ')}
       ORDER BY t.TICKET_ID DESC
     `);
     
@@ -2233,14 +2285,15 @@ exports.getReporteSatisfaccionCSV = async (req, res) => {
     
     const pool = await databaseService.getPool(req.user?.empresa);
     const { from, to, area } = req.query;
-    let where = '1=1';
-    
-    if (from) where += ` AND t.FECHA_CREACION >= CONVERT(datetime, '${from}')`;
-    if (to) where += ` AND t.FECHA_CREACION <= CONVERT(datetime, '${to}')`;
-    if (area) where += ` AND t.AREA = '${normalizeArea(area)}'`;
-    
-    const rs = await pool.request().query(`
-      SELECT 
+    const condiciones = ['1=1'];
+    const request = pool.request();
+
+    if (from) { condiciones.push('t.FECHA_CREACION >= @rsFrom'); request.input('rsFrom', sql.DateTime, from); }
+    if (to) { condiciones.push('t.FECHA_CREACION <= @rsTo'); request.input('rsTo', sql.DateTime, to); }
+    if (area) { condiciones.push('t.AREA = @rsArea'); request.input('rsArea', sql.NVarChar, normalizeArea(area)); }
+
+    const rs = await request.query(`
+      SELECT
         t.TICKET_ID as id,
         t.TITULO as titulo,
         t.AREA as area,
@@ -2256,7 +2309,7 @@ exports.getReporteSatisfaccionCSV = async (req, res) => {
       LEFT JOIN NEUS_USUARIOS owner ON owner.NEUS_ID = t.SOLICITANTE_ID
       LEFT JOIN NEUS_USUARIOS asg ON asg.NEUS_ID = t.ASIGNADO_A
       LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-      WHERE ${where}
+      WHERE ${condiciones.join(' AND ')}
       ORDER BY t.TICKET_ID DESC
     `);
     

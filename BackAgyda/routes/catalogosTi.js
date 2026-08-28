@@ -45,6 +45,10 @@ router.post('/servicios', requireActionAccess('configuracion', 'configurar'), ca
 router.put('/servicios/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateServicio);
 router.patch('/servicios/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleServicioActivo);
 
+// Config general (zona horaria informativa)
+router.get('/config-general', requireActionAccess('configuracion', 'ver'), catalogosTiController.getConfigGeneral);
+router.put('/config-general', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateConfigGeneral);
+
 // Días festivos (excluidos del cálculo de SLA)
 router.get('/dias-festivos', requireActionAccess('configuracion', 'ver'), catalogosTiController.getDiasFestivos);
 router.post('/dias-festivos', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createDiaFestivo);

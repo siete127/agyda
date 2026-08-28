@@ -78,6 +78,7 @@ app.use('/api/nomina',   require('./routes/nomina'));
 app.use('/api/tickets', require('./routes/tickets'));
 app.use('/api/kb', require('./routes/kb'));
 app.use('/api/plantillas-correo', require('./routes/plantillasCorreo'));
+app.use('/api/plantillas-respuesta', require('./routes/plantillasRespuesta'));
 app.use('/api/catalogos-ti', require('./routes/catalogosTi'));
 app.use('/api/tecnicos', require('./routes/tecnicos'));
 app.use('/api/push', require('./routes/push'));

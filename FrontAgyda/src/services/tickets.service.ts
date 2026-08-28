@@ -3,8 +3,16 @@ import { parseTicket, parseTicketComment, type Ticket, type TicketComment, type 
 import type { FichaUsuario } from '@/types/fichaUsuario.types'
 
 export const ticketsService = {
-  async getAll(): Promise<Ticket[]> {
-    const { data } = await api.get('/tickets')
+  async getAll(filtros?: {
+    prioridad?: string
+    area?: string
+    asignadoA?: number
+    fechaDesde?: string
+    fechaHasta?: string
+    limit?: number
+    offset?: number
+  }): Promise<Ticket[]> {
+    const { data } = await api.get('/tickets', { params: filtros })
     const list = Array.isArray(data) ? data : (data?.data ?? data?.tickets ?? [])
     return (list as Record<string, unknown>[]).map(parseTicket)
   },
@@ -56,9 +64,9 @@ export const ticketsService = {
     await api.post(`/tickets/${id}/transferir`, { usuarioId })
   },
 
-  async escalar(id: number, nivelDestino?: number, motivo?: string): Promise<{ nivelActual: number; asignadoA: number | null }> {
-    const { data } = await api.post(`/tickets/${id}/escalar`, { nivelDestino, motivo })
-    return { nivelActual: data?.nivelActual, asignadoA: data?.asignadoA ?? null }
+  async escalar(id: number, nivelDestino?: number, motivo?: string, proveedorId?: number): Promise<{ nivelActual: number; asignadoA: number | null; proveedorNombre: string | null }> {
+    const { data } = await api.post(`/tickets/${id}/escalar`, { nivelDestino, motivo, proveedorId })
+    return { nivelActual: data?.nivelActual, asignadoA: data?.asignadoA ?? null, proveedorNombre: data?.proveedorNombre ?? null }
   },
 
   async resolver(id: number, payload: {
@@ -67,6 +75,7 @@ export const ticketsService = {
     causaRaiz?: string
     codigoCierre?: string
     articuloKbId?: number
+    nuevoArticuloKb?: { titulo: string; contenido: string; categoria?: string; tipo?: string }
   }): Promise<void> {
     await api.post(`/tickets/${id}/resolver`, payload)
   },
@@ -171,6 +180,31 @@ export const ticketsService = {
 
   async runSlaCronNow(): Promise<void> {
     await api.post('/tickets/sla/run-cron')
+  },
+
+  async getRecordatoriosConfig(): Promise<{ activo: boolean; diasSinActividad: number }> {
+    const { data } = await api.get('/tickets/recordatorios-config')
+    return data?.data ?? { activo: true, diasSinActividad: 3 }
+  },
+
+  async actualizarRecordatoriosConfig(payload: { activo: boolean; diasSinActividad: number }): Promise<void> {
+    await api.put('/tickets/recordatorios-config', payload)
+  },
+
+  async runRecordatoriosCronNow(): Promise<void> {
+    await api.post('/tickets/recordatorios/run-cron')
+  },
+
+  async exportTicketsCsv(filtros: { from?: string; to?: string; area?: string } = {}): Promise<void> {
+    const { data } = await api.get('/tickets/reportes/tickets-satisfaccion.csv', { params: filtros, responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `tickets-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
   },
 
   async getReporteSatisfaccion(): Promise<{ id: number; rating: number | null; comentario: string | null; area: string }[]> {

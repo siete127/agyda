@@ -55,38 +55,49 @@ exports.getArticuloById = async (req, res) => {
   }
 };
 
+// Lógica de negocio separada del handler HTTP para que ticketController pueda
+// reusarla al crear un artículo directamente desde el flujo de cierre de
+// ticket (mismo patrón que crearTicketInterno en ticketController.js).
+async function crearArticuloInterno(pool, { titulo, contenido, categoria, tipo, autorId, autorNombre, ip }) {
+  const tipoVal = TIPOS_VALIDOS.includes(tipo) ? tipo : 'articulo';
+  if (!titulo || !contenido) {
+    return { ok: false, status: 400, message: 'titulo y contenido son requeridos' };
+  }
+
+  const ins = await pool.request()
+    .input('tit', sql.NVarChar, titulo)
+    .input('cont', sql.NVarChar, contenido)
+    .input('cat', sql.NVarChar, categoria || null)
+    .input('tipo', sql.NVarChar, tipoVal)
+    .input('autorId', sql.Int, autorId || null)
+    .input('autorNombre', sql.NVarChar, autorNombre || null)
+    .query(`INSERT INTO KB_ARTICULOS (ART_TITULO, ART_CONTENIDO, ART_CATEGORIA, ART_TIPO, ART_AUTOR_ID, ART_AUTOR_NOMBRE)
+            VALUES (@tit, @cont, @cat, @tipo, @autorId, @autorNombre);
+            SELECT SCOPE_IDENTITY() as id;`);
+
+  const articuloId = Number(ins.recordset[0].id);
+  await logAudit(pool, { userId: autorId || null, userName: autorNombre || null, modulo: 'kb', accion: 'crear', entidadId: String(articuloId), detalle: { titulo, tipo: tipoVal }, ip: ip || null });
+
+  return { ok: true, status: 201, data: { id: articuloId, titulo, contenido, categoria: categoria || null, tipo: tipoVal, autorNombre: autorNombre || null } };
+}
+
 exports.createArticulo = async (req, res) => {
   try {
     const { titulo, contenido, categoria, tipo } = req.body;
     const autorId = req.user?.id || Number(req.headers['usuarioid']) || null;
     const autorNombre = req.user?.nombre || null;
-    const tipoVal = TIPOS_VALIDOS.includes(tipo) ? tipo : 'articulo';
-
-    if (!titulo || !contenido) {
-      return res.status(400).json({ success: false, message: 'titulo y contenido son requeridos' });
-    }
 
     const pool = await databaseService.getPool(req.user?.empresa);
-    const ins = await pool.request()
-      .input('tit', sql.NVarChar, titulo)
-      .input('cont', sql.NVarChar, contenido)
-      .input('cat', sql.NVarChar, categoria || null)
-      .input('tipo', sql.NVarChar, tipoVal)
-      .input('autorId', sql.Int, autorId)
-      .input('autorNombre', sql.NVarChar, autorNombre)
-      .query(`INSERT INTO KB_ARTICULOS (ART_TITULO, ART_CONTENIDO, ART_CATEGORIA, ART_TIPO, ART_AUTOR_ID, ART_AUTOR_NOMBRE)
-              VALUES (@tit, @cont, @cat, @tipo, @autorId, @autorNombre);
-              SELECT SCOPE_IDENTITY() as id;`);
-
-    const articuloId = Number(ins.recordset[0].id);
-    await logAudit(pool, { userId: autorId, userName: autorNombre, modulo: 'kb', accion: 'crear', entidadId: String(articuloId), detalle: { titulo, tipo: tipoVal }, ip: req.ip });
-
-    res.status(201).json({ success: true, data: { id: articuloId, titulo, contenido, categoria: categoria || null, tipo: tipoVal, autorNombre } });
+    const result = await crearArticuloInterno(pool, { titulo, contenido, categoria, tipo, autorId, autorNombre, ip: req.ip });
+    if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
+    res.status(result.status).json({ success: true, data: result.data });
   } catch (e) {
     console.error('Error creando artículo KB:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };
+
+exports.crearArticuloInterno = crearArticuloInterno;
 
 exports.updateArticulo = async (req, res) => {
   try {

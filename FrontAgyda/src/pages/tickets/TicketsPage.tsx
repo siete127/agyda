@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, RefreshCw, MessageCircle,
   Send, LifeBuoy, Clock, CheckCircle2, CircleDot, UserCheck, Star,
-  LayoutList, Table2, BarChart2, Timer, Paperclip, Trash2, Users, KeyRound,
+  LayoutList, Table2, BarChart2, Timer, Paperclip, Trash2, Users, KeyRound, Download, Columns3,
 } from 'lucide-react'
 import { ticketsService } from '@/services/tickets.service'
 import { FichaUsuarioModal } from './FichaUsuarioModal'
@@ -20,6 +20,7 @@ import {
 } from '@/types/ticket.types'
 import { catalogosTiService } from '@/services/catalogosTi.service'
 import { activosGeneralesService } from '@/services/activosGenerales.service'
+import { plantillasRespuestaService } from '@/services/plantillasRespuesta.service'
 import { camposPersonalizadosService } from '@/services/camposPersonalizados.service'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -51,6 +52,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     impacto: '' as TicketImpacto | '', urgencia: '' as TicketUrgencia | '',
   })
   const [valoresCampos, setValoresCampos] = useState<Record<number, string>>({})
+  const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null)
 
   const prioridadCalculada = calcularPrioridad(form.impacto, form.urgencia)
 
@@ -110,8 +112,24 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
       urgencia: form.urgencia || undefined,
       camposPersonalizados: Object.keys(valoresCampos).length ? valoresCampos : undefined,
     }),
-    onSuccess: () => {
+    onSuccess: async (nuevoTicket) => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
+      // La evidencia se sube en un segundo request al mismo endpoint que ya
+      // existe para adjuntar evidencia a un ticket existente (uploadEvidencia)
+      // — no hay forma de mandar el archivo en el mismo POST de creación
+      // porque el ticket todavía no tiene ID hasta que el primero responde.
+      if (evidenciaFile) {
+        try {
+          await ticketsService.uploadEvidencia(nuevoTicket.id, evidenciaFile)
+        } catch (e) {
+          const status = (e as { response?: { status?: number } })?.response?.status
+          toast.error(
+            status === 403
+              ? 'El ticket se creó, pero tu perfil no tiene permiso para adjuntar evidencia — pídele a un técnico que la suba desde el detalle del ticket'
+              : 'El ticket se creó, pero no se pudo subir la evidencia adjunta',
+          )
+        }
+      }
       toast.success('Ticket creado')
       onClose()
     },
@@ -349,6 +367,19 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Evidencia (opcional)</label>
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:border-teal-400 w-fit">
+            <Paperclip className="h-3.5 w-3.5" />
+            {evidenciaFile ? evidenciaFile.name : 'Adjuntar archivo'}
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => setEvidenciaFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        </div>
+
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button
@@ -513,6 +544,10 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
   const [codigoCierre, setCodigoCierre] = useState<string>('')
   const [buscarKb, setBuscarKb] = useState('')
   const [articuloKbId, setArticuloKbId] = useState<number | null>(null)
+  const [modoKb, setModoKb] = useState<'vincular' | 'crear' | null>(null)
+  const [nuevoTituloKb, setNuevoTituloKb] = useState('')
+  const [nuevoContenidoKb, setNuevoContenidoKb] = useState('')
+  const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null)
 
   const { data: codigos = [] } = useQuery({
     queryKey: ['ticket-codigos-cierre'],
@@ -529,10 +564,29 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
   const resolver = useMutation({
     mutationFn: () => ticketsService.resolver(ticket.id, {
       diagnostico, accionesRealizadas, causaRaiz: causaRaiz || undefined,
-      codigoCierre: codigoCierre || undefined, articuloKbId: articuloKbId ?? undefined,
+      codigoCierre: codigoCierre || undefined,
+      articuloKbId: modoKb === 'vincular' ? (articuloKbId ?? undefined) : undefined,
+      nuevoArticuloKb: modoKb === 'crear' && nuevoTituloKb.trim() && nuevoContenidoKb.trim()
+        ? { titulo: nuevoTituloKb.trim(), contenido: nuevoContenidoKb.trim(), categoria: ticket.categoria || undefined }
+        : undefined,
     }),
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
+      // Mismo endpoint que ya existe para adjuntar evidencia a un ticket
+      // existente — resolverTicket no acepta multipart, así que se sube en
+      // un segundo request justo después de marcar como resuelto.
+      if (evidenciaFile) {
+        try {
+          await ticketsService.uploadEvidencia(ticket.id, evidenciaFile)
+        } catch (e) {
+          const status = (e as { response?: { status?: number } })?.response?.status
+          toast.error(
+            status === 403
+              ? 'El ticket se resolvió, pero tu perfil no tiene permiso para adjuntar evidencia'
+              : 'El ticket se resolvió, pero no se pudo subir la evidencia de la solución',
+          )
+        }
+      }
       toast.success('Ticket marcado como resuelto')
       onDone()
     },
@@ -562,30 +616,83 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Vincular artículo de base de conocimiento (opcional)</label>
-        <input
-          value={buscarKb}
-          onChange={(e) => setBuscarKb(e.target.value)}
-          className="field text-sm mb-1.5"
-          placeholder="Buscar artículo..."
-        />
-        {articulosKb.length > 0 && (
-          <div className="space-y-1 max-h-28 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-1.5">
-            {articulosKb.map((a) => (
-              <div
-                key={a.id}
-                onClick={() => setArticuloKbId(articuloKbId === a.id ? null : a.id)}
-                className={clsx(
-                  'cursor-pointer rounded-md px-2 py-1.5 text-[0.72rem] transition-colors',
-                  articuloKbId === a.id ? 'bg-emerald-100 text-emerald-800 font-semibold' : 'text-ink-secondary hover:bg-surface',
-                )}
-              >
-                {a.titulo}
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Base de conocimiento (opcional)</label>
+        <div className="mb-1.5 flex gap-1.5">
+          <button
+            type="button"
+            className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors', modoKb === 'vincular' ? 'bg-emerald-600 text-white' : 'bg-white text-ink-secondary border border-emerald-200')}
+            onClick={() => setModoKb(modoKb === 'vincular' ? null : 'vincular')}
+          >
+            Vincular existente
+          </button>
+          <button
+            type="button"
+            className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors', modoKb === 'crear' ? 'bg-emerald-600 text-white' : 'bg-white text-ink-secondary border border-emerald-200')}
+            onClick={() => setModoKb(modoKb === 'crear' ? null : 'crear')}
+          >
+            Crear artículo nuevo
+          </button>
+        </div>
+
+        {modoKb === 'vincular' && (
+          <>
+            <input
+              value={buscarKb}
+              onChange={(e) => setBuscarKb(e.target.value)}
+              className="field text-sm mb-1.5"
+              placeholder="Buscar artículo..."
+            />
+            {articulosKb.length > 0 && (
+              <div className="space-y-1 max-h-28 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-1.5">
+                {articulosKb.map((a) => (
+                  <div
+                    key={a.id}
+                    onClick={() => setArticuloKbId(articuloKbId === a.id ? null : a.id)}
+                    className={clsx(
+                      'cursor-pointer rounded-md px-2 py-1.5 text-[0.72rem] transition-colors',
+                      articuloKbId === a.id ? 'bg-emerald-100 text-emerald-800 font-semibold' : 'text-ink-secondary hover:bg-surface',
+                    )}
+                  >
+                    {a.titulo}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+          </>
+        )}
+
+        {modoKb === 'crear' && (
+          <div className="space-y-1.5 rounded-lg border border-emerald-200 bg-white p-2">
+            <input
+              value={nuevoTituloKb}
+              onChange={(e) => setNuevoTituloKb(e.target.value)}
+              className="field text-sm"
+              placeholder="Título del artículo"
+            />
+            <textarea
+              value={nuevoContenidoKb}
+              onChange={(e) => setNuevoContenidoKb(e.target.value)}
+              rows={3}
+              className="field resize-none text-sm"
+              placeholder="Contenido / solución documentada..."
+            />
           </div>
         )}
       </div>
+
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Evidencia de la solución (opcional)</label>
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:border-teal-400 w-fit">
+          <Paperclip className="h-3.5 w-3.5" />
+          {evidenciaFile ? evidenciaFile.name : 'Adjuntar archivo'}
+          <input
+            type="file"
+            className="hidden"
+            onChange={(e) => setEvidenciaFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      </div>
+
       <Button
         size="sm"
         isLoading={resolver.isPending}
@@ -602,13 +709,22 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
 function PanelEscalar({ ticket, onDone }: { ticket: Ticket; onDone: () => void }) {
   const qc = useQueryClient()
   const [motivo, setMotivo] = useState('')
+  const [proveedorId, setProveedorId] = useState<number | ''>('')
   const siguienteNivel = Math.min(ticket.nivelActual + 1, 3)
 
+  // Solo N3 puede involucrar a un proveedor externo (Especialista/Desarrollo
+  // interno vs. Proveedor — ver diagrama de Soporte por Niveles).
+  const { data: proveedores = [] } = useQuery({
+    queryKey: ['catalogos-ti-proveedores'],
+    queryFn: () => catalogosTiService.getProveedores(),
+    enabled: siguienteNivel === 3,
+  })
+
   const escalar = useMutation({
-    mutationFn: () => ticketsService.escalar(ticket.id, siguienteNivel, motivo || undefined),
-    onSuccess: () => {
+    mutationFn: () => ticketsService.escalar(ticket.id, siguienteNivel, motivo || undefined, proveedorId || undefined),
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
-      toast.success(`Ticket escalado a Nivel ${siguienteNivel}`)
+      toast.success(`Ticket escalado a Nivel ${siguienteNivel}${r.proveedorNombre ? ` — ${r.proveedorNombre}` : ''}`)
       onDone()
     },
     onError: () => toast.error('Error al escalar el ticket'),
@@ -633,6 +749,19 @@ function PanelEscalar({ ticket, onDone }: { ticket: Ticket; onDone: () => void }
         className="field py-2 text-sm"
         placeholder="Motivo del escalamiento (opcional)"
       />
+      {siguienteNivel === 3 && (
+        <div>
+          <label className="mb-1 block text-[0.68rem] font-semibold text-orange-800 uppercase tracking-wide">Proveedor externo (opcional)</label>
+          <select
+            value={proveedorId}
+            onChange={(e) => setProveedorId(e.target.value ? Number(e.target.value) : '')}
+            className="field py-2 text-sm"
+          >
+            <option value="">Ninguno / se atiende internamente</option>
+            {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+        </div>
+      )}
       <Button size="sm" isLoading={escalar.isPending} onClick={() => escalar.mutate()}>
         Escalar a Nivel {siguienteNivel}
       </Button>
@@ -736,6 +865,62 @@ const HIST_CONFIG: Record<string, { label: string; color: string; dot: string }>
   reabierto:      { label: 'Ticket reabierto',      color: 'text-red-600',     dot: 'bg-red-500'     },
   en_espera:      { label: 'Puesto en espera',      color: 'text-amber-600',   dot: 'bg-amber-500'   },
   salio_espera:   { label: 'Retomado',              color: 'text-emerald-600', dot: 'bg-emerald-500' },
+}
+
+/* ── Vista Kanban: columnas por estado, cada tarjeta abre el detalle completo
+   para cambiar de estado ahí (reutiliza los flujos de resolver/espera/validar
+   ya existentes en vez de duplicar esa lógica en la tarjeta). ── */
+const KANBAN_COLUMNAS: TicketEstado[] = ['abierto', 'asignado', 'en_proceso', 'en_espera', 'resuelto', 'cerrado']
+
+function KanbanCard({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      className="group flex w-full flex-col gap-1.5 rounded-xl border border-surface-border bg-white p-3 text-left transition-colors hover:border-brand/30"
+    >
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[0.62rem] font-mono font-bold text-ink-tertiary">#{ticket.id}</span>
+        <span className={clsx('chip text-[0.6rem]', PRIORIDAD_COLORS[ticket.prioridad])}>{ticket.prioridad}</span>
+      </div>
+      <p className="line-clamp-2 text-[0.78rem] font-semibold leading-snug text-ink transition-colors group-hover:text-brand">
+        {ticket.titulo}
+      </p>
+      <p className="line-clamp-1 text-[0.65rem] text-ink-tertiary">{ticket.solicitanteNombre}</p>
+      {ticket.asignadoNombre && (
+        <p className="line-clamp-1 text-[0.62rem] text-ink-tertiary">→ {ticket.asignadoNombre}</p>
+      )}
+      {ticket.slaResolucion && (
+        <span className={clsx('chip w-fit text-[0.58rem]', SLA_COLORS[ticket.slaResolucion])}>
+          {SLA_LABELS[ticket.slaResolucion]}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function VistaKanban({ tickets, onOpen }: { tickets: Ticket[]; onOpen: (t: Ticket) => void }) {
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2">
+      {KANBAN_COLUMNAS.map((estado) => {
+        const enColumna = tickets.filter((t) => t.estado === estado)
+        return (
+          <div key={estado} className="flex w-64 flex-shrink-0 flex-col rounded-2xl border border-surface-border bg-surface/40">
+            <div className={clsx('flex items-center justify-between rounded-t-2xl border-b border-surface-border px-3 py-2', ESTADO_COLORS[estado])}>
+              <span className="text-[0.72rem] font-semibold">{ESTADO_LABELS[estado]}</span>
+              <span className="text-[0.68rem] font-bold">{enColumna.length}</span>
+            </div>
+            <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ maxHeight: '65vh' }}>
+              {enColumna.length === 0 ? (
+                <p className="py-6 text-center text-[0.68rem] text-ink-tertiary">Sin tickets</p>
+              ) : (
+                enColumna.map((t) => <KanbanCard key={t.id} ticket={t} onOpen={() => onOpen(t)} />)
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 /* ── Tarjeta de ticket (grid) ── */
@@ -919,6 +1104,12 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
   const { data: comentarios = [], isLoading: loadingComents } = useQuery({
     queryKey: ['ticket-comentarios', ticket.id],
     queryFn: () => ticketsService.getComentarios(ticket.id),
+  })
+
+  const { data: plantillasRespuesta = [] } = useQuery({
+    queryKey: ['plantillas-respuesta'],
+    queryFn: () => plantillasRespuestaService.getPlantillas(true),
+    staleTime: 5 * 60_000,
   })
 
   const { data: historial = [], isLoading: loadingHist } = useQuery({
@@ -1252,28 +1443,43 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
             </div>
 
             {ticket.estado !== 'cerrado' && (
-              <div className="flex gap-2">
-                <input
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  placeholder="Agregar comentario..."
-                  className="field flex-1 py-2"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && comentario.trim()) {
-                      e.preventDefault()
-                      addComentario.mutate(comentario.trim())
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  disabled={!comentario.trim() || addComentario.isPending}
-                  isLoading={addComentario.isPending}
-                  onClick={() => addComentario.mutate(comentario.trim())}
-                  className="px-3"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </Button>
+              <div className="space-y-1.5">
+                {plantillasRespuesta.length > 0 && (
+                  <select
+                    className="field py-1.5 text-xs"
+                    value=""
+                    onChange={(e) => {
+                      const p = plantillasRespuesta.find((x) => String(x.id) === e.target.value)
+                      if (p) setComentario(p.contenido)
+                    }}
+                  >
+                    <option value="">Usar plantilla...</option>
+                    {plantillasRespuesta.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </select>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={comentario}
+                    onChange={(e) => setComentario(e.target.value)}
+                    placeholder="Agregar comentario..."
+                    className="field flex-1 py-2"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && comentario.trim()) {
+                        e.preventDefault()
+                        addComentario.mutate(comentario.trim())
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!comentario.trim() || addComentario.isPending}
+                    isLoading={addComentario.isPending}
+                    onClick={() => addComentario.mutate(comentario.trim())}
+                    className="px-3"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
             )}
           </>
@@ -1696,14 +1902,46 @@ export function TicketsPage() {
   const [filtroEstado, setFiltroEstado] = useState<TicketEstado | 'todos'>('abierto')
   const [showNuevo, setShowNuevo] = useState(false)
   const [showApiKeys, setShowApiKeys] = useState(false)
-  const [vista, setVista] = useState<'lista' | 'tabla' | 'productividad'>('lista')
+  const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
+  const [filtroPrioridad, setFiltroPrioridad] = useState<TicketPrioridad | ''>('')
+  const [filtroArea, setFiltroArea] = useState<'' | 'TI' | 'ST'>('')
+  const [filtroAsignadoA, setFiltroAsignadoA] = useState<number | ''>('')
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
+  const [vista, setVista] = useState<'lista' | 'tabla' | 'kanban' | 'productividad'>('lista')
   const [selected, setSelected] = useState<Ticket | null>(null)
   const currentUser = useAuthStore((s) => s.user)
   const esAD = currentUser?.tipoUsuario?.toUpperCase() === 'AD'
 
+  const filtrosBackend = {
+    prioridad: filtroPrioridad || undefined,
+    area: filtroArea || undefined,
+    asignadoA: filtroAsignadoA || undefined,
+    fechaDesde: filtroFechaDesde || undefined,
+    fechaHasta: filtroFechaHasta || undefined,
+    limit: 200,
+  }
+  const hayFiltrosAvanzados = !!(filtroPrioridad || filtroArea || filtroAsignadoA || filtroFechaDesde || filtroFechaHasta)
+
   const { data: tickets = [], isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['tickets'],
-    queryFn: () => ticketsService.getAll(),
+    queryKey: ['tickets', filtrosBackend],
+    queryFn: () => ticketsService.getAll(filtrosBackend),
+  })
+
+  const { data: staffFiltro = [] } = useQuery({
+    queryKey: ['staff-ti'],
+    queryFn: () => ticketsService.getStaffTI(),
+    staleTime: 60_000,
+    enabled: showFiltrosAvanzados,
+  })
+
+  const exportarCsv = useMutation({
+    mutationFn: () => ticketsService.exportTicketsCsv({
+      from: filtroFechaDesde || undefined,
+      to: filtroFechaHasta || undefined,
+      area: filtroArea || undefined,
+    }),
+    onError: () => toast.error('No se pudo exportar el CSV'),
   })
 
   // Al llegar con ?id= en la URL, abrir ese ticket directamente (sin efecto: se deriva del render)
@@ -1769,6 +2007,16 @@ export function TicketsPage() {
                   )}
                 >
                   <Table2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => { setVista('kanban'); if (filtroEstado !== 'todos') setFiltroEstado('todos') }}
+                  title="Vista kanban"
+                  className={clsx(
+                    'flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+                    vista === 'kanban' ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white/80',
+                  )}
+                >
+                  <Columns3 className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => setVista('productividad')}
@@ -1854,7 +2102,62 @@ export function TicketsPage() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setShowFiltrosAvanzados((v) => !v)}
+            className={clsx(
+              'whitespace-nowrap rounded-full px-3 py-1 text-[0.72rem] font-semibold transition-all',
+              hayFiltrosAvanzados ? 'bg-brand text-white' : 'bg-surface text-ink-tertiary hover:bg-surface-border/60',
+            )}
+          >
+            Filtros{hayFiltrosAvanzados ? ' ●' : ''}
+          </button>
         </div>
+
+        {showFiltrosAvanzados && (
+          <div className="grid grid-cols-2 gap-2 border-b border-surface-border px-5 py-3.5 sm:grid-cols-5">
+            <select value={filtroPrioridad} onChange={(e) => setFiltroPrioridad(e.target.value as TicketPrioridad | '')} className="field py-1.5 text-xs">
+              <option value="">Cualquier prioridad</option>
+              <option value="P1">P1</option>
+              <option value="P2">P2</option>
+              <option value="P3">P3</option>
+              <option value="P4">P4</option>
+            </select>
+            <select value={filtroArea} onChange={(e) => setFiltroArea(e.target.value as '' | 'TI' | 'ST')} className="field py-1.5 text-xs">
+              <option value="">Cualquier área</option>
+              <option value="TI">TI</option>
+              <option value="ST">ST</option>
+            </select>
+            <select
+              value={filtroAsignadoA}
+              onChange={(e) => setFiltroAsignadoA(e.target.value ? Number(e.target.value) : '')}
+              className="field py-1.5 text-xs"
+            >
+              <option value="">Cualquier técnico</option>
+              {staffFiltro.map((s) => <option key={s.usuarioId} value={s.usuarioId}>{s.nombre}</option>)}
+            </select>
+            <input type="date" value={filtroFechaDesde} onChange={(e) => setFiltroFechaDesde(e.target.value)} className="field py-1.5 text-xs" placeholder="Desde" />
+            <input type="date" value={filtroFechaHasta} onChange={(e) => setFiltroFechaHasta(e.target.value)} className="field py-1.5 text-xs" placeholder="Hasta" />
+            <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-5">
+              {hayFiltrosAvanzados ? (
+                <button
+                  className="text-left text-[0.7rem] text-ink-tertiary hover:text-ink"
+                  onClick={() => { setFiltroPrioridad(''); setFiltroArea(''); setFiltroAsignadoA(''); setFiltroFechaDesde(''); setFiltroFechaHasta('') }}
+                >
+                  Limpiar filtros
+                </button>
+              ) : <span />}
+              {esAD && (
+                <button
+                  className="btn-secondary flex items-center gap-1 px-2.5 py-1 text-[0.7rem]"
+                  disabled={exportarCsv.isPending}
+                  onClick={() => exportarCsv.mutate()}
+                >
+                  <Download className="h-3 w-3" /> Exportar CSV
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Stats ── */}
@@ -1910,6 +2213,8 @@ export function TicketsPage() {
           </p>
           <TablaTickets tickets={filtered} />
         </>
+      ) : vista === 'kanban' ? (
+        <VistaKanban tickets={filtered} onOpen={(t) => setSelected(t)} />
       ) : (
         <div className="space-y-3">
           <p className="text-[0.72rem] text-ink-tertiary">

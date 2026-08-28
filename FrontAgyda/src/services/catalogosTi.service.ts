@@ -103,6 +103,15 @@ export const catalogosTiService = {
     await api.patch(`/catalogos-ti/servicios/${id}/activo`)
   },
 
+  // Config general (zona horaria informativa)
+  async getConfigGeneral(): Promise<{ zonaHoraria: string }> {
+    const { data } = await api.get('/catalogos-ti/config-general')
+    return data?.data ?? { zonaHoraria: 'America/Mexico_City' }
+  },
+  async updateConfigGeneral(zonaHoraria: string): Promise<void> {
+    await api.put('/catalogos-ti/config-general', { zonaHoraria })
+  },
+
   // Días festivos (excluidos del cálculo de SLA)
   async getDiasFestivos(): Promise<DiaFestivo[]> {
     const { data } = await api.get('/catalogos-ti/dias-festivos')
