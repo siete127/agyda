@@ -40,7 +40,7 @@ export function Topbar() {
   const canUseMarcador = ['AD', 'CC'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
 
   const openMarcador = () => {
-    window.open('https://web21.rc9.com.mx/', '_blank', 'noopener,noreferrer')
+    window.open('https://dialer20450.pbxhosting.com.mx/', '_blank', 'noopener,noreferrer')
   }
 
   const openMarcadorContingencia = () => {

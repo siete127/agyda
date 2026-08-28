@@ -26,7 +26,7 @@ const PROVIDERS = ['Azul1', 'Vici', 'Integra'];
 
 const DEFAULTS = [
   { label: 'Azul 1',   url: 'https://azul1.ardabytec.vip/', vpn: false, provider: 'Azul1' },
-  { label: 'Web21 RC9', url: 'https://web21.rc9.com.mx/',    vpn: true,  provider: 'Vici'  },
+  { label: 'Dialer 20450', url: 'https://dialer20450.pbxhosting.com.mx/', vpn: true, provider: 'Vici' },
 ];
 
 async function seedVistas(pool) {
