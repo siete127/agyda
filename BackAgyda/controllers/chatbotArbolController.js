@@ -111,6 +111,7 @@ exports.avanzar = async (req, res) => {
           categoria: categoriaNombre,
           tenantKey: req.user?.empresa,
           esAD: false,
+          canalOrigen: 'chatbot',
         });
         if (result.ok) {
           await chatbotArbolService.cerrarSesion(pool, token, { ticketId: result.data.id });

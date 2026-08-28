@@ -1,7 +1,7 @@
 import {
   Settings, Headset, Tags, Users, UsersRound, Megaphone, MessageCircle, Bot,
   GitBranch, Timer, ArrowUpCircle, Zap, Bell, BookOpen, ClipboardList,
-  FileText, ShieldCheck, Database, Plug,
+  FileText, ShieldCheck, Database, Plug, ListChecks,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -29,6 +29,7 @@ export const CONFIGURACION_SECCIONES: ConfiguracionSeccion[] = [
   { key: 'kb',             label: 'Base de Conocimiento',     icon: BookOpen,      disponible: true },
   { key: 'encuestas',      label: 'Encuestas',                icon: ClipboardList, disponible: true },
   { key: 'plantillas',     label: 'Plantillas',                icon: FileText,      disponible: true },
+  { key: 'campos-personalizados', label: 'Campos Personalizados', icon: ListChecks, disponible: true },
   { key: 'seguridad',      label: 'Seguridad',                icon: ShieldCheck,   disponible: true },
   { key: 'catalogos',      label: 'Catálogos',                icon: Database,      disponible: true },
   { key: 'integraciones',  label: 'Integraciones',            icon: Plug,          disponible: true },

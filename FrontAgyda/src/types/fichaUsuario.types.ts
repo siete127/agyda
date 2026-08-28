@@ -8,6 +8,7 @@ export interface FichaUsuarioPerfil {
   departamento: string | null
   tipoUsuario: string
   activo: boolean
+  usuarioRed: string | null
 }
 
 export interface FichaUsuarioTicket {

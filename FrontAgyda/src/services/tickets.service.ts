@@ -29,6 +29,8 @@ export const ticketsService = {
     departamento?: string
     activoAfectado?: string
     servicioAfectado?: string
+    activoAfectadoId?: number
+    servicioAfectadoId?: number
     impacto?: string
     urgencia?: string
     camposPersonalizados?: Record<number, string>

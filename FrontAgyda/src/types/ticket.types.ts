@@ -5,6 +5,15 @@ export type TicketClasificacion = 'incidente' | 'solicitud' | 'acceso' | 'proble
 export type TicketImpacto = 'BAJO' | 'MEDIO' | 'ALTO'
 export type TicketUrgencia = 'BAJA' | 'MEDIA' | 'ALTA'
 export type TicketMotivoEspera = 'usuario' | 'proveedor' | 'autorizacion' | 'refaccion' | 'ventana'
+export type TicketCanalOrigen = 'portal' | 'chatbot' | 'chat_en_vivo' | 'tecnico' | 'api'
+
+export const CANAL_ORIGEN_LABELS: Record<TicketCanalOrigen, string> = {
+  portal: 'Portal',
+  chatbot: 'Chatbot',
+  chat_en_vivo: 'Chat en Vivo',
+  tecnico: 'Creado por técnico',
+  api: 'API / Integración',
+}
 
 export interface Ticket {
   id: number
@@ -33,6 +42,8 @@ export interface Ticket {
   departamento: string | null
   activoAfectado: string | null
   servicioAfectado: string | null
+  activoAfectadoId: number | null
+  servicioAfectadoId: number | null
   impacto: TicketImpacto | null
   urgencia: TicketUrgencia | null
   nivelActual: number
@@ -51,6 +62,11 @@ export interface Ticket {
   chatRelacionadoId: number | null
   chatRelacionadoEstado: string | null
   encuestaAplica: boolean
+  canalOrigen: TicketCanalOrigen | null
+  slaRespuestaCumplido: boolean | null
+  slaResolucionCumplido: boolean | null
+  minutosPrimeraRespuesta: number | null
+  minutosTrabajados: number | null
 }
 
 export type SlaEstado = 'cumplido' | 'incumplido' | 'en_riesgo' | 'en_tiempo'
@@ -186,6 +202,8 @@ export function parseTicket(raw: Record<string, unknown>): Ticket {
     departamento: String(p('DEPARTAMENTO', 'departamento') ?? '') || null,
     activoAfectado: String(p('ACTIVO_AFECTADO', 'activoAfectado') ?? '') || null,
     servicioAfectado: String(p('SERVICIO_AFECTADO', 'servicioAfectado') ?? '') || null,
+    activoAfectadoId: parseNum(p('ACTIVO_AFECTADO_ID', 'activoAfectadoId')),
+    servicioAfectadoId: parseNum(p('SERVICIO_AFECTADO_ID', 'servicioAfectadoId')),
     impacto: (String(p('IMPACTO', 'impacto') ?? '') || null) as TicketImpacto | null,
     urgencia: (String(p('URGENCIA', 'urgencia') ?? '') || null) as TicketUrgencia | null,
     nivelActual: Number(p('NIVEL_ACTUAL', 'nivelActual') ?? 1),
@@ -204,6 +222,11 @@ export function parseTicket(raw: Record<string, unknown>): Ticket {
     chatRelacionadoId: parseNum(p('chatRelacionadoId', 'CHAT_RELACIONADO_ID')),
     chatRelacionadoEstado: String(p('chatRelacionadoEstado', 'CHAT_RELACIONADO_ESTADO') ?? '') || null,
     encuestaAplica: parseBool(p('encuestaAplica', 'ENCUESTA_APLICA')) ?? true,
+    canalOrigen: (String(p('CANAL_ORIGEN', 'canalOrigen') ?? '') || null) as TicketCanalOrigen | null,
+    slaRespuestaCumplido: parseBool(p('SLA_RESPUESTA_CUMPLIDO', 'slaRespuestaCumplido')),
+    slaResolucionCumplido: parseBool(p('SLA_RESOLUCION_CUMPLIDO', 'slaResolucionCumplido')),
+    minutosPrimeraRespuesta: parseNum(p('MINUTOS_PRIMERA_RESPUESTA', 'minutosPrimeraRespuesta')),
+    minutosTrabajados: parseNum(p('MINUTOS_TRABAJADOS', 'minutosTrabajados')),
   }
 }
 

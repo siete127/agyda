@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { User, Mail, Phone, Building2, Star, Laptop, TicketIcon } from 'lucide-react'
+import { User, Mail, Phone, Building2, Star, Laptop, TicketIcon, IdCard } from 'lucide-react'
 import { clsx } from 'clsx'
 import { ticketsService } from '@/services/tickets.service'
 import { Modal } from '@/components/ui/Modal'
@@ -30,6 +30,9 @@ export function FichaUsuarioModal({ userId, onClose }: { userId: number; onClose
               </div>
             </div>
             <div className="mt-3 space-y-1 text-xs text-ink-secondary">
+              {ficha.perfil.usuarioRed && (
+                <p className="flex items-center gap-1.5"><IdCard className="h-3 w-3 text-ink-tertiary" /> {ficha.perfil.usuarioRed}</p>
+              )}
               {ficha.perfil.correo && (
                 <p className="flex items-center gap-1.5"><Mail className="h-3 w-3 text-ink-tertiary" /> {ficha.perfil.correo}</p>
               )}

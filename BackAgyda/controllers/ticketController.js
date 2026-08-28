@@ -185,6 +185,52 @@ function enriquecerConSla(tickets, reglas, feriados = null) {
   });
 }
 
+// Cierra un ticket 'resuelto' (ESTADO='cerrado' + FECHA_CIERRE) y congela un
+// snapshot del SLA/tiempos en ese instante — ver columnas SLA_*_CUMPLIDO/
+// MINUTOS_* en schemaService.js. Se llama desde dos puntos: registrarSatisfaccion
+// (ticket con encuesta, cierra tras calificar) y validarResolucion (ticket sin
+// encuesta aplicable, cierra directo al confirmar que la solución funcionó) —
+// ambos deben producir el mismo snapshot, de ahí la función compartida.
+async function cerrarTicketConSnapshot(pool, ticketId, tenantKey) {
+  const hdr = await pool.request().input('tid', sql.Int, ticketId).query(`
+    SELECT TICKET_ID, PRIORIDAD, AREA, SERVICIO_AFECTADO, FECHA_CREACION, FECHA_PRIMERA_RESPUESTA,
+           MINUTOS_TOTAL_ESPERA, FECHA_CIERRE
+    FROM TICKETS WHERE TICKET_ID=@tid`);
+  if (!hdr.recordset.length) return;
+  const t = hdr.recordset[0];
+
+  const reglas = await cargarReglasSlaActivas(pool);
+  const feriados = await cargarFeriadosActivos(pool, tenantKey);
+  const regla = buscarReglaSla(reglas, t.PRIORIDAD, t.AREA, t.SERVICIO_AFECTADO);
+
+  const ahoraCierre = t.FECHA_CIERRE ? new Date(t.FECHA_CIERRE) : new Date();
+  const creacion = new Date(t.FECHA_CREACION);
+  const transcurridos = (desde, hasta) => minutosLaborablesEntre(desde, hasta, feriados);
+
+  let slaRespuestaCumplido = null;
+  let minutosPrimeraRespuesta = null;
+  if (t.FECHA_PRIMERA_RESPUESTA) {
+    minutosPrimeraRespuesta = transcurridos(creacion, new Date(t.FECHA_PRIMERA_RESPUESTA));
+    if (regla) slaRespuestaCumplido = minutosPrimeraRespuesta <= regla.minPrimeraRespuesta;
+  }
+
+  const minutosTrabajados = transcurridos(creacion, ahoraCierre) - (t.MINUTOS_TOTAL_ESPERA || 0);
+  const slaResolucionCumplido = regla ? minutosTrabajados <= regla.minResolucion : null;
+
+  await pool.request()
+    .input('tid', sql.Int, ticketId)
+    .input('fecha', sql.DateTime, ahoraCierre)
+    .input('slaResp', sql.Bit, slaRespuestaCumplido)
+    .input('slaRes', sql.Bit, slaResolucionCumplido)
+    .input('minResp', sql.Int, minutosPrimeraRespuesta)
+    .input('minTrab', sql.Int, minutosTrabajados)
+    .query(`UPDATE TICKETS SET
+              ESTADO='cerrado', FECHA_CIERRE = COALESCE(FECHA_CIERRE, @fecha),
+              SLA_RESPUESTA_CUMPLIDO=@slaResp, SLA_RESOLUCION_CUMPLIDO=@slaRes,
+              MINUTOS_PRIMERA_RESPUESTA=@minResp, MINUTOS_TRABAJADOS=@minTrab
+            WHERE TICKET_ID=@tid`);
+}
+
 // GET /api/tickets/sla/reglas
 exports.listReglasSla = async (req, res) => {
   try {
@@ -460,7 +506,9 @@ exports.getTicketById = async (req, res) => {
         t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
         t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-        t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.SERVICIO_AFECTADO, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
+        t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.SERVICIO_AFECTADO, t.CANAL_ORIGEN, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
+        t.ACTIVO_AFECTADO_ID, t.SERVICIO_AFECTADO_ID,
+        t.SLA_RESPUESTA_CUMPLIDO, t.SLA_RESOLUCION_CUMPLIDO, t.MINUTOS_PRIMERA_RESPUESTA, t.MINUTOS_TRABAJADOS,
         t.FECHA_RESOLUCION_PROPUESTA, t.FECHA_VALIDACION, t.ARTICULO_KB_ID,
         au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
         chat.LC_ID as chatRelacionadoId, chat.LC_ESTADO as chatRelacionadoEstado,
@@ -520,13 +568,17 @@ exports.getTicketById = async (req, res) => {
 // Lógica de negocio de creación de ticket, separada del handler HTTP para que
 // tanto el portal (createTicket) como la API pública (createTicketFromApi)
 // la reusen sin duplicar código, siguiendo el mismo patrón que escalarTicketInterno.
+const CANALES_ORIGEN_VALIDOS = ['portal', 'chatbot', 'chat_en_vivo', 'tecnico', 'api'];
+
 async function crearTicketInterno(pool, {
   solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
   clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+  activoAfectadoId, servicioAfectadoId,
   impacto, urgencia, prioridadManual: prioridadManualFlag, esAD,
-  tenantKey, camposPersonalizados,
+  tenantKey, camposPersonalizados, canalOrigen,
 }) {
     area = normalizeArea(area || 'TI');
+    const canal = CANALES_ORIGEN_VALIDOS.includes(canalOrigen) ? canalOrigen : 'portal';
     const tituloTrim = (titulo ?? '').toString().trim();
 
     if (!solicitanteId || !tituloTrim) {
@@ -568,16 +620,21 @@ async function crearTicketInterno(pool, {
       .input('depto', sql.NVarChar, departamento || null)
       .input('activo', sql.NVarChar, activoAfectado || null)
       .input('servicio', sql.NVarChar, servicioAfectado || null)
+      .input('activoId', sql.Int, activoAfectadoId || null)
+      .input('servicioId', sql.Int, servicioAfectadoId || null)
       .input('impacto', sql.NVarChar, impactoNorm)
       .input('urgencia', sql.NVarChar, urgenciaNorm)
       .input('prioManual', sql.Bit, prioridadManual ? 1 : 0)
+      .input('canal', sql.NVarChar, canal)
       .query(`INSERT INTO TICKETS
                 (SOLICITANTE_ID, AREA, PRIORIDAD, TITULO, DESCRIPCION, ESTADO,
                  CLASIFICACION, CATEGORIA, SUBCATEGORIA, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO, SERVICIO_AFECTADO,
-                 IMPACTO, URGENCIA, PRIORIDAD_MANUAL, NIVEL_ACTUAL)
+                 ACTIVO_AFECTADO_ID, SERVICIO_AFECTADO_ID,
+                 IMPACTO, URGENCIA, PRIORIDAD_MANUAL, NIVEL_ACTUAL, CANAL_ORIGEN)
               VALUES (@sol, @area, @prio, @tit, @desc, 'abierto',
                  @clasif, @cat, @subcat, @sede, @depto, @activo, @servicio,
-                 @impacto, @urgencia, @prioManual, 1);
+                 @activoId, @servicioId,
+                 @impacto, @urgencia, @prioManual, 1, @canal);
               SELECT SCOPE_IDENTITY() as id;`);
 
     const ticketId = Number(ins.recordset[0].id);
@@ -709,7 +766,8 @@ async function crearTicketInterno(pool, {
              FECHA_PRIMERA_RESPUESTA as fechaPrimeraRespuesta, FECHA_CIERRE as fechaCierre, ASIGNADO_A as asignadoA,
              CLASIFICACION as clasificacion, CATEGORIA as categoria, SUBCATEGORIA as subcategoria,
              SEDE as sede, DEPARTAMENTO as departamento, ACTIVO_AFECTADO as activoAfectado,
-             IMPACTO as impacto, URGENCIA as urgencia, NIVEL_ACTUAL as nivelActual
+             ACTIVO_AFECTADO_ID as activoAfectadoId, SERVICIO_AFECTADO_ID as servicioAfectadoId,
+             IMPACTO as impacto, URGENCIA as urgencia, NIVEL_ACTUAL as nivelActual, CANAL_ORIGEN as canalOrigen
       FROM TICKETS WHERE TICKET_ID=@tid`);
 
     // Emitir evento en tiempo real sobre creación de ticket
@@ -746,6 +804,7 @@ exports.createTicket = async (req, res) => {
     const {
       area, titulo, descripcion, prioridad, categoria, asignadoA,
       clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId,
       impacto, urgencia, camposPersonalizados,
     } = req.body;
     console.warn(`[createTicket] solicitante=${solicitanteId} area=${area} tipo=${tipoUsuario}`);
@@ -756,12 +815,17 @@ exports.createTicket = async (req, res) => {
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const esAD = ['AD', 'ADMIN'].includes(tipoUsuario);
+    // Si quien crea el ticket es distinto del solicitante, lo está creando un
+    // técnico/AD a nombre de otro usuario (canal 'tecnico'); si no, es el propio
+    // usuario desde el portal (canal 'portal').
+    const canalOrigen = req.user?.id && Number(req.user.id) !== Number(solicitanteId) ? 'tecnico' : 'portal';
 
     const result = await crearTicketInterno(pool, {
       solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
       clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId,
       impacto, urgencia, prioridadManual: req.body.prioridadManual, esAD,
-      tenantKey: req.user?.empresa, camposPersonalizados,
+      tenantKey: req.user?.empresa, camposPersonalizados, canalOrigen,
     });
 
     if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
@@ -798,7 +862,7 @@ exports.createTicketFromApi = async (req, res) => {
       solicitanteId, area, titulo, descripcion, categoria,
       clasificacion, subcategoria, sede, departamento, activoAfectado,
       impacto, urgencia, prioridadManual: false, esAD: false,
-      tenantKey: req.query.empresa,
+      tenantKey: req.query.empresa, canalOrigen: 'api',
     });
 
     if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
@@ -1525,7 +1589,7 @@ WHEN MATCHED THEN UPDATE SET RATING=@r, COMENTARIO=@c, SUBMIT_AT=GETDATE()
 WHEN NOT MATCHED THEN INSERT (TICKET_ID, RATING, COMENTARIO) VALUES (@tid, @r, @c);
       `);
       
-    await pool.request().input('tid', sql.Int, id).query(`UPDATE TICKETS SET ESTADO='cerrado', FECHA_CIERRE = COALESCE(FECHA_CIERRE, GETDATE()) WHERE TICKET_ID=@tid`);
+    await cerrarTicketConSnapshot(pool, Number(id), req.user?.empresa);
     await pool.request().input('tid', sql.Int, id).query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO) VALUES (@tid, 'encuesta')`);
     
     // Notificar al asignado
@@ -1794,7 +1858,7 @@ exports.validarResolucion = async (req, res) => {
     }
 
     const pool = await databaseService.getPool(req.user?.empresa);
-    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO, ASIGNADO_A FROM TICKETS WHERE TICKET_ID=@tid`);
+    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO, ASIGNADO_A, AREA, PRIORIDAD FROM TICKETS WHERE TICKET_ID=@tid`);
     if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
 
     const t = hdr.recordset[0];
@@ -1810,6 +1874,15 @@ exports.validarResolucion = async (req, res) => {
         .query(`UPDATE TICKETS SET VALIDADO_USUARIO = 1, FECHA_VALIDACION = GETDATE() WHERE TICKET_ID=@tid`);
       await pool.request().input('tid', sql.Int, id).input('uid', sql.Int, solicitanteId)
         .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, USER_ID) VALUES (@tid, 'validado', @uid)`);
+
+      // Si el ticket no amerita encuesta (Configuración > Encuestas), nunca se le
+      // muestra el panel de calificación al usuario — cerrarlo aquí mismo, o
+      // quedaría 'resuelto' para siempre sin pasar nunca por registrarSatisfaccion.
+      const amerita = await ticketAmeritaEncuesta(pool, req.user?.empresa, t.AREA, t.PRIORIDAD);
+      if (!amerita) {
+        await cerrarTicketConSnapshot(pool, Number(id), req.user?.empresa);
+        await pool.request().input('tid', sql.Int, id).query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE) VALUES (@tid, 'cerrado', 'Cerrado automáticamente: no amerita encuesta')`);
+      }
     } else {
       await pool.request().input('tid', sql.Int, id)
         .query(`UPDATE TICKETS SET
@@ -2318,7 +2391,7 @@ exports.getFichaUsuario = async (req, res) => {
     const perfilR = await pool.request().input('uid', sql.Int, userId).query(`
       SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_CORREO as correo,
              NEUS_TELEFONO as telefono, NEUS_DEPARTAMENTO as departamento,
-             NEUS_TIPOUSUARIO as tipoUsuario, NEUS_ACTIVO as activo
+             NEUS_TIPOUSUARIO as tipoUsuario, NEUS_ACTIVO as activo, NEUS_USUARIO as usuarioRed
       FROM NEUS_USUARIOS WHERE NEUS_ID=@uid`);
     if (!perfilR.recordset.length) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
     const perfil = perfilR.recordset[0];

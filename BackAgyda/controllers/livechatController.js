@@ -1089,6 +1089,14 @@ exports.getAgentesEstado = async (req, res) => {
 // asignado (si ya lo hay) o, si no hay técnico, queda con prioridad máxima
 // visible para cualquiera que revise la bandeja de Tickets. Se marca
 // LCO_ESPERA_ESCALADA=1 para no repetir el aviso cada minuto.
+//
+// NOTA sobre el diagrama de flujo de Soporte TI: el diagrama describe "si supera
+// tiempo máximo de espera → crear ticket automáticamente". Este cron cubre ese
+// mismo resultado de forma más fuerte: el ticket ya existe desde el segundo 0
+// del chat (nunca hay una ventana sin ticket mientras se espera agente), así
+// que al vencer el timeout no hay nada que crear — solo escalar lo que ya
+// existe. Decisión tomada explícitamente: no se agrega una creación de ticket
+// aquí porque duplicaría el ticket ya vinculado en LC_TICKET_ID.
 async function escalarChatsSoporteTiEnEsperaCron() {
   const { listTenants } = require('../config/tenants');
   const notificationService = require('../services/notificationService');

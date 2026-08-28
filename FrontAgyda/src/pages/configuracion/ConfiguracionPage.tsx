@@ -18,6 +18,7 @@ import { AutomatizacionesTab } from './tecnologia/AutomatizacionesTab'
 import { KbConfigTab } from './tecnologia/KbConfigTab'
 import { EncuestasTab } from './tecnologia/EncuestasTab'
 import { PlantillasTab } from './tecnologia/PlantillasTab'
+import { CamposPersonalizadosTab } from './tecnologia/CamposPersonalizadosTab'
 import { SeguridadTab } from './tecnologia/SeguridadTab'
 import { IntegracionesTab } from './tecnologia/IntegracionesTab'
 import { ProximamenteTab } from './tecnologia/ProximamenteTab'
@@ -60,6 +61,7 @@ export function ConfiguracionPage() {
       case 'kb':                     return <KbConfigTab />
       case 'encuestas':              return <EncuestasTab />
       case 'plantillas':             return <PlantillasTab />
+      case 'campos-personalizados':  return <CamposPersonalizadosTab />
       case 'seguridad':              return <SeguridadTab />
       case 'integraciones':          return <IntegracionesTab />
       case 'notificaciones':         return <NotificacionesTecTab />

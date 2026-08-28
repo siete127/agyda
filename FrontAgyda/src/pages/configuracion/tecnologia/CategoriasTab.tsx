@@ -272,7 +272,7 @@ function CampoFormModal({ campo, categorias, onClose }: { campo: CampoPersonaliz
   )
 }
 
-function CamposPersonalizadosPanel() {
+export function CamposPersonalizadosPanel() {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'crear' | CampoPersonalizado | null>(null)
 
@@ -412,8 +412,6 @@ export function CategoriasTab() {
           </button>
         </div>
       </div>
-
-      <CamposPersonalizadosPanel />
     </div>
   )
 }

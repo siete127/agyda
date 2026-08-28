@@ -16,9 +16,10 @@ import {
   type Ticket, type TicketEstado, type TicketPrioridad,
   type TicketClasificacion, type TicketImpacto, type TicketUrgencia, type TicketMotivoEspera,
   PRIORIDAD_COLORS, PRIORIDAD_LABELS, ESTADO_COLORS, ESTADO_LABELS, SLA_COLORS, SLA_LABELS,
-  CLASIFICACION_LABELS, MOTIVO_ESPERA_LABELS, calcularPrioridad,
+  CLASIFICACION_LABELS, MOTIVO_ESPERA_LABELS, CANAL_ORIGEN_LABELS, calcularPrioridad,
 } from '@/types/ticket.types'
 import { catalogosTiService } from '@/services/catalogosTi.service'
+import { activosGeneralesService } from '@/services/activosGenerales.service'
 import { camposPersonalizadosService } from '@/services/camposPersonalizados.service'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -46,6 +47,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     clasificacion: '' as TicketClasificacion | '',
     categoria: '', subcategoria: '',
     sede: '', departamento: '', activoAfectado: '', servicioAfectado: '',
+    activoAfectadoId: '' as number | '', servicioAfectadoId: '' as number | '',
     impacto: '' as TicketImpacto | '', urgencia: '' as TicketUrgencia | '',
   })
   const [valoresCampos, setValoresCampos] = useState<Record<number, string>>({})
@@ -73,6 +75,11 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     queryFn: () => catalogosTiService.getServicios(),
     staleTime: 5 * 60_000,
   })
+  const { data: activosGenerales = [] } = useQuery({
+    queryKey: ['activos-generales'],
+    queryFn: () => activosGeneralesService.getActivosGenerales(),
+    staleTime: 5 * 60_000,
+  })
   const subcategoriasDisponibles = categorias.find((c) => c.nombre === form.categoria)?.subcategorias ?? []
   const categoriaSeleccionadaId = categorias.find((c) => c.nombre === form.categoria)?.id ?? null
 
@@ -95,6 +102,8 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
       departamento: form.departamento || undefined,
       activoAfectado: form.activoAfectado || undefined,
       servicioAfectado: form.servicioAfectado || undefined,
+      activoAfectadoId: form.activoAfectadoId || undefined,
+      servicioAfectadoId: form.servicioAfectadoId || undefined,
       impacto: form.impacto || undefined,
       urgencia: form.urgencia || undefined,
       camposPersonalizados: Object.keys(valoresCampos).length ? valoresCampos : undefined,
@@ -190,15 +199,36 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Activo afectado</label>
-            <input value={form.activoAfectado} onChange={(e) => setForm({ ...form, activoAfectado: e.target.value })} className="field" placeholder="Opcional" />
+            <select
+              value={form.activoAfectadoId}
+              onChange={(e) => {
+                const id = e.target.value ? Number(e.target.value) : ''
+                const activo = activosGenerales.find((a) => a.id === id)
+                setForm({ ...form, activoAfectadoId: id, activoAfectado: activo?.nombreEquipo || '' })
+              }}
+              className="field"
+            >
+              <option value="">Ninguno / no aplica</option>
+              {activosGenerales.map((a) => (
+                <option key={a.id} value={a.id}>{a.nombreEquipo || `Activo #${a.id}`}{a.numeroSerie ? ` (${a.numeroSerie})` : ''}</option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div>
           <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Servicio afectado</label>
-          <select value={form.servicioAfectado} onChange={(e) => setForm({ ...form, servicioAfectado: e.target.value })} className="field">
+          <select
+            value={form.servicioAfectadoId}
+            onChange={(e) => {
+              const id = e.target.value ? Number(e.target.value) : ''
+              const servicio = servicios.find((s) => s.id === id)
+              setForm({ ...form, servicioAfectadoId: id, servicioAfectado: servicio?.nombre || '' })
+            }}
+            className="field"
+          >
             <option value="">Ninguno / no aplica</option>
-            {servicios.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+            {servicios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
         </div>
 
@@ -940,6 +970,11 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
           </span>
           <span className="chip bg-surface text-ink-secondary text-[0.65rem]">{ticket.area}</span>
           <span className="chip bg-surface text-ink-secondary text-[0.65rem]">N{ticket.nivelActual}</span>
+          {ticket.canalOrigen && (
+            <span className="chip bg-surface text-ink-secondary text-[0.65rem]" title="Canal de origen">
+              {CANAL_ORIGEN_LABELS[ticket.canalOrigen]}
+            </span>
+          )}
           {ticket.slaRespuesta && (
             <span className={clsx('chip text-[0.65rem]', SLA_COLORS[ticket.slaRespuesta])}>
               Respuesta: {SLA_LABELS[ticket.slaRespuesta]}
@@ -953,6 +988,13 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
           {ticket.rating !== null && (
             <span className="flex items-center gap-1 text-[0.65rem] text-ink-tertiary">
               <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" /> Calificado
+            </span>
+          )}
+          {ticket.estado === 'cerrado' && ticket.minutosTrabajados !== null && (
+            <span className="chip bg-surface text-ink-secondary text-[0.65rem]" title="Tiempo trabajado (creación → cierre, sin contar espera)">
+              {ticket.minutosTrabajados < 60
+                ? `${ticket.minutosTrabajados} min trabajados`
+                : `${(ticket.minutosTrabajados / 60).toFixed(1)} h trabajadas`}
             </span>
           )}
           {ticket.chatRelacionadoId && (

@@ -12,6 +12,7 @@ const ESTADO_TRABAJO_LABELS: Record<TecnicoEstadoTrabajo, string> = {
   pausa: 'En pausa',
   fuera_horario: 'Fuera de horario',
   ocupado: 'Ocupado',
+  no_disponible: 'No disponible',
 }
 
 const PRIORIDADES = ['P1', 'P2', 'P3', 'P4']

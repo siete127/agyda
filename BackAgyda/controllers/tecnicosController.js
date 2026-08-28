@@ -2,7 +2,7 @@ const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { normalizeArea } = require('../utils/helpers');
 
-const ESTADOS_TRABAJO = ['disponible', 'pausa', 'fuera_horario', 'ocupado'];
+const ESTADOS_TRABAJO = ['disponible', 'pausa', 'fuera_horario', 'ocupado', 'no_disponible'];
 
 // Carga real de un técnico: tickets abiertos asignados + chats activos.
 // Materializa la decisión de negocio "carga de trabajo = tickets + chats".

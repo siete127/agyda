@@ -1,4 +1,4 @@
-export type TecnicoEstadoTrabajo = 'disponible' | 'pausa' | 'fuera_horario' | 'ocupado'
+export type TecnicoEstadoTrabajo = 'disponible' | 'pausa' | 'fuera_horario' | 'ocupado' | 'no_disponible'
 
 export interface TecnicoCargaActual {
   tickets: number
