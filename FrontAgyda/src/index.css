@@ -321,3 +321,44 @@
   100% { background-position: 200% 50%; }
 }
 .animate-gradient-x { animation: gradient-x 8s linear infinite; }
+
+/* ── Recharts en modo oscuro ──────────────────────────────────
+   Los charts de recharts añaden sus clases (.recharts-*) en runtime y no
+   traen soporte de tema. Estas reglas van FUERA de @layer (si no, Tailwind
+   las purga por no encontrar las clases en el código fuente) y adaptan
+   ejes, grid, leyenda y tooltip sin tocar cada componente. */
+:root[data-theme="dark"] .recharts-cartesian-grid line { stroke: rgb(var(--surface-border)); }
+
+:root[data-theme="dark"] .recharts-text,
+:root[data-theme="dark"] .recharts-cartesian-axis-tick text,
+:root[data-theme="dark"] .recharts-legend-item-text {
+  fill: rgb(var(--ink-tertiary)) !important;
+  color: rgb(var(--ink-tertiary)) !important;
+}
+:root[data-theme="dark"] .recharts-default-tooltip {
+  background-color: rgb(var(--card)) !important;
+  border-color: rgb(var(--surface-border)) !important;
+  color: rgb(var(--ink)) !important;
+}
+:root[data-theme="dark"] .recharts-tooltip-item { color: rgb(var(--ink-secondary)) !important; }
+:root[data-theme="dark"] .recharts-cartesian-axis-line,
+:root[data-theme="dark"] .recharts-cartesian-axis-tick-line { stroke: rgb(var(--surface-border)) !important; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .recharts-cartesian-grid line { stroke: rgb(var(--surface-border)); }
+  :root:not([data-theme="light"]) .recharts-text,
+  :root:not([data-theme="light"]) .recharts-cartesian-axis-tick text,
+  :root:not([data-theme="light"]) .recharts-legend-item-text {
+    fill: rgb(var(--ink-tertiary)) !important;
+    color: rgb(var(--ink-tertiary)) !important;
+  }
+  :root:not([data-theme="light"]) .recharts-default-tooltip {
+    background-color: rgb(var(--card)) !important;
+    border-color: rgb(var(--surface-border)) !important;
+    color: rgb(var(--ink)) !important;
+  }
+  :root:not([data-theme="light"]) .recharts-tooltip-item { color: rgb(var(--ink-secondary)) !important; }
+  :root:not([data-theme="light"]) .recharts-cartesian-axis-line,
+  :root:not([data-theme="light"]) .recharts-cartesian-axis-tick-line { stroke: rgb(var(--surface-border)) !important; }
+}
+
