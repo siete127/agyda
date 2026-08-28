@@ -105,6 +105,7 @@ export interface LivechatConfig {
   mensajeSinAgentes: string | null
   mensajeEnCola: string | null
   maxChatsPorAgente: number
+  timeoutColaMinutos: number
 }
 
 export interface LivechatAgenteTransferible {
@@ -288,5 +289,6 @@ export function parseLivechatConfig(raw: Record<string, unknown>): LivechatConfi
     mensajeSinAgentes: pick(raw, 'mensajeSinAgentes') ? String(pick(raw, 'mensajeSinAgentes')) : null,
     mensajeEnCola: pick(raw, 'mensajeEnCola') ? String(pick(raw, 'mensajeEnCola')) : null,
     maxChatsPorAgente: Number(pick(raw, 'maxChatsPorAgente') ?? 5),
+    timeoutColaMinutos: Number(pick(raw, 'timeoutColaMinutos') ?? 15),
   }
 }

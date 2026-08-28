@@ -80,6 +80,19 @@ exports.avanzar = async (req, res) => {
           accion = { tipo: 'escalar_chat', error: fakeRes.body?.message || 'No se pudo iniciar el chat' };
         }
       }
+    } else if (nodo.tipo === 'consultar_tickets') {
+      if (!req.user?.id) {
+        accion = { tipo: 'consultar_tickets', error: 'Necesitas iniciar sesión para consultar tus tickets' };
+      } else {
+        const rsTickets = await pool.request().input('uid', sql.Int, req.user.id).query(`
+          SELECT TOP 10 TICKET_ID as id, TITULO as titulo, PRIORIDAD as prioridad, ESTADO as estado,
+                 FECHA_CREACION as fechaCreacion, NIVEL_ACTUAL as nivelActual
+          FROM TICKETS
+          WHERE SOLICITANTE_ID=@uid AND ESTADO NOT IN ('resuelto','cerrado')
+          ORDER BY FECHA_CREACION DESC`);
+        await chatbotArbolService.cerrarSesion(pool, token);
+        accion = { tipo: 'consultar_tickets', tickets: rsTickets.recordset };
+      }
     } else if (nodo.tipo === 'crear_ticket') {
       if (!req.user?.id) {
         accion = { tipo: 'crear_ticket', error: 'Necesitas iniciar sesión para crear un ticket' };
@@ -98,6 +111,7 @@ exports.avanzar = async (req, res) => {
           categoria: categoriaNombre,
           tenantKey: req.user?.empresa,
           esAD: false,
+          canalOrigen: 'chatbot',
         });
         if (result.ok) {
           await chatbotArbolService.cerrarSesion(pool, token, { ticketId: result.data.id });

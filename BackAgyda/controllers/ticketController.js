@@ -17,42 +17,141 @@ const TICKET_MOTIVOS_ESPERA = require('../constants/ticketMotivosEspera');
    tiempos que este controller ya calcula (tiempoAtencionMinutos / tiempoPrimeraRespuestaMinutos).
    No se guarda nada nuevo por ticket — el cumplimiento se calcula al vuelo. ── */
 
+/* ── Reglas de envío de encuesta de satisfacción: por área, la prioridad
+   mínima que amerita encuesta. Cacheado igual que los feriados (cambia poco). ── */
+const encuestaConfigCache = new Map(); // tenantKey -> Map<area, prioridadMinima>
+
+async function cargarEncuestaConfig(pool, tenantKey) {
+  const key = tenantKey || 'default';
+  if (encuestaConfigCache.has(key)) return encuestaConfigCache.get(key);
+  const rs = await pool.request().query(`SELECT TEN_AREA as area, TEN_PRIORIDAD_MINIMA as prioridadMinima FROM TICKETS_ENCUESTA_CONFIG`);
+  const map = new Map(rs.recordset.map((r) => [r.area, r.prioridadMinima]));
+  encuestaConfigCache.set(key, map);
+  return map;
+}
+
+function invalidarCacheEncuestaConfig(tenantKey) {
+  if (tenantKey) encuestaConfigCache.delete(tenantKey);
+  else encuestaConfigCache.clear();
+}
+
+// true si `prioridad` es igual o más crítica que `prioridadMinima`. El orden
+// P1..P4 (ticketPrioridad.PRIORIDADES) va de más a menos crítico, así que
+// "más crítica o igual" = índice menor o igual.
+function prioridadAmeritaEncuesta(prioridad, prioridadMinima) {
+  const orden = ticketPrioridad.PRIORIDADES;
+  const idxTicket = orden.indexOf((prioridad || '').toUpperCase());
+  const idxMinima = orden.indexOf((prioridadMinima || '').toUpperCase());
+  if (idxTicket === -1 || idxMinima === -1) return true; // dato inesperado: no bloquear la encuesta
+  return idxTicket <= idxMinima;
+}
+
+// Sin fila configurada para el área = comportamiento anterior (siempre aplica),
+// para no romper el flujo si el AD no configuró nada todavía.
+async function ticketAmeritaEncuesta(pool, tenantKey, area, prioridad) {
+  const config = await cargarEncuestaConfig(pool, tenantKey);
+  const prioridadMinima = config.get((area || '').toUpperCase());
+  if (!prioridadMinima) return true;
+  return prioridadAmeritaEncuesta(prioridad, prioridadMinima);
+}
+
+/* ── Días festivos: catálogo simple, cacheado en memoria del proceso (cambia
+   con muy poca frecuencia — no vale la pena una query en cada listado de
+   tickets). Se invalida al crear/eliminar un festivo desde Configuración. ── */
+const feriadosCache = new Map(); // tenantKey -> Set<'YYYY-MM-DD'>
+
+async function cargarFeriadosActivos(pool, tenantKey) {
+  const key = tenantKey || 'default';
+  if (feriadosCache.has(key)) return feriadosCache.get(key);
+  const rs = await pool.request().query(`SELECT CONVERT(varchar(10), FEST_FECHA, 23) as fecha FROM TI_DIAS_FESTIVOS`);
+  const set = new Set(rs.recordset.map((r) => r.fecha));
+  feriadosCache.set(key, set);
+  return set;
+}
+
+function invalidarCacheFeriados(tenantKey) {
+  if (tenantKey) feriadosCache.delete(tenantKey);
+  else feriadosCache.clear();
+}
+
+// Minutos "laborables" entre dos fechas: cuenta días completos (24h) salvo
+// sábados, domingos y las fechas en `feriados` (Set de 'YYYY-MM-DD'), que se
+// excluyen por completo del conteo. No recorta por horario de oficina dentro
+// de un día laborable — un día lunes-viernes cuenta sus 24 horas igual.
+function minutosLaborablesEntre(fechaInicio, fechaFin, feriados) {
+  if (fechaFin <= fechaInicio) return 0;
+  const feriadosSet = feriados || new Set();
+
+  let minutos = 0;
+  const cursor = new Date(fechaInicio.getFullYear(), fechaInicio.getMonth(), fechaInicio.getDate());
+  const finDia = new Date(fechaFin.getFullYear(), fechaFin.getMonth(), fechaFin.getDate());
+
+  while (cursor <= finDia) {
+    const diaSemana = cursor.getDay(); // 0=domingo, 6=sábado
+    const yyyyMmDd = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+    const esNoLaborable = diaSemana === 0 || diaSemana === 6 || feriadosSet.has(yyyyMmDd);
+
+    if (!esNoLaborable) {
+      const inicioTramo = cursor.getTime() > fechaInicio.getTime() ? cursor : fechaInicio;
+      const finDelDia = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+      const finTramo = finDelDia.getTime() < fechaFin.getTime() ? finDelDia : fechaFin;
+      const tramoInicio = Math.max(inicioTramo.getTime(), cursor.getTime());
+      minutos += Math.max(0, Math.round((finTramo.getTime() - tramoInicio) / 60000));
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return minutos;
+}
+
 async function cargarReglasSlaActivas(pool) {
   const rs = await pool.request().query(`
-    SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area,
+    SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area, TSR_SERVICIO as servicio,
            TSR_MIN_PRIMERA_RESPUESTA as minPrimeraRespuesta, TSR_MIN_RESOLUCION as minResolucion
     FROM TICKETS_SLA_REGLAS WHERE TSR_ACTIVA = 1
   `);
   return rs.recordset;
 }
 
-// Busca la regla más específica: prioridad+área exacta, si no existe cae a prioridad
-// sin área (regla general).
-function buscarReglaSla(reglas, prioridad, area) {
+// Busca la regla más específica primero: prioridad+área+servicio exactos.
+// Si no hay match, va cayendo a reglas más genéricas (prioridad+área,
+// prioridad sola) — retrocompatible: si nunca se configuró una regla por
+// servicio, el comportamiento es idéntico al de antes.
+function buscarReglaSla(reglas, prioridad, area, servicio) {
   const prio = (prioridad || '').toString().toUpperCase();
   const ar = (area || '').toString().toUpperCase();
-  return reglas.find((r) => r.prioridad === prio && (r.area || '').toUpperCase() === ar)
-    || reglas.find((r) => r.prioridad === prio && !r.area)
+  const srv = (servicio || '').toString().toLowerCase();
+  return reglas.find((r) => r.prioridad === prio && (r.area || '').toUpperCase() === ar && (r.servicio || '').toLowerCase() === srv && srv)
+    || reglas.find((r) => r.prioridad === prio && (r.area || '').toUpperCase() === ar && !r.servicio)
+    || reglas.find((r) => r.prioridad === prio && !r.area && !r.servicio)
     || null;
 }
 
 // Añade a cada ticket: sla (regla aplicada o null), slaRespuesta y slaResolucion
 // ('cumplido' | 'incumplido' | 'en_riesgo' | 'en_tiempo' | null si no hay regla).
-function enriquecerConSla(tickets, reglas) {
-  const ahora = Date.now();
+function enriquecerConSla(tickets, reglas, feriados = null) {
+  const ahora = new Date();
+  // feriados === null (no se cargó el catálogo) => tiempo de reloj simple, sin
+  // excluir nada. feriados es un Set (aunque esté vacío) => siempre excluye
+  // fin de semana como mínimo, más lo que haya en el Set — ver minutosLaborablesEntre.
+  const transcurridos = feriados !== null
+    ? (desde, hasta) => minutosLaborablesEntre(desde, hasta, feriados)
+    : (desde, hasta) => Math.round((hasta.getTime() - desde.getTime()) / 60000);
+
   return tickets.map((t) => {
-    const regla = buscarReglaSla(reglas, t.PRIORIDAD ?? t.prioridad, t.AREA ?? t.area);
+    const regla = buscarReglaSla(reglas, t.PRIORIDAD ?? t.prioridad, t.AREA ?? t.area, t.SERVICIO_AFECTADO ?? t.servicioAfectado);
     if (!regla) return { ...t, slaRespuesta: null, slaResolucion: null, slaReglaId: null };
 
-    const creacion = new Date(t.FECHA_CREACION ?? t.fechaCreacion).getTime();
+    const creacion = new Date(t.FECHA_CREACION ?? t.fechaCreacion);
 
     let slaRespuesta = null;
     const primeraRespuesta = t.FECHA_PRIMERA_RESPUESTA ?? t.fechaPrimeraRespuesta;
     if (primeraRespuesta) {
-      const minutos = Math.round((new Date(primeraRespuesta).getTime() - creacion) / 60000);
+      const minutos = transcurridos(creacion, new Date(primeraRespuesta));
       slaRespuesta = minutos <= regla.minPrimeraRespuesta ? 'cumplido' : 'incumplido';
     } else {
-      const minutosTranscurridos = Math.round((ahora - creacion) / 60000);
+      const minutosTranscurridos = transcurridos(creacion, ahora);
       if (minutosTranscurridos > regla.minPrimeraRespuesta) slaRespuesta = 'incumplido';
       else if (minutosTranscurridos >= regla.minPrimeraRespuesta * 0.85) slaRespuesta = 'en_riesgo';
       else slaRespuesta = 'en_tiempo';
@@ -61,20 +160,22 @@ function enriquecerConSla(tickets, reglas) {
     // El reloj de SLA de resolución se pausa mientras el ticket está en_espera:
     // se descuenta el tiempo ya acumulado (MINUTOS_TOTAL_ESPERA) y, si está
     // actualmente en espera, también el tramo en curso desde FECHA_INICIO_ESPERA.
+    // Los minutos de espera se restan tal cual (en tiempo de reloj, no laborable)
+    // porque ya representan una pausa explícita del SLA, no tiempo transcurrido.
     const minutosTotalEspera = t.MINUTOS_TOTAL_ESPERA ?? t.minutosTotalEspera ?? 0;
     const estadoTicket = t.ESTADO ?? t.estado;
     const fechaInicioEspera = t.FECHA_INICIO_ESPERA ?? t.fechaInicioEspera;
     const minutosEsperaEnCurso = (estadoTicket === 'en_espera' && fechaInicioEspera)
-      ? Math.round((ahora - new Date(fechaInicioEspera).getTime()) / 60000)
+      ? Math.round((ahora.getTime() - new Date(fechaInicioEspera).getTime()) / 60000)
       : 0;
 
     let slaResolucion = null;
     const cierre = t.FECHA_CIERRE ?? t.fechaCierre;
     if (cierre) {
-      const minutos = Math.round((new Date(cierre).getTime() - creacion) / 60000) - minutosTotalEspera;
+      const minutos = transcurridos(creacion, new Date(cierre)) - minutosTotalEspera;
       slaResolucion = minutos <= regla.minResolucion ? 'cumplido' : 'incumplido';
     } else {
-      const minutosTranscurridos = Math.round((ahora - creacion) / 60000) - minutosTotalEspera - minutosEsperaEnCurso;
+      const minutosTranscurridos = transcurridos(creacion, ahora) - minutosTotalEspera - minutosEsperaEnCurso;
       if (minutosTranscurridos > regla.minResolucion) slaResolucion = 'incumplido';
       else if (minutosTranscurridos >= regla.minResolucion * 0.85) slaResolucion = 'en_riesgo';
       else slaResolucion = 'en_tiempo';
@@ -84,12 +185,58 @@ function enriquecerConSla(tickets, reglas) {
   });
 }
 
+// Cierra un ticket 'resuelto' (ESTADO='cerrado' + FECHA_CIERRE) y congela un
+// snapshot del SLA/tiempos en ese instante — ver columnas SLA_*_CUMPLIDO/
+// MINUTOS_* en schemaService.js. Se llama desde dos puntos: registrarSatisfaccion
+// (ticket con encuesta, cierra tras calificar) y validarResolucion (ticket sin
+// encuesta aplicable, cierra directo al confirmar que la solución funcionó) —
+// ambos deben producir el mismo snapshot, de ahí la función compartida.
+async function cerrarTicketConSnapshot(pool, ticketId, tenantKey) {
+  const hdr = await pool.request().input('tid', sql.Int, ticketId).query(`
+    SELECT TICKET_ID, PRIORIDAD, AREA, SERVICIO_AFECTADO, FECHA_CREACION, FECHA_PRIMERA_RESPUESTA,
+           MINUTOS_TOTAL_ESPERA, FECHA_CIERRE
+    FROM TICKETS WHERE TICKET_ID=@tid`);
+  if (!hdr.recordset.length) return;
+  const t = hdr.recordset[0];
+
+  const reglas = await cargarReglasSlaActivas(pool);
+  const feriados = await cargarFeriadosActivos(pool, tenantKey);
+  const regla = buscarReglaSla(reglas, t.PRIORIDAD, t.AREA, t.SERVICIO_AFECTADO);
+
+  const ahoraCierre = t.FECHA_CIERRE ? new Date(t.FECHA_CIERRE) : new Date();
+  const creacion = new Date(t.FECHA_CREACION);
+  const transcurridos = (desde, hasta) => minutosLaborablesEntre(desde, hasta, feriados);
+
+  let slaRespuestaCumplido = null;
+  let minutosPrimeraRespuesta = null;
+  if (t.FECHA_PRIMERA_RESPUESTA) {
+    minutosPrimeraRespuesta = transcurridos(creacion, new Date(t.FECHA_PRIMERA_RESPUESTA));
+    if (regla) slaRespuestaCumplido = minutosPrimeraRespuesta <= regla.minPrimeraRespuesta;
+  }
+
+  const minutosTrabajados = transcurridos(creacion, ahoraCierre) - (t.MINUTOS_TOTAL_ESPERA || 0);
+  const slaResolucionCumplido = regla ? minutosTrabajados <= regla.minResolucion : null;
+
+  await pool.request()
+    .input('tid', sql.Int, ticketId)
+    .input('fecha', sql.DateTime, ahoraCierre)
+    .input('slaResp', sql.Bit, slaRespuestaCumplido)
+    .input('slaRes', sql.Bit, slaResolucionCumplido)
+    .input('minResp', sql.Int, minutosPrimeraRespuesta)
+    .input('minTrab', sql.Int, minutosTrabajados)
+    .query(`UPDATE TICKETS SET
+              ESTADO='cerrado', FECHA_CIERRE = COALESCE(FECHA_CIERRE, @fecha),
+              SLA_RESPUESTA_CUMPLIDO=@slaResp, SLA_RESOLUCION_CUMPLIDO=@slaRes,
+              MINUTOS_PRIMERA_RESPUESTA=@minResp, MINUTOS_TRABAJADOS=@minTrab
+            WHERE TICKET_ID=@tid`);
+}
+
 // GET /api/tickets/sla/reglas
 exports.listReglasSla = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
-      SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area,
+      SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area, TSR_SERVICIO as servicio,
              TSR_MIN_PRIMERA_RESPUESTA as minPrimeraRespuesta, TSR_MIN_RESOLUCION as minResolucion,
              TSR_ACTIVA as activa
       FROM TICKETS_SLA_REGLAS ORDER BY TSR_PRIORIDAD, TSR_AREA
@@ -104,7 +251,7 @@ exports.listReglasSla = async (req, res) => {
 // POST /api/tickets/sla/reglas
 exports.crearReglaSla = async (req, res) => {
   try {
-    const { prioridad, area, minPrimeraRespuesta, minResolucion } = req.body;
+    const { prioridad, area, servicio, minPrimeraRespuesta, minResolucion } = req.body;
     if (!prioridad || !minPrimeraRespuesta || !minResolucion) {
       return res.status(400).json({ success: false, message: 'Prioridad, minutos de primera respuesta y de resolución son requeridos' });
     }
@@ -112,12 +259,13 @@ exports.crearReglaSla = async (req, res) => {
     await pool.request()
       .input('prioridad', sql.NVarChar, prioridad.toString().toUpperCase())
       .input('area', sql.NVarChar, area ? area.toString().toUpperCase() : null)
+      .input('servicio', sql.NVarChar, servicio || null)
       .input('minRespuesta', sql.Int, minPrimeraRespuesta)
       .input('minResolucion', sql.Int, minResolucion)
       .input('creadoPor', sql.SmallInt, req.headers['usuarioid'] ? Number(req.headers['usuarioid']) : null)
       .query(`
-        INSERT INTO TICKETS_SLA_REGLAS (TSR_PRIORIDAD, TSR_AREA, TSR_MIN_PRIMERA_RESPUESTA, TSR_MIN_RESOLUCION, TSR_CREADO_POR)
-        VALUES (@prioridad, @area, @minRespuesta, @minResolucion, @creadoPor)
+        INSERT INTO TICKETS_SLA_REGLAS (TSR_PRIORIDAD, TSR_AREA, TSR_SERVICIO, TSR_MIN_PRIMERA_RESPUESTA, TSR_MIN_RESOLUCION, TSR_CREADO_POR)
+        VALUES (@prioridad, @area, @servicio, @minRespuesta, @minResolucion, @creadoPor)
       `);
     res.status(201).json({ success: true });
   } catch (e) {
@@ -130,18 +278,19 @@ exports.crearReglaSla = async (req, res) => {
 exports.actualizarReglaSla = async (req, res) => {
   try {
     const { id } = req.params;
-    const { prioridad, area, minPrimeraRespuesta, minResolucion, activa } = req.body;
+    const { prioridad, area, servicio, minPrimeraRespuesta, minResolucion, activa } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
       .input('id', sql.Int, id)
       .input('prioridad', sql.NVarChar, prioridad ? prioridad.toString().toUpperCase() : null)
       .input('area', sql.NVarChar, area ? area.toString().toUpperCase() : null)
+      .input('servicio', sql.NVarChar, servicio || null)
       .input('minRespuesta', sql.Int, minPrimeraRespuesta)
       .input('minResolucion', sql.Int, minResolucion)
       .input('activa', sql.Bit, activa ? 1 : 0)
       .query(`
         UPDATE TICKETS_SLA_REGLAS
-        SET TSR_PRIORIDAD = @prioridad, TSR_AREA = @area, TSR_MIN_PRIMERA_RESPUESTA = @minRespuesta,
+        SET TSR_PRIORIDAD = @prioridad, TSR_AREA = @area, TSR_SERVICIO = @servicio, TSR_MIN_PRIMERA_RESPUESTA = @minRespuesta,
             TSR_MIN_RESOLUCION = @minResolucion, TSR_ACTIVA = @activa
         WHERE TSR_ID = @id
       `);
@@ -172,12 +321,13 @@ exports.getReporteSla = async (req, res) => {
     const pool = await databaseService.getPool(req.user?.empresa);
     const reglas = await cargarReglasSlaActivas(pool);
     if (reglas.length === 0) return res.json({ success: true, data: { totalEvaluados: 0, cumplidos: 0, pctCumplimiento: null, porArea: [], porPrioridad: [] } });
+    const feriados = await cargarFeriadosActivos(pool, req.user?.empresa);
 
     const rs = await pool.request().query(`
       SELECT TICKET_ID as id, AREA as area, PRIORIDAD as prioridad, FECHA_CREACION as fechaCreacion, FECHA_CIERRE as fechaCierre
       FROM TICKETS WHERE FECHA_CIERRE IS NOT NULL
     `);
-    const enriquecidos = enriquecerConSla(rs.recordset, reglas).filter((t) => t.slaResolucion !== null);
+    const enriquecidos = enriquecerConSla(rs.recordset, reglas, feriados).filter((t) => t.slaResolucion !== null);
 
     const cumplidos = enriquecidos.filter((t) => t.slaResolucion === 'cumplido').length;
     const totalEvaluados = enriquecidos.length;
@@ -230,113 +380,140 @@ async function validarAgentePool(pool, area, userId, nivel = null) {
   return rs.recordset.length > 0;
 }
 
+const TICKETS_SELECT_COLUMNAS = `
+  t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
+  t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
+  t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+  t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
+  t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
+  su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
+  au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
+  s.RATING as rating,
+  CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+`;
+
+// Filtros opcionales de listado (estado/prioridad/área/técnico asignado/rango
+// de fechas) + paginación real — aplican igual sobre cualquiera de las 4 ramas
+// de visibilidad por rol de abajo, que ya no cambian (son seguridad, no filtro).
+function aplicarFiltrosYPaginacion(query, req) {
+  const condiciones = [];
+  const request = query.request;
+  if (req.query.estado) {
+    condiciones.push('t.ESTADO = @fEstado');
+    request.input('fEstado', sql.NVarChar, String(req.query.estado));
+  }
+  if (req.query.prioridad) {
+    condiciones.push('t.PRIORIDAD = @fPrioridad');
+    request.input('fPrioridad', sql.NVarChar, String(req.query.prioridad).toUpperCase());
+  }
+  if (req.query.area) {
+    condiciones.push('t.AREA = @fArea');
+    request.input('fArea', sql.NVarChar, normalizeArea(req.query.area));
+  }
+  if (req.query.asignadoA) {
+    condiciones.push('t.ASIGNADO_A = @fAsignadoA');
+    request.input('fAsignadoA', sql.Int, Number(req.query.asignadoA));
+  }
+  if (req.query.fechaDesde) {
+    condiciones.push('t.FECHA_CREACION >= @fFechaDesde');
+    request.input('fFechaDesde', sql.Date, req.query.fechaDesde);
+  }
+  if (req.query.fechaHasta) {
+    condiciones.push('t.FECHA_CREACION < DATEADD(DAY, 1, @fFechaHasta)');
+    request.input('fFechaHasta', sql.Date, req.query.fechaHasta);
+  }
+
+  const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  request.input('fLimit', sql.Int, limit);
+  request.input('fOffset', sql.Int, offset);
+
+  return { extraWhere: condiciones.length ? ` AND ${condiciones.join(' AND ')}` : '', limit, offset };
+}
+
 exports.getTickets = async (req, res) => {
   try {
     const tipoUsuario = (req.headers['x-user-tipo'] || req.headers['x-user-type'] || req.headers['tipousuario'] || '').toString().toUpperCase();
     const usuarioId = Number(req.headers['usuarioid'] || req.query.usuarioId || 0) || null;
     const clienteId = Number(req.headers['clienteid'] || req.query.clienteId || 0) || null;
     const areaParam = req.query.area ? normalizeArea(req.query.area) : null;
-    
+
     const pool = await databaseService.getPool(req.user?.empresa);
     const reglasSla = await cargarReglasSlaActivas(pool);
+    const feriadosSla = await cargarFeriadosActivos(pool, req.user?.empresa);
 
     // If a clienteId is provided, return only tickets for that solicitante
     if (clienteId) {
-      const rs = await pool.request()
-        .input('clienteId', sql.Int, clienteId)
-        .query(`
-          SELECT TOP 200
-            t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-            t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-            su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-            au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-            s.RATING as rating,
-            CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+      const request = pool.request().input('clienteId', sql.Int, clienteId);
+      const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+      const rs = await request.query(`
+          SELECT ${TICKETS_SELECT_COLUMNAS}
           FROM TICKETS t
           LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
           LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
           LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-          WHERE t.SOLICITANTE_ID = @clienteId
-          ORDER BY t.TICKET_ID DESC`);
-      return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla) });
+          WHERE t.SOLICITANTE_ID = @clienteId${extraWhere}
+          ORDER BY t.TICKET_ID DESC
+          OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
+      return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
     }
 
     // Admins ven todo
     if (['AD','ADMIN','ADM'].includes(tipoUsuario)) {
-      const rs = await pool.request().query(`
-        SELECT TOP 200
-          t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-          t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-          su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-          au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-          s.RATING as rating,
-          CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+      const request = pool.request();
+      const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+      const rs = await request.query(`
+        SELECT ${TICKETS_SELECT_COLUMNAS}
         FROM TICKETS t
         LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
         LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
         LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-        ORDER BY t.TICKET_ID DESC`);
-      return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla) });
+        WHERE 1=1${extraWhere}
+        ORDER BY t.TICKET_ID DESC
+        OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
+      return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
     }
 
     // TI/ST: ver sólo asignados al usuario
     if (['TI','ST'].includes(tipoUsuario)) {
       if (!usuarioId) return res.status(400).json({ success: false, message: 'usuarioId requerido' });
 
-      const rs = await pool.request()
-        .input('uid', sql.Int, usuarioId)
-        .query(`
-          SELECT TOP 200
-            t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-            t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-            su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-            au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-            s.RATING as rating,
-            CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+      const request = pool.request().input('uid', sql.Int, usuarioId);
+      const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+      const rs = await request.query(`
+          SELECT ${TICKETS_SELECT_COLUMNAS}
           FROM TICKETS t
           LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
           LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
           LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-          WHERE t.ASIGNADO_A = @uid
+          WHERE (t.ASIGNADO_A = @uid
              OR EXISTS (
                SELECT 1 FROM TICKET_HISTORIAL h
                WHERE h.TICKET_ID = t.TICKET_ID
                  AND h.TIPO IN ('asignado','transferido','transferido_por','participante')
                  AND h.USER_ID = @uid
-             )
-          ORDER BY t.TICKET_ID DESC`);
-      return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla) });
+             ))${extraWhere}
+          ORDER BY t.TICKET_ID DESC
+          OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
+      return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
     }
 
     // Resto: sólo sus propios tickets
     if (!usuarioId) return res.status(400).json({ success: false, message: 'usuarioId requerido' });
 
-    const rs = await pool.request().input('uid', sql.Int, usuarioId)
-      .query(`SELECT TOP 200 t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
-                     t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
-        t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-            t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-                     su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
-                     au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
-                     s.RATING as rating,
-                     CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos
+    const request = pool.request().input('uid', sql.Int, usuarioId);
+    const { extraWhere } = aplicarFiltrosYPaginacion({ request }, req);
+    const rs = await request.query(`
+              SELECT ${TICKETS_SELECT_COLUMNAS}
               FROM TICKETS t
               LEFT JOIN NEUS_USUARIOS su ON su.NEUS_ID = t.SOLICITANTE_ID
               LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
               LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-              WHERE t.SOLICITANTE_ID=@uid ORDER BY t.TICKET_ID DESC`);
+              WHERE t.SOLICITANTE_ID=@uid${extraWhere}
+              ORDER BY t.TICKET_ID DESC
+              OFFSET @fOffset ROWS FETCH NEXT @fLimit ROWS ONLY`);
 
-    return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla) });
+    return res.json({ success: true, data: enriquecerConSla(rs.recordset, reglasSla, feriadosSla) });
   } catch (e) {
     console.error('Error listando tickets:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -352,22 +529,27 @@ exports.getTicketById = async (req, res) => {
       SELECT 
         t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.DESCRIPCION, t.ESTADO,
         t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-        t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
         t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
-        t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
+        t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.SERVICIO_AFECTADO, t.CANAL_ORIGEN, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
+        t.ACTIVO_AFECTADO_ID, t.SERVICIO_AFECTADO_ID,
+        t.SLA_RESPUESTA_CUMPLIDO, t.SLA_RESOLUCION_CUMPLIDO, t.MINUTOS_PRIMERA_RESPUESTA, t.MINUTOS_TRABAJADOS,
         t.FECHA_RESOLUCION_PROPUESTA, t.FECHA_VALIDACION, t.ARTICULO_KB_ID,
         au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
+        chat.LC_ID as chatRelacionadoId, chat.LC_ESTADO as chatRelacionadoEstado,
         CASE WHEN t.FECHA_CIERRE IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_CIERRE) ELSE NULL END AS tiempoAtencionMinutos,
         CASE WHEN t.FECHA_PRIMERA_RESPUESTA IS NOT NULL THEN DATEDIFF(MINUTE, t.FECHA_CREACION, t.FECHA_PRIMERA_RESPUESTA) ELSE NULL END AS tiempoPrimeraRespuestaMinutos
       FROM TICKETS t
       LEFT JOIN NEUS_USUARIOS au ON au.NEUS_ID = t.ASIGNADO_A
+      LEFT JOIN LIVECHAT_CONVERSACIONES chat ON chat.LC_TICKET_ID = t.TICKET_ID
       WHERE t.TICKET_ID=@tid`);
       
     if (header.recordset.length === 0) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
 
     const reglasSla = await cargarReglasSlaActivas(pool);
-    const [ticketConSla] = enriquecerConSla(header.recordset, reglasSla);
+    const feriadosSla = await cargarFeriadosActivos(pool, req.user?.empresa);
+    const [ticketConSla] = enriquecerConSla(header.recordset, reglasSla, feriadosSla);
 
     const comentarios = await pool.request().input('tid', sql.Int, id).query(`
       SELECT c.COM_ID as id, c.USER_ID as userId, u.NEUS_NOMBRES as userNombre,
@@ -384,13 +566,23 @@ exports.getTicketById = async (req, res) => {
     const sat = await pool.request().input('tid', sql.Int, id).query(`
       SELECT TICKET_ID as ticketId, RATING, COMENTARIO, SUBMIT_AT FROM TICKET_SATISFACCION WHERE TICKET_ID=@tid`);
 
+    const camposPersonalizados = await pool.request().input('tid', sql.Int, id).query(`
+      SELECT tcv.TCV_CAMPO_ID as campoId, cp.CP_NOMBRE as nombre, cp.CP_TIPO as tipo, tcv.TCV_VALOR as valor
+      FROM TICKET_CAMPOS_VALORES tcv
+      JOIN TI_CAMPOS_PERSONALIZADOS cp ON cp.CP_ID = tcv.TCV_CAMPO_ID
+      WHERE tcv.TCV_TICKET_ID=@tid ORDER BY cp.CP_ORDEN, cp.CP_NOMBRE`);
+
+    const encuestaAplica = await ticketAmeritaEncuesta(pool, req.user?.empresa, ticketConSla.AREA, ticketConSla.PRIORIDAD);
+
     return res.json({
       success: true,
       data: {
         ...ticketConSla,
         comentarios: comentarios.recordset,
         historial: hist.recordset,
-        satisfaccion: sat.recordset[0] || null
+        satisfaccion: sat.recordset[0] || null,
+        camposPersonalizados: camposPersonalizados.recordset,
+        encuestaAplica,
       }
     });
   } catch (e) {
@@ -402,13 +594,17 @@ exports.getTicketById = async (req, res) => {
 // Lógica de negocio de creación de ticket, separada del handler HTTP para que
 // tanto el portal (createTicket) como la API pública (createTicketFromApi)
 // la reusen sin duplicar código, siguiendo el mismo patrón que escalarTicketInterno.
+const CANALES_ORIGEN_VALIDOS = ['portal', 'chatbot', 'chat_en_vivo', 'tecnico', 'api'];
+
 async function crearTicketInterno(pool, {
   solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
-  clasificacion, subcategoria, sede, departamento, activoAfectado,
+  clasificacion, subcategoria, elemento, sede, departamento, activoAfectado, servicioAfectado,
+  activoAfectadoId, servicioAfectadoId,
   impacto, urgencia, prioridadManual: prioridadManualFlag, esAD,
-  tenantKey,
+  tenantKey, camposPersonalizados, canalOrigen,
 }) {
     area = normalizeArea(area || 'TI');
+    const canal = CANALES_ORIGEN_VALIDOS.includes(canalOrigen) ? canalOrigen : 'portal';
     const tituloTrim = (titulo ?? '').toString().trim();
 
     if (!solicitanteId || !tituloTrim) {
@@ -446,19 +642,26 @@ async function crearTicketInterno(pool, {
       .input('clasif', sql.NVarChar, clasifValida)
       .input('cat', sql.NVarChar, categoria || null)
       .input('subcat', sql.NVarChar, subcategoria || null)
+      .input('elem', sql.NVarChar, elemento || null)
       .input('sede', sql.NVarChar, sede || null)
       .input('depto', sql.NVarChar, departamento || null)
       .input('activo', sql.NVarChar, activoAfectado || null)
+      .input('servicio', sql.NVarChar, servicioAfectado || null)
+      .input('activoId', sql.Int, activoAfectadoId || null)
+      .input('servicioId', sql.Int, servicioAfectadoId || null)
       .input('impacto', sql.NVarChar, impactoNorm)
       .input('urgencia', sql.NVarChar, urgenciaNorm)
       .input('prioManual', sql.Bit, prioridadManual ? 1 : 0)
+      .input('canal', sql.NVarChar, canal)
       .query(`INSERT INTO TICKETS
                 (SOLICITANTE_ID, AREA, PRIORIDAD, TITULO, DESCRIPCION, ESTADO,
-                 CLASIFICACION, CATEGORIA, SUBCATEGORIA, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO,
-                 IMPACTO, URGENCIA, PRIORIDAD_MANUAL, NIVEL_ACTUAL)
+                 CLASIFICACION, CATEGORIA, SUBCATEGORIA, ELEMENTO, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO, SERVICIO_AFECTADO,
+                 ACTIVO_AFECTADO_ID, SERVICIO_AFECTADO_ID,
+                 IMPACTO, URGENCIA, PRIORIDAD_MANUAL, NIVEL_ACTUAL, CANAL_ORIGEN)
               VALUES (@sol, @area, @prio, @tit, @desc, 'abierto',
-                 @clasif, @cat, @subcat, @sede, @depto, @activo,
-                 @impacto, @urgencia, @prioManual, 1);
+                 @clasif, @cat, @subcat, @elem, @sede, @depto, @activo, @servicio,
+                 @activoId, @servicioId,
+                 @impacto, @urgencia, @prioManual, 1, @canal);
               SELECT SCOPE_IDENTITY() as id;`);
 
     const ticketId = Number(ins.recordset[0].id);
@@ -588,9 +791,10 @@ async function crearTicketInterno(pool, {
       SELECT TICKET_ID as id, SOLICITANTE_ID as solicitanteId, AREA as area, PRIORIDAD as prioridad, TITULO as titulo,
              DESCRIPCION as descripcion, ESTADO as estado, FECHA_CREACION as fechaCreacion, FECHA_ASIGNACION as fechaAsignacion,
              FECHA_PRIMERA_RESPUESTA as fechaPrimeraRespuesta, FECHA_CIERRE as fechaCierre, ASIGNADO_A as asignadoA,
-             CLASIFICACION as clasificacion, CATEGORIA as categoria, SUBCATEGORIA as subcategoria,
+             CLASIFICACION as clasificacion, CATEGORIA as categoria, SUBCATEGORIA as subcategoria, ELEMENTO as elemento,
              SEDE as sede, DEPARTAMENTO as departamento, ACTIVO_AFECTADO as activoAfectado,
-             IMPACTO as impacto, URGENCIA as urgencia, NIVEL_ACTUAL as nivelActual
+             ACTIVO_AFECTADO_ID as activoAfectadoId, SERVICIO_AFECTADO_ID as servicioAfectadoId,
+             IMPACTO as impacto, URGENCIA as urgencia, NIVEL_ACTUAL as nivelActual, CANAL_ORIGEN as canalOrigen
       FROM TICKETS WHERE TICKET_ID=@tid`);
 
     // Emitir evento en tiempo real sobre creación de ticket
@@ -608,6 +812,15 @@ async function crearTicketInterno(pool, {
       // No bloquear la respuesta si socket no está disponible
     }
 
+    if (camposPersonalizados) {
+      try {
+        const camposPersonalizadosController = require('./camposPersonalizadosController');
+        await camposPersonalizadosController.guardarValoresDeTicket(pool, ticketId, camposPersonalizados);
+      } catch (e) {
+        console.warn('⚠️ Error guardando campos personalizados del ticket:', e?.message || e);
+      }
+    }
+
     return { ok: true, status: 201, data: header.recordset[0] };
 }
 
@@ -617,8 +830,9 @@ exports.createTicket = async (req, res) => {
     const solicitanteId = req.body.solicitanteId ?? req.body.usuarioId ?? Number(req.headers['usuarioid']);
     const {
       area, titulo, descripcion, prioridad, categoria, asignadoA,
-      clasificacion, subcategoria, sede, departamento, activoAfectado,
-      impacto, urgencia,
+      clasificacion, subcategoria, elemento, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId,
+      impacto, urgencia, camposPersonalizados,
     } = req.body;
     console.warn(`[createTicket] solicitante=${solicitanteId} area=${area} tipo=${tipoUsuario}`);
 
@@ -628,12 +842,17 @@ exports.createTicket = async (req, res) => {
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const esAD = ['AD', 'ADMIN'].includes(tipoUsuario);
+    // Si quien crea el ticket es distinto del solicitante, lo está creando un
+    // técnico/AD a nombre de otro usuario (canal 'tecnico'); si no, es el propio
+    // usuario desde el portal (canal 'portal').
+    const canalOrigen = req.user?.id && Number(req.user.id) !== Number(solicitanteId) ? 'tecnico' : 'portal';
 
     const result = await crearTicketInterno(pool, {
       solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
-      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      clasificacion, subcategoria, elemento, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId,
       impacto, urgencia, prioridadManual: req.body.prioridadManual, esAD,
-      tenantKey: req.user?.empresa,
+      tenantKey: req.user?.empresa, camposPersonalizados, canalOrigen,
     });
 
     if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
@@ -653,7 +872,8 @@ exports.createTicketFromApi = async (req, res) => {
   try {
     const {
       email, area, titulo, descripcion, categoria, clasificacion,
-      subcategoria, sede, departamento, activoAfectado, impacto, urgencia,
+      subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId, impacto, urgencia,
     } = req.body;
 
     if (!email) return res.status(400).json({ success: false, message: 'email requerido' });
@@ -668,9 +888,10 @@ exports.createTicketFromApi = async (req, res) => {
 
     const result = await crearTicketInterno(pool, {
       solicitanteId, area, titulo, descripcion, categoria,
-      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId,
       impacto, urgencia, prioridadManual: false, esAD: false,
-      tenantKey: req.query.empresa,
+      tenantKey: req.query.empresa, canalOrigen: 'api',
     });
 
     if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
@@ -1397,7 +1618,7 @@ WHEN MATCHED THEN UPDATE SET RATING=@r, COMENTARIO=@c, SUBMIT_AT=GETDATE()
 WHEN NOT MATCHED THEN INSERT (TICKET_ID, RATING, COMENTARIO) VALUES (@tid, @r, @c);
       `);
       
-    await pool.request().input('tid', sql.Int, id).query(`UPDATE TICKETS SET ESTADO='cerrado', FECHA_CIERRE = COALESCE(FECHA_CIERRE, GETDATE()) WHERE TICKET_ID=@tid`);
+    await cerrarTicketConSnapshot(pool, Number(id), req.user?.empresa);
     await pool.request().input('tid', sql.Int, id).query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO) VALUES (@tid, 'encuesta')`);
     
     // Notificar al asignado
@@ -1443,7 +1664,7 @@ WHEN NOT MATCHED THEN INSERT (TICKET_ID, RATING, COMENTARIO) VALUES (@tid, @r, @
 // Lógica de negocio separada del handler HTTP para que el cron de SLA
 // (ticketSlaCronController.js) pueda invocarla directamente sin simular
 // un req/res de Express.
-async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, actorId, tenantKey, tipo = 'manual' }) {
+async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, actorId, tenantKey, tipo = 'manual', proveedorId = null }) {
   const hdr = await pool.request().input('tid', sql.Int, ticketId)
     .query(`SELECT AREA, ASIGNADO_A, NIVEL_ACTUAL, ESTADO, SOLICITANTE_ID, CATEGORIA, SEDE, PRIORIDAD FROM TICKETS WHERE TICKET_ID=@tid`);
   if (!hdr.recordset.length) return { ok: false, message: 'Ticket no encontrado' };
@@ -1493,13 +1714,20 @@ async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, acto
     .input('prev', sql.Int, prevAsignado)
     .input('nuevo', sql.Int, nuevoAsignado)
     .input('actor', sql.Int, actorId || null)
+    .input('provId', sql.Int, proveedorId || null)
     .query(`INSERT INTO TICKET_ESCALAMIENTOS
-              (TICKET_ID, NIVEL_ORIGEN, NIVEL_DESTINO, TIPO, MOTIVO, ASIGNADO_ANTERIOR, ASIGNADO_NUEVO, ACTOR_ID)
-            VALUES (@tid, @no, @nd, @tipo, @motivo, @prev, @nuevo, @actor)`);
+              (TICKET_ID, NIVEL_ORIGEN, NIVEL_DESTINO, TIPO, MOTIVO, ASIGNADO_ANTERIOR, ASIGNADO_NUEVO, ACTOR_ID, PROVEEDOR_ID)
+            VALUES (@tid, @no, @nd, @tipo, @motivo, @prev, @nuevo, @actor, @provId)`);
+
+  let proveedorNombre = null;
+  if (proveedorId) {
+    const rsProv = await pool.request().input('id', sql.Int, proveedorId).query(`SELECT PROV_NOMBRE FROM TI_PROVEEDORES WHERE PROV_ID=@id`);
+    proveedorNombre = rsProv.recordset[0]?.PROV_NOMBRE ?? null;
+  }
 
   await pool.request()
     .input('tid', sql.Int, ticketId)
-    .input('det', sql.NVarChar, `Escalado de N${nivelOrigen} a N${destino}${motivo ? ` — ${motivo}` : ''} (${tipo})`)
+    .input('det', sql.NVarChar, `Escalado de N${nivelOrigen} a N${destino}${motivo ? ` — ${motivo}` : ''} (${tipo})${proveedorNombre ? ` — Proveedor: ${proveedorNombre}` : ''}`)
     .input('uid', sql.Int, actorId || null)
     .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE, USER_ID) VALUES (@tid, 'escalado', @det, @uid)`);
 
@@ -1550,7 +1778,7 @@ async function escalarTicketInterno(pool, { ticketId, nivelDestino, motivo, acto
     entidadId: String(ticketId), detalle: { nivelOrigen, nivelDestino: destino, tipo, motivo }, ip: null,
   });
 
-  return { ok: true, nivelActual: destino, asignadoA: nuevoAsignado };
+  return { ok: true, nivelActual: destino, asignadoA: nuevoAsignado, proveedorId: proveedorId || null, proveedorNombre };
 }
 
 // POST /api/tickets/:id/escalar
@@ -1560,7 +1788,7 @@ exports.escalarTicket = async (req, res) => {
     if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
 
     const { id } = req.params;
-    const { nivelDestino, motivo } = req.body;
+    const { nivelDestino, motivo, proveedorId } = req.body;
     const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
     const pool = await databaseService.getPool(req.user?.empresa);
 
@@ -1568,10 +1796,11 @@ exports.escalarTicket = async (req, res) => {
       ticketId: Number(id),
       nivelDestino: nivelDestino ? Number(nivelDestino) : null,
       motivo, actorId, tenantKey: req.user?.empresa, tipo: 'manual',
+      proveedorId: proveedorId ? Number(proveedorId) : null,
     });
 
     if (!result.ok) return res.status(400).json({ success: false, message: result.message });
-    res.json({ success: true, nivelActual: result.nivelActual, asignadoA: result.asignadoA });
+    res.json({ success: true, nivelActual: result.nivelActual, asignadoA: result.asignadoA, proveedorId: result.proveedorId, proveedorNombre: result.proveedorNombre });
   } catch (e) {
     console.error('Error escalando ticket:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -1586,7 +1815,7 @@ exports.resolverTicket = async (req, res) => {
     if (!['TI','ST','AD','ADMIN','ADM'].includes(tipoUsuario)) return res.status(403).json({ success: false, message: 'No autorizado' });
 
     const { id } = req.params;
-    const { diagnostico, accionesRealizadas, causaRaiz, codigoCierre, articuloKbId } = req.body;
+    const { diagnostico, accionesRealizadas, causaRaiz, codigoCierre, articuloKbId, nuevoArticuloKb } = req.body;
     const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
 
     if (!diagnostico || !accionesRealizadas) {
@@ -1595,13 +1824,30 @@ exports.resolverTicket = async (req, res) => {
     const codigo = codigoCierre && TICKET_CODIGOS_CIERRE.includes(codigoCierre)
       ? codigoCierre
       : TICKET_CODIGOS_CIERRE[0];
-    const artId = Number(articuloKbId) || null;
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
     if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     if (['cerrado'].includes(hdr.recordset[0].ESTADO)) {
       return res.status(400).json({ success: false, message: 'El ticket ya está cerrado' });
+    }
+
+    // Vincular un artículo existente (articuloKbId) o crear uno nuevo desde
+    // el propio cierre (nuevoArticuloKb) — mutuamente excluyentes; si llega
+    // nuevoArticuloKb, se crea primero y se usa su ID resultante.
+    let artId = Number(articuloKbId) || null;
+    if (!artId && nuevoArticuloKb?.titulo && nuevoArticuloKb?.contenido) {
+      const kbController = require('./kbController');
+      const kbResult = await kbController.crearArticuloInterno(pool, {
+        titulo: nuevoArticuloKb.titulo,
+        contenido: nuevoArticuloKb.contenido,
+        categoria: nuevoArticuloKb.categoria,
+        tipo: nuevoArticuloKb.tipo,
+        autorId: req.user?.id || actorId,
+        autorNombre: req.user?.nombre || null,
+        ip: req.ip,
+      });
+      if (kbResult.ok) artId = kbResult.data.id;
     }
 
     await pool.request()
@@ -1666,7 +1912,7 @@ exports.validarResolucion = async (req, res) => {
     }
 
     const pool = await databaseService.getPool(req.user?.empresa);
-    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO, ASIGNADO_A FROM TICKETS WHERE TICKET_ID=@tid`);
+    const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO, ASIGNADO_A, AREA, PRIORIDAD FROM TICKETS WHERE TICKET_ID=@tid`);
     if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
 
     const t = hdr.recordset[0];
@@ -1682,6 +1928,15 @@ exports.validarResolucion = async (req, res) => {
         .query(`UPDATE TICKETS SET VALIDADO_USUARIO = 1, FECHA_VALIDACION = GETDATE() WHERE TICKET_ID=@tid`);
       await pool.request().input('tid', sql.Int, id).input('uid', sql.Int, solicitanteId)
         .query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, USER_ID) VALUES (@tid, 'validado', @uid)`);
+
+      // Si el ticket no amerita encuesta (Configuración > Encuestas), nunca se le
+      // muestra el panel de calificación al usuario — cerrarlo aquí mismo, o
+      // quedaría 'resuelto' para siempre sin pasar nunca por registrarSatisfaccion.
+      const amerita = await ticketAmeritaEncuesta(pool, req.user?.empresa, t.AREA, t.PRIORIDAD);
+      if (!amerita) {
+        await cerrarTicketConSnapshot(pool, Number(id), req.user?.empresa);
+        await pool.request().input('tid', sql.Int, id).query(`INSERT INTO TICKET_HISTORIAL (TICKET_ID, TIPO, DETALLE) VALUES (@tid, 'cerrado', 'Cerrado automáticamente: no amerita encuesta')`);
+      }
     } else {
       await pool.request().input('tid', sql.Int, id)
         .query(`UPDATE TICKETS SET
@@ -1985,14 +2240,15 @@ exports.getReporteSatisfaccion = async (req, res) => {
     
     const pool = await databaseService.getPool(req.user?.empresa);
     const { from, to, area } = req.query;
-    let where = '1=1';
-    
-    if (from) where += ` AND t.FECHA_CREACION >= CONVERT(datetime, '${from}')`;
-    if (to) where += ` AND t.FECHA_CREACION <= CONVERT(datetime, '${to}')`;
-    if (area) where += ` AND t.AREA = '${normalizeArea(area)}'`;
-    
-    const rs = await pool.request().query(`
-      SELECT 
+    const condiciones = ['1=1'];
+    const request = pool.request();
+
+    if (from) { condiciones.push('t.FECHA_CREACION >= @rsFrom'); request.input('rsFrom', sql.DateTime, from); }
+    if (to) { condiciones.push('t.FECHA_CREACION <= @rsTo'); request.input('rsTo', sql.DateTime, to); }
+    if (area) { condiciones.push('t.AREA = @rsArea'); request.input('rsArea', sql.NVarChar, normalizeArea(area)); }
+
+    const rs = await request.query(`
+      SELECT
         t.TICKET_ID as id,
         t.TITULO as titulo,
         t.AREA as area,
@@ -2008,7 +2264,7 @@ exports.getReporteSatisfaccion = async (req, res) => {
       LEFT JOIN NEUS_USUARIOS owner ON owner.NEUS_ID = t.SOLICITANTE_ID
       LEFT JOIN NEUS_USUARIOS asg ON asg.NEUS_ID = t.ASIGNADO_A
       LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-      WHERE ${where}
+      WHERE ${condiciones.join(' AND ')}
       ORDER BY t.TICKET_ID DESC
     `);
     
@@ -2029,14 +2285,15 @@ exports.getReporteSatisfaccionCSV = async (req, res) => {
     
     const pool = await databaseService.getPool(req.user?.empresa);
     const { from, to, area } = req.query;
-    let where = '1=1';
-    
-    if (from) where += ` AND t.FECHA_CREACION >= CONVERT(datetime, '${from}')`;
-    if (to) where += ` AND t.FECHA_CREACION <= CONVERT(datetime, '${to}')`;
-    if (area) where += ` AND t.AREA = '${normalizeArea(area)}'`;
-    
-    const rs = await pool.request().query(`
-      SELECT 
+    const condiciones = ['1=1'];
+    const request = pool.request();
+
+    if (from) { condiciones.push('t.FECHA_CREACION >= @rsFrom'); request.input('rsFrom', sql.DateTime, from); }
+    if (to) { condiciones.push('t.FECHA_CREACION <= @rsTo'); request.input('rsTo', sql.DateTime, to); }
+    if (area) { condiciones.push('t.AREA = @rsArea'); request.input('rsArea', sql.NVarChar, normalizeArea(area)); }
+
+    const rs = await request.query(`
+      SELECT
         t.TICKET_ID as id,
         t.TITULO as titulo,
         t.AREA as area,
@@ -2052,7 +2309,7 @@ exports.getReporteSatisfaccionCSV = async (req, res) => {
       LEFT JOIN NEUS_USUARIOS owner ON owner.NEUS_ID = t.SOLICITANTE_ID
       LEFT JOIN NEUS_USUARIOS asg ON asg.NEUS_ID = t.ASIGNADO_A
       LEFT JOIN TICKET_SATISFACCION s ON s.TICKET_ID = t.TICKET_ID
-      WHERE ${where}
+      WHERE ${condiciones.join(' AND ')}
       ORDER BY t.TICKET_ID DESC
     `);
     
@@ -2137,9 +2394,123 @@ exports.actualizarEscalamientoConfig = async (req, res) => {
   }
 };
 
+// ── Configuración de envío de encuesta de satisfacción (una fila por área) ──
+exports.getEncuestaConfig = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`SELECT TEN_ID as id, TEN_AREA as area, TEN_PRIORIDAD_MINIMA as prioridadMinima FROM TICKETS_ENCUESTA_CONFIG ORDER BY TEN_AREA`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error obteniendo configuración de encuesta:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.actualizarEncuestaConfig = async (req, res) => {
+  try {
+    const { area, prioridadMinima } = req.body;
+    if (!area || !['TI', 'ST'].includes(area.toUpperCase())) return res.status(400).json({ success: false, message: 'area debe ser TI o ST' });
+    if (!ticketPrioridad.PRIORIDADES.includes((prioridadMinima || '').toUpperCase())) {
+      return res.status(400).json({ success: false, message: `prioridadMinima debe ser una de: ${ticketPrioridad.PRIORIDADES.join(', ')}` });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const a = area.toUpperCase();
+    await pool.request()
+      .input('area', sql.NVarChar, a)
+      .input('prioridadMinima', sql.NVarChar, prioridadMinima.toUpperCase())
+      .query(`
+        MERGE TICKETS_ENCUESTA_CONFIG AS target
+        USING (SELECT @area AS area) AS src
+        ON target.TEN_AREA = src.area
+        WHEN MATCHED THEN UPDATE SET TEN_PRIORIDAD_MINIMA = @prioridadMinima
+        WHEN NOT MATCHED THEN INSERT (TEN_AREA, TEN_PRIORIDAD_MINIMA) VALUES (@area, @prioridadMinima);
+      `);
+    invalidarCacheEncuestaConfig(req.user?.empresa);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'actualizar-encuesta-config', entidadId: a, detalle:{ area: a, prioridadMinima }, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando configuración de encuesta:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /api/tickets/ficha-usuario/:userId — vista combinada para identificar
+// al solicitante desde cualquier canal (portal, chat en vivo, chatbot):
+// perfil, tickets abiertos/recientes y activos asignados en una sola llamada.
+// Solo expone campos que realmente existen en NEUS_USUARIOS — no inventa
+// "sede" ni "nivel de servicio" porque no hay dato real detrás de esos campos.
+exports.getFichaUsuario = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const perfilR = await pool.request().input('uid', sql.Int, userId).query(`
+      SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_CORREO as correo,
+             NEUS_TELEFONO as telefono, NEUS_DEPARTAMENTO as departamento,
+             NEUS_TIPOUSUARIO as tipoUsuario, NEUS_ACTIVO as activo, NEUS_USUARIO as usuarioRed
+      FROM NEUS_USUARIOS WHERE NEUS_ID=@uid`);
+    if (!perfilR.recordset.length) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    const perfil = perfilR.recordset[0];
+
+    const ticketsAbiertosR = await pool.request().input('uid', sql.Int, userId).query(`
+      SELECT TOP 20 TICKET_ID as id, TITULO as titulo, AREA as area, PRIORIDAD as prioridad,
+             ESTADO as estado, FECHA_CREACION as fechaCreacion, NIVEL_ACTUAL as nivelActual
+      FROM TICKETS
+      WHERE SOLICITANTE_ID=@uid AND ESTADO NOT IN ('resuelto','cerrado')
+      ORDER BY FECHA_CREACION DESC`);
+
+    const statsR = await pool.request().input('uid', sql.Int, userId).query(`
+      SELECT
+        (SELECT COUNT(*) FROM TICKETS WHERE SOLICITANTE_ID=@uid) as totalTickets,
+        (SELECT COUNT(*) FROM TICKETS WHERE SOLICITANTE_ID=@uid AND ESTADO NOT IN ('resuelto','cerrado')) as ticketsAbiertos,
+        (SELECT COUNT(*) FROM TICKETS WHERE SOLICITANTE_ID=@uid AND ESTADO='reabierto') as ticketsReabiertos,
+        (SELECT AVG(CAST(RATING as FLOAT)) FROM TICKET_SATISFACCION s JOIN TICKETS t ON t.TICKET_ID=s.TICKET_ID WHERE t.SOLICITANTE_ID=@uid) as ratingPromedio`);
+
+    // Reutiliza la misma lógica de match por nombre que ya existe en
+    // activoGeneralController.getActivosGeneralesPorUsuario, para no duplicar
+    // la heurística de búsqueda de activos.
+    let activos = [];
+    try {
+      const primerNombre = (perfil.nombre || '').trim().split(/\s+/)[0] || '';
+      const activosR = await pool.request().input('nombre', sql.NVarChar, `%${primerNombre}%`).query(`
+        SELECT TOP 20 AG_ID as id, AG_NOMBRE_EQUIPO as nombreEquipo, AG_MARCA as marca, AG_MODELO as modelo,
+               AG_NUMERO_SERIE as numeroSerie, AG_SO as sistemaOperativo, AG_UBICACION as ubicacion, AG_ESTADO as estado
+        FROM ACTIVOS_GENERALES
+        WHERE AG_ACTIVO = 1 AND ISNULL(AG_DEPARTAMENTO, '') NOT IN ('MONITOR', 'CPU', 'HP')
+          AND AG_USUARIO_EXCEL LIKE @nombre`);
+      activos = activosR.recordset;
+    } catch (e) {
+      console.warn('⚠️ Error obteniendo activos para ficha de usuario:', e?.message || e);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        perfil,
+        ticketsAbiertos: ticketsAbiertosR.recordset,
+        activos,
+        stats: {
+          totalTickets: statsR.recordset[0].totalTickets,
+          ticketsAbiertos: statsR.recordset[0].ticketsAbiertos,
+          ticketsReabiertos: statsR.recordset[0].ticketsReabiertos,
+          ratingPromedio: statsR.recordset[0].ratingPromedio,
+        },
+      },
+    });
+  } catch (e) {
+    console.error('Error obteniendo ficha de usuario:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // Reutilizado por ticketSlaCronController.js: evita duplicar la carga de
 // reglas SLA y la lógica de escalamiento fuera de un ciclo request/response.
 exports.cargarReglasSlaActivas = cargarReglasSlaActivas;
 exports.buscarReglaSla = buscarReglaSla;
+exports.cargarFeriadosActivos = cargarFeriadosActivos;
+exports.minutosLaborablesEntre = minutosLaborablesEntre;
+exports.invalidarCacheFeriados = invalidarCacheFeriados;
+exports.ticketAmeritaEncuesta = ticketAmeritaEncuesta;
+exports.invalidarCacheEncuestaConfig = invalidarCacheEncuestaConfig;
 exports.escalarTicketInterno = escalarTicketInterno;
 exports.crearTicketInterno = crearTicketInterno;

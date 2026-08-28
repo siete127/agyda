@@ -85,6 +85,7 @@ exports.iniciarConversacionInterna = async (req, res) => {
         asignadoA: agente ? agente.usuarioId : undefined,
         tenantKey,
         esAD: false,
+        canalOrigen: 'chat_en_vivo',
       });
     } catch (e) {
       console.warn('⚠️ Error creando ticket vinculado al chat interno de Soporte TI:', e?.message || e);

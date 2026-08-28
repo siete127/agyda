@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Timer, Plus, Trash2, Pencil, Power, BarChart3 } from 'lucide-react'
+import { Timer, Plus, Trash2, Pencil, Power, BarChart3, CalendarOff } from 'lucide-react'
 import { ticketSlaService } from '@/services/ticketSla.service'
+import { catalogosTiService } from '@/services/catalogosTi.service'
 import { DashboardStatRow } from '@/components/ui/DashboardStatRow'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -25,13 +26,19 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
   const qc = useQueryClient()
   const [prioridad, setPrioridad] = useState(regla?.prioridad ?? 'P3')
   const [area, setArea] = useState(regla?.area ?? '')
+  const [servicio, setServicio] = useState(regla?.servicio ?? '')
   const [minPrimeraRespuesta, setMinPrimeraRespuesta] = useState<number | ''>(regla?.minPrimeraRespuesta ?? '')
   const [minResolucion, setMinResolucion] = useState<number | ''>(regla?.minResolucion ?? '')
 
+  const { data: servicios = [] } = useQuery({
+    queryKey: ['catalogos-ti-servicios'],
+    queryFn: () => catalogosTiService.getServicios(),
+  })
+
   const guardar = useMutation({
     mutationFn: () => regla
-      ? ticketSlaService.actualizarRegla(regla.id, { prioridad, area: area || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion), activa: regla.activa })
-      : ticketSlaService.crearRegla({ prioridad, area: area || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion) }),
+      ? ticketSlaService.actualizarRegla(regla.id, { prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion), activa: regla.activa })
+      : ticketSlaService.crearRegla({ prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets-sla-reglas'] })
       qc.invalidateQueries({ queryKey: ['tickets-sla-reporte'] })
@@ -67,6 +74,13 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
             {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Servicio (opcional — vacío aplica a todos)</label>
+          <select value={servicio} onChange={(e) => setServicio(e.target.value)} className="field">
+            <option value="">Todos los servicios</option>
+            {servicios.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Minutos — primera respuesta</label>
@@ -86,6 +100,75 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
   )
 }
 
+function DiasFestivosPanel() {
+  const qc = useQueryClient()
+  const [fecha, setFecha] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+
+  const { data: festivos = [], isLoading } = useQuery({
+    queryKey: ['ti-dias-festivos'],
+    queryFn: () => catalogosTiService.getDiasFestivos(),
+  })
+
+  const crear = useMutation({
+    mutationFn: () => catalogosTiService.createDiaFestivo({ fecha, descripcion: descripcion.trim() || undefined }),
+    onSuccess: () => {
+      setFecha('')
+      setDescripcion('')
+      qc.invalidateQueries({ queryKey: ['ti-dias-festivos'] })
+    },
+    onError: () => toast.error('No se pudo crear el día festivo (¿ya existe esa fecha?)'),
+  })
+
+  const eliminar = useMutation({
+    mutationFn: (id: number) => catalogosTiService.deleteDiaFestivo(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ti-dias-festivos'] }),
+  })
+
+  return (
+    <div className="card p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <CalendarOff className="h-4 w-4 text-brand" />
+        <p className="text-sm font-semibold text-ink">Días festivos / no laborables</p>
+      </div>
+      <p className="mb-3 text-xs text-ink-tertiary">
+        Sábados, domingos y las fechas aquí listadas se excluyen por completo del cálculo de SLA — un
+        ticket creado un viernes antes de un feriado no "pierde" ese tiempo contra su plazo de resolución.
+      </p>
+
+      {isLoading ? (
+        <p className="text-sm text-ink-tertiary">Cargando...</p>
+      ) : festivos.length === 0 ? (
+        <p className="py-4 text-center text-xs text-ink-tertiary">Sin días festivos configurados.</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {festivos.map((f) => (
+            <div key={f.id} className="flex items-center gap-2 py-1.5 text-sm">
+              <span className="w-28 font-mono text-xs text-ink-secondary">{f.fecha}</span>
+              <span className="flex-1 text-ink-tertiary">{f.descripcion ?? '—'}</span>
+              <button className="text-ink-tertiary hover:text-red-500" onClick={() => eliminar.mutate(f.id)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
+        <input type="date" className="field text-sm" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        <input className="field flex-1 text-sm" placeholder="Descripción (ej. Día de la Independencia)" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
+        <button
+          className="btn-primary flex items-center gap-1 px-3 py-1.5 text-xs"
+          disabled={!fecha || crear.isPending}
+          onClick={() => crear.mutate()}
+        >
+          <Plus className="h-3.5 w-3.5" /> Agregar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function SlaTab() {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'crear' | ReglaSla | null>(null)
@@ -101,7 +184,7 @@ export function SlaTab() {
   })
 
   const toggleActiva = useMutation({
-    mutationFn: (r: ReglaSla) => ticketSlaService.actualizarRegla(r.id, { prioridad: r.prioridad, area: r.area ?? undefined, minPrimeraRespuesta: r.minPrimeraRespuesta, minResolucion: r.minResolucion, activa: !r.activa }),
+    mutationFn: (r: ReglaSla) => ticketSlaService.actualizarRegla(r.id, { prioridad: r.prioridad, area: r.area ?? undefined, servicio: r.servicio ?? undefined, minPrimeraRespuesta: r.minPrimeraRespuesta, minResolucion: r.minResolucion, activa: !r.activa }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets-sla-reglas'] })
       qc.invalidateQueries({ queryKey: ['tickets-sla-reporte'] })
@@ -183,7 +266,7 @@ export function SlaTab() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{PRIORIDAD_LABELS[r.prioridad as TicketPrioridad] ?? r.prioridad}</p>
-                  <p className="text-xs text-gray-500">{r.area ?? 'Todas las áreas'}</p>
+                  <p className="text-xs text-gray-500">{r.area ?? 'Todas las áreas'}{r.servicio ? ` · ${r.servicio}` : ''}</p>
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => toggleActiva.mutate(r)} title={r.activa ? 'Desactivar' : 'Activar'} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700">
@@ -205,6 +288,8 @@ export function SlaTab() {
           ))}
         </div>
       )}
+
+      <DiasFestivosPanel />
 
       {modal && <GuardarReglaModal regla={modal === 'crear' ? null : modal} onClose={() => setModal(null)} />}
     </div>

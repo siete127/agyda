@@ -64,7 +64,7 @@ exports.toggleSedeActiva = async (req, res) => {
   }
 };
 
-/* ── Categorías / Subcategorías (árbol) ── */
+/* ── Categorías / Subcategorías / Elementos (árbol de 3 niveles) ── */
 exports.getCategorias = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -77,10 +77,17 @@ exports.getCategorias = async (req, res) => {
       SELECT SUBCAT_ID as id, SUBCAT_CAT_ID as categoriaId, SUBCAT_NOMBRE as nombre, SUBCAT_ORDEN as orden, SUBCAT_ACTIVA as activa
       FROM TICKET_SUBCATEGORIAS ${incluirInactivas ? '' : 'WHERE SUBCAT_ACTIVA = 1'}
       ORDER BY SUBCAT_ORDEN, SUBCAT_NOMBRE`);
+    const elems = await pool.request().query(`
+      SELECT ELEM_ID as id, ELEM_SUBCAT_ID as subcategoriaId, ELEM_NOMBRE as nombre, ELEM_ORDEN as orden, ELEM_ACTIVO as activa
+      FROM TICKET_ELEMENTOS ${incluirInactivas ? '' : 'WHERE ELEM_ACTIVO = 1'}
+      ORDER BY ELEM_ORDEN, ELEM_NOMBRE`);
 
     const arbol = cats.recordset.map((c) => ({
       ...c,
-      subcategorias: subs.recordset.filter((s) => s.categoriaId === c.id).map(({ categoriaId, ...rest }) => rest),
+      subcategorias: subs.recordset.filter((s) => s.categoriaId === c.id).map(({ categoriaId, ...rest }) => ({
+        ...rest,
+        elementos: elems.recordset.filter((el) => el.subcategoriaId === rest.id).map(({ subcategoriaId, ...restEl }) => restEl),
+      })),
     }));
     res.json({ success: true, data: arbol });
   } catch (e) {
@@ -180,6 +187,53 @@ exports.toggleSubcategoriaActiva = async (req, res) => {
   }
 };
 
+/* ── Elementos (tercer nivel del árbol, colgado de subcategoría) ── */
+exports.createElemento = async (req, res) => {
+  try {
+    const { subcategoriaId, nombre, orden } = req.body;
+    if (!subcategoriaId || !nombre) return res.status(400).json({ success: false, message: 'subcategoriaId y nombre son requeridos' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('subcatId', sql.Int, subcategoriaId)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_ELEMENTOS (ELEM_SUBCAT_ID, ELEM_NOMBRE, ELEM_ORDEN) VALUES (@subcatId, @nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando elemento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateElemento = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_ELEMENTOS SET ELEM_NOMBRE=@nombre, ELEM_ORDEN=@orden WHERE ELEM_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando elemento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleElementoActivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_ELEMENTOS SET ELEM_ACTIVO = 1 - ELEM_ACTIVO WHERE ELEM_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de elemento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 /* ── Especialidades ── */
 exports.getEspecialidades = async (req, res) => {
   try {
@@ -232,6 +286,215 @@ exports.toggleEspecialidadActiva = async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('Error cambiando estado de especialidad:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Proveedores ── */
+exports.getProveedores = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivos = req.query.incluirInactivos === '1';
+    const rs = await pool.request().query(`
+      SELECT PROV_ID as id, PROV_NOMBRE as nombre, PROV_CONTACTO as contacto,
+             PROV_TELEFONO as telefono, PROV_CORREO as correo, PROV_ACTIVO as activo
+      FROM TI_PROVEEDORES ${incluirInactivos ? '' : 'WHERE PROV_ACTIVO = 1'}
+      ORDER BY PROV_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando proveedores:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createProveedor = async (req, res) => {
+  try {
+    const { nombre, contacto, telefono, correo } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('contacto', sql.NVarChar, contacto || null)
+      .input('telefono', sql.NVarChar, telefono || null)
+      .input('correo', sql.NVarChar, correo || null)
+      .query(`INSERT INTO TI_PROVEEDORES (PROV_NOMBRE, PROV_CONTACTO, PROV_TELEFONO, PROV_CORREO)
+              VALUES (@nombre, @contacto, @telefono, @correo); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, contacto: contacto || null, telefono: telefono || null, correo: correo || null, activo: true } });
+  } catch (e) {
+    console.error('Error creando proveedor:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateProveedor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, contacto, telefono, correo } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('contacto', sql.NVarChar, contacto || null)
+      .input('telefono', sql.NVarChar, telefono || null)
+      .input('correo', sql.NVarChar, correo || null)
+      .query(`UPDATE TI_PROVEEDORES SET PROV_NOMBRE=@nombre, PROV_CONTACTO=@contacto, PROV_TELEFONO=@telefono, PROV_CORREO=@correo WHERE PROV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando proveedor:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleProveedorActivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TI_PROVEEDORES SET PROV_ACTIVO = 1 - PROV_ACTIVO WHERE PROV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de proveedor:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Servicios ── */
+exports.getServicios = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivos = req.query.incluirInactivos === '1';
+    const rs = await pool.request().query(`
+      SELECT s.SRV_ID as id, s.SRV_NOMBRE as nombre, s.SRV_DESCRIPCION as descripcion,
+             s.SRV_PROVEEDOR_ID as proveedorId, p.PROV_NOMBRE as proveedorNombre, s.SRV_ACTIVO as activo
+      FROM TI_SERVICIOS s
+      LEFT JOIN TI_PROVEEDORES p ON p.PROV_ID = s.SRV_PROVEEDOR_ID
+      ${incluirInactivos ? '' : 'WHERE s.SRV_ACTIVO = 1'}
+      ORDER BY s.SRV_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando servicios:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createServicio = async (req, res) => {
+  try {
+    const { nombre, descripcion, proveedorId } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('descripcion', sql.NVarChar, descripcion || null)
+      .input('proveedorId', sql.Int, proveedorId || null)
+      .query(`INSERT INTO TI_SERVICIOS (SRV_NOMBRE, SRV_DESCRIPCION, SRV_PROVEEDOR_ID)
+              VALUES (@nombre, @descripcion, @proveedorId); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, descripcion: descripcion || null, proveedorId: proveedorId || null, activo: true } });
+  } catch (e) {
+    console.error('Error creando servicio:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateServicio = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, descripcion, proveedorId } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('descripcion', sql.NVarChar, descripcion || null)
+      .input('proveedorId', sql.Int, proveedorId || null)
+      .query(`UPDATE TI_SERVICIOS SET SRV_NOMBRE=@nombre, SRV_DESCRIPCION=@descripcion, SRV_PROVEEDOR_ID=@proveedorId WHERE SRV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando servicio:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleServicioActivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TI_SERVICIOS SET SRV_ACTIVO = 1 - SRV_ACTIVO WHERE SRV_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de servicio:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Días festivos (excluidos del cálculo de SLA — ver minutosLaborablesEntre en ticketController.js) ── */
+exports.getDiasFestivos = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT FEST_ID as id, CONVERT(varchar(10), FEST_FECHA, 23) as fecha, FEST_DESCRIPCION as descripcion
+      FROM TI_DIAS_FESTIVOS ORDER BY FEST_FECHA`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando días festivos:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createDiaFestivo = async (req, res) => {
+  try {
+    const { fecha, descripcion } = req.body;
+    if (!fecha) return res.status(400).json({ success: false, message: 'fecha requerida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('fecha', sql.Date, fecha)
+      .input('descripcion', sql.NVarChar, descripcion || null)
+      .query(`INSERT INTO TI_DIAS_FESTIVOS (FEST_FECHA, FEST_DESCRIPCION) VALUES (@fecha, @descripcion); SELECT SCOPE_IDENTITY() as id;`);
+    require('./ticketController').invalidarCacheFeriados(req.user?.empresa);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'catalogos-ti', accion:'crear-dia-festivo', entidadId: String(ins.recordset[0].id), detalle:{ fecha, descripcion }, ip:req.ip });
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), fecha, descripcion: descripcion || null } });
+  } catch (e) {
+    console.error('Error creando día festivo:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.deleteDiaFestivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`DELETE FROM TI_DIAS_FESTIVOS WHERE FEST_ID=@id`);
+    require('./ticketController').invalidarCacheFeriados(req.user?.empresa);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error eliminando día festivo:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Config general (fila única). ZONA_HORARIA es informativa, no funcional
+   — ver comentario en schemaService.js. ── */
+exports.getConfigGeneral = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`SELECT TOP 1 TCG_ZONA_HORARIA as zonaHoraria FROM TI_CONFIG_GENERAL ORDER BY TCG_ID`);
+    res.json({ success: true, data: rs.recordset[0] || { zonaHoraria: 'America/Mexico_City' } });
+  } catch (e) {
+    console.error('Error obteniendo config general:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateConfigGeneral = async (req, res) => {
+  try {
+    const { zonaHoraria } = req.body;
+    if (!zonaHoraria) return res.status(400).json({ success: false, message: 'zonaHoraria requerida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('zh', sql.NVarChar, zonaHoraria).query(`
+      UPDATE TI_CONFIG_GENERAL SET TCG_ZONA_HORARIA=@zh, TCG_FECHA_ACTUALIZACION=GETDATE()
+      WHERE TCG_ID = (SELECT TOP 1 TCG_ID FROM TI_CONFIG_GENERAL ORDER BY TCG_ID)
+    `);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'catalogos-ti', accion:'actualizar-config-general', entidadId: 'zona-horaria', detalle:{ zonaHoraria }, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando config general:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

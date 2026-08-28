@@ -22,11 +22,37 @@ router.post('/subcategorias', requireActionAccess('configuracion', 'configurar')
 router.put('/subcategorias/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateSubcategoria);
 router.patch('/subcategorias/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleSubcategoriaActiva);
 
+// Elementos (tercer nivel, colgado de subcategoría)
+router.post('/elementos', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createElemento);
+router.put('/elementos/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateElemento);
+router.patch('/elementos/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleElementoActivo);
+
 // Especialidades
 router.get('/especialidades', requireActionAccess('configuracion', 'ver'), catalogosTiController.getEspecialidades);
 router.post('/especialidades', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createEspecialidad);
 router.put('/especialidades/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateEspecialidad);
 router.patch('/especialidades/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleEspecialidadActiva);
+
+// Proveedores
+router.get('/proveedores', requireActionAccess('configuracion', 'ver'), catalogosTiController.getProveedores);
+router.post('/proveedores', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createProveedor);
+router.put('/proveedores/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateProveedor);
+router.patch('/proveedores/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleProveedorActivo);
+
+// Servicios
+router.get('/servicios', requireActionAccess('configuracion', 'ver'), catalogosTiController.getServicios);
+router.post('/servicios', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createServicio);
+router.put('/servicios/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateServicio);
+router.patch('/servicios/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleServicioActivo);
+
+// Config general (zona horaria informativa)
+router.get('/config-general', requireActionAccess('configuracion', 'ver'), catalogosTiController.getConfigGeneral);
+router.put('/config-general', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateConfigGeneral);
+
+// Días festivos (excluidos del cálculo de SLA)
+router.get('/dias-festivos', requireActionAccess('configuracion', 'ver'), catalogosTiController.getDiasFestivos);
+router.post('/dias-festivos', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createDiaFestivo);
+router.delete('/dias-festivos/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.deleteDiaFestivo);
 
 // Integraciones (placeholder clave/valor, sin cifrado)
 router.get('/integraciones', requireActionAccess('configuracion', 'ver'), catalogosTiController.getIntegraciones);

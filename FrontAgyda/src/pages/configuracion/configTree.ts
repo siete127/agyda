@@ -717,6 +717,7 @@ export const CONFIG_TREE: ConfigNode[] = [
       { key: 'ti-general',          label: 'General',                 screen: 'ti-general' },
       { key: 'ti-mesa-servicio',    label: 'Mesa de Servicio',        screen: 'ti-mesa-servicio' },
       { key: 'ti-categorias',       label: 'Categorías y subcategorías', screen: 'ti-categorias' },
+      { key: 'ti-campos-personalizados', label: 'Campos personalizados', screen: 'ti-campos-personalizados' },
       { key: 'ti-tecnicos',         label: 'Técnicos',                screen: 'ti-tecnicos' },
       { key: 'ti-catalogos',        label: 'Sedes y activos',         screen: 'ti-catalogos' },
       { key: 'ti-grupos-soporte',   label: 'Grupos de soporte',       screen: 'ti-grupos-soporte' },

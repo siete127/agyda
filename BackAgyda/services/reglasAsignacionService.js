@@ -2,24 +2,39 @@ const sql = require('mssql');
 
 // Motor de reglas de asignación: unifica el ruteo de Tickets (antes autoAssignTicket,
 // aleatorio) y de Livechat (antes least-busy simple) en un solo algoritmo configurable.
+// Se divide en dos fases independientes, cada una exportada por separado:
 //
-// Algoritmo:
-// 1. Carga reglas activas ordenadas por REG_PRIORIDAD_ORDEN.
-// 2. Toma la primera regla cuyas condiciones no-NULL matcheen todos los criterios recibidos.
-// 3. Si hay match: usa REG_NIVEL_REQUERIDO/REG_ESP_ID si vienen definidos.
-// 4. Si no hay match: fallback (nivel = criterios.nivel, sin filtro de especialidad) —
-//    el sistema nunca se queda sin poder asignar solo por falta de reglas configuradas.
-// 5. Candidatos: TI_STAFF_STATUS del área/nivel efectivo, disponibles, activos,
-//    filtrando horario/prioridades permitidas y especialidad/categoría/sede permitida
-//    (regla: sin filas en la tabla puente = sin restricción, compatible hacia atrás).
-// 6. Excluye candidatos en/sobre su capacidad (MAX_TICKETS o MAX_CHATS según tipoCarga).
-// 7. Ordena por menor carga real (tickets abiertos + chats activos), desempate por
-//    LAST_ASSIGNED_AT.
+// FASE 1 — ENRUTAMIENTO (enrutarTicket): a qué grupo/nivel/especialidad va.
+//   1. Carga reglas activas ordenadas por REG_PRIORIDAD_ORDEN.
+//   2. Toma la primera regla cuyas condiciones no-NULL matcheen todos los criterios recibidos.
+//   3. Si hay match: usa REG_NIVEL_REQUERIDO/REG_ESP_ID si vienen definidos.
+//   4. Si no hay match: fallback (nivel = criterios.nivel, sin filtro de especialidad) —
+//      el sistema nunca se queda sin destino solo por falta de reglas configuradas.
+//   5. Resuelve el GRUPOS_SOPORTE(AREA,NIVEL) correspondiente, informativo.
+//
+// FASE 2 — ASIGNACIÓN (asignarTecnico): dado ese destino, qué técnico concreto.
+//   6. Candidatos: TI_STAFF_STATUS del área/nivel efectivo, disponibles, activos,
+//      filtrando horario/prioridades permitidas y especialidad/categoría/sede permitida
+//      (regla: sin filas en la tabla puente = sin restricción, compatible hacia atrás).
+//   7. Excluye candidatos en/sobre su capacidad (MAX_TICKETS o MAX_CHATS según tipoCarga).
+//   8. Ordena por menor carga real (tickets abiertos + chats activos), desempate por
+//      LAST_ASSIGNED_AT.
+//
+// seleccionarTecnico() compone ambas fases y es lo que usan los llamadores existentes
+// (ticketController, livechatController) sin que ellos necesiten saber de la separación.
 
 async function buscarReglaAplicable(pool, { area, categoriaId, subcategoriaId, sedeId, prioridad }) {
+  // REG_HORARIO_INICIO/FIN son columnas TIME — el driver mssql las devuelve como
+  // objetos Date (con fecha base 1970-01-01), no como texto. CONVERT a varchar(5)
+  // aquí para que horaActualEnRango reciba 'HH:MM' de forma consistente con lo que
+  // ya hace getReglas() en reglasAsignacionController.js.
   const rs = await pool.request().query(`
     SELECT REG_ID as id, REG_AREA as area, REG_CAT_ID as categoriaId, REG_SUBCAT_ID as subcategoriaId,
-           REG_SEDE_ID as sedeId, REG_PRIORIDAD as prioridad, REG_NIVEL_REQUERIDO as nivelRequerido, REG_ESP_ID as espId
+           REG_SEDE_ID as sedeId, REG_PRIORIDAD as prioridad, REG_NIVEL_REQUERIDO as nivelRequerido, REG_ESP_ID as espId,
+           REG_TECNICO_ID as tecnicoId,
+           CONVERT(varchar(5), REG_HORARIO_INICIO, 108) as horarioInicio,
+           CONVERT(varchar(5), REG_HORARIO_FIN, 108) as horarioFin,
+           REG_DIAS_SEMANA as diasSemana
     FROM TI_REGLAS_ASIGNACION
     WHERE REG_ACTIVA = 1
     ORDER BY REG_PRIORIDAD_ORDEN ASC, REG_ID ASC
@@ -31,7 +46,11 @@ async function buscarReglaAplicable(pool, { area, categoriaId, subcategoriaId, s
     const matchSubcat = r.subcategoriaId == null || r.subcategoriaId === subcategoriaId;
     const matchSede = r.sedeId == null || r.sedeId === sedeId;
     const matchPrio = r.prioridad == null || r.prioridad === prioridad;
-    if (matchArea && matchCat && matchSubcat && matchSede && matchPrio) return r;
+    // Condición de horario de la REGLA (distinta del horario por técnico): si la
+    // regla define un rango horario/días, solo se considera "match" dentro de esa
+    // ventana — permite reglas tipo "solo aplica de 6pm a 8am" para guardia nocturna.
+    const matchHorario = horaActualEnRango(r.horarioInicio, r.horarioFin) && diaActualPermitido(r.diasSemana);
+    if (matchArea && matchCat && matchSubcat && matchSede && matchPrio && matchHorario) return r;
   }
   return null;
 }
@@ -55,22 +74,84 @@ function diaActualPermitido(diasCsv) {
   return dias.includes(String(hoy1a7));
 }
 
-async function seleccionarTecnico(pool, {
-  area, nivel = 1, categoriaId = null, subcategoriaId = null, sedeId = null,
-  prioridad = null, tipoCarga = 'ticket',
-}) {
+// FASE 1: ENRUTAMIENTO — decide A QUÉ GRUPO/NIVEL/ESPECIALIDAD debe ir el
+// ticket/chat, según las reglas configuradas. No elige ningún técnico
+// concreto todavía; eso es responsabilidad exclusiva de la fase de asignación.
+// Separado de asignarTecnico() para que cada fase se pueda configurar,
+// probar y auditar de forma independiente (p.ej. simular a qué grupo iría
+// algo sin necesidad de tener técnicos con capacidad disponible).
+async function enrutarTicket(pool, { area, categoriaId = null, subcategoriaId = null, sedeId = null, prioridad = null, nivel = 1 }) {
   const regla = await buscarReglaAplicable(pool, { area, categoriaId, subcategoriaId, sedeId, prioridad });
-
   const nivelEfectivo = regla?.nivelRequerido ?? nivel;
   const espRequerida = regla?.espId ?? null;
+  const tecnicoForzadoId = regla?.tecnicoId ?? null;
 
+  let grupo = null;
+  const grupoRs = await pool.request()
+    .input('area', sql.NVarChar, area)
+    .input('nivel', sql.TinyInt, nivelEfectivo)
+    .query(`SELECT GRUPO_ID as id, NOMBRE as nombre FROM GRUPOS_SOPORTE WHERE AREA=@area AND NIVEL=@nivel`);
+  if (grupoRs.recordset.length) grupo = grupoRs.recordset[0];
+
+  return {
+    reglaAplicada: regla?.id ?? null,
+    area,
+    nivel: nivelEfectivo,
+    espId: espRequerida,
+    tecnicoForzadoId,
+    grupoId: grupo?.id ?? null,
+    grupoNombre: grupo?.nombre ?? null,
+  };
+}
+
+// FASE 2: ASIGNACIÓN — dado un destino ya enrutado (área/nivel/especialidad),
+// elige QUÉ TÉCNICO específico se hace cargo: filtra candidatos por
+// horario/prioridades/especialidad/categoría/sede permitida, excluye a
+// quienes están en/sobre capacidad, y ordena por menor carga real.
+async function asignarTecnico(pool, {
+  area, nivel = 1, espId = null, categoriaId = null, sedeId = null,
+  prioridad = null, tipoCarga = 'ticket', tecnicoForzadoId = null,
+}) {
+  const nivelEfectivo = nivel;
+  const espRequerida = espId;
+
+  // Regla "por técnico": si la regla exige una persona específica, saltar el
+  // resto del algoritmo (especialidad/categoría/sede/orden por carga) y usar
+  // esa persona directo, siempre que esté disponible y con capacidad. Si no
+  // califica, se cae al flujo normal (fallback) en vez de bloquear la
+  // asignación — mismo principio que "sin reglas = fallback" del resto del motor.
+  if (tecnicoForzadoId) {
+    const forzadoRs = await pool.request().input('uid', sql.Int, tecnicoForzadoId).query(`
+      SELECT u.NEUS_ID as userId, s.MAX_TICKETS as maxTickets, s.MAX_CHATS as maxChats
+      FROM NEUS_USUARIOS u
+      INNER JOIN TI_STAFF_STATUS s ON s.USER_ID = u.NEUS_ID
+      WHERE u.NEUS_ACTIVO = 1 AND s.DISPONIBLE = 1 AND s.ESTADO_TRABAJO = 'disponible' AND u.NEUS_ID = @uid
+    `);
+    const forzado = forzadoRs.recordset[0];
+    if (forzado) {
+      const cargaRs = await pool.request().input('uid', sql.Int, forzado.userId).query(`
+        SELECT
+          (SELECT COUNT(*) FROM TICKETS WHERE ASIGNADO_A=@uid AND ESTADO NOT IN ('resuelto','cerrado')) as tickets,
+          (SELECT COUNT(*) FROM LIVECHAT_CONVERSACIONES WHERE LC_AGENTE_ID=@uid AND LC_ESTADO='activa') as chats
+      `);
+      const carga = cargaRs.recordset[0];
+      const limite = tipoCarga === 'chat' ? forzado.maxChats : forzado.maxTickets;
+      const actual = tipoCarga === 'chat' ? carga.chats : carga.tickets;
+      if (actual < limite) return { userId: forzado.userId };
+    }
+  }
+
+  // HORARIO_INICIO/FIN son TIME, hay que convertirlas a 'HH:MM' explícitamente
+  // o el driver las entrega como Date (ver buscarReglaAplicable más arriba).
   const rs = await pool.request()
     .input('area', sql.NVarChar, area)
     .input('nivel', sql.TinyInt, nivelEfectivo)
     .query(`
       SELECT u.NEUS_ID as userId, s.MAX_TICKETS as maxTickets, s.MAX_CHATS as maxChats,
-             s.PRIORIDADES_PERMITIDAS as prioridadesPermitidas, s.HORARIO_INICIO as horarioInicio,
-             s.HORARIO_FIN as horarioFin, s.DIAS_SEMANA as diasSemana, s.LAST_ASSIGNED_AT as lastAssignedAt
+             s.PRIORIDADES_PERMITIDAS as prioridadesPermitidas,
+             CONVERT(varchar(5), s.HORARIO_INICIO, 108) as horarioInicio,
+             CONVERT(varchar(5), s.HORARIO_FIN, 108) as horarioFin,
+             s.DIAS_SEMANA as diasSemana, s.LAST_ASSIGNED_AT as lastAssignedAt
       FROM NEUS_USUARIOS u
       INNER JOIN TI_STAFF_STATUS s ON s.USER_ID = u.NEUS_ID
       WHERE u.NEUS_ACTIVO = 1
@@ -151,13 +232,24 @@ async function seleccionarTecnico(pool, {
     return aTime - bTime;
   });
 
-  return { userId: conCarga[0].userId, reglaAplicada: regla?.id ?? null };
+  return { userId: conCarga[0].userId };
 }
 
-async function evaluarReglasParaCriterios(pool, criterios) {
-  const regla = await buscarReglaAplicable(pool, criterios);
-  const resultado = await seleccionarTecnico(pool, criterios);
-  return { regla, resultado };
+// Composición de las dos fases — mantiene la firma histórica de
+// seleccionarTecnico() para que ticketController/livechatController no
+// necesiten cambiar. Internamente ya no hace todo en un solo paso: primero
+// enruta (fase 1), luego asigna dentro de ese destino (fase 2).
+async function seleccionarTecnico(pool, {
+  area, nivel = 1, categoriaId = null, subcategoriaId = null, sedeId = null,
+  prioridad = null, tipoCarga = 'ticket',
+}) {
+  const ruteo = await enrutarTicket(pool, { area, categoriaId, subcategoriaId, sedeId, prioridad, nivel });
+  const asignacion = await asignarTecnico(pool, {
+    area, nivel: ruteo.nivel, espId: ruteo.espId, categoriaId, sedeId, prioridad, tipoCarga,
+    tecnicoForzadoId: ruteo.tecnicoForzadoId,
+  });
+  if (!asignacion) return null;
+  return { userId: asignacion.userId, reglaAplicada: ruteo.reglaAplicada, grupoId: ruteo.grupoId, grupoNombre: ruteo.grupoNombre };
 }
 
-module.exports = { seleccionarTecnico, evaluarReglasParaCriterios };
+module.exports = { seleccionarTecnico, enrutarTicket, asignarTecnico };

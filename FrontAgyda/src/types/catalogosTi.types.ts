@@ -5,11 +5,19 @@ export interface Sede {
   activa: boolean
 }
 
+export interface Elemento {
+  id: number
+  nombre: string
+  orden: number
+  activa: boolean
+}
+
 export interface Subcategoria {
   id: number
   nombre: string
   orden: number
   activa: boolean
+  elementos: Elemento[]
 }
 
 export interface CategoriaConSubcategorias {
@@ -31,4 +39,28 @@ export interface IntegracionConfig {
   clave: string
   valor: string | null
   fechaActualizacion: string
+}
+
+export interface Proveedor {
+  id: number
+  nombre: string
+  contacto: string | null
+  telefono: string | null
+  correo: string | null
+  activo: boolean
+}
+
+export interface Servicio {
+  id: number
+  nombre: string
+  descripcion: string | null
+  proveedorId: number | null
+  proveedorNombre: string | null
+  activo: boolean
+}
+
+export interface DiaFestivo {
+  id: number
+  fecha: string
+  descripcion: string | null
 }

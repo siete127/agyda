@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig } from '@/types/catalogosTi.types'
+import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig, Proveedor, Servicio, DiaFestivo, Elemento } from '@/types/catalogosTi.types'
 
 export const catalogosTiService = {
   // Sedes
@@ -43,6 +43,18 @@ export const catalogosTiService = {
     await api.patch(`/catalogos-ti/subcategorias/${id}/activa`)
   },
 
+  // Elementos (tercer nivel, colgado de subcategoría)
+  async createElemento(payload: { subcategoriaId: number; nombre: string; orden?: number }): Promise<Elemento> {
+    const { data } = await api.post('/catalogos-ti/elementos', payload)
+    return data.data
+  },
+  async updateElemento(id: number, payload: { nombre: string; orden?: number }): Promise<void> {
+    await api.put(`/catalogos-ti/elementos/${id}`, payload)
+  },
+  async toggleElementoActiva(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/elementos/${id}/activa`)
+  },
+
   // Especialidades
   async getEspecialidades(incluirInactivas = false): Promise<Especialidad[]> {
     const { data } = await api.get('/catalogos-ti/especialidades', { params: incluirInactivas ? { incluirInactivas: '1' } : {} })
@@ -57,6 +69,60 @@ export const catalogosTiService = {
   },
   async toggleEspecialidadActiva(id: number): Promise<void> {
     await api.patch(`/catalogos-ti/especialidades/${id}/activa`)
+  },
+
+  // Proveedores
+  async getProveedores(incluirInactivos = false): Promise<Proveedor[]> {
+    const { data } = await api.get('/catalogos-ti/proveedores', { params: incluirInactivos ? { incluirInactivos: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createProveedor(payload: { nombre: string; contacto?: string; telefono?: string; correo?: string }): Promise<Proveedor> {
+    const { data } = await api.post('/catalogos-ti/proveedores', payload)
+    return data.data
+  },
+  async updateProveedor(id: number, payload: { nombre: string; contacto?: string; telefono?: string; correo?: string }): Promise<void> {
+    await api.put(`/catalogos-ti/proveedores/${id}`, payload)
+  },
+  async toggleProveedorActivo(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/proveedores/${id}/activo`)
+  },
+
+  // Servicios
+  async getServicios(incluirInactivos = false): Promise<Servicio[]> {
+    const { data } = await api.get('/catalogos-ti/servicios', { params: incluirInactivos ? { incluirInactivos: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createServicio(payload: { nombre: string; descripcion?: string; proveedorId?: number | null }): Promise<Servicio> {
+    const { data } = await api.post('/catalogos-ti/servicios', payload)
+    return data.data
+  },
+  async updateServicio(id: number, payload: { nombre: string; descripcion?: string; proveedorId?: number | null }): Promise<void> {
+    await api.put(`/catalogos-ti/servicios/${id}`, payload)
+  },
+  async toggleServicioActivo(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/servicios/${id}/activo`)
+  },
+
+  // Config general (zona horaria informativa)
+  async getConfigGeneral(): Promise<{ zonaHoraria: string }> {
+    const { data } = await api.get('/catalogos-ti/config-general')
+    return data?.data ?? { zonaHoraria: 'America/Mexico_City' }
+  },
+  async updateConfigGeneral(zonaHoraria: string): Promise<void> {
+    await api.put('/catalogos-ti/config-general', { zonaHoraria })
+  },
+
+  // Días festivos (excluidos del cálculo de SLA)
+  async getDiasFestivos(): Promise<DiaFestivo[]> {
+    const { data } = await api.get('/catalogos-ti/dias-festivos')
+    return data?.data ?? []
+  },
+  async createDiaFestivo(payload: { fecha: string; descripcion?: string }): Promise<DiaFestivo> {
+    const { data } = await api.post('/catalogos-ti/dias-festivos', payload)
+    return data.data
+  },
+  async deleteDiaFestivo(id: number): Promise<void> {
+    await api.delete(`/catalogos-ti/dias-festivos/${id}`)
   },
 
   // Integraciones (placeholder clave/valor, sin cifrado)

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ticketController = require('../controllers/ticketController');
 const ticketSlaCron = require('../controllers/ticketSlaCronController');
+const ticketRecordatoriosCron = require('../controllers/ticketRecordatoriosCronController');
 const { uploadEvidence } = require('../middleware/evidenceUpload');
 const { authenticateToken, verificarRol } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
@@ -48,9 +49,21 @@ router.delete('/sla/reglas/:id', requireActionAccess('tickets', 'editar'), ticke
 router.get('/sla/reporte', requireActionAccess('tickets', 'ver'), ticketController.getReporteSla);
 router.post('/sla/run-cron', verificarRol(['AD']), ticketSlaCron.runNow);
 
+// Recordatorios automáticos de tickets sin actividad (config global de una sola fila)
+router.get('/recordatorios-config', requireActionAccess('configuracion', 'ver'), ticketRecordatoriosCron.getConfig);
+router.put('/recordatorios-config', requireActionAccess('configuracion', 'configurar'), ticketRecordatoriosCron.updateConfig);
+router.post('/recordatorios/run-cron', verificarRol(['AD']), ticketRecordatoriosCron.runNow);
+
 // Configuración de escalamiento automático (fila única global)
 router.get('/escalamiento-config', requireActionAccess('configuracion', 'ver'), ticketController.getEscalamientoConfig);
 router.put('/escalamiento-config', requireActionAccess('configuracion', 'configurar'), ticketController.actualizarEscalamientoConfig);
+
+// Configuración de envío de encuesta de satisfacción (prioridad mínima por área)
+router.get('/encuesta-config', requireActionAccess('configuracion', 'ver'), ticketController.getEncuestaConfig);
+router.put('/encuesta-config', requireActionAccess('configuracion', 'configurar'), ticketController.actualizarEncuestaConfig);
+
+// Ficha 360° del usuario (identificación al atender ticket/chat)
+router.get('/ficha-usuario/:userId', requireActionAccess('tickets', 'ver'), ticketController.getFichaUsuario);
 
 // Catálogos (clasificación, categorías, códigos de cierre)
 router.get('/categorias', requireActionAccess('tickets', 'ver'), ticketController.getCategorias);

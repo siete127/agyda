@@ -519,6 +519,24 @@ BEGIN
   CREATE INDEX IX_TICKET_SUBCAT_CAT ON dbo.TICKET_SUBCATEGORIAS(SUBCAT_CAT_ID);
 END
 
+-- Tercer nivel del árbol de clasificación (Categoría > Subcategoría > Elemento),
+-- mismo patrón que TICKET_SUBCATEGORIAS un nivel arriba. Opcional: no toda
+-- subcategoría necesita elementos (p.ej. "Contraseñas" puede no requerir
+-- desglose adicional), así que el frontend debe tratar "sin elementos" como
+-- válido, no como error.
+IF OBJECT_ID('dbo.TICKET_ELEMENTOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_ELEMENTOS (
+    ELEM_ID INT IDENTITY(1,1) PRIMARY KEY,
+    ELEM_SUBCAT_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TICKET_SUBCATEGORIAS(SUBCAT_ID),
+    ELEM_NOMBRE NVARCHAR(100) NOT NULL,
+    ELEM_ORDEN INT NOT NULL DEFAULT 0,
+    ELEM_ACTIVO BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_ELEM UNIQUE (ELEM_SUBCAT_ID, ELEM_NOMBRE)
+  );
+  CREATE INDEX IX_TICKET_ELEM_SUBCAT ON dbo.TICKET_ELEMENTOS(ELEM_SUBCAT_ID);
+END
+
 IF OBJECT_ID('dbo.TI_ESPECIALIDADES', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.TI_ESPECIALIDADES (
@@ -650,6 +668,39 @@ BEGIN
     ALTER TABLE dbo.NOTIFICACIONES ADD DATA_EXTRA NVARCHAR(MAX) NULL;
 END
 
+-- Suscripciones de notificaciones push del navegador (Web Push / VAPID).
+-- Un usuario puede tener varias (una por navegador/dispositivo donde activó
+-- push). PUSH_ENDPOINT es único por navegador — sirve de llave natural para
+-- evitar duplicar la misma suscripción si el usuario la vuelve a activar.
+IF OBJECT_ID('dbo.PUSH_SUSCRIPCIONES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.PUSH_SUSCRIPCIONES (
+    PUSH_ID INT IDENTITY(1,1) PRIMARY KEY,
+    PUSH_USER_ID INT NOT NULL,
+    PUSH_ENDPOINT NVARCHAR(500) NOT NULL,
+    PUSH_P256DH NVARCHAR(300) NOT NULL,
+    PUSH_AUTH NVARCHAR(150) NOT NULL,
+    PUSH_USER_AGENT NVARCHAR(300) NULL,
+    PUSH_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+    PUSH_ULTIMO_USO DATETIME NULL,
+    CONSTRAINT UQ_PUSH_ENDPOINT UNIQUE (PUSH_ENDPOINT)
+  );
+  CREATE INDEX IX_PUSH_USER ON dbo.PUSH_SUSCRIPCIONES(PUSH_USER_ID);
+END
+
+-- Catálogo de días festivos/no laborables para el cálculo de SLA. El SLA de
+-- tickets excluye sábados, domingos y las fechas listadas aquí (día completo,
+-- no franjas horarias) — ver minutosLaborablesEntre() en ticketController.js.
+IF OBJECT_ID('dbo.TI_DIAS_FESTIVOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_DIAS_FESTIVOS (
+    FEST_ID INT IDENTITY(1,1) PRIMARY KEY,
+    FEST_FECHA DATE NOT NULL,
+    FEST_DESCRIPCION NVARCHAR(150) NULL,
+    CONSTRAINT UQ_TI_DIAS_FESTIVOS_FECHA UNIQUE (FEST_FECHA)
+  );
+END
+
 IF OBJECT_ID('dbo.TICKETS_SLA_REGLAS', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.TICKETS_SLA_REGLAS (
@@ -664,6 +715,118 @@ BEGIN
   );
   CREATE INDEX IX_TSR_PRIORIDAD_AREA ON dbo.TICKETS_SLA_REGLAS(TSR_PRIORIDAD, TSR_AREA);
 END
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_SERVICIO')
+  ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_SERVICIO NVARCHAR(100) NULL;
+
+-- Campos personalizados por categoría: el AD define campos extra (texto,
+-- número, lista o fecha) que aparecen en el formulario de ticket SOLO cuando
+-- se elige una de las categorías asociadas al campo (TCP_CAMPO_CATEGORIA).
+-- Sin categorías asociadas = el campo no aparece en ningún formulario (evita
+-- que un campo "huérfano" aparezca por accidente en todos los tickets).
+IF OBJECT_ID('dbo.TI_CAMPOS_PERSONALIZADOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_CAMPOS_PERSONALIZADOS (
+    CP_ID INT IDENTITY(1,1) PRIMARY KEY,
+    CP_NOMBRE NVARCHAR(100) NOT NULL,
+    CP_TIPO NVARCHAR(20) NOT NULL, -- 'texto' | 'numero' | 'lista' | 'fecha'
+    CP_OPCIONES NVARCHAR(MAX) NULL, -- CSV de opciones, solo para CP_TIPO='lista'
+    CP_REQUERIDO BIT NOT NULL DEFAULT 0,
+    CP_ORDEN INT NOT NULL DEFAULT 0,
+    CP_ACTIVO BIT NOT NULL DEFAULT 1,
+    CP_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_TI_CAMPOS_PERSONALIZADOS_NOMBRE UNIQUE (CP_NOMBRE)
+  );
+END
+IF OBJECT_ID('dbo.TI_CAMPO_PERSONALIZADO_CATEGORIA', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_CAMPO_PERSONALIZADO_CATEGORIA (
+    TCP_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TCP_CAMPO_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TI_CAMPOS_PERSONALIZADOS(CP_ID) ON DELETE CASCADE,
+    TCP_CAT_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TICKET_CATEGORIAS(CAT_ID),
+    CONSTRAINT UQ_TI_CAMPO_CATEGORIA UNIQUE (TCP_CAMPO_ID, TCP_CAT_ID)
+  );
+  CREATE INDEX IX_TCP_CAT ON dbo.TI_CAMPO_PERSONALIZADO_CATEGORIA(TCP_CAT_ID);
+END
+IF OBJECT_ID('dbo.TICKET_CAMPOS_VALORES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_CAMPOS_VALORES (
+    TCV_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TCV_TICKET_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TICKETS(TICKET_ID) ON DELETE CASCADE,
+    TCV_CAMPO_ID INT NOT NULL FOREIGN KEY REFERENCES dbo.TI_CAMPOS_PERSONALIZADOS(CP_ID),
+    TCV_VALOR NVARCHAR(500) NULL, -- texto/número/fecha(ISO)/opción de lista, todos como texto
+    CONSTRAINT UQ_TICKET_CAMPO_VALOR UNIQUE (TCV_TICKET_ID, TCV_CAMPO_ID)
+  );
+  CREATE INDEX IX_TCV_TICKET ON dbo.TICKET_CAMPOS_VALORES(TCV_TICKET_ID);
+END
+
+-- Reglas de envío de encuesta de satisfacción: una fila por área (TI/ST) con
+-- la prioridad MÍNIMA que amerita encuesta. P1 es la más crítica, así que
+-- "prioridad mínima P2" significa que P1 y P2 sí reciben encuesta, P3/P4 no.
+-- Sin fila para un área = comportamiento anterior (siempre se ofrece), para
+-- no romper el flujo si el AD no configuró nada todavía.
+IF OBJECT_ID('dbo.TICKETS_ENCUESTA_CONFIG', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_ENCUESTA_CONFIG (
+    TEN_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TEN_AREA NVARCHAR(10) NOT NULL,
+    TEN_PRIORIDAD_MINIMA NVARCHAR(10) NOT NULL DEFAULT 'P4', -- P4 = todas las prioridades reciben encuesta
+    CONSTRAINT UQ_TICKETS_ENCUESTA_CONFIG_AREA UNIQUE (TEN_AREA)
+  );
+END
+
+-- Catálogo de Servicios y Proveedores (Tecnología/TI). TICKETS.SERVICIO_AFECTADO
+-- sigue siendo texto libre (igual que CATEGORIA/SEDE, decisión D3) para no
+-- migrar histórico ni tocar queries existentes — el frontend lo llena desde
+-- este catálogo, el backend no lo valida contra FK.
+IF OBJECT_ID('dbo.TI_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_SERVICIOS (
+    SRV_ID INT IDENTITY(1,1) PRIMARY KEY,
+    SRV_NOMBRE NVARCHAR(100) NOT NULL,
+    SRV_DESCRIPCION NVARCHAR(300) NULL,
+    SRV_PROVEEDOR_ID INT NULL,
+    SRV_ACTIVO BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TI_SERVICIOS_NOMBRE UNIQUE (SRV_NOMBRE)
+  );
+END
+IF OBJECT_ID('dbo.TI_PROVEEDORES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_PROVEEDORES (
+    PROV_ID INT IDENTITY(1,1) PRIMARY KEY,
+    PROV_NOMBRE NVARCHAR(150) NOT NULL,
+    PROV_CONTACTO NVARCHAR(150) NULL,
+    PROV_TELEFONO NVARCHAR(30) NULL,
+    PROV_CORREO NVARCHAR(150) NULL,
+    PROV_ACTIVO BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TI_PROVEEDORES_NOMBRE UNIQUE (PROV_NOMBRE)
+  );
+END
+IF OBJECT_ID('dbo.TI_SERVICIOS', 'U') IS NOT NULL AND OBJECT_ID('dbo.TI_PROVEEDORES', 'U') IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_TI_SERVICIOS_PROVEEDOR')
+BEGIN
+  ALTER TABLE dbo.TI_SERVICIOS ADD CONSTRAINT FK_TI_SERVICIOS_PROVEEDOR
+    FOREIGN KEY (SRV_PROVEEDOR_ID) REFERENCES dbo.TI_PROVEEDORES(PROV_ID);
+END
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='SERVICIO_AFECTADO')
+  ALTER TABLE dbo.TICKETS ADD SERVICIO_AFECTADO NVARCHAR(100) NULL;
+
+-- FK real hacia los catálogos, ADITIVA sobre las columnas de texto libre
+-- existentes (mismo patrón D3 ya usado para CATEGORIA/SEDE): no se migra el
+-- histórico ni se toca ninguna query que ya lee SERVICIO_AFECTADO/ACTIVO_AFECTADO
+-- como texto. Tickets nuevos creados desde un catálogo llenan ambas columnas
+-- (texto + ID); tickets viejos quedan con ID NULL y siguen mostrando su texto.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='SERVICIO_AFECTADO_ID')
+  ALTER TABLE dbo.TICKETS ADD SERVICIO_AFECTADO_ID INT NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_TICKETS_SERVICIO_AFECTADO')
+  ALTER TABLE dbo.TICKETS ADD CONSTRAINT FK_TICKETS_SERVICIO_AFECTADO FOREIGN KEY (SERVICIO_AFECTADO_ID) REFERENCES dbo.TI_SERVICIOS(SRV_ID);
+
+-- Canal por el que se originó el ticket. Valores usados en JS (sin CHECK
+-- constraint, para no requerir migración si se agrega un canal nuevo):
+-- 'portal' | 'chatbot' | 'chat_en_vivo' | 'tecnico' | 'api'. NULL en tickets
+-- históricos creados antes de esta columna.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='CANAL_ORIGEN')
+  ALTER TABLE dbo.TICKETS ADD CANAL_ORIGEN NVARCHAR(20) NULL;
 
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='CLASIFICACION')
   ALTER TABLE dbo.TICKETS ADD CLASIFICACION NVARCHAR(30) NULL;
@@ -671,12 +834,21 @@ IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKET
   ALTER TABLE dbo.TICKETS ADD CATEGORIA NVARCHAR(50) NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='SUBCATEGORIA')
   ALTER TABLE dbo.TICKETS ADD SUBCATEGORIA NVARCHAR(100) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='ELEMENTO')
+  ALTER TABLE dbo.TICKETS ADD ELEMENTO NVARCHAR(100) NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='SEDE')
   ALTER TABLE dbo.TICKETS ADD SEDE NVARCHAR(100) NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='DEPARTAMENTO')
   ALTER TABLE dbo.TICKETS ADD DEPARTAMENTO NVARCHAR(100) NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='ACTIVO_AFECTADO')
   ALTER TABLE dbo.TICKETS ADD ACTIVO_AFECTADO NVARCHAR(200) NULL;
+
+-- ACTIVO_AFECTADO_ID: FK hacia ACTIVOS_GENERALES(AG_ID). La constraint se crea
+-- en ensureActivosGeneralesSchema (más abajo), no aquí, porque esa tabla se
+-- asegura DESPUÉS de esta función en ensureAllSchemas — crear la FK antes de
+-- que exista la tabla destino rompería el bootstrap en una instalación nueva.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='ACTIVO_AFECTADO_ID')
+  ALTER TABLE dbo.TICKETS ADD ACTIVO_AFECTADO_ID INT NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='IMPACTO')
   ALTER TABLE dbo.TICKETS ADD IMPACTO NVARCHAR(10) NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='URGENCIA')
@@ -685,6 +857,21 @@ IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKET
   ALTER TABLE dbo.TICKETS ADD PRIORIDAD_MANUAL BIT NOT NULL DEFAULT 0;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='NIVEL_ACTUAL')
   ALTER TABLE dbo.TICKETS ADD NIVEL_ACTUAL TINYINT NOT NULL DEFAULT 1;
+
+-- Snapshot de SLA/tiempos al momento del cierre. enriquecerConSla() calcula esto
+-- en vivo en cada GET usando la regla SLA ACTUAL — si un admin edita/borra esa
+-- regla después, el resultado mostrado para tickets ya cerrados cambia
+-- retroactivamente. Estas columnas congelan el resultado real en el momento
+-- del cierre, para reportes históricos y auditoría. NULL en tickets cerrados
+-- antes de esta columna (no se recalculan retroactivamente).
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='SLA_RESPUESTA_CUMPLIDO')
+  ALTER TABLE dbo.TICKETS ADD SLA_RESPUESTA_CUMPLIDO BIT NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='SLA_RESOLUCION_CUMPLIDO')
+  ALTER TABLE dbo.TICKETS ADD SLA_RESOLUCION_CUMPLIDO BIT NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='MINUTOS_PRIMERA_RESPUESTA')
+  ALTER TABLE dbo.TICKETS ADD MINUTOS_PRIMERA_RESPUESTA INT NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='MINUTOS_TRABAJADOS')
+  ALTER TABLE dbo.TICKETS ADD MINUTOS_TRABAJADOS INT NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='CODIGO_CIERRE')
   ALTER TABLE dbo.TICKETS ADD CODIGO_CIERRE NVARCHAR(50) NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='CAUSA_RAIZ')
@@ -779,6 +966,11 @@ BEGIN
   );
   CREATE INDEX IX_TICKET_ESC_TICKET ON dbo.TICKET_ESCALAMIENTOS(TICKET_ID);
 END
+-- Vínculo real hacia el catálogo de Proveedores (D del diagrama: Nivel 3
+-- puede escalar a "Proveedor"). Aditivo — el resto de escalamientos (a
+-- especialista/desarrollo interno) simplemente dejan esto NULL.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKET_ESCALAMIENTOS' AND COLUMN_NAME='PROVEEDOR_ID')
+  ALTER TABLE dbo.TICKET_ESCALAMIENTOS ADD PROVEEDOR_ID INT NULL FOREIGN KEY REFERENCES dbo.TI_PROVEEDORES(PROV_ID);
 
 IF OBJECT_ID('dbo.TICKETS_API_KEYS', 'U') IS NULL
 BEGIN
@@ -847,6 +1039,24 @@ BEGIN
   );
   CREATE INDEX IX_TI_REGLAS_ACTIVA_ORDEN ON dbo.TI_REGLAS_ASIGNACION(REG_ACTIVA, REG_PRIORIDAD_ORDEN);
 END
+-- Condición de horario a nivel de REGLA (distinta del horario por TÉCNICO que ya
+-- existía en TI_STAFF_STATUS): permite reglas tipo "solo aplica de 6pm a 8am" para
+-- rutear a especialistas de guardia nocturna. NULL = sin restricción de horario.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_REGLAS_ASIGNACION' AND COLUMN_NAME='REG_HORARIO_INICIO')
+  ALTER TABLE dbo.TI_REGLAS_ASIGNACION ADD REG_HORARIO_INICIO TIME NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_REGLAS_ASIGNACION' AND COLUMN_NAME='REG_HORARIO_FIN')
+  ALTER TABLE dbo.TI_REGLAS_ASIGNACION ADD REG_HORARIO_FIN TIME NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_REGLAS_ASIGNACION' AND COLUMN_NAME='REG_DIAS_SEMANA')
+  ALTER TABLE dbo.TI_REGLAS_ASIGNACION ADD REG_DIAS_SEMANA NVARCHAR(20) NULL; -- CSV '1,2,3,4,5' (1=lunes); NULL = todos los días
+
+-- Regla "por técnico": fuerza la asignación a UN técnico específico (no un pool
+-- por especialidad). Distinto de REG_ESP_ID (que exige una skill, dejando que el
+-- algoritmo elija entre varios candidatos con esa skill) — aquí se salta el
+-- balanceo de carga por completo y va directo a esa persona. Si el técnico
+-- forzado no tiene capacidad disponible, el motor cae al fallback normal
+-- (ver asignarTecnico en reglasAsignacionService.js) en vez de bloquear la asignación.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_REGLAS_ASIGNACION' AND COLUMN_NAME='REG_TECNICO_ID')
+  ALTER TABLE dbo.TI_REGLAS_ASIGNACION ADD REG_TECNICO_ID INT NULL;
 
 IF OBJECT_ID('dbo.TICKETS_ESCALAMIENTO_CONFIG', 'U') IS NULL
 BEGIN
@@ -860,6 +1070,46 @@ END
 IF NOT EXISTS (SELECT 1 FROM dbo.TICKETS_ESCALAMIENTO_CONFIG)
   INSERT INTO dbo.TICKETS_ESCALAMIENTO_CONFIG (TEC_AUTO_ESCALAMIENTO, TEC_UMBRAL_RIESGO) VALUES (1, 0.8);
 
+-- Recordatorios automáticos: notifica al técnico asignado cuando un ticket
+-- abierto lleva N días SIN actividad (sin comentarios ni cambios de historial).
+-- Config global de una sola fila, mismo patrón que TICKETS_ESCALAMIENTO_CONFIG.
+IF OBJECT_ID('dbo.TICKETS_RECORDATORIOS_CONFIG', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_RECORDATORIOS_CONFIG (
+    TRC_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TRC_ACTIVO BIT NOT NULL DEFAULT 1,
+    TRC_DIAS_SIN_ACTIVIDAD INT NOT NULL DEFAULT 3,
+    TRC_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+IF NOT EXISTS (SELECT 1 FROM dbo.TICKETS_RECORDATORIOS_CONFIG)
+  INSERT INTO dbo.TICKETS_RECORDATORIOS_CONFIG (TRC_ACTIVO, TRC_DIAS_SIN_ACTIVIDAD) VALUES (1, 3);
+
+-- Config general de Tecnología/TI (fila única global). ZONA_HORARIA es
+-- puramente INFORMATIVA: el sistema real siempre calcula con la hora del
+-- servidor (America/Mexico_City) en SLA, crons y horarios — cambiar este
+-- valor NO afecta ningún cálculo. Sirve solo para que el admin deje
+-- documentado en qué zona horaria opera la mesa de servicio.
+IF OBJECT_ID('dbo.TI_CONFIG_GENERAL', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TI_CONFIG_GENERAL (
+    TCG_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TCG_ZONA_HORARIA NVARCHAR(60) NOT NULL DEFAULT 'America/Mexico_City',
+    TCG_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+IF NOT EXISTS (SELECT 1 FROM dbo.TI_CONFIG_GENERAL)
+  INSERT INTO dbo.TI_CONFIG_GENERAL (TCG_ZONA_HORARIA) VALUES ('America/Mexico_City');
+
+-- Fecha del último recordatorio enviado para este ticket — a diferencia de
+-- SLA_RIESGO_NOTIFICADO (un bit, porque el SLA solo empeora con el tiempo),
+-- "sin actividad" puede resetearse: si llega un comentario nuevo, el ticket
+-- vuelve a tener actividad reciente y debe poder disparar OTRO recordatorio
+-- más adelante si vuelve a quedarse inactivo. Guardar la fecha (no un bit)
+-- permite comparar "¿la actividad más reciente es posterior al último aviso?".
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='FECHA_ULTIMO_RECORDATORIO')
+  ALTER TABLE dbo.TICKETS ADD FECHA_ULTIMO_RECORDATORIO DATETIME NULL;
+
 -- Placeholder clave/valor para Integraciones (Configuración > Tecnología/TI).
 -- INT_VALOR es texto plano SIN CIFRAR — no usar para secretos reales (API keys,
 -- contraseñas) hasta implementar cifrado. Solo para flags/URLs no sensibles.
@@ -871,6 +1121,38 @@ BEGIN
     INT_VALOR NVARCHAR(500) NULL,
     INT_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
     CONSTRAINT UQ_TI_INTEGRACIONES_CLAVE UNIQUE (INT_CLAVE)
+  );
+END
+
+-- Plantillas de correo: texto reutilizable para copiar/pegar en el cliente de
+-- correo del técnico. El sistema NO envía correos automáticamente (Correo no
+-- es un canal real de creación/respuesta de tickets en este proyecto).
+IF OBJECT_ID('dbo.TICKETS_PLANTILLAS_CORREO', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_PLANTILLAS_CORREO (
+    PC_ID INT IDENTITY(1,1) PRIMARY KEY,
+    PC_NOMBRE NVARCHAR(150) NOT NULL,
+    PC_ASUNTO NVARCHAR(300) NULL,
+    PC_CONTENIDO NVARCHAR(MAX) NOT NULL,
+    PC_ACTIVA BIT NOT NULL DEFAULT 1,
+    PC_CREADO_POR INT NULL,
+    PC_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+
+-- Plantillas de respuesta rápida para tickets: texto reutilizable que un
+-- técnico inserta directo en un comentario o en el diagnóstico/acciones al
+-- resolver (a diferencia de las de correo, que son solo para copiar/pegar
+-- fuera del sistema — estas se insertan dentro de la misma app).
+IF OBJECT_ID('dbo.TICKETS_PLANTILLAS_RESPUESTA', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_PLANTILLAS_RESPUESTA (
+    PR_ID INT IDENTITY(1,1) PRIMARY KEY,
+    PR_NOMBRE NVARCHAR(150) NOT NULL,
+    PR_CONTENIDO NVARCHAR(MAX) NOT NULL,
+    PR_ACTIVA BIT NOT NULL DEFAULT 1,
+    PR_CREADO_POR INT NULL,
+    PR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
   );
 END
 `;
@@ -907,6 +1189,7 @@ async function ensureKbSchema(pool) {
           ART_TITULO                NVARCHAR(200) NOT NULL,
           ART_CONTENIDO             NVARCHAR(MAX) NOT NULL,
           ART_CATEGORIA             NVARCHAR(50) NULL,
+          ART_TIPO                  NVARCHAR(10) NOT NULL DEFAULT 'articulo', -- 'articulo' | 'faq'
           ART_AUTOR_ID              INT NULL,
           ART_AUTOR_NOMBRE          NVARCHAR(150) NULL,
           ART_ACTIVO                BIT NOT NULL DEFAULT 1,
@@ -915,6 +1198,8 @@ async function ensureKbSchema(pool) {
         );
         CREATE INDEX IX_KB_CATEGORIA ON dbo.KB_ARTICULOS(ART_CATEGORIA);
       END
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TIPO')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TIPO NVARCHAR(10) NOT NULL DEFAULT 'articulo';
     `);
     logger.info('✅ Esquema de base de conocimiento asegurado');
   } catch (err) {
@@ -1346,6 +1631,11 @@ BEGIN
   );
   CREATE INDEX IX_AG_DEPARTAMENTO ON dbo.ACTIVOS_GENERALES(AG_DEPARTAMENTO);
   CREATE INDEX IX_AG_ASIGNADO_A   ON dbo.ACTIVOS_GENERALES(AG_ASIGNADO_A);
+END
+IF OBJECT_ID('dbo.TICKETS', 'U') IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_TICKETS_ACTIVO_AFECTADO')
+BEGIN
+  ALTER TABLE dbo.TICKETS ADD CONSTRAINT FK_TICKETS_ACTIVO_AFECTADO FOREIGN KEY (ACTIVO_AFECTADO_ID) REFERENCES dbo.ACTIVOS_GENERALES(AG_ID);
 END
     `);
     logger.info('✅ Esquema de activos generales asegurado');
@@ -4897,6 +5187,58 @@ END
       `);
     }
 
+    // Árbol de ejemplo (3 ramas: Hardware con autoservicio, Contraseña con
+    // resolución directa, y escalamiento a un humano) para que el chatbot
+    // tenga contenido navegable desde el primer arranque, en vez de quedar
+    // con solo el nodo 'inicio' sin opciones. Solo corre si el nodo 'inicio'
+    // sigue sin ninguna opción — así no pisa un árbol que el admin ya haya
+    // personalizado manualmente desde Configuración > Chatbot.
+    const inicioSinOpciones = await pool.request().query(`
+      SELECT n.NODO_ID as id FROM dbo.CHATBOT_NODOS n
+      WHERE n.NODO_CODIGO='inicio' AND NOT EXISTS (SELECT 1 FROM dbo.CHATBOT_NODO_OPCIONES o WHERE o.OPC_NODO_ID = n.NODO_ID)
+    `);
+    if (inicioSinOpciones.recordset.length) {
+      const inicioId = inicioSinOpciones.recordset[0].id;
+      const catHardware = await pool.request().query(`SELECT CAT_ID as id FROM dbo.TICKET_CATEGORIAS WHERE CAT_NOMBRE='Hardware'`);
+      const catAccesos = await pool.request().query(`SELECT CAT_ID as id FROM dbo.TICKET_CATEGORIAS WHERE CAT_NOMBRE='Usuarios y Accesos'`);
+      const catHardwareId = catHardware.recordset[0]?.id ?? null;
+      const catAccesosId = catAccesos.recordset[0]?.id ?? null;
+
+      const crearNodo = async (codigo, texto, tipo, categoriaId = null) => {
+        const ins = await pool.request()
+          .input('cod', sql.NVarChar, codigo).input('txt', sql.NVarChar, texto)
+          .input('tipo', sql.NVarChar, tipo).input('catId', sql.Int, categoriaId)
+          .query(`INSERT INTO dbo.CHATBOT_NODOS (NODO_CODIGO, NODO_TEXTO, NODO_TIPO, NODO_CATEGORIA_ID)
+                  VALUES (@cod, @txt, @tipo, @catId); SELECT SCOPE_IDENTITY() as id;`);
+        return Number(ins.recordset[0].id);
+      };
+      const crearOpcion = async (nodoId, textoBoton, nodoDestinoId, orden) => {
+        await pool.request()
+          .input('nodoId', sql.Int, nodoId).input('txt', sql.NVarChar, textoBoton)
+          .input('destId', sql.Int, nodoDestinoId).input('orden', sql.Int, orden)
+          .query(`INSERT INTO dbo.CHATBOT_NODO_OPCIONES (OPC_NODO_ID, OPC_TEXTO_BOTON, OPC_NODO_DESTINO_ID, OPC_ORDEN)
+                  VALUES (@nodoId, @txt, @destId, @orden)`);
+      };
+
+      // Rama Hardware: pregunta -> pasos de autoservicio -> resuelto o crear ticket
+      const hwNoEnciende = await crearNodo('hw_no_enciende', '¿Probaste desconectar el equipo de la corriente 30 segundos y volver a conectarlo?', 'pregunta', catHardwareId);
+      const hwFuncionaAutoservicio = await crearNodo('hw_resuelto_autoservicio', 'Genial, eso resuelve la mayoría de los casos. Si vuelve a pasar, no dudes en contactarnos de nuevo.', 'resolucion');
+      const hwCrearTicket = await crearNodo('hw_crear_ticket_no_enciende', 'Vamos a crear un ticket para que un técnico revise el equipo en sitio.', 'crear_ticket', catHardwareId);
+      await crearOpcion(hwNoEnciende, 'Sí, ya lo intenté y sigue sin encender', hwCrearTicket, 1);
+      await crearOpcion(hwNoEnciende, 'No lo había intentado, lo voy a probar', hwFuncionaAutoservicio, 2);
+
+      // Rama Contraseña/Acceso: resolución directa con instrucciones de autoservicio
+      const accesoContrasena = await crearNodo('acceso_contrasena', 'Puedes restablecer tu contraseña desde el portal de autoservicio con tu correo institucional. Si el problema persiste después de intentarlo, contáctanos.', 'resolucion', catAccesosId);
+
+      // Rama de escalamiento directo a un humano
+      const hablarTecnico = await crearNodo('hablar_tecnico', 'Te conectamos con un técnico disponible.', 'escalar_chat');
+
+      // Nodo raíz: 3 opciones hacia las ramas anteriores
+      await crearOpcion(inicioId, 'Mi equipo no enciende', hwNoEnciende, 1);
+      await crearOpcion(inicioId, 'Olvidé mi contraseña', accesoContrasena, 2);
+      await crearOpcion(inicioId, 'Quiero hablar con un técnico', hablarTecnico, 3);
+    }
+
     logger.info('✅ Esquema de chatbot asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de chatbot:', err.message);
@@ -4971,6 +5313,8 @@ BEGIN
       REFERENCES dbo.LIVECHAT_CONVERSACIONES(LC_ID) ON DELETE CASCADE
   );
 END
+IF COL_LENGTH('dbo.LIVECHAT_COLA', 'LCO_ESPERA_ESCALADA') IS NULL
+  ALTER TABLE dbo.LIVECHAT_COLA ADD LCO_ESPERA_ESCALADA BIT NOT NULL DEFAULT 0;
 
 IF OBJECT_ID('dbo.LIVECHAT_CONFIG', 'U') IS NULL
 BEGIN
@@ -4997,6 +5341,8 @@ IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_SABADO_HORARIO_INICIO') IS NULL
   ALTER TABLE dbo.LIVECHAT_CONFIG ADD LCF_SABADO_HORARIO_INICIO NVARCHAR(5) NULL;
 IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_SABADO_HORARIO_FIN') IS NULL
   ALTER TABLE dbo.LIVECHAT_CONFIG ADD LCF_SABADO_HORARIO_FIN NVARCHAR(5) NULL;
+IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_TIMEOUT_COLA_MINUTOS') IS NULL
+  ALTER TABLE dbo.LIVECHAT_CONFIG ADD LCF_TIMEOUT_COLA_MINUTOS INT NOT NULL DEFAULT (15);
 
 IF COL_LENGTH('dbo.LIVECHAT_AGENTE_ESTADO', 'LAE_MODO_AUTOMATICO') IS NULL
   ALTER TABLE dbo.LIVECHAT_AGENTE_ESTADO ADD LAE_MODO_AUTOMATICO BIT NOT NULL DEFAULT (1);

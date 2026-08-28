@@ -225,6 +225,82 @@ function BandejaEsperaModal({ onClose, onTomada }: { onClose: () => void; onToma
   )
 }
 
+// Solo lectura — un supervisor/admin ve el contenido de conversaciones de
+// CUALQUIER agente, no solo las propias (a diferencia del panel principal,
+// que solo maneja "mis conversaciones"). Reusa GET /conversaciones/:id, que
+// ya no filtra por dueño en el backend.
+function SupervisionModal({ onClose }: { onClose: () => void }) {
+  const [seleccionadaId, setSeleccionadaId] = useState<number | null>(null)
+
+  const { data: conversaciones = [], isLoading } = useQuery({
+    queryKey: ['livechat-supervision-activas'],
+    queryFn: () => livechatService.getConversacionesActivasSupervision(),
+    refetchInterval: 8_000,
+  })
+
+  const { data: detalle, isLoading: loadingDetalle } = useQuery({
+    queryKey: ['livechat-supervision-detalle', seleccionadaId],
+    queryFn: () => livechatService.getConversacion(seleccionadaId!),
+    enabled: seleccionadaId != null,
+    refetchInterval: 5_000,
+  })
+
+  return (
+    <Modal isOpen onClose={onClose} title="Supervisión — conversaciones activas" size="xl">
+      <div className="grid grid-cols-[1fr_1.4fr] gap-3" style={{ height: '65vh' }}>
+        <div className="overflow-y-auto rounded-xl border border-gray-200">
+          {isLoading ? (
+            <div className="flex justify-center py-10"><Spinner /></div>
+          ) : conversaciones.length === 0 ? (
+            <p className="py-10 text-center text-sm text-gray-400">No hay conversaciones activas ni en espera.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {conversaciones.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setSeleccionadaId(c.id)}
+                  className={clsx(
+                    'block w-full px-3 py-2.5 text-left text-sm hover:bg-gray-50',
+                    seleccionadaId === c.id && 'bg-blue-50',
+                  )}
+                >
+                  <p className="font-medium text-gray-800">{c.visitanteNombre || 'Visitante'}</p>
+                  <p className="text-xs text-gray-500">
+                    {c.agenteNombre ? `Atiende: ${c.agenteNombre}` : 'Sin agente asignado'} ·{' '}
+                    <span className={clsx('font-semibold', c.estado === 'activa' ? 'text-emerald-600' : 'text-amber-600')}>
+                      {c.estado === 'activa' ? 'Activa' : 'En espera'}
+                    </span>
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="overflow-y-auto rounded-xl border border-gray-200 p-3">
+          {seleccionadaId == null ? (
+            <p className="py-10 text-center text-sm text-gray-400">Selecciona una conversación para ver los mensajes.</p>
+          ) : loadingDetalle || !detalle ? (
+            <div className="flex justify-center py-10"><Spinner /></div>
+          ) : (
+            <div className="space-y-2">
+              {detalle.mensajes.length === 0 ? (
+                <p className="py-10 text-center text-sm text-gray-400">Sin mensajes todavía.</p>
+              ) : (
+                detalle.mensajes.map((m) => (
+                  <div key={m.id} className={clsx('rounded-lg px-3 py-2 text-sm', m.emisor === 'agente' ? 'bg-blue-50 ml-8' : 'bg-gray-50 mr-8')}>
+                    <p className="mb-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">{m.emisor}</p>
+                    <p className="text-gray-800">{m.contenido}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function AgentesEstadoModal({ onClose }: { onClose: () => void }) {
   const { data: agentes = [], isLoading } = useQuery({
     queryKey: ['livechat-agentes-estado'],
@@ -897,12 +973,14 @@ export default function LivechatPage() {
   const user = useCurrentUser()
   const { can } = useActionAccess()
   const puedeAtender = can('livechat', 'atender')
+  const puedeSupervisar = can('livechat', 'gestionar-campanas')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const [historialOpen, setHistorialOpen] = useState(false)
   const [bandejaOpen, setBandejaOpen] = useState(false)
   const [campaniasOpen, setCampaniasOpen] = useState(false)
   const [agentesOpen, setAgentesOpen] = useState(false)
+  const [supervisionOpen, setSupervisionOpen] = useState(false)
 
   // Sin esto, 'livechat:nueva_conversacion' y 'livechat:actividad_conversacion'
   // (dirigidos a la sala user:{agenteId}) nunca le llegan a este agente — la
@@ -1011,6 +1089,12 @@ export default function LivechatPage() {
             <UserCheck size={16} />
             Agentes
           </Button>
+          {puedeSupervisar && (
+            <Button variant="ghost" onClick={() => setSupervisionOpen(true)}>
+              <Users size={16} />
+              Supervisión
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setHistorialOpen(true)}>
             <History size={16} />
             Historial
@@ -1042,6 +1126,7 @@ export default function LivechatPage() {
       )}
       {campaniasOpen && <CampaniasModal onClose={() => setCampaniasOpen(false)} />}
       {agentesOpen && <AgentesEstadoModal onClose={() => setAgentesOpen(false)} />}
+      {supervisionOpen && <SupervisionModal onClose={() => setSupervisionOpen(false)} />}
 
       <div className="flex-1 flex bg-white rounded-xl border border-gray-200 overflow-hidden min-h-0">
         <div className="w-72 border-r border-gray-100 overflow-y-auto shrink-0">

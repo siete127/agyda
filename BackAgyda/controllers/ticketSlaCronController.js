@@ -39,6 +39,7 @@ async function runSlaCheckTenant(tenantKey) {
     if (!reglas.length) return;
 
     const escalamientoConfig = await getEscalamientoConfig(pool);
+    const feriados = await ticketController.cargarFeriadosActivos(pool, tenantKey);
 
     const rs = await pool.request().query(`
       SELECT TICKET_ID as id, AREA, PRIORIDAD, ESTADO, FECHA_CREACION, ASIGNADO_A,
@@ -54,7 +55,9 @@ async function runSlaCheckTenant(tenantKey) {
       // El reloj de SLA se pausa mientras el ticket está en espera: se descuenta
       // MINUTOS_TOTAL_ESPERA (tiempo ya acumulado en pausas anteriores) del total
       // transcurrido. Un ticket actualmente en_espera ya quedó excluido arriba.
-      const minutosTranscurridos = Math.round((Date.now() - new Date(t.FECHA_CREACION).getTime()) / 60000) - (t.MINUTOS_TOTAL_ESPERA || 0);
+      // Los minutos transcurridos se cuentan en días laborables (excluye fines
+      // de semana y feriados de TI_DIAS_FESTIVOS) — ver minutosLaborablesEntre.
+      const minutosTranscurridos = ticketController.minutosLaborablesEntre(new Date(t.FECHA_CREACION), new Date(), feriados) - (t.MINUTOS_TOTAL_ESPERA || 0);
       const minResolucion = regla.minResolucion;
 
       // Vencido: notificar (si no se hizo antes) y escalar al siguiente nivel

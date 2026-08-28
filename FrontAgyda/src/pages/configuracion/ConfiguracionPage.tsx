@@ -32,6 +32,7 @@ import { AutomatizacionesTab } from './tecnologia/AutomatizacionesTab'
 import { KbConfigTab } from './tecnologia/KbConfigTab'
 import { EncuestasTab } from './tecnologia/EncuestasTab'
 import { PlantillasTab } from './tecnologia/PlantillasTab'
+import { CamposPersonalizadosTab } from './tecnologia/CamposPersonalizadosTab'
 import { SeguridadTab } from './tecnologia/SeguridadTab'
 import { IntegracionesTab } from './tecnologia/IntegracionesTab'
 
@@ -63,6 +64,7 @@ const SCREENS: Record<string, ComponentType> = {
   'ti-reglas': ReglasNegocioTab,
   'ti-escalamientos': EscalamientosTab,
   'ti-automatizaciones': AutomatizacionesTab,
+  'ti-campos-personalizados': CamposPersonalizadosTab,
   'ti-kb': KbConfigTab,
   'ti-encuestas': EncuestasTab,
   'ti-plantillas': PlantillasTab,

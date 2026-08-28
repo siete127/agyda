@@ -39,6 +39,13 @@ export const livechatService = {
     return { ...parseLivechatConversacion(raw), mensajes }
   },
 
+  // Supervisión: todas las conversaciones activas/en espera de todos los agentes.
+  async getConversacionesActivasSupervision(): Promise<LivechatConversacion[]> {
+    const { data } = await api.get('/livechat/supervision/conversaciones-activas')
+    const list = Array.isArray(data) ? data : (data?.data ?? [])
+    return (list as Record<string, unknown>[]).map(parseLivechatConversacion)
+  },
+
   async enviarMensaje(conversacionId: number, contenido: string): Promise<LivechatMensaje> {
     const { data } = await api.post(`/livechat/conversaciones/${conversacionId}/mensajes`, {
       contenido,

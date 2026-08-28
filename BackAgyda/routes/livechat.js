@@ -34,6 +34,8 @@ router.post('/conversaciones/:conversacionId/transferir', authenticateToken, req
 router.post('/mi-estado', authenticateToken, requireActionAccess('livechat', 'atender'), livechatController.setDisponible);
 router.get('/mi-estado', authenticateToken, requireActionAccess('livechat', 'ver'), livechatController.getMiEstado);
 router.get('/agentes-estado', authenticateToken, requireActionAccess('livechat', 'ver'), livechatController.getAgentesEstado);
+// Supervisión: todas las conversaciones activas de todos los agentes (no solo propias).
+router.get('/supervision/conversaciones-activas', authenticateToken, requireActionAccess('livechat', 'gestionar-campanas'), livechatController.getConversacionesActivasSupervision);
 
 // Configuración de horario/mensajes automáticos — requiere permiso de administración del módulo.
 router.get('/config', authenticateToken, requireActionAccess('livechat', 'ver'), livechatController.getConfig);
