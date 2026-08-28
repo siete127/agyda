@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Star, MessageCircle, Search, RefreshCw,
@@ -1041,6 +1042,19 @@ export function NoticiasPage() {
     queryKey: ['noticias'],
     queryFn: () => noticiasService.getAll(),
   })
+
+  // Deep-link ?noticia=<id> (desde notificaciones) — abre el detalle al cargar.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [linkAbierto, setLinkAbierto] = useState<string | null>(null)
+  const noticiaParam = searchParams.get('noticia')
+  if (noticiaParam && noticiaParam !== linkAbierto && noticias.length > 0) {
+    setLinkAbierto(noticiaParam)
+    const n = noticias.find((x) => x.id === Number(noticiaParam))
+    if (n) setSelected(n)
+    const next = new URLSearchParams(searchParams)
+    next.delete('noticia')
+    setSearchParams(next, { replace: true })
+  }
 
   const { data: destacadas = [] } = useQuery({
     queryKey: ['noticias-destacadas'],

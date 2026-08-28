@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus } from 'lucide-react'
 import { mensajeriaService } from '@/services/mensajeria.service'
@@ -540,6 +541,18 @@ export function MensajeriaPage() {
   useEffect(() => {
     setCanales(canales)
   }, [canales, setCanales])
+
+  // Deep-link ?canal=<id> (desde notificaciones) — abre esa conversación.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [linkAbierto, setLinkAbierto] = useState<string | null>(null)
+  const canalParam = searchParams.get('canal')
+  if (canalParam && canalParam !== linkAbierto && canales.length > 0) {
+    setLinkAbierto(canalParam)
+    if (canales.some((c) => c.id === Number(canalParam))) abrirChat(Number(canalParam))
+    const next = new URLSearchParams(searchParams)
+    next.delete('canal')
+    setSearchParams(next, { replace: true })
+  }
 
   // Al salir del módulo, ya no hay "canal abierto" — así la burbuja flotante
   // vuelve a poder mostrar avisos de cualquier conversación.
