@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Palette, Type, Sparkles, Image as ImageIcon, Upload, Check, RotateCcw, Loader2 } from 'lucide-react'
+import { Palette, Type, Sparkles, Image as ImageIcon, Upload, Check, RotateCcw, Loader2, IdCard, Droplet, ImagePlus, Info, HelpCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
@@ -9,9 +9,15 @@ import {
 
 const inputCls =
   'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
-  'placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15'
+  'placeholder-gray-400 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15'
 
 const COLOR_DEFAULT = '#2F6FED'
+
+const PASOS = [
+  { n: 1, key: 'identidad', label: 'Identidad',        sub: 'Nombre y eslogan que representan tu empresa.', icon: IdCard },
+  { n: 2, key: 'color',     label: 'Color de marca',    sub: 'El color principal del sistema y sus estados.', icon: Droplet },
+  { n: 3, key: 'imagenes',  label: 'Logos e imágenes',  sub: 'Sube los activos visuales de tu marca.', icon: ImagePlus },
+] as const
 
 function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -27,25 +33,31 @@ function Field({ label, icon, children }: { label: string; icon: React.ReactNode
   )
 }
 
-function SeccionNum({ n, titulo, subtitulo }: { n: number; titulo: string; subtitulo: string }) {
+function CardSeccion({ icon: Icon, titulo, subtitulo, children, anchor }: {
+  icon: React.ElementType; titulo: string; subtitulo: string; children: React.ReactNode; anchor: string
+}) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand text-[0.8rem] font-bold text-white">{n}</span>
-      <div>
-        <p className="text-[0.95rem] font-bold text-gray-900">{titulo}</p>
-        <p className="text-[0.78rem] text-gray-400">{subtitulo}</p>
+    <section id={anchor} className="scroll-mt-4 rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+          <Icon className="h-4.5 w-4.5" />
+        </div>
+        <div>
+          <p className="text-[0.95rem] font-bold text-gray-900">{titulo}</p>
+          <p className="text-[0.78rem] text-gray-400">{subtitulo}</p>
+        </div>
       </div>
-    </div>
+      {children}
+    </section>
   )
 }
 
 /* ── Uploader de un asset ─────────────────────────────────────── */
-function AssetUploader({ tipo, label, hint, actualId, previewClass, onUploaded }: {
+function AssetUploader({ tipo, label, hint, actualId, onUploaded }: {
   tipo: AssetTipo
   label: string
   hint: string
   actualId: number | null
-  previewClass: string
   onUploaded: (id: number) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -67,24 +79,24 @@ function AssetUploader({ tipo, label, hint, actualId, previewClass, onUploaded }
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-card p-3">
-      <div className={clsx('mb-2 flex items-center justify-center overflow-hidden rounded-lg border border-dashed border-gray-200 bg-gray-50', previewClass)}>
-        {url ? (
-          <img src={url} alt={label} className="max-h-full max-w-full object-contain" />
-        ) : (
-          <ImageIcon className="h-6 w-6 text-gray-300" />
-        )}
+    <button
+      type="button"
+      onClick={() => inputRef.current?.click()}
+      disabled={subiendo}
+      className="group flex flex-col items-center gap-2 rounded-xl border border-gray-200 p-4 text-center transition-colors hover:border-violet-400 disabled:opacity-60"
+    >
+      <p className="text-[0.78rem] font-semibold text-gray-700">{label}</p>
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-50 text-violet-500 transition-colors group-hover:bg-violet-100">
+        {subiendo ? <Loader2 className="h-4 w-4 animate-spin" />
+          : url ? <img src={url} alt={label} className="h-full w-full rounded-full object-cover" />
+          : <Upload className="h-4 w-4" />}
       </div>
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={subiendo}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-1.5 text-[0.72rem] font-semibold text-gray-600 transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
-      >
-        {subiendo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-        {label}
-      </button>
-      <p className="mt-1 text-center text-[0.62rem] text-gray-400">{hint}</p>
+      <p className="text-[0.66rem] text-gray-400">{hint}</p>
+      {url && !subiendo && (
+        <span className="flex items-center gap-1 text-[0.62rem] font-semibold text-violet-600">
+          <ImageIcon className="h-3 w-3" /> Reemplazar
+        </span>
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -92,6 +104,27 @@ function AssetUploader({ tipo, label, hint, actualId, previewClass, onUploaded }
         className="hidden"
         onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }}
       />
+    </button>
+  )
+}
+
+/* ── Mini-ilustración del header ── */
+function HeaderMockup() {
+  return (
+    <div className="hidden w-64 flex-shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-card p-2 shadow-sm lg:block">
+      <div className="mb-1.5 flex gap-1 px-1">
+        <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+        <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+        <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+      </div>
+      <div className="flex gap-2">
+        <div className="h-10 w-16 rounded-lg bg-gradient-to-br from-violet-500 to-blue-500" />
+        <div className="flex-1 space-y-1.5 py-1">
+          <div className="h-2 w-full rounded bg-violet-200" />
+          <div className="h-2 w-3/4 rounded bg-gray-200" />
+          <div className="h-2 w-2/3 rounded bg-gray-200" />
+        </div>
+      </div>
     </div>
   )
 }
@@ -103,15 +136,14 @@ export function BrandingTab() {
     queryFn: () => personalizacionService.get(),
   })
 
-  // Estado editable sembrado desde el servidor. Cuando llega una versión nueva
-  // del servidor (por otro admin / socket), re-sembramos — patrón de
-  // "you might not need an effect" (react.dev).
   const [form, setForm] = useState<Branding | null>(null)
   const [seededFrom, setSeededFrom] = useState<Branding | null>(null)
   if (data && data.branding !== seededFrom) {
     setSeededFrom(data.branding)
     setForm(data.branding)
   }
+
+  const [pasoActivo, setPasoActivo] = useState<string>('identidad')
 
   const set = <K extends keyof Branding>(k: K, v: Branding[K]) =>
     setForm((f) => (f ? { ...f, [k]: v } : f))
@@ -134,27 +166,76 @@ export function BrandingTab() {
 
   const color = /^#[0-9a-fA-F]{6}$/.test(form.colorBrand) ? form.colorBrand : COLOR_DEFAULT
 
+  const irA = (key: string) => {
+    setPasoActivo(key)
+    document.getElementById(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div className="space-y-5">
-      {/* Encabezado */}
-      <div className="flex items-center gap-3.5">
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand">
-          <Palette className="h-6 w-6" />
+      {/* Encabezado con ilustración */}
+      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[0.75rem] font-semibold text-gray-500 hover:border-gray-300"
+          >
+            <HelpCircle className="h-3.5 w-3.5" /> Ayuda
+          </button>
         </div>
-        <div>
-          <h2 className="text-[1.35rem] font-bold text-gray-900">Marca de la empresa</h2>
-          <p className="text-[0.82rem] text-gray-400">
-            Logo, colores y nombre. Los cambios se aplican a toda la empresa en vivo.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
+              <Palette className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-[1.35rem] font-bold text-gray-900">Marca de la empresa</h2>
+              <p className="text-[0.82rem] text-gray-400">
+                Personaliza la identidad visual de tu empresa. Los cambios se aplicarán en todo el sistema.
+              </p>
+            </div>
+          </div>
+          <HeaderMockup />
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card">
-        <div className="space-y-6 p-5">
-          {/* ① Identidad */}
-          <div className="space-y-4">
-            <SeccionNum n={1} titulo="Identidad" subtitulo="Nombre y eslogan que aparecen en el encabezado y en el pie." />
-            <div className="grid grid-cols-1 gap-4 pl-10 sm:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
+        {/* ── Navegación lateral de pasos ── */}
+        <nav className="hidden lg:block">
+          <ol className="sticky top-4 space-y-1">
+            {PASOS.map((p) => {
+              const activo = pasoActivo === p.key
+              return (
+                <li key={p.key}>
+                  <button
+                    type="button"
+                    onClick={() => irA(p.key)}
+                    className={clsx(
+                      'flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors',
+                      activo ? 'bg-violet-50' : 'hover:bg-gray-50',
+                    )}
+                  >
+                    <span className={clsx(
+                      'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[0.72rem] font-bold',
+                      activo ? 'bg-violet-600 text-white' : 'border border-gray-300 text-gray-400',
+                    )}>
+                      {p.n}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={clsx('block text-[0.82rem] font-semibold', activo ? 'text-violet-700' : 'text-gray-700')}>{p.label}</span>
+                      <span className="block text-[0.68rem] text-gray-400">{p.sub}</span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+        </nav>
+
+        {/* ── Contenido ── */}
+        <div className="space-y-5">
+          <CardSeccion anchor="identidad" icon={IdCard} titulo="Identidad" subtitulo="Nombre y eslogan que aparecen en el encabezado y en el pie.">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Nombre corto" icon={<Type className="h-3.5 w-3.5" />}>
                 <input value={form.nombreCorto} onChange={(e) => set('nombreCorto', e.target.value)} placeholder="AGYDA" className={inputCls} />
               </Field>
@@ -165,25 +246,21 @@ export function BrandingTab() {
                 <input value={form.eslogan} onChange={(e) => set('eslogan', e.target.value)} placeholder="Soluciones en tecnología" className={inputCls} />
               </Field>
             </div>
-          </div>
+          </CardSeccion>
 
-          <div className="border-t border-gray-50" />
-
-          {/* ② Color */}
-          <div className="space-y-4">
-            <SeccionNum n={2} titulo="Color de marca" subtitulo="El acento del sistema: botones, chips, enlaces y estados activos." />
-            <div className="flex flex-wrap items-center gap-4 pl-10">
+          <CardSeccion anchor="color" icon={Droplet} titulo="Color de marca" subtitulo="El color principal del sistema. Se aplica a botones, chips, enlaces y estados activos.">
+            <div className="flex flex-wrap items-center gap-4">
               <input
                 type="color"
                 value={color}
                 onChange={(e) => set('colorBrand', e.target.value)}
-                className="h-11 w-16 cursor-pointer rounded-lg border border-gray-200 bg-card p-1"
+                className="h-11 w-14 cursor-pointer rounded-lg border border-gray-200 bg-card p-1"
               />
               <input
                 value={form.colorBrand}
                 onChange={(e) => set('colorBrand', e.target.value)}
                 placeholder="#2F6FED"
-                className="w-28 rounded-xl border border-gray-200 bg-card py-2.5 px-3 text-[0.85rem] font-mono outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                className="w-28 rounded-xl border border-gray-200 bg-card py-2.5 px-3 text-[0.85rem] font-mono outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
               />
               <button
                 type="button"
@@ -192,48 +269,36 @@ export function BrandingTab() {
               >
                 <RotateCcw className="h-3.5 w-3.5" /> Azul por defecto
               </button>
-              {/* preview en vivo con el color elegido (aún no guardado) */}
-              <div
-                className="flex items-center gap-2 rounded-xl border px-3 py-2"
-                style={{ borderColor: color + '55', background: color + '12' }}
-              >
-                <span className="rounded-lg px-2.5 py-1 text-[0.72rem] font-semibold text-white" style={{ background: color }}>Botón</span>
-                <span className="text-[0.72rem] font-semibold" style={{ color }}>Enlace</span>
+              <div className="rounded-xl border px-3 py-2" style={{ borderColor: color + '55', background: color + '12' }}>
+                <p className="mb-1 text-[0.6rem] font-semibold uppercase tracking-wide text-gray-400">Vista previa</p>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-lg px-2.5 py-1 text-[0.72rem] font-semibold text-white" style={{ background: color }}>Botón</span>
+                  <span className="text-[0.72rem] font-semibold" style={{ color }}>Enlace</span>
+                </div>
               </div>
             </div>
-          </div>
+          </CardSeccion>
 
-          <div className="border-t border-gray-50" />
-
-          {/* ③ Imágenes */}
-          <div className="space-y-4">
-            <SeccionNum n={3} titulo="Logos e imágenes" subtitulo="PNG, JPG, WEBP o SVG. Se guardan por empresa, fuera del código." />
-            <div className="grid grid-cols-2 gap-3 pl-10 md:grid-cols-4">
-              <AssetUploader
-                tipo="logo-principal" label="Logo principal" hint="480 × 160" previewClass="h-16"
-                actualId={form.logoPrincipalId} onUploaded={(id) => set('logoPrincipalId', id)}
-              />
-              <AssetUploader
-                tipo="logo-compacto" label="Logo compacto" hint="128 × 128" previewClass="h-16"
-                actualId={form.logoCompactoId} onUploaded={(id) => set('logoCompactoId', id)}
-              />
-              <AssetUploader
-                tipo="login" label="Imagen de login" hint="1920 × 1080" previewClass="h-16"
-                actualId={form.loginImagenId} onUploaded={(id) => set('loginImagenId', id)}
-              />
-              <AssetUploader
-                tipo="favicon" label="Favicon" hint="64 × 64" previewClass="h-16"
-                actualId={form.faviconId} onUploaded={(id) => set('faviconId', id)}
-              />
+          <CardSeccion anchor="imagenes" icon={ImagePlus} titulo="Logos e imágenes" subtitulo="Formatos soportados: PNG, JPG, WEBP o SVG. Fondo transparente recomendado.">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <AssetUploader tipo="logo-principal" label="Logo principal" hint="480 × 160 px" actualId={form.logoPrincipalId} onUploaded={(id) => set('logoPrincipalId', id)} />
+              <AssetUploader tipo="logo-compacto" label="Logo compacto" hint="128 × 128 px" actualId={form.logoCompactoId} onUploaded={(id) => set('logoCompactoId', id)} />
+              <AssetUploader tipo="login" label="Imagen de login" hint="1920 × 1080 px" actualId={form.loginImagenId} onUploaded={(id) => set('loginImagenId', id)} />
+              <AssetUploader tipo="favicon" label="Favicon" hint="64 × 64 px" actualId={form.faviconId} onUploaded={(id) => set('faviconId', id)} />
             </div>
-            <p className="pl-10 text-[0.72rem] text-gray-400">
-              Al subir una imagen se guarda de inmediato como asset. Pulsa "Guardar" para
-              que la marca use esas imágenes y el nombre/color.
-            </p>
-          </div>
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-violet-50/60 px-3 py-2.5">
+              <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500" />
+              <p className="text-[0.72rem] text-gray-500">
+                Las imágenes se guardan de inmediato como activos. Puedes reemplazarlas cuando lo necesites. Pulsa "Guardar cambios" para que la marca use el nombre y color.
+              </p>
+            </div>
+          </CardSeccion>
         </div>
+      </div>
 
-        <div className="flex justify-end gap-2 border-t border-gray-50 bg-gray-50/40 px-5 py-4">
+      {/* Footer de acciones */}
+      <div className="flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-gray-100 bg-card px-5 py-4 shadow-card">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => data && setForm(data.branding)}
@@ -245,10 +310,10 @@ export function BrandingTab() {
             type="button"
             onClick={() => guardar.mutate()}
             disabled={guardar.isPending}
-            className="flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98] disabled:opacity-60"
+            className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-violet-600/20 transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-60"
           >
             {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            Guardar
+            Guardar cambios
           </button>
         </div>
       </div>
