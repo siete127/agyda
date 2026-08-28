@@ -1,12 +1,43 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Building2, Plus, ShieldAlert, Home, ChevronRight, SlidersHorizontal, Users, LayoutGrid, ShieldCheck } from 'lucide-react'
+import { Building2, Plus, ShieldAlert, Home, ChevronRight, SlidersHorizontal, Users, LayoutGrid, ShieldCheck, Hash, User, AtSign, Lock, Eye, EyeOff, X } from 'lucide-react'
 import { api, getApiError } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/auth.store'
 import { EmpresaModulosPanel } from './EmpresaModulosPanel'
+
+const empInputCls =
+  'w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
+  'placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15'
+
+// Campo con ícono en pill a la izquierda (mismo lenguaje visual que PerfilModal).
+function EmpField({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-[0.8rem] font-semibold text-gray-700">{label}</label>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md bg-gray-100 text-gray-400">
+          {icon}
+        </span>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function SeccionNum({ n, titulo, subtitulo }: { n: number; titulo: string; subtitulo: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand text-[0.8rem] font-bold text-white">{n}</span>
+      <div>
+        <p className="text-[0.95rem] font-bold text-gray-900">{titulo}</p>
+        <p className="text-[0.78rem] text-gray-400">{subtitulo}</p>
+      </div>
+    </div>
+  )
+}
 
 // Mismos IDs que el backend restringe en utils/superAdmin.esSuperAdminFijo
 // — aquí solo controla si se MUESTRA la sección; la autorización real vive en
@@ -35,6 +66,7 @@ export function EmpresasTab() {
 
   const [mostrarFormEmpresa, setMostrarFormEmpresa] = useState(false)
   const [formEmpresa, setFormEmpresa] = useState({ codigo: '', nombre: '', adminUsuario: '', adminPassword: '', adminNombre: '' })
+  const [showPass, setShowPass] = useState(false)
   const [expandida, setExpandida] = useState<string | null>(null)
 
   const { data: todasEmpresas = [], isLoading } = useQuery({
@@ -209,60 +241,91 @@ export function EmpresasTab() {
 
       {/* ── Form nueva empresa ── */}
       {mostrarFormEmpresa && (
-        <div className="rounded-2xl border border-brand/30 bg-brand/[0.02] p-4 space-y-3 shadow-card animate-fade-in">
-          <p className="section-label">Nueva empresa</p>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className={clsx('text-[0.65rem] font-semibold uppercase tracking-wider text-gray-500')}>Código</label>
-              <input
-                value={formEmpresa.codigo}
-                onChange={(e) => setFormEmpresa((f) => ({ ...f, codigo: e.target.value.toLowerCase() }))}
-                placeholder="ej. clientex"
-                className="field py-1.5 text-[0.78rem]"
-              />
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card animate-fade-in">
+          <div className="flex items-center gap-3 border-b border-gray-50 px-5 py-4">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+              <Plus className="h-5 w-5" />
             </div>
-            <div className="space-y-1">
-              <label className="text-[0.65rem] font-semibold uppercase tracking-wider text-gray-500">Nombre</label>
-              <input
-                value={formEmpresa.nombre}
-                onChange={(e) => setFormEmpresa((f) => ({ ...f, nombre: e.target.value }))}
-                placeholder="ej. Cliente X"
-                className="field py-1.5 text-[0.78rem]"
-              />
+            <div className="min-w-0 flex-1">
+              <p className="text-[1rem] font-bold text-gray-900">Nueva empresa</p>
+              <p className="text-[0.78rem] text-gray-400">Registra una nueva empresa (tenant) en el sistema.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMostrarFormEmpresa(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="space-y-6 p-5">
+            {/* ① Información de la empresa */}
+            <div className="space-y-4">
+              <SeccionNum n={1} titulo="Información de la empresa" subtitulo="Datos generales de la empresa que se registrará." />
+              <div className="grid grid-cols-1 gap-4 pl-10 sm:grid-cols-2">
+                <EmpField label="Código" icon={<Hash className="h-3.5 w-3.5" />}>
+                  <input
+                    value={formEmpresa.codigo}
+                    onChange={(e) => setFormEmpresa((f) => ({ ...f, codigo: e.target.value.toLowerCase() }))}
+                    placeholder="ej. clientex"
+                    className={empInputCls}
+                  />
+                </EmpField>
+                <EmpField label="Nombre" icon={<Building2 className="h-3.5 w-3.5" />}>
+                  <input
+                    value={formEmpresa.nombre}
+                    onChange={(e) => setFormEmpresa((f) => ({ ...f, nombre: e.target.value }))}
+                    placeholder="ej. Cliente X"
+                    className={empInputCls}
+                  />
+                </EmpField>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-50" />
+
+            {/* ② Administrador inicial */}
+            <div className="space-y-4">
+              <SeccionNum n={2} titulo="Administrador inicial" subtitulo="Usuario que se creará como administrador inicial de la empresa." />
+              <div className="grid grid-cols-1 gap-4 pl-10 sm:grid-cols-3">
+                <EmpField label="Nombre" icon={<User className="h-3.5 w-3.5" />}>
+                  <input
+                    value={formEmpresa.adminNombre}
+                    onChange={(e) => setFormEmpresa((f) => ({ ...f, adminNombre: e.target.value }))}
+                    placeholder="Nombre completo"
+                    className={empInputCls}
+                  />
+                </EmpField>
+                <EmpField label="Usuario" icon={<AtSign className="h-3.5 w-3.5" />}>
+                  <input
+                    value={formEmpresa.adminUsuario}
+                    onChange={(e) => setFormEmpresa((f) => ({ ...f, adminUsuario: e.target.value }))}
+                    placeholder="usuario"
+                    className={empInputCls}
+                  />
+                </EmpField>
+                <EmpField label="Contraseña" icon={<Lock className="h-3.5 w-3.5" />}>
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    value={formEmpresa.adminPassword}
+                    onChange={(e) => setFormEmpresa((f) => ({ ...f, adminPassword: e.target.value }))}
+                    placeholder="••••••••"
+                    className={clsx(empInputCls, 'pr-10')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
+                  >
+                    {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </EmpField>
+              </div>
             </div>
           </div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-wider text-gray-500 pt-1">Administrador inicial</p>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <div className="space-y-1">
-              <label className="text-[0.65rem] font-semibold uppercase tracking-wider text-gray-500">Nombre</label>
-              <input
-                value={formEmpresa.adminNombre}
-                onChange={(e) => setFormEmpresa((f) => ({ ...f, adminNombre: e.target.value }))}
-                placeholder="Nombre completo"
-                className="field py-1.5 text-[0.78rem]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[0.65rem] font-semibold uppercase tracking-wider text-gray-500">Usuario</label>
-              <input
-                value={formEmpresa.adminUsuario}
-                onChange={(e) => setFormEmpresa((f) => ({ ...f, adminUsuario: e.target.value }))}
-                placeholder="usuario"
-                className="field py-1.5 text-[0.78rem]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[0.65rem] font-semibold uppercase tracking-wider text-gray-500">Contraseña</label>
-              <input
-                type="password"
-                value={formEmpresa.adminPassword}
-                onChange={(e) => setFormEmpresa((f) => ({ ...f, adminPassword: e.target.value }))}
-                placeholder="••••••••"
-                className="field py-1.5 text-[0.78rem]"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
+
+          <div className="flex justify-end gap-2 border-t border-gray-50 bg-gray-50/40 px-5 py-4">
             <Button variant="ghost" onClick={() => setMostrarFormEmpresa(false)}>Cancelar</Button>
             <Button onClick={handleCrearEmpresa} disabled={crearEmpresa.isPending}>
               {crearEmpresa.isPending ? 'Creando…' : 'Crear empresa'}
