@@ -450,7 +450,7 @@ function ConfigModal({ onClose }: { onClose: () => void }) {
                   'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors',
                   diasSeleccionados.has(d.valor)
                     ? 'bg-brand text-white border-brand'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50',
+                    : 'bg-card text-gray-600 border-gray-200 hover:bg-gray-50',
                 )}
               >
                 {d.label}
@@ -825,7 +825,7 @@ function ChatPanel({ conversacionId, onCerrada }: { conversacionId: number; onCe
         </div>
 
         {cerrarOpen && (
-          <div className="absolute right-5 top-14 z-10 w-80 bg-white border border-gray-200 rounded-xl shadow-lg p-4 space-y-3">
+          <div className="absolute right-5 top-14 z-10 w-80 bg-card border border-gray-200 rounded-xl shadow-lg p-4 space-y-3">
             {conv.grupoId ? (
               <div>
                 <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Motivo de cierre</label>
@@ -876,7 +876,7 @@ function ChatPanel({ conversacionId, onCerrada }: { conversacionId: number; onCe
         )}
 
         {transferirOpen && (
-          <div className="absolute right-5 top-14 z-10 w-64 bg-white border border-gray-200 rounded-xl shadow-lg py-2">
+          <div className="absolute right-5 top-14 z-10 w-64 bg-card border border-gray-200 rounded-xl shadow-lg py-2">
             {agentesTransferibles.length === 0 ? (
               <p className="px-4 py-3 text-xs text-gray-400">No hay otros agentes conectados</p>
             ) : (
@@ -908,7 +908,7 @@ function ChatPanel({ conversacionId, onCerrada }: { conversacionId: number; onCe
               className={clsx(
                 'max-w-[70%] rounded-2xl px-4 py-2 text-sm',
                 m.emisor === 'agente' && 'bg-blue-600 text-white rounded-br-sm',
-                m.emisor === 'visitante' && 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm',
+                m.emisor === 'visitante' && 'bg-card text-gray-800 border border-gray-200 rounded-bl-sm',
                 m.emisor === 'sistema' && 'bg-gray-200 text-gray-600 italic text-xs mx-auto',
               )}
             >
@@ -935,7 +935,7 @@ function ChatPanel({ conversacionId, onCerrada }: { conversacionId: number; onCe
               <FileText size={15} />
             </button>
             {plantillasOpen && (
-              <div className="absolute bottom-12 left-0 z-10 w-72 bg-white border border-gray-200 rounded-xl shadow-lg py-2 max-h-64 overflow-y-auto">
+              <div className="absolute bottom-12 left-0 z-10 w-72 bg-card border border-gray-200 rounded-xl shadow-lg py-2 max-h-64 overflow-y-auto">
                 {plantillas.map((p) => (
                   <button
                     key={p.id}
@@ -1128,7 +1128,7 @@ export default function LivechatPage() {
       {agentesOpen && <AgentesEstadoModal onClose={() => setAgentesOpen(false)} />}
       {supervisionOpen && <SupervisionModal onClose={() => setSupervisionOpen(false)} />}
 
-      <div className="flex-1 flex bg-white rounded-xl border border-gray-200 overflow-hidden min-h-0">
+      <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
         <div className="w-72 border-r border-gray-100 overflow-y-auto shrink-0">
           {conversaciones.length === 0 ? (
             <div className="p-6 text-center text-sm text-gray-400">

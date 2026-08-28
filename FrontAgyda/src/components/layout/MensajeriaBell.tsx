@@ -30,7 +30,7 @@ export function MensajeriaBell() {
         <>
           <div className="fixed inset-0 z-30" onClick={() => setIsOpen(false)} />
 
-          <div className="absolute right-0 top-full mt-2 w-80 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card-lg">
+          <div className="absolute right-0 top-full mt-2 w-80 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-card shadow-card-lg">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <div className="flex items-center gap-2">
                 <MessagesSquare className="h-3.5 w-3.5 text-gray-400" />

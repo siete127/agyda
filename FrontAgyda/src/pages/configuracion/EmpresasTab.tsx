@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { EmpresaModulosPanel } from './EmpresaModulosPanel'
 
 const empInputCls =
-  'w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
+  'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
   'placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15'
 
 // Campo con ícono en pill a la izquierda (mismo lenguaje visual que PerfilModal).
@@ -123,7 +123,7 @@ export function EmpresasTab() {
 
   if (!esSuperAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-200/60 bg-white py-16 shadow-card">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-200/60 bg-card py-16 shadow-card">
         <ShieldAlert className="h-8 w-8 text-gray-300" />
         <p className="text-sm font-semibold text-gray-500">No tienes acceso a esta sección</p>
       </div>
@@ -209,7 +209,7 @@ export function EmpresasTab() {
 
           {/* ── Form nueva empresa (justo debajo de la empresa principal) ── */}
           {mostrarFormEmpresa && (
-            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card animate-fade-in">
+            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card animate-fade-in">
               <div className="flex items-center gap-3 border-b border-gray-50 px-5 py-4">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
                   <BuildingPlus className="h-5 w-5" />
@@ -303,7 +303,7 @@ export function EmpresasTab() {
           )}
 
           {/* ── Otras empresas ── */}
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card">
             <div className="flex items-center gap-2 border-b border-gray-50 px-5 py-4">
               <h3 className="text-[0.95rem] font-bold text-gray-900">Otras empresas</h3>
               <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[0.65rem] font-bold text-gray-500">{otras.length}</span>

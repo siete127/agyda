@@ -568,7 +568,7 @@ function DecisionCard({ decision, onClick }: { decision: Decision; onClick: () =
   return (
     <button
       onClick={onClick}
-      className="group relative flex flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
+      className="group relative flex flex-col rounded-2xl border border-gray-100 bg-card p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
     >
       <span className="mb-1 inline-flex w-fit chip bg-blue-50 text-blue-700">{decision.tipoNombre}</span>
       <h3 className="text-sm font-semibold text-ink">{decision.titulo}</h3>
@@ -715,7 +715,7 @@ function AdminTiposPanel() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card">
           <table className="w-full text-left text-xs">
             <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-ink-tertiary">
               <tr>
@@ -905,7 +905,7 @@ export function TomaDecisionesPage() {
       ) : isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">No hay solicitudes en esta bandeja.</p>
         </div>
       ) : (

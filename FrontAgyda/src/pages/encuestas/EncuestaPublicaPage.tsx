@@ -16,7 +16,7 @@ function respondienteKey(slug: string) { return `encuesta_${slug}_respondiente` 
 
 function BrandHeader() {
   return (
-    <div className="bg-white border-b border-gray-200 px-6 py-4">
+    <div className="bg-card border-b border-gray-200 px-6 py-4">
       <div className="max-w-xl mx-auto flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10">
           <ClipboardList className="h-5 w-5 text-brand" />
@@ -174,7 +174,7 @@ export function EncuestaPublicaPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <BrandHeader />
       <div className="max-w-xl mx-auto px-4 py-10">
-        <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm">
+        <div className="rounded-2xl bg-card border border-gray-200 p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
             <span className="chip bg-brand/10 text-brand text-[0.65rem]">Bienvenido a AGYDA</span>
           </div>

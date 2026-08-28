@@ -184,7 +184,7 @@ function PdfViewer({
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="flex flex-col w-full max-w-2xl h-[94vh] rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="flex flex-col w-full max-w-2xl h-[94vh] rounded-2xl bg-card shadow-2xl overflow-hidden">
 
         {/* Barra superior */}
         <div className="flex items-center justify-between px-4 py-3 bg-indigo-600 flex-shrink-0">
@@ -219,7 +219,7 @@ function PdfViewer({
 
         {/* Pie con botón de aceptación */}
         {showAccept && (
-          <div className="flex items-center justify-between gap-4 px-5 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+          <div className="flex items-center justify-between gap-4 px-5 py-3 border-t border-gray-100 bg-card flex-shrink-0">
             <p className="text-xs text-gray-400">Debes leer el reglamento antes de aceptar.</p>
             <button
               onClick={onAccept}
@@ -260,7 +260,7 @@ function SubirReglamentoModal({ onClose, onUploaded }: { onClose: () => void; on
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-md rounded-2xl bg-card shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-[#0D1B3E] to-[#1B4FD8]">
           <div className="flex items-center gap-2">
             <Upload className="h-4 w-4 text-white" />
@@ -498,7 +498,7 @@ export function ReglamentoPage() {
               </Button>
               <Button
                 onClick={() => setShowSubir(true)}
-                className="bg-white !text-brand hover:bg-blue-50 !shadow-none border-0 text-xs py-1.5 px-3"
+                className="bg-card !text-brand hover:bg-blue-50 !shadow-none border-0 text-xs py-1.5 px-3"
               >
                 <Upload className="h-3.5 w-3.5" /> Reemplazar reglamento
               </Button>
@@ -533,7 +533,7 @@ export function ReglamentoPage() {
               onClick={() => setFiltro(f)}
               className={clsx(
                 'px-4 py-2 text-[0.72rem] font-semibold capitalize transition-colors',
-                filtro === f ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50',
+                filtro === f ? 'bg-indigo-600 text-white' : 'bg-card text-gray-600 hover:bg-gray-50',
               )}
             >
               {f}
@@ -582,7 +582,7 @@ export function ReglamentoPage() {
                     key={u.id}
                     className={clsx(
                       'grid grid-cols-[2fr_1fr_1fr_auto] gap-x-4 items-center px-5 py-3 transition-colors hover:bg-indigo-50/30',
-                      i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40',
+                      i % 2 === 0 ? 'bg-card' : 'bg-gray-50/40',
                     )}
                   >
                     {/* Nombre */}

@@ -204,7 +204,7 @@ export function ProductosServiciosPage() {
               <button onClick={() => refetch()} className={clsx('flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors', isRefetching && 'animate-spin')}>
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              <Button onClick={() => { setEditando(null); setShowModal(true) }} className="bg-white !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+              <Button onClick={() => { setEditando(null); setShowModal(true) }} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <Plus className="h-3.5 w-3.5" /> Nuevo
               </Button>
             </div>
@@ -225,7 +225,7 @@ export function ProductosServiciosPage() {
             onClick={() => setSoloActivos(!soloActivos)}
             className={clsx(
               'rounded-xl px-3 py-2 text-xs font-semibold border transition-colors',
-              soloActivos ? 'bg-brand/8 text-brand border-brand/20' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300',
+              soloActivos ? 'bg-brand/8 text-brand border-brand/20' : 'bg-card text-gray-500 border-gray-200 hover:border-gray-300',
             )}
           >
             {soloActivos ? 'Solo activos' : 'Todos'}

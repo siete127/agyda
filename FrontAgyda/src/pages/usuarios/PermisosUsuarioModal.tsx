@@ -209,7 +209,7 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
                   activoLocal ? 'bg-blue-600' : 'bg-gray-200',
                 )}
               >
-                <span className={clsx('inline-block h-4.5 w-4.5 rounded-full bg-white shadow transform transition-transform duration-200', activoLocal ? 'translate-x-4.5' : 'translate-x-0')} />
+                <span className={clsx('inline-block h-4.5 w-4.5 rounded-full bg-card shadow transform transition-transform duration-200', activoLocal ? 'translate-x-4.5' : 'translate-x-0')} />
               </button>
             </div>
             <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2.5">
@@ -230,7 +230,7 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
                   statusLocal ? 'bg-emerald-500' : 'bg-gray-200',
                 )}
               >
-                <span className={clsx('inline-block h-4.5 w-4.5 rounded-full bg-white shadow transform transition-transform duration-200', statusLocal ? 'translate-x-4.5' : 'translate-x-0')} />
+                <span className={clsx('inline-block h-4.5 w-4.5 rounded-full bg-card shadow transform transition-transform duration-200', statusLocal ? 'translate-x-4.5' : 'translate-x-0')} />
               </button>
             </div>
           </div>
@@ -380,7 +380,7 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
                                 className={clsx(
                                   'flex items-start gap-2.5 rounded-lg px-2 py-1.5',
                                   puedeGestionar ? 'cursor-pointer' : 'cursor-default',
-                                  activa ? 'bg-white shadow-sm' : puedeGestionar ? 'hover:bg-white' : '',
+                                  activa ? 'bg-card shadow-sm' : puedeGestionar ? 'hover:bg-card' : '',
                                 )}
                               >
                                 <input

@@ -38,7 +38,7 @@ export function DireccionGeneralPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {data.areas.map((a) => (
-              <div key={a.areaKey} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+              <div key={a.areaKey} className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-semibold text-ink">{a.label}</span>
                   {a.reportando ? (

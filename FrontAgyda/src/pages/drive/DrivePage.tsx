@@ -240,7 +240,7 @@ function CompartirModal({
               {accesos.map(a => {
                 const cfg = PERMISOS[a.permiso] ?? PERMISOS.ver
                 return (
-                  <div key={a.usuarioId} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2">
+                  <div key={a.usuarioId} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-card px-3 py-2">
                     <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-[0.65rem] font-bold text-brand">
                       {a.nombre.charAt(0).toUpperCase()}
                     </div>
@@ -306,7 +306,7 @@ function CompartirModal({
                       ? 'border-gray-100 bg-gray-50 opacity-60'
                       : selec
                         ? 'border-brand/30 bg-brand/5'
-                        : 'border-gray-100 bg-white hover:border-gray-200 cursor-pointer'
+                        : 'border-gray-100 bg-card hover:border-gray-200 cursor-pointer'
                   )}
                   onClick={() => !yaAcceso && toggleSeleccion(u.id)}
                 >
@@ -331,7 +331,7 @@ function CompartirModal({
                           onClick={() => setPermisoDropOpen(permisoDropOpen === u.id ? null : u.id)}
                           className={clsx(
                             'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[0.7rem] font-semibold transition-colors',
-                            'border-gray-200 bg-white hover:bg-gray-50', cfgPermiso.color
+                            'border-gray-200 bg-card hover:bg-gray-50', cfgPermiso.color
                           )}
                         >
                           <span className={clsx('h-1.5 w-1.5 rounded-full', cfgPermiso.dot)} />
@@ -341,7 +341,7 @@ function CompartirModal({
                         {permisoDropOpen === u.id && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setPermisoDropOpen(null)} />
-                            <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden">
+                            <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl border border-gray-200 bg-card shadow-xl overflow-hidden">
                               {(Object.entries(PERMISOS) as [Permiso, typeof PERMISOS[Permiso]][]).map(([key, cfg]) => (
                                 <button
                                   key={key}
@@ -602,7 +602,7 @@ export function DrivePage() {
               )}
               <label className="cursor-pointer">
                 <input type="file" className="hidden" onChange={subirArchivo} />
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-[0.78rem] font-semibold text-brand hover:bg-blue-50 transition-colors cursor-pointer">
+                <span className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-brand hover:bg-blue-50 transition-colors cursor-pointer">
                   <Upload className="h-3.5 w-3.5" /> Subir archivo
                 </span>
               </label>

@@ -95,7 +95,7 @@ function AgentesDeGrupo({ grupoId }: { grupoId: number }) {
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {agentes.map((a) => (
-            <span key={a.id} className="inline-flex items-center gap-1 rounded-full bg-white border border-gray-200 pl-2.5 pr-1 py-1 text-xs">
+            <span key={a.id} className="inline-flex items-center gap-1 rounded-full bg-card border border-gray-200 pl-2.5 pr-1 py-1 text-xs">
               {a.nombre}
               <button type="button" onClick={() => quitar.mutate(a.usuarioId)} className="text-gray-400 hover:text-red-500 rounded-full p-0.5">
                 <X size={11} />
@@ -135,7 +135,7 @@ function GrupoRow({ grupo }: { grupo: LivechatGrupo }) {
   const [tab, setTab] = useState<SubTab>('agentes')
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+    <div className="border border-gray-200 rounded-lg overflow-hidden bg-card">
       <button
         type="button"
         onClick={() => setExpandido((v) => !v)}

@@ -54,7 +54,7 @@ export function MisTareasPage() {
       ) : (
         <div className="space-y-4">
           {pendientes.length > 0 && (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
               <div className="border-b border-gray-100 px-4 py-3">
                 <p className="text-[0.8rem] font-bold text-gray-700">Pendientes</p>
               </div>
@@ -64,7 +64,7 @@ export function MisTareasPage() {
             </div>
           )}
           {completadas.length > 0 && (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
               <div className="border-b border-gray-100 px-4 py-3">
                 <p className="text-[0.8rem] font-bold text-gray-700">Completadas / canceladas</p>
               </div>

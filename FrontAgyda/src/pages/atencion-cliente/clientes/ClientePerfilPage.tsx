@@ -106,7 +106,7 @@ export function ClientePerfilPage() {
             onClick={() => setTab(t.key)}
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-all',
-              tab === t.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700',
+              tab === t.key ? 'bg-card shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700',
             )}
           >
             <t.icon className="h-3.5 w-3.5" /> {t.label}

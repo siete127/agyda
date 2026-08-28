@@ -82,7 +82,7 @@ function NuevoDMPicker({ onClose, onCreado }: { onClose: () => void; onCreado: (
     .filter((u) => u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
 
   return (
-    <div className="absolute inset-x-3 top-14 z-20 rounded-xl border border-gray-200 bg-white shadow-lg">
+    <div className="absolute inset-x-3 top-14 z-20 rounded-xl border border-gray-200 bg-card shadow-lg">
       <div className="p-2 border-b border-gray-100">
         <input
           autoFocus
@@ -352,7 +352,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
             <div className="fixed inset-0 z-10" onClick={() => setAparienciaOpen(false)} />
             <div className={clsx(
               'absolute right-4 top-12 z-20 w-64 rounded-xl border shadow-lg p-3',
-              oscuro ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200',
+              oscuro ? 'bg-gray-800 border-gray-700' : 'bg-card border-gray-200',
             )}>
               <p className={clsx('mb-2 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>Apariencia del chat</p>
 
@@ -574,7 +574,7 @@ export function MensajeriaPage() {
         </Button>
       </div>
 
-      <div className="flex-1 flex bg-white rounded-xl border border-gray-200 overflow-hidden min-h-0">
+      <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
         <div className="w-72 border-r border-gray-100 flex flex-col shrink-0 relative">
           <div className="p-3 border-b border-gray-100">
             <Button size="sm" variant="ghost" className="w-full" onClick={() => setPickerOpen((v) => !v)}>
@@ -633,7 +633,7 @@ export function MensajeriaPage() {
             <button
               key={canal.id}
               onClick={() => restaurarChat(canal.id)}
-              className="group relative flex items-center gap-2 rounded-full border border-gray-200 bg-white pl-1.5 pr-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors"
+              className="group relative flex items-center gap-2 rounded-full border border-gray-200 bg-card pl-1.5 pr-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors"
               title={canal.nombre || 'Conversación'}
             >
               {canal.tipo === 'grupo' ? (

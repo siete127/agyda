@@ -13,7 +13,7 @@ interface SectionCardProps {
 
 export function SectionCard({ title, icon: Icon, barColor = 'bg-brand', action, className, children }: SectionCardProps) {
   return (
-    <div className={clsx('rounded-2xl border border-surface-border bg-white overflow-hidden', className)}>
+    <div className={clsx('rounded-2xl border border-surface-border bg-card overflow-hidden', className)}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
         <div className="flex items-center gap-2">
           {Icon ? (

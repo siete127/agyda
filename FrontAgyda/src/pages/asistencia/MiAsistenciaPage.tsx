@@ -115,7 +115,7 @@ export function MiAsistenciaPage() {
       <EntradaWidget />
 
       {/* Navegador de mes */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button

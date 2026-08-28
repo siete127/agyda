@@ -540,7 +540,7 @@ export function ResumenVacacionesTab() {
                 onClick={() => setFiltro(f)}
                 className={clsx(
                   'rounded-lg px-3 py-1.5 text-xs font-semibold transition-all capitalize whitespace-nowrap',
-                  filtro === f ? 'bg-white shadow-sm text-brand' : 'text-gray-500 hover:text-gray-700',
+                  filtro === f ? 'bg-card shadow-sm text-brand' : 'text-gray-500 hover:text-gray-700',
                 )}
               >
                 {f === 'todos' ? 'Todos' : 'Sin pool'}

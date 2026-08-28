@@ -66,7 +66,7 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
             {puedeGestionar ? ' Completa sus datos y guarda para activar seguimiento, tareas e incidencias.' : ''}
           </div>
         )}
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <p className="text-[0.8rem] font-bold text-gray-700">Datos generales</p>
             {puedeGestionar && (
@@ -107,7 +107,7 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
     <div className="rounded-2xl border-2 border-brand/30 bg-brand/5 overflow-hidden">
       <div className="flex items-center justify-between border-b border-brand/10 px-4 py-3">
         <p className="text-[0.8rem] font-bold text-gray-700">Editar datos generales</p>
-        <button onClick={() => setEditando(false)} className="rounded-lg p-1 text-gray-400 hover:bg-white hover:text-gray-600 transition-colors">
+        <button onClick={() => setEditando(false)} className="rounded-lg p-1 text-gray-400 hover:bg-card hover:text-gray-600 transition-colors">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -151,7 +151,7 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
                 title={cfg.label}
                 className={clsx(
                   'flex flex-col items-center gap-1 rounded-xl border-2 py-2 text-[0.65rem] font-semibold transition-all',
-                  estatusCliente === cfg.key ? `${cfg.bg} ${cfg.text} border-current` : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300',
+                  estatusCliente === cfg.key ? `${cfg.bg} ${cfg.text} border-current` : 'border-gray-200 bg-card text-gray-400 hover:border-gray-300',
                 )}
               >
                 <span className={clsx('h-2 w-2 rounded-full', cfg.dot)} />

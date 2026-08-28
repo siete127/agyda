@@ -395,7 +395,7 @@ export function MusicaPage() {
           {BUBBLES.map((b, i) => (
             <span
               key={i}
-              className="animate-bubble-rise absolute rounded-full bg-white"
+              className="animate-bubble-rise absolute rounded-full bg-card"
               style={{
                 left: `${b.left}%`,
                 bottom: `-${b.size}px`,
@@ -421,7 +421,7 @@ export function MusicaPage() {
                   onClick={() => setTab(t)}
                   className={clsx(
                     'rounded-lg px-4 py-1.5 text-xs font-semibold transition-all',
-                    tab === t ? 'bg-white text-brand shadow-sm' : 'text-white/70 hover:text-white',
+                    tab === t ? 'bg-card text-brand shadow-sm' : 'text-white/70 hover:text-white',
                   )}
                 >
                   {t === 'general' ? 'Lista General' : 'Mi Lista'}

@@ -69,7 +69,7 @@ function BanioAlertModal({ slot, onClose }: { slot: BanioSlot; onClose: () => vo
   const label = slot.genero === 'F' ? 'Baño de mujeres' : 'Baño de hombres'
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
-      <div className="pointer-events-auto w-full max-w-xs rounded-2xl bg-white shadow-2xl overflow-hidden"
+      <div className="pointer-events-auto w-full max-w-xs rounded-2xl bg-card shadow-2xl overflow-hidden"
         style={{ border: `2px solid ${color}33` }}>
         <div className="h-1.5 w-full" style={{ background: color }} />
         <div className="px-6 py-5 flex flex-col items-center gap-3 text-center">
@@ -237,7 +237,7 @@ export function PausaWidget() {
 
         {/* ── Panel ── */}
         {open && (
-          <div className="w-64 rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
+          <div className="w-64 rounded-2xl bg-card shadow-2xl border border-gray-100 overflow-hidden">
 
             {/* Cabecera — arrastrar desde aquí */}
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between"

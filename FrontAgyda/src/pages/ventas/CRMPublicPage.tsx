@@ -316,7 +316,7 @@ export default function CRMPublicPage() {
       <div className="mx-auto max-w-2xl px-4 pt-4 pb-8 space-y-4">
 
         {/* Tabs internos */}
-        <div className="flex rounded-xl bg-white border border-gray-200/60 shadow-sm overflow-hidden">
+        <div className="flex rounded-xl bg-card border border-gray-200/60 shadow-sm overflow-hidden">
           {(['datos', 'tipificar', 'historial'] as const).map(t => (
             <button
               key={t}
@@ -335,7 +335,7 @@ export default function CRMPublicPage() {
 
         {/* ── TAB: DATOS ── */}
         {tipTab === 'datos' && (
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
               <p className="text-[0.78rem] font-bold text-gray-700">Datos del cliente</p>
               {editando ? (
@@ -376,7 +376,7 @@ export default function CRMPublicPage() {
                         {editando && cfg.editable ? (
                           <input value={editando[cfg.campo] ?? ''}
                             onChange={e => setEditando(prev => ({ ...prev!, [cfg.campo]: e.target.value }))}
-                            className="mt-1 w-full rounded-lg border border-brand/30 bg-white px-2 py-1 text-[0.8rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+                            className="mt-1 w-full rounded-lg border border-brand/30 bg-card px-2 py-1 text-[0.8rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
                         ) : (
                           <p className={clsx('text-[0.82rem] font-semibold mt-0.5 truncate', val ? 'text-gray-800' : 'text-gray-300')}>
                             {val || '—'}
@@ -425,7 +425,7 @@ export default function CRMPublicPage() {
 
         {/* ── TAB: HISTORIAL ── */}
         {tipTab === 'historial' && (
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
             <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-4">
               <History className="h-4 w-4 text-brand" />
               <p className="text-[0.85rem] font-bold text-gray-900">Historial de gestiones</p>
@@ -519,7 +519,7 @@ function TipificacionPanel({
   onEnviar: () => void
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-brand" />

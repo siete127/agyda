@@ -835,7 +835,7 @@ function InventarioGeneralView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
       </div>
 
       {/* Tabla */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1439,7 +1439,7 @@ function InventarioMobiliarioView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
       </div>
 
       {/* Tabla */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1643,14 +1643,14 @@ export function ActivosPage() {
                 <button
                   onClick={() => setVista((v) => (v === 'mobiliario' ? 'inventario' : v))}
                   title="Equipos de TI"
-                  className={clsx('flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-semibold transition-colors', vista !== 'mobiliario' ? 'bg-white text-brand' : 'text-white/70 hover:bg-white/10')}
+                  className={clsx('flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-semibold transition-colors', vista !== 'mobiliario' ? 'bg-card text-brand' : 'text-white/70 hover:bg-white/10')}
                 >
                   <Server className="h-3.5 w-3.5" /> Equipos TI
                 </button>
                 <button
                   onClick={() => setVista('mobiliario')}
                   title="Mobiliario y equipos de oficina"
-                  className={clsx('flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-semibold transition-colors', vista === 'mobiliario' ? 'bg-white text-brand' : 'text-white/70 hover:bg-white/10')}
+                  className={clsx('flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-semibold transition-colors', vista === 'mobiliario' ? 'bg-card text-brand' : 'text-white/70 hover:bg-white/10')}
                 >
                   <Armchair className="h-3.5 w-3.5" /> Mobiliario
                 </button>
@@ -1662,14 +1662,14 @@ export function ActivosPage() {
                   <button
                     onClick={() => setVista('dashboard')}
                     title="Ver dashboard"
-                    className={clsx('flex h-8 w-8 items-center justify-center rounded-md transition-colors', vista === 'dashboard' ? 'bg-white text-brand' : 'text-white/70 hover:bg-white/10')}
+                    className={clsx('flex h-8 w-8 items-center justify-center rounded-md transition-colors', vista === 'dashboard' ? 'bg-card text-brand' : 'text-white/70 hover:bg-white/10')}
                   >
                     <PieChart className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => setVista('inventario')}
                     title="Listado de equipos"
-                    className={clsx('flex h-8 w-8 items-center justify-center rounded-md transition-colors', vista === 'inventario' ? 'bg-white text-brand' : 'text-white/70 hover:bg-white/10')}
+                    className={clsx('flex h-8 w-8 items-center justify-center rounded-md transition-colors', vista === 'inventario' ? 'bg-card text-brand' : 'text-white/70 hover:bg-white/10')}
                   >
                     <LayoutGrid className="h-4 w-4" />
                   </button>

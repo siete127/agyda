@@ -43,7 +43,7 @@ export function EmpresaModulosPanel({ empresa, embedded = false }: { empresa: Em
   }, [modulos, busqueda])
 
   return (
-    <div className={clsx(!embedded && 'rounded-2xl border border-gray-100 bg-white shadow-card overflow-hidden')}>
+    <div className={clsx(!embedded && 'rounded-2xl border border-gray-100 bg-card shadow-card overflow-hidden')}>
       {/* ── Encabezado ── */}
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 pb-3">
         <div>
@@ -63,7 +63,7 @@ export function EmpresaModulosPanel({ empresa, embedded = false }: { empresa: Em
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar módulo…"
-            className="w-56 rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-[0.78rem] outline-none focus:border-brand"
+            className="w-56 rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-3 text-[0.78rem] outline-none focus:border-brand"
           />
         </div>
       </div>
@@ -100,7 +100,7 @@ export function EmpresaModulosPanel({ empresa, embedded = false }: { empresa: Em
                     )}
                     aria-pressed={m.allow}
                   >
-                    <span className={clsx('inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform', m.allow ? 'translate-x-5' : 'translate-x-0')} />
+                    <span className={clsx('inline-block h-5 w-5 rounded-full bg-card shadow transform transition-transform', m.allow ? 'translate-x-5' : 'translate-x-0')} />
                   </button>
                 </div>
               )

@@ -232,7 +232,7 @@ function ReporteRetardoButton({ asistenciaId }: { asistenciaId: number }) {
       onClick={() => mut.mutate()}
       disabled={mut.isPending}
       title="Generar reporte de retardo"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[0.7rem] font-semibold text-gray-500 hover:border-brand/40 hover:text-brand transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-card px-2.5 py-1 text-[0.7rem] font-semibold text-gray-500 hover:border-brand/40 hover:text-brand transition-colors disabled:opacity-50"
     >
       {mut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
       Reporte
@@ -255,7 +255,7 @@ function VerActaButton({ actaId }: { actaId: number }) {
       onClick={() => mut.mutate()}
       disabled={mut.isPending}
       title="Ver e imprimir acción correctiva"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[0.7rem] font-semibold text-gray-500 hover:border-brand/40 hover:text-brand transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-card px-2.5 py-1 text-[0.7rem] font-semibold text-gray-500 hover:border-brand/40 hover:text-brand transition-colors disabled:opacity-50"
     >
       {mut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
       Ver PDF
@@ -271,7 +271,7 @@ function ActasSection() {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-50 border border-orange-200">
@@ -392,7 +392,7 @@ function VacacionesButton({ registro }: { registro: AsistenciaRegistro }) {
       onClick={() => marcar.mutate()}
       disabled={marcar.isPending}
       title="Marcar como vacaciones"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[0.7rem] font-semibold text-gray-500 hover:border-sky-300 hover:text-sky-600 transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-card px-2.5 py-1 text-[0.7rem] font-semibold text-gray-500 hover:border-sky-300 hover:text-sky-600 transition-colors disabled:opacity-50"
     >
       {marcar.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Umbrella className="h-3 w-3" />}
       Vacaciones
@@ -563,7 +563,7 @@ function TablaAgrupada({
   }, [registros])
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/10 border border-brand/20">
@@ -674,7 +674,7 @@ function UploadBiometricoButton() {
       </button>
       {resultado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setResultado(null)}>
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-sm bg-card rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-[#0D1B3E] to-[#1B4FD8] px-5 py-4 flex items-center justify-between">
               <h3 className="text-sm font-bold text-white">Carga biométrica completada</h3>
               <button onClick={() => setResultado(null)} className="text-white/70 hover:text-white text-lg">×</button>
@@ -747,7 +747,7 @@ function SyncBiotimeModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg bg-card rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="bg-gradient-to-r from-[#0D1B3E] to-[#1B4FD8] px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Link2 className="h-4 w-4 text-white" />
@@ -884,7 +884,7 @@ function BiotimeTab() {
             key={t}
             onClick={() => setTabBio(t)}
             className={`px-4 py-1.5 rounded-t-lg text-[0.78rem] font-semibold transition-colors ${
-              tabBio === t ? 'bg-white border border-b-white border-gray-200 text-brand' : 'text-gray-400 hover:text-gray-600'
+              tabBio === t ? 'bg-card border border-b-white border-gray-200 text-brand' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
             {t === 'mapa' ? `Mapeo emp_code (${mapa.length})` : `Alertas inactivos (${alertasData?.total ?? 0})`}
@@ -899,7 +899,7 @@ function BiotimeTab() {
       </div>
 
       {tabBio === 'mapa' && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
             <Link2 className="h-4 w-4 text-brand" />
             <span className="text-[0.82rem] font-semibold text-gray-800">Mapeo BioTime emp_code → empleado</span>
@@ -965,7 +965,7 @@ function BiotimeTab() {
               </button>
             )}
           </div>
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-500" />
               <span className="text-[0.82rem] font-semibold text-gray-800">Usuarios inactivos que marcaron en BioTime</span>
@@ -1096,7 +1096,7 @@ function CalendarioAsistencia() {
   const hayIncidencias = (dia: number) => mapRetardos.has(dia) || mapFaltas.has(dia)
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       {/* panel header */}
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -1444,7 +1444,7 @@ function ConfigHorariosTab() {
       {/* Sección: Horarios */}
       <div className="space-y-2">
         <p className="px-1 text-[0.65rem] font-bold uppercase tracking-widest text-gray-400">Horarios</p>
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/10 border border-brand/20">
@@ -1587,12 +1587,12 @@ function ConfigHorariosTab() {
                         ) : (
                           <>
                             <button onClick={() => startEdit(h)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[0.72rem] font-semibold text-gray-600 hover:border-brand/40 hover:text-brand transition-colors">
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-card px-3 py-1.5 text-[0.72rem] font-semibold text-gray-600 hover:border-brand/40 hover:text-brand transition-colors">
                               <Edit3 className="h-3 w-3" /> Editar
                             </button>
                             <button onClick={() => toggleExpandido(h.id)}
                               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[0.72rem] font-semibold transition-colors
-                                ${isExp ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-600 hover:border-amber-300 hover:text-amber-700'}`}>
+                                ${isExp ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-gray-200 bg-card text-gray-600 hover:border-amber-300 hover:text-amber-700'}`}>
                               <CalendarDays className="h-3 w-3" />
                               Especiales {h.especiales.length > 0 && <span className="ml-0.5 rounded-full bg-amber-200 px-1.5 text-[0.6rem]">{h.especiales.length}</span>}
                             </button>
@@ -1627,7 +1627,7 @@ function ConfigHorariosTab() {
                         </div>
                         {!espForm && (
                           <button onClick={() => iniciarEspecial(h)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-[0.72rem] font-semibold text-amber-700 hover:bg-amber-50 transition-colors">
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-card px-3 py-1.5 text-[0.72rem] font-semibold text-amber-700 hover:bg-amber-50 transition-colors">
                             + Agregar día especial
                           </button>
                         )}
@@ -1637,7 +1637,7 @@ function ConfigHorariosTab() {
                       {h.especiales.length > 0 && (
                         <div className="mb-3 space-y-1.5">
                           {h.especiales.map(e => (
-                            <div key={e.id} className="flex items-center gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2">
+                            <div key={e.id} className="flex items-center gap-3 rounded-xl border border-amber-200 bg-card px-3 py-2">
                               <span className="text-[0.72rem] font-bold text-amber-700 w-8">{DIAS_LABELS[e.diaSemana]}</span>
                               <span className="text-[0.68rem] text-gray-500">{DIAS_FULL[e.diaSemana]}</span>
                               <span className="ml-auto font-mono text-[0.8rem] font-bold text-gray-800 tabular-nums">
@@ -1655,7 +1655,7 @@ function ConfigHorariosTab() {
 
                       {/* Formulario de nuevo especial */}
                       {espForm && (
-                        <div className="rounded-xl border border-amber-300 bg-white p-3 flex flex-wrap items-end gap-3">
+                        <div className="rounded-xl border border-amber-300 bg-card p-3 flex flex-wrap items-end gap-3">
                           <div className="flex flex-col gap-0.5">
                             <span className="text-[0.58rem] font-bold text-gray-400 uppercase">Día</span>
                             <select value={espForm.diaSemana} onChange={e => setEspForm(f => f ? { ...f, diaSemana: parseInt(e.target.value, 10) } : null)}
@@ -1805,7 +1805,7 @@ function ExentosSection() {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-3.5 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 border border-gray-200">
@@ -1828,7 +1828,7 @@ function ExentosSection() {
               className="w-full rounded-xl border border-gray-200 px-3 py-2 text-[0.8rem] text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             {!usuarioSel && usuarios.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+              <div className="absolute z-10 mt-1 w-full rounded-xl border border-gray-200 bg-card shadow-lg overflow-hidden">
                 {usuarios.map(u => (
                   <button
                     key={u.id}
@@ -1971,7 +1971,7 @@ function PosibleBajaSection() {
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-50 border border-red-200">
@@ -2111,7 +2111,7 @@ function KpiCard({
   }[color]
 
   return (
-    <div className="flex items-center gap-3.5 rounded-2xl border border-gray-200/70 bg-white p-4 shadow-sm">
+    <div className="flex items-center gap-3.5 rounded-2xl border border-gray-200/70 bg-card p-4 shadow-sm">
       <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border ${palette.wrap}`}>
         <Icon className={`h-5 w-5 ${palette.icon}`} />
       </div>
@@ -2232,7 +2232,7 @@ export function AsistenciaReportePage() {
                   onClick={() => setVista(v)}
                   title={label}
                   className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-                    vista === v ? 'bg-white text-brand shadow-sm' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                    vista === v ? 'bg-card text-brand shadow-sm' : 'text-white/60 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -2248,7 +2248,7 @@ export function AsistenciaReportePage() {
                   onClick={() => setVista(v)}
                   title={label}
                   className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-                    vista === v ? 'bg-white text-brand shadow-sm' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                    vista === v ? 'bg-card text-brand shadow-sm' : 'text-white/60 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -2278,7 +2278,7 @@ export function AsistenciaReportePage() {
       {/* ── Filtros ── */}
       {vista !== 'actas' && vista !== 'calendario' && vista !== 'config' && vista !== 'biotime' && (
         <>
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm px-4 py-3 flex flex-wrap gap-3 items-end">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm px-4 py-3 flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label className="text-[0.62rem] font-semibold text-gray-400 uppercase tracking-wider">Desde</label>
               <input
@@ -2302,7 +2302,7 @@ export function AsistenciaReportePage() {
               <select
                 value={estado}
                 onChange={(e) => setEstado(e.target.value)}
-                className="rounded-xl border border-gray-200 px-3 py-1.5 text-[0.8rem] text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 bg-white"
+                className="rounded-xl border border-gray-200 px-3 py-1.5 text-[0.8rem] text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 bg-card"
               >
                 {ESTADOS.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
               </select>
@@ -2312,7 +2312,7 @@ export function AsistenciaReportePage() {
               <select
                 value={rol}
                 onChange={(e) => setRol(e.target.value)}
-                className="rounded-xl border border-gray-200 px-3 py-1.5 text-[0.8rem] text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 bg-white"
+                className="rounded-xl border border-gray-200 px-3 py-1.5 text-[0.8rem] text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 bg-card"
               >
                 {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
@@ -2353,7 +2353,7 @@ export function AsistenciaReportePage() {
       ) : vista === 'actas' ? (
         <ActasSection />
       ) : vista === 'barras' ? (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-5">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-5">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-50 border border-red-200">

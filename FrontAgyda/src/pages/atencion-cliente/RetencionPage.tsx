@@ -169,7 +169,7 @@ export function RetencionPage() {
             </div>
             {puedeCrear && (
               <Button onClick={() => setShowNueva(true)}
-                className="bg-white !text-red-700 hover:bg-red-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                className="bg-card !text-red-700 hover:bg-red-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <Plus className="h-3.5 w-3.5" /> Nueva evaluación
               </Button>
             )}
@@ -218,7 +218,7 @@ export function RetencionPage() {
           {evaluaciones.map((e) => {
             const cfg = ESTATUS_CFG[e.estatus] ?? ESTATUS_CFG['estable']
             return (
-              <div key={e.id} className="flex items-start gap-3 rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4">
+              <div key={e.id} className="flex items-start gap-3 rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4">
                 <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl', cfg.bg)}>
                   <ShieldAlert className={clsx('h-4 w-4', cfg.text)} />
                 </div>

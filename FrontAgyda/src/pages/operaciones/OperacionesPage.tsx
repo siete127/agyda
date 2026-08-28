@@ -36,7 +36,7 @@ export function OperacionesPage() {
             ]}
           />
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+          <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
             <h2 className="mb-3 text-sm font-bold text-ink">Asignación por campaña</h2>
             <ProgressBarList
               items={data.porCampania.map((c) => ({

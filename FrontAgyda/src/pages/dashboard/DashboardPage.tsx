@@ -143,7 +143,7 @@ function LegalesManager({ isAdmin }: { isAdmin: boolean }) {
             value={uploadTitulo}
             onChange={(e) => setUploadTitulo(e.target.value)}
             placeholder="Título del documento"
-            className="w-full rounded-lg border border-surface-border bg-white px-2.5 py-1.5 text-[0.78rem] text-ink focus:border-brand focus:outline-none"
+            className="w-full rounded-lg border border-surface-border bg-card px-2.5 py-1.5 text-[0.78rem] text-ink focus:border-brand focus:outline-none"
           />
           <div className="flex justify-end gap-2">
             <button onClick={cancelUpload} disabled={loading}
@@ -187,7 +187,7 @@ function EmpresaModal({ empresaKey, isAdmin, onClose }: { empresaKey: EmpresaKey
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl animate-fade-in overflow-hidden">
+      <div className="relative w-full max-w-md rounded-2xl bg-card shadow-2xl animate-fade-in overflow-hidden">
         <div className="flex items-center gap-3 border-b border-surface-border px-5 py-4">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-light">
             {empresaKey === 'mision'  && <Target className="h-5 w-5 text-brand" />}
@@ -321,7 +321,7 @@ export function DashboardPage() {
     bienvenida: {
       label: 'Bienvenida',
       node: (
-        <div className="dash-card flex h-full flex-col rounded-2xl border border-surface-border bg-white p-6">
+        <div className="dash-card flex h-full flex-col rounded-2xl border border-surface-border bg-card p-6">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
@@ -362,7 +362,7 @@ export function DashboardPage() {
     legales: {
       label: 'Misión / Visión / Valores / Legales',
       node: (
-        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white p-6">
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-card p-6">
           <h3 className="text-[0.9rem] font-semibold text-ink mb-4">Legales</h3>
           <div className="flex items-start justify-between">
             {EMPRESA_ITEMS.map((item) => (
@@ -381,7 +381,7 @@ export function DashboardPage() {
     marca: {
       label: 'Marca / mascota',
       node: (
-        <div className="dash-card relative flex h-full items-center justify-center overflow-hidden rounded-2xl border border-surface-border bg-white p-3">
+        <div className="dash-card relative flex h-full items-center justify-center overflow-hidden rounded-2xl border border-surface-border bg-card p-3">
           <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl"
             style={{ background: 'linear-gradient(160deg, #10203F 0%, #0B1730 100%)' }}>
             <video src="/dashboard-mascota.mp4" poster="/dashboard-mascota-poster.jpg"
@@ -393,7 +393,7 @@ export function DashboardPage() {
     'lo-importante': {
       label: 'Lo importante, al día',
       node: (
-        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white p-5 overflow-auto">
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-card p-5 overflow-auto">
           <h3 className="text-[0.9rem] font-semibold text-ink mb-3">Lo importante, al día</h3>
           <div className="flex flex-col">
             {RESUMEN.map((s, i) => (
@@ -428,7 +428,7 @@ export function DashboardPage() {
     'ultimas-noticias': {
       label: 'Últimas noticias',
       node: (
-        <div className="dash-card flex h-full flex-col rounded-2xl border border-surface-border bg-white overflow-hidden">
+        <div className="dash-card flex h-full flex-col rounded-2xl border border-surface-border bg-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
             <h3 className="text-[0.9rem] font-semibold text-ink">Últimas noticias</h3>
             {noticias.length > 0 && (
@@ -457,7 +457,7 @@ export function DashboardPage() {
     'proximos-eventos': {
       label: 'Próximos eventos',
       node: (
-        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
             <h3 className="text-[0.9rem] font-semibold text-ink">Próximos eventos</h3>
             {eventos.length > 0 && (
@@ -505,7 +505,7 @@ export function DashboardPage() {
     cumpleanos: {
       label: 'Cumpleaños del mes',
       node: (
-        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-card overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
             <div className="flex items-center gap-2">
               <Gift className="h-4 w-4 text-brand" />
@@ -543,7 +543,7 @@ export function DashboardPage() {
     soporte: {
       label: 'Soporte y sugerencias',
       node: (
-        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
             <h3 className="text-[0.9rem] font-semibold text-ink">Soporte y sugerencias</h3>
           </div>
@@ -561,7 +561,7 @@ export function DashboardPage() {
     'accesos-rapidos': {
       label: 'Accesos rápidos',
       node: (
-        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-card overflow-hidden">
           <div className="px-5 py-4 border-b border-surface-border">
             <h3 className="text-[0.9rem] font-semibold text-ink">Accesos rápidos</h3>
           </div>
@@ -694,7 +694,7 @@ function DashboardGrid({ cards, isAdmin }: {
             </>
           ) : (
             <button onClick={iniciarEdicion}
-              className="ml-auto flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-3 py-1.5 font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors">
+              className="ml-auto flex items-center gap-1.5 rounded-lg border border-surface-border bg-card px-3 py-1.5 font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors">
               <LayoutGrid className="h-3.5 w-3.5" /> Editar diseño
             </button>
           )}
@@ -708,7 +708,7 @@ function DashboardGrid({ cards, isAdmin }: {
           <div className="flex flex-wrap gap-2">
             {ocultas.filter((c) => cards[c.id]).map((c) => (
               <button key={c.id} onClick={() => setVisible(c.id, true)}
-                className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-2.5 py-1.5 text-[0.72rem] font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors">
+                className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-card px-2.5 py-1.5 text-[0.72rem] font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors">
                 <Plus className="h-3 w-3" /> {cards[c.id].label}
               </button>
             ))}
@@ -717,7 +717,7 @@ function DashboardGrid({ cards, isAdmin }: {
       )}
 
       {visibles.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-surface-border bg-white py-16 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-surface-border bg-card py-16 text-center">
           <LayoutGrid className="h-7 w-7 text-ink-tertiary" />
           <p className="text-sm font-semibold text-ink-secondary">Sin tarjetas en el inicio</p>
           {isAdmin && <p className="text-[0.75rem] text-ink-tertiary">Pulsa "Editar diseño" para agregar tarjetas.</p>}

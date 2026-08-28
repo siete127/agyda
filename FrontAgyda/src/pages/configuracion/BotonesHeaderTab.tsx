@@ -70,7 +70,7 @@ export function BotonesHeaderTab() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card">
         <div className="divide-y divide-gray-50">
           {ordenados.map((b) => {
             const Icon = META[b.key].icon
@@ -95,7 +95,7 @@ export function BotonesHeaderTab() {
                         checked={b.visible}
                         onChange={(e) => patch(b.key, { visible: e.target.checked })}
                       />
-                      <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', b.visible ? 'translate-x-4' : 'translate-x-0')} />
+                      <span className={clsx('inline-block h-4 w-4 rounded-full bg-card shadow transform transition-transform', b.visible ? 'translate-x-4' : 'translate-x-0')} />
                     </span>
                     <span className="text-[0.78rem] font-semibold text-gray-600">Visible</span>
                   </label>
@@ -104,7 +104,7 @@ export function BotonesHeaderTab() {
                     value={b.label}
                     onChange={(e) => patch(b.key, { label: e.target.value })}
                     placeholder="Nombre del botón"
-                    className="min-w-[10rem] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[0.82rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                    className="min-w-[10rem] flex-1 rounded-lg border border-gray-200 bg-card px-3 py-2 text-[0.82rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
                   />
                 </div>
 
@@ -114,7 +114,7 @@ export function BotonesHeaderTab() {
                     value={b.url}
                     onChange={(e) => patch(b.key, { url: e.target.value })}
                     placeholder="https://…  (vacío = función interna)"
-                    className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-[0.8rem] font-mono outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                    className="w-full rounded-lg border border-gray-200 bg-card py-2 pl-9 pr-3 text-[0.8rem] font-mono outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
                   />
                 </div>
                 <p className="mt-1 pl-1 text-[0.68rem] text-gray-400">{META[b.key].nota}</p>

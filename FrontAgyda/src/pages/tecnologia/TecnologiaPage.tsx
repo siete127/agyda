@@ -47,7 +47,7 @@ export function TecnologiaPage() {
             ]}
           />
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+          <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
             <h2 className="mb-3 text-sm font-bold text-ink">Incidentes por severidad</h2>
             <StatusBar
               segments={data.porSeveridad.map((s) => ({

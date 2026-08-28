@@ -28,7 +28,7 @@ import toast from 'react-hot-toast'
 /* ── Skeleton ── */
 function SkeletonRow() {
   return (
-    <div className="rounded-2xl border border-surface-border bg-white p-4 animate-pulse space-y-2">
+    <div className="rounded-2xl border border-surface-border bg-card p-4 animate-pulse space-y-2">
       <div className="flex gap-2">
         <div className="h-3 w-12 rounded-full bg-surface" />
         <div className="h-3 w-20 rounded-full bg-surface" />
@@ -620,14 +620,14 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
         <div className="mb-1.5 flex gap-1.5">
           <button
             type="button"
-            className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors', modoKb === 'vincular' ? 'bg-emerald-600 text-white' : 'bg-white text-ink-secondary border border-emerald-200')}
+            className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors', modoKb === 'vincular' ? 'bg-emerald-600 text-white' : 'bg-card text-ink-secondary border border-emerald-200')}
             onClick={() => setModoKb(modoKb === 'vincular' ? null : 'vincular')}
           >
             Vincular existente
           </button>
           <button
             type="button"
-            className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors', modoKb === 'crear' ? 'bg-emerald-600 text-white' : 'bg-white text-ink-secondary border border-emerald-200')}
+            className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors', modoKb === 'crear' ? 'bg-emerald-600 text-white' : 'bg-card text-ink-secondary border border-emerald-200')}
             onClick={() => setModoKb(modoKb === 'crear' ? null : 'crear')}
           >
             Crear artículo nuevo
@@ -643,7 +643,7 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
               placeholder="Buscar artículo..."
             />
             {articulosKb.length > 0 && (
-              <div className="space-y-1 max-h-28 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-1.5">
+              <div className="space-y-1 max-h-28 overflow-y-auto rounded-lg border border-emerald-200 bg-card p-1.5">
                 {articulosKb.map((a) => (
                   <div
                     key={a.id}
@@ -662,7 +662,7 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
         )}
 
         {modoKb === 'crear' && (
-          <div className="space-y-1.5 rounded-lg border border-emerald-200 bg-white p-2">
+          <div className="space-y-1.5 rounded-lg border border-emerald-200 bg-card p-2">
             <input
               value={nuevoTituloKb}
               onChange={(e) => setNuevoTituloKb(e.target.value)}
@@ -811,14 +811,14 @@ function PanelTransferir({ ticket, onDone }: { ticket: Ticket; onDone: () => voi
                 'flex items-center gap-3 cursor-pointer rounded-xl border px-3 py-2 transition-colors',
                 seleccionado === s.usuarioId
                   ? 'border-purple-400 bg-purple-100'
-                  : 'border-purple-200 bg-white hover:border-purple-300',
+                  : 'border-purple-200 bg-card hover:border-purple-300',
               )}
             >
               <div className={clsx(
                 'h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors',
                 seleccionado === s.usuarioId ? 'border-purple-500 bg-purple-500' : 'border-surface-border',
               )}>
-                {seleccionado === s.usuarioId && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                {seleccionado === s.usuarioId && <div className="h-1.5 w-1.5 rounded-full bg-card" />}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[0.78rem] font-semibold text-ink">{s.nombre}</p>
@@ -876,7 +876,7 @@ function KanbanCard({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) 
   return (
     <button
       onClick={onOpen}
-      className="group flex w-full flex-col gap-1.5 rounded-xl border border-surface-border bg-white p-3 text-left transition-colors hover:border-brand/30"
+      className="group flex w-full flex-col gap-1.5 rounded-xl border border-surface-border bg-card p-3 text-left transition-colors hover:border-brand/30"
     >
       <div className="flex items-center justify-between gap-1">
         <span className="text-[0.62rem] font-mono font-bold text-ink-tertiary">#{ticket.id}</span>
@@ -934,7 +934,7 @@ function TicketCard({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) 
   return (
     <button
       onClick={onOpen}
-      className="group flex flex-col items-center gap-2.5 rounded-2xl border border-surface-border bg-white px-4 py-5 text-center transition-colors hover:border-brand/30"
+      className="group flex flex-col items-center gap-2.5 rounded-2xl border border-surface-border bg-card px-4 py-5 text-center transition-colors hover:border-brand/30"
     >
       <span className="text-[0.65rem] font-mono font-bold text-ink-tertiary">#{ticket.id}</span>
 
@@ -1071,7 +1071,7 @@ function PanelEvidencias({ ticket, isTI, userId }: { ticket: Ticket; isTI: boole
       ) : (
         <ul className="space-y-1">
           {evidencias.map((ev) => (
-            <li key={ev.id} className="flex items-center justify-between gap-2 rounded-lg bg-white border border-surface-border px-2.5 py-1.5">
+            <li key={ev.id} className="flex items-center justify-between gap-2 rounded-lg bg-card border border-surface-border px-2.5 py-1.5">
               <a href={ev.detalle ?? '#'} target="_blank" rel="noreferrer" className="truncate text-[0.72rem] text-brand hover:underline">
                 {ev.detalle?.split('/').pop() ?? `Evidencia #${ev.id}`}
               </a>
@@ -1354,7 +1354,7 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
                   key={m}
                   onClick={() => ponerEnEspera.mutate(m)}
                   disabled={ponerEnEspera.isPending}
-                  className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[0.7rem] font-semibold text-amber-700 hover:border-amber-400 disabled:opacity-50"
+                  className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[0.7rem] font-semibold text-amber-700 hover:border-amber-400 disabled:opacity-50"
                 >
                   {MOTIVO_ESPERA_LABELS[m]}
                 </button>
@@ -1604,7 +1604,7 @@ function ProductividadCard({ p, maxTotal, tipo }: { p: PersonaStat; maxTotal: nu
   const ringColor = resueltosPct >= 80 ? 'text-emerald-500' : resueltosPct >= 50 ? 'text-amber-500' : 'text-red-400'
 
   return (
-    <div className="rounded-2xl border border-surface-border bg-white p-4 space-y-3">
+    <div className="rounded-2xl border border-surface-border bg-card p-4 space-y-3">
       {/* Nombre + porcentaje */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -1700,7 +1700,7 @@ function VistaProductividad({ tickets }: { tickets: Ticket[] }) {
           onClick={() => setTab('solucionadores')}
           className={clsx(
             'rounded-xl px-4 py-1.5 text-[0.78rem] font-semibold border transition-all',
-            tab === 'solucionadores' ? 'bg-brand text-white border-brand' : 'bg-white text-ink-secondary border-surface-border hover:border-brand/40',
+            tab === 'solucionadores' ? 'bg-brand text-white border-brand' : 'bg-card text-ink-secondary border-surface-border hover:border-brand/40',
           )}
         >
           🛠 Solucionadores
@@ -1709,7 +1709,7 @@ function VistaProductividad({ tickets }: { tickets: Ticket[] }) {
           onClick={() => setTab('solicitantes')}
           className={clsx(
             'rounded-xl px-4 py-1.5 text-[0.78rem] font-semibold border transition-all',
-            tab === 'solicitantes' ? 'bg-brand text-white border-brand' : 'bg-white text-ink-secondary border-surface-border hover:border-brand/40',
+            tab === 'solicitantes' ? 'bg-brand text-white border-brand' : 'bg-card text-ink-secondary border-surface-border hover:border-brand/40',
           )}
         >
           👤 Solicitantes
@@ -1727,7 +1727,7 @@ function VistaProductividad({ tickets }: { tickets: Ticket[] }) {
 
       {/* Grid de cards */}
       {stats.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-surface-border bg-white py-16 text-ink-tertiary">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-surface-border bg-card py-16 text-ink-tertiary">
           <BarChart2 className="h-10 w-10 text-surface-border" />
           <p className="text-sm">Sin datos</p>
         </div>
@@ -1753,7 +1753,7 @@ function formatDuracion(minutos: number | null) {
 
 function TablaTickets({ tickets }: { tickets: Ticket[] }) {
   return (
-    <div className="rounded-2xl border border-surface-border bg-white overflow-x-auto">
+    <div className="rounded-2xl border border-surface-border bg-card overflow-x-auto">
       <table className="w-full text-[0.78rem]">
         <thead>
           <tr className="border-b border-surface-border text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">
@@ -1864,7 +1864,7 @@ function PanelApiKeys({ onClose }: { onClose: () => void }) {
         {nuevaKey && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
             <p className="text-[0.72rem] font-semibold text-amber-800">Guarda esta key ahora — no se puede volver a mostrar</p>
-            <code className="block break-all rounded-lg bg-white px-2 py-1.5 text-[0.75rem] text-ink">{nuevaKey}</code>
+            <code className="block break-all rounded-lg bg-card px-2 py-1.5 text-[0.75rem] text-ink">{nuevaKey}</code>
           </div>
         )}
         <div className="flex gap-2">
@@ -1971,7 +1971,7 @@ export function TicketsPage() {
     <div className="space-y-5 animate-fade-in">
 
       {/* ── Header banner ── */}
-      <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+      <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
         <div className="relative overflow-hidden px-6 py-5" style={{ background: 'linear-gradient(135deg, #0B1730 0%, #14274E 100%)' }}>
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
           <div className="pointer-events-none absolute right-20 bottom-0 h-24 w-24 rounded-full bg-white/5" />
@@ -2065,7 +2065,7 @@ export function TicketsPage() {
               )}
               <Button
                 onClick={() => setShowNuevo(true)}
-                className="bg-white !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3"
+                className="bg-card !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3"
               >
                 <Plus className="h-3.5 w-3.5" /> Nuevo ticket
               </Button>
@@ -2163,7 +2163,7 @@ export function TicketsPage() {
       {/* ── Stats ── */}
       <div className="grid grid-cols-3 gap-3">
         {stats.map((s) => (
-          <div key={s.label} className="flex items-center gap-3 rounded-2xl border border-surface-border bg-white p-4">
+          <div key={s.label} className="flex items-center gap-3 rounded-2xl border border-surface-border bg-card p-4">
             <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-light">
               <s.icon className="h-5 w-5 text-brand" />
             </div>
@@ -2181,7 +2181,7 @@ export function TicketsPage() {
           {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-surface-border bg-white py-20">
+        <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-surface-border bg-card py-20">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-light">
             <MessageCircle className="h-7 w-7 text-brand" />
           </div>

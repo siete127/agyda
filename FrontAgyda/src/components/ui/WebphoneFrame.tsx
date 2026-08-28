@@ -212,19 +212,19 @@ export function WebphoneFrame() {
   return (
     <div
       ref={homeRef}
-      className="fixed z-10 overflow-hidden rounded-2xl border border-gray-200/60 bg-white shadow-sm"
+      className="fixed z-10 overflow-hidden rounded-2xl border border-gray-200/60 bg-card shadow-sm"
       style={activo && rect && !inPip
         ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
         : { top: 0, left: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }
       }
     >
       {activo && loading && !loadError && !inPip && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-card">
           <span className="h-8 w-8 animate-spin rounded-full border-4 border-brand/20 border-t-brand" />
         </div>
       )}
       {activo && loadError && !inPip && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card px-6 text-center">
           <p className="text-sm font-semibold text-gray-700">No se pudo cargar {vista.label}</p>
           <p className="text-xs text-gray-400 max-w-sm">
             La página no respondió en {LOAD_TIMEOUT_MS / 1000}s. Puede que el sitio bloquee ser mostrado dentro de otras

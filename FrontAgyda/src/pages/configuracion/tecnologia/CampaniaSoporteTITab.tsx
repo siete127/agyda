@@ -39,7 +39,7 @@ export function CampaniaSoporteTITab() {
 
   if (!campania) {
     return (
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="text-sm text-ink-tertiary">
           La campaña "Soporte TI" todavía no existe — se crea automáticamente la primera vez que un
           empleado inicia un chat interno de soporte desde el widget flotante.
@@ -50,7 +50,7 @@ export function CampaniaSoporteTITab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Megaphone className="h-4 w-4 text-brand" />

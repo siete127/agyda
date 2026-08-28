@@ -164,7 +164,7 @@ export function ExamenFormModal({ cursoId, onClose }: { cursoId: number; onClose
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-white pb-1">
+        <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-card pb-1">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button isLoading={crear.isPending} disabled={!canSave} onClick={() => crear.mutate()}>
             Crear examen

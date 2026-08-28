@@ -106,7 +106,7 @@ export function KbPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+      <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
         <div className="relative overflow-hidden px-6 py-5" style={{ background: 'linear-gradient(135deg, #0B1730 0%, #14274E 100%)' }}>
           <div className="relative flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -119,7 +119,7 @@ export function KbPage() {
               </div>
             </div>
             {isTI && (
-              <Button onClick={() => setEditing('nuevo')} className="bg-white !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+              <Button onClick={() => setEditing('nuevo')} className="bg-card !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <Plus className="h-3.5 w-3.5" /> Nuevo contenido
               </Button>
             )}

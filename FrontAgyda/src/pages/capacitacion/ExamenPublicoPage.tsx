@@ -13,7 +13,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function BrandHeader() {
   return (
-    <div className="bg-white border-b border-gray-200 px-6 py-4">
+    <div className="bg-card border-b border-gray-200 px-6 py-4">
       <div className="max-w-xl mx-auto flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10">
           <GraduationCap className="h-5 w-5 text-brand" />
@@ -94,7 +94,7 @@ export function ExamenPublicoPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <BrandHeader />
       <div className="max-w-xl mx-auto px-4 py-10">
-        <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm">
+        <div className="rounded-2xl bg-card border border-gray-200 p-6 shadow-sm">
           <span className="chip bg-brand/10 text-brand text-[0.65rem]">Bienvenido a AGYDA</span>
           <h1 className="text-lg font-bold text-gray-900 mt-2">{examen?.titulo}</h1>
           {examen?.descripcion && <p className="text-sm text-gray-500 mt-1">{examen.descripcion}</p>}

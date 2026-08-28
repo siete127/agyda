@@ -94,7 +94,7 @@ function TareaCard({ tarea, onMover, onEliminar, onEditar, puedeMover, puedeElim
       onDragStart={(e) => { setDragging(true); onDragStart?.(e, tarea.id) }}
       onDragEnd={() => setDragging(false)}
       className={clsx(
-        'rounded-xl bg-white border transition-all duration-150 p-3 space-y-2',
+        'rounded-xl bg-card border transition-all duration-150 p-3 space-y-2',
         dragging ? 'opacity-40 scale-95 border-brand/50' : '',
         !dragging && hovered ? 'border-brand/30 shadow-card-md -translate-y-0.5' : 'border-gray-200/60 shadow-card',
         puedeMover ? 'cursor-grab active:cursor-grabbing' : '',
@@ -546,9 +546,9 @@ function ProyectoKanban({ proyecto, onVolver }: { proyecto: Proyecto; onVolver: 
           {/* Fila 2: selector de vista + acciones admin agrupadas */}
           <div className="relative flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-1 rounded-lg bg-white/10 p-1">
-              <button onClick={() => setVista('kanban')} className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vista === 'kanban' ? 'bg-white text-brand' : 'text-white/70 hover:text-white')}>Kanban</button>
-              <button onClick={() => setVista('cronograma')} className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vista === 'cronograma' ? 'bg-white text-brand' : 'text-white/70 hover:text-white')}>Cronograma</button>
-              <button onClick={() => setVista('calendario')} className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vista === 'calendario' ? 'bg-white text-brand' : 'text-white/70 hover:text-white')}>Calendario</button>
+              <button onClick={() => setVista('kanban')} className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vista === 'kanban' ? 'bg-card text-brand' : 'text-white/70 hover:text-white')}>Kanban</button>
+              <button onClick={() => setVista('cronograma')} className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vista === 'cronograma' ? 'bg-card text-brand' : 'text-white/70 hover:text-white')}>Cronograma</button>
+              <button onClick={() => setVista('calendario')} className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vista === 'calendario' ? 'bg-card text-brand' : 'text-white/70 hover:text-white')}>Calendario</button>
             </div>
             {puedeAdministrar && (
               <div className="flex items-center gap-2">
@@ -558,7 +558,7 @@ function ProyectoKanban({ proyecto, onVolver }: { proyecto: Proyecto; onVolver: 
                 <Button size="sm" onClick={() => setShowMiembros(true)} className="bg-white/10 !text-white hover:bg-white/20 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Users className="h-3.5 w-3.5" /> Miembros
                 </Button>
-                <Button size="sm" onClick={abrirNuevaTarea} className="bg-white !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                <Button size="sm" onClick={abrirNuevaTarea} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Plus className="h-3.5 w-3.5" /> Tarea
                 </Button>
               </div>
@@ -589,7 +589,7 @@ function ProyectoKanban({ proyecto, onVolver }: { proyecto: Proyecto; onVolver: 
               return (
                 <div
                   key={m.id}
-                  className="flex items-center gap-1.5 rounded-full bg-white border border-gray-200 px-2 py-0.5 shadow-sm transition-all duration-150 origin-center hover:scale-110 hover:shadow-md hover:border-brand/40 hover:z-10 relative"
+                  className="flex items-center gap-1.5 rounded-full bg-card border border-gray-200 px-2 py-0.5 shadow-sm transition-all duration-150 origin-center hover:scale-110 hover:shadow-md hover:border-brand/40 hover:z-10 relative"
                   title={`${m.nombre} · ${m.rol}`}
                 >
                   <span className={clsx('flex h-5 w-5 items-center justify-center rounded-full text-[0.58rem] font-bold flex-shrink-0', avatarClass)}>
@@ -644,7 +644,7 @@ function ProyectoKanban({ proyecto, onVolver }: { proyecto: Proyecto; onVolver: 
                     <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: col.color }} />
                     <h3 className="text-[0.8rem] font-bold text-gray-700">{col.nombre}</h3>
                   </div>
-                  <span className="text-[0.65rem] bg-white rounded-full px-2 py-0.5 text-gray-500 border border-gray-200 font-semibold">{colTareas.length}</span>
+                  <span className="text-[0.65rem] bg-card rounded-full px-2 py-0.5 text-gray-500 border border-gray-200 font-semibold">{colTareas.length}</span>
                 </div>
                 {colTareas.length === 0 ? (
                   <div className={clsx('flex items-center justify-center rounded-xl border-2 border-dashed py-6 transition-colors', isOver ? 'border-brand/40 bg-brand/5' : 'border-gray-200')}>
@@ -767,7 +767,7 @@ function ProyectoCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={clsx(
-        'group/admin relative flex flex-col gap-3 rounded-2xl bg-white border transition-all duration-200 p-5',
+        'group/admin relative flex flex-col gap-3 rounded-2xl bg-card border transition-all duration-200 p-5',
         hovered ? '-translate-y-1 shadow-card-lg border-gray-300/60' : 'shadow-card border-gray-200/60',
       )}
     >
@@ -777,7 +777,7 @@ function ProyectoCard({
           {onEditar && (
             <button
               onClick={(e) => { e.stopPropagation(); onEditar() }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow border border-gray-200 text-brand hover:bg-brand hover:text-white transition-colors"
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-card shadow border border-gray-200 text-brand hover:bg-brand hover:text-white transition-colors"
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
@@ -785,7 +785,7 @@ function ProyectoCard({
           {onEliminar && (
             <button
               onClick={(e) => { e.stopPropagation(); onEliminar() }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow border border-gray-200 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-card shadow border border-gray-200 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -1210,13 +1210,13 @@ export function ProyectosPage() {
               <div className="flex items-center gap-1 rounded-lg bg-white/10 p-1">
                 <button
                   onClick={() => setVistaPrincipal('lista')}
-                  className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vistaPrincipal === 'lista' ? 'bg-white text-brand' : 'text-white/70 hover:text-white')}
+                  className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vistaPrincipal === 'lista' ? 'bg-card text-brand' : 'text-white/70 hover:text-white')}
                 >
                   Lista
                 </button>
                 <button
                   onClick={() => setVistaPrincipal('dashboard')}
-                  className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vistaPrincipal === 'dashboard' ? 'bg-white text-brand' : 'text-white/70 hover:text-white')}
+                  className={clsx('rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors', vistaPrincipal === 'dashboard' ? 'bg-card text-brand' : 'text-white/70 hover:text-white')}
                 >
                   Dashboard
                 </button>
@@ -1237,7 +1237,7 @@ export function ProyectosPage() {
                 </button>
               )}
               {isTI && (
-                <Button onClick={() => setShowNuevo(true)} className="bg-white !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                <Button onClick={() => setShowNuevo(true)} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Plus className="h-3.5 w-3.5" /> Nuevo proyecto
                 </Button>
               )}
@@ -1355,7 +1355,7 @@ export function ProyectosPage() {
                   )}
                 >
                   <span className={clsx(
-                    'absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200',
+                    'absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-card shadow transition-transform duration-200',
                     configAD ? 'translate-x-5' : 'translate-x-0'
                   )} />
                 </button>

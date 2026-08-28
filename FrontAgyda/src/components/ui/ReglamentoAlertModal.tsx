@@ -78,7 +78,7 @@ export function ReglamentoAlertModal() {
 
       {showPdf ? (
         /* ── Panel visor de PDF ── */
-        <div className="relative flex flex-col w-full max-w-3xl h-[90vh] rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up border border-indigo-100">
+        <div className="relative flex flex-col w-full max-w-3xl h-[90vh] rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up border border-indigo-100">
           {/* Header del visor */}
           <div className="flex items-center justify-between px-5 py-3 bg-indigo-600 flex-shrink-0">
             <div className="flex items-center gap-2">
@@ -116,7 +116,7 @@ export function ReglamentoAlertModal() {
           </div>
 
           {/* Footer con botón de aceptar */}
-          <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+          <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 bg-card flex-shrink-0">
             <p className="text-xs text-gray-400">Debes leer el reglamento antes de aceptar.</p>
             <button
               onClick={() => aceptar.mutate()}
@@ -132,7 +132,7 @@ export function ReglamentoAlertModal() {
         </div>
       ) : (
         /* ── Tarjeta inicial ── */
-        <div className="relative w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up border-2 border-indigo-100">
+        <div className="relative w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up border-2 border-indigo-100">
           <div className="h-1.5 w-full bg-gradient-to-r from-indigo-600 to-indigo-400" />
 
           <div className="px-7 py-8 flex flex-col items-center gap-5 text-center">

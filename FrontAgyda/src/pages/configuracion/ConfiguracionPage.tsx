@@ -17,6 +17,7 @@ import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
 import { DashboardDisenoTab } from './DashboardDisenoTab'
+import { TemaTab } from './TemaTab'
 // ── Secciones de Configuración > Tecnología/TI (módulo de Soporte TI) ──
 import { GeneralTab } from './tecnologia/GeneralTab'
 import { MesaServicioTab } from './tecnologia/MesaServicioTab'
@@ -51,6 +52,7 @@ const SCREENS: Record<string, ComponentType> = {
   'pers-branding': BrandingTab,
   'pers-botones': BotonesHeaderTab,
   'pers-dashboard': DashboardDisenoTab,
+  tema: TemaTab,
   'webphone-vistas': WebphoneVistasTab,
   'webphone-credenciales': WebphoneCredencialesTab,
   notificaciones: NotificacionesCorreoTab,
@@ -219,7 +221,7 @@ function HomeView({ tree, onOpen }: { tree: ConfigNode[]; onOpen: (key: string) 
           <button
             key={cat.key}
             onClick={() => onOpen(cat.key)}
-            className="group flex flex-col items-start gap-3 rounded-2xl border border-gray-100 bg-white p-5 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
+            className="group flex flex-col items-start gap-3 rounded-2xl border border-gray-100 bg-card p-5 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
           >
             <div className={clsx('flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-sm', style.gradient)}>
               <Icon className="h-6 w-6" />
@@ -266,7 +268,7 @@ function CategoryView({
   return (
     <div className="space-y-4">
       {/* Header ilustrado */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -321,7 +323,7 @@ function SubsectionGrid({ node, style, onSelect }: { node: ConfigNode; style: ty
           <button
             key={child.key}
             onClick={() => onSelect(child)}
-            className="group flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 text-left shadow-sm transition-all hover:border-gray-200 hover:shadow-card"
+            className="group flex items-center gap-3 rounded-xl border border-gray-100 bg-card px-4 py-3 text-left shadow-sm transition-all hover:border-gray-200 hover:shadow-card"
           >
             <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', style.soft)}>
               {isImplemented ? (
@@ -344,7 +346,7 @@ function SubsectionGrid({ node, style, onSelect }: { node: ConfigNode; style: ty
 
 function PlaceholderPanel({ node }: { node: ConfigNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-gray-200/60 bg-white py-20 shadow-card">
+    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-gray-200/60 bg-card py-20 shadow-card">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
         <HardHat className="h-8 w-8 text-amber-500" />
       </div>
@@ -361,7 +363,7 @@ function PlaceholderPanel({ node }: { node: ConfigNode }) {
 function SearchResultsView({ results, onSelect }: { results: { node: ConfigNode; trail: ConfigNode[] }[]; onSelect: (node: ConfigNode) => void }) {
   if (results.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-2xl border border-gray-200/60 bg-white py-16 text-sm text-gray-400 shadow-card">
+      <div className="flex items-center justify-center rounded-2xl border border-gray-200/60 bg-card py-16 text-sm text-gray-400 shadow-card">
         Sin resultados
       </div>
     )
@@ -375,7 +377,7 @@ function SearchResultsView({ results, onSelect }: { results: { node: ConfigNode;
           <button
             key={node.key}
             onClick={() => onSelect(node)}
-            className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-2.5 text-left shadow-sm transition-colors hover:border-gray-200"
+            className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-card px-4 py-2.5 text-left shadow-sm transition-colors hover:border-gray-200"
           >
             <div className={clsx('h-1.5 w-1.5 flex-shrink-0 rounded-full', style.text.replace('text-', 'bg-'))} />
             <div className="min-w-0 flex-1">

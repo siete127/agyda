@@ -80,7 +80,7 @@ export function CRMEmailModal({ opoId, contacto, onClose }: {
           ) : (
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {emails.map((e) => (
-                <div key={e.id} className="flex gap-2.5 rounded-xl border border-gray-100 bg-white p-2.5">
+                <div key={e.id} className="flex gap-2.5 rounded-xl border border-gray-100 bg-card p-2.5">
                   <div className={clsx('mt-0.5 flex-shrink-0', e.ok ? 'text-emerald-500' : 'text-red-400')}>
                     {e.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                   </div>

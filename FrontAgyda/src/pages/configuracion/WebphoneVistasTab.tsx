@@ -53,7 +53,7 @@ export function WebphoneVistasTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-3 text-sm font-semibold text-ink">Nueva vista</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto_auto_auto]">
           <input
@@ -91,7 +91,7 @@ export function WebphoneVistasTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-3 text-sm font-semibold text-ink">Vistas configuradas</p>
         {isLoading && <p className="text-xs text-ink-tertiary">Cargando...</p>}
         <div className="space-y-2">

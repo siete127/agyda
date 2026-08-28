@@ -219,7 +219,7 @@ export function Sidebar() {
           {BUBBLES.map((b, i) => (
             <span
               key={i}
-              className="animate-bubble-rise absolute rounded-full bg-white"
+              className="animate-bubble-rise absolute rounded-full bg-card"
               style={{
                 left: `${b.left}%`,
                 bottom: `-${b.size}px`,

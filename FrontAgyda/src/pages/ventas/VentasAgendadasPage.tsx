@@ -87,7 +87,7 @@ function AgendadasContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar cliente o teléfono..."
-            className="rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 w-64"
+            className="rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 w-64"
           />
         </div>
       </div>
@@ -95,7 +95,7 @@ function AgendadasContent() {
       {isLoading ? (
         <div className="flex justify-center py-10"><Spinner size="lg" /></div>
       ) : ventas.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200/60 bg-white py-16 gap-3 text-gray-400">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200/60 bg-card py-16 gap-3 text-gray-400">
           <CalendarClock className="h-10 w-10 opacity-25" />
           <p className="text-[0.85rem]">No hay ventas agendadas</p>
         </div>
@@ -125,7 +125,7 @@ function Section({ title, badge, badgeColor, ventas, completar, eliminar }: {
   eliminar:  ReturnType<typeof useMutation<void, Error, number>>
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-3.5">
         <h2 className="text-[0.85rem] font-bold text-gray-800">{title}</h2>
         <span className={clsx('rounded-full px-2 py-0.5 text-[0.68rem] font-bold', badgeColor)}>{badge}</span>

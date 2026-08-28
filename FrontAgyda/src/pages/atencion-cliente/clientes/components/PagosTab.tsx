@@ -172,7 +172,7 @@ export function PagosTab({ contactoId }: { contactoId: number }) {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <p className="text-[0.8rem] font-bold text-gray-700">Recordatorios de pago</p>
         {puedeGestionar && (

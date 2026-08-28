@@ -105,7 +105,7 @@ export function MusicBubble() {
         {isPlaying ? (
           <div className="flex items-end gap-0.5 h-5">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="w-1 rounded-full bg-white"
+              <div key={i} className="w-1 rounded-full bg-card"
                 style={{ height: `${35 + i * 25}%`, animation: `music-bar 0.7s ease-in-out ${i * 0.18}s infinite alternate` }} />
             ))}
           </div>
@@ -153,7 +153,7 @@ export function MusicBubble() {
               {isPlaying ? (
                 <div className="flex items-end gap-0.5 h-5">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="w-1 rounded-full bg-white"
+                    <div key={i} className="w-1 rounded-full bg-card"
                       style={{ height: `${30 + i * 25}%`, animation: `music-bar 0.7s ease-in-out ${i * 0.18}s infinite alternate` }} />
                   ))}
                 </div>
@@ -180,7 +180,7 @@ export function MusicBubble() {
             <SkipBack className="h-4 w-4" />
           </button>
           <button onClick={togglePlayPause}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-brand shadow-lg transition-all hover:scale-105 active:scale-95">
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-brand shadow-lg transition-all hover:scale-105 active:scale-95">
             {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 translate-x-0.5" />}
           </button>
           <button onClick={next} disabled={tracks.length < 2}
@@ -227,7 +227,7 @@ export function MusicBubble() {
                   {active && isPlaying ? (
                     <div className="flex items-end gap-0.5 h-3.5">
                       {[1, 2, 3].map((i) => (
-                        <div key={i} className="w-0.5 rounded-full bg-white"
+                        <div key={i} className="w-0.5 rounded-full bg-card"
                           style={{ height: `${35 + i * 25}%`, animation: `music-bar 0.7s ease-in-out ${i * 0.18}s infinite alternate` }} />
                       ))}
                     </div>

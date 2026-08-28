@@ -24,7 +24,7 @@ export function ModulosEmpresaTab() {
 
   if (!esSuperAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-200/60 bg-white py-16 shadow-card">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-200/60 bg-card py-16 shadow-card">
         <ShieldAlert className="h-8 w-8 text-gray-300" />
         <p className="text-sm font-semibold text-gray-500">No tienes acceso a esta sección</p>
       </div>
@@ -41,7 +41,7 @@ export function ModulosEmpresaTab() {
       ) : !empresaActual ? (
         <p className="py-10 text-center text-sm text-gray-400">No se encontró la empresa actual</p>
       ) : (
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-card overflow-hidden">
+        <div className="rounded-2xl border border-gray-100 bg-card shadow-card overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3.5">
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-50">
               <Building2 className="h-4.5 w-4.5 text-indigo-600" />

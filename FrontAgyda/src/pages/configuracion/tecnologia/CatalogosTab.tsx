@@ -206,7 +206,7 @@ function ProveedoresYServiciosPanel() {
 
   return (
     <>
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Proveedores</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Terceros que dan soporte a servicios externos (ej. ISP, VICIdial hosting, licenciamiento).
@@ -232,7 +232,7 @@ function ProveedoresYServiciosPanel() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Servicios</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Servicios que un ticket puede afectar (ej. Correo corporativo, VICIdial, VPN). Se usan para
@@ -288,7 +288,7 @@ export function CatalogosTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Sedes</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Ubicaciones físicas usadas para asignar tickets a técnicos con cobertura en esa sede.
@@ -317,7 +317,7 @@ export function CatalogosTab() {
 
       <ProveedoresYServiciosPanel />
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="text-sm font-semibold text-ink">Activos</p>
         <p className="mt-1 text-xs text-ink-tertiary">
           El catálogo de activos generales (equipos, licencias) se administra en su propio módulo.

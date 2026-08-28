@@ -78,7 +78,7 @@ export function ProspeccionPage() {
               <div className="flex flex-wrap gap-2">
                 {data.porTipoGestion.map((t) => (
                   <span key={t.tipo} className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                    {t.tipo} <span className="rounded-full bg-white px-1.5 py-0.5 text-[0.65rem] font-bold text-gray-500">{t.total}</span>
+                    {t.tipo} <span className="rounded-full bg-card px-1.5 py-0.5 text-[0.65rem] font-bold text-gray-500">{t.total}</span>
                   </span>
                 ))}
               </div>

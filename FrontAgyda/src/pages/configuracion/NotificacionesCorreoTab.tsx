@@ -24,7 +24,7 @@ export function NotificacionesCorreoTab() {
       {data.modulos.map((modulo) => {
         const activos = new Set(data.destinatarios[modulo.key] ?? [])
         return (
-          <div key={modulo.key} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+          <div key={modulo.key} className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
             <p className="text-sm font-semibold text-ink">{modulo.nombre}</p>
             <p className="mb-3 text-xs text-ink-tertiary">{modulo.descripcion}</p>
             <div className="max-h-64 space-y-1 overflow-y-auto">

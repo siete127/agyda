@@ -40,7 +40,7 @@ export function CRMSeguimientoTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
       {/* Selector de contacto */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden flex flex-col max-h-[75vh]">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden flex flex-col max-h-[75vh]">
         <div className="border-b border-gray-100 p-3">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -48,7 +48,7 @@ export function CRMSeguimientoTab() {
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar contacto..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/10"
             />
           </div>
         </div>
@@ -106,7 +106,7 @@ export function CRMSeguimientoTab() {
                   onClick={() => setSubTab(t.key)}
                   className={clsx(
                     'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-all',
-                    subTab === t.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700',
+                    subTab === t.key ? 'bg-card shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
                   {t.icon}{t.label}
@@ -158,7 +158,7 @@ function RecordatoriosSeccion({ contacto }: { contacto: CRMContacto }) {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <p className="text-[0.8rem] font-bold text-gray-700">Recordatorios de pago</p>
         {puedeGestionar && (
@@ -310,7 +310,7 @@ function DocumentosSeccion({ contacto }: { contacto: CRMContacto }) {
   const fmtSize = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <p className="text-[0.8rem] font-bold text-gray-700">Documentos del cliente</p>
         {puedeGestionar && (
@@ -443,7 +443,7 @@ function EncuestasSeccion({ contacto }: { contacto: CRMContacto }) {
   return (
     <div className="space-y-3">
       {puedeEnviar && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex items-center gap-2 flex-wrap">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex items-center gap-2 flex-wrap">
           <select
             value={encuestaId}
             onChange={(e) => setEncuestaId(e.target.value)}
@@ -485,7 +485,7 @@ function EncuestasSeccion({ contacto }: { contacto: CRMContacto }) {
         />
       )}
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="border-b border-gray-100 px-4 py-3">
           <p className="text-[0.8rem] font-bold text-gray-700">Encuestas enviadas</p>
         </div>

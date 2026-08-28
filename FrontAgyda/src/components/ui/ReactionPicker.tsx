@@ -71,7 +71,7 @@ export function ReactionPicker({ noticiaId, miReaccion, total, queryKey = 'notic
       {/* Picker emergente */}
       {open && (
         <div
-          className="absolute bottom-full left-0 mb-2 z-50 flex items-center gap-1 rounded-2xl border border-gray-100 bg-white px-2 py-1.5 shadow-xl"
+          className="absolute bottom-full left-0 mb-2 z-50 flex items-center gap-1 rounded-2xl border border-gray-100 bg-card px-2 py-1.5 shadow-xl"
           onMouseEnter={handleOpen}
           onMouseLeave={handleClose}
           style={{ animation: 'reactionPop 0.18s cubic-bezier(0.34,1.56,0.64,1) both' }}

@@ -8,7 +8,7 @@ import { perfilConfigService, type Perfil } from '@/services/perfilConfig.servic
 import { roleService } from '@/services/role.service'
 
 const inputCls =
-  'w-full rounded-xl border border-gray-200 bg-white py-3 pl-12 pr-3.5 text-[0.9rem] text-gray-900 ' +
+  'w-full rounded-xl border border-gray-200 bg-card py-3 pl-12 pr-3.5 text-[0.9rem] text-gray-900 ' +
   'placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15'
 const selectCls = inputCls + ' appearance-none cursor-pointer pr-10'
 
@@ -140,7 +140,7 @@ export function PerfilModal({ perfil, onClose }: { perfil: Perfil | null; onClos
         </div>
 
         <div className="flex items-center justify-end gap-2.5 border-t border-gray-100 pt-5">
-          <button onClick={onClose} className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50">
+          <button onClick={onClose} className="rounded-xl border border-gray-200 bg-card px-5 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50">
             Cancelar
           </button>
           <button

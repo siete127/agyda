@@ -78,7 +78,7 @@ function NoticiaCard({ noticia, onOpen, index }: { noticia: Noticia; onOpen: (n:
   return (
     <article
       className={clsx(
-        'group flex flex-col overflow-hidden rounded-2xl bg-white border border-gray-200/60 cursor-pointer transition-all duration-200',
+        'group flex flex-col overflow-hidden rounded-2xl bg-card border border-gray-200/60 cursor-pointer transition-all duration-200',
         hovered ? '-translate-y-1 shadow-card-lg border-gray-300/60' : 'shadow-card',
       )}
       style={{ animationDelay: `${index * 40}ms` }}
@@ -164,7 +164,7 @@ function NoticiaRow({ noticia, onOpen, index }: { noticia: Noticia; onOpen: (n: 
   return (
     <article
       className={clsx(
-        'flex gap-4 overflow-hidden rounded-2xl bg-white border border-gray-200/60 cursor-pointer transition-all duration-200 p-0',
+        'flex gap-4 overflow-hidden rounded-2xl bg-card border border-gray-200/60 cursor-pointer transition-all duration-200 p-0',
         hovered ? '-translate-y-0.5 shadow-card-md border-gray-300/60' : 'shadow-card',
       )}
       style={{ animationDelay: `${index * 30}ms` }}
@@ -339,7 +339,7 @@ export function NoticiaDetalle({ noticia, onClose }: { noticia: Noticia; onClose
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 pt-8 animate-fade-in">
       <div
-        className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up"
+        className="relative w-full max-w-2xl rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -974,7 +974,7 @@ function EncuestaResponderInline({
                   )}>
                     <div className={clsx('h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0',
                       respuestas[p.id] === opt ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300')}>
-                      {respuestas[p.id] === opt && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      {respuestas[p.id] === opt && <div className="h-1.5 w-1.5 rounded-full bg-card" />}
                     </div>
                     <input type="radio" className="sr-only" onChange={() => setRespuestas({ ...respuestas, [p.id]: opt })} />
                     <span className="text-sm text-gray-700">{opt}</span>
@@ -1121,7 +1121,7 @@ export function NoticiasPage() {
                     <span className="hidden sm:inline">Carrusel</span>
                   </button>
                   <Button onClick={() => setShowCrear(true)}
-                    className="bg-white !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                    className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                     <Plus className="h-3.5 w-3.5" /> Nueva noticia
                   </Button>
                 </>
@@ -1190,13 +1190,13 @@ export function NoticiasPage() {
             <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 ml-1 flex-shrink-0">
               <button
                 onClick={() => setView('grid')}
-                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'grid' ? 'bg-white shadow-sm text-brand' : 'text-gray-400 hover:text-gray-600')}
+                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'grid' ? 'bg-card shadow-sm text-brand' : 'text-gray-400 hover:text-gray-600')}
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => setView('list')}
-                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'list' ? 'bg-white shadow-sm text-brand' : 'text-gray-400 hover:text-gray-600')}
+                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'list' ? 'bg-card shadow-sm text-brand' : 'text-gray-400 hover:text-gray-600')}
               >
                 <List className="h-3.5 w-3.5" />
               </button>

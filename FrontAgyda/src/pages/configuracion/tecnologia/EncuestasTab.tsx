@@ -35,7 +35,7 @@ function EncuestaConfigPanel() {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="mb-1 flex items-center gap-2">
         <Settings2 className="h-4 w-4 text-brand" />
         <p className="text-sm font-semibold text-ink">Reglas de envío</p>
@@ -93,7 +93,7 @@ export function EncuestasTab() {
     <div className="space-y-4">
       <EncuestaConfigPanel />
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-1 flex items-center gap-2">
           <ClipboardList className="h-4 w-4 text-brand" />
           <p className="text-sm font-semibold text-ink">Encuestas de satisfacción</p>

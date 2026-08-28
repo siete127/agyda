@@ -90,7 +90,7 @@ function MencionesTextarea({
         placeholder={placeholder}
       />
       {mencionQuery !== null && sugerencias.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        <div className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-card shadow-lg">
           {sugerencias.map((u) => (
             <button
               key={u.id}
@@ -476,7 +476,7 @@ export function CalendarioPage() {
             {isTI && (
               <Button
                 onClick={() => setShowModal(true)}
-                className="bg-white !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3"
+                className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3"
               >
                 <Plus className="h-3.5 w-3.5" /> Nuevo evento
               </Button>
@@ -546,7 +546,7 @@ export function CalendarioPage() {
                     {evts.length > 0 && (
                       <div className="flex flex-wrap items-center justify-center gap-1">
                         {evts.slice(0, 3).map((e) => (
-                          <span key={e.id} className={clsx('block h-2 w-2 rounded-full', isSelected ? 'bg-white' : 'bg-brand')} />
+                          <span key={e.id} className={clsx('block h-2 w-2 rounded-full', isSelected ? 'bg-card' : 'bg-brand')} />
                         ))}
                         {evts.length > 3 && (
                           <span className={clsx('text-[9px] font-bold', isSelected ? 'text-white' : 'text-brand')}>
@@ -559,10 +559,10 @@ export function CalendarioPage() {
                     {hayIncidencia && (
                       <div className="flex items-center justify-center gap-1">
                         {diasConRetardo.has(day) && (
-                          <span className={clsx('block h-2 w-2 rounded-full', isSelected ? 'bg-white' : 'bg-amber-500')} title="Retardos" />
+                          <span className={clsx('block h-2 w-2 rounded-full', isSelected ? 'bg-card' : 'bg-amber-500')} title="Retardos" />
                         )}
                         {diasConFalta.has(day) && (
-                          <span className={clsx('block h-2 w-2 rounded-full', isSelected ? 'bg-white' : 'bg-red-500')} title="Faltas" />
+                          <span className={clsx('block h-2 w-2 rounded-full', isSelected ? 'bg-card' : 'bg-red-500')} title="Faltas" />
                         )}
                       </div>
                     )}

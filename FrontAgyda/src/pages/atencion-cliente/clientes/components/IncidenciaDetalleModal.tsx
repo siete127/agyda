@@ -48,7 +48,7 @@ function EvidenciasSection({ incidenciaId, puedeGestionar }: { incidenciaId: num
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-gray-100 bg-card overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2">
         <p className="text-[0.75rem] font-bold text-gray-600">Evidencias</p>
         {puedeGestionar && (
@@ -181,7 +181,7 @@ export function IncidenciaDetalleModal({ incidencia, onClose, queryKeysToInvalid
           </div>
         )}
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-3">
+        <div className="rounded-2xl border border-gray-100 bg-card p-3">
           <div className="flex items-center justify-between">
             <p className="text-[0.75rem] font-bold text-gray-600">Solución propuesta</p>
             {puedeGestionar && !editandoSolucion && (

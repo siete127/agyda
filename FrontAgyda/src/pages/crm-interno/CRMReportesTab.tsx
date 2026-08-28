@@ -175,7 +175,7 @@ export function CRMReportesTab() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Embudo */}
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-5">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-5">
           <h3 className="text-[0.82rem] font-bold text-gray-800 mb-4 flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-brand" /> Embudo de ventas
           </h3>
@@ -205,7 +205,7 @@ export function CRMReportesTab() {
         </div>
 
         {/* Forecast */}
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-5">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-5">
           <h3 className="text-[0.82rem] font-bold text-gray-800 mb-4 flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-emerald-500" /> Forecast por mes de cierre
           </h3>
@@ -226,7 +226,7 @@ export function CRMReportesTab() {
 
       {/* Por responsable (solo AD) */}
       {isAD && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
             <h3 className="text-[0.82rem] font-bold text-gray-800 flex items-center gap-2">
               <Users className="h-4 w-4 text-purple-500" /> Por responsable
@@ -258,7 +258,7 @@ export function CRMReportesTab() {
 
       {/* Cuotas (solo AD) */}
       {isAD && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-wrap gap-2">
             <h3 className="text-[0.82rem] font-bold text-gray-800 flex items-center gap-2">
               <Trophy className="h-4 w-4 text-amber-500" /> Cuotas mensuales
@@ -331,7 +331,7 @@ export function CRMReportesTab() {
 
       {/* Accesos CRM (solo AD) */}
       {isAD && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-wrap gap-2">
             <h3 className="text-[0.82rem] font-bold text-gray-800 flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-indigo-500" /> Administración de Accesos CRM
@@ -363,7 +363,7 @@ export function CRMReportesTab() {
                         onClick={() => toggleAcceso.mutate({ id: a.accesoId, activo: !a.accesoActivo })}
                         className={clsx('h-5 w-9 rounded-full transition-colors relative', a.accesoActivo ? 'bg-indigo-500' : 'bg-gray-200')}
                       >
-                        <span className={clsx('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform', a.accesoActivo ? 'translate-x-4' : 'translate-x-0.5')} />
+                        <span className={clsx('absolute top-0.5 h-4 w-4 rounded-full bg-card shadow transition-transform', a.accesoActivo ? 'translate-x-4' : 'translate-x-0.5')} />
                       </button>
                       <button
                         onClick={() => eliminarAcceso.mutate(a.accesoId)}
@@ -385,7 +385,7 @@ export function CRMReportesTab() {
 
       {/* Reglas de Automatización (solo AD) */}
       {isAD && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-wrap gap-2">
             <h3 className="text-[0.82rem] font-bold text-gray-800 flex items-center gap-2">
               <Settings className="h-4 w-4 text-violet-500" /> Reglas de Automatización por Etapa
@@ -426,7 +426,7 @@ export function CRMReportesTab() {
                         onClick={() => toggleRegla.mutate({ id: r.id, activo: !r.activo })}
                         className={clsx('h-5 w-9 rounded-full transition-colors relative', r.activo ? 'bg-violet-500' : 'bg-gray-200')}
                       >
-                        <span className={clsx('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform', r.activo ? 'translate-x-4' : 'translate-x-0.5')} />
+                        <span className={clsx('absolute top-0.5 h-4 w-4 rounded-full bg-card shadow transition-transform', r.activo ? 'translate-x-4' : 'translate-x-0.5')} />
                       </button>
                     </td>
                     <td className="px-3 py-2.5 text-right">
@@ -452,7 +452,7 @@ export function CRMReportesTab() {
       {showReglaModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowReglaModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="relative bg-card rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
             <h4 className="font-semibold text-gray-900 text-[0.9rem]">Nueva regla de automatización</h4>
             <div className="space-y-3">
               <div>
@@ -515,7 +515,7 @@ export function CRMReportesTab() {
       {showAddAcceso && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddAcceso(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+          <div className="relative bg-card rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
             <h4 className="font-semibold text-gray-900 text-[0.9rem]">Agregar acceso CRM</h4>
             <div>
               <label className="block text-[0.72rem] font-semibold text-gray-600 mb-1">Usuario (AD/TI)</label>
@@ -646,7 +646,7 @@ function PivotEtapaMes({
   [pivot, meses])
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-3 border-b border-gray-100">
         <h3 className="text-[0.82rem] font-bold text-gray-800 flex items-center gap-2">
           <span className="text-purple-500">⊞</span> Revenue por etapa y mes
@@ -670,7 +670,7 @@ function PivotEtapaMes({
             <tbody className="divide-y divide-gray-50">
               {meses.map((m) => (
                 <tr key={m.key} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-2.5 font-semibold text-gray-700 sticky left-0 bg-white">{m.label}</td>
+                  <td className="px-4 py-2.5 font-semibold text-gray-700 sticky left-0 bg-card">{m.label}</td>
                   {PIVOT_ETAPAS.map((e) => {
                     const val = pivot[m.key]?.[e] ?? 0
                     return (

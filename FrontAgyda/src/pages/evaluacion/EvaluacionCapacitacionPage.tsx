@@ -351,8 +351,8 @@ function EvalFormModal({ evalId, soloLectura, onClose }: { evalId: number; soloL
                 <tbody>
                   {data.criterios.map((criterio, ci) => (
                     <tr key={criterio.key}
-                      className={clsx('border-b border-gray-100', ci % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')}>
-                      <td className={clsx('sticky left-0 px-3 py-2 font-semibold text-gray-800 text-[0.72rem]', ci % 2 === 0 ? 'bg-white' : 'bg-gray-50')}>
+                      className={clsx('border-b border-gray-100', ci % 2 === 0 ? 'bg-card' : 'bg-gray-50/50')}>
+                      <td className={clsx('sticky left-0 px-3 py-2 font-semibold text-gray-800 text-[0.72rem]', ci % 2 === 0 ? 'bg-card' : 'bg-gray-50')}>
                         {criterio.label}
                       </td>
                       {DIAS.map((_, di) => (
@@ -370,7 +370,7 @@ function EvalFormModal({ evalId, soloLectura, onClose }: { evalId: number; soloL
                                     'h-5 w-5 rounded-full border-2 transition-all',
                                     activo
                                       ? clsx(sem.color, 'border-white ring-2', sem.ring, 'shadow-sm scale-110')
-                                      : 'bg-white border-gray-200 hover:border-gray-400',
+                                      : 'bg-card border-gray-200 hover:border-gray-400',
                                     readonly && 'cursor-default'
                                   )}
                                 />
@@ -549,7 +549,7 @@ export function EvaluacionCapacitacionPage() {
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               {esAD && (
-                <Button onClick={() => setShowCrear(true)} className="bg-white !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                <Button onClick={() => setShowCrear(true)} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Plus className="h-3.5 w-3.5" /> Nueva evaluación
                 </Button>
               )}
@@ -559,7 +559,7 @@ export function EvaluacionCapacitacionPage() {
       </div>
 
       {/* Filtros */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex flex-wrap gap-3 items-end">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[0.72rem] font-semibold text-gray-500 uppercase tracking-wide">Estado</label>
           <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value as typeof filtroEstado)}
@@ -613,7 +613,7 @@ export function EvaluacionCapacitacionPage() {
           <p className="text-sm">Ningún resultado con los filtros aplicados</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>

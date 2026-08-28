@@ -956,12 +956,12 @@ export const CONFIG_TREE: ConfigNode[] = [
       {
         key: 'apariencia', label: 'Apariencia',
         children: [
-          { key: 'tema', label: 'Tema' },
-          { key: 'colores', label: 'Colores' },
+          { key: 'tema', label: 'Tema', screen: 'tema' },
+          { key: 'colores', label: 'Colores', screen: 'pers-branding' },
           { key: 'menu-apariencia', label: 'Menú' },
-          { key: 'dashboard-apariencia', label: 'Dashboard' },
+          { key: 'dashboard-apariencia', label: 'Dashboard', screen: 'pers-dashboard' },
           { key: 'widgets', label: 'Widgets' },
-          { key: 'branding-empresa', label: 'Branding por empresa' },
+          { key: 'branding-empresa', label: 'Branding por empresa', screen: 'pers-branding' },
         ],
       },
       {

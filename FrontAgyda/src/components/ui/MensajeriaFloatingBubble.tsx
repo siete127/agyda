@@ -175,7 +175,7 @@ export function MensajeriaFloatingBubble() {
       {alertas.map((alerta) => (
         <div
           key={alerta.uid}
-          className="pointer-events-auto rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden animate-fade-in"
+          className="pointer-events-auto rounded-2xl border border-gray-200 bg-card shadow-2xl overflow-hidden animate-fade-in"
         >
           <div
             className="flex items-start gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"

@@ -341,7 +341,7 @@ function ContratoDetalleModal({ contrato, esAdmin, onClose }: { contrato: Contra
 function ContratoCard({ contrato, esAdmin, onClick, onEliminar }: { contrato: Contrato; esAdmin: boolean; onClick: () => void; onEliminar: () => void }) {
   const cfg = ESTATUS_CONFIG[contrato.estatus]
   return (
-    <button onClick={onClick} className="group relative flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
+    <button onClick={onClick} className="group relative flex h-full flex-col rounded-2xl border border-gray-100 bg-card p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
       {esAdmin && (
         <span
           onClick={(e) => { e.stopPropagation(); onEliminar() }}
@@ -435,7 +435,7 @@ export function ContratosPage() {
       </div>
 
       {data && data.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-card p-3">
           <select className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs" value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value as TipoContrato | '')}>
             <option value="">Todos los tipos</option>
             {(Object.keys(TIPO_LABEL) as TipoContrato[]).map((t) => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
@@ -455,11 +455,11 @@ export function ContratosPage() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay contratos registrados.</p>
         </div>
       ) : contratosFiltrados.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Ningún contrato coincide con los filtros aplicados.</p>
         </div>
       ) : (

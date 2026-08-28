@@ -40,7 +40,7 @@ export function NotificationBell() {
         <>
           <div className="fixed inset-0 z-30" onClick={() => setIsOpen(false)} />
 
-          <div className="absolute right-0 top-full mt-2 w-80 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card-lg">
+          <div className="absolute right-0 top-full mt-2 w-80 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-card shadow-card-lg">
 
             {/* Header del panel */}
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">

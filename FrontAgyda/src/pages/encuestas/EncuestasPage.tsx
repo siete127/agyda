@@ -337,7 +337,7 @@ export function CrearEncuestaModal({ onClose, categoriaFija }: { onClose: () => 
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-white pb-1">
+        <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-card pb-1">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button isLoading={crear.isPending} disabled={!canSave} onClick={() => crear.mutate()}>
             Crear encuesta
@@ -417,7 +417,7 @@ function AsignarModal({ encuesta, onClose }: { encuesta: Encuesta; onClose: () =
                     'flex flex-col items-start gap-1 rounded-xl border-2 p-3 text-left transition-all',
                     isSelected
                       ? 'border-brand bg-brand/5 shadow-sm'
-                      : 'border-gray-100 hover:border-brand/30 bg-white',
+                      : 'border-gray-100 hover:border-brand/30 bg-card',
                   )}
                 >
                   <div className="flex w-full items-center justify-between">
@@ -657,7 +657,7 @@ export function EditarEncuestaModal({ encuesta, onClose }: { encuesta: Encuesta;
           </>
         )}
 
-        <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-white pb-1">
+        <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-card pb-1">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button isLoading={guardar.isPending} disabled={!canSave || isLoading} onClick={() => guardar.mutate()}>
             Guardar cambios
@@ -1024,7 +1024,7 @@ export function EncuestasPage() {
                   onClick={() => setVistaAdmin(!vistaAdmin)}
                   className={clsx(
                     'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.72rem] font-semibold transition-colors',
-                    vistaAdmin ? 'bg-white text-brand' : 'bg-white/10 text-white/80 hover:bg-white/20',
+                    vistaAdmin ? 'bg-card text-brand' : 'bg-white/10 text-white/80 hover:bg-white/20',
                   )}
                 >
                   {vistaAdmin ? <ChevronLeft className="h-3.5 w-3.5" /> : <Settings className="h-3.5 w-3.5" />}

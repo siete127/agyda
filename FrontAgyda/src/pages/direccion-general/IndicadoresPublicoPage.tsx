@@ -16,7 +16,7 @@ function KpiCardPublica({ kpi, areaLabel }: { kpi: KpiPublico; areaLabel: string
   const cfg = tonoConfig(kpi)
   const pct = kpi.progreso !== null ? Math.max(0, Math.min(100, kpi.progreso)) : null
   return (
-    <div className="flex h-full flex-col rounded-xl border border-gray-100 bg-white p-3.5 shadow-sm">
+    <div className="flex h-full flex-col rounded-xl border border-gray-100 bg-card p-3.5 shadow-sm">
       <span className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">{areaLabel}</span>
       <div className="mb-2 flex items-start justify-between gap-2">
         <span className="text-xs font-semibold leading-snug text-gray-900">{kpi.label}</span>
@@ -83,7 +83,7 @@ export function IndicadoresPublicoPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
+      <div className="border-b border-gray-200 bg-card px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10">
             <Gauge className="h-5 w-5 text-brand" />
@@ -99,7 +99,7 @@ export function IndicadoresPublicoPage() {
         <DashboardStatRow stats={stats} />
 
         {areasConDatos.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-[0.85rem] text-gray-400">
+          <div className="rounded-2xl border border-gray-200 bg-card p-8 text-center text-[0.85rem] text-gray-400">
             No hay indicadores publicados para este periodo.
           </div>
         ) : (

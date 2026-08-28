@@ -374,7 +374,7 @@ function TablaDocumentos({ documentos, onSelect, onEliminar, puedeEliminar }: {
   puedeEliminar: boolean
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-card">
       <table className="w-full text-left text-xs">
         <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-ink-tertiary">
           <tr>
@@ -546,7 +546,7 @@ export function ControlDocumentalPage() {
       </div>
 
       {data && data.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-card p-3">
           <input
             className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
             placeholder="Buscar por título..."
@@ -572,7 +572,7 @@ export function ControlDocumentalPage() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay documentos registrados.</p>
         </div>
       ) : (

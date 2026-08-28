@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, HelpCircle, BarChart3, MonitorCog } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, HelpCircle, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
@@ -12,6 +12,7 @@ import { type Noticia } from '@/types/noticia.types'
 import logoAgyda from '@/assets/Logo_AGYDA.png'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { personalizacionService } from '@/services/personalizacion.service'
+import { useThemeStore } from '@/stores/theme.store'
 
 interface SearchResult {
   id: string
@@ -36,6 +37,11 @@ export function Topbar() {
 
   const { branding, headerButtons } = usePersonalizacion()
   const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
+
+  const theme = useThemeStore((s) => s.theme)
+  const cycleTheme = useThemeStore((s) => s.cycle)
+  const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : MonitorSmartphone
+  const themeLabel = theme === 'dark' ? 'Tema: oscuro' : theme === 'light' ? 'Tema: claro' : 'Tema: automático'
 
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -174,7 +180,7 @@ export function Topbar() {
 
   return (
     <>
-    <header className="flex h-[64px] flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-5">
+    <header className="flex h-[64px] flex-shrink-0 items-center gap-3 border-b border-surface-border bg-card px-5">
 
       {/* Izquierda: toggle + logo */}
       <div className="flex items-center gap-2 min-w-0">
@@ -235,7 +241,7 @@ export function Topbar() {
         </div>
 
         {open && results.length > 0 && (
-          <div className="absolute top-full mt-1.5 w-72 rounded-2xl border border-surface-border bg-white shadow-lg z-50 overflow-hidden">
+          <div className="absolute top-full mt-1.5 w-72 rounded-2xl border border-surface-border bg-card shadow-lg z-50 overflow-hidden">
             {results.map((r) => {
               const Icon = ICONS[r.type]
               return (
@@ -286,6 +292,14 @@ export function Topbar() {
         <MensajeriaBell />
 
         <NotificationBell />
+
+        <button
+          onClick={cycleTheme}
+          title={`${themeLabel} · clic para cambiar`}
+          className="flex text-ink-tertiary hover:text-ink-secondary transition-colors"
+        >
+          <ThemeIcon className="h-[18px] w-[18px]" />
+        </button>
 
         <button className="hidden text-ink-tertiary hover:text-ink-secondary transition-colors sm:flex" title="Ayuda">
           <HelpCircle className="h-[19px] w-[19px]" />

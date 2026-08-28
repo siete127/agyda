@@ -240,7 +240,7 @@ export function AuditoriaPage() {
           onClick={() => setDetailRow(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-lg rounded-2xl bg-card p-6 shadow-xl"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="mb-3 font-semibold text-gray-800">Detalle de auditoría #{detailRow.id}</h3>

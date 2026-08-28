@@ -6,6 +6,7 @@ import { router } from '@/router'
 import { queryClient } from '@/lib/queryClient'
 import { useAuthStore } from '@/stores/auth.store'
 import { authService } from '@/services/auth.service'
+import { ThemeProvider } from '@/providers/ThemeProvider'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -63,17 +64,25 @@ function AppInitializer() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AppInitializer />
-        <RouterProvider router={router} />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: { borderRadius: '10px', fontSize: '14px' },
-          }}
-        />
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppInitializer />
+          <RouterProvider router={router} />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                borderRadius: '10px',
+                fontSize: '14px',
+                background: 'rgb(var(--card))',
+                color: 'rgb(var(--ink))',
+                border: '1px solid rgb(var(--surface-border))',
+              },
+            }}
+          />
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }

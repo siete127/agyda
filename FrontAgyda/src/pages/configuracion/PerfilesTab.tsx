@@ -57,7 +57,7 @@ export function PerfilesTab() {
   return (
     <div className="space-y-4">
       {/* ── Encabezado con ilustración ── */}
-      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
+      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card">
         {/* ilustración decorativa */}
         <div className="pointer-events-none absolute right-0 top-0 hidden h-full w-1/2 overflow-hidden sm:block">
           <div className="absolute right-16 top-1/2 h-24 w-24 -translate-y-1/2 rounded-3xl bg-emerald-500/90 rotate-6" />
@@ -90,7 +90,7 @@ export function PerfilesTab() {
       </div>
 
       {/* ── Card lista ── */}
-      <div className="rounded-2xl border border-gray-100 bg-white shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-50 p-5">
           <div>
             <h3 className="text-[0.95rem] font-bold text-gray-900">Lista de perfiles</h3>
@@ -103,14 +103,14 @@ export function PerfilesTab() {
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar perfiles…"
-                className="w-52 rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-[0.82rem] outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
+                className="w-52 rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-3 text-[0.82rem] outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
               />
             </div>
             <button
               onClick={() => setShowFiltros((v) => !v)}
               className={clsx(
                 'flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[0.8rem] font-semibold transition-colors',
-                showFiltros || filtrosActivos ? 'border-brand/40 bg-brand/[0.04] text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                showFiltros || filtrosActivos ? 'border-brand/40 bg-brand/[0.04] text-brand' : 'border-gray-200 bg-card text-gray-600 hover:bg-gray-50',
               )}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />

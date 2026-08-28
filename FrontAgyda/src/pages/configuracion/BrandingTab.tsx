@@ -8,7 +8,7 @@ import {
 } from '@/services/personalizacion.service'
 
 const inputCls =
-  'w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
+  'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
   'placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15'
 
 const COLOR_DEFAULT = '#2F6FED'
@@ -67,7 +67,7 @@ function AssetUploader({ tipo, label, hint, actualId, previewClass, onUploaded }
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3">
+    <div className="rounded-xl border border-gray-200 bg-card p-3">
       <div className={clsx('mb-2 flex items-center justify-center overflow-hidden rounded-lg border border-dashed border-gray-200 bg-gray-50', previewClass)}>
         {url ? (
           <img src={url} alt={label} className="max-h-full max-w-full object-contain" />
@@ -149,7 +149,7 @@ export function BrandingTab() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card">
         <div className="space-y-6 p-5">
           {/* ① Identidad */}
           <div className="space-y-4">
@@ -177,13 +177,13 @@ export function BrandingTab() {
                 type="color"
                 value={color}
                 onChange={(e) => set('colorBrand', e.target.value)}
-                className="h-11 w-16 cursor-pointer rounded-lg border border-gray-200 bg-white p-1"
+                className="h-11 w-16 cursor-pointer rounded-lg border border-gray-200 bg-card p-1"
               />
               <input
                 value={form.colorBrand}
                 onChange={(e) => set('colorBrand', e.target.value)}
                 placeholder="#2F6FED"
-                className="w-28 rounded-xl border border-gray-200 bg-white py-2.5 px-3 text-[0.85rem] font-mono outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                className="w-28 rounded-xl border border-gray-200 bg-card py-2.5 px-3 text-[0.85rem] font-mono outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
               />
               <button
                 type="button"

@@ -16,7 +16,7 @@ export function AreaSubItemsGrid({ areaPath, items }: AreaSubItemsGridProps) {
           <Link
             key={item.slug}
             to={to}
-            className="group flex items-start justify-between gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-card transition-all hover:shadow-card-lg hover:border-brand/30"
+            className="group flex items-start justify-between gap-2 rounded-2xl border border-gray-100 bg-card p-4 shadow-card transition-all hover:shadow-card-lg hover:border-brand/30"
           >
             <div className="min-w-0">
               <p className="text-sm font-semibold text-ink">{item.label}</p>

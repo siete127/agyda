@@ -193,7 +193,7 @@ export function WebphonePage() {
                     onClick={() => setZoom(z)}
                     className={clsx(
                       'rounded-md px-2 py-1 text-[0.7rem] font-semibold transition-colors',
-                      zoom === z ? 'bg-white text-brand' : 'text-white/70 hover:text-white',
+                      zoom === z ? 'bg-card text-brand' : 'text-white/70 hover:text-white',
                     )}
                     title={`Zoom ${z}x`}
                   >
@@ -248,7 +248,7 @@ export function WebphonePage() {
         <div data-webphone-slot className="absolute inset-0 rounded-2xl" />
 
         {!loadingVistas && !vista && (
-          <div className="card absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+          <div className="card absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card px-6 text-center">
             <Phone className="h-8 w-8 text-gray-300" />
             <p className="text-sm font-semibold text-gray-700">No hay vistas configuradas</p>
             {isAdmin && (
@@ -272,7 +272,7 @@ export function WebphonePage() {
             {vista.requiereVpn && (
               <button
                 onClick={verificarVpn}
-                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 shadow-md hover:bg-amber-50 transition-colors"
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-card px-3 py-1.5 text-xs font-semibold text-amber-700 shadow-md hover:bg-amber-50 transition-colors"
               >
                 {vpnCheck === 'checking' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5" />}
                 Verificar VPN
@@ -295,7 +295,7 @@ export function WebphonePage() {
       {/* ── Modal: cambiar vista ── */}
       {showConfig && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+          <div className="w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-[#0D1B3E] to-[#1B4FD8] flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Settings className="h-4 w-4 text-white" />
@@ -372,7 +372,7 @@ export function WebphonePage() {
       {/* ── Modal: aviso VPN ── */}
       {showVpnWarning && vista && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+          <div className="w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden">
             <div className="flex flex-col items-center gap-3 p-6 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50">
                 <ShieldAlert className="h-7 w-7 text-amber-500" />

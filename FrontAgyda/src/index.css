@@ -5,20 +5,96 @@
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
 
-  /* Color de marca — RGB (sin #), sobreescrito en runtime por
-     PersonalizacionProvider con el color de la empresa. Defaults = azul AGYDA. */
+  /* ── Tokens de tema ──────────────────────────────────────────
+     Color de marca: sobreescrito en runtime por PersonalizacionProvider
+     con el color de la empresa. Escala de gris + superficies + texto:
+     valores claros por defecto, invertidos bajo [data-theme="dark"] /
+     prefers-color-scheme. Todo en formato "R G B" para que Tailwind
+     mantenga el soporte de opacidad (bg-gray-100/60, text-ink/40, …). */
   :root {
     --color-brand: 47 111 237;
     --color-brand-dark: 30 79 196;
     --color-brand-light: 238 243 254;
     --color-brand-muted: 127 168 245;
+
+    /* gris — valores estándar de Tailwind (modo claro) */
+    --gray-50: 249 250 251;
+    --gray-100: 243 244 246;
+    --gray-200: 229 231 235;
+    --gray-300: 209 213 219;
+    --gray-400: 156 163 175;
+    --gray-500: 107 114 128;
+    --gray-600: 75 85 99;
+    --gray-700: 55 65 81;
+    --gray-800: 31 41 55;
+    --gray-900: 17 24 39;
+
+    --card: 255 255 255;
+    --surface: 247 249 252;
+    --surface-border: 231 236 245;
+
+    --ink: 16 24 40;
+    --ink-secondary: 71 84 103;
+    --ink-tertiary: 152 162 179;
+
+    color-scheme: light;
+  }
+
+  /* modo oscuro — set explícito */
+  :root[data-theme="dark"] {
+    --gray-50: 30 35 45;
+    --gray-100: 38 44 56;
+    --gray-200: 51 59 74;
+    --gray-300: 71 82 102;
+    --gray-400: 148 163 184;
+    --gray-500: 168 181 200;
+    --gray-600: 195 205 222;
+    --gray-700: 214 222 236;
+    --gray-800: 230 236 246;
+    --gray-900: 244 247 252;
+
+    --card: 24 29 39;
+    --surface: 15 19 27;
+    --surface-border: 44 52 66;
+
+    --ink: 244 247 252;
+    --ink-secondary: 195 205 222;
+    --ink-tertiary: 148 163 184;
+
+    color-scheme: dark;
+  }
+
+  /* modo oscuro — automático (sigue al SO cuando no hay elección explícita) */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --gray-50: 30 35 45;
+      --gray-100: 38 44 56;
+      --gray-200: 51 59 74;
+      --gray-300: 71 82 102;
+      --gray-400: 148 163 184;
+      --gray-500: 168 181 200;
+      --gray-600: 195 205 222;
+      --gray-700: 214 222 236;
+      --gray-800: 230 236 246;
+      --gray-900: 244 247 252;
+
+      --card: 24 29 39;
+      --surface: 15 19 27;
+      --surface-border: 44 52 66;
+
+      --ink: 244 247 252;
+      --ink-secondary: 195 205 222;
+      --ink-tertiary: 148 163 184;
+
+      color-scheme: dark;
+    }
   }
 
   html { font-size: 14px; scroll-behavior: smooth; }
 
   body {
     font-family: 'Instrument Sans', 'Inter', system-ui, sans-serif;
-    @apply bg-[#F7F9FC] text-ink antialiased;
+    @apply bg-surface text-ink antialiased;
   }
 
   ::-webkit-scrollbar        { @apply w-1.5 h-1.5; }
@@ -74,7 +150,7 @@
 
   /* ── Card estándar intranet ── */
   .card {
-    @apply rounded-2xl bg-white border border-gray-200/60 shadow-sm;
+    @apply rounded-2xl bg-card border border-gray-200/60 shadow-sm;
   }
   .card-hover {
     @apply card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-md hover:border-gray-300/60;
@@ -92,7 +168,7 @@
 
   /* ── Input / campo de formulario ── */
   .field {
-    @apply w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900
+    @apply w-full rounded-xl border border-gray-200 bg-card px-3.5 py-2.5 text-sm text-gray-900
            placeholder-gray-400 outline-none transition
            focus:border-brand focus:ring-2 focus:ring-brand/15;
   }

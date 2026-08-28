@@ -126,7 +126,7 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
 
   return (
     <div
-      className="pointer-events-auto flex w-80 flex-col rounded-t-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden"
+      className="pointer-events-auto flex w-80 flex-col rounded-t-2xl border border-gray-200 bg-card shadow-2xl overflow-hidden"
       style={{ height: 420, position: 'fixed', bottom: 0, right: 24 + offset * (320 + 16), zIndex: 190 }}
     >
       {/* Barra de cabecera estilo Messenger */}
@@ -180,7 +180,7 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
                 <div
                   className={clsx(
                     'max-w-[75%] rounded-2xl px-3 py-1.5 text-[0.8rem]',
-                    esMio ? 'rounded-br-sm bg-brand text-white' : 'rounded-bl-sm border border-gray-200 bg-white text-gray-800',
+                    esMio ? 'rounded-br-sm bg-brand text-white' : 'rounded-bl-sm border border-gray-200 bg-card text-gray-800',
                   )}
                 >
                   {!esMio && canal.tipo === 'grupo' && (

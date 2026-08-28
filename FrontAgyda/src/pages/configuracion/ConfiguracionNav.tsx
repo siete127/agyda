@@ -41,7 +41,7 @@ export const CONFIGURACION_SECCIONES: ConfiguracionSeccion[] = [
 
 export function ConfiguracionNav({ activa, onChange }: { activa: string; onChange: (key: string) => void }) {
   return (
-    <nav className="flex flex-col gap-0.5 rounded-2xl border border-gray-100 bg-white p-2 shadow-card">
+    <nav className="flex flex-col gap-0.5 rounded-2xl border border-gray-100 bg-card p-2 shadow-card">
       {CONFIGURACION_SECCIONES.map((s) => {
         const Icon = s.icon
         return (

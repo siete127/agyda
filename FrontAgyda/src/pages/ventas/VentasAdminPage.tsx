@@ -74,7 +74,7 @@ function AdminContent() {
           {ventasCampaigns.length > 1 && (
             <div className="relative">
               <select value={campaignId ?? ''} onChange={(e) => setCampaignId(e.target.value ? Number(e.target.value) : undefined)}
-                className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
+                className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
                 <option value="">Todas las campañas</option>
                 {ventasCampaigns.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
@@ -82,7 +82,7 @@ function AdminContent() {
             </div>
           )}
           <button onClick={exportCSV} disabled={!stats.length}
-            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40">
+            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40">
             <Download className="h-3.5 w-3.5" /> Exportar CSV
           </button>
         </div>
@@ -93,7 +93,7 @@ function AdminContent() {
         {([['hoy','Hoy'], ['semana','Semana'], ['mes','Mes']] as [Tab, string][]).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={clsx('rounded-lg px-4 py-1.5 text-[0.78rem] font-semibold transition-all',
-              tab === key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700')}>
+              tab === key ? 'bg-card shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700')}>
             {label}
           </button>
         ))}
@@ -120,7 +120,7 @@ function AdminContent() {
       )}
 
       {/* Tabla */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="border-b border-gray-100 px-5 py-4">
           <h2 className="text-[0.85rem] font-bold text-gray-900">Detalle por agente</h2>
         </div>
@@ -179,7 +179,7 @@ function AdminContent() {
 
       {/* Barras visuales */}
       {stats.length > 0 && !isLoading && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-4">
             <h2 className="text-[0.85rem] font-bold text-gray-900">Aprobadas por agente</h2>
           </div>

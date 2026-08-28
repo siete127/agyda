@@ -110,7 +110,7 @@ export function ClientesDashboardPage() {
                     onClick={() => setRango(r.key)}
                     className={clsx(
                       'rounded-md px-3 py-1.5 text-[0.75rem] font-semibold transition-colors',
-                      rango === r.key ? 'bg-white text-brand' : 'text-white/70 hover:text-white',
+                      rango === r.key ? 'bg-card text-brand' : 'text-white/70 hover:text-white',
                     )}
                   >
                     {r.label}
@@ -120,7 +120,7 @@ export function ClientesDashboardPage() {
               <button
                 onClick={handleExportar}
                 disabled={exportando}
-                className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[0.78rem] font-semibold text-brand shadow-sm hover:bg-blue-50 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-brand shadow-sm hover:bg-blue-50 transition-colors disabled:opacity-50"
               >
                 {exportando ? <Spinner size="sm" /> : <FileSpreadsheet className="h-3.5 w-3.5" />} Descargar reporte
               </button>

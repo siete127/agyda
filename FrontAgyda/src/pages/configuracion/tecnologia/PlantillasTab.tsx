@@ -32,7 +32,7 @@ function PlantillaRespuestaFormModal({ plantilla, onClose }: { plantilla: Planti
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <p className="text-base font-bold text-ink">{plantilla ? 'Editar plantilla' : 'Nueva plantilla de respuesta'}</p>
           <button onClick={onClose} className="text-ink-tertiary hover:text-ink"><X className="h-5 w-5" /></button>
@@ -170,7 +170,7 @@ function PlantillaCorreoFormModal({ plantilla, onClose }: { plantilla: Plantilla
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <p className="text-base font-bold text-ink">{plantilla ? 'Editar plantilla' : 'Nueva plantilla de correo'}</p>
           <button onClick={onClose} className="text-ink-tertiary hover:text-ink"><X className="h-5 w-5" /></button>
@@ -313,7 +313,7 @@ export function PlantillasTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-3 flex items-center gap-2">
           <FileText className="h-4 w-4 text-brand" />
           <p className="text-sm font-semibold text-ink">Plantillas de mensajes</p>

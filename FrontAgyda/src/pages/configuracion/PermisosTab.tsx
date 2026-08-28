@@ -132,14 +132,14 @@ export function PermisosTab() {
           onClick={() => setShowFiltros((v) => !v)}
           className={clsx(
             'flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-[0.78rem] font-semibold transition-colors',
-            showFiltros || filtrosActivos ? 'border-brand/40 bg-brand/[0.04] text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+            showFiltros || filtrosActivos ? 'border-brand/40 bg-brand/[0.04] text-brand' : 'border-gray-200 bg-card text-gray-600 hover:bg-gray-50',
           )}
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Filtros
           {filtrosActivos > 0 && <span className="rounded-full bg-brand px-1.5 text-[0.6rem] font-bold text-white">{filtrosActivos}</span>}
         </button>
-        <div className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2">
+        <div className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2">
           <span className="text-[0.72rem] text-gray-400">Ordenar por</span>
           <select
             value={orden}
@@ -155,7 +155,7 @@ export function PermisosTab() {
 
       {/* ── Panel de filtros ── */}
       {showFiltros && rolesDisponibles.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-card animate-fade-in">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-gray-100 bg-card px-4 py-3 shadow-card animate-fade-in">
           <span className="mr-1 text-[0.7rem] font-semibold uppercase tracking-wider text-gray-400">Rol</span>
           <button
             onClick={() => setFiltroRol('todos')}
@@ -187,7 +187,7 @@ export function PermisosTab() {
       )}
 
       {/* ── Card lista ── */}
-      <div className="rounded-2xl border border-gray-100 bg-white shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card shadow-card">
         <div className="flex items-center gap-2 border-b border-gray-50 px-5 py-4">
           <h3 className="text-[0.92rem] font-bold text-gray-900">Lista de usuarios</h3>
           {!isLoading && (
@@ -251,7 +251,7 @@ export function PermisosTab() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={pageClamped === 1}
-                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-card"
                 >
                   <ChevronRight className="h-3.5 w-3.5 rotate-180" /> Anterior
                 </button>
@@ -261,7 +261,7 @@ export function PermisosTab() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={pageClamped === totalPages}
-                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-card"
                 >
                   Siguiente <ChevronRight className="h-3.5 w-3.5" />
                 </button>
@@ -271,7 +271,7 @@ export function PermisosTab() {
                 <select
                   value={pageSize}
                   onChange={(e) => setPageSize(Number(e.target.value))}
-                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[0.72rem] font-semibold text-gray-700 outline-none focus:border-brand"
+                  className="rounded-lg border border-gray-200 bg-card px-2 py-1 text-[0.72rem] font-semibold text-gray-700 outline-none focus:border-brand"
                 >
                   {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>

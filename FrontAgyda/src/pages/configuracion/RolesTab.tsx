@@ -45,7 +45,7 @@ export function RolesTab() {
   return (
     <div className="space-y-4">
       {/* ── Encabezado ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand/[0.08] text-brand">
             <ShieldCheck className="h-5.5 w-5.5" />
@@ -64,7 +64,7 @@ export function RolesTab() {
       </div>
 
       {/* ── Lista de roles ── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card divide-y divide-gray-50">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card divide-y divide-gray-50">
         {isLoading ? (
           <div className="flex justify-center py-12"><ShieldCheck className="h-5 w-5 animate-pulse text-gray-300" /></div>
         ) : roles.length === 0 ? (
@@ -147,7 +147,7 @@ export function RolesTab() {
                   value={confirmTexto}
                   onChange={(e) => setConfirmTexto(e.target.value)}
                   placeholder={confirmDelete.NOMBRE}
-                  className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                  className="w-full rounded-lg border border-amber-300 bg-card px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                 />
               </div>
             )}

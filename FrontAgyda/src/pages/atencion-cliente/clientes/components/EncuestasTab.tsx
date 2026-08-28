@@ -51,7 +51,7 @@ export function EncuestasTab({ contactoId }: { contactoId: number }) {
   return (
     <div className="space-y-3">
       {puedeEnviar && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex items-center gap-2 flex-wrap">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex items-center gap-2 flex-wrap">
           <select value={encuestaId} onChange={(e) => setEncuestaId(e.target.value)} className="field flex-1 min-w-[200px]">
             <option value="">Selecciona una encuesta de satisfacción activa...</option>
             {disponibles.map((e) => <option key={e.id} value={e.id}>{e.titulo}</option>)}
@@ -66,7 +66,7 @@ export function EncuestasTab({ contactoId }: { contactoId: number }) {
         </div>
       )}
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="border-b border-gray-100 px-4 py-3">
           <p className="text-[0.8rem] font-bold text-gray-700">Encuestas enviadas</p>
         </div>

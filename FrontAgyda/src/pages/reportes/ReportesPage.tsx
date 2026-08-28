@@ -309,13 +309,13 @@ export function ReportesPage() {
               </div>
             </div>
             {tab === 'tiempos' && reporte.length > 0 && (
-              <Button onClick={descargarCSV} className="bg-white !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+              <Button onClick={descargarCSV} className="bg-card !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <Download className="h-3.5 w-3.5" /> Descargar CSV
               </Button>
             )}
             {tab === 'resumen' && resumen.length > 0 && (
               <div className="flex items-center gap-2">
-                <Button onClick={() => exportResumenExcel(resumen, from, to)} className="bg-white !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                <Button onClick={() => exportResumenExcel(resumen, from, to)} className="bg-card !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Download className="h-3.5 w-3.5" /> Exportar Excel
                 </Button>
                 <button
@@ -342,7 +342,7 @@ export function ReportesPage() {
             onClick={() => setTab('resumen')}
             className={clsx(
               'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[0.8rem] font-semibold border transition-all',
-              tab === 'resumen' ? 'bg-brand text-white border-brand shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
+              tab === 'resumen' ? 'bg-brand text-white border-brand shadow-sm' : 'bg-card text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
             )}
           >
             <LayoutGrid className="h-3.5 w-3.5" /> Resumen general
@@ -351,7 +351,7 @@ export function ReportesPage() {
             onClick={() => setTab('tiempos')}
             className={clsx(
               'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[0.8rem] font-semibold border transition-all',
-              tab === 'tiempos' ? 'bg-brand text-white border-brand shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
+              tab === 'tiempos' ? 'bg-brand text-white border-brand shadow-sm' : 'bg-card text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
             )}
           >
             <Clock className="h-3.5 w-3.5" /> Tiempos por usuario

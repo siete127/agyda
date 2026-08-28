@@ -105,7 +105,7 @@ function DocViewer({ doc, downloadPath, onClose }: { doc: DocExpediente; downloa
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="relative flex flex-col w-full max-w-4xl h-[90vh] rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="relative flex flex-col w-full max-w-4xl h-[90vh] rounded-2xl bg-card shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 bg-brand flex-shrink-0">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-white" />
@@ -573,7 +573,7 @@ function ExpedientesAdminTab() {
                         'group flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition-all duration-200',
                         isActive
                           ? 'border-brand/40 bg-brand/[0.06] shadow-card-md'
-                          : 'border-gray-200/60 bg-white shadow-sm hover:-translate-y-0.5 hover:border-brand/25 hover:shadow-card-md',
+                          : 'border-gray-200/60 bg-card shadow-sm hover:-translate-y-0.5 hover:border-brand/25 hover:shadow-card-md',
                       )}
                     >
                       <div
@@ -746,7 +746,7 @@ export function ExpedientePage() {
             title="Ver y gestionar el expediente de otros empleados"
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-4 py-2 text-[0.78rem] font-semibold transition-all',
-              activeTab === 'admin' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700',
+              activeTab === 'admin' ? 'bg-card text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700',
             )}
           >
             <FolderOpen className="h-3.5 w-3.5" />
@@ -757,7 +757,7 @@ export function ExpedientePage() {
             title="Mis propios documentos"
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-4 py-2 text-[0.78rem] font-semibold transition-all',
-              activeTab === 'mi' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700',
+              activeTab === 'mi' ? 'bg-card text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700',
             )}
           >
             <User className="h-3.5 w-3.5" />

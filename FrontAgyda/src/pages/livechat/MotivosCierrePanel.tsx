@@ -26,7 +26,7 @@ function MotivoForm({ grupoId, motivo, orden, onDone }: { grupoId: number; motiv
   })
 
   return (
-    <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-2 bg-white">
+    <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-2 bg-card">
       <input
         type="text"
         value={texto}
@@ -80,7 +80,7 @@ export function MotivosCierrePanel({ grupoId }: { grupoId: number }) {
             editandoId === m.id ? (
               <MotivoForm key={m.id} grupoId={grupoId} motivo={m} orden={m.orden} onDone={() => setEditandoId(null)} />
             ) : (
-              <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 bg-white">
+              <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 bg-card">
                 <span className="text-xs text-gray-700 flex items-center gap-1.5">
                   {m.motivo}
                   {m.requiereComentario && (

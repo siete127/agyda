@@ -74,7 +74,7 @@ export function SatisfaccionPage() {
             {puedeGestionar && (
               <button
                 onClick={() => setShowCrear(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-[0.78rem] font-semibold text-yellow-700 hover:bg-yellow-50 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-yellow-700 hover:bg-yellow-50 transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" /> Nueva encuesta
               </button>
@@ -115,7 +115,7 @@ export function SatisfaccionPage() {
             return (
               <div
                 key={e.id}
-                className="flex h-full flex-col rounded-2xl border border-gray-200/60 bg-white shadow-sm p-5 gap-3 transition-all hover:shadow-md hover:border-yellow-400"
+                className="flex h-full flex-col rounded-2xl border border-gray-200/60 bg-card shadow-sm p-5 gap-3 transition-all hover:shadow-md hover:border-yellow-400"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">

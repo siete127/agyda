@@ -70,7 +70,7 @@ export function LoginPage() {
       </div>
 
       {/* Card formulario */}
-      <form onSubmit={handleSubmit} className="rounded-2xl bg-white border border-gray-200 shadow-card p-6 space-y-5">
+      <form onSubmit={handleSubmit} className="rounded-2xl bg-card border border-gray-200 shadow-card p-6 space-y-5">
 
         {/* Empresa */}
         {!forcedTenant && empresas.length > 1 && (

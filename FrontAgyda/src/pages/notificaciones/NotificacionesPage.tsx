@@ -242,7 +242,7 @@ function NotifRow({ n, onRead, onNavigate }: { n: NotificationItem; onRead: () =
       className={clsx(
         'flex items-start gap-3 px-5 py-4 transition-colors',
         isNavegable ? 'cursor-pointer' : (!n.leida ? 'cursor-pointer' : ''),
-        !n.leida ? 'bg-brand/[0.015] hover:bg-brand/[0.03]' : 'bg-white hover:bg-gray-50/50',
+        !n.leida ? 'bg-brand/[0.015] hover:bg-brand/[0.03]' : 'bg-card hover:bg-gray-50/50',
       )}
     >
       <div className={clsx('mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full', getDot(n.tipo))} />

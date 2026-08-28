@@ -21,7 +21,7 @@ export function KbConfigTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-1 flex items-center gap-2">
           <BookOpen className="h-4 w-4 text-brand" />
           <p className="text-sm font-semibold text-ink">Base de Conocimiento</p>

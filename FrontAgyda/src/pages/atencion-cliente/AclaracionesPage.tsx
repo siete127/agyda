@@ -105,7 +105,7 @@ function EstatusSelector({ aclaracionId, estatus }: { aclaracionId: number; esta
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden">
+          <div className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-xl border border-gray-200 bg-card shadow-xl overflow-hidden">
             {Object.entries(ESTATUSES).map(([key, s]) => (
               <button
                 key={key}
@@ -396,7 +396,7 @@ function AclaracionCard({
     <div
       onClick={onClick}
       className={clsx(
-        'flex h-full flex-col rounded-2xl border bg-white shadow-sm p-5 gap-3 transition-all cursor-pointer hover:shadow-md hover:border-purple-400',
+        'flex h-full flex-col rounded-2xl border bg-card shadow-sm p-5 gap-3 transition-all cursor-pointer hover:shadow-md hover:border-purple-400',
         destacada ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200/60'
       )}
     >
@@ -541,7 +541,7 @@ export function AclaracionesPage() {
             </div>
             {puedeCrear && (
               <Button onClick={() => setShowNueva(true)}
-                className="bg-white !text-purple-700 hover:bg-purple-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                className="bg-card !text-purple-700 hover:bg-purple-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <Plus className="h-3.5 w-3.5" /> Nueva aclaración
               </Button>
             )}
@@ -562,7 +562,7 @@ export function AclaracionesPage() {
 
       {/* Filtros — solo gestores */}
       {esGestor && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex flex-wrap gap-3 items-end">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-[0.72rem] font-semibold text-gray-500 uppercase tracking-wide">Desde</label>
             <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}

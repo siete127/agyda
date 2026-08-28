@@ -18,7 +18,7 @@ export function DashboardDisenoTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <p className="text-[0.88rem] font-semibold text-gray-800">El editor está en la propia página de Inicio</p>
         <p className="mt-1 text-[0.8rem] text-gray-500">
           Ve a <b>Inicio</b> y pulsa <b>"Editar diseño"</b> (arriba a la derecha, solo visible para administradores).

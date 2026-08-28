@@ -178,7 +178,7 @@ export function BanioReportePage() {
               'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[0.8rem] font-semibold border transition-all',
               tabIdx === i
                 ? 'bg-brand text-white border-brand shadow-sm'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
+                : 'bg-card text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
             ].join(' ')}>
             <span>{p.emoji}</span>
             {p.label}
@@ -207,7 +207,7 @@ export function BanioReportePage() {
       )}
 
       {/* Filtros */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex flex-wrap gap-3 items-end">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[0.72rem] font-semibold text-gray-500 uppercase tracking-wide">Desde</label>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
@@ -235,15 +235,15 @@ export function BanioReportePage() {
       {/* Cards de totales */}
       {registros.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4">
             <p className="text-[0.7rem] font-semibold text-gray-400 uppercase tracking-wide">Visitas</p>
             <p className="text-2xl font-black text-gray-800 mt-1">{totalVisitas}</p>
           </div>
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4">
             <p className="text-[0.7rem] font-semibold text-gray-400 uppercase tracking-wide">Tiempo total</p>
             <p className="text-2xl font-black text-gray-800 mt-1">{fmt(totalSeg)}</p>
           </div>
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4">
             <p className="text-[0.7rem] font-semibold text-gray-400 uppercase tracking-wide">Promedio/visita</p>
             <p className="text-2xl font-black text-gray-800 mt-1">{promSeg > 0 ? fmt(promSeg) : '—'}</p>
           </div>
@@ -286,7 +286,7 @@ export function BanioReportePage() {
               })
               const hayExcede = tipos.some(t => t.excede)
               return (
-                <div key={r.id} className={`rounded-2xl border bg-white shadow-sm p-4 flex flex-col gap-2 ${hayExcede ? 'border-red-300' : 'border-gray-200/60'}`}>
+                <div key={r.id} className={`rounded-2xl border bg-card shadow-sm p-4 flex flex-col gap-2 ${hayExcede ? 'border-red-300' : 'border-gray-200/60'}`}>
                   <p className="text-[0.78rem] font-bold text-gray-800 leading-tight" title={r.nombre}>
                     {r.nombre.split(' ').slice(0,3).join(' ')}
                   </p>
@@ -315,7 +315,7 @@ export function BanioReportePage() {
       )}
 
       {/* Tabla detalle */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">Detalle de registros</h2>
           <span className="text-[0.72rem] text-gray-400">{registros.length} registro{registros.length !== 1 ? 's' : ''}</span>

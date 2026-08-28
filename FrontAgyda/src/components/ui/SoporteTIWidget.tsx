@@ -84,7 +84,7 @@ export function SoporteTIWidget() {
   return createPortal(
     <div className="pointer-events-none fixed bottom-6 right-24 z-[195] flex flex-col items-end gap-2.5">
       {abierto && (
-        <div className="pointer-events-auto flex h-[26rem] w-80 flex-col overflow-hidden rounded-2xl border border-surface-border bg-white shadow-xl">
+        <div className="pointer-events-auto flex h-[26rem] w-80 flex-col overflow-hidden rounded-2xl border border-surface-border bg-card shadow-xl">
           <div className="flex items-center justify-between bg-brand px-4 py-3 text-white">
             <div className="flex items-center gap-2">
               <LifeBuoy className="h-4 w-4" />

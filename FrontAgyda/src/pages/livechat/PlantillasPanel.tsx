@@ -27,7 +27,7 @@ function PlantillaForm({ grupoId, plantilla, onDone }: { grupoId: number; planti
   })
 
   return (
-    <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white">
+    <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-card">
       <input
         type="text"
         value={nombre}
@@ -52,7 +52,7 @@ function PlantillaForm({ grupoId, plantilla, onDone }: { grupoId: number; planti
               onClick={() => setVisibilidad(v)}
               className={clsx(
                 'flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border',
-                visibilidad === v ? 'bg-brand text-white border-brand' : 'bg-white text-gray-500 border-gray-200',
+                visibilidad === v ? 'bg-brand text-white border-brand' : 'bg-card text-gray-500 border-gray-200',
               )}
             >
               {v === 'publica' ? <Globe size={10} /> : <Lock size={10} />}
@@ -100,7 +100,7 @@ export function PlantillasPanel({ grupoId }: { grupoId: number }) {
             editandoId === p.id ? (
               <PlantillaForm key={p.id} grupoId={grupoId} plantilla={p} onDone={() => setEditandoId(null)} />
             ) : (
-              <div key={p.id} className="flex items-start justify-between gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 bg-white">
+              <div key={p.id} className="flex items-start justify-between gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 bg-card">
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-gray-700 flex items-center gap-1">
                     {p.visibilidad === 'publica' ? <Globe size={10} className="text-gray-400" /> : <Lock size={10} className="text-gray-400" />}

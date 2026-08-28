@@ -165,7 +165,7 @@ function AreaSupervisionCard({ area, expandida, onToggle }: { area: AreaSupervis
   const semCfg = SEMAFORO_CONFIG[area.semaforo ?? 'sin-datos']
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white shadow-card transition-all">
+    <div className="rounded-2xl border border-gray-100 bg-card shadow-card transition-all">
       <button onClick={onToggle} className="flex w-full items-center gap-3 p-4 text-left">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10">
           <Icon className="h-4.5 w-4.5 text-brand" />

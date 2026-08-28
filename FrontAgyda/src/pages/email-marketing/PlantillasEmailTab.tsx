@@ -79,7 +79,7 @@ function PlantillaForm({ plantilla, onDone }: { plantilla?: EmailPlantilla; onDo
               Actualizar
             </Button>
           </div>
-          <div className="w-full h-[268px] overflow-y-auto rounded-lg border border-gray-300 bg-white p-3 text-sm">
+          <div className="w-full h-[268px] overflow-y-auto rounded-lg border border-gray-300 bg-card p-3 text-sm">
             {previewHtml ? (
               <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
             ) : (
@@ -141,7 +141,7 @@ export function PlantillasEmailTab() {
             editandoId === p.id ? (
               <PlantillaForm key={p.id} plantilla={p} onDone={() => setEditandoId(null)} />
             ) : (
-              <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 px-4 py-3 bg-white">
+              <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 px-4 py-3 bg-card">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
                   <p className="text-xs text-gray-400 truncate">{p.asunto}</p>

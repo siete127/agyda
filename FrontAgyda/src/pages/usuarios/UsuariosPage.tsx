@@ -117,7 +117,7 @@ export function UsuariosPage() {
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              <Button onClick={() => { setSelected(null); setShowModal(true) }} className="bg-white !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+              <Button onClick={() => { setSelected(null); setShowModal(true) }} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <UserPlus className="h-3.5 w-3.5" /> Nuevo usuario
               </Button>
             </div>

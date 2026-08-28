@@ -16,7 +16,7 @@ interface AccionModulo { key: string; nombre: string; descripcion: string }
 type ActionsCatalog = Record<string, AccionModulo[]>
 
 const inputCls =
-  'w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-3 text-sm text-gray-900 ' +
+  'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-11 pr-3 text-sm text-gray-900 ' +
   'placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15'
 
 export function RolModal({ rol, onClose }: { rol: Rol | null; onClose: () => void }) {
@@ -202,7 +202,7 @@ export function RolModal({ rol, onClose }: { rol: Rol | null; onClose: () => voi
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar módulos…"
-            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
+            className="w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
           />
         </div>
 
@@ -242,7 +242,7 @@ export function RolModal({ rol, onClose }: { rol: Rol | null; onClose: () => voi
                         onClick={() => toggleModulo(m.key)}
                         className={clsx(
                           'flex h-4.5 w-4.5 flex-shrink-0 items-center justify-center rounded-[5px] border transition-colors',
-                          tiene ? 'border-brand bg-brand text-white' : 'border-gray-300 bg-white hover:border-brand/50',
+                          tiene ? 'border-brand bg-brand text-white' : 'border-gray-300 bg-card hover:border-brand/50',
                         )}
                       >
                         {tiene && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -308,7 +308,7 @@ export function RolModal({ rol, onClose }: { rol: Rol | null; onClose: () => voi
                             return (
                               <label
                                 key={a.key}
-                                className={clsx('flex items-start gap-2.5 rounded-lg px-2 py-1.5 cursor-pointer', activa ? 'bg-white shadow-sm' : 'hover:bg-white')}
+                                className={clsx('flex items-start gap-2.5 rounded-lg px-2 py-1.5 cursor-pointer', activa ? 'bg-card shadow-sm' : 'hover:bg-card')}
                               >
                                 <input
                                   type="checkbox"
@@ -337,7 +337,7 @@ export function RolModal({ rol, onClose }: { rol: Rol | null; onClose: () => voi
         <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
           <button
             onClick={onClose}
-            className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+            className="rounded-xl border border-gray-200 bg-card px-5 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
           >
             Cancelar
           </button>

@@ -41,7 +41,7 @@ function StatCard({
     amber:   { soft: 'bg-amber-50',   text: 'text-amber-500',   bar: 'bg-amber-400' },
   }[tone]
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="flex items-start gap-3">
         <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl', tones.soft)}>
           <Icon className={clsx('h-4 w-4', tones.text)} />
@@ -91,7 +91,7 @@ function RowMenu({
         <MoreVertical className="h-4 w-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg animate-fade-in">
+        <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-card py-1 shadow-lg animate-fade-in">
           {esDesactivado ? (
             <button
               onClick={() => { onReactivate?.(); setOpen(false) }}
@@ -305,7 +305,7 @@ export function UsuariosTab() {
             'flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-[0.78rem] font-semibold transition-colors',
             showFiltros || filtrosActivos > 0
               ? 'border-brand/40 bg-brand/[0.04] text-brand'
-              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+              : 'border-gray-200 bg-card text-gray-600 hover:bg-gray-50',
           )}
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -318,7 +318,7 @@ export function UsuariosTab() {
           onClick={() => { if (tab === 'activos') refetch(); else refetchDesact() }}
           title="Actualizar"
           className={clsx(
-            'flex h-[38px] w-[38px] items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors',
+            'flex h-[38px] w-[38px] items-center justify-center rounded-xl border border-gray-200 bg-card text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors',
             refrescando && 'animate-spin',
           )}
         >
@@ -328,7 +328,7 @@ export function UsuariosTab() {
 
       {/* ── Panel de filtros plegable ── */}
       {showFiltros && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card space-y-3 animate-fade-in">
+        <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card space-y-3 animate-fade-in">
           <div className="flex items-center justify-between">
             <span className="section-label">Filtros</span>
             {filtrosActivos > 0 && (
@@ -370,7 +370,7 @@ export function UsuariosTab() {
       )}
 
       {/* ── Tabla ── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card">
         {loading ? (
           <div className="flex justify-center py-16"><Users className="h-5 w-5 animate-pulse text-gray-300" /></div>
         ) : filtered.length === 0 ? (
@@ -517,7 +517,7 @@ export function UsuariosTab() {
                 <select
                   value={pageSize}
                   onChange={(e) => setPageSize(Number(e.target.value))}
-                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[0.72rem] text-gray-600 outline-none focus:border-brand"
+                  className="rounded-lg border border-gray-200 bg-card px-2 py-1 text-[0.72rem] text-gray-600 outline-none focus:border-brand"
                 >
                   {PAGE_SIZES.map((n) => (
                     <option key={n} value={n}>{n} por página</option>

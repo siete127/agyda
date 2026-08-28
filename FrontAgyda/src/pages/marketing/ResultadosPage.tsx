@@ -84,7 +84,7 @@ function ResultadosPageContent() {
         <>
           <DashboardStatRow stats={stats} />
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+          <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
             <h2 className="mb-3 text-sm font-bold text-ink">Tendencia de los últimos 6 meses</h2>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -109,7 +109,7 @@ function ResultadosPageContent() {
                 <Link
                   key={t.key}
                   to={t.linkTo}
-                  className="group flex flex-col rounded-2xl border border-gray-100 bg-white p-4 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                  className="group flex flex-col rounded-2xl border border-gray-100 bg-card p-4 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <span className="flex items-center gap-2 text-sm font-semibold text-ink">

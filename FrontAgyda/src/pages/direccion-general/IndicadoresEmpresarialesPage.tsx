@@ -64,7 +64,7 @@ function KpiCard({ kpi, areaLabel, onClick }: { kpi: KpiIndicador; areaLabel: st
   const varCfg = varianzaConfig(variacion)
 
   return (
-    <button onClick={onClick} className="flex h-full flex-col rounded-xl border border-gray-100 bg-white p-3.5 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
+    <button onClick={onClick} className="flex h-full flex-col rounded-xl border border-gray-100 bg-card p-3.5 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
       <span className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-tertiary">{areaLabel}</span>
 
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -478,7 +478,7 @@ export function IndicadoresEmpresarialesPage() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.totales.totalKpis === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Ninguna área ha publicado indicadores para este periodo.</p>
         </div>
       ) : (
@@ -486,7 +486,7 @@ export function IndicadoresEmpresarialesPage() {
           <DashboardStatRow stats={stats} />
 
           {chartData.length > 0 && (
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+            <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
               <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-tertiary">Valor vs. meta</h2>
               <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -515,7 +515,7 @@ export function IndicadoresEmpresarialesPage() {
           </div>
 
           {areasSinDatos.length > 0 && (
-            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-4">
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-4">
               <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-tertiary">Sin datos este periodo</h2>
               <div className="flex flex-wrap gap-2">
                 {areasSinDatos.map((a) => (

@@ -60,7 +60,7 @@ function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <p className="text-base font-bold text-ink">{regla ? 'Editar regla' : 'Nueva regla de asignación'}</p>
           <button onClick={onClose} className="text-ink-tertiary hover:text-ink"><X className="h-5 w-5" /></button>
@@ -180,7 +180,7 @@ function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onC
                     onClick={() => toggleDia(d.val)}
                     className={clsx(
                       'rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
-                      (form.diasSemana ?? []).includes(d.val) ? 'bg-brand text-white' : 'bg-white text-ink-secondary',
+                      (form.diasSemana ?? []).includes(d.val) ? 'bg-brand text-white' : 'bg-card text-ink-secondary',
                     )}
                   >
                     {d.label}
@@ -227,7 +227,7 @@ function SimuladorPanel() {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="mb-3 flex items-center gap-2">
         <FlaskConical className="h-4 w-4 text-brand" />
         <p className="text-sm font-semibold text-ink">Simulador (dry-run, no asigna nada real)</p>
@@ -329,7 +329,7 @@ export function ReglasNegocioTab() {
     <div className="space-y-4">
       <SimuladorPanel />
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-1 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-brand" />

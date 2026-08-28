@@ -282,7 +282,7 @@ export function PerfilPage() {
   if (isLoading || !perfil) {
     return (
       <div className="mx-auto max-w-6xl space-y-5 animate-fade-in">
-        <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+        <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
           <div className="h-40" style={{ background: 'linear-gradient(135deg, #0B1730 0%, #14274E 100%)' }} />
           <div className="px-6 pb-5">
             <div className="-mt-12 mb-4 flex items-end gap-4">
@@ -320,7 +320,7 @@ export function PerfilPage() {
     <div className="mx-auto max-w-6xl space-y-5 animate-fade-in">
 
       {/* ── Banner de bienvenida ── */}
-      <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+      <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
         <div
           className="relative overflow-hidden px-6 py-6 sm:px-8 sm:py-7"
           style={{ background: 'linear-gradient(135deg, #0B1730 0%, #14274E 100%)' }}
@@ -379,7 +379,7 @@ export function PerfilPage() {
       </div>
 
       {/* ── Card Resumen (chips en línea) ── */}
-      <div className="rounded-2xl border border-surface-border bg-white p-4">
+      <div className="rounded-2xl border border-surface-border bg-card p-4">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatWidget icon={Briefcase} label="Puesto" value={perfil.puesto || 'No disponible'} />
           <StatWidget icon={Building2} label="Área" value={perfil.departamento || 'No disponible'} />
@@ -415,7 +415,7 @@ export function PerfilPage() {
           </div>
 
           {/* ── Tabs de acción (Información / Editar / Seguridad) ── */}
-          <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+          <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
             {/* Tab nav */}
             <div className="flex border-b border-surface-border">
               {TABS.map(({ key, label, icon: Icon }) => (
@@ -661,7 +661,7 @@ export function PerfilPage() {
       </div>
 
       {/* ── Mi expediente: datos personales que antes vivían en el módulo Expediente ── */}
-      <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+      <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
         <div className="flex items-center gap-3 border-b border-surface-border px-5 py-4">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-light">
             <FolderOpen className="h-4.5 w-4.5 text-brand" />

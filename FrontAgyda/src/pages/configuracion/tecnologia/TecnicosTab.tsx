@@ -75,7 +75,7 @@ function EditorTecnico({ tecnico, onClose }: { tecnico: Tecnico; onClose: () => 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-card p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -261,7 +261,7 @@ export function TecnicosTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Técnicos de soporte</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Perfil completo usado por el motor de reglas de asignación: especialidad, categorías/sedes con

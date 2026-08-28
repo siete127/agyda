@@ -26,7 +26,7 @@ function Field({
 }
 
 const inputCls =
-  'w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-12 pr-3 text-sm text-gray-900 ' +
+  'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-12 pr-3 text-sm text-gray-900 ' +
   'placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15'
 const selectCls = inputCls + ' appearance-none cursor-pointer pr-9'
 
@@ -313,7 +313,7 @@ export function UsuarioModal({ usuario, onClose }: { usuario: Usuario | null; on
         <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
           <button
             onClick={onClose}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+            className="rounded-xl border border-gray-200 bg-card px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
           >
             Cancelar
           </button>

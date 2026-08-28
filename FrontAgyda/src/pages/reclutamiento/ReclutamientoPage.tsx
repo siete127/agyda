@@ -82,7 +82,7 @@ export function ReclutamientoPage() {
               type="button"
               onClick={() => setVista('kanban')}
               title="Vista Kanban"
-              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors', vista === 'kanban' ? 'bg-brand text-white' : 'bg-white text-gray-500 hover:bg-gray-50')}
+              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors', vista === 'kanban' ? 'bg-brand text-white' : 'bg-card text-gray-500 hover:bg-gray-50')}
             >
               <Kanban className="h-4 w-4" />
             </button>
@@ -90,7 +90,7 @@ export function ReclutamientoPage() {
               type="button"
               onClick={() => setVista('lista')}
               title="Vista Lista"
-              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors', vista === 'lista' ? 'bg-brand text-white' : 'bg-white text-gray-500 hover:bg-gray-50')}
+              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors', vista === 'lista' ? 'bg-brand text-white' : 'bg-card text-gray-500 hover:bg-gray-50')}
             >
               <List className="h-4 w-4" />
             </button>
@@ -212,7 +212,7 @@ function PostulanteCard({
       onDragStart={(e) => { e.stopPropagation(); onDragStart() }}
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); onDragOver() }}
       className={clsx(
-        'group relative rounded-xl border-l-4 border border-gray-100 bg-white p-3 shadow-sm hover:shadow-md transition-all active:opacity-60 cursor-grab',
+        'group relative rounded-xl border-l-4 border border-gray-100 bg-card p-3 shadow-sm hover:shadow-md transition-all active:opacity-60 cursor-grab',
         etapa?.borderColor ?? 'border-gray-400',
       )}
     >

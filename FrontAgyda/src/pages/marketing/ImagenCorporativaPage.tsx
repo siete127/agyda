@@ -107,7 +107,7 @@ function AssetCard({ asset, esAdmin, onEliminar }: { asset: AssetMarca; esAdmin:
   const url = imagenCorporativaService.getUrlVerAsset(asset.id)
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
+    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
       {esAdmin && (
         <button
           onClick={onEliminar}
@@ -214,11 +214,11 @@ function ImagenCorporativaPageContent() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay assets de marca registrados.</p>
         </div>
       ) : assetsFiltrados.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Ningún asset coincide con los filtros aplicados.</p>
         </div>
       ) : (
