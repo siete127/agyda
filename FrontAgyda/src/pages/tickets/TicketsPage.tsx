@@ -22,6 +22,8 @@ import { catalogosTiService } from '@/services/catalogosTi.service'
 import { activosGeneralesService } from '@/services/activosGenerales.service'
 import { plantillasRespuestaService } from '@/services/plantillasRespuesta.service'
 import { camposPersonalizadosService } from '@/services/camposPersonalizados.service'
+import { SlaTab } from '@/pages/configuracion/tecnologia/SlaTab'
+import { TecnicosTab } from '@/pages/configuracion/tecnologia/TecnicosTab'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -1587,7 +1589,7 @@ interface PersonaStat {
   tiempoPromMinutos: number | null
 }
 
-function ProductividadBar({ label, val, max, color }: { label: string; val: number; max: number; color: string }) {
+function ProductividadBar({ val, max, color }: { val: number; max: number; color: string }) {
   const pct = max > 0 ? Math.round((val / max) * 100) : 0
   return (
     <div className="flex items-center gap-3">
@@ -1619,7 +1621,7 @@ function ProductividadCard({ p, maxTotal, tipo }: { p: PersonaStat; maxTotal: nu
       {/* Barra total */}
       <div>
         <p className="text-[0.62rem] font-semibold text-ink-tertiary uppercase tracking-wide mb-1">Total vs máximo</p>
-        <ProductividadBar label="" val={p.total} max={maxTotal} color="bg-brand/70" />
+        <ProductividadBar val={p.total} max={maxTotal} color="bg-brand/70" />
       </div>
 
       {/* Barras de estado */}
@@ -1627,13 +1629,13 @@ function ProductividadCard({ p, maxTotal, tipo }: { p: PersonaStat; maxTotal: nu
         <p className="text-[0.62rem] font-semibold text-ink-tertiary uppercase tracking-wide">Desglose</p>
         <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1.5 text-[0.65rem]">
           <span className="text-emerald-600 font-semibold">Resueltos</span>
-          <ProductividadBar label="" val={p.resueltos} max={p.total} color="bg-emerald-400" />
+          <ProductividadBar val={p.resueltos} max={p.total} color="bg-emerald-400" />
           <span className="text-ink-secondary font-semibold">Cerrados</span>
-          <ProductividadBar label="" val={p.cerrados} max={p.total} color="bg-gray-400" />
+          <ProductividadBar val={p.cerrados} max={p.total} color="bg-gray-400" />
           <span className="text-amber-600 font-semibold">En proceso</span>
-          <ProductividadBar label="" val={p.enProceso} max={p.total} color="bg-amber-400" />
+          <ProductividadBar val={p.enProceso} max={p.total} color="bg-amber-400" />
           <span className="text-blue-500 font-semibold">Abiertos</span>
-          <ProductividadBar label="" val={p.abiertos} max={p.total} color="bg-brand/50" />
+          <ProductividadBar val={p.abiertos} max={p.total} color="bg-brand/50" />
         </div>
       </div>
 
@@ -1902,6 +1904,8 @@ export function TicketsPage() {
   const [filtroEstado, setFiltroEstado] = useState<TicketEstado | 'todos'>('abierto')
   const [showNuevo, setShowNuevo] = useState(false)
   const [showApiKeys, setShowApiKeys] = useState(false)
+  const [showSla, setShowSla] = useState(false)
+  const [showTecnicos, setShowTecnicos] = useState(false)
   const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
   const [filtroPrioridad, setFiltroPrioridad] = useState<TicketPrioridad | ''>('')
   const [filtroArea, setFiltroArea] = useState<'' | 'TI' | 'ST'>('')
@@ -2038,21 +2042,21 @@ export function TicketsPage() {
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              <Link
-                to="/configuracion?tab=sla"
+              <button
+                onClick={() => setShowSla(true)}
                 title="Configurar SLA"
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
               >
                 <Timer className="h-3.5 w-3.5" />
-              </Link>
+              </button>
               {esAD && (
-                <Link
-                  to="/configuracion?tab=tecnicos"
+                <button
+                  onClick={() => setShowTecnicos(true)}
                   title="Administrar técnicos"
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
                 >
                   <Users className="h-3.5 w-3.5" />
-                </Link>
+                </button>
               )}
               {esAD && (
                 <button
@@ -2230,6 +2234,14 @@ export function TicketsPage() {
 
       {showNuevo && <NuevoTicketModal onClose={() => setShowNuevo(false)} />}
       {showApiKeys && <PanelApiKeys onClose={() => setShowApiKeys(false)} />}
+
+      <Modal isOpen={showSla} onClose={() => setShowSla(false)} title="SLA de Tickets" size="xl">
+        <SlaTab />
+      </Modal>
+
+      <Modal isOpen={showTecnicos} onClose={() => setShowTecnicos(false)} title="Administrar técnicos" size="xl">
+        <TecnicosTab />
+      </Modal>
       {activeTicket && (
         <TicketDetalleModal
           ticket={tickets.find((t) => t.id === activeTicket.id) ?? activeTicket}

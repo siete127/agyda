@@ -8,6 +8,20 @@ require('dotenv').config({ path: envPath });
 // Inicializar logger centralizado (usa LOG_LEVEL: error,warn,info,debug)
 const logger = require('./utils/logger');
 global.logger = logger;
+
+// Red de seguridad del proceso: sin esto, CUALQUIER promesa rechazada sin
+// catch en cualquier parte del código (una condición de carrera rara, un
+// error de red transitorio con SQL Server, etc.) tumba el servidor completo
+// para TODOS los tenants — no solo la petición que falló. Loggeamos con todo
+// detalle y dejamos el proceso vivo; el bug de fondo sigue habiendo que
+// arreglarlo, pero ya no se lleva de corbata al resto de usuarios activos.
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('❌ unhandledRejection (promesa rechazada sin catch):', reason);
+});
+process.on('uncaughtException', (err) => {
+  logger.error('❌ uncaughtException (excepción no capturada):', err);
+});
+
 // permitir `console.debug(...)` como alias para mensajes debug controlados
 console.debug = (...args) => logger.debug(...args);
 // Redirigir `console.log` a `logger.debug` para reducir salida no importante

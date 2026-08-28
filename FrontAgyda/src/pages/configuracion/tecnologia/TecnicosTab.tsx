@@ -254,10 +254,16 @@ function EditorTecnico({ tecnico, onClose }: { tecnico: Tecnico; onClose: () => 
 export function TecnicosTab() {
   const [editando, setEditando] = useState<Tecnico | null>(null)
 
-  const { data: tecnicos = [], isLoading } = useQuery({
+  const { data: tecnicos = [], isLoading, isError, error } = useQuery({
     queryKey: ['tecnicos'],
     queryFn: () => tecnicosService.getTecnicos(),
   })
+
+  const mensajeError = isError
+    ? (error as { response?: { status?: number; data?: { message?: string } } })?.response?.status === 403
+      ? 'Tu perfil no tiene permiso para ver esta sección (Configuración > ver).'
+      : (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'No se pudo cargar la lista de técnicos.'
+    : null
 
   return (
     <div className="space-y-4">
@@ -270,6 +276,13 @@ export function TecnicosTab() {
 
         {isLoading ? (
           <p className="text-sm text-ink-tertiary">Cargando...</p>
+        ) : isError ? (
+          <p className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">{mensajeError}</p>
+        ) : tecnicos.length === 0 ? (
+          <p className="text-sm text-ink-tertiary">
+            No hay usuarios con tipo TI o ST dados de alta todavía. Da de alta al menos uno en el módulo
+            de Usuarios para que aparezca aquí.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[0.8rem]">

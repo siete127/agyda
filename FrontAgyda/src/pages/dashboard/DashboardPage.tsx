@@ -322,32 +322,17 @@ export function DashboardPage() {
       label: 'Bienvenida',
       node: (
         <div className="dash-card flex h-full flex-col rounded-2xl border border-surface-border bg-card p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
-                ¡{greeting}, {user?.perfilAlias ?? user?.nombres?.split(' ')[0] ?? 'Usuario'}! <span>👋</span>
-              </h1>
-              <p className="mt-1 text-[0.8rem] text-ink-tertiary capitalize">
-                {now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-              </p>
-            </div>
-            {user && (
-              <Link to="/perfil"
-                className="flex flex-shrink-0 items-center gap-2 rounded-full border border-surface-border pl-1 pr-3 py-1 group hover:border-brand/30 hover:bg-brand-light transition-colors">
-                <Avatar src={user.perfilFotoUrl} name={user.nombres} size="sm" ring="brand" />
-                <div className="hidden text-left leading-none sm:block">
-                  <p className="text-[0.78rem] font-semibold text-ink group-hover:text-brand transition-colors">
-                    {user.perfilAlias ?? user.nombres.split(' ')[0]}
-                  </p>
-                  <p className="text-[0.65rem] text-ink-tertiary capitalize mt-0.5">{user.tipoUsuario}</p>
-                </div>
-                <ChevronDown className="hidden h-3.5 w-3.5 text-ink-tertiary group-hover:text-brand transition-colors sm:block" />
-              </Link>
-            )}
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
+              ¡{greeting}, {user?.perfilAlias ?? user?.nombres?.split(' ')[0] ?? 'Usuario'}! <span>👋</span>
+            </h1>
+            <p className="mt-1 text-[0.8rem] text-ink-tertiary capitalize">
+              {now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
           </div>
           <p className="mt-4 text-[0.8rem] text-ink-secondary">Conectados hoy, resolvemos el mañana.</p>
           <p className="mt-1 text-[0.8rem] font-medium text-brand">Soluciones en tecnología que impulsan a tu equipo.</p>
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <span className={clsx(
               'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-medium',
               isConnected ? 'border-success/20 bg-success/10 text-success' : 'border-surface-border bg-surface text-ink-tertiary',
@@ -355,6 +340,14 @@ export function DashboardPage() {
               <span className={clsx('h-1.5 w-1.5 rounded-full', isConnected ? 'bg-success animate-pulse' : 'bg-ink-tertiary')} />
               {isConnected ? 'En línea' : 'Sin conexión'}
             </span>
+            {user && (
+              <Link to="/perfil"
+                className="flex flex-shrink-0 items-center gap-2 rounded-full border border-surface-border pl-1 pr-3 py-1 group hover:border-brand/30 hover:bg-brand-light transition-colors">
+                <Avatar src={user.perfilFotoUrl} name={user.nombres} size="sm" ring="brand" />
+                <p className="hidden text-[0.78rem] font-semibold text-ink group-hover:text-brand transition-colors sm:block">Perfil</p>
+                <ChevronDown className="hidden h-3.5 w-3.5 text-ink-tertiary group-hover:text-brand transition-colors sm:block" />
+              </Link>
+            )}
           </div>
         </div>
       ),

@@ -17,7 +17,7 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
   headerButtons: [
     { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: true },
     { key: 'marcador', label: 'Marcador', url: '', visible: true },
-    { key: 'sistemas', label: 'Sistemas', url: '', visible: true },
+    { key: 'sistemas', label: 'Ventas', url: '', visible: true },
     { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
   ],
   dashboard: { cards: [] },
