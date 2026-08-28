@@ -10,6 +10,8 @@ import { getRouteLabel, ROUTES } from '@/router/routes.config'
 import { type Ticket } from '@/types/ticket.types'
 import { type Noticia } from '@/types/noticia.types'
 import logoAgyda from '@/assets/Logo_AGYDA.png'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { personalizacionService } from '@/services/personalizacion.service'
 
 interface SearchResult {
   id: string
@@ -31,6 +33,9 @@ export function Topbar() {
   const handleSwitchSystem = () => {
     navigate('/ventas')
   }
+
+  const { branding } = usePersonalizacion()
+  const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
 
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -160,14 +165,16 @@ export function Topbar() {
 
         {/* Logo */}
         <div className="hidden items-center gap-2 md:flex">
-          <img src={logoAgyda} alt="AGYDA" className="h-8 w-8 flex-shrink-0 object-contain" />
+          <img src={logoSrc} alt={branding.nombreCorto} className="h-8 w-auto max-w-[120px] flex-shrink-0 object-contain" />
           <div className="leading-tight">
             <p className="text-[1rem] font-extrabold tracking-tight text-ink">
-              ARDABY<span className="text-brand">TEC</span>
+              {branding.nombreCorto}
             </p>
-            <p className="text-[7.5px] font-semibold -mt-0.5 text-ink-tertiary" style={{ letterSpacing: '0.12em' }}>
-              SOLUCIONES EN TECNOLOGÍA
-            </p>
+            {branding.eslogan && (
+              <p className="text-[7.5px] font-semibold -mt-0.5 text-ink-tertiary uppercase" style={{ letterSpacing: '0.12em' }}>
+                {branding.eslogan}
+              </p>
+            )}
           </div>
         </div>
 

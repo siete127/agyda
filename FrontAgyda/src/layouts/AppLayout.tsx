@@ -14,6 +14,8 @@ import { useUIStore } from '@/stores/ui.store'
 import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { useAuthStore } from '@/stores/auth.store'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
+import { PersonalizacionProvider } from '@/providers/PersonalizacionProvider'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
 
 export function AppLayout() {
   const setActiveRoute = useUIStore((s) => s.setActiveRoute)
@@ -32,6 +34,19 @@ export function AppLayout() {
   }, [location.pathname, setActiveRoute])
 
   return (
+    <PersonalizacionProvider>
+      <Layout location={location} showMusic={showMusic} showMensajeria={showMensajeria} />
+    </PersonalizacionProvider>
+  )
+}
+
+function Layout({ location, showMusic, showMensajeria }: {
+  location: ReturnType<typeof useLocation>
+  showMusic: boolean
+  showMensajeria: boolean
+}) {
+  const { branding } = usePersonalizacion()
+  return (
     <div className="flex h-screen overflow-hidden bg-surface">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
@@ -41,7 +56,7 @@ export function AppLayout() {
             <Outlet />
           </div>
           <footer className="mt-8 pb-2 text-center text-[0.68rem] text-ink-tertiary">
-            © {new Date().getFullYear()} ARDABYTEC. Todos los derechos reservados.
+            © {new Date().getFullYear()} {branding.nombreLargo.toUpperCase()}. Todos los derechos reservados.
           </footer>
         </main>
         {showMusic && <MusicBubble />}

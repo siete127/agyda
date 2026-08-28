@@ -10,12 +10,16 @@ const config: Config = {
         mono:    ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
-        /* Azul de marca — único acento del sistema */
+        /* Color de marca — configurable por empresa vía CSS vars (ver
+           src/index.css :root y PersonalizacionProvider). Los defaults son el
+           azul histórico #2F6FED / #1E4FC4 / #EEF3FE / #7FA8F5. El patrón
+           rgb(var(--x) / <alpha-value>) mantiene el soporte de opacidad
+           (bg-brand/20, text-brand/40, etc.). */
         brand: {
-          DEFAULT: '#2F6FED',
-          dark:    '#1E4FC4',
-          light:   '#EEF3FE',   /* fondo de ícono / chip suave */
-          muted:   '#7FA8F5',   /* texto de item activo en sidebar */
+          DEFAULT: 'rgb(var(--color-brand) / <alpha-value>)',
+          dark:    'rgb(var(--color-brand-dark) / <alpha-value>)',
+          light:   'rgb(var(--color-brand-light) / <alpha-value>)',
+          muted:   'rgb(var(--color-brand-muted) / <alpha-value>)',
         },
         /* Retenido para páginas aún no migradas a este design system */
         accent: {

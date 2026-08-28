@@ -17,6 +17,15 @@ export const CONFIG_TREE: ConfigNode[] = [
     screen: 'modulos-empresa',
   },
   {
+    key: 'apariencia', label: 'Apariencia',
+    description: 'Identidad visual de la empresa: logo, colores, nombre',
+    children: [
+      { key: 'pers-branding', label: 'Marca (logo, colores, nombre)', screen: 'pers-branding' },
+      { key: 'pers-botones', label: 'Botones del encabezado' },
+      { key: 'pers-dashboard', label: 'Diseño del inicio' },
+    ],
+  },
+  {
     key: 'organizacion', label: 'Organización',
     description: 'Empresas, sucursales, estructura y calendarios corporativos',
     children: [
