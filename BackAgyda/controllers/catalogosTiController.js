@@ -64,7 +64,7 @@ exports.toggleSedeActiva = async (req, res) => {
   }
 };
 
-/* ── Categorías / Subcategorías (árbol) ── */
+/* ── Categorías / Subcategorías / Elementos (árbol de 3 niveles) ── */
 exports.getCategorias = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -77,10 +77,17 @@ exports.getCategorias = async (req, res) => {
       SELECT SUBCAT_ID as id, SUBCAT_CAT_ID as categoriaId, SUBCAT_NOMBRE as nombre, SUBCAT_ORDEN as orden, SUBCAT_ACTIVA as activa
       FROM TICKET_SUBCATEGORIAS ${incluirInactivas ? '' : 'WHERE SUBCAT_ACTIVA = 1'}
       ORDER BY SUBCAT_ORDEN, SUBCAT_NOMBRE`);
+    const elems = await pool.request().query(`
+      SELECT ELEM_ID as id, ELEM_SUBCAT_ID as subcategoriaId, ELEM_NOMBRE as nombre, ELEM_ORDEN as orden, ELEM_ACTIVO as activa
+      FROM TICKET_ELEMENTOS ${incluirInactivas ? '' : 'WHERE ELEM_ACTIVO = 1'}
+      ORDER BY ELEM_ORDEN, ELEM_NOMBRE`);
 
     const arbol = cats.recordset.map((c) => ({
       ...c,
-      subcategorias: subs.recordset.filter((s) => s.categoriaId === c.id).map(({ categoriaId, ...rest }) => rest),
+      subcategorias: subs.recordset.filter((s) => s.categoriaId === c.id).map(({ categoriaId, ...rest }) => ({
+        ...rest,
+        elementos: elems.recordset.filter((el) => el.subcategoriaId === rest.id).map(({ subcategoriaId, ...restEl }) => restEl),
+      })),
     }));
     res.json({ success: true, data: arbol });
   } catch (e) {
@@ -176,6 +183,53 @@ exports.toggleSubcategoriaActiva = async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('Error cambiando estado de subcategoría:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Elementos (tercer nivel del árbol, colgado de subcategoría) ── */
+exports.createElemento = async (req, res) => {
+  try {
+    const { subcategoriaId, nombre, orden } = req.body;
+    if (!subcategoriaId || !nombre) return res.status(400).json({ success: false, message: 'subcategoriaId y nombre son requeridos' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request()
+      .input('subcatId', sql.Int, subcategoriaId)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_ELEMENTOS (ELEM_SUBCAT_ID, ELEM_NOMBRE, ELEM_ORDEN) VALUES (@subcatId, @nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando elemento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateElemento = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_ELEMENTOS SET ELEM_NOMBRE=@nombre, ELEM_ORDEN=@orden WHERE ELEM_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando elemento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleElementoActivo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_ELEMENTOS SET ELEM_ACTIVO = 1 - ELEM_ACTIVO WHERE ELEM_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de elemento:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

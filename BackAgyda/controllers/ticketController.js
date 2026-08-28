@@ -399,7 +399,7 @@ exports.getTickets = async (req, res) => {
           SELECT TOP 200
             t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
             t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
             su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -421,7 +421,7 @@ exports.getTickets = async (req, res) => {
         SELECT TOP 200
           t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
           t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
           su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -446,7 +446,7 @@ exports.getTickets = async (req, res) => {
           SELECT TOP 200
             t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
             t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
             su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -474,7 +474,7 @@ exports.getTickets = async (req, res) => {
     const rs = await pool.request().input('uid', sql.Int, usuarioId)
       .query(`SELECT TOP 200 t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
                      t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+            t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
             t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
                      su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
@@ -503,7 +503,7 @@ exports.getTicketById = async (req, res) => {
       SELECT 
         t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.DESCRIPCION, t.ESTADO,
         t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
-        t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
+        t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
         t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
         t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
         t.SEDE, t.DEPARTAMENTO, t.ACTIVO_AFECTADO, t.SERVICIO_AFECTADO, t.CANAL_ORIGEN, t.CAUSA_RAIZ, t.DIAGNOSTICO, t.ACCIONES_REALIZADAS,
@@ -572,7 +572,7 @@ const CANALES_ORIGEN_VALIDOS = ['portal', 'chatbot', 'chat_en_vivo', 'tecnico', 
 
 async function crearTicketInterno(pool, {
   solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
-  clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+  clasificacion, subcategoria, elemento, sede, departamento, activoAfectado, servicioAfectado,
   activoAfectadoId, servicioAfectadoId,
   impacto, urgencia, prioridadManual: prioridadManualFlag, esAD,
   tenantKey, camposPersonalizados, canalOrigen,
@@ -616,6 +616,7 @@ async function crearTicketInterno(pool, {
       .input('clasif', sql.NVarChar, clasifValida)
       .input('cat', sql.NVarChar, categoria || null)
       .input('subcat', sql.NVarChar, subcategoria || null)
+      .input('elem', sql.NVarChar, elemento || null)
       .input('sede', sql.NVarChar, sede || null)
       .input('depto', sql.NVarChar, departamento || null)
       .input('activo', sql.NVarChar, activoAfectado || null)
@@ -628,11 +629,11 @@ async function crearTicketInterno(pool, {
       .input('canal', sql.NVarChar, canal)
       .query(`INSERT INTO TICKETS
                 (SOLICITANTE_ID, AREA, PRIORIDAD, TITULO, DESCRIPCION, ESTADO,
-                 CLASIFICACION, CATEGORIA, SUBCATEGORIA, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO, SERVICIO_AFECTADO,
+                 CLASIFICACION, CATEGORIA, SUBCATEGORIA, ELEMENTO, SEDE, DEPARTAMENTO, ACTIVO_AFECTADO, SERVICIO_AFECTADO,
                  ACTIVO_AFECTADO_ID, SERVICIO_AFECTADO_ID,
                  IMPACTO, URGENCIA, PRIORIDAD_MANUAL, NIVEL_ACTUAL, CANAL_ORIGEN)
               VALUES (@sol, @area, @prio, @tit, @desc, 'abierto',
-                 @clasif, @cat, @subcat, @sede, @depto, @activo, @servicio,
+                 @clasif, @cat, @subcat, @elem, @sede, @depto, @activo, @servicio,
                  @activoId, @servicioId,
                  @impacto, @urgencia, @prioManual, 1, @canal);
               SELECT SCOPE_IDENTITY() as id;`);
@@ -764,7 +765,7 @@ async function crearTicketInterno(pool, {
       SELECT TICKET_ID as id, SOLICITANTE_ID as solicitanteId, AREA as area, PRIORIDAD as prioridad, TITULO as titulo,
              DESCRIPCION as descripcion, ESTADO as estado, FECHA_CREACION as fechaCreacion, FECHA_ASIGNACION as fechaAsignacion,
              FECHA_PRIMERA_RESPUESTA as fechaPrimeraRespuesta, FECHA_CIERRE as fechaCierre, ASIGNADO_A as asignadoA,
-             CLASIFICACION as clasificacion, CATEGORIA as categoria, SUBCATEGORIA as subcategoria,
+             CLASIFICACION as clasificacion, CATEGORIA as categoria, SUBCATEGORIA as subcategoria, ELEMENTO as elemento,
              SEDE as sede, DEPARTAMENTO as departamento, ACTIVO_AFECTADO as activoAfectado,
              ACTIVO_AFECTADO_ID as activoAfectadoId, SERVICIO_AFECTADO_ID as servicioAfectadoId,
              IMPACTO as impacto, URGENCIA as urgencia, NIVEL_ACTUAL as nivelActual, CANAL_ORIGEN as canalOrigen
@@ -803,7 +804,7 @@ exports.createTicket = async (req, res) => {
     const solicitanteId = req.body.solicitanteId ?? req.body.usuarioId ?? Number(req.headers['usuarioid']);
     const {
       area, titulo, descripcion, prioridad, categoria, asignadoA,
-      clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      clasificacion, subcategoria, elemento, sede, departamento, activoAfectado, servicioAfectado,
       activoAfectadoId, servicioAfectadoId,
       impacto, urgencia, camposPersonalizados,
     } = req.body;
@@ -822,7 +823,7 @@ exports.createTicket = async (req, res) => {
 
     const result = await crearTicketInterno(pool, {
       solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,
-      clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      clasificacion, subcategoria, elemento, sede, departamento, activoAfectado, servicioAfectado,
       activoAfectadoId, servicioAfectadoId,
       impacto, urgencia, prioridadManual: req.body.prioridadManual, esAD,
       tenantKey: req.user?.empresa, camposPersonalizados, canalOrigen,
@@ -845,7 +846,8 @@ exports.createTicketFromApi = async (req, res) => {
   try {
     const {
       email, area, titulo, descripcion, categoria, clasificacion,
-      subcategoria, sede, departamento, activoAfectado, impacto, urgencia,
+      subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId, impacto, urgencia,
     } = req.body;
 
     if (!email) return res.status(400).json({ success: false, message: 'email requerido' });
@@ -860,7 +862,8 @@ exports.createTicketFromApi = async (req, res) => {
 
     const result = await crearTicketInterno(pool, {
       solicitanteId, area, titulo, descripcion, categoria,
-      clasificacion, subcategoria, sede, departamento, activoAfectado,
+      clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
+      activoAfectadoId, servicioAfectadoId,
       impacto, urgencia, prioridadManual: false, esAD: false,
       tenantKey: req.query.empresa, canalOrigen: 'api',
     });

@@ -8,10 +8,67 @@ import { camposPersonalizadosService } from '@/services/camposPersonalizados.ser
 import type { CategoriaConSubcategorias } from '@/types/catalogosTi.types'
 import { TIPO_LABELS, type CampoPersonalizado, type CampoPersonalizadoTipo, type CampoPersonalizadoPayload } from '@/types/camposPersonalizados.types'
 
+function ElementoRow({ elem }: { elem: CategoriaConSubcategorias['subcategorias'][number]['elementos'][number] }) {
+  const qc = useQueryClient()
+  const [editando, setEditando] = useState(false)
+  const [nombre, setNombre] = useState(elem.nombre)
+
+  const guardar = useMutation({
+    mutationFn: () => catalogosTiService.updateElemento(elem.id, { nombre: nombre.trim() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['catalogos-ti-categorias'] })
+      setEditando(false)
+    },
+    onError: () => toast.error('No se pudo actualizar el elemento'),
+  })
+
+  const toggle = useMutation({
+    mutationFn: () => catalogosTiService.toggleElementoActiva(elem.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['catalogos-ti-categorias'] }),
+  })
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-2 py-1 pl-14 text-xs hover:bg-surface">
+      {editando ? (
+        <>
+          <input
+            className="field flex-1 py-1 text-xs"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            autoFocus
+          />
+          <button className="btn-secondary px-2 py-1 text-xs" onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+            Guardar
+          </button>
+          <button className="px-2 py-1 text-xs text-ink-tertiary" onClick={() => { setEditando(false); setNombre(elem.nombre) }}>
+            Cancelar
+          </button>
+        </>
+      ) : (
+        <>
+          <span className={clsx('flex-1', !elem.activa && 'text-ink-tertiary line-through')}>{elem.nombre}</span>
+          <button className="text-ink-tertiary hover:text-brand" onClick={() => setEditando(true)} title="Editar">
+            <Pencil className="h-3 w-3" />
+          </button>
+          <button
+            className={clsx('hover:opacity-70', elem.activa ? 'text-red-400' : 'text-green-500')}
+            onClick={() => toggle.mutate()}
+            title={elem.activa ? 'Desactivar' : 'Activar'}
+          >
+            {elem.activa ? <Ban className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 function SubcategoriaRow({ categoriaId, sub }: { categoriaId: number; sub: CategoriaConSubcategorias['subcategorias'][number] }) {
   const qc = useQueryClient()
   const [editando, setEditando] = useState(false)
   const [nombre, setNombre] = useState(sub.nombre)
+  const [abierta, setAbierta] = useState(false)
+  const [nuevoElem, setNuevoElem] = useState('')
 
   const guardar = useMutation({
     mutationFn: () => catalogosTiService.updateSubcategoria(sub.id, { nombre: nombre.trim() }),
@@ -27,37 +84,73 @@ function SubcategoriaRow({ categoriaId, sub }: { categoriaId: number; sub: Categ
     onSuccess: () => qc.invalidateQueries({ queryKey: ['catalogos-ti-categorias'] }),
   })
 
+  const crearElem = useMutation({
+    mutationFn: () => catalogosTiService.createElemento({ subcategoriaId: sub.id, nombre: nuevoElem.trim() }),
+    onSuccess: () => {
+      setNuevoElem('')
+      qc.invalidateQueries({ queryKey: ['catalogos-ti-categorias'] })
+    },
+    onError: () => toast.error('No se pudo crear el elemento'),
+  })
+
   return (
-    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 pl-8 text-sm hover:bg-surface">
-      {editando ? (
-        <>
-          <input
-            className="field flex-1 py-1 text-sm"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            autoFocus
-          />
-          <button className="btn-secondary px-2 py-1 text-xs" onClick={() => guardar.mutate()} disabled={guardar.isPending}>
-            Guardar
-          </button>
-          <button className="px-2 py-1 text-xs text-ink-tertiary" onClick={() => { setEditando(false); setNombre(sub.nombre) }}>
-            Cancelar
-          </button>
-        </>
-      ) : (
-        <>
-          <span className={clsx('flex-1', !sub.activa && 'text-ink-tertiary line-through')}>{sub.nombre}</span>
-          <button className="text-ink-tertiary hover:text-brand" onClick={() => setEditando(true)} title="Editar">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
-            className={clsx('hover:opacity-70', sub.activa ? 'text-red-400' : 'text-green-500')}
-            onClick={() => toggle.mutate()}
-            title={sub.activa ? 'Desactivar' : 'Activar'}
-          >
-            {sub.activa ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-          </button>
-        </>
+    <div>
+      <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 pl-8 text-sm hover:bg-surface">
+        <button className="text-ink-tertiary" onClick={() => setAbierta((v) => !v)} title={abierta ? 'Ocultar elementos' : 'Ver elementos'}>
+          {abierta ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        </button>
+        {editando ? (
+          <>
+            <input
+              className="field flex-1 py-1 text-sm"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              autoFocus
+            />
+            <button className="btn-secondary px-2 py-1 text-xs" onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+              Guardar
+            </button>
+            <button className="px-2 py-1 text-xs text-ink-tertiary" onClick={() => { setEditando(false); setNombre(sub.nombre) }}>
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <>
+            <span className={clsx('flex-1', !sub.activa && 'text-ink-tertiary line-through')}>{sub.nombre}</span>
+            {sub.elementos.length > 0 && <span className="text-[0.65rem] text-ink-tertiary">{sub.elementos.length} elementos</span>}
+            <button className="text-ink-tertiary hover:text-brand" onClick={() => setEditando(true)} title="Editar">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              className={clsx('hover:opacity-70', sub.activa ? 'text-red-400' : 'text-green-500')}
+              onClick={() => toggle.mutate()}
+              title={sub.activa ? 'Desactivar' : 'Activar'}
+            >
+              {sub.activa ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            </button>
+          </>
+        )}
+      </div>
+      {abierta && (
+        <div className="pb-1">
+          {sub.elementos.map((el) => <ElementoRow key={el.id} elem={el} />)}
+          <div className="flex items-center gap-2 px-2 py-1 pl-14">
+            <input
+              className="field flex-1 py-1 text-xs"
+              placeholder="Nuevo elemento..."
+              value={nuevoElem}
+              onChange={(e) => setNuevoElem(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && nuevoElem.trim()) crearElem.mutate() }}
+            />
+            <button
+              className="btn-secondary px-2 py-1 text-xs"
+              disabled={!nuevoElem.trim() || crearElem.isPending}
+              onClick={() => crearElem.mutate()}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

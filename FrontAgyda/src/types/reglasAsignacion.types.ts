@@ -14,6 +14,8 @@ export interface ReglaAsignacion {
   nivelRequerido: number | null
   especialidadId: number | null
   especialidadNombre: string | null
+  tecnicoId: number | null
+  tecnicoNombre: string | null
   horarioInicio: string | null
   horarioFin: string | null
   diasSemana: string | null
@@ -30,6 +32,7 @@ export interface ReglaAsignacionPayload {
   prioridad?: string | null
   nivelRequerido?: number | null
   especialidadId?: number | null
+  tecnicoId?: number | null
   horarioInicio?: string | null
   horarioFin?: string | null
   diasSemana?: string[]
@@ -50,6 +53,7 @@ export interface SimulacionAsignacionResultado {
     reglaAplicada: number | null
     nivel: number
     especialidadId: number | null
+    tecnicoForzadoId: number | null
     grupoId: number | null
     grupoNombre: string | null
   }

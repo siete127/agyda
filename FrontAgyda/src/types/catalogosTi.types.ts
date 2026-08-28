@@ -5,11 +5,19 @@ export interface Sede {
   activa: boolean
 }
 
+export interface Elemento {
+  id: number
+  nombre: string
+  orden: number
+  activa: boolean
+}
+
 export interface Subcategoria {
   id: number
   nombre: string
   orden: number
   activa: boolean
+  elementos: Elemento[]
 }
 
 export interface CategoriaConSubcategorias {

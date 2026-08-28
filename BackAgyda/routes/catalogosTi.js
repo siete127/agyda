@@ -22,6 +22,11 @@ router.post('/subcategorias', requireActionAccess('configuracion', 'configurar')
 router.put('/subcategorias/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateSubcategoria);
 router.patch('/subcategorias/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleSubcategoriaActiva);
 
+// Elementos (tercer nivel, colgado de subcategoría)
+router.post('/elementos', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createElemento);
+router.put('/elementos/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateElemento);
+router.patch('/elementos/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleElementoActivo);
+
 // Especialidades
 router.get('/especialidades', requireActionAccess('configuracion', 'ver'), catalogosTiController.getEspecialidades);
 router.post('/especialidades', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createEspecialidad);

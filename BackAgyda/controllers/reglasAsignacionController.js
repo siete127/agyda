@@ -13,6 +13,7 @@ exports.getReglas = async (req, res) => {
              r.REG_SEDE_ID as sedeId, s.SEDE_NOMBRE as sedeNombre,
              r.REG_PRIORIDAD as prioridad, r.REG_NIVEL_REQUERIDO as nivelRequerido,
              r.REG_ESP_ID as especialidadId, e.ESP_NOMBRE as especialidadNombre,
+             r.REG_TECNICO_ID as tecnicoId, t.NEUS_NOMBRES as tecnicoNombre,
              CONVERT(varchar(5), r.REG_HORARIO_INICIO, 108) as horarioInicio,
              CONVERT(varchar(5), r.REG_HORARIO_FIN, 108) as horarioFin,
              r.REG_DIAS_SEMANA as diasSemana
@@ -21,6 +22,7 @@ exports.getReglas = async (req, res) => {
       LEFT JOIN TICKET_SUBCATEGORIAS sc ON sc.SUBCAT_ID = r.REG_SUBCAT_ID
       LEFT JOIN SEDES s ON s.SEDE_ID = r.REG_SEDE_ID
       LEFT JOIN TI_ESPECIALIDADES e ON e.ESP_ID = r.REG_ESP_ID
+      LEFT JOIN NEUS_USUARIOS t ON t.NEUS_ID = r.REG_TECNICO_ID
       ORDER BY r.REG_PRIORIDAD_ORDEN, r.REG_ID`);
     res.json({ success: true, data: rs.recordset });
   } catch (e) {
@@ -31,7 +33,7 @@ exports.getReglas = async (req, res) => {
 
 exports.createRegla = async (req, res) => {
   try {
-    const { nombre, area, categoriaId, subcategoriaId, sedeId, prioridad, nivelRequerido, especialidadId, orden, horarioInicio, horarioFin, diasSemana } = req.body;
+    const { nombre, area, categoriaId, subcategoriaId, sedeId, prioridad, nivelRequerido, especialidadId, tecnicoId, orden, horarioInicio, horarioFin, diasSemana } = req.body;
     if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -45,13 +47,14 @@ exports.createRegla = async (req, res) => {
       .input('prioridad', sql.NVarChar, prioridad || null)
       .input('nivel', sql.TinyInt, nivelRequerido || null)
       .input('espId', sql.Int, especialidadId || null)
+      .input('tecnicoId', sql.Int, tecnicoId || null)
       .input('creadoPor', sql.Int, req.user?.id || null)
       .input('horarioInicio', sql.VarChar, horarioInicio || null)
       .input('horarioFin', sql.VarChar, horarioFin || null)
       .input('diasSemana', sql.NVarChar, Array.isArray(diasSemana) && diasSemana.length ? diasSemana.join(',') : null)
       .query(`INSERT INTO TI_REGLAS_ASIGNACION
-                (REG_NOMBRE, REG_PRIORIDAD_ORDEN, REG_AREA, REG_CAT_ID, REG_SUBCAT_ID, REG_SEDE_ID, REG_PRIORIDAD, REG_NIVEL_REQUERIDO, REG_ESP_ID, REG_CREADO_POR, REG_HORARIO_INICIO, REG_HORARIO_FIN, REG_DIAS_SEMANA)
-              VALUES (@nombre, @orden, @area, @catId, @subcatId, @sedeId, @prioridad, @nivel, @espId, @creadoPor, @horarioInicio, @horarioFin, @diasSemana);
+                (REG_NOMBRE, REG_PRIORIDAD_ORDEN, REG_AREA, REG_CAT_ID, REG_SUBCAT_ID, REG_SEDE_ID, REG_PRIORIDAD, REG_NIVEL_REQUERIDO, REG_ESP_ID, REG_TECNICO_ID, REG_CREADO_POR, REG_HORARIO_INICIO, REG_HORARIO_FIN, REG_DIAS_SEMANA)
+              VALUES (@nombre, @orden, @area, @catId, @subcatId, @sedeId, @prioridad, @nivel, @espId, @tecnicoId, @creadoPor, @horarioInicio, @horarioFin, @diasSemana);
               SELECT SCOPE_IDENTITY() as id;`);
 
     await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'reglas-asignacion', accion:'crear', entidadId: String(ins.recordset[0].id), detalle:{ nombre }, ip:req.ip });
@@ -65,7 +68,7 @@ exports.createRegla = async (req, res) => {
 exports.updateRegla = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, activa, area, categoriaId, subcategoriaId, sedeId, prioridad, nivelRequerido, especialidadId, horarioInicio, horarioFin, diasSemana } = req.body;
+    const { nombre, activa, area, categoriaId, subcategoriaId, sedeId, prioridad, nivelRequerido, especialidadId, tecnicoId, horarioInicio, horarioFin, diasSemana } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
       .input('id', sql.Int, id)
@@ -78,13 +81,14 @@ exports.updateRegla = async (req, res) => {
       .input('prioridad', sql.NVarChar, prioridad || null)
       .input('nivel', sql.TinyInt, nivelRequerido || null)
       .input('espId', sql.Int, especialidadId || null)
+      .input('tecnicoId', sql.Int, tecnicoId || null)
       .input('horarioInicio', sql.VarChar, horarioInicio || null)
       .input('horarioFin', sql.VarChar, horarioFin || null)
       .input('diasSemana', sql.NVarChar, Array.isArray(diasSemana) && diasSemana.length ? diasSemana.join(',') : null)
       .query(`UPDATE TI_REGLAS_ASIGNACION SET
                 REG_NOMBRE=@nombre, REG_ACTIVA=@activa, REG_AREA=@area, REG_CAT_ID=@catId,
                 REG_SUBCAT_ID=@subcatId, REG_SEDE_ID=@sedeId, REG_PRIORIDAD=@prioridad,
-                REG_NIVEL_REQUERIDO=@nivel, REG_ESP_ID=@espId,
+                REG_NIVEL_REQUERIDO=@nivel, REG_ESP_ID=@espId, REG_TECNICO_ID=@tecnicoId,
                 REG_HORARIO_INICIO=@horarioInicio, REG_HORARIO_FIN=@horarioFin, REG_DIAS_SEMANA=@diasSemana
               WHERE REG_ID=@id`);
     res.json({ success: true });
@@ -142,6 +146,7 @@ exports.simularAsignacion = async (req, res) => {
     const asignacion = await asignarTecnico(pool, {
       area, nivel: ruteo.nivel, espId: ruteo.espId, categoriaId: criterios.categoriaId,
       sedeId: criterios.sedeId, prioridad: criterios.prioridad, tipoCarga: tipoCarga || 'ticket',
+      tecnicoForzadoId: ruteo.tecnicoForzadoId,
     });
 
     let tecnicoNombre = null;
@@ -153,7 +158,10 @@ exports.simularAsignacion = async (req, res) => {
     res.json({
       success: true,
       data: {
-        enrutamiento: { reglaAplicada: ruteo.reglaAplicada, nivel: ruteo.nivel, especialidadId: ruteo.espId, grupoId: ruteo.grupoId, grupoNombre: ruteo.grupoNombre },
+        enrutamiento: {
+          reglaAplicada: ruteo.reglaAplicada, nivel: ruteo.nivel, especialidadId: ruteo.espId,
+          tecnicoForzadoId: ruteo.tecnicoForzadoId, grupoId: ruteo.grupoId, grupoNombre: ruteo.grupoNombre,
+        },
         asignacion: { tecnicoId: asignacion?.userId || null, tecnicoNombre },
       },
     });

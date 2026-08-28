@@ -25,6 +25,7 @@ export const ticketsService = {
     clasificacion?: string
     categoria?: string
     subcategoria?: string
+    elemento?: string
     sede?: string
     departamento?: string
     activoAfectado?: string

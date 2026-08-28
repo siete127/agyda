@@ -38,6 +38,7 @@ export interface Ticket {
   clasificacion: TicketClasificacion | null
   categoria: string | null
   subcategoria: string | null
+  elemento: string | null
   sede: string | null
   departamento: string | null
   activoAfectado: string | null
@@ -198,6 +199,7 @@ export function parseTicket(raw: Record<string, unknown>): Ticket {
     clasificacion: (String(p('CLASIFICACION', 'clasificacion') ?? '') || null) as TicketClasificacion | null,
     categoria: String(p('CATEGORIA', 'categoria') ?? '') || null,
     subcategoria: String(p('SUBCATEGORIA', 'subcategoria') ?? '') || null,
+    elemento: String(p('ELEMENTO', 'elemento') ?? '') || null,
     sede: String(p('SEDE', 'sede') ?? '') || null,
     departamento: String(p('DEPARTAMENTO', 'departamento') ?? '') || null,
     activoAfectado: String(p('ACTIVO_AFECTADO', 'activoAfectado') ?? '') || null,

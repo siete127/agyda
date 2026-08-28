@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { reglasAsignacionService } from '@/services/reglasAsignacion.service'
 import { catalogosTiService } from '@/services/catalogosTi.service'
+import { tecnicosService } from '@/services/tecnicos.service'
 import type { ReglaAsignacion, ReglaAsignacionPayload } from '@/types/reglasAsignacion.types'
 
 const PRIORIDADES = ['P1', 'P2', 'P3', 'P4']
@@ -18,6 +19,7 @@ function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onC
   const { data: categorias = [] } = useQuery({ queryKey: ['catalogos-ti-categorias'], queryFn: () => catalogosTiService.getCategorias() })
   const { data: sedes = [] } = useQuery({ queryKey: ['catalogos-ti-sedes'], queryFn: () => catalogosTiService.getSedes() })
   const { data: especialidades = [] } = useQuery({ queryKey: ['catalogos-ti-especialidades'], queryFn: () => catalogosTiService.getEspecialidades() })
+  const { data: tecnicos = [] } = useQuery({ queryKey: ['tecnicos'], queryFn: () => tecnicosService.getTecnicos() })
 
   const [form, setForm] = useState<ReglaAsignacionPayload>({
     nombre: regla?.nombre ?? '',
@@ -28,6 +30,7 @@ function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onC
     prioridad: regla?.prioridad ?? null,
     nivelRequerido: regla?.nivelRequerido ?? null,
     especialidadId: regla?.especialidadId ?? null,
+    tecnicoId: regla?.tecnicoId ?? null,
     horarioInicio: regla?.horarioInicio ?? null,
     horarioFin: regla?.horarioFin ?? null,
     diasSemana: regla?.diasSemana ? regla.diasSemana.split(',') : [],
@@ -137,6 +140,19 @@ function ReglaFormModal({ regla, onClose }: { regla: ReglaAsignacion | null; onC
               <option value="">Ninguna</option>
               {especialidades.map((esp) => <option key={esp.id} value={esp.id}>{esp.nombre}</option>)}
             </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-600">Forzar técnico específico (vacío = elegir por carga)</label>
+            <select className="field mt-1 text-sm" value={form.tecnicoId ?? ''} onChange={(e) => setForm((f) => ({ ...f, tecnicoId: e.target.value ? Number(e.target.value) : null }))}>
+              <option value="">Ninguno — dejar que el motor elija por menor carga</option>
+              {tecnicos.map((t) => <option key={t.userId} value={t.userId}>{t.nombre}</option>)}
+            </select>
+            {form.tecnicoId && (
+              <p className="mt-1 text-[0.7rem] text-amber-600">
+                Se salta la especialidad y el balanceo de carga: siempre irá a esta persona si tiene capacidad disponible.
+              </p>
+            )}
           </div>
 
           <div className="rounded-xl border border-gray-100 bg-surface/50 p-3">
@@ -283,7 +299,7 @@ export function ReglasNegocioTab() {
   })
 
   const toggleActiva = useMutation({
-    mutationFn: (r: ReglaAsignacion) => reglasAsignacionService.updateRegla(r.id, { nombre: r.nombre, activa: !r.activa, area: r.area, categoriaId: r.categoriaId, subcategoriaId: r.subcategoriaId, sedeId: r.sedeId, prioridad: r.prioridad, nivelRequerido: r.nivelRequerido, especialidadId: r.especialidadId, horarioInicio: r.horarioInicio, horarioFin: r.horarioFin, diasSemana: r.diasSemana ? r.diasSemana.split(',') : [] }),
+    mutationFn: (r: ReglaAsignacion) => reglasAsignacionService.updateRegla(r.id, { nombre: r.nombre, activa: !r.activa, area: r.area, categoriaId: r.categoriaId, subcategoriaId: r.subcategoriaId, sedeId: r.sedeId, prioridad: r.prioridad, nivelRequerido: r.nivelRequerido, especialidadId: r.especialidadId, tecnicoId: r.tecnicoId, horarioInicio: r.horarioInicio, horarioFin: r.horarioFin, diasSemana: r.diasSemana ? r.diasSemana.split(',') : [] }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reglas-asignacion'] }),
   })
 
@@ -348,6 +364,9 @@ export function ReglasNegocioTab() {
                   <p className="text-xs text-ink-tertiary">
                     {[r.area, r.categoriaNombre, r.subcategoriaNombre, r.sedeNombre, r.prioridad, r.nivelRequerido ? `N${r.nivelRequerido}` : null, r.especialidadNombre]
                       .filter(Boolean).join(' · ') || 'Sin condiciones (comodín)'}
+                    {r.tecnicoNombre && (
+                      <span className="ml-1.5 text-brand">→ {r.tecnicoNombre}</span>
+                    )}
                     {r.horarioInicio && r.horarioFin && (
                       <span className="ml-1.5 text-amber-600">⏰ {r.horarioInicio}–{r.horarioFin}</span>
                     )}

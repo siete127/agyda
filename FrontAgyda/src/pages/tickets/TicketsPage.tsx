@@ -45,7 +45,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     titulo: '', descripcion: '', area: 'TI', asignadoA: '',
     clasificacion: '' as TicketClasificacion | '',
-    categoria: '', subcategoria: '',
+    categoria: '', subcategoria: '', elemento: '',
     sede: '', departamento: '', activoAfectado: '', servicioAfectado: '',
     activoAfectadoId: '' as number | '', servicioAfectadoId: '' as number | '',
     impacto: '' as TicketImpacto | '', urgencia: '' as TicketUrgencia | '',
@@ -82,6 +82,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
   })
   const subcategoriasDisponibles = categorias.find((c) => c.nombre === form.categoria)?.subcategorias ?? []
   const categoriaSeleccionadaId = categorias.find((c) => c.nombre === form.categoria)?.id ?? null
+  const elementosDisponibles = subcategoriasDisponibles.find((s) => s.nombre === form.subcategoria)?.elementos ?? []
 
   const { data: camposPersonalizadosDisponibles = [] } = useQuery({
     queryKey: ['campos-personalizados-por-categoria', categoriaSeleccionadaId],
@@ -98,6 +99,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
       clasificacion: form.clasificacion || undefined,
       categoria: form.categoria || undefined,
       subcategoria: form.subcategoria || undefined,
+      elemento: form.elemento || undefined,
       sede: form.sede || undefined,
       departamento: form.departamento || undefined,
       activoAfectado: form.activoAfectado || undefined,
@@ -164,7 +166,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
             <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Categoría</label>
             <select
               value={form.categoria}
-              onChange={(e) => setForm({ ...form, categoria: e.target.value, subcategoria: '' })}
+              onChange={(e) => setForm({ ...form, categoria: e.target.value, subcategoria: '', elemento: '' })}
               className="field"
             >
               <option value="">Seleccionar...</option>
@@ -175,7 +177,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
             <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Subcategoría</label>
             <select
               value={form.subcategoria}
-              onChange={(e) => setForm({ ...form, subcategoria: e.target.value })}
+              onChange={(e) => setForm({ ...form, subcategoria: e.target.value, elemento: '' })}
               className="field"
               disabled={!form.categoria}
             >
@@ -184,6 +186,20 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
         </div>
+
+        {elementosDisponibles.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Elemento</label>
+            <select
+              value={form.elemento}
+              onChange={(e) => setForm({ ...form, elemento: e.target.value })}
+              className="field"
+            >
+              <option value="">Ninguno / no aplica</option>
+              {elementosDisponibles.map((el) => <option key={el.id} value={el.nombre}>{el.nombre}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-3">
           <div>

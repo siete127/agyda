@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig, Proveedor, Servicio, DiaFestivo } from '@/types/catalogosTi.types'
+import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig, Proveedor, Servicio, DiaFestivo, Elemento } from '@/types/catalogosTi.types'
 
 export const catalogosTiService = {
   // Sedes
@@ -41,6 +41,18 @@ export const catalogosTiService = {
   },
   async toggleSubcategoriaActiva(id: number): Promise<void> {
     await api.patch(`/catalogos-ti/subcategorias/${id}/activa`)
+  },
+
+  // Elementos (tercer nivel, colgado de subcategoría)
+  async createElemento(payload: { subcategoriaId: number; nombre: string; orden?: number }): Promise<Elemento> {
+    const { data } = await api.post('/catalogos-ti/elementos', payload)
+    return data.data
+  },
+  async updateElemento(id: number, payload: { nombre: string; orden?: number }): Promise<void> {
+    await api.put(`/catalogos-ti/elementos/${id}`, payload)
+  },
+  async toggleElementoActiva(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/elementos/${id}/activa`)
   },
 
   // Especialidades

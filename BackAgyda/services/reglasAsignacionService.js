@@ -31,6 +31,7 @@ async function buscarReglaAplicable(pool, { area, categoriaId, subcategoriaId, s
   const rs = await pool.request().query(`
     SELECT REG_ID as id, REG_AREA as area, REG_CAT_ID as categoriaId, REG_SUBCAT_ID as subcategoriaId,
            REG_SEDE_ID as sedeId, REG_PRIORIDAD as prioridad, REG_NIVEL_REQUERIDO as nivelRequerido, REG_ESP_ID as espId,
+           REG_TECNICO_ID as tecnicoId,
            CONVERT(varchar(5), REG_HORARIO_INICIO, 108) as horarioInicio,
            CONVERT(varchar(5), REG_HORARIO_FIN, 108) as horarioFin,
            REG_DIAS_SEMANA as diasSemana
@@ -83,6 +84,7 @@ async function enrutarTicket(pool, { area, categoriaId = null, subcategoriaId = 
   const regla = await buscarReglaAplicable(pool, { area, categoriaId, subcategoriaId, sedeId, prioridad });
   const nivelEfectivo = regla?.nivelRequerido ?? nivel;
   const espRequerida = regla?.espId ?? null;
+  const tecnicoForzadoId = regla?.tecnicoId ?? null;
 
   let grupo = null;
   const grupoRs = await pool.request()
@@ -96,6 +98,7 @@ async function enrutarTicket(pool, { area, categoriaId = null, subcategoriaId = 
     area,
     nivel: nivelEfectivo,
     espId: espRequerida,
+    tecnicoForzadoId,
     grupoId: grupo?.id ?? null,
     grupoNombre: grupo?.nombre ?? null,
   };
@@ -107,10 +110,36 @@ async function enrutarTicket(pool, { area, categoriaId = null, subcategoriaId = 
 // quienes están en/sobre capacidad, y ordena por menor carga real.
 async function asignarTecnico(pool, {
   area, nivel = 1, espId = null, categoriaId = null, sedeId = null,
-  prioridad = null, tipoCarga = 'ticket',
+  prioridad = null, tipoCarga = 'ticket', tecnicoForzadoId = null,
 }) {
   const nivelEfectivo = nivel;
   const espRequerida = espId;
+
+  // Regla "por técnico": si la regla exige una persona específica, saltar el
+  // resto del algoritmo (especialidad/categoría/sede/orden por carga) y usar
+  // esa persona directo, siempre que esté disponible y con capacidad. Si no
+  // califica, se cae al flujo normal (fallback) en vez de bloquear la
+  // asignación — mismo principio que "sin reglas = fallback" del resto del motor.
+  if (tecnicoForzadoId) {
+    const forzadoRs = await pool.request().input('uid', sql.Int, tecnicoForzadoId).query(`
+      SELECT u.NEUS_ID as userId, s.MAX_TICKETS as maxTickets, s.MAX_CHATS as maxChats
+      FROM NEUS_USUARIOS u
+      INNER JOIN TI_STAFF_STATUS s ON s.USER_ID = u.NEUS_ID
+      WHERE u.NEUS_ACTIVO = 1 AND s.DISPONIBLE = 1 AND s.ESTADO_TRABAJO = 'disponible' AND u.NEUS_ID = @uid
+    `);
+    const forzado = forzadoRs.recordset[0];
+    if (forzado) {
+      const cargaRs = await pool.request().input('uid', sql.Int, forzado.userId).query(`
+        SELECT
+          (SELECT COUNT(*) FROM TICKETS WHERE ASIGNADO_A=@uid AND ESTADO NOT IN ('resuelto','cerrado')) as tickets,
+          (SELECT COUNT(*) FROM LIVECHAT_CONVERSACIONES WHERE LC_AGENTE_ID=@uid AND LC_ESTADO='activa') as chats
+      `);
+      const carga = cargaRs.recordset[0];
+      const limite = tipoCarga === 'chat' ? forzado.maxChats : forzado.maxTickets;
+      const actual = tipoCarga === 'chat' ? carga.chats : carga.tickets;
+      if (actual < limite) return { userId: forzado.userId };
+    }
+  }
 
   // HORARIO_INICIO/FIN son TIME, hay que convertirlas a 'HH:MM' explícitamente
   // o el driver las entrega como Date (ver buscarReglaAplicable más arriba).
@@ -217,6 +246,7 @@ async function seleccionarTecnico(pool, {
   const ruteo = await enrutarTicket(pool, { area, categoriaId, subcategoriaId, sedeId, prioridad, nivel });
   const asignacion = await asignarTecnico(pool, {
     area, nivel: ruteo.nivel, espId: ruteo.espId, categoriaId, sedeId, prioridad, tipoCarga,
+    tecnicoForzadoId: ruteo.tecnicoForzadoId,
   });
   if (!asignacion) return null;
   return { userId: asignacion.userId, reglaAplicada: ruteo.reglaAplicada, grupoId: ruteo.grupoId, grupoNombre: ruteo.grupoNombre };
