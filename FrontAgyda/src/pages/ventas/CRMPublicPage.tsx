@@ -46,9 +46,19 @@ const RESULTADOS_VENTA = [
   { code: 'RECHA',  label: 'Venta rechazada' },
 ]
 
+/* Normaliza a 10 dígitos (México), quitando el prefijo de país 52/521 que
+   VICIdial a veces incluye en el número — debe coincidir con la normalización
+   del backend (ventasController.js) para que la búsqueda del cliente haga match. */
+function normalizarTelefono(v: string): string {
+  const digitos = v.replace(/\D/g, '')
+  if (digitos.length === 12 && digitos.startsWith('52')) return digitos.slice(2)
+  if (digitos.length === 13 && digitos.startsWith('521')) return digitos.slice(3)
+  return digitos
+}
+
 export default function CRMPublicPage() {
   const [params] = useSearchParams()
-  const telefono = (params.get('cliente') ?? '').replace(/\D/g, '')
+  const telefono = normalizarTelefono(params.get('cliente') ?? '')
 
   /* Nombre del agente: resuelto por el backend via username, fallback al store o URL param */
   const storeNombre   = useVentasStore(s => s.ventasNombre)
