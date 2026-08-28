@@ -37,6 +37,8 @@
     --ink-secondary: 71 84 103;
     --ink-tertiary: 152 162 179;
 
+    --shadow: 0 0 0;
+
     color-scheme: light;
   }
 
@@ -60,6 +62,8 @@
     --ink: 244 247 252;
     --ink-secondary: 195 205 222;
     --ink-tertiary: 148 163 184;
+
+    --shadow: 0 0 0;
 
     color-scheme: dark;
   }

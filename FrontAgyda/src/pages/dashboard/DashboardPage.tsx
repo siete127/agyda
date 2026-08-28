@@ -398,7 +398,7 @@ export function DashboardPage() {
           <div className="flex flex-col">
             {RESUMEN.map((s, i) => (
               <Link key={s.to} to={s.to}
-                className={clsx('group flex items-center gap-3 py-2.5', i > 0 && 'border-t border-[#F0F2F6]')}>
+                className={clsx('group flex items-center gap-3 py-2.5', i > 0 && 'border-t border-gray-100')}>
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-brand-light">
                   <s.icon className="h-4 w-4 text-brand" />
                 </div>

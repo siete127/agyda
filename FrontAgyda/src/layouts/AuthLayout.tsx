@@ -96,7 +96,7 @@ export function AuthLayout() {
       </div>
 
       {/* ══ Panel derecho — Formulario ══ */}
-      <div className="relative flex flex-1 flex-col items-center justify-center bg-[#F0F2F5] p-6 lg:p-12">
+      <div className="relative flex flex-1 flex-col items-center justify-center bg-surface p-6 lg:p-12">
         {/* Solo visible en mobile */}
         <div className="mb-8 flex items-center gap-3 lg:hidden">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand">

@@ -69,11 +69,12 @@ const config: Config = {
         success: '#12B76A',
       },
       boxShadow: {
-        /* Retenidas para páginas aún no migradas; el design system nuevo usa borde de 1px, no sombra */
-        card:    '0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)',
-        'card-md':'0 4px 16px rgba(0,0,0,.08)',
-        'card-lg':'0 8px 32px rgba(0,0,0,.12)',
-        glow:    '0 0 20px rgba(47,111,237,.35)',
+        /* Color de sombra por var: negro suave en claro, negro más denso en
+           oscuro (para que la sombra siga leyéndose sobre superficies oscuras). */
+        card:    '0 1px 3px rgb(var(--shadow) / .06), 0 1px 2px rgb(var(--shadow) / .04)',
+        'card-md':'0 4px 16px rgb(var(--shadow) / .08)',
+        'card-lg':'0 8px 32px rgb(var(--shadow) / .12)',
+        glow:    '0 0 20px rgb(var(--color-brand) / .35)',
       },
       borderRadius: {
         '2xl': '1rem', /* 16px — radio estándar de tarjeta */
