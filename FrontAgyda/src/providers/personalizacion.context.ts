@@ -23,6 +23,22 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
   dashboard: { cards: [] },
 }
 
+// Layout por defecto del inicio — el orden/tamaño que ya tenía la portada,
+// portado a una grilla de 12 columnas. Se usa cuando la empresa no ha
+// personalizado su dashboard.
+export const DASHBOARD_DEFAULT: PersonalizacionConfig['dashboard']['cards'] = [
+  { id: 'bienvenida',      x: 0, y: 0, w: 5, h: 3, visible: true },
+  { id: 'marca',           x: 5, y: 0, w: 4, h: 5, visible: true },
+  { id: 'lo-importante',   x: 9, y: 0, w: 3, h: 4, visible: true },
+  { id: 'legales',         x: 0, y: 3, w: 5, h: 2, visible: true },
+  { id: 'cita',            x: 9, y: 4, w: 3, h: 1, visible: true },
+  { id: 'ultimas-noticias', x: 0, y: 5, w: 8, h: 5, visible: true },
+  { id: 'proximos-eventos', x: 8, y: 5, w: 4, h: 3, visible: true },
+  { id: 'cumpleanos',      x: 8, y: 8, w: 4, h: 3, visible: true },
+  { id: 'soporte',         x: 8, y: 11, w: 4, h: 2, visible: true },
+  { id: 'accesos-rapidos', x: 0, y: 13, w: 12, h: 3, visible: true },
+]
+
 export const PersonalizacionContext = createContext<PersonalizacionConfig>(DEFAULT_CONFIG)
 
 export function usePersonalizacion(): PersonalizacionConfig {

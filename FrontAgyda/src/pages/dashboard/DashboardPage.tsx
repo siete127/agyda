@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useSocketStore } from '@/stores/socket.store'
-import { useNotificationStore } from '@/stores/notification.store'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   LifeBuoy, HardDrive,
@@ -10,11 +9,13 @@ import {
   Music2, Clock,
   Target, Eye, Heart, Scale, ChevronRight, ChevronDown,
   X, FileText, Loader2, Upload, Trash2, Gift, Calendar,
-  PlaneTakeoff,
+  PlaneTakeoff, LayoutGrid, Plus, GripVertical, EyeOff, Check,
 } from 'lucide-react'
-import { useVentasAutoLogin } from '@/hooks/useVentasAutoLogin'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { clsx } from 'clsx'
+import toast from 'react-hot-toast'
+import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout'
+import 'react-grid-layout/css/styles.css'
 import { api } from '@/lib/axios'
 import { noticiasService } from '@/services/noticias.service'
 import { ticketsService } from '@/services/tickets.service'
@@ -22,6 +23,9 @@ import { proyectosService } from '@/services/proyectos.service'
 import { NoticiaDetalle } from '@/pages/noticias/NoticiasPage'
 import { type Noticia } from '@/types/noticia.types'
 import { Avatar } from '@/components/ui/Avatar'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
+import { personalizacionService, type DashboardCard } from '@/services/personalizacion.service'
 
 /* ─── Empresa ───────────────────────────────────────────────── */
 type EmpresaKey = 'mision' | 'vision' | 'valores' | 'legales'
@@ -80,6 +84,7 @@ function LegalesManager({ isAdmin }: { isAdmin: boolean }) {
     catch { setError('Error al cargar documentos') }
     finally { setLoading(false) }
   }
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchDocs() }, [])
 
   const pickFile = () => {
@@ -248,7 +253,6 @@ function NewsCard({ n, onOpen }: { n: Noticia; onOpen: (n: Noticia) => void }) {
 export function DashboardPage() {
   const user         = useCurrentUser()
   const socketStatus = useSocketStore((s) => s.status)
-  const unreadCount  = useNotificationStore((s) => s.unreadCount)
   const isConnected  = socketStatus === 'connected'
   const navigate     = useNavigate()
 
@@ -256,7 +260,6 @@ export function DashboardPage() {
   const [empresaModal, setEmpresaModal] = useState<EmpresaKey | null>(null)
 
   const isAdmin    = ['AD', 'ADMIN'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
-  const { openVentas, loading: ventasLoading } = useVentasAutoLogin()
   const { isAllowed } = useModuleAccess()
 
   const now   = new Date()
@@ -313,122 +316,119 @@ export function DashboardPage() {
     isAllowed('proyectos') && { icon: FolderOpenIcon, value: proyectosActivos,  label: 'Proyectos activos', sub: proyectosActivos > 0 ? 'En curso' : 'Sin proyectos activos',  to: '/proyectos' },
   ].filter(Boolean) as { icon: typeof Megaphone; value: number; label: string; sub: string; to: string }[]
 
-  return (
-    <div className="space-y-5 animate-fade-in">
-
-      {/* ── Fila 1: saludo+accesos | ilustración de marca | lo importante+cita ── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr_0.9fr]">
-
-        {/* Columna 1: bienvenida + accesos rápidos empresa */}
-        <div className="flex flex-col gap-5 min-w-0">
-          <div className="rounded-2xl border border-surface-border bg-white p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
-                  ¡{greeting}, {user?.perfilAlias ?? user?.nombres?.split(' ')[0] ?? 'Usuario'}! <span>👋</span>
-                </h1>
-                <p className="mt-1 text-[0.8rem] text-ink-tertiary capitalize">
-                  {now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                </p>
-              </div>
-
-              {user && (
-                <Link
-                  to="/perfil"
-                  className="flex flex-shrink-0 items-center gap-2 rounded-full border border-surface-border pl-1 pr-3 py-1 group hover:border-brand/30 hover:bg-brand-light transition-colors"
-                >
-                  <Avatar src={user.perfilFotoUrl} name={user.nombres} size="sm" ring="brand" />
-                  <div className="hidden text-left leading-none sm:block">
-                    <p className="text-[0.78rem] font-semibold text-ink group-hover:text-brand transition-colors">
-                      {user.perfilAlias ?? user.nombres.split(' ')[0]}
-                    </p>
-                    <p className="text-[0.65rem] text-ink-tertiary capitalize mt-0.5">{user.tipoUsuario}</p>
-                  </div>
-                  <ChevronDown className="hidden h-3.5 w-3.5 text-ink-tertiary group-hover:text-brand transition-colors sm:block" />
-                </Link>
-              )}
+  /* ═══ Cards del dashboard — cada una es un bloque re-ubicable ═══ */
+  const CARDS: Record<string, { label: string; node: React.ReactNode }> = {
+    bienvenida: {
+      label: 'Bienvenida',
+      node: (
+        <div className="dash-card flex h-full flex-col rounded-2xl border border-surface-border bg-white p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
+                ¡{greeting}, {user?.perfilAlias ?? user?.nombres?.split(' ')[0] ?? 'Usuario'}! <span>👋</span>
+              </h1>
+              <p className="mt-1 text-[0.8rem] text-ink-tertiary capitalize">
+                {now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
             </div>
-            <p className="mt-4 text-[0.8rem] text-ink-secondary">Conectados hoy, resolvemos el mañana.</p>
-            <p className="mt-1 text-[0.8rem] font-medium text-brand">Soluciones en tecnología que impulsan a tu equipo.</p>
-
-            <div className="mt-4 flex items-center gap-2">
-              <span className={clsx(
-                'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-medium',
-                isConnected ? 'border-success/20 bg-success/10 text-success' : 'border-surface-border bg-surface text-ink-tertiary',
-              )}>
-                <span className={clsx('h-1.5 w-1.5 rounded-full', isConnected ? 'bg-success animate-pulse' : 'bg-ink-tertiary')} />
-                {isConnected ? 'En línea' : 'Sin conexión'}
-              </span>
-            </div>
+            {user && (
+              <Link to="/perfil"
+                className="flex flex-shrink-0 items-center gap-2 rounded-full border border-surface-border pl-1 pr-3 py-1 group hover:border-brand/30 hover:bg-brand-light transition-colors">
+                <Avatar src={user.perfilFotoUrl} name={user.nombres} size="sm" ring="brand" />
+                <div className="hidden text-left leading-none sm:block">
+                  <p className="text-[0.78rem] font-semibold text-ink group-hover:text-brand transition-colors">
+                    {user.perfilAlias ?? user.nombres.split(' ')[0]}
+                  </p>
+                  <p className="text-[0.65rem] text-ink-tertiary capitalize mt-0.5">{user.tipoUsuario}</p>
+                </div>
+                <ChevronDown className="hidden h-3.5 w-3.5 text-ink-tertiary group-hover:text-brand transition-colors sm:block" />
+              </Link>
+            )}
           </div>
-
-          <div className="rounded-2xl border border-surface-border bg-white p-6">
-            <h3 className="text-[0.9rem] font-semibold text-ink mb-4">Legales</h3>
-            <div className="flex items-start justify-between">
-              {EMPRESA_ITEMS.map((item) => (
-                <button key={item.label} onClick={() => setEmpresaModal(item.key)}
-                  className="group flex w-16 flex-col items-center gap-2">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-brand/20 group-hover:border-brand/50 group-hover:bg-brand-light transition-colors">
-                    <item.icon className="h-[18px] w-[18px] text-brand" />
-                  </div>
-                  <span className="text-center text-[0.68rem] leading-tight text-ink-secondary">{item.label}</span>
-                </button>
-              ))}
-            </div>
+          <p className="mt-4 text-[0.8rem] text-ink-secondary">Conectados hoy, resolvemos el mañana.</p>
+          <p className="mt-1 text-[0.8rem] font-medium text-brand">Soluciones en tecnología que impulsan a tu equipo.</p>
+          <div className="mt-4 flex items-center gap-2">
+            <span className={clsx(
+              'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-medium',
+              isConnected ? 'border-success/20 bg-success/10 text-success' : 'border-surface-border bg-surface text-ink-tertiary',
+            )}>
+              <span className={clsx('h-1.5 w-1.5 rounded-full', isConnected ? 'bg-success animate-pulse' : 'bg-ink-tertiary')} />
+              {isConnected ? 'En línea' : 'Sin conexión'}
+            </span>
           </div>
         </div>
-
-        {/* Columna 2: card de marca / animación de la mascota */}
-        <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-white p-3 flex items-center justify-center min-h-[220px] lg:min-h-0">
+      ),
+    },
+    legales: {
+      label: 'Misión / Visión / Valores / Legales',
+      node: (
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white p-6">
+          <h3 className="text-[0.9rem] font-semibold text-ink mb-4">Legales</h3>
+          <div className="flex items-start justify-between">
+            {EMPRESA_ITEMS.map((item) => (
+              <button key={item.label} onClick={() => setEmpresaModal(item.key)}
+                className="group flex w-16 flex-col items-center gap-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-brand/20 group-hover:border-brand/50 group-hover:bg-brand-light transition-colors">
+                  <item.icon className="h-[18px] w-[18px] text-brand" />
+                </div>
+                <span className="text-center text-[0.68rem] leading-tight text-ink-secondary">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    marca: {
+      label: 'Marca / mascota',
+      node: (
+        <div className="dash-card relative flex h-full items-center justify-center overflow-hidden rounded-2xl border border-surface-border bg-white p-3">
           <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl"
             style={{ background: 'linear-gradient(160deg, #10203F 0%, #0B1730 100%)' }}>
-            <video
-              src="/dashboard-mascota.mp4"
-              poster="/dashboard-mascota-poster.jpg"
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            <video src="/dashboard-mascota.mp4" poster="/dashboard-mascota-poster.jpg"
+              autoPlay loop muted playsInline className="w-full h-full object-cover" />
           </div>
         </div>
-
-        {/* Columna 3: lo importante al día + cita */}
-        <div className="flex flex-col gap-5 min-w-0">
-          <div className="rounded-2xl border border-surface-border bg-white p-5">
-            <h3 className="text-[0.9rem] font-semibold text-ink mb-3">Lo importante, al día</h3>
-            <div className="flex flex-col">
-              {RESUMEN.map((s, i) => (
-                <Link key={s.to} to={s.to}
-                  className={clsx('group flex items-center gap-3 py-2.5', i > 0 && 'border-t border-[#F0F2F6]')}>
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-brand-light">
-                    <s.icon className="h-4 w-4 text-brand" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[0.95rem] font-bold leading-none text-ink tabular-nums">{s.value}</p>
-                    <p className="mt-1 text-[0.72rem] text-ink-secondary">{s.label}</p>
-                    <p className="text-[0.62rem] text-ink-tertiary">{s.sub}</p>
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-surface-border group-hover:text-brand transition-colors" />
-                </Link>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-2xl px-4 py-4 flex gap-2.5" style={{ backgroundColor: '#EEF3FE' }}>
-            <Quote className="h-4 w-4 flex-shrink-0 mt-0.5 text-brand" />
-            <p className="text-[0.75rem] font-medium leading-snug" style={{ color: '#1E3A6E' }}>
-              La tecnología es mejor cuando conecta personas y simplifica procesos.
-            </p>
+      ),
+    },
+    'lo-importante': {
+      label: 'Lo importante, al día',
+      node: (
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white p-5 overflow-auto">
+          <h3 className="text-[0.9rem] font-semibold text-ink mb-3">Lo importante, al día</h3>
+          <div className="flex flex-col">
+            {RESUMEN.map((s, i) => (
+              <Link key={s.to} to={s.to}
+                className={clsx('group flex items-center gap-3 py-2.5', i > 0 && 'border-t border-[#F0F2F6]')}>
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-brand-light">
+                  <s.icon className="h-4 w-4 text-brand" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.95rem] font-bold leading-none text-ink tabular-nums">{s.value}</p>
+                  <p className="mt-1 text-[0.72rem] text-ink-secondary">{s.label}</p>
+                  <p className="text-[0.62rem] text-ink-tertiary">{s.sub}</p>
+                </div>
+                <ChevronRight className="h-3.5 w-3.5 text-surface-border group-hover:text-brand transition-colors" />
+              </Link>
+            ))}
           </div>
         </div>
-      </div>
-
-      {/* ── Fila 2: noticias (ancha) | eventos + soporte + cumpleaños (columna angosta) ── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_1fr] lg:items-start">
-
-        {/* Últimas noticias */}
-        <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+      ),
+    },
+    cita: {
+      label: 'Cita',
+      node: (
+        <div className="dash-card h-full rounded-2xl px-4 py-4 flex gap-2.5 items-start" style={{ backgroundColor: '#EEF3FE' }}>
+          <Quote className="h-4 w-4 flex-shrink-0 mt-0.5 text-brand" />
+          <p className="text-[0.75rem] font-medium leading-snug" style={{ color: '#1E3A6E' }}>
+            La tecnología es mejor cuando conecta personas y simplifica procesos.
+          </p>
+        </div>
+      ),
+    },
+    'ultimas-noticias': {
+      label: 'Últimas noticias',
+      node: (
+        <div className="dash-card flex h-full flex-col rounded-2xl border border-surface-border bg-white overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
             <h3 className="text-[0.9rem] font-semibold text-ink">Últimas noticias</h3>
             {noticias.length > 0 && (
@@ -439,158 +439,325 @@ export function DashboardPage() {
             )}
           </div>
           {noticias.length > 0 ? (
-            <div className="divide-y divide-surface-border/60">
+            <div className="divide-y divide-surface-border/60 overflow-auto">
               {noticias.slice(0, 5).map((n) => (
-                <div key={n.id} className="px-3 py-2">
-                  <NewsCard n={n} onOpen={setSelected} />
-                </div>
+                <div key={n.id} className="px-3 py-2"><NewsCard n={n} onOpen={setSelected} /></div>
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center px-5 py-10 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center px-5 py-10 text-center">
               <Newspaper className="h-[30px] w-[30px] mb-3" style={{ color: '#C9D6F0' }} />
               <p className="text-[0.8rem] font-medium text-ink">Aún no hay noticias para mostrar.</p>
               <p className="mt-1 text-[0.7rem] text-ink-tertiary">Las novedades de la empresa aparecerán aquí.</p>
             </div>
           )}
         </div>
-
-        {/* Columna angosta: eventos + soporte + cumpleaños */}
-        <div className="flex flex-col gap-5 min-w-0">
-
-          {/* Próximos eventos */}
-          <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
-              <h3 className="text-[0.9rem] font-semibold text-ink">Próximos eventos</h3>
-              {eventos.length > 0 && (
-                <button onClick={() => navigate('/calendario')}
-                  className="flex items-center gap-1 text-[0.75rem] font-medium text-brand hover:text-brand-dark transition-colors">
-                  Ver calendario <ChevronRight className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-            {eventos.length > 0 ? (
-              <div className="divide-y divide-surface-border/60">
-                {eventos.slice(0, 3).map((e) => {
-                  const [y, m, d] = (e.fechaInicio || '').split('T')[0].split('-').map(Number)
-                  const hora = e.fechaInicio.includes('T') ? e.fechaInicio.split('T')[1]?.slice(0, 5) : null
-                  const hex  = e.color?.startsWith('#') ? e.color : '#2F6FED'
-                  return (
-                    <div key={e.id} className="flex items-center gap-3 px-4 py-3">
-                      <div className="flex h-9 w-9 flex-shrink-0 flex-col items-center justify-center rounded-xl text-center"
-                        style={{ backgroundColor: `${hex}14`, border: `1px solid ${hex}30` }}>
-                        <span className="text-[0.5rem] font-bold uppercase" style={{ color: hex }}>
-                          {new Date(y, m - 1, d).toLocaleDateString('es-MX', { month: 'short' })}
-                        </span>
-                        <span className="text-[0.85rem] font-black leading-none" style={{ color: hex }}>{d}</span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[0.76rem] font-semibold text-ink truncate">{e.titulo}</p>
-                        <p className="text-[0.62rem] text-ink-tertiary flex items-center gap-1 mt-0.5">
-                          <Clock className="h-3 w-3 flex-shrink-0" />
-                          {e.todoElDia ? 'Todo el día' : hora ?? 'Todo el día'}
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center px-5 py-6 text-center">
-                <Calendar className="h-6 w-6 mb-2" style={{ color: '#C9D6F0' }} />
-                <p className="text-[0.75rem] font-medium text-ink">No hay eventos próximos.</p>
-              </div>
+      ),
+    },
+    'proximos-eventos': {
+      label: 'Próximos eventos',
+      node: (
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
+            <h3 className="text-[0.9rem] font-semibold text-ink">Próximos eventos</h3>
+            {eventos.length > 0 && (
+              <button onClick={() => navigate('/calendario')}
+                className="flex items-center gap-1 text-[0.75rem] font-medium text-brand hover:text-brand-dark transition-colors">
+                Ver calendario <ChevronRight className="h-3 w-3" />
+              </button>
             )}
           </div>
-
-          {/* Cumpleaños del mes */}
-          {(cumpleHoy.length > 0 || cumpleMes.length > 0) && (
-            <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
-                <div className="flex items-center gap-2">
-                  <Gift className="h-4 w-4 text-brand" />
-                  <h3 className="text-[0.82rem] font-bold text-ink">Cumpleaños del mes</h3>
-                </div>
-                <button onClick={() => navigate('/calendario')}
-                  className="text-[0.65rem] font-semibold text-brand hover:text-brand-dark transition-colors">
-                  Ver todos
-                </button>
-              </div>
-              {cumpleHoy.map((c, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
-                  <div>
-                    <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
-                    <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+          {eventos.length > 0 ? (
+            <div className="divide-y divide-surface-border/60 overflow-auto">
+              {eventos.slice(0, 3).map((e) => {
+                const [y, m, d] = (e.fechaInicio || '').split('T')[0].split('-').map(Number)
+                const hora = e.fechaInicio.includes('T') ? e.fechaInicio.split('T')[1]?.slice(0, 5) : null
+                const hex  = e.color?.startsWith('#') ? e.color : '#2F6FED'
+                return (
+                  <div key={e.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex h-9 w-9 flex-shrink-0 flex-col items-center justify-center rounded-xl text-center"
+                      style={{ backgroundColor: `${hex}14`, border: `1px solid ${hex}30` }}>
+                      <span className="text-[0.5rem] font-bold uppercase" style={{ color: hex }}>
+                        {new Date(y, m - 1, d).toLocaleDateString('es-MX', { month: 'short' })}
+                      </span>
+                      <span className="text-[0.85rem] font-black leading-none" style={{ color: hex }}>{d}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.76rem] font-semibold text-ink truncate">{e.titulo}</p>
+                      <p className="text-[0.62rem] text-ink-tertiary flex items-center gap-1 mt-0.5">
+                        <Clock className="h-3 w-3 flex-shrink-0" />
+                        {e.todoElDia ? 'Todo el día' : hora ?? 'Todo el día'}
+                      </p>
+                    </div>
                   </div>
-                  <span className="ml-auto text-lg">🎉</span>
-                </div>
-              ))}
-              {cumpleHoy.length === 0 && cumpleMes.length > 0 && (
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
-                  <div>
-                    <p className="text-[0.8rem] font-bold text-ink">{cumpleMes[0].nombre}</p>
-                    <p className="text-[0.65rem] text-ink-tertiary">{cumpleMes[0].dia_cumpleanos} de {MESES[mes - 1]}</p>
-                  </div>
-                </div>
-              )}
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center px-5 py-6 text-center">
+              <Calendar className="h-6 w-6 mb-2" style={{ color: '#C9D6F0' }} />
+              <p className="text-[0.75rem] font-medium text-ink">No hay eventos próximos.</p>
             </div>
           )}
-
-          {/* Soporte y sugerencias */}
-          <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
-              <h3 className="text-[0.9rem] font-semibold text-ink">Soporte y sugerencias</h3>
+        </div>
+      ),
+    },
+    cumpleanos: {
+      label: 'Cumpleaños del mes',
+      node: (
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
+            <div className="flex items-center gap-2">
+              <Gift className="h-4 w-4 text-brand" />
+              <h3 className="text-[0.82rem] font-bold text-ink">Cumpleaños del mes</h3>
             </div>
-            <div className="flex items-center gap-3 px-5 py-4">
-              <LifeBuoy className="h-5 w-5 flex-shrink-0 text-brand" />
-              <p className="flex-1 text-[0.78rem] font-medium text-ink">¿Necesitas ayuda?</p>
-              <button onClick={() => navigate('/tickets')}
-                className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.7rem] font-semibold text-white hover:bg-brand-dark transition-colors">
-                <Lightbulb className="h-3.5 w-3.5" /> Sugerir
-              </button>
-            </div>
+            <button onClick={() => navigate('/calendario')}
+              className="text-[0.65rem] font-semibold text-brand hover:text-brand-dark transition-colors">Ver todos</button>
+          </div>
+          {cumpleHoy.length === 0 && cumpleMes.length === 0 ? (
+            <p className="px-4 py-6 text-center text-[0.72rem] text-ink-tertiary">Sin cumpleaños próximos este mes.</p>
+          ) : (<>
+            {cumpleHoy.map((c, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
+                <div>
+                  <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
+                  <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+                </div>
+                <span className="ml-auto text-lg">🎉</span>
+              </div>
+            ))}
+            {cumpleHoy.length === 0 && cumpleMes.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
+                <div>
+                  <p className="text-[0.8rem] font-bold text-ink">{cumpleMes[0].nombre}</p>
+                  <p className="text-[0.65rem] text-ink-tertiary">{cumpleMes[0].dia_cumpleanos} de {MESES[mes - 1]}</p>
+                </div>
+              </div>
+            )}
+          </>)}
+        </div>
+      ),
+    },
+    soporte: {
+      label: 'Soporte y sugerencias',
+      node: (
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
+            <h3 className="text-[0.9rem] font-semibold text-ink">Soporte y sugerencias</h3>
+          </div>
+          <div className="flex items-center gap-3 px-5 py-4">
+            <LifeBuoy className="h-5 w-5 flex-shrink-0 text-brand" />
+            <p className="flex-1 text-[0.78rem] font-medium text-ink">¿Necesitas ayuda?</p>
+            <button onClick={() => navigate('/tickets')}
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.7rem] font-semibold text-white hover:bg-brand-dark transition-colors">
+              <Lightbulb className="h-3.5 w-3.5" /> Sugerir
+            </button>
           </div>
         </div>
-      </div>
+      ),
+    },
+    'accesos-rapidos': {
+      label: 'Accesos rápidos',
+      node: (
+        <div className="dash-card h-full rounded-2xl border border-surface-border bg-white overflow-hidden">
+          <div className="px-5 py-4 border-b border-surface-border">
+            <h3 className="text-[0.9rem] font-semibold text-ink">Accesos rápidos</h3>
+          </div>
+          <div className="grid grid-cols-3 gap-1 p-3 sm:grid-cols-6">
+            {([
+              { img: '/icons/proyectos.gif',    label: 'Proyectos',    to: '/proyectos'   },
+              { img: '/icons/tickets.gif',      label: 'Tickets',      to: '/tickets'     },
+              { img: '/icons/vacaciones.gif',   label: 'Vacaciones',   to: '/vacaciones'  },
+              { img: '/icons/organigrama.gif',  label: 'Organigrama',  to: '/organigrama' },
+              { icon: HardDrive,                label: 'Drive',        to: '/drive'       },
+              { icon: Music2,                   label: 'Música',       to: '/musica'      },
+            ] as { icon?: React.ElementType; img?: string; label: string; to: string }[]).map((m) => (
+              <button key={m.label} onClick={() => navigate(m.to)}
+                className="group flex flex-col items-center gap-1.5 rounded-xl p-2.5 transition-colors hover:bg-brand-light">
+                {m.img ? (
+                  <img src={m.img} alt="" className="h-9 w-9 object-contain" />
+                ) : (
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light">
+                    {m.icon && <m.icon className="h-4 w-4 text-brand" />}
+                  </div>
+                )}
+                <span className="text-[0.65rem] font-semibold text-ink-secondary group-hover:text-brand transition-colors text-center leading-tight">{m.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3 border-t border-surface-border px-5 py-3">
+            <PlaneTakeoff className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
+            <p className="text-[0.72rem] text-ink-tertiary">Fuera de oficina · Sin datos aún — aquí se mostrará quién está de vacaciones hoy</p>
+          </div>
+        </div>
+      ),
+    },
+  }
 
-      {/* Módulos + Fuera de oficina, en una sola card */}
-      <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
-        <div className="px-5 py-4 border-b border-surface-border">
-          <h3 className="text-[0.9rem] font-semibold text-ink">Accesos rápidos</h3>
-        </div>
-        <div className="grid grid-cols-3 gap-1 p-3 sm:grid-cols-6">
-          {([
-            { img: '/icons/proyectos.gif',    label: 'Proyectos',    to: '/proyectos'   },
-            { img: '/icons/tickets.gif',      label: 'Tickets',      to: '/tickets'     },
-            { img: '/icons/vacaciones.gif',   label: 'Vacaciones',   to: '/vacaciones'  },
-            { img: '/icons/organigrama.gif',  label: 'Organigrama',  to: '/organigrama' },
-            { icon: HardDrive,                label: 'Drive',        to: '/drive'       },
-            { icon: Music2,                   label: 'Música',       to: '/musica'      },
-          ] as { icon?: React.ElementType; img?: string; label: string; to: string }[]).map((m) => (
-            <button key={m.label} onClick={() => navigate(m.to)}
-              className="group flex flex-col items-center gap-1.5 rounded-xl p-2.5 transition-colors hover:bg-brand-light">
-              {m.img ? (
-                <img src={m.img} alt="" className="h-9 w-9 object-contain" />
-              ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light">
-                  {m.icon && <m.icon className="h-4 w-4 text-brand" />}
-                </div>
-              )}
-              <span className="text-[0.65rem] font-semibold text-ink-secondary group-hover:text-brand transition-colors text-center leading-tight">{m.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-3 border-t border-surface-border px-5 py-3">
-          <PlaneTakeoff className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
-          <p className="text-[0.72rem] text-ink-tertiary">Fuera de oficina · Sin datos aún — aquí se mostrará quién está de vacaciones hoy</p>
-        </div>
-      </div>
-
-      {/* Modales */}
+  return (
+    <>
+      <DashboardGrid cards={CARDS} isAdmin={isAdmin} />
       {selected && <NoticiaDetalle noticia={selected} onClose={() => setSelected(null)} />}
       {empresaModal && <EmpresaModal empresaKey={empresaModal} isAdmin={isAdmin} onClose={() => setEmpresaModal(null)} />}
+    </>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GRID DEL DASHBOARD — vista + modo edición (react-grid-layout)
+═══════════════════════════════════════════════════════════ */
+const ROW_H = 64
+const COLS = 12
+
+function DashboardGrid({ cards, isAdmin }: {
+  cards: Record<string, { label: string; node: React.ReactNode }>
+  isAdmin: boolean
+}) {
+  const qc = useQueryClient()
+  const { dashboard } = usePersonalizacion()
+  const { width, containerRef } = useContainerWidth()
+
+  const guardada = dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT
+
+  const [editando, setEditando] = useState(false)
+  const [draft, setDraft] = useState<DashboardCard[]>(guardada)
+  const [seed, setSeed] = useState(guardada)
+  if (dashboard.cards !== seed && !editando) {
+    setSeed(dashboard.cards)
+    setDraft(dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT)
+  }
+
+  const activos = editando ? draft : guardada
+  const visibles = activos.filter((c) => c.visible && cards[c.id])
+  const ocultas = activos.filter((c) => !c.visible || !cards[c.id])
+
+  const layout: Layout = useMemo(
+    () => visibles.map((c) => ({ i: c.id, x: c.x, y: c.y, w: c.w, h: c.h, minW: 2, minH: 1 })),
+    [visibles],
+  )
+
+  const guardar = useMutation({
+    mutationFn: async () => { await personalizacionService.updateDashboard(draft) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['personalizacion'] })
+      toast.success('Diseño del inicio guardado')
+      setEditando(false)
+    },
+    onError: () => toast.error('No se pudo guardar el diseño'),
+  })
+
+  const onLayoutChange = (l: Layout) => {
+    if (!editando) return
+    setDraft((prev) => prev.map((c) => {
+      const item = l.find((x) => x.i === c.id)
+      return item ? { ...c, x: item.x, y: item.y, w: item.w, h: item.h } : c
+    }))
+  }
+
+  const setVisible = (id: string, visible: boolean) =>
+    setDraft((prev) => {
+      const exists = prev.some((c) => c.id === id)
+      if (exists) return prev.map((c) => (c.id === id ? { ...c, visible } : c))
+      const def = DASHBOARD_DEFAULT.find((c) => c.id === id)
+      return [...prev, { ...(def ?? { id, x: 0, y: 99, w: 4, h: 3 }), visible }]
+    })
+
+  const iniciarEdicion = () => {
+    setDraft(dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT)
+    setEditando(true)
+  }
+
+  return (
+    <div className="animate-fade-in" ref={containerRef}>
+      {/* Toolbar de edición */}
+      {isAdmin && (
+        <div className={clsx(
+          'mb-4 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-[0.78rem]',
+          editando ? 'border-brand/30 bg-brand/[0.04]' : 'border-transparent',
+        )}>
+          {editando ? (
+            <>
+              <GripVertical className="h-4 w-4 text-ink-tertiary" />
+              <span className="text-ink-tertiary">Arrastra las tarjetas para moverlas; la esquina inferior derecha para redimensionarlas.</span>
+              <div className="ml-auto flex items-center gap-2">
+                <button onClick={() => setEditando(false)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold text-ink-tertiary hover:bg-gray-100">
+                  <X className="h-3.5 w-3.5" /> Cancelar
+                </button>
+                <button onClick={() => guardar.mutate()} disabled={guardar.isPending}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-semibold text-white hover:bg-brand-dark disabled:opacity-60">
+                  {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar diseño
+                </button>
+              </div>
+            </>
+          ) : (
+            <button onClick={iniciarEdicion}
+              className="ml-auto flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-3 py-1.5 font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors">
+              <LayoutGrid className="h-3.5 w-3.5" /> Editar diseño
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Tarjetas ocultas (solo en edición) */}
+      {editando && ocultas.length > 0 && (
+        <div className="mb-4 rounded-xl border border-dashed border-surface-border bg-surface/50 p-3">
+          <p className="mb-2 text-[0.72rem] font-semibold text-ink-tertiary">Tarjetas ocultas — pulsa para agregar</p>
+          <div className="flex flex-wrap gap-2">
+            {ocultas.filter((c) => cards[c.id]).map((c) => (
+              <button key={c.id} onClick={() => setVisible(c.id, true)}
+                className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-2.5 py-1.5 text-[0.72rem] font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors">
+                <Plus className="h-3 w-3" /> {cards[c.id].label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {visibles.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-surface-border bg-white py-16 text-center">
+          <LayoutGrid className="h-7 w-7 text-ink-tertiary" />
+          <p className="text-sm font-semibold text-ink-secondary">Sin tarjetas en el inicio</p>
+          {isAdmin && <p className="text-[0.75rem] text-ink-tertiary">Pulsa "Editar diseño" para agregar tarjetas.</p>}
+        </div>
+      ) : width > 0 && width < 768 && !editando ? (
+        /* Móvil: pila vertical según el orden guardado (y, x). El editor sigue
+           usando la grilla — solo se recomienda en pantalla ancha. */
+        <div className="space-y-4">
+          {[...visibles].sort((a, b) => a.y - b.y || a.x - b.x).map((c) => (
+            <div key={c.id} style={{ minHeight: c.h * ROW_H }}>{cards[c.id].node}</div>
+          ))}
+        </div>
+      ) : width > 0 ? (
+        <GridLayout
+          width={width}
+          layout={layout}
+          onLayoutChange={onLayoutChange}
+          gridConfig={{ cols: COLS, rowHeight: ROW_H, margin: [16, 16], containerPadding: [0, 0] }}
+          dragConfig={{ enabled: editando, bounded: false, handle: '.dash-drag', threshold: 3 }}
+          resizeConfig={{ enabled: editando, handles: ['se'] }}
+          className={clsx(editando && 'dash-editing')}
+        >
+          {visibles.map((c) => (
+            <div key={c.id} className="relative">
+              {editando && (
+                <div className="dash-drag absolute inset-x-0 top-0 z-10 flex cursor-move items-center gap-1.5 rounded-t-2xl bg-brand/90 px-3 py-1 text-[0.68rem] font-semibold text-white">
+                  <GripVertical className="h-3 w-3" /> {cards[c.id].label}
+                  <button onClick={() => setVisible(c.id, false)}
+                    className="ml-auto rounded p-0.5 hover:bg-white/20" title="Ocultar">
+                    <EyeOff className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              <div className={clsx('h-full', editando && 'pointer-events-none pt-6 opacity-95')}>
+                {cards[c.id].node}
+              </div>
+            </div>
+          ))}
+        </GridLayout>
+      ) : null}
     </div>
   )
 }

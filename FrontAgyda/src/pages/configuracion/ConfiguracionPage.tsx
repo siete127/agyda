@@ -16,6 +16,7 @@ import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
+import { DashboardDisenoTab } from './DashboardDisenoTab'
 // ── Secciones de Configuración > Tecnología/TI (módulo de Soporte TI) ──
 import { GeneralTab } from './tecnologia/GeneralTab'
 import { MesaServicioTab } from './tecnologia/MesaServicioTab'
@@ -49,6 +50,7 @@ const SCREENS: Record<string, ComponentType> = {
   perfiles: PerfilesTab,
   'pers-branding': BrandingTab,
   'pers-botones': BotonesHeaderTab,
+  'pers-dashboard': DashboardDisenoTab,
   'webphone-vistas': WebphoneVistasTab,
   'webphone-credenciales': WebphoneCredencialesTab,
   notificaciones: NotificacionesCorreoTab,

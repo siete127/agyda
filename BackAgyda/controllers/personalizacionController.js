@@ -11,6 +11,12 @@ try { socketService = require('../services/socketService'); } catch (_) { socket
 
 const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login'];
 const HEADER_BUTTON_KEYS = ['marcador', 'contingencia', 'sistemas', 'gestion-mis'];
+// Catálogo de cards del dashboard — el frontend sabe renderizarlas; aquí solo
+// validamos que las keys sean conocidas.
+const DASHBOARD_CARD_IDS = [
+  'bienvenida', 'legales', 'marca', 'lo-importante', 'cita',
+  'ultimas-noticias', 'proximos-eventos', 'cumpleanos', 'soporte', 'accesos-rapidos',
+];
 
 // Config por defecto — refleja lo que hoy está hardcodeado en el frontend.
 const DEFAULT_CONFIG = {
@@ -172,6 +178,49 @@ exports.updateHeaderButtons = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateHeaderButtons', e);
     return res.status(500).json({ success: false, message: 'Error al guardar los botones del encabezado' });
+  }
+};
+
+// PUT /api/personalizacion/dashboard
+// Body: { cards: [{ id, x, y, w, h, visible }] }
+exports.updateDashboard = async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body?.cards) ? req.body.cards : null;
+    if (!incoming) return res.status(400).json({ success: false, message: 'Se espera { cards: [...] }' });
+
+    const n = (v, def) => {
+      const x = Number(v);
+      return Number.isFinite(x) ? x : def;
+    };
+    const cards = [];
+    const vistas = new Set();
+    for (const raw of incoming) {
+      const id = String(raw?.id || '').trim();
+      if (!DASHBOARD_CARD_IDS.includes(id) || vistas.has(id)) continue;
+      vistas.add(id);
+      cards.push({
+        id,
+        x: Math.max(0, n(raw.x, 0)),
+        y: Math.max(0, n(raw.y, 0)),
+        w: Math.min(12, Math.max(1, n(raw.w, 4))),
+        h: Math.max(1, n(raw.h, 2)),
+        visible: raw?.visible !== false,
+      });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.dashboard = { cards };
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-dashboard', detalle: `${cards.length} cards`, ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'dashboard');
+    return res.json({ success: true, data: config.dashboard });
+  } catch (e) {
+    logger.error('personalizacionController.updateDashboard', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar el diseño del inicio' });
   }
 };
 

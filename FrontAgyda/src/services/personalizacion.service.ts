@@ -21,10 +21,19 @@ export interface HeaderButton {
   visible: boolean
 }
 
+export interface DashboardCard {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  visible: boolean
+}
+
 export interface PersonalizacionConfig {
   branding: Branding
   headerButtons: HeaderButton[]
-  dashboard: { cards: unknown[] }
+  dashboard: { cards: DashboardCard[] }
 }
 
 export const personalizacionService = {
@@ -41,6 +50,11 @@ export const personalizacionService = {
   async updateHeaderButtons(buttons: HeaderButton[]): Promise<HeaderButton[]> {
     const { data } = await api.put('/personalizacion/header-buttons', buttons)
     return data.data as HeaderButton[]
+  },
+
+  async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {
+    const { data } = await api.put('/personalizacion/dashboard', { cards })
+    return data.data as { cards: DashboardCard[] }
   },
 
   async subirAsset(tipo: AssetTipo, file: File): Promise<number> {

@@ -26,6 +26,25 @@
   ::-webkit-scrollbar-thumb  { @apply rounded-full bg-gray-300/80; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400; }
 
+  /* ── Dashboard builder (react-grid-layout) ── */
+  .react-grid-item.react-grid-placeholder {
+    background: rgb(var(--color-brand)) !important;
+    opacity: 0.12 !important;
+    border-radius: 1rem;
+  }
+  .dash-editing .react-grid-item {
+    outline: 1px dashed rgb(var(--color-brand) / 0.35);
+    outline-offset: 2px;
+    border-radius: 1rem;
+  }
+  .dash-editing .react-grid-item > .react-resizable-handle::after {
+    border-right-color: rgb(var(--color-brand));
+    border-bottom-color: rgb(var(--color-brand));
+    width: 8px;
+    height: 8px;
+  }
+  .dash-editing .react-grid-item > .react-resizable-handle { opacity: 1; }
+
   /* Prose para contenido HTML de noticias */
   .prose h1, .prose h2, .prose h3 { @apply font-bold text-gray-900 leading-tight; }
   .prose h1 { @apply text-2xl mb-3; }
