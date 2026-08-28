@@ -37,6 +37,11 @@ export function SoporteTIWidget() {
     setMensajes((prev) => [...prev, msg])
   })
 
+  useSocketEvent<{ conversacionId: number }>('livechat:conversacion_cerrada', (payload) => {
+    if (payload.conversacionId !== conversacionId) return
+    setEstado('cerrada')
+  })
+
   async function iniciarChat() {
     if (!motivo.trim()) return
     setIniciando(true)
@@ -117,7 +122,9 @@ export function SoporteTIWidget() {
           ) : (
             <>
               <div className="border-b border-surface-border px-4 py-2 text-[0.72rem] text-ink-tertiary">
-                {estado === 'activa' ? 'Conectado con un técnico' : 'Esperando un técnico disponible...'}
+                {estado === 'activa' ? 'Conectado con un técnico'
+                  : estado === 'cerrada' ? 'Esta conversación fue cerrada'
+                  : 'Esperando un técnico disponible...'}
                 {ticketId && <span className="ml-1">· Ticket #{ticketId}</span>}
               </div>
               <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
@@ -140,10 +147,11 @@ export function SoporteTIWidget() {
                   value={nuevoMensaje}
                   onChange={(e) => setNuevoMensaje(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') enviar() }}
-                  className="field flex-1 py-1.5 text-sm"
-                  placeholder="Escribe un mensaje..."
+                  disabled={estado === 'cerrada'}
+                  className="field flex-1 py-1.5 text-sm disabled:opacity-50"
+                  placeholder={estado === 'cerrada' ? 'Conversación cerrada' : 'Escribe un mensaje...'}
                 />
-                <button onClick={enviar} disabled={!nuevoMensaje.trim() || enviando} className="rounded-lg bg-brand p-2 text-white disabled:opacity-50">
+                <button onClick={enviar} disabled={!nuevoMensaje.trim() || enviando || estado === 'cerrada'} className="rounded-lg bg-brand p-2 text-white disabled:opacity-50">
                   <Send className="h-3.5 w-3.5" />
                 </button>
               </div>

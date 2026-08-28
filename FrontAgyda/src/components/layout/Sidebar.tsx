@@ -10,7 +10,6 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/axios'
 import { SidebarItem } from './SidebarItem'
 import { SidebarFlyout, type FlyoutPosition } from './SidebarFlyout'
-import { Avatar } from '@/components/ui/Avatar'
 import { ROUTES } from '@/router/routes.config'
 import { disconnectSocket } from '@/lib/socket'
 import { clsx } from 'clsx'
@@ -335,30 +334,6 @@ export function Sidebar() {
         {/* ── Footer: perfil + logout ── */}
         <div className="relative z-10 flex-shrink-0 px-3 pb-4">
           <div className="h-px bg-white/[0.06] mb-3" />
-
-          {user && (
-            <Link
-              to="/perfil"
-              title={sidebarCollapsed ? (user.perfilAlias ?? user.nombres) : undefined}
-              className={clsx(
-                'group mb-1 flex items-center gap-3 rounded-xl transition-colors hover:bg-white/[0.05]',
-                sidebarCollapsed ? 'justify-center px-2 py-2' : 'px-2 py-2',
-              )}
-            >
-              <Avatar src={user.perfilFotoUrl} name={user.nombres} size="sm" />
-              {!sidebarCollapsed && (
-                <>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[0.78rem] font-semibold text-white leading-none">
-                      {user.perfilAlias ?? user.nombres.split(' ')[0]}
-                    </p>
-                    <p className="text-[0.65rem] text-[#A9B4DE] mt-0.5 capitalize">{user.tipoUsuario}</p>
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-[#8E9FD4] group-hover:text-[#DCE3F5] transition-colors" />
-                </>
-              )}
-            </Link>
-          )}
 
           <button
             onClick={handleLogout}

@@ -22,6 +22,8 @@ import { catalogosTiService } from '@/services/catalogosTi.service'
 import { activosGeneralesService } from '@/services/activosGenerales.service'
 import { plantillasRespuestaService } from '@/services/plantillasRespuesta.service'
 import { camposPersonalizadosService } from '@/services/camposPersonalizados.service'
+import { SlaTab } from '@/pages/configuracion/tecnologia/SlaTab'
+import { TecnicosTab } from '@/pages/configuracion/tecnologia/TecnicosTab'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -1902,6 +1904,8 @@ export function TicketsPage() {
   const [filtroEstado, setFiltroEstado] = useState<TicketEstado | 'todos'>('abierto')
   const [showNuevo, setShowNuevo] = useState(false)
   const [showApiKeys, setShowApiKeys] = useState(false)
+  const [showSla, setShowSla] = useState(false)
+  const [showTecnicos, setShowTecnicos] = useState(false)
   const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
   const [filtroPrioridad, setFiltroPrioridad] = useState<TicketPrioridad | ''>('')
   const [filtroArea, setFiltroArea] = useState<'' | 'TI' | 'ST'>('')
@@ -2038,21 +2042,21 @@ export function TicketsPage() {
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              <Link
-                to="/configuracion?tab=sla"
+              <button
+                onClick={() => setShowSla(true)}
                 title="Configurar SLA"
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
               >
                 <Timer className="h-3.5 w-3.5" />
-              </Link>
+              </button>
               {esAD && (
-                <Link
-                  to="/configuracion?tab=tecnicos"
+                <button
+                  onClick={() => setShowTecnicos(true)}
                   title="Administrar técnicos"
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
                 >
                   <Users className="h-3.5 w-3.5" />
-                </Link>
+                </button>
               )}
               {esAD && (
                 <button
@@ -2230,6 +2234,14 @@ export function TicketsPage() {
 
       {showNuevo && <NuevoTicketModal onClose={() => setShowNuevo(false)} />}
       {showApiKeys && <PanelApiKeys onClose={() => setShowApiKeys(false)} />}
+
+      <Modal isOpen={showSla} onClose={() => setShowSla(false)} title="SLA de Tickets" size="xl">
+        <SlaTab />
+      </Modal>
+
+      <Modal isOpen={showTecnicos} onClose={() => setShowTecnicos(false)} title="Administrar técnicos" size="xl">
+        <TecnicosTab />
+      </Modal>
       {activeTicket && (
         <TicketDetalleModal
           ticket={tickets.find((t) => t.id === activeTicket.id) ?? activeTicket}

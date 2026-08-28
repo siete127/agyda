@@ -243,7 +243,7 @@ export function Topbar() {
         {/* Cambiar de sistema (Intranet / Ventas) */}
         <button
           onClick={handleSwitchSystem}
-          title="Cambiar de sistema"
+          title="Ventas"
           className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand transition-colors"
         >
           <BarChart3 className="h-3.5 w-3.5" />
