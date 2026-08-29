@@ -87,7 +87,7 @@ export function BanioReportePage() {
   const pausaActiva = PAUSAS[tabIdx]
   const qc = useQueryClient()
 
-  const { data, isLoading, refetch, isRefetching, dataUpdatedAt } = useQuery({
+  const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['pausas-reporte', from, to, pausaActiva.statusId, area],
     queryFn: async () => {
       const params = new URLSearchParams({ from, to })
@@ -101,32 +101,29 @@ export function BanioReportePage() {
     refetchOnWindowFocus: true,
   })
 
-  // Ancla del contador en vivo: instante (reloj del cliente) en que empezó cada
-  // pausa activa, por id de registro. Se fija una sola vez (cuando aparece la
-  // pausa) y no se re-calcula en refetches posteriores → el contador es monótono
-  // y no retrocede. (No mutamos los datos de la query: react-query los congela.)
+  // Ancla del contador en vivo: por id de registro activo, el instante (reloj
+  // del cliente) en que empezó la pausa. Se fija UNA sola vez, la primera vez
+  // que vemos ese id, y ya no se vuelve a tocar mientras la pausa siga abierta
+  // → el contador es monótono y no retrocede en los refetches.
+  // (No mutamos los datos de la query: react-query los congela con Object.freeze.)
   const [anclas, setAnclas] = useState<Record<number, number>>({})
   useEffect(() => {
     if (!data) return
-    const recibidoMs = dataUpdatedAt || Date.now()
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- deriva anclas de la respuesta de la query; sólo cambia cuando llega/expira una pausa
-    setAnclas((prev) => {
+    const activos = data.filter((r) => r.activo)
+    const idsActivos = new Set(activos.map((r) => r.id))
+    const faltanAnclas = activos.some((r) => anclas[r.id] == null)
+    const sobranAnclas = Object.keys(anclas).some((id) => !idsActivos.has(Number(id)))
+    if (!faltanAnclas && !sobranAnclas) return
+    const ahora = Date.now()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deriva anclas de la respuesta de la query; sólo corre al aparecer/cerrarse una pausa
+    setAnclas(() => {
       const next: Record<number, number> = {}
-      let cambio = false
-      for (const r of data) {
-        if (!r.activo) continue
-        if (prev[r.id] != null) {
-          next[r.id] = prev[r.id]
-        } else {
-          next[r.id] = recibidoMs - r.duracionSegundos * 1000
-          cambio = true
-        }
+      for (const r of activos) {
+        next[r.id] = anclas[r.id] ?? ahora - r.duracionSegundos * 1000
       }
-      // ¿desapareció alguna ancla previa (pausa cerrada)?
-      if (!cambio && Object.keys(prev).length !== Object.keys(next).length) cambio = true
-      return cambio ? next : prev
+      return next
     })
-  }, [data, dataUpdatedAt])
+  }, [data, anclas])
 
   // Tiempo real: al toggle de baño de cualquiera → refrescar el reporte.
   useEffect(() => {
