@@ -121,15 +121,21 @@ export function PerfilMenu() {
     if (loadingStatus !== null) return
     if (statusId === 3 && banioBloqueado) return
     setLoadingStatus(statusId)
-    const terminar = statusActivo === statusId
     try {
-      await api.post(terminar ? '/reports/pausa/terminar' : '/reports/pausa/iniciar', { statusId })
       if (statusId === 3) {
+        // Baño: SOLO por socket. El handler banio:toggle abre/cierra el
+        // registro en USUARIO_TIEMPOS. Si además llamáramos al endpoint REST,
+        // se crearían dos filas que se pisan (bug del contador reiniciándose).
         const sock = getSocket()
         const payload = { userId: user?.id ?? null, userName: user?.nombres?.split(' ').slice(0, 2).join(' ') ?? 'Usuario' }
         if (sock.connected) sock.emit('banio:toggle', payload)
+        else throw new Error('sin conexión')
+      } else {
+        const terminar = statusActivo === statusId
+        await api.post(terminar ? '/reports/pausa/terminar' : '/reports/pausa/iniciar', { statusId })
       }
-      qc.invalidateQueries({ queryKey: ['pausa-activa'] })
+      // Dar un respiro a la escritura async del socket antes de refetchear.
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['pausa-activa'] }), statusId === 3 ? 600 : 0)
     } catch { toast.error('No se pudo cambiar el estado') }
     finally { setLoadingStatus(null) }
   }
