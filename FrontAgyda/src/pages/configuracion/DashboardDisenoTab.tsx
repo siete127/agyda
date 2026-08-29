@@ -1,46 +1,49 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import {
-  LayoutGrid, ArrowRight, Search, Check, Plus, Loader2, RotateCcw, Lock,
+  LayoutGrid, Search, Check, Plus, Loader2, RotateCcw, Lock, Move,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { useUIStore } from '@/stores/ui.store'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
 import { personalizacionService, type DashboardCard } from '@/services/personalizacion.service'
-import { CARD_CATALOG, CATEGORIAS, type CatalogEntry } from '@/pages/dashboard/cardCatalog'
+import { CARD_CATALOG, CATEGORIAS, CARD_CATALOG_INDEX, type CatalogEntry } from '@/pages/dashboard/cardCatalog'
+import { DashboardLayoutModal } from './DashboardLayoutModal'
 
-const visMap = (cards: DashboardCard[]): Record<string, boolean> =>
-  Object.fromEntries(cards.map((c) => [c.id, c.visible]))
+const norm = (cards: DashboardCard[]) =>
+  [...cards].sort((a, b) => a.id.localeCompare(b.id))
+    .map((c) => `${c.id}:${c.visible ? 1 : 0}:${c.x},${c.y},${c.w},${c.h}`).join('|')
 
 /* Configuración → Apariencia → Diseño del inicio.
-   Galería/catálogo de todas las cards del sistema: agrega o quita cada una
-   del Inicio de la empresa. El orden y tamaño se ajustan luego arrastrando
-   en la propia página de Inicio ("Editar diseño"). */
+   Catálogo de todas las cards del sistema: agrega/quita cada una del Inicio de
+   la empresa, y con "Ajustar diseño" ordena/redimensiona en un modal sin salir
+   de Configuración. */
 export function DashboardDisenoTab() {
-  const navigate = useNavigate()
   const qc = useQueryClient()
-  const setDashboardEditArmed = useUIStore((s) => s.setDashboardEditArmed)
   const { isAllowed } = useModuleAccess()
   const { dashboard } = usePersonalizacion()
 
-  const guardadas = dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT
+  const guardadas: DashboardCard[] = dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT
 
-  // Borrador local: id -> visible. Arranca de lo guardado.
-  const [draft, setDraft] = useState<Record<string, boolean>>(() => visMap(guardadas))
-  // Si llega personalización nueva de fuera (socket), re-sembrar el borrador.
+  // Borrador local completo (id + visible + geometría).
+  const [draft, setDraft] = useState<DashboardCard[]>(() => guardadas.map((c) => ({ ...c })))
+  // Re-sembrar si llega personalización nueva de fuera (socket).
   const [seed, setSeed] = useState(dashboard.cards)
   if (dashboard.cards !== seed) {
     setSeed(dashboard.cards)
-    setDraft(visMap(dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT))
+    setDraft((dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT).map((c) => ({ ...c })))
   }
 
   const [q, setQ] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
 
-  // Catálogo filtrado por módulos activos + búsqueda.
+  const draftIndex = useMemo(
+    () => Object.fromEntries(draft.map((c) => [c.id, c])) as Record<string, DashboardCard>,
+    [draft],
+  )
+
   const disponibles = useMemo(
     () => CARD_CATALOG.filter((c) => {
       if (c.moduleKey && !isAllowed(c.moduleKey)) return false
@@ -51,51 +54,32 @@ export function DashboardDisenoTab() {
     [isAllowed, q],
   )
 
-  const activasCount = Object.values(draft).filter(Boolean).length
-  const dirty = useMemo(() => {
-    const g = visMap(guardadas)
-    const ids = new Set([...Object.keys(g), ...Object.keys(draft)])
-    for (const id of ids) if ((g[id] ?? false) !== (draft[id] ?? false)) return true
-    return false
-  }, [draft, guardadas])
+  const activasCount = draft.filter((c) => c.visible).length
+  const dirty = norm(draft) !== norm(guardadas)
 
-  const toggle = (id: string) => setDraft((p) => ({ ...p, [id]: !p[id] }))
+  const isActiva = (id: string) => !!draftIndex[id]?.visible
+
+  const toggle = (entry: CatalogEntry) => setDraft((prev) => {
+    const existing = prev.find((c) => c.id === entry.id)
+    if (existing) return prev.map((c) => (c.id === entry.id ? { ...c, visible: !c.visible } : c))
+    const maxY = prev.reduce((m, c) => Math.max(m, c.y + c.h), 0)
+    return [...prev, { id: entry.id, x: 0, y: maxY, w: entry.size.w, h: entry.size.h, visible: true }]
+  })
 
   const guardar = useMutation({
     mutationFn: async () => {
-      // Construir el array de DashboardCard: parte de lo guardado, aplica el
-      // draft de visibilidad, y agrega las nuevas con su tamaño de catálogo.
-      const porId = new Map<string, DashboardCard>(guardadas.map((c) => [c.id, { ...c }]))
-      const cards: DashboardCard[] = []
-      let y = 0
-      for (const entry of CARD_CATALOG) {
-        const visible = !!draft[entry.id]
-        const prev = porId.get(entry.id)
-        if (!visible && !prev) continue
-        if (prev) {
-          cards.push({ ...prev, visible })
-        } else {
-          cards.push({ id: entry.id, x: 0, y: 100 + y, w: entry.size.w, h: entry.size.h, visible })
-          y += entry.size.h
-        }
-      }
+      // Solo cards con id conocido; conserva geometría; descarta las nunca usadas.
+      const cards = draft.filter((c) => CARD_CATALOG_INDEX[c.id] && (c.visible || guardadas.some((g) => g.id === c.id)))
       await personalizacionService.updateDashboard(cards)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['personalizacion'] })
-      toast.success('Catálogo del inicio guardado')
+      toast.success('Diseño del inicio guardado')
     },
     onError: () => toast.error('No se pudo guardar'),
   })
 
-  const restablecer = () => {
-    setDraft(Object.fromEntries(DASHBOARD_DEFAULT.map((c) => [c.id, c.visible])))
-  }
-
-  const irAOrdenar = () => {
-    setDashboardEditArmed(true)
-    navigate('/dashboard')
-  }
+  const restablecer = () => setDraft(DASHBOARD_DEFAULT.map((c) => ({ ...c })))
 
   return (
     <div className="space-y-5">
@@ -107,13 +91,13 @@ export function DashboardDisenoTab() {
         <div>
           <h2 className="text-[1.35rem] font-bold text-gray-900">Diseño del inicio</h2>
           <p className="text-[0.82rem] text-gray-400">
-            Elige qué tarjetas aparecen en la página de Inicio de tu empresa. Luego ordénalas
-            arrastrándolas desde el propio Inicio.
+            Elige qué tarjetas aparecen en la página de Inicio de tu empresa y ajústalas con
+            <b> Ajustar diseño</b>.
           </p>
         </div>
       </div>
 
-      {/* Barra: resumen + acciones */}
+      {/* Barra: resumen + buscador */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="flex items-center gap-2 text-[0.82rem]">
           <span className="rounded-lg bg-violet-50 px-2.5 py-1 font-bold text-violet-600">{activasCount}</span>
@@ -128,12 +112,6 @@ export function DashboardDisenoTab() {
             className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-3 text-[0.82rem] outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
           />
         </div>
-        <button
-          onClick={irAOrdenar}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-[0.8rem] font-semibold text-gray-700 transition-colors hover:border-violet-300 hover:text-violet-600"
-        >
-          Ordenar en el Inicio <ArrowRight className="h-4 w-4" />
-        </button>
       </div>
 
       {/* Galería por categoría */}
@@ -148,8 +126,8 @@ export function DashboardDisenoTab() {
                 <CardTile
                   key={entry.id}
                   entry={entry}
-                  activa={!!draft[entry.id]}
-                  onToggle={() => toggle(entry.id)}
+                  activa={isActiva(entry.id)}
+                  onToggle={() => toggle(entry)}
                 />
               ))}
             </div>
@@ -157,27 +135,43 @@ export function DashboardDisenoTab() {
         )
       })}
 
-      {/* Cards de módulos no disponibles (informativo) */}
       <ModulosBloqueados isAllowed={isAllowed} />
 
-      {/* Footer de acciones — pegado al fondo del viewport mientras hay cambios */}
-      <div className="sticky bottom-4 z-20 flex items-center justify-end gap-2 rounded-2xl border border-gray-200 bg-card/95 px-4 py-3 shadow-card-lg backdrop-blur">
-        {dirty && <span className="mr-auto text-[0.75rem] font-medium text-amber-600">Cambios sin guardar</span>}
-        <button
-          onClick={restablecer}
-          className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[0.8rem] font-semibold text-gray-500 transition-colors hover:bg-gray-100"
-        >
-          <RotateCcw className="h-3.5 w-3.5" /> Restablecer
-        </button>
-        <button
-          onClick={() => guardar.mutate()}
-          disabled={!dirty || guardar.isPending}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-[0.8rem] font-semibold text-white shadow-sm transition-all hover:bg-violet-700 disabled:opacity-50"
-        >
-          {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          Guardar cambios
-        </button>
+      {/* Footer de acciones */}
+      <div className="sticky bottom-4 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 bg-card/95 px-4 py-3 shadow-card-lg backdrop-blur">
+        {dirty && <span className="text-[0.75rem] font-medium text-amber-600">Cambios sin guardar</span>}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={restablecer}
+            className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[0.8rem] font-semibold text-gray-500 transition-colors hover:bg-gray-100"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Restablecer
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            disabled={activasCount === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 px-3.5 py-2 text-[0.8rem] font-semibold text-violet-600 transition-colors hover:bg-violet-50 disabled:opacity-50"
+          >
+            <Move className="h-3.5 w-3.5" /> Ajustar diseño
+          </button>
+          <button
+            onClick={() => guardar.mutate()}
+            disabled={!dirty || guardar.isPending}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-[0.8rem] font-semibold text-white shadow-sm transition-all hover:bg-violet-700 disabled:opacity-50"
+          >
+            {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Guardar cambios
+          </button>
+        </div>
       </div>
+
+      {modalOpen && (
+        <DashboardLayoutModal
+          cards={draft}
+          onAplicar={setDraft}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
     </div>
   )
 }
