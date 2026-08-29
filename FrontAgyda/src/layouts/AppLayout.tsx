@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { PersonalizacionProvider } from '@/providers/PersonalizacionProvider'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { useMusicStore } from '@/stores/music.store'
 
 export function AppLayout() {
   const setActiveRoute = useUIStore((s) => s.setActiveRoute)
@@ -24,7 +25,9 @@ export function AppLayout() {
   const { isAllowed } = useModuleAccess()
   // Las burbujas flotantes solo se montan si el módulo está activo para la
   // empresa — así no disparan llamadas a /api que devolverían 403.
-  const showMusic = tipoUsuario !== 'CC' && tipoUsuario !== 'CL' && isAllowed('musica')
+  const musicBubbleVisible = useMusicStore((s) => s.bubbleVisible)
+  const puedeMusica = tipoUsuario !== 'CC' && tipoUsuario !== 'CL' && isAllowed('musica')
+  const showMusic = puedeMusica && musicBubbleVisible
   const showMensajeria = isAllowed('mensajeria')
 
   useInactivityTimer()

@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, HelpCircle, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { NotificationBell } from './NotificationBell'
 import { MensajeriaBell } from './MensajeriaBell'
+import { PerfilMenu } from './PerfilMenu'
 import { getRouteLabel, ROUTES } from '@/router/routes.config'
 import { type Ticket } from '@/types/ticket.types'
 import { type Noticia } from '@/types/noticia.types'
@@ -301,9 +302,7 @@ export function Topbar() {
           <ThemeIcon className="h-[18px] w-[18px]" />
         </button>
 
-        <button className="hidden text-ink-tertiary hover:text-ink-secondary transition-colors sm:flex" title="Ayuda">
-          <HelpCircle className="h-[19px] w-[19px]" />
-        </button>
+        <PerfilMenu />
       </div>
     </header>
 
