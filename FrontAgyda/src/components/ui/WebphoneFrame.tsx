@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { Phone, Minus, X } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { useWebphoneStore } from '@/stores/webphone.store'
 
@@ -278,10 +279,14 @@ export function WebphoneFrame() {
   useEffect(() => {
     if (!vista) { setRequestPip(null); setOnNavigateAway(null); return }
     setRequestPip(() => abrirPip())
-    setOnNavigateAway(() => { if (!inPip) abrirPip() })
+    // Solo se activa el flotante automático al salir de /webphone — si el
+    // usuario ya está en otro módulo y sigue navegando, no se debe volver a
+    // disparar (registrar esto sin condicionar a "activo" hacía que cualquier
+    // navegación entre otros módulos también intentara abrir el flotante).
+    setOnNavigateAway(activo ? () => { if (!inPip) abrirPip() } : null)
     return () => { setRequestPip(null); setOnNavigateAway(null) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista?.id, inPip])
+  }, [vista?.id, inPip, activo])
 
   if (!vista) return null
 
@@ -312,21 +317,27 @@ export function WebphoneFrame() {
           onMouseDown={onBubbleMouseDown}
           title={`${vista.label} — conectado · arrastrar o clic para restaurar`}
           className={
-            'fixed z-40 flex cursor-grab items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-dark text-white shadow-2xl ring-4 ring-white select-none hover:scale-105 active:cursor-grabbing active:scale-95' +
-            (interacting ? '' : ' transition-transform duration-150')
+            'fixed z-40 flex cursor-grab items-center justify-center rounded-full select-none' +
+            ' bg-gradient-to-br from-brand via-brand to-brand-dark' +
+            ' shadow-[0_8px_24px_-4px_rgba(47,111,237,0.55),0_2px_8px_rgba(0,0,0,0.15)]' +
+            ' ring-[3px] ring-white/90 hover:ring-white' +
+            ' hover:scale-110 active:cursor-grabbing active:scale-95' +
+            (interacting ? '' : ' transition-all duration-200 ease-out')
           }
           style={{ top: bubblePos.y, left: bubblePos.x, width: BUBBLE_SIZE, height: BUBBLE_SIZE }}
         >
-          <span className="text-xl">📞</span>
-          <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400">
-            <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
+          <Phone className="h-5 w-5 fill-white text-white drop-shadow-sm" strokeWidth={2.5} />
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center">
+            <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative h-3 w-3 rounded-full border-2 border-white bg-emerald-400 shadow-sm" />
           </span>
         </button>
       )}
       <div
         className={
           (inPip
-            ? 'fixed z-40 flex flex-col overflow-hidden rounded-xl border border-gray-300 bg-card shadow-2xl ring-1 ring-black/5'
+            ? 'fixed z-40 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-card shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35),0_4px_16px_rgba(0,0,0,0.12)] ring-1 ring-black/5'
             : 'fixed z-40 overflow-hidden rounded-2xl border border-gray-200/60 bg-card shadow-xl') +
           (interacting ? '' : ' transition-all duration-200 ease-out')
         }
@@ -338,15 +349,16 @@ export function WebphoneFrame() {
         {inPip && (
           <div
             onMouseDown={onDragStart}
-            className="flex flex-shrink-0 cursor-grab items-center justify-between gap-1.5 pl-2 pr-1 text-white select-none active:cursor-grabbing"
-            style={{ height: FLOAT_HEADER_HEIGHT, background: '#0B1730' }}
+            className="flex flex-shrink-0 cursor-grab items-center justify-between gap-1.5 bg-gradient-to-r from-[#0B1730] via-[#0F1F42] to-[#0B1730] pl-2.5 pr-1 text-white select-none active:cursor-grabbing"
+            style={{ height: FLOAT_HEADER_HEIGHT }}
           >
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="relative flex h-2 w-2 flex-shrink-0">
+              <Phone className="h-3 w-3 flex-shrink-0 text-brand-muted" strokeWidth={2.5} />
+              <span className="truncate text-xs font-semibold tracking-wide text-white/95">{vista.label}</span>
+              <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
                 <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400" />
               </span>
-              <span className="truncate text-xs font-medium text-white/90">{vista.label}</span>
             </div>
             <div className="flex flex-shrink-0 items-center gap-0.5">
               <button
@@ -354,18 +366,18 @@ export function WebphoneFrame() {
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => setMinimized(true)}
                 title="Minimizar"
-                className="flex h-5 w-5 items-center justify-center rounded-full text-xs text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+                className="flex h-6 w-6 items-center justify-center rounded-full text-white/75 transition-all hover:scale-105 hover:bg-white/15 hover:text-white active:scale-95"
               >
-                −
+                <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
               </button>
               <button
                 type="button"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={cerrarPip}
                 title="Cerrar modo flotante"
-                className="flex h-5 w-5 items-center justify-center rounded-full text-xs text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+                className="flex h-6 w-6 items-center justify-center rounded-full text-white/75 transition-all hover:scale-105 hover:bg-red-500/80 hover:text-white active:scale-95"
               >
-                ✕
+                <X className="h-3.5 w-3.5" strokeWidth={2.5} />
               </button>
             </div>
           </div>
@@ -404,7 +416,20 @@ export function WebphoneFrame() {
           <div onMouseDown={onResizeStart('nw')} title="Redimensionar" className="absolute left-0 top-0 z-30 h-3 w-3 cursor-nwse-resize" />
           <div onMouseDown={onResizeStart('ne')} title="Redimensionar" className="absolute right-0 top-0 z-30 h-3 w-3 cursor-nesw-resize" />
           <div onMouseDown={onResizeStart('sw')} title="Redimensionar" className="absolute bottom-0 left-0 z-30 h-3 w-3 cursor-nesw-resize" />
-          <div onMouseDown={onResizeStart('se')} title="Redimensionar" className="absolute bottom-0 right-0 z-30 h-3 w-3 cursor-nwse-resize" />
+          <div
+            onMouseDown={onResizeStart('se')}
+            title="Redimensionar"
+            className="absolute bottom-0 right-0 z-30 flex h-4 w-4 cursor-nwse-resize items-end justify-end p-0.5 opacity-40 transition-opacity hover:opacity-90"
+          >
+            <svg width="9" height="9" viewBox="0 0 9 9" className="text-gray-400">
+              <circle cx="7.5" cy="1.5" r="1" fill="currentColor" />
+              <circle cx="7.5" cy="4.5" r="1" fill="currentColor" />
+              <circle cx="7.5" cy="7.5" r="1" fill="currentColor" />
+              <circle cx="4.5" cy="4.5" r="1" fill="currentColor" />
+              <circle cx="4.5" cy="7.5" r="1" fill="currentColor" />
+              <circle cx="1.5" cy="7.5" r="1" fill="currentColor" />
+            </svg>
+          </div>
         </>
       )}
       </div>

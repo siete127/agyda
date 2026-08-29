@@ -5687,6 +5687,70 @@ END
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de mensajería:', err.message);
   }
+
+  // Se separa en pasos independientes (cada uno con su propio try/catch) en
+  // vez de un solo CREATE TABLE con las FK/UNIQUE inline — así, si un tenant
+  // tiene algún problema puntual con una referencia, el resto igual se crea
+  // en vez de que "Could not create constraint or index" tumbe todo el batch
+  // sin decir cuál constraint fue la que realmente falló.
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.MSJ_MENSAJE_REACCIONES (
+    MMR_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    MMR_MENSAJE_ID  INT NOT NULL,
+    MMR_USUARIO_ID  INT NOT NULL,
+    MMR_EMOJI       NVARCHAR(20) NOT NULL,
+    MMR_FECHA       DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+`);
+    logger.info('✅ Tabla MSJ_MENSAJE_REACCIONES asegurada');
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear tabla MSJ_MENSAJE_REACCIONES:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_MSJ_REACCIONES_MENSAJE')
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT FK_MSJ_REACCIONES_MENSAJE
+  FOREIGN KEY (MMR_MENSAJE_ID) REFERENCES dbo.MSJ_MENSAJES(MM_ID) ON DELETE CASCADE;
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear FK_MSJ_REACCIONES_MENSAJE:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_MSJ_REACCIONES_USUARIO')
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT FK_MSJ_REACCIONES_USUARIO
+  FOREIGN KEY (MMR_USUARIO_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID);
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear FK_MSJ_REACCIONES_USUARIO:', err.message);
+  }
+
+  try {
+    // Una sola reacción activa por usuario y mensaje (como WhatsApp): al elegir
+    // otro emoji se reemplaza la fila en vez de acumular varias por la misma persona.
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_MSJ_REACCIONES_MENSAJE_USUARIO' AND object_id = OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES'))
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT UQ_MSJ_REACCIONES_MENSAJE_USUARIO UNIQUE (MMR_MENSAJE_ID, MMR_USUARIO_ID);
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear UQ_MSJ_REACCIONES_MENSAJE_USUARIO:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_MSJ_REACCIONES_MENSAJE' AND object_id = OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES'))
+CREATE INDEX IX_MSJ_REACCIONES_MENSAJE ON dbo.MSJ_MENSAJE_REACCIONES(MMR_MENSAJE_ID);
+`);
+    logger.info('✅ Esquema de reacciones de mensajería asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear IX_MSJ_REACCIONES_MENSAJE:', err.message);
+  }
 }
 
 // Encuestas: las tablas base (ENCUESTAS, ENCUESTA_PREGUNTAS, ENCUESTA_OPCIONES,
