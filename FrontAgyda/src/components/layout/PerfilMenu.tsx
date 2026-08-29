@@ -80,7 +80,7 @@ export function PerfilMenu() {
   const puedeMusica = rol !== 'CC' && rol !== 'CL' && isAllowed('musica')
 
   /* ── Pausa activa (REST) ── */
-  const { data: pausaActiva, dataUpdatedAt, refetch: refetchPausa } = useQuery({
+  const { data: pausaActiva, refetch: refetchPausa } = useQuery({
     queryKey: ['pausa-activa'],
     queryFn: async () => {
       const { data } = await api.get<{ success: boolean; data: PausaActiva | null }>('/reports/pausa/activa')
@@ -91,10 +91,22 @@ export function PerfilMenu() {
     refetchOnMount: 'always',
   })
 
+  /* ── Acumulado de HOY por estado (segundos) ── */
+  const { data: acumHoy = { 2: 0, 3: 0, 5: 0, 6: 0 } as Record<number, number>, dataUpdatedAt: acumUpdatedAt, refetch: refetchAcum } = useQuery({
+    queryKey: ['pausa-hoy'],
+    queryFn: async () => {
+      const { data } = await api.get<{ success: boolean; data: Record<number, number> }>('/reports/pausa/hoy')
+      return data.data
+    },
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchOnMount: 'always',
+  })
+
   // Al abrir el menú, traer el estado fresco de inmediato.
   useEffect(() => {
-    if (open) refetchPausa()
-  }, [open, refetchPausa])
+    if (open) { refetchPausa(); refetchAcum() }
+  }, [open, refetchPausa, refetchAcum])
 
   /* ── Baño (socket) ── */
   const esF = user?.genero ? user.genero === 'F' : detectarGenero(user?.nombres ?? '') === 'F'
@@ -112,14 +124,15 @@ export function PerfilMenu() {
   const banioMio = !!banio?.ocupado && String(banio.porUsuario) === myIdStr
   const banioBloqueado = !!banio?.ocupado && !banioMio
 
-  // Cuando el socket confirma que entré/salí del baño, refrescar la query REST
-  // (el socket escribe la fila async). Dos refetches: uno rápido y uno de
-  // respaldo por si la escritura tardó.
+  // Cuando el socket confirma que entré/salí del baño, refrescar las queries
+  // REST (el socket escribe la fila async). Dos refetches: uno rápido y uno
+  // de respaldo por si la escritura tardó.
   useEffect(() => {
-    const a = setTimeout(() => refetchPausa(), 400)
-    const b = setTimeout(() => refetchPausa(), 1500)
+    const run = () => { refetchPausa(); refetchAcum() }
+    const a = setTimeout(run, 400)
+    const b = setTimeout(run, 1500)
     return () => { clearTimeout(a); clearTimeout(b) }
-  }, [banioMio, refetchPausa])
+  }, [banioMio, refetchPausa, refetchAcum])
 
   /* ── Estado activo unificado + cambio ── */
   const [loadingStatus, setLoadingStatus] = useState<number | null>(null)
@@ -161,25 +174,26 @@ export function PerfilMenu() {
   }
 
   /* ── Cronómetro del estado activo ────────────────────────────
-     El backend da `duracionSegundos` (DATEDIFF server-side, sin líos de zona
-     horaria) y react-query nos da `dataUpdatedAt` = cuándo llegó esa respuesta.
-     start = dataUpdatedAt - duracionSegundos*1000 → epoch en que empezó la
-     pausa. Estable: el par (duracion, updatedAt) siempre apunta al mismo
-     instante de inicio, venga de caché o de un refetch. */
-  const anclaActiva = pausaActiva && statusActivo === pausaActiva.status_id ? pausaActiva : null
-  const startMs = anclaActiva ? dataUpdatedAt - anclaActiva.duracionSegundos * 1000 : null
+     El contador (izquierda) = ACUMULADO DE HOY para ese estado.
+     `acumHoy[st]` viene del backend (SUM de segundos del día, incluye la
+     sesión abierta hasta el instante `acumUpdatedAt`). El contador sigue
+     subiendo: acumHoy[st] + (ahora − acumUpdatedAt). Como acumHoy y
+     acumUpdatedAt se refrescan juntos, la suma es estable entre refetches. */
+  const baseSeg = statusActivo !== null ? (acumHoy[statusActivo] ?? 0) : 0
+  const baseAtMs = acumUpdatedAt
+  const hayDato = statusActivo !== null && pausaActiva !== undefined
 
   const [elapsed, setElapsed] = useState<number | null>(null)
   useEffect(() => {
-    if (startMs === null) {
+    if (statusActivo === null || !hayDato) {
       setElapsed(null)  // eslint-disable-line react-hooks/set-state-in-effect
       return
     }
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)))
+    const tick = () => setElapsed(baseSeg + Math.max(0, Math.floor((Date.now() - baseAtMs) / 1000)))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [startMs])
+  }, [statusActivo, hayDato, baseSeg, baseAtMs])
 
   /* ── Livechat disponible ── */
   const { data: miEstado } = useQuery({
@@ -236,7 +250,7 @@ export function PerfilMenu() {
                 const Icon = est.icon
                 const limite = limiteMinutos(statusActivo, rol)     // minutos, o null
                 const limiteSeg = limite !== null ? limite * 60 : null
-                const seg = elapsed ?? 0
+                const seg = elapsed ?? 0                              // acumulado de HOY
                 const restante = limiteSeg !== null ? Math.max(0, limiteSeg - seg) : null
                 const excedido = limiteSeg !== null && seg >= limiteSeg
                 return (
@@ -247,13 +261,13 @@ export function PerfilMenu() {
                     <div className="min-w-0 flex-1">
                       <p className={clsx('text-[0.8rem] font-bold leading-tight', excedido ? 'text-red-500' : a.text)}>{est.label}</p>
                       <p className={clsx('mt-0.5 font-mono text-[0.9rem] font-bold tabular-nums', excedido ? 'text-red-500' : a.text)}>
-                        {/* izquierda: transcurrido (sube) · derecha: restante (baja hasta 0) */}
+                        {/* izquierda: acumulado de hoy (sube) · derecha: límite − acumulado (baja a 0) */}
                         {elapsed === null ? '··:··' : fmtCronometro(seg)}
                         {restante !== null && <span className="opacity-60"> / {elapsed === null ? '··:··' : fmtCronometro(restante)}</span>}
                       </p>
                       {limiteSeg !== null && (
                         <p className="mt-0.5 text-[0.6rem] text-gray-400">
-                          {excedido ? 'Tiempo excedido' : `restante · límite ${fmtCronometro(limiteSeg)}`}
+                          {excedido ? 'Excediste tu tiempo del día' : `usado hoy · límite diario ${fmtCronometro(limiteSeg)}`}
                         </p>
                       )}
                     </div>
