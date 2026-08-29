@@ -80,14 +80,21 @@ export function PerfilMenu() {
   const puedeMusica = rol !== 'CC' && rol !== 'CL' && isAllowed('musica')
 
   /* ── Pausa activa (REST) ── */
-  const { data: pausaActiva } = useQuery({
+  const { data: pausaActiva, refetch: refetchPausa } = useQuery({
     queryKey: ['pausa-activa'],
     queryFn: async () => {
       const { data } = await api.get<{ success: boolean; data: PausaActiva | null }>('/reports/pausa/activa')
       return data.data
     },
-    staleTime: 10_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   })
+
+  // Al abrir el menú, traer el estado fresco (para que el cronómetro arranque
+  // en el segundo correcto, no en 0).
+  useEffect(() => {
+    if (open) refetchPausa()
+  }, [open, refetchPausa])
 
   /* ── Baño (socket) ── */
   const esF = user?.genero ? user.genero === 'F' : detectarGenero(user?.nombres ?? '') === 'F'
@@ -127,25 +134,44 @@ export function PerfilMenu() {
     finally { setLoadingStatus(null) }
   }
 
-  /* ── Cronómetro del estado activo ── */
-  // Semilla: segundos ya transcurridos según el backend (0 si el baño lo
-  // acabamos de iniciar por socket y aún no llegó la query).
-  const seedSegundos = pausaActiva && statusActivo === pausaActiva.status_id
-    ? pausaActiva.duracionSegundos
-    : 0
+  /* ── Cronómetro del estado activo ────────────────────────────
+     `startMs` = momento en que empezó la pausa (epoch ms), calculado desde la
+     duración que reporta el backend (DATEDIFF server-side, sin líos de zona
+     horaria). Se fija UNA vez por pausa (clave = tiempo_id); los refetches del
+     mismo tiempo_id no lo recalculan, así el contador no salta. */
+  const anclaTiempoId = pausaActiva && statusActivo === pausaActiva.status_id ? pausaActiva.tiempo_id : null
+  const seedSegundos = pausaActiva && statusActivo === pausaActiva.status_id ? pausaActiva.duracionSegundos : 0
+
+  const [startMs, setStartMs] = useState<number | null>(null)
+  const [startMsTiempoId, setStartMsTiempoId] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
-  const startedAtRef = useRef<number>(0)
+
+  /* eslint-disable react-hooks/set-state-in-effect -- sincroniza el ancla del
+     cronómetro con los datos del backend; requiere Date.now() en el momento */
   useEffect(() => {
     if (statusActivo === null) {
-      startedAtRef.current = 0
+      setStartMs(null); setStartMsTiempoId(null)
       return
     }
-    startedAtRef.current = Date.now() - seedSegundos * 1000
-    const tick = () => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000))
+    if (anclaTiempoId !== null && anclaTiempoId !== startMsTiempoId) {
+      // Dato del backend para esta pausa → ancla exacta.
+      setStartMs(Date.now() - seedSegundos * 1000)
+      setStartMsTiempoId(anclaTiempoId)
+    } else if (startMs === null) {
+      // Baño recién iniciado por socket, aún sin REST → arranca en ~0 y se
+      // corrige cuando llegue el refetch con el tiempo_id.
+      setStartMs(Date.now())
+    }
+  }, [statusActivo, anclaTiempoId, seedSegundos, startMs, startMsTiempoId])
+
+  useEffect(() => {
+    if (startMs === null) { setElapsed(0); return }
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [statusActivo, seedSegundos])
+  }, [startMs])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   /* ── Livechat disponible ── */
   const { data: miEstado } = useQuery({
