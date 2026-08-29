@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Clock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
+import { getSocket } from '@/lib/socket'
 
 // ── Configuración de tipos de pausa ──────────────────────────────────────────
 const PAUSAS = [
@@ -68,14 +69,6 @@ function fmtFecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function badgeDuracion(seg: number, activo: boolean, limiteMin: number | null, esAcumulado = false, totalAcumSeg = 0) {
-  if (activo) return 'bg-amber-100 text-amber-700 border-amber-200'
-  const checkSeg = esAcumulado ? totalAcumSeg : seg
-  if (limiteMin !== null && checkSeg > limiteMin * 60) return 'bg-red-100 text-red-700 border-red-200'
-  if (limiteMin !== null && checkSeg > limiteMin * 60 * 0.75) return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-  return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-}
-
 function localDateStr(d = new Date()) {
   const y  = d.getFullYear()
   const m  = String(d.getMonth() + 1).padStart(2, '0')
@@ -92,8 +85,9 @@ export function BanioReportePage() {
   const [area,     setArea]    = useState('')
 
   const pausaActiva = PAUSAS[tabIdx]
+  const qc = useQueryClient()
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch, isRefetching, dataUpdatedAt } = useQuery({
     queryKey: ['pausas-reporte', from, to, pausaActiva.statusId, area],
     queryFn: async () => {
       const params = new URLSearchParams({ from, to })
@@ -102,9 +96,30 @@ export function BanioReportePage() {
       const { data } = await api.get<{ success: boolean; data: PausaRecord[] }>(`/reports/banio?${params}`)
       return data.data ?? []
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 8_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
+
+  // Tiempo real: al toggle de baño de cualquiera → refrescar el reporte.
+  useEffect(() => {
+    const sock = getSocket()
+    const onBanio = () => qc.invalidateQueries({ queryKey: ['pausas-reporte'] })
+    sock.on('banio:status', onBanio)
+    return () => { sock.off('banio:status', onBanio) }
+  }, [qc])
+
+  // Reloj que avanza cada segundo — para que las filas ACTIVAS muestren su
+  // duración subiendo sin esperar al siguiente refetch.
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  // Segundos extra a sumar a `duracionSegundos` de una fila activa: lo que pasó
+  // desde que llegó la respuesta.
+  const driftSeg = Math.max(0, Math.floor((nowTick - dataUpdatedAt) / 1000))
+  const liveDur = (r: PausaRecord) => r.duracionSegundos + (r.activo ? driftSeg : 0)
 
   const registros = (data ?? []).filter((r) =>
     buscar === ''
@@ -262,7 +277,7 @@ export function BanioReportePage() {
                 const pausa = PAUSAS.find(p => p.statusId === r.statusId)
                 return (
                   <span key={r.id} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold ${st.badge}`}>
-                    {pausa?.emoji} {r.nombre.split(' ').slice(0,2).join(' ')} · {fmt(r.duracionSegundos)}
+                    {pausa?.emoji} {r.nombre.split(' ').slice(0,2).join(' ')} · <span className="font-mono tabular-nums">{fmt(liveDur(r))}</span>
                   </span>
                 )
               })}
@@ -378,15 +393,15 @@ export function BanioReportePage() {
                       <td className="px-4 py-3 text-[0.8rem] text-gray-600 font-mono">{fmtHora(r.entrada)}</td>
                       <td className="px-4 py-3 text-[0.8rem] font-mono">
                         {r.activo
-                          ? <span className="text-amber-500 font-semibold">Activo ⏱</span>
+                          ? <span className="text-amber-500 font-semibold tabular-nums">En curso · {fmt(liveDur(r))} ⏱</span>
                           : <span className="text-gray-600">{fmtHora(r.salida!)}</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold tabular-nums
                           ${r.activo ? 'bg-amber-100 text-amber-700 border-amber-200'
                             : excede ? 'bg-red-100 text-red-700 border-red-200'
                             : 'bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
-                          {fmt(r.duracionSegundos)}{r.activo ? ' ⏱' : excede ? ' ⚠️' : ''}
+                          {fmt(liveDur(r))}{r.activo ? ' ⏱' : excede ? ' ⚠️' : ''}
                         </span>
                       </td>
                     </tr>
