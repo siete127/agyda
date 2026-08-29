@@ -86,12 +86,12 @@ export function PerfilMenu() {
       const { data } = await api.get<{ success: boolean; data: PausaActiva | null }>('/reports/pausa/activa')
       return data.data
     },
-    staleTime: 20_000,
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchOnMount: 'always',
   })
 
-  // Al abrir el menú, traer el estado fresco (para que el cronómetro arranque
-  // en el segundo correcto, no en 0).
+  // Al abrir el menú, traer el estado fresco de inmediato.
   useEffect(() => {
     if (open) refetchPausa()
   }, [open, refetchPausa])
@@ -113,10 +113,12 @@ export function PerfilMenu() {
   const banioBloqueado = !!banio?.ocupado && !banioMio
 
   // Cuando el socket confirma que entré/salí del baño, refrescar la query REST
-  // para tener duracionSegundos real (el socket escribe la fila async).
+  // (el socket escribe la fila async). Dos refetches: uno rápido y uno de
+  // respaldo por si la escritura tardó.
   useEffect(() => {
-    const t = setTimeout(() => refetchPausa(), 700)
-    return () => clearTimeout(t)
+    const a = setTimeout(() => refetchPausa(), 400)
+    const b = setTimeout(() => refetchPausa(), 1500)
+    return () => { clearTimeout(a); clearTimeout(b) }
   }, [banioMio, refetchPausa])
 
   /* ── Estado activo unificado + cambio ── */
@@ -124,25 +126,36 @@ export function PerfilMenu() {
   // statusId activo: baño por socket, resto por la query REST.
   const statusActivo = banioMio ? 3 : (pausaActiva?.status_id ?? null)
 
+  const emitBanioToggle = () => {
+    const sock = getSocket()
+    const payload = { userId: user?.id ?? null, userName: user?.nombres?.split(' ').slice(0, 2).join(' ') ?? 'Usuario' }
+    if (sock.connected) sock.emit('banio:toggle', payload)
+    else throw new Error('sin conexión')
+  }
+
   const cambiarEstado = async (statusId: number) => {
     if (loadingStatus !== null) return
     if (statusId === 3 && banioBloqueado) return
+    // El único estado "activo" real: baño por socket, resto por la query REST.
+    const activo = statusActivo
+    const terminar = activo === statusId
     setLoadingStatus(statusId)
     try {
       if (statusId === 3) {
-        // Baño: SOLO por socket. El handler banio:toggle abre/cierra el
-        // registro en USUARIO_TIEMPOS. Si además llamáramos al endpoint REST,
-        // se crearían dos filas que se pisan (bug del contador reiniciándose).
-        const sock = getSocket()
-        const payload = { userId: user?.id ?? null, userName: user?.nombres?.split(' ').slice(0, 2).join(' ') ?? 'Usuario' }
-        if (sock.connected) sock.emit('banio:toggle', payload)
-        else throw new Error('sin conexión')
+        // Si venía de otra pausa (comida/capac/permiso), cerrarla primero
+        // para no quedar con dos filas abiertas.
+        if (activo !== null && activo !== 3) {
+          await api.post('/reports/pausa/terminar', { statusId: activo }).catch(() => {})
+        }
+        // Baño: solo socket (el handler banio:toggle escribe USUARIO_TIEMPOS).
+        emitBanioToggle()
       } else {
-        const terminar = statusActivo === statusId
+        // Si venía del baño, salir primero (el socket no se entera de que
+        // iniciarPausa cerró la fila del baño, quedaría "pegado").
+        if (activo === 3 && banioMio) { try { emitBanioToggle() } catch { /* seguimos */ } }
         await api.post(terminar ? '/reports/pausa/terminar' : '/reports/pausa/iniciar', { statusId })
         qc.invalidateQueries({ queryKey: ['pausa-activa'] })
       }
-      // El baño refetchea vía el efecto que observa `banioMio`.
     } catch { toast.error('No se pudo cambiar el estado') }
     finally { setLoadingStatus(null) }
   }
