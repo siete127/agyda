@@ -3097,6 +3097,71 @@ async function ensureTiAreaSchema(pool) {
         );
         CREATE INDEX IX_TI_INCIDENTES_SISTEMA_SIS ON dbo.TI_INCIDENTES_SISTEMA(ISI_SISTEMA_ID);
       END
+
+      /* ── Monitoreo de red en vivo (agente PowerShell → ingesta) ── */
+
+      IF OBJECT_ID('dbo.TI_RED_AGENTES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_AGENTES (
+          RA_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          RA_NOMBRE        NVARCHAR(120)  NOT NULL,        -- hostname o etiqueta
+          RA_ENLACE_ID     INT            NULL,            -- enlace que monitorea
+          RA_VERSION       NVARCHAR(30)   NULL,
+          RA_SO            NVARCHAR(120)  NULL,
+          RA_IP_LOCAL      NVARCHAR(45)   NULL,
+          RA_GATEWAY       NVARCHAR(45)   NULL,
+          RA_ULTIMA_SENAL  DATETIME       NULL,            -- última ingesta recibida
+          RA_PRIMERA_VEZ   DATETIME       NOT NULL DEFAULT GETDATE(),
+          RA_ACTIVO        BIT            NOT NULL DEFAULT 1,
+          CONSTRAINT UQ_TI_RED_AGENTES_NOMBRE UNIQUE (RA_NOMBRE),
+          CONSTRAINT FK_TI_RED_AGENTES_ENLACE FOREIGN KEY (RA_ENLACE_ID)
+            REFERENCES dbo.TI_ENLACES_RED(ENL_ID) ON DELETE SET NULL
+        );
+      END
+
+      IF OBJECT_ID('dbo.TI_RED_MEDICIONES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_MEDICIONES (
+          RM_ID            BIGINT IDENTITY(1,1) PRIMARY KEY,
+          RM_ENLACE_ID     INT            NULL,
+          RM_AGENTE_ID     INT            NULL,
+          RM_FECHA         DATETIME       NOT NULL DEFAULT GETDATE(),
+          RM_ONLINE        BIT            NOT NULL,
+          RM_LATENCIA_MS   DECIMAL(7,2)   NULL,
+          RM_JITTER_MS     DECIMAL(7,2)   NULL,
+          RM_PERDIDA_PCT   DECIMAL(5,2)   NULL,
+          RM_DOWN_MBPS     DECIMAL(9,2)   NULL,
+          RM_UP_MBPS       DECIMAL(9,2)   NULL,
+          RM_LINK_MBPS     DECIMAL(9,2)   NULL,
+          RM_ADAPTADOR_UP  BIT            NULL,
+          RM_DISP_ONLINE   INT            NULL,
+          RM_ORIGEN        NVARCHAR(120)  NULL,
+          CONSTRAINT FK_TI_RED_MEDICIONES_ENLACE FOREIGN KEY (RM_ENLACE_ID)
+            REFERENCES dbo.TI_ENLACES_RED(ENL_ID) ON DELETE SET NULL
+        );
+        CREATE INDEX IX_TI_RED_MEDICIONES_FECHA ON dbo.TI_RED_MEDICIONES(RM_FECHA DESC);
+        CREATE INDEX IX_TI_RED_MEDICIONES_ENLACE ON dbo.TI_RED_MEDICIONES(RM_ENLACE_ID, RM_FECHA DESC);
+      END
+
+      IF OBJECT_ID('dbo.TI_RED_DISPOSITIVOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_DISPOSITIVOS (
+          RD_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          RD_MAC           NVARCHAR(40)   NOT NULL,
+          RD_ENLACE_ID     INT            NULL,
+          RD_IP            NVARCHAR(45)   NULL,
+          RD_HOSTNAME      NVARCHAR(160)  NULL,
+          RD_FABRICANTE    NVARCHAR(140)  NULL,          -- OUI vendor
+          RD_ALIAS         NVARCHAR(160)  NULL,          -- editable por TI
+          RD_ORIGEN        NVARCHAR(20)   NULL,          -- 'arp' | 'dhcp' | 'router'
+          RD_PRIMERA_VEZ   DATETIME       NOT NULL DEFAULT GETDATE(),
+          RD_ULTIMA_VEZ    DATETIME       NOT NULL DEFAULT GETDATE(),
+          RD_ONLINE        BIT            NOT NULL DEFAULT 1,
+          RD_BLOQUEADO     BIT            NOT NULL DEFAULT 0,
+          CONSTRAINT UQ_TI_RED_DISPOSITIVOS_MAC UNIQUE (RD_MAC)
+        );
+        CREATE INDEX IX_TI_RED_DISPOSITIVOS_ULTIMA ON dbo.TI_RED_DISPOSITIVOS(RD_ULTIMA_VEZ DESC);
+      END
     `);
   } catch (err) {
     console.warn('⚠️ TiAreaSchema:', err.message);

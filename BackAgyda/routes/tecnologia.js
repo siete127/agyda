@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/tecnologiaController');
 const auth = require('../middleware/auth');
+const apiKeyAuth = require('../middleware/apiKeyAuth');
 
 router.get('/dashboard', auth.authenticateToken, controller.getDashboard);
 router.get('/mantenimientos', auth.authenticateToken, controller.listMantenimientos);
@@ -18,6 +19,13 @@ router.get('/incidentes-red', auth.authenticateToken, controller.listIncidentesR
 router.post('/incidentes-red', auth.authenticateToken, controller.crearIncidenteRed);
 router.patch('/incidentes-red/:id/resolver', auth.authenticateToken, controller.resolverIncidenteRed);
 router.get('/dashboard-red', auth.authenticateToken, controller.getDashboardRed);
+
+// Monitoreo de red en vivo — ingesta del agente (API key) + lecturas (sesión)
+router.post('/red/ingesta', apiKeyAuth, controller.ingestaRed);
+router.get('/red/estado-actual', auth.authenticateToken, controller.getEstadoActualRed);
+router.get('/red/mediciones', auth.authenticateToken, controller.getMedicionesRed);
+router.get('/red/dispositivos', auth.authenticateToken, controller.getDispositivosRed);
+router.patch('/red/dispositivos/:id', auth.authenticateToken, controller.actualizarDispositivoRed);
 
 // Respaldos
 router.get('/respaldos/config', auth.authenticateToken, controller.listRespaldosConfig);

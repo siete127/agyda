@@ -34,3 +34,49 @@ export const ESTADO_COLORS: Record<EnlaceEstado, string> = {
   caido: 'bg-red-50 text-red-600',
   mantenimiento: 'bg-amber-50 text-amber-700',
 }
+
+/* ── Monitoreo de red en vivo ── */
+
+export interface MedicionRed {
+  fecha: string
+  online: boolean
+  latenciaMs: number | null
+  jitterMs: number | null
+  perdidaPct: number | null
+  downMbps: number | null
+  upMbps: number | null
+  linkMbps: number | null
+  dispOnline: number | null
+}
+
+export interface DispositivoRed {
+  id: number
+  mac: string
+  ip: string | null
+  hostname: string | null
+  fabricante: string | null
+  alias: string | null
+  origen: string | null
+  primeraVez: string
+  ultimaVez: string
+  online: boolean
+  bloqueado: boolean
+}
+
+export interface AgenteRed {
+  id: number
+  nombre: string
+  enlaceId: number | null
+  version: string | null
+  ultimaSenal: string | null
+  gateway: string | null
+  vivo: 0 | 1
+}
+
+export interface EstadoActualRed {
+  ultima: (MedicionRed & { origen: string | null; adaptadorUp: boolean | null }) | null
+  ultimaVelocidad: { fecha: string; downMbps: number | null; upMbps: number | null } | null
+  dispositivos: { total: number; online: number }
+  agentes: AgenteRed[]
+  enlaces: { id: number; nombre: string; estado: EnlaceEstado; proveedor: string | null }[]
+}

@@ -594,6 +594,265 @@ async function getDashboardSistemas(req, res) {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Monitoreo de red en vivo — ingesta del agente PowerShell + lecturas
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const AGENTE_INACTIVO_MIN = 6;      // sin señal en N min → agente "sin señal"
+const DISP_OFFLINE_MIN = 6;         // no visto en N min → dispositivo offline
+const RETENCION_DIAS = 90;          // mediciones más viejas se purgan
+
+// POST /api/tecnologia/red/ingesta  (apiKeyAuth — el pool viene de req.dbPool)
+// Body: { agente:{ nombre, version?, so?, ipLocal?, gateway? }, enlaceId?,
+//         online, latenciaMs?, jitterMs?, perdidaPct?, downMbps?, upMbps?,
+//         linkMbps?, adaptadorUp?, dispositivos:[{ mac, ip?, hostname?, fabricante?, origen? }] }
+async function ingestaRed(req, res) {
+  try {
+    const pool = req.dbPool || await databaseService.getPool(req.query.empresa || req.body?.empresa);
+    const b = req.body || {};
+
+    const online = b.online === true || b.online === 1 || b.online === '1';
+    const num = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+    const enlaceId = num(b.enlaceId);
+    const dispositivos = Array.isArray(b.dispositivos) ? b.dispositivos : [];
+    const agente = b.agente || {};
+    const nombreAgente = String(agente.nombre || b.origen || 'agente-desconocido').slice(0, 120);
+
+    // 1) upsert del agente
+    let agenteId = null;
+    try {
+      const ag = await pool.request()
+        .input('nombre', sql.NVarChar, nombreAgente)
+        .input('enlaceId', sql.Int, enlaceId)
+        .input('version', sql.NVarChar, (agente.version || null))
+        .input('so', sql.NVarChar, (agente.so || null))
+        .input('ipLocal', sql.NVarChar, (agente.ipLocal || null))
+        .input('gateway', sql.NVarChar, (agente.gateway || null))
+        .query(`
+          MERGE dbo.TI_RED_AGENTES AS t
+          USING (SELECT @nombre AS RA_NOMBRE) AS s ON t.RA_NOMBRE = s.RA_NOMBRE
+          WHEN MATCHED THEN UPDATE SET
+            RA_ENLACE_ID = COALESCE(@enlaceId, t.RA_ENLACE_ID),
+            RA_VERSION = @version, RA_SO = @so, RA_IP_LOCAL = @ipLocal,
+            RA_GATEWAY = @gateway, RA_ULTIMA_SENAL = GETDATE()
+          WHEN NOT MATCHED THEN INSERT (RA_NOMBRE, RA_ENLACE_ID, RA_VERSION, RA_SO, RA_IP_LOCAL, RA_GATEWAY, RA_ULTIMA_SENAL)
+            VALUES (@nombre, @enlaceId, @version, @so, @ipLocal, @gateway, GETDATE())
+          OUTPUT INSERTED.RA_ID;
+        `);
+      agenteId = ag.recordset[0]?.RA_ID ?? null;
+    } catch (e) { logger.warn('ingestaRed: upsert agente', e.message); }
+
+    // 2) medición
+    const med = await pool.request()
+      .input('enlaceId', sql.Int, enlaceId)
+      .input('agenteId', sql.Int, agenteId)
+      .input('online', sql.Bit, online ? 1 : 0)
+      .input('lat', sql.Decimal(7, 2), num(b.latenciaMs))
+      .input('jit', sql.Decimal(7, 2), num(b.jitterMs))
+      .input('loss', sql.Decimal(5, 2), num(b.perdidaPct))
+      .input('down', sql.Decimal(9, 2), num(b.downMbps))
+      .input('up', sql.Decimal(9, 2), num(b.upMbps))
+      .input('link', sql.Decimal(9, 2), num(b.linkMbps))
+      .input('adapUp', sql.Bit, b.adaptadorUp === undefined ? null : (b.adaptadorUp ? 1 : 0))
+      .input('disp', sql.Int, dispositivos.length)
+      .input('origen', sql.NVarChar, nombreAgente)
+      .query(`
+        INSERT INTO dbo.TI_RED_MEDICIONES
+          (RM_ENLACE_ID, RM_AGENTE_ID, RM_ONLINE, RM_LATENCIA_MS, RM_JITTER_MS, RM_PERDIDA_PCT,
+           RM_DOWN_MBPS, RM_UP_MBPS, RM_LINK_MBPS, RM_ADAPTADOR_UP, RM_DISP_ONLINE, RM_ORIGEN)
+        OUTPUT INSERTED.RM_ID
+        VALUES (@enlaceId, @agenteId, @online, @lat, @jit, @loss, @down, @up, @link, @adapUp, @disp, @origen);
+      `);
+    const medicionId = med.recordset[0].RM_ID;
+
+    // 3) upsert de dispositivos vistos
+    let dispGuardados = 0;
+    for (const d of dispositivos) {
+      const mac = String(d.mac || '').trim().toUpperCase();
+      if (!mac || mac.length < 11) continue;
+      try {
+        await pool.request()
+          .input('mac', sql.NVarChar, mac)
+          .input('enlaceId', sql.Int, enlaceId)
+          .input('ip', sql.NVarChar, (d.ip || null))
+          .input('host', sql.NVarChar, (d.hostname || null))
+          .input('fab', sql.NVarChar, (d.fabricante || null))
+          .input('origen', sql.NVarChar, (d.origen || 'arp'))
+          .query(`
+            MERGE dbo.TI_RED_DISPOSITIVOS AS t
+            USING (SELECT @mac AS RD_MAC) AS s ON t.RD_MAC = s.RD_MAC
+            WHEN MATCHED THEN UPDATE SET
+              RD_IP = COALESCE(@ip, t.RD_IP),
+              RD_HOSTNAME = COALESCE(@host, t.RD_HOSTNAME),
+              RD_FABRICANTE = COALESCE(@fab, t.RD_FABRICANTE),
+              RD_ENLACE_ID = COALESCE(@enlaceId, t.RD_ENLACE_ID),
+              RD_ORIGEN = @origen, RD_ULTIMA_VEZ = GETDATE(), RD_ONLINE = 1
+            WHEN NOT MATCHED THEN INSERT (RD_MAC, RD_ENLACE_ID, RD_IP, RD_HOSTNAME, RD_FABRICANTE, RD_ORIGEN)
+              VALUES (@mac, @enlaceId, @ip, @host, @fab, @origen);
+          `);
+        dispGuardados++;
+      } catch (e) { logger.warn('ingestaRed: upsert disp', e.message); }
+    }
+
+    // 4) marcar offline los no vistos recientemente
+    await pool.request().query(`
+      UPDATE dbo.TI_RED_DISPOSITIVOS SET RD_ONLINE = 0
+      WHERE RD_ONLINE = 1 AND RD_ULTIMA_VEZ < DATEADD(MINUTE, -${DISP_OFFLINE_MIN}, GETDATE())
+    `);
+
+    // 5) estado del enlace + incidentes automáticos
+    if (enlaceId) {
+      const enl = await pool.request().input('id', sql.Int, enlaceId)
+        .query('SELECT ENL_ESTADO FROM dbo.TI_ENLACES_RED WHERE ENL_ID = @id');
+      const estadoActual = enl.recordset[0]?.ENL_ESTADO;
+      if (!online && estadoActual && estadoActual !== 'caido' && estadoActual !== 'mantenimiento') {
+        await pool.request().input('id', sql.Int, enlaceId)
+          .query(`UPDATE dbo.TI_ENLACES_RED SET ENL_ESTADO='caido', ENL_FECHA_ACTUALIZACION=GETDATE() WHERE ENL_ID=@id`);
+        const abierto = await pool.request().input('id', sql.Int, enlaceId)
+          .query(`SELECT TOP 1 IR_ID FROM dbo.TI_INCIDENTES_RED WHERE IR_ENLACE_ID=@id AND IR_FECHA_FIN IS NULL`);
+        if (!abierto.recordset.length) {
+          await pool.request().input('id', sql.Int, enlaceId)
+            .query(`INSERT INTO dbo.TI_INCIDENTES_RED (IR_ENLACE_ID, IR_TIPO, IR_DESCRIPCION)
+                    VALUES (@id, 'caida', 'Detectado automáticamente por el agente de monitoreo')`);
+        }
+      } else if (online && estadoActual === 'caido') {
+        await pool.request().input('id', sql.Int, enlaceId)
+          .query(`UPDATE dbo.TI_ENLACES_RED SET ENL_ESTADO='activo', ENL_FECHA_ACTUALIZACION=GETDATE() WHERE ENL_ID=@id`);
+        await pool.request().input('id', sql.Int, enlaceId)
+          .query(`UPDATE dbo.TI_INCIDENTES_RED SET IR_FECHA_FIN=GETDATE()
+                  WHERE IR_ENLACE_ID=@id AND IR_FECHA_FIN IS NULL`);
+      }
+    }
+
+    // 6) purga de mediciones viejas (barato: 1 DELETE con tope)
+    await pool.request().query(`
+      DELETE TOP (2000) FROM dbo.TI_RED_MEDICIONES
+      WHERE RM_FECHA < DATEADD(DAY, -${RETENCION_DIAS}, GETDATE())
+    `);
+
+    res.json({ success: true, data: { medicionId, dispositivos: dispGuardados, agenteId } });
+  } catch (err) {
+    logger.error('tecnologiaController.ingestaRed', err);
+    res.status(500).json({ success: false, message: 'Error al procesar la ingesta de red' });
+  }
+}
+
+// GET /api/tecnologia/red/estado-actual
+async function getEstadoActualRed(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ultima = await pool.request().query(`
+      SELECT TOP 1 RM_FECHA as fecha, RM_ONLINE as online, RM_LATENCIA_MS as latenciaMs,
+             RM_JITTER_MS as jitterMs, RM_PERDIDA_PCT as perdidaPct, RM_DOWN_MBPS as downMbps,
+             RM_UP_MBPS as upMbps, RM_LINK_MBPS as linkMbps, RM_ADAPTADOR_UP as adaptadorUp,
+             RM_DISP_ONLINE as dispOnline, RM_ORIGEN as origen
+      FROM dbo.TI_RED_MEDICIONES ORDER BY RM_FECHA DESC
+    `);
+    const ultimaVel = await pool.request().query(`
+      SELECT TOP 1 RM_FECHA as fecha, RM_DOWN_MBPS as downMbps, RM_UP_MBPS as upMbps
+      FROM dbo.TI_RED_MEDICIONES WHERE RM_DOWN_MBPS IS NOT NULL ORDER BY RM_FECHA DESC
+    `);
+    const disp = await pool.request().query(`
+      SELECT COUNT(*) as total,
+             SUM(CASE WHEN RD_ONLINE=1 THEN 1 ELSE 0 END) as online
+      FROM dbo.TI_RED_DISPOSITIVOS
+    `);
+    const agentes = await pool.request().query(`
+      SELECT RA_ID as id, RA_NOMBRE as nombre, RA_ENLACE_ID as enlaceId, RA_VERSION as version,
+             RA_ULTIMA_SENAL as ultimaSenal, RA_GATEWAY as gateway,
+             CASE WHEN RA_ULTIMA_SENAL >= DATEADD(MINUTE, -${AGENTE_INACTIVO_MIN}, GETDATE()) THEN 1 ELSE 0 END as vivo
+      FROM dbo.TI_RED_AGENTES WHERE RA_ACTIVO = 1 ORDER BY RA_ULTIMA_SENAL DESC
+    `);
+    const enlaces = await pool.request().query(`
+      SELECT ENL_ID as id, ENL_NOMBRE as nombre, ENL_ESTADO as estado, ENL_PROVEEDOR as proveedor
+      FROM dbo.TI_ENLACES_RED ORDER BY ENL_NOMBRE
+    `);
+    res.json({
+      success: true,
+      data: {
+        ultima: ultima.recordset[0] ?? null,
+        ultimaVelocidad: ultimaVel.recordset[0] ?? null,
+        dispositivos: { total: disp.recordset[0]?.total ?? 0, online: disp.recordset[0]?.online ?? 0 },
+        agentes: agentes.recordset,
+        enlaces: enlaces.recordset,
+      },
+    });
+  } catch (err) {
+    logger.error('tecnologiaController.getEstadoActualRed', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el estado de la red' });
+  }
+}
+
+// GET /api/tecnologia/red/mediciones?enlaceId=&horas=24
+async function getMedicionesRed(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const horas = Math.min(Math.max(parseInt(req.query.horas) || 24, 1), 24 * 30);
+    const enlaceId = parseInt(req.query.enlaceId) || null;
+    const rq = pool.request().input('horas', sql.Int, horas);
+    let filtro = '';
+    if (enlaceId) { rq.input('enlaceId', sql.Int, enlaceId); filtro = 'AND RM_ENLACE_ID = @enlaceId'; }
+    const rs = await rq.query(`
+      SELECT RM_FECHA as fecha, RM_ONLINE as online, RM_LATENCIA_MS as latenciaMs,
+             RM_JITTER_MS as jitterMs, RM_PERDIDA_PCT as perdidaPct,
+             RM_DOWN_MBPS as downMbps, RM_UP_MBPS as upMbps, RM_LINK_MBPS as linkMbps,
+             RM_DISP_ONLINE as dispOnline
+      FROM dbo.TI_RED_MEDICIONES
+      WHERE RM_FECHA >= DATEADD(HOUR, -@horas, GETDATE()) ${filtro}
+      ORDER BY RM_FECHA ASC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('tecnologiaController.getMedicionesRed', err);
+    res.status(500).json({ success: false, message: 'Error al obtener las mediciones de red' });
+  }
+}
+
+// GET /api/tecnologia/red/dispositivos
+async function getDispositivosRed(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT RD_ID as id, RD_MAC as mac, RD_IP as ip, RD_HOSTNAME as hostname,
+             RD_FABRICANTE as fabricante, RD_ALIAS as alias, RD_ORIGEN as origen,
+             RD_PRIMERA_VEZ as primeraVez, RD_ULTIMA_VEZ as ultimaVez,
+             RD_ONLINE as online, RD_BLOQUEADO as bloqueado
+      FROM dbo.TI_RED_DISPOSITIVOS
+      ORDER BY RD_ONLINE DESC, RD_ULTIMA_VEZ DESC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('tecnologiaController.getDispositivosRed', err);
+    res.status(500).json({ success: false, message: 'Error al obtener los dispositivos de red' });
+  }
+}
+
+// PATCH /api/tecnologia/red/dispositivos/:id  { alias?, bloqueado? }
+async function actualizarDispositivoRed(req, res) {
+  try {
+    const { id } = req.params;
+    const { alias, bloqueado } = req.body || {};
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const existe = await pool.request().input('id', sql.Int, id)
+      .query('SELECT RD_ID FROM dbo.TI_RED_DISPOSITIVOS WHERE RD_ID = @id');
+    if (!existe.recordset.length) return res.status(404).json({ success: false, message: 'Dispositivo no encontrado' });
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('alias', sql.NVarChar, alias === undefined ? null : (alias || null))
+      .input('bloqueado', sql.Bit, bloqueado === undefined ? null : (bloqueado ? 1 : 0))
+      .query(`
+        UPDATE dbo.TI_RED_DISPOSITIVOS SET
+          RD_ALIAS = COALESCE(@alias, RD_ALIAS),
+          RD_BLOQUEADO = COALESCE(@bloqueado, RD_BLOQUEADO)
+        WHERE RD_ID = @id
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('tecnologiaController.actualizarDispositivoRed', err);
+    res.status(500).json({ success: false, message: 'Error al actualizar el dispositivo' });
+  }
+}
+
 module.exports = {
   listMantenimientos,
   crearMantenimiento,
@@ -608,6 +867,11 @@ module.exports = {
   crearIncidenteRed,
   resolverIncidenteRed,
   getDashboardRed,
+  ingestaRed,
+  getEstadoActualRed,
+  getMedicionesRed,
+  getDispositivosRed,
+  actualizarDispositivoRed,
   listRespaldosConfig,
   crearRespaldoConfig,
   actualizarRespaldoConfig,

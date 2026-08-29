@@ -63,6 +63,9 @@ app.use(loggingMiddleware);
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 app.use('/audio', express.static(process.env.AUDIO_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Musica'));
 app.use('/capacitacion-materiales', express.static(process.env.CAPACITACION_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Capacitacion'));
+// Instalador y script del agente de monitoreo de red (descarga sin auth — el
+// script no contiene secretos; la API key la pega el instalador en la PC).
+app.use('/agente-red', express.static(path.join(__dirname, 'tools', 'agente-red')));
 
 /* =====================================================
    🔴 PROXY (ANTES DEL SPA)
