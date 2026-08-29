@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  LayoutGrid, Search, Check, Plus, Loader2, RotateCcw, Lock, Move,
+  LayoutGrid, Search, Check, Loader2, RotateCcw, Lock, Move, HelpCircle, GripHorizontal, ImageIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -38,6 +38,7 @@ export function DashboardDisenoTab() {
 
   const [q, setQ] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [ayudaOpen, setAyudaOpen] = useState(false)
 
   const draftIndex = useMemo(
     () => Object.fromEntries(draft.map((c) => [c.id, c])) as Record<string, DashboardCard>,
@@ -83,17 +84,44 @@ export function DashboardDisenoTab() {
 
   return (
     <div className="space-y-5">
-      {/* Encabezado */}
-      <div className="flex items-center gap-3.5">
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
-          <LayoutGrid className="h-6 w-6" />
+      {/* Botón Ayuda (arriba a la derecha del panel) */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setAyudaOpen((v) => !v)}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3.5 py-2 text-[0.8rem] font-semibold text-gray-600 shadow-sm transition-colors hover:border-violet-300 hover:text-violet-600"
+        >
+          <HelpCircle className="h-4 w-4" /> Ayuda
+        </button>
+      </div>
+
+      {ayudaOpen && (
+        <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4 text-[0.8rem] text-gray-600">
+          <p className="mb-1.5 font-semibold text-gray-800">¿Cómo funciona?</p>
+          <ul className="list-inside list-disc space-y-1 text-gray-500">
+            <li><b>Marca o desmarca</b> una tarjeta para agregarla o quitarla del Inicio de tu empresa.</li>
+            <li>Con <b>Ajustar diseño</b> abres el editor para mover y redimensionar las tarjetas en una cuadrícula.</li>
+            <li><b>Guardar cambios</b> aplica todo para todos los usuarios de la empresa.</li>
+            <li>Las tarjetas de módulos que tu empresa no tiene activos aparecen bloqueadas al final.</li>
+          </ul>
         </div>
-        <div>
-          <h2 className="text-[1.35rem] font-bold text-gray-900">Diseño del inicio</h2>
-          <p className="text-[0.82rem] text-gray-400">
-            Elige qué tarjetas aparecen en la página de Inicio de tu empresa y ajústalas con
-            <b> Ajustar diseño</b>.
-          </p>
+      )}
+
+      {/* Encabezado con ilustración */}
+      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
+              <LayoutGrid className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-[1.35rem] font-bold text-gray-900">Diseño del inicio</h2>
+              <p className="max-w-md text-[0.82rem] text-gray-400">
+                Elige qué tarjetas aparecen en la página de Inicio de tu empresa y ajústalas con
+                {' '}<b className="text-gray-500">Ajustar diseño</b>.
+              </p>
+            </div>
+          </div>
+          <HeaderMockup />
         </div>
       </div>
 
@@ -119,9 +147,9 @@ export function DashboardDisenoTab() {
         const items = disponibles.filter((c) => c.categoria === cat)
         if (items.length === 0) return null
         return (
-          <section key={cat} className="space-y-2.5">
-            <h3 className="text-[0.7rem] font-bold uppercase tracking-wider text-gray-400">{cat}</h3>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          <section key={cat} className="space-y-2">
+            <h3 className="text-[0.68rem] font-bold uppercase tracking-wider text-gray-400">{cat}</h3>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((entry) => (
                 <CardTile
                   key={entry.id}
@@ -176,6 +204,33 @@ export function DashboardDisenoTab() {
   )
 }
 
+/* Ilustración del header — panel arrastrable, guiño al editor de diseño. */
+function HeaderMockup() {
+  return (
+    <div className="relative hidden w-72 flex-shrink-0 overflow-hidden rounded-xl border border-violet-100 bg-violet-50/60 p-3 shadow-sm lg:block">
+      <div className="mb-2 flex gap-1 px-0.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-violet-200" />
+        <span className="h-1.5 w-1.5 rounded-full bg-violet-200" />
+        <span className="h-1.5 w-1.5 rounded-full bg-violet-200" />
+      </div>
+      <div className="flex items-start gap-2">
+        <div className="h-12 w-24 flex-shrink-0 rounded-lg bg-gradient-to-br from-violet-400 to-violet-600" />
+        <div className="relative flex-1 rounded-lg border border-violet-300 bg-card p-2 shadow-md">
+          <div className="flex items-center gap-2">
+            <GripHorizontal className="h-3.5 w-3.5 text-violet-400" />
+            <ImageIcon className="h-3.5 w-3.5 text-gray-300" />
+          </div>
+          <span className="pointer-events-none absolute -bottom-1 -right-1 text-violet-500">▨</span>
+        </div>
+        <div className="flex-1 space-y-1.5 pt-1">
+          <div className="h-2 w-full rounded bg-violet-200" />
+          <div className="h-2 w-2/3 rounded bg-gray-200" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CardTile({ entry, activa, onToggle }: {
   entry: CatalogEntry; activa: boolean; onToggle: () => void
 }) {
@@ -184,27 +239,28 @@ function CardTile({ entry, activa, onToggle }: {
     <button
       onClick={onToggle}
       className={clsx(
-        'group flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-all',
-        activa
-          ? 'border-violet-300 bg-violet-50/50 shadow-sm'
-          : 'border-gray-100 bg-card hover:border-gray-200 hover:shadow-card',
+        'group flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition-all',
+        activa ? 'border-gray-100 shadow-card' : 'border-gray-100 hover:border-gray-200 hover:shadow-card',
       )}
     >
       <div className={clsx(
-        'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl',
-        activa ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-400',
+        'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-colors',
+        activa ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400',
       )}>
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[0.82rem] font-bold text-gray-900">{entry.titulo}</p>
-        <p className="mt-0.5 line-clamp-2 text-[0.7rem] leading-snug text-gray-400">{entry.descripcion}</p>
+        <p className="truncate text-[0.8rem] font-semibold text-gray-900">{entry.titulo}</p>
+        <p className="truncate text-[0.68rem] leading-snug text-gray-400">{entry.descripcion}</p>
       </div>
+      {/* Checkbox cuadrado */}
       <span className={clsx(
-        'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-[0.7rem] font-bold transition-colors',
-        activa ? 'bg-violet-600 text-white' : 'border border-gray-200 text-gray-300 group-hover:border-violet-300 group-hover:text-violet-500',
+        'flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-[5px] border-2 transition-colors',
+        activa
+          ? 'border-violet-600 bg-violet-600 text-white'
+          : 'border-gray-300 bg-card group-hover:border-violet-400',
       )}>
-        {activa ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+        {activa && <Check className="h-3 w-3" strokeWidth={3.5} />}
       </span>
     </button>
   )
