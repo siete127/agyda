@@ -200,8 +200,10 @@ export function PerfilMenu() {
                 const est = ESTADOS.find((e) => e.statusId === statusActivo)!
                 const a = ACCENT[est.accent]
                 const Icon = est.icon
-                const limite = limiteMinutos(statusActivo, rol)
-                const excedido = limite !== null && elapsed >= limite * 60
+                const limite = limiteMinutos(statusActivo, rol)     // minutos, o null
+                const limiteSeg = limite !== null ? limite * 60 : null
+                const restante = limiteSeg !== null ? Math.max(0, limiteSeg - elapsed) : null
+                const excedido = limiteSeg !== null && elapsed >= limiteSeg
                 return (
                   <div className={clsx('flex items-center gap-3 rounded-xl border px-3 py-2.5', excedido ? 'border-red-500/50 bg-red-500/10' : `${a.border} ${a.bg}`)}>
                     <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-white', excedido ? 'bg-red-500' : a.solid)}>
@@ -210,9 +212,15 @@ export function PerfilMenu() {
                     <div className="min-w-0 flex-1">
                       <p className={clsx('text-[0.8rem] font-bold leading-tight', excedido ? 'text-red-500' : a.text)}>{est.label}</p>
                       <p className={clsx('mt-0.5 font-mono text-[0.9rem] font-bold tabular-nums', excedido ? 'text-red-500' : a.text)}>
+                        {/* izquierda: transcurrido (sube) · derecha: restante (baja hasta 0) */}
                         {fmtCronometro(elapsed)}
-                        {limite !== null && <span className="opacity-60"> / {fmtCronometro(limite * 60)}</span>}
+                        {restante !== null && <span className="opacity-60"> / {fmtCronometro(restante)}</span>}
                       </p>
+                      {limiteSeg !== null && (
+                        <p className="mt-0.5 text-[0.6rem] text-gray-400">
+                          {excedido ? 'Tiempo excedido' : `restante · límite ${fmtCronometro(limiteSeg)}`}
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={() => cambiarEstado(statusActivo)}
