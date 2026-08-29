@@ -80,14 +80,14 @@ export function PerfilMenu() {
   const puedeMusica = rol !== 'CC' && rol !== 'CL' && isAllowed('musica')
 
   /* ── Pausa activa (REST) ── */
-  const { data: pausaActiva, refetch: refetchPausa } = useQuery({
+  const { data: pausaActiva, dataUpdatedAt, refetch: refetchPausa } = useQuery({
     queryKey: ['pausa-activa'],
     queryFn: async () => {
       const { data } = await api.get<{ success: boolean; data: PausaActiva | null }>('/reports/pausa/activa')
       return data.data
     },
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: 20_000,
+    refetchInterval: 60_000,
   })
 
   // Al abrir el menú, traer el estado fresco (para que el cronómetro arranque
@@ -112,6 +112,13 @@ export function PerfilMenu() {
   const banioMio = !!banio?.ocupado && String(banio.porUsuario) === myIdStr
   const banioBloqueado = !!banio?.ocupado && !banioMio
 
+  // Cuando el socket confirma que entré/salí del baño, refrescar la query REST
+  // para tener duracionSegundos real (el socket escribe la fila async).
+  useEffect(() => {
+    const t = setTimeout(() => refetchPausa(), 700)
+    return () => clearTimeout(t)
+  }, [banioMio, refetchPausa])
+
   /* ── Estado activo unificado + cambio ── */
   const [loadingStatus, setLoadingStatus] = useState<number | null>(null)
   // statusId activo: baño por socket, resto por la query REST.
@@ -133,51 +140,33 @@ export function PerfilMenu() {
       } else {
         const terminar = statusActivo === statusId
         await api.post(terminar ? '/reports/pausa/terminar' : '/reports/pausa/iniciar', { statusId })
+        qc.invalidateQueries({ queryKey: ['pausa-activa'] })
       }
-      // Dar un respiro a la escritura async del socket antes de refetchear.
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['pausa-activa'] }), statusId === 3 ? 600 : 0)
+      // El baño refetchea vía el efecto que observa `banioMio`.
     } catch { toast.error('No se pudo cambiar el estado') }
     finally { setLoadingStatus(null) }
   }
 
   /* ── Cronómetro del estado activo ────────────────────────────
-     `startMs` = momento en que empezó la pausa (epoch ms), calculado desde la
-     duración que reporta el backend (DATEDIFF server-side, sin líos de zona
-     horaria). Se fija UNA vez por pausa (clave = tiempo_id); los refetches del
-     mismo tiempo_id no lo recalculan, así el contador no salta. */
-  const anclaTiempoId = pausaActiva && statusActivo === pausaActiva.status_id ? pausaActiva.tiempo_id : null
-  const seedSegundos = pausaActiva && statusActivo === pausaActiva.status_id ? pausaActiva.duracionSegundos : 0
+     El backend da `duracionSegundos` (DATEDIFF server-side, sin líos de zona
+     horaria) y react-query nos da `dataUpdatedAt` = cuándo llegó esa respuesta.
+     start = dataUpdatedAt - duracionSegundos*1000 → epoch en que empezó la
+     pausa. Estable: el par (duracion, updatedAt) siempre apunta al mismo
+     instante de inicio, venga de caché o de un refetch. */
+  const anclaActiva = pausaActiva && statusActivo === pausaActiva.status_id ? pausaActiva : null
+  const startMs = anclaActiva ? dataUpdatedAt - anclaActiva.duracionSegundos * 1000 : null
 
-  const [startMs, setStartMs] = useState<number | null>(null)
-  const [startMsTiempoId, setStartMsTiempoId] = useState<number | null>(null)
-  const [elapsed, setElapsed] = useState(0)
-
-  /* eslint-disable react-hooks/set-state-in-effect -- sincroniza el ancla del
-     cronómetro con los datos del backend; requiere Date.now() en el momento */
+  const [elapsed, setElapsed] = useState<number | null>(null)
   useEffect(() => {
-    if (statusActivo === null) {
-      setStartMs(null); setStartMsTiempoId(null)
+    if (startMs === null) {
+      setElapsed(null)  // eslint-disable-line react-hooks/set-state-in-effect
       return
     }
-    if (anclaTiempoId !== null && anclaTiempoId !== startMsTiempoId) {
-      // Dato del backend para esta pausa → ancla exacta.
-      setStartMs(Date.now() - seedSegundos * 1000)
-      setStartMsTiempoId(anclaTiempoId)
-    } else if (startMs === null) {
-      // Baño recién iniciado por socket, aún sin REST → arranca en ~0 y se
-      // corrige cuando llegue el refetch con el tiempo_id.
-      setStartMs(Date.now())
-    }
-  }, [statusActivo, anclaTiempoId, seedSegundos, startMs, startMsTiempoId])
-
-  useEffect(() => {
-    if (startMs === null) { setElapsed(0); return }
     const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [startMs])
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   /* ── Livechat disponible ── */
   const { data: miEstado } = useQuery({
@@ -234,8 +223,9 @@ export function PerfilMenu() {
                 const Icon = est.icon
                 const limite = limiteMinutos(statusActivo, rol)     // minutos, o null
                 const limiteSeg = limite !== null ? limite * 60 : null
-                const restante = limiteSeg !== null ? Math.max(0, limiteSeg - elapsed) : null
-                const excedido = limiteSeg !== null && elapsed >= limiteSeg
+                const seg = elapsed ?? 0
+                const restante = limiteSeg !== null ? Math.max(0, limiteSeg - seg) : null
+                const excedido = limiteSeg !== null && seg >= limiteSeg
                 return (
                   <div className={clsx('flex items-center gap-3 rounded-xl border px-3 py-2.5', excedido ? 'border-red-500/50 bg-red-500/10' : `${a.border} ${a.bg}`)}>
                     <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-white', excedido ? 'bg-red-500' : a.solid)}>
@@ -245,8 +235,8 @@ export function PerfilMenu() {
                       <p className={clsx('text-[0.8rem] font-bold leading-tight', excedido ? 'text-red-500' : a.text)}>{est.label}</p>
                       <p className={clsx('mt-0.5 font-mono text-[0.9rem] font-bold tabular-nums', excedido ? 'text-red-500' : a.text)}>
                         {/* izquierda: transcurrido (sube) · derecha: restante (baja hasta 0) */}
-                        {fmtCronometro(elapsed)}
-                        {restante !== null && <span className="opacity-60"> / {fmtCronometro(restante)}</span>}
+                        {elapsed === null ? '··:··' : fmtCronometro(seg)}
+                        {restante !== null && <span className="opacity-60"> / {elapsed === null ? '··:··' : fmtCronometro(restante)}</span>}
                       </p>
                       {limiteSeg !== null && (
                         <p className="mt-0.5 text-[0.6rem] text-gray-400">
