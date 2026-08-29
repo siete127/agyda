@@ -18,13 +18,22 @@ interface BanioSlot { ocupado: boolean; porUsuario: string | null; porNombre: st
 interface BanioStatus { hombres: BanioSlot; mujeres: BanioSlot }
 
 // Todos los estados. El baño (statusId 3) además se refleja/dispara por socket;
-// el resto es solo REST (/reports/pausa/*).
+// el resto es solo REST (/reports/pausa/*). `limiteMin`: minutos permitidos
+// (null = sin límite). Comida depende del rol (ver limiteMinutos()).
 const ESTADOS = [
-  { statusId: 3, label: 'Baño',         icon: null as null,   color: 'text-blue-500',    accent: 'blue' },
-  { statusId: 2, label: 'Comida',       icon: Coffee,         color: 'text-orange-500',  accent: 'orange' },
-  { statusId: 5, label: 'Capacitación', icon: GraduationCap,  color: 'text-violet-500',  accent: 'violet' },
-  { statusId: 6, label: 'Permiso',      icon: Hand,           color: 'text-emerald-500', accent: 'emerald' },
+  { statusId: 3, label: 'Baño',         icon: null as null,   color: 'text-blue-500',    accent: 'blue',    limiteMin: 20 },
+  { statusId: 2, label: 'Comida',       icon: Coffee,         color: 'text-orange-500',  accent: 'orange',  limiteMin: 60 },
+  { statusId: 5, label: 'Capacitación', icon: GraduationCap,  color: 'text-violet-500',  accent: 'violet',  limiteMin: null },
+  { statusId: 6, label: 'Permiso',      icon: Hand,           color: 'text-emerald-500', accent: 'emerald', limiteMin: null },
 ]
+
+// Comida: CC = 40 min, AD/TI = 1 h (mismo criterio que el widget anterior).
+function limiteMinutos(statusId: number, rol: string): number | null {
+  const est = ESTADOS.find((e) => e.statusId === statusId)
+  if (!est) return null
+  if (statusId === 2) return ['AD', 'TI'].includes(rol) ? 60 : 40
+  return est.limiteMin
+}
 
 // Colores translúcidos (via /N) para que el tinte funcione sobre fondo claro
 // u oscuro sin quedar "en blanco" en modo noche.
@@ -191,14 +200,19 @@ export function PerfilMenu() {
                 const est = ESTADOS.find((e) => e.statusId === statusActivo)!
                 const a = ACCENT[est.accent]
                 const Icon = est.icon
+                const limite = limiteMinutos(statusActivo, rol)
+                const excedido = limite !== null && elapsed >= limite * 60
                 return (
-                  <div className={clsx('flex items-center gap-3 rounded-xl border px-3 py-2.5', a.border, a.bg)}>
-                    <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-white', a.solid)}>
+                  <div className={clsx('flex items-center gap-3 rounded-xl border px-3 py-2.5', excedido ? 'border-red-500/50 bg-red-500/10' : `${a.border} ${a.bg}`)}>
+                    <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-white', excedido ? 'bg-red-500' : a.solid)}>
                       {Icon ? <Icon className="h-5 w-5" /> : <span className="text-lg leading-none">{esF ? '🚺' : '🚹'}</span>}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={clsx('text-[0.8rem] font-bold leading-tight', a.text)}>{est.label}</p>
-                      <p className={clsx('mt-0.5 font-mono text-[0.9rem] font-bold tabular-nums', a.text)}>{fmtCronometro(elapsed)}</p>
+                      <p className={clsx('text-[0.8rem] font-bold leading-tight', excedido ? 'text-red-500' : a.text)}>{est.label}</p>
+                      <p className={clsx('mt-0.5 font-mono text-[0.9rem] font-bold tabular-nums', excedido ? 'text-red-500' : a.text)}>
+                        {fmtCronometro(elapsed)}
+                        {limite !== null && <span className="opacity-60"> / {fmtCronometro(limite * 60)}</span>}
+                      </p>
                     </div>
                     <button
                       onClick={() => cambiarEstado(statusActivo)}
