@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Ticket, FolderKanban, ClipboardList, MessageSquareWarning, Scale, BookOpenCheck,
   Headset, CalendarClock, Newspaper, PlaneTakeoff, GraduationCap, HeartPulse,
-  Users, ChevronRight, type LucideIcon,
+  Users, Target, ChevronRight, type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
@@ -19,6 +19,7 @@ import { legalService } from '@/services/legal.service'
 import { livechatService } from '@/services/livechat.service'
 import { capacitacionService } from '@/services/capacitacion.service'
 import { incapacidadesService } from '@/services/incapacidades.service'
+import { ventasService } from '@/services/ventas.service'
 
 /* ════════════════════════════════════════════════════════════════════════
    CATÁLOGO DE CARDS DE RESUMEN
@@ -371,6 +372,51 @@ function VacantesResumen() {
   )
 }
 
+function VentasResumen() {
+  const { data, isError } = useQuery({
+    queryKey: ['ventas-stats-day-resumen'],
+    queryFn: () => ventasService.getStatsDay(),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    retry: 1,
+  })
+  const t = data?.totales
+  const total = t?.total ?? 0
+  const aprob = t?.aprobadas ?? 0
+  const rech = t?.rechazadas ?? 0
+  const pctAprob = total > 0 ? Math.round((aprob / total) * 100) : null
+  return (
+    <CardShell titulo="Ventas del día" Icon={Target} to="/ventas" verLabel="Ver ventas" tono="emerald">
+      {isError ? (
+        <p className="text-[0.74rem] text-ink-tertiary">
+          No se pudo cargar. Abre <b>Ventas</b> para iniciar sesión.
+        </p>
+      ) : (
+        <>
+          <BigStat
+            value={aprob}
+            label="ventas aprobadas hoy"
+            tono="emerald"
+            hint={pctAprob !== null ? `${pctAprob}% de aprobación · ${total} registradas` : 'Sin registros hoy'}
+          />
+          {total > 0 && (
+            <>
+              <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-surface-border">
+                <div className="h-full bg-emerald-500" style={{ width: `${(aprob / total) * 100}%` }} />
+                <div className="h-full bg-rose-500" style={{ width: `${(rech / total) * 100}%` }} />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[0.66rem] font-semibold">
+                <span className="text-emerald-500">Aprobadas {aprob}</span>
+                <span className="text-rose-500">Rechazadas {rech}</span>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </CardShell>
+  )
+}
+
 /* ── Registro del catálogo ──────────────────────────────────────────── */
 
 export const RESUMEN_CARDS: ResumenCardDef[] = [
@@ -387,6 +433,7 @@ export const RESUMEN_CARDS: ResumenCardDef[] = [
   { id: 'r-incapacidades', titulo: 'Incapacidades', descripcion: 'Incapacidades vigentes.', categoria: 'Personas', moduleKey: 'incapacidades', size: { w: 3, h: 3 }, Icon: HeartPulse, render: () => <IncapacidadesResumen /> },
   { id: 'r-noticias', titulo: 'Noticias sin leer', descripcion: 'Publicaciones que aún no has visto.', categoria: 'Contenido', moduleKey: 'noticias', size: { w: 3, h: 3 }, Icon: Newspaper, render: () => <NoticiasNuevasResumen /> },
   { id: 'r-vacantes', titulo: 'Reclutamiento', descripcion: 'Vacantes abiertas y postulantes nuevos.', categoria: 'Personas', moduleKey: 'vacantes', size: { w: 3, h: 3 }, Icon: Users, render: () => <VacantesResumen /> },
+  { id: 'r-ventas', titulo: 'Ventas del día', descripcion: 'Ventas aprobadas y rechazadas de hoy (VICIdial).', categoria: 'Comercial', moduleKey: 'ventas', size: { w: 3, h: 4 }, Icon: Target, render: () => <VentasResumen /> },
 ]
 
 export const RESUMEN_CARD_IDS = RESUMEN_CARDS.map((c) => c.id)

@@ -21,7 +21,7 @@ const DASHBOARD_CARD_IDS = [
   // Resúmenes de módulos
   'r-tickets', 'r-proyectos', 'r-encuestas', 'r-quejas', 'r-legal',
   'r-reglamento', 'r-livechat', 'r-pausas', 'r-vacaciones', 'r-capacitacion',
-  'r-incapacidades', 'r-noticias', 'r-vacantes',
+  'r-incapacidades', 'r-noticias', 'r-vacantes', 'r-ventas',
 ];
 
 const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];
