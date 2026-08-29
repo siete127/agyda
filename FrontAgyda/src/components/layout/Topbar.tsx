@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
@@ -26,11 +26,19 @@ interface SearchResult {
 
 export function Topbar() {
   const { sidebarCollapsed, toggleSidebar, setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
+  const dashboardEditArmed = useUIStore((s) => s.dashboardEditArmed)
+  const dashboardEditMode = useUIStore((s) => s.dashboardEditMode)
+  const setDashboardEditMode = useUIStore((s) => s.setDashboardEditMode)
   const user = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const pageTitle = getRouteLabel(location.pathname)
+
+  // El botón "Editar diseño" solo aparece en el inicio y cuando fue "armado"
+  // desde Configuración → Diseño del inicio.
+  const enInicio = location.pathname === '/dashboard'
+  const mostrarEditarDiseno = enInicio && dashboardEditArmed && !dashboardEditMode
 
   const handleSwitchSystem = () => {
     navigate('/ventas')
@@ -267,6 +275,16 @@ export function Topbar() {
 
       {/* Derecha: notificaciones + perfil */}
       <div className="ml-auto flex items-center gap-2.5">
+
+        {/* "Editar diseño" del inicio — armado desde Configuración */}
+        {mostrarEditarDiseno && (
+          <button
+            onClick={() => setDashboardEditMode(true)}
+            className="flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-[0.72rem] font-semibold text-brand transition-colors hover:bg-brand/15"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" /> Editar diseño
+          </button>
+        )}
 
         {/* Botones del encabezado — configurables por empresa (Configuración →
             Apariencia → Botones del encabezado). URL vacía = acción interna. */}

@@ -20,6 +20,8 @@ import { useMusicStore } from '@/stores/music.store'
 
 export function AppLayout() {
   const setActiveRoute = useUIStore((s) => s.setActiveRoute)
+  const setDashboardEditArmed = useUIStore((s) => s.setDashboardEditArmed)
+  const setDashboardEditMode = useUIStore((s) => s.setDashboardEditMode)
   const location = useLocation()
   const tipoUsuario = useAuthStore((s) => s.user?.tipoUsuario?.toUpperCase())
   const { isAllowed } = useModuleAccess()
@@ -34,7 +36,12 @@ export function AppLayout() {
 
   useEffect(() => {
     setActiveRoute(location.pathname)
-  }, [location.pathname, setActiveRoute])
+    // Al salir del inicio, desarmar el editor de diseño.
+    if (location.pathname !== '/dashboard') {
+      setDashboardEditArmed(false)
+      setDashboardEditMode(false)
+    }
+  }, [location.pathname, setActiveRoute, setDashboardEditArmed, setDashboardEditMode])
 
   return (
     <PersonalizacionProvider>

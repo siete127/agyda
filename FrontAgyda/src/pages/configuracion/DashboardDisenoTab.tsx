@@ -1,9 +1,18 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { LayoutGrid, ArrowRight, MousePointer2, Move, Maximize2 } from 'lucide-react'
+import { useUIStore } from '@/stores/ui.store'
 
-// El editor del inicio es in-situ (en la propia página de Inicio, botón
-// "Editar diseño"). Esta pantalla solo explica dónde está y qué hace.
+// El editor del inicio es in-situ. "Ir al Inicio" arma el botón "Editar
+// diseño" del topbar y lleva a la portada.
 export function DashboardDisenoTab() {
+  const navigate = useNavigate()
+  const setDashboardEditArmed = useUIStore((s) => s.setDashboardEditArmed)
+
+  const irAEditar = () => {
+    setDashboardEditArmed(true)
+    navigate('/dashboard')
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3.5">
@@ -21,7 +30,7 @@ export function DashboardDisenoTab() {
       <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <p className="text-[0.88rem] font-semibold text-gray-800">El editor está en la propia página de Inicio</p>
         <p className="mt-1 text-[0.8rem] text-gray-500">
-          Ve a <b>Inicio</b> y pulsa <b>"Editar diseño"</b> (arriba a la derecha, solo visible para administradores).
+          Pulsa <b>"Ir al Inicio"</b> y luego <b>"Editar diseño"</b> en la barra superior.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -38,12 +47,13 @@ export function DashboardDisenoTab() {
           ))}
         </div>
 
-        <Link
-          to="/"
+        <button
+          type="button"
+          onClick={irAEditar}
           className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]"
         >
           Ir al Inicio <ArrowRight className="h-4 w-4" />
-        </Link>
+        </button>
 
         <p className="mt-3 text-[0.7rem] text-gray-400">
           Los cambios se guardan por empresa y se aplican a todos sus usuarios.
