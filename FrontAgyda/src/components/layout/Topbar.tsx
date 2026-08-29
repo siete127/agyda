@@ -14,6 +14,7 @@ import logoAgyda from '@/assets/Logo_AGYDA.png'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { personalizacionService } from '@/services/personalizacion.service'
 import { useThemeStore } from '@/stores/theme.store'
+import { clsx } from 'clsx'
 
 interface SearchResult {
   id: string
@@ -26,7 +27,6 @@ interface SearchResult {
 
 export function Topbar() {
   const { sidebarCollapsed, toggleSidebar, setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
-  const dashboardEditArmed = useUIStore((s) => s.dashboardEditArmed)
   const dashboardEditMode = useUIStore((s) => s.dashboardEditMode)
   const setDashboardEditMode = useUIStore((s) => s.setDashboardEditMode)
   const user = useCurrentUser()
@@ -35,10 +35,8 @@ export function Topbar() {
   const qc = useQueryClient()
   const pageTitle = getRouteLabel(location.pathname)
 
-  // El botón "Editar diseño" solo aparece en el inicio y cuando fue "armado"
-  // desde Configuración → Diseño del inicio.
+  // El botón "Editar diseño" es fijo mientras estás en el Inicio.
   const enInicio = location.pathname === '/dashboard'
-  const mostrarEditarDiseno = enInicio && dashboardEditArmed && !dashboardEditMode
 
   const handleSwitchSystem = () => {
     navigate('/ventas')
@@ -276,13 +274,19 @@ export function Topbar() {
       {/* Derecha: notificaciones + perfil */}
       <div className="ml-auto flex items-center gap-2.5">
 
-        {/* "Editar diseño" del inicio — armado desde Configuración */}
-        {mostrarEditarDiseno && (
+        {/* "Editar diseño" del inicio — fijo mientras estás en la portada */}
+        {enInicio && (
           <button
-            onClick={() => setDashboardEditMode(true)}
-            className="flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-[0.72rem] font-semibold text-brand transition-colors hover:bg-brand/15"
+            onClick={() => setDashboardEditMode(!dashboardEditMode)}
+            className={clsx(
+              'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.72rem] font-semibold transition-colors',
+              dashboardEditMode
+                ? 'border-brand bg-brand text-white hover:bg-brand-dark'
+                : 'border-brand/40 bg-brand/10 text-brand hover:bg-brand/15',
+            )}
           >
-            <LayoutGrid className="h-3.5 w-3.5" /> Editar diseño
+            <LayoutGrid className="h-3.5 w-3.5" />
+            {dashboardEditMode ? 'Salir de edición' : 'Editar diseño'}
           </button>
         )}
 
