@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  LayoutGrid, Search, Check, Loader2, RotateCcw, Lock, Move, GripHorizontal, ImageIcon,
+  LayoutGrid, Search, Check, Loader2, RotateCcw, Lock, Move, GripHorizontal, ImageIcon, Sparkles,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -10,6 +10,7 @@ import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
 import { personalizacionService, type DashboardCard } from '@/services/personalizacion.service'
 import { CARD_CATALOG, CATEGORIAS, CARD_CATALOG_INDEX, type CatalogEntry } from '@/pages/dashboard/cardCatalog'
+import { LAYOUT_PRESETS, layoutMatchesPreset, type LayoutPreset } from '@/pages/dashboard/layoutPresets'
 import { DashboardLayoutModal } from './DashboardLayoutModal'
 
 const norm = (cards: DashboardCard[]) =>
@@ -81,6 +82,18 @@ export function DashboardDisenoTab() {
 
   const restablecer = () => setDraft(DASHBOARD_DEFAULT.map((c) => ({ ...c })))
 
+  const presetActivo = LAYOUT_PRESETS.find((p) => layoutMatchesPreset(p, draft))
+  const aplicarPreset = (p: LayoutPreset) => {
+    // Solo cards del catálogo y de módulos activos.
+    setDraft(p.cards
+      .filter((c) => CARD_CATALOG_INDEX[c.id])
+      .filter((c) => {
+        const m = CARD_CATALOG_INDEX[c.id].moduleKey
+        return !m || isAllowed(m)
+      })
+      .map((c) => ({ ...c })))
+  }
+
   return (
     <div className="space-y-5">
       {/* Encabezado con ilustración */}
@@ -99,6 +112,51 @@ export function DashboardDisenoTab() {
             </div>
           </div>
           <HeaderMockup />
+        </div>
+      </div>
+
+      {/* Plantillas de distribución */}
+      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+        <div className="mb-3 flex items-start gap-3">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-[0.95rem] font-bold text-gray-900">Plantillas</p>
+            <p className="text-[0.78rem] text-gray-400">
+              Una distribución lista para usar. Reemplaza las tarjetas actuales; luego puedes ajustarla.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {LAYOUT_PRESETS.map((p) => {
+            const activo = presetActivo?.key === p.key
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => aplicarPreset(p)}
+                className={clsx(
+                  'group flex items-start gap-3 rounded-2xl border p-3 text-left transition-all',
+                  activo ? 'border-violet-500 ring-2 ring-violet-500/20' : 'border-gray-200 hover:border-gray-300',
+                )}
+              >
+                <div className={clsx(
+                  'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl',
+                  activo ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-400',
+                )}>
+                  <p.Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-[0.82rem] font-bold text-gray-900">
+                    {p.nombre}
+                    {activo && <Check className="h-3.5 w-3.5 text-violet-600" />}
+                  </p>
+                  <p className="mt-0.5 text-[0.7rem] leading-snug text-gray-400">{p.descripcion}</p>
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
 
