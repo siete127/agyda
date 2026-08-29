@@ -906,7 +906,7 @@ export const CONFIG_TREE: ConfigNode[] = [
         key: 'cambios-aud', label: 'Cambios',
         children: [
           { key: 'cambio-usuario', label: 'Usuario' },
-          { key: 'cambio-empresa', label: 'Empresa' },
+          { key: 'cambio-empresa-aud', label: 'Empresa' },
           { key: 'cambio-modulo', label: 'Módulo' },
           { key: 'cambio-entidad', label: 'Entidad' },
           { key: 'cambio-registro', label: 'Registro' },
@@ -954,7 +954,7 @@ export const CONFIG_TREE: ConfigNode[] = [
         ],
       },
       {
-        key: 'apariencia', label: 'Apariencia',
+        key: 'apariencia-sistema', label: 'Apariencia',
         children: [
           { key: 'tema', label: 'Tema', screen: 'tema' },
           { key: 'colores', label: 'Colores', screen: 'pers-branding' },
