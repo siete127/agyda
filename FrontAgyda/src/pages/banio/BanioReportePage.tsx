@@ -49,6 +49,8 @@ interface PausaRecord {
   salida: string | null
   duracionSegundos: number
   activo: boolean
+  /** Sólo cliente: instante (ms) en que empezó la pausa, para el contador en vivo. */
+  _startMs?: number
 }
 
 function fmt(seg: number): string {
@@ -87,14 +89,23 @@ export function BanioReportePage() {
   const pausaActiva = PAUSAS[tabIdx]
   const qc = useQueryClient()
 
-  const { data, isLoading, refetch, isRefetching, dataUpdatedAt } = useQuery({
+  const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['pausas-reporte', from, to, pausaActiva.statusId, area],
     queryFn: async () => {
       const params = new URLSearchParams({ from, to })
       if (pausaActiva.statusId) params.set('statusId', String(pausaActiva.statusId))
       if (area) params.set('area', area)
       const { data } = await api.get<{ success: boolean; data: PausaRecord[] }>(`/reports/banio?${params}`)
-      return data.data ?? []
+      const rows = data.data ?? []
+      // Ancla estable para el contador en vivo: instante (reloj del cliente) en
+      // que, según el servidor, empezó cada pausa activa. Se deriva de
+      // `duracionSegundos` (= DATEDIFF hasta GETDATE()) en el momento de la
+      // respuesta, así el offset reloj-servidor / reloj-cliente queda absorbido.
+      const recibidoMs = Date.now()
+      for (const r of rows) {
+        if (r.activo) r._startMs = recibidoMs - r.duracionSegundos * 1000
+      }
+      return rows
     },
     staleTime: 8_000,
     refetchInterval: 15_000,
@@ -116,10 +127,13 @@ export function BanioReportePage() {
     const id = setInterval(() => setNowTick(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
-  // Segundos extra a sumar a `duracionSegundos` de una fila activa: lo que pasó
-  // desde que llegó la respuesta.
-  const driftSeg = Math.max(0, Math.floor((nowTick - dataUpdatedAt) / 1000))
-  const liveDur = (r: PausaRecord) => r.duracionSegundos + (r.activo ? driftSeg : 0)
+  // Duración a mostrar: para pausas activas, segundos transcurridos desde el
+  // inicio anclado (monótono, no retrocede en cada refetch). Para cerradas, el
+  // valor del servidor tal cual.
+  const liveDur = (r: PausaRecord) =>
+    r.activo && r._startMs != null
+      ? Math.max(r.duracionSegundos, Math.floor((nowTick - r._startMs) / 1000))
+      : r.duracionSegundos
 
   const registros = (data ?? []).filter((r) =>
     buscar === ''
@@ -136,7 +150,7 @@ export function BanioReportePage() {
     if (!resumen[r.usuarioId]) resumen[r.usuarioId] = { id: r.usuarioId, nombre: r.nombre, area: r.area, activo: false, porTipo: {} }
     if (!resumen[r.usuarioId].porTipo[r.statusId]) resumen[r.usuarioId].porTipo[r.statusId] = { visitas: 0, totalSeg: 0 }
     resumen[r.usuarioId].porTipo[r.statusId].visitas++
-    resumen[r.usuarioId].porTipo[r.statusId].totalSeg += r.duracionSegundos
+    resumen[r.usuarioId].porTipo[r.statusId].totalSeg += liveDur(r)
     if (r.activo) resumen[r.usuarioId].activo = true
   }
   const resumenList = Object.values(resumen)
@@ -148,10 +162,14 @@ export function BanioReportePage() {
 
   const activos = registros.filter((r) => r.activo)
 
-  // Totales generales
+  // Totales generales — incluyen la pausa activa (con su tiempo en vivo), para
+  // que "Tiempo total" avance mientras alguien está en pausa.
   const totalVisitas = registros.length
-  const totalSeg = registros.filter(r => !r.activo).reduce((s, r) => s + r.duracionSegundos, 0)
-  const promSeg = totalVisitas > 0 ? Math.round(totalSeg / registros.filter(r => !r.activo).length || 0) : 0
+  const totalSeg = registros.reduce((s, r) => s + liveDur(r), 0)
+  const cerradas = registros.filter(r => !r.activo).length
+  const promSeg = cerradas > 0
+    ? Math.round(registros.filter(r => !r.activo).reduce((s, r) => s + r.duracionSegundos, 0) / cerradas)
+    : 0
 
   return (
     <div className="space-y-5 animate-fade-in">
