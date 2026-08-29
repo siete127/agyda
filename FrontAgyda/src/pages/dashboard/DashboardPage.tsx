@@ -26,6 +26,8 @@ import { type Noticia } from '@/types/noticia.types'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
 import { personalizacionService, type DashboardCard } from '@/services/personalizacion.service'
+import { RESUMEN_CARDS } from './resumenCards'
+import { CARD_CATALOG_INDEX } from './cardCatalog'
 
 /* ─── Empresa ───────────────────────────────────────────────── */
 type EmpresaKey = 'mision' | 'vision' | 'valores' | 'legales'
@@ -581,6 +583,13 @@ export function DashboardPage() {
     },
   }
 
+  // Cards de resumen de módulos (catálogo). Solo se registran las de módulos
+  // que la empresa tiene activos — el resto ni siquiera se instancian.
+  for (const rc of RESUMEN_CARDS) {
+    if (rc.moduleKey && !isAllowed(rc.moduleKey)) continue
+    CARDS[rc.id] = { label: rc.titulo, node: rc.render() }
+  }
+
   return (
     <>
       <DashboardGrid cards={CARDS} />
@@ -657,7 +666,9 @@ function DashboardGrid({ cards }: {
       const exists = prev.some((c) => c.id === id)
       if (exists) return prev.map((c) => (c.id === id ? { ...c, visible } : c))
       const def = DASHBOARD_DEFAULT.find((c) => c.id === id)
-      return [...prev, { ...(def ?? { id, x: 0, y: 99, w: 4, h: 3 }), visible }]
+      const cat = CARD_CATALOG_INDEX[id]
+      const base = def ?? { id, x: 0, y: 99, w: cat?.size.w ?? 4, h: cat?.size.h ?? 3 }
+      return [...prev, { ...base, visible }]
     })
 
   return (
