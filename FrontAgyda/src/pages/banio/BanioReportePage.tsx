@@ -49,8 +49,6 @@ interface PausaRecord {
   salida: string | null
   duracionSegundos: number
   activo: boolean
-  /** Sólo cliente: instante (ms) en que empezó la pausa, para el contador en vivo. */
-  _startMs?: number
 }
 
 function fmt(seg: number): string {
@@ -89,28 +87,46 @@ export function BanioReportePage() {
   const pausaActiva = PAUSAS[tabIdx]
   const qc = useQueryClient()
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch, isRefetching, dataUpdatedAt } = useQuery({
     queryKey: ['pausas-reporte', from, to, pausaActiva.statusId, area],
     queryFn: async () => {
       const params = new URLSearchParams({ from, to })
       if (pausaActiva.statusId) params.set('statusId', String(pausaActiva.statusId))
       if (area) params.set('area', area)
       const { data } = await api.get<{ success: boolean; data: PausaRecord[] }>(`/reports/banio?${params}`)
-      const rows = data.data ?? []
-      // Ancla estable para el contador en vivo: instante (reloj del cliente) en
-      // que, según el servidor, empezó cada pausa activa. Se deriva de
-      // `duracionSegundos` (= DATEDIFF hasta GETDATE()) en el momento de la
-      // respuesta, así el offset reloj-servidor / reloj-cliente queda absorbido.
-      const recibidoMs = Date.now()
-      for (const r of rows) {
-        if (r.activo) r._startMs = recibidoMs - r.duracionSegundos * 1000
-      }
-      return rows
+      return data.data ?? []
     },
     staleTime: 8_000,
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   })
+
+  // Ancla del contador en vivo: instante (reloj del cliente) en que empezó cada
+  // pausa activa, por id de registro. Se fija una sola vez (cuando aparece la
+  // pausa) y no se re-calcula en refetches posteriores → el contador es monótono
+  // y no retrocede. (No mutamos los datos de la query: react-query los congela.)
+  const [anclas, setAnclas] = useState<Record<number, number>>({})
+  useEffect(() => {
+    if (!data) return
+    const recibidoMs = dataUpdatedAt || Date.now()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deriva anclas de la respuesta de la query; sólo cambia cuando llega/expira una pausa
+    setAnclas((prev) => {
+      const next: Record<number, number> = {}
+      let cambio = false
+      for (const r of data) {
+        if (!r.activo) continue
+        if (prev[r.id] != null) {
+          next[r.id] = prev[r.id]
+        } else {
+          next[r.id] = recibidoMs - r.duracionSegundos * 1000
+          cambio = true
+        }
+      }
+      // ¿desapareció alguna ancla previa (pausa cerrada)?
+      if (!cambio && Object.keys(prev).length !== Object.keys(next).length) cambio = true
+      return cambio ? next : prev
+    })
+  }, [data, dataUpdatedAt])
 
   // Tiempo real: al toggle de baño de cualquiera → refrescar el reporte.
   useEffect(() => {
@@ -130,10 +146,12 @@ export function BanioReportePage() {
   // Duración a mostrar: para pausas activas, segundos transcurridos desde el
   // inicio anclado (monótono, no retrocede en cada refetch). Para cerradas, el
   // valor del servidor tal cual.
-  const liveDur = (r: PausaRecord) =>
-    r.activo && r._startMs != null
-      ? Math.max(r.duracionSegundos, Math.floor((nowTick - r._startMs) / 1000))
-      : r.duracionSegundos
+  const liveDur = (r: PausaRecord) => {
+    if (!r.activo) return r.duracionSegundos
+    const startMs = anclas[r.id]
+    if (startMs == null) return r.duracionSegundos
+    return Math.max(r.duracionSegundos, Math.floor((nowTick - startMs) / 1000))
+  }
 
   const registros = (data ?? []).filter((r) =>
     buscar === ''
