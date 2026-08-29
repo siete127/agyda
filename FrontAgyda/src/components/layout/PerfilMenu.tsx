@@ -26,11 +26,13 @@ const ESTADOS = [
   { statusId: 6, label: 'Permiso',      icon: Hand,           color: 'text-emerald-500', accent: 'emerald' },
 ]
 
+// Colores translúcidos (via /N) para que el tinte funcione sobre fondo claro
+// u oscuro sin quedar "en blanco" en modo noche.
 const ACCENT: Record<string, { border: string; bg: string; text: string; solid: string }> = {
-  blue:    { border: 'border-blue-400',    bg: 'bg-blue-50',    text: 'text-blue-600',    solid: 'bg-blue-500' },
-  orange:  { border: 'border-orange-400',  bg: 'bg-orange-50',  text: 'text-orange-600',  solid: 'bg-orange-500' },
-  violet:  { border: 'border-violet-400',  bg: 'bg-violet-50',  text: 'text-violet-600',  solid: 'bg-violet-500' },
-  emerald: { border: 'border-emerald-400', bg: 'bg-emerald-50', text: 'text-emerald-600', solid: 'bg-emerald-500' },
+  blue:    { border: 'border-blue-500/40',    bg: 'bg-blue-500/10',    text: 'text-blue-500',    solid: 'bg-blue-500' },
+  orange:  { border: 'border-orange-500/40',  bg: 'bg-orange-500/10',  text: 'text-orange-500',  solid: 'bg-orange-500' },
+  violet:  { border: 'border-violet-500/40',  bg: 'bg-violet-500/10',  text: 'text-violet-500',  solid: 'bg-violet-500' },
+  emerald: { border: 'border-emerald-500/40', bg: 'bg-emerald-500/10', text: 'text-emerald-500', solid: 'bg-emerald-500' },
 }
 
 function fmtCronometro(seg: number): string {
@@ -242,7 +244,7 @@ export function PerfilMenu() {
               disabled={toggleDisponible.isPending}
               className="flex w-full items-center gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50 disabled:opacity-50"
             >
-              <div className={clsx('flex h-8 w-8 items-center justify-center rounded-lg', miEstado?.disponible ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400')}>
+              <div className={clsx('flex h-8 w-8 items-center justify-center rounded-lg', miEstado?.disponible ? 'bg-emerald-500/15 text-emerald-500' : 'bg-gray-100 text-gray-400')}>
                 <Headset className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
@@ -286,7 +288,7 @@ export function PerfilMenu() {
           </Link>
           <button
             onClick={logout}
-            className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3 text-[0.8rem] font-semibold text-red-500 transition-colors hover:bg-red-50"
+            className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3 text-[0.8rem] font-semibold text-red-500 transition-colors hover:bg-red-500/10"
           >
             <LogOut className="h-4 w-4" /> Cerrar sesión
           </button>
