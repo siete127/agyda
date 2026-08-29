@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  LayoutGrid, Search, Check, Loader2, RotateCcw, Lock, Move, HelpCircle, GripHorizontal, ImageIcon,
+  LayoutGrid, Search, Check, Loader2, RotateCcw, Lock, Move, GripHorizontal, ImageIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -38,7 +38,6 @@ export function DashboardDisenoTab() {
 
   const [q, setQ] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [ayudaOpen, setAyudaOpen] = useState(false)
 
   const draftIndex = useMemo(
     () => Object.fromEntries(draft.map((c) => [c.id, c])) as Record<string, DashboardCard>,
@@ -84,28 +83,6 @@ export function DashboardDisenoTab() {
 
   return (
     <div className="space-y-5">
-      {/* Botón Ayuda (arriba a la derecha del panel) */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setAyudaOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3.5 py-2 text-[0.8rem] font-semibold text-gray-600 shadow-sm transition-colors hover:border-violet-300 hover:text-violet-600"
-        >
-          <HelpCircle className="h-4 w-4" /> Ayuda
-        </button>
-      </div>
-
-      {ayudaOpen && (
-        <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4 text-[0.8rem] text-gray-600">
-          <p className="mb-1.5 font-semibold text-gray-800">¿Cómo funciona?</p>
-          <ul className="list-inside list-disc space-y-1 text-gray-500">
-            <li><b>Marca o desmarca</b> una tarjeta para agregarla o quitarla del Inicio de tu empresa.</li>
-            <li>Con <b>Ajustar diseño</b> abres el editor para mover y redimensionar las tarjetas en una cuadrícula.</li>
-            <li><b>Guardar cambios</b> aplica todo para todos los usuarios de la empresa.</li>
-            <li>Las tarjetas de módulos que tu empresa no tiene activos aparecen bloqueadas al final.</li>
-          </ul>
-        </div>
-      )}
-
       {/* Encabezado con ilustración */}
       <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-4">
