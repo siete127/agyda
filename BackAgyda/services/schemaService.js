@@ -2985,7 +2985,7 @@ async function ensureCallCenterSchema(pool) {
       BEGIN
         CREATE TABLE dbo.AC_CAMPANIAS_AGENTES (
           ACA_ID                  INT IDENTITY(1,1) PRIMARY KEY,
-          ACA_NEUS_ID             INT NOT NULL,
+          ACA_NEUS_ID             SMALLINT NOT NULL,
           ACA_VENTAS_CAMPANA_ID   INT NOT NULL,
           ACA_VENTAS_CAMPANA_NOMBRE NVARCHAR(200) NOT NULL,
           ACA_ASIGNADO_POR        INT NULL,
@@ -4575,7 +4575,6 @@ async function ensureAllSchemas(pool) {
   await ensureControlDocumentalSchema(pool);
   await ensureProductosServiciosSchema(pool);
   await ensureActivosSchema(pool);
-  await ensureCampaniasAgentesSchema(pool);
   await ensureUsuarioTiemposSchema(pool);
 }
 
@@ -5797,7 +5796,7 @@ BEGIN
   CREATE TABLE dbo.MSJ_MENSAJE_REACCIONES (
     MMR_ID          INT IDENTITY(1,1) PRIMARY KEY,
     MMR_MENSAJE_ID  INT NOT NULL,
-    MMR_USUARIO_ID  INT NOT NULL,
+    MMR_USUARIO_ID  SMALLINT NOT NULL,
     MMR_EMOJI       NVARCHAR(20) NOT NULL,
     MMR_FECHA       DATETIME NOT NULL DEFAULT GETDATE()
   );
@@ -6094,33 +6093,6 @@ END
   }
 }
 
-// Campaña de call center asignada a cada agente (usuarioController la
-// consulta por LEFT JOIN en /api/usuarios, /usuarios/con-area y por área —
-// una tabla inexistente rompe la query completa, no solo el JOIN). Tabla
-// legado sin CREATE TABLE versionado hasta ahora.
-async function ensureCampaniasAgentesSchema(pool) {
-  try {
-    await pool.request().batch(`
-IF OBJECT_ID('dbo.AC_CAMPANIAS_AGENTES', 'U') IS NULL
-BEGIN
-  CREATE TABLE dbo.AC_CAMPANIAS_AGENTES (
-    ACA_ID                     INT IDENTITY(1,1) PRIMARY KEY,
-    ACA_NEUS_ID                SMALLINT      NOT NULL,
-    ACA_VENTAS_CAMPANA_ID      INT           NOT NULL,
-    ACA_VENTAS_CAMPANA_NOMBRE  NVARCHAR(400) NOT NULL,
-    ACA_ASIGNADO_POR           INT           NULL,
-    ACA_FECHA_ASIGNACION       DATETIME      NOT NULL DEFAULT GETDATE(),
-    CONSTRAINT UQ_ACA_NEUS UNIQUE (ACA_NEUS_ID),
-    CONSTRAINT FK_ACA_NEUS FOREIGN KEY (ACA_NEUS_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID)
-  );
-END
-`);
-    logger.info('✅ Esquema de campañas de agentes asegurado');
-  } catch (err) {
-    console.warn('⚠️ No se pudo asegurar esquema de campañas de agentes:', err.message);
-  }
-}
-
 // Catálogo de estatus de presencia (online/comida/sanitario/etc.) y bitácora
 // de tiempos por usuario — se consultan desde el login (marca de presencia) y
 // desde el widget global de "pausa activa" (reportController.getPausaActiva),
@@ -6220,7 +6192,6 @@ module.exports = {
     ensureAuditoriaSchema,
     ensureProductosServiciosSchema,
     ensureActivosSchema,
-    ensureCampaniasAgentesSchema,
     ensureUsuarioTiemposSchema,
     ensureVacantesSchema,
     ensureCapacitacionSchema,
