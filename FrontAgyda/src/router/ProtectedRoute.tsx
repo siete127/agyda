@@ -8,6 +8,7 @@ import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { BanioAlertWatcher } from '@/components/ui/BanioAlertWatcher'
 import { TicketAlertModal } from '@/components/ui/TicketAlertModal'
 import { ReglamentoAlertModal } from '@/components/ui/ReglamentoAlertModal'
+import { CambiarPasswordObligatorioModal } from '@/components/ui/CambiarPasswordObligatorioModal'
 import { VentaAlertWatcher } from '@/components/ventas/VentaAlertWatcher'
 
 // Componente separado: los hooks de socket solo corren cuando hay sesión activa.
@@ -20,6 +21,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
+      <CambiarPasswordObligatorioModal />
       <BanioAlertWatcher />
       <TicketAlertModal />
       {!isCL && <ReglamentoAlertModal />}

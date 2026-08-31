@@ -1,5 +1,6 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
+const { empresaRequierePolitica } = require('../utils/passwordPolicy');
 const { logAudit } = require('../services/auditService');
 
 exports.getUsuarios = async (req, res) => {
@@ -198,12 +199,13 @@ exports.createUsuario = async (req, res) => {
       .input('puesto', sql.NVarChar, puesto ? String(puesto).trim() : null)
       .input('departamento', sql.NVarChar, departamento ? String(departamento).trim() : null)
       .input('genero', sql.Char(1), generoValue)
-      .input('idHorario', sql.Int, idHorario);
+      .input('idHorario', sql.Int, idHorario)
+      .input('debeCambiarPassword', sql.Bit, empresaRequierePolitica(req.user?.empresa) ? 1 : 0);
 
     const insertResult = await request.query(`
       INSERT INTO NEUS_USUARIOS
-      (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password], NEUS_FECHA_INGRESO, NEUS_CORREO, NEUS_PUESTO, NEUS_DEPARTAMENTO, NEUS_GENERO, id_horario)
-      VALUES (@nombres, @usuario, @contra, @tipoUsuario, @activo, @status, @base, GETDATE(), @ventasUsuario, @ventasPassword, @fechaIngreso, @correo, @puesto, @departamento, @genero, @idHorario);
+      (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password], NEUS_FECHA_INGRESO, NEUS_CORREO, NEUS_PUESTO, NEUS_DEPARTAMENTO, NEUS_GENERO, id_horario, NEUS_DEBE_CAMBIAR_PASSWORD)
+      VALUES (@nombres, @usuario, @contra, @tipoUsuario, @activo, @status, @base, GETDATE(), @ventasUsuario, @ventasPassword, @fechaIngreso, @correo, @puesto, @departamento, @genero, @idHorario, @debeCambiarPassword);
       SELECT SCOPE_IDENTITY() AS NEUS_ID;
     `);
 

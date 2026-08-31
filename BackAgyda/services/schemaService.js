@@ -43,6 +43,30 @@ END
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de NEUS_USUARIOS:', err.message);
   }
+
+  // Bandera de política de contraseña (empresas ≠ agyda, ver
+  // utils/passwordPolicy.js): fuerza cambio de contraseña en el próximo
+  // login hasta que cumpla la política nueva. La BD de la empresa maestra
+  // (agyda) se llama 'intranet' — es la única excluida del sembrado masivo,
+  // consistente con utils/passwordPolicy.empresaRequierePolitica.
+  try {
+    const yaExisteColumna = await pool.request().query(
+      `SELECT 1 AS existe FROM sys.columns WHERE object_id = OBJECT_ID('dbo.NEUS_USUARIOS') AND name = 'NEUS_DEBE_CAMBIAR_PASSWORD'`
+    );
+    if (!yaExisteColumna.recordset.length) {
+      await pool.request().batch(`ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_DEBE_CAMBIAR_PASSWORD BIT NOT NULL DEFAULT 0;`);
+      // Sembrado único: al crear la columna, marcar a todos los usuarios
+      // activos como pendientes de cambio — salvo en la BD maestra.
+      const dbActual = await pool.request().query(`SELECT DB_NAME() AS nombre`);
+      if (dbActual.recordset[0].nombre.toLowerCase() !== 'intranet') {
+        await pool.request().query(
+          `UPDATE dbo.NEUS_USUARIOS SET NEUS_DEBE_CAMBIAR_PASSWORD = 1 WHERE NEUS_ACTIVO = 1`
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ No se pudo agregar NEUS_DEBE_CAMBIAR_PASSWORD:', err.message);
+  }
 }
 
 async function ensureCommentsSchema(pool) {

@@ -6,6 +6,7 @@ const { buildCookieHeaderFromSetCookieArray, rewriteVentasContent } = require('.
 const { DEFAULT_TENANT, listTenants } = require('../config/tenants');
 const { revokeToken } = require('../middleware/tokenDenylist');
 const { SUPER_ADMIN_CROSS_EMPRESA_USERNAMES } = require('../utils/superAdmin');
+const { empresaRequierePolitica } = require('../utils/passwordPolicy');
 const logger = global.logger || require('../utils/logger');
 
 // Bypass de login cross-empresa: si el usuario/password no existen en la BD
@@ -268,6 +269,21 @@ exports.login = async (req, res) => {
     const ventasPassword = user.password || user.NEUS_CONTRA;
     const empresaResuelta = (empresa || DEFAULT_TENANT).toLowerCase();
 
+    // Política de contraseña (ver utils/passwordPolicy.js): no aplica a la
+    // empresa maestra ni al login cross-empresa (ese usuario ya cumple la
+    // política en su empresa de origen).
+    let debeCambiarPassword = false;
+    if (empresaRequierePolitica(empresaResuelta) && !esLoginCrossEmpresa) {
+      try {
+        const rsFlag = await pool.request()
+          .input('id', sql.Int, user['ID USUARIO'])
+          .query('SELECT NEUS_DEBE_CAMBIAR_PASSWORD AS flag FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @id');
+        debeCambiarPassword = !!(rsFlag.recordset[0] && rsFlag.recordset[0].flag);
+      } catch (e) {
+        logger.warn('⚠️ No se pudo leer NEUS_DEBE_CAMBIAR_PASSWORD:', e && e.message);
+      }
+    }
+
     const token = jwt.sign(
       {
         id: user['ID USUARIO'],
@@ -275,7 +291,8 @@ exports.login = async (req, res) => {
         tipoUsuario: user['TIPO USUARIO'],
         ventasUsuario: ventasUsuario,
         nombre: user['NOMBRE'] || '',
-        empresa: empresaResuelta
+        empresa: empresaResuelta,
+        debeCambiarPassword
       },
       process.env.JWT_SECRET || 'AKOLATRONIC',
       { expiresIn: '12h' }
@@ -296,7 +313,8 @@ exports.login = async (req, res) => {
         genero: (user['GENERO'] || '').trim() || null,
         accessToken: token,
         ventasToken: token,
-        empresa: empresaResuelta
+        empresa: empresaResuelta,
+        debeCambiarPassword
       }
     };
 

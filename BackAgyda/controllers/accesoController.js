@@ -885,8 +885,8 @@ exports.createEmpresa = async (req, res) => {
         .input('contra', sql.NVarChar, adminPassword)
         .query(`
           INSERT INTO NEUS_USUARIOS
-          (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password])
-          VALUES (@nombres, @usuario, @contra, 'AD', 1, 1, 1, GETDATE(), @usuario, @contra);
+          (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password], NEUS_DEBE_CAMBIAR_PASSWORD)
+          VALUES (@nombres, @usuario, @contra, 'AD', 1, 1, 1, GETDATE(), @usuario, @contra, 1);
           SELECT SCOPE_IDENTITY() AS NEUS_ID;
         `);
       nuevoAdminId = insert.recordset[0]?.NEUS_ID || null;

@@ -42,6 +42,7 @@ export const authService = {
       accessToken: token,
       codigo: payload.codigo ? String(payload.codigo) : null,
       empresa: payload.empresa ? String(payload.empresa) : undefined,
+      debeCambiarPassword: Boolean(payload.debeCambiarPassword),
     }
 
     return { user, token }
