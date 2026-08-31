@@ -6,14 +6,15 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 
 router.use(authenticateToken);
 
-// Sedes
-router.get('/sedes', requireActionAccess('configuracion', 'ver'), catalogosTiController.getSedes);
+// Sedes — lectura abierta a cualquiera con acceso a Tickets (se usa al crear un
+// ticket), no solo a quien administra Configuración; escritura sigue restringida.
+router.get('/sedes', requireActionAccess('tickets', 'ver'), catalogosTiController.getSedes);
 router.post('/sedes', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createSede);
 router.put('/sedes/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateSede);
 router.patch('/sedes/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleSedeActiva);
 
-// Categorías / Subcategorías
-router.get('/categorias', requireActionAccess('configuracion', 'ver'), catalogosTiController.getCategorias);
+// Categorías / Subcategorías — lectura abierta a Tickets, misma razón que Sedes.
+router.get('/categorias', requireActionAccess('tickets', 'ver'), catalogosTiController.getCategorias);
 router.post('/categorias', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createCategoria);
 router.put('/categorias/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateCategoria);
 router.patch('/categorias/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleCategoriaActiva);
@@ -33,14 +34,14 @@ router.post('/especialidades', requireActionAccess('configuracion', 'configurar'
 router.put('/especialidades/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateEspecialidad);
 router.patch('/especialidades/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleEspecialidadActiva);
 
-// Proveedores
-router.get('/proveedores', requireActionAccess('configuracion', 'ver'), catalogosTiController.getProveedores);
+// Proveedores — lectura abierta a Tickets (se usa al escalar un ticket a Nivel 3).
+router.get('/proveedores', requireActionAccess('tickets', 'ver'), catalogosTiController.getProveedores);
 router.post('/proveedores', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createProveedor);
 router.put('/proveedores/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateProveedor);
 router.patch('/proveedores/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleProveedorActivo);
 
-// Servicios
-router.get('/servicios', requireActionAccess('configuracion', 'ver'), catalogosTiController.getServicios);
+// Servicios — lectura abierta a Tickets (servicio afectado al crear un ticket).
+router.get('/servicios', requireActionAccess('tickets', 'ver'), catalogosTiController.getServicios);
 router.post('/servicios', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createServicio);
 router.put('/servicios/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateServicio);
 router.patch('/servicios/:id/activo', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleServicioActivo);

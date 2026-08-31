@@ -36,6 +36,8 @@ exports.getTecnicos = async (req, res) => {
         s.PRIORIDADES_PERMITIDAS as prioridadesPermitidas,
         s.HORARIO_INICIO as horarioInicio,
         s.HORARIO_FIN as horarioFin,
+        s.HORARIO_SABADO_INICIO as horarioSabadoInicio,
+        s.HORARIO_SABADO_FIN as horarioSabadoFin,
         s.DIAS_SEMANA as diasSemana,
         g.NOMBRE as grupoNombre
       FROM NEUS_USUARIOS u
@@ -90,7 +92,8 @@ exports.getTecnicoById = async (req, res) => {
         COALESCE(s.ESTADO_TRABAJO,'disponible') as estadoTrabajo,
         COALESCE(s.MAX_TICKETS,10) as maxTickets, COALESCE(s.MAX_CHATS,5) as maxChats,
         s.PRIORIDADES_PERMITIDAS as prioridadesPermitidas, s.HORARIO_INICIO as horarioInicio,
-        s.HORARIO_FIN as horarioFin, s.DIAS_SEMANA as diasSemana
+        s.HORARIO_FIN as horarioFin, s.HORARIO_SABADO_INICIO as horarioSabadoInicio,
+        s.HORARIO_SABADO_FIN as horarioSabadoFin, s.DIAS_SEMANA as diasSemana
       FROM NEUS_USUARIOS u LEFT JOIN TI_STAFF_STATUS s ON s.USER_ID=u.NEUS_ID
       WHERE u.NEUS_ID=@uid`);
     if (!rs.recordset.length) return res.status(404).json({ success: false, message: 'Técnico no encontrado' });
@@ -135,7 +138,8 @@ exports.actualizarPerfilTecnico = async (req, res) => {
     const { userId } = req.params;
     const {
       area, nivel, disponible, estadoTrabajo, maxTickets, maxChats,
-      prioridadesPermitidas, horarioInicio, horarioFin, diasSemana,
+      prioridadesPermitidas, horarioInicio, horarioFin,
+      horarioSabadoInicio, horarioSabadoFin, diasSemana,
       especialidadesIds = [], categoriasIds = [], sedesIds = [],
     } = req.body;
 
@@ -163,6 +167,8 @@ exports.actualizarPerfilTecnico = async (req, res) => {
       .input('prio', sql.NVarChar, prioCsv)
       .input('hIni', sql.VarChar, horarioInicio || null)
       .input('hFin', sql.VarChar, horarioFin || null)
+      .input('hSabIni', sql.VarChar, horarioSabadoInicio || null)
+      .input('hSabFin', sql.VarChar, horarioSabadoFin || null)
       .input('dias', sql.NVarChar, diasCsv)
       .query(`
 MERGE TI_STAFF_STATUS AS tgt
@@ -170,9 +176,10 @@ USING (SELECT @uid AS USER_ID) AS src
 ON (tgt.USER_ID = src.USER_ID)
 WHEN MATCHED THEN UPDATE SET AREA=@area, DISPONIBLE=@disp, NIVEL=@nivel, ESTADO_TRABAJO=@estado,
   MAX_TICKETS=@maxT, MAX_CHATS=@maxC, PRIORIDADES_PERMITIDAS=@prio,
-  HORARIO_INICIO=@hIni, HORARIO_FIN=@hFin, DIAS_SEMANA=@dias
-WHEN NOT MATCHED THEN INSERT(USER_ID, AREA, DISPONIBLE, NIVEL, ESTADO_TRABAJO, MAX_TICKETS, MAX_CHATS, PRIORIDADES_PERMITIDAS, HORARIO_INICIO, HORARIO_FIN, DIAS_SEMANA)
-  VALUES(@uid, @area, @disp, @nivel, @estado, @maxT, @maxC, @prio, @hIni, @hFin, @dias);
+  HORARIO_INICIO=@hIni, HORARIO_FIN=@hFin,
+  HORARIO_SABADO_INICIO=@hSabIni, HORARIO_SABADO_FIN=@hSabFin, DIAS_SEMANA=@dias
+WHEN NOT MATCHED THEN INSERT(USER_ID, AREA, DISPONIBLE, NIVEL, ESTADO_TRABAJO, MAX_TICKETS, MAX_CHATS, PRIORIDADES_PERMITIDAS, HORARIO_INICIO, HORARIO_FIN, HORARIO_SABADO_INICIO, HORARIO_SABADO_FIN, DIAS_SEMANA)
+  VALUES(@uid, @area, @disp, @nivel, @estado, @maxT, @maxC, @prio, @hIni, @hFin, @hSabIni, @hSabFin, @dias);
       `);
 
     // Reemplazo total de las 3 tablas puente (DELETE + INSERT en bloque)

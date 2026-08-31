@@ -3,7 +3,9 @@ export interface ReglaSla {
   prioridad: string
   area: string | null
   servicio: string | null
+  minPrimeraRespuestaDesde: number | null
   minPrimeraRespuesta: number
+  minResolucionDesde: number | null
   minResolucion: number
   activa: boolean
 }
@@ -12,7 +14,9 @@ export interface CrearReglaSlaPayload {
   prioridad: string
   area?: string
   servicio?: string
+  minPrimeraRespuestaDesde?: number
   minPrimeraRespuesta: number
+  minResolucionDesde?: number
   minResolucion: number
 }
 
@@ -20,7 +24,9 @@ export interface ActualizarReglaSlaPayload {
   prioridad: string
   area?: string
   servicio?: string
+  minPrimeraRespuestaDesde?: number
   minPrimeraRespuesta: number
+  minResolucionDesde?: number
   minResolucion: number
   activa: boolean
 }

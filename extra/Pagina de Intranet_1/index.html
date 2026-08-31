@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=20260819b">
+    <link rel="stylesheet" href="css/styles.css?v=20260829a">
 
     <script src="/socket.io/socket.io.js"></script>
 
@@ -45,6 +45,7 @@
                 <a href="#servicios" class="nav-link" data-i18n="nav.servicios">Servicios</a>
                 <a href="#portafolio" class="nav-link" data-i18n="nav.portafolio">Portafolio</a>
                 <a href="#vacantes" class="nav-link" data-i18n="nav.vacantes">Vacantes</a>
+                <a href="#base-conocimiento" class="nav-link" data-i18n="nav.baseConocimiento">Base de Conocimiento</a>
                 <a href="#contacto" class="nav-link" data-i18n="nav.contacto">Contacto</a>
             </nav>
 
@@ -860,6 +861,57 @@
         </div>
     </div>
 
+    <section id="base-conocimiento" class="vacantes-section">
+        <div class="vacantes-circle vacantes-circle-1" aria-hidden="true"></div>
+        <div class="vacantes-circle vacantes-circle-2" aria-hidden="true"></div>
+
+        <div class="servicios-header">
+            <h2 class="section-title-center" data-i18n-html="kb.title">Resuelve tu problema <span class="highlight-blue">por tu cuenta</span></h2>
+            <p class="section-desc-center" data-i18n="kb.desc">
+                Busca en nuestra base de conocimiento y encuentra la solución paso a paso, sin esperar a que un técnico te atienda.
+            </p>
+        </div>
+
+        <div class="vacantes-container">
+            <div class="kb-search-wrap">
+                <div class="kb-search-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="kb-search-icon"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+                    <input type="text" id="kbBuscarInput"
+                        data-i18n-placeholder="kb.buscarPlaceholder" placeholder="Ej: no puedo entrar a mi correo, impresora, contraseña...">
+                    <button type="button" class="kb-search-btn" id="kbBuscarBtn" aria-label="Buscar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="kbGrid" class="vacantes-grid">
+                <!-- Tarjetas inyectadas dinámicamente por JS desde /api/kb/publicos -->
+            </div>
+            <p id="kbEmpty" class="vacantes-empty" data-i18n="kb.empty" style="display:none;">
+                No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.
+            </p>
+        </div>
+    </section>
+
+    <div id="kbModal" class="modal-overlay">
+        <div class="modal-container">
+            <button class="modal-close-btn" onclick="closeKbModal()">&times;</button>
+            <div class="modal-body">
+                <div class="modal-header-info">
+                    <span class="modal-top-icon">📖</span>
+                    <h2 id="kbModalTitulo">Título del artículo</h2>
+                </div>
+                <div class="modal-scroll-area">
+                    <div class="vacante-modal-meta">
+                        <span id="kbModalCategoria" class="vacante-badge"></span>
+                    </div>
+                    <div class="modal-section-block">
+                        <p id="kbModalContenido" style="white-space:pre-wrap;"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <section id="contacto" class="qr-form-section">
         <div class="qr-form-circle qr-form-circle-1" aria-hidden="true"></div>
         <div class="qr-form-circle qr-form-circle-2" aria-hidden="true"></div>
@@ -917,6 +969,7 @@
                     <li><a href="#servicios" data-i18n="nav.servicios">Servicios</a></li>
                     <li><a href="#portafolio" data-i18n="nav.portafolio">Portafolio</a></li>
                     <li><a href="#vacantes" data-i18n="nav.vacantes">Vacantes</a></li>
+                    <li><a href="#base-conocimiento" data-i18n="nav.baseConocimiento">Base de Conocimiento</a></li>
                 </ul>
             </div>
 
@@ -1567,6 +1620,7 @@
                 "nav.inicio": "Inicio", "nav.nosotros": "Nosotros", "nav.soluciones": "Soluciones",
                 "nav.aliados": "Aliados", "nav.servicios": "Servicios", "nav.contacto": "Contacto",
                 "nav.portafolio": "Portafolio", "nav.vacantes": "Vacantes", "nav.login": "Iniciar sesión",
+                "nav.baseConocimiento": "Base de Conocimiento",
 
                 "hero.title": 'Soluciones <br>tecnológicas <br>a la medida de <span class="highlight-blue">tu empresa</span>',
                 "hero.desc": "Impulsamos el crecimiento y la eficiencia de tu negocio con tecnología confiable, innovadora y escalable.",
@@ -1683,6 +1737,10 @@
                 "vacantes.desc": "Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.",
                 "vacantes.empty": "Por el momento no hay vacantes disponibles. ¡Vuelve pronto!",
                 "vacantes.verDetalle": "Ver detalle y postular",
+                "kb.title": 'Resuelve tu problema <span class="highlight-blue">por tu cuenta</span>',
+                "kb.desc": "Busca en nuestra base de conocimiento y encuentra la solución paso a paso, sin esperar a que un técnico te atienda.",
+                "kb.buscarPlaceholder": "Ej: no puedo entrar a mi correo, impresora, contraseña...",
+                "kb.empty": "No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.",
                 "vacantes.modal.descripcion": "Descripción del puesto",
                 "vacantes.modal.requisitos": "Requisitos",
                 "vacantes.modal.postular": "Postúlate a esta vacante",
@@ -1704,6 +1762,7 @@
                 "nav.inicio": "Home", "nav.nosotros": "About", "nav.soluciones": "Solutions",
                 "nav.aliados": "Partners", "nav.servicios": "Services", "nav.contacto": "Contact",
                 "nav.portafolio": "Portfolio", "nav.vacantes": "Careers", "nav.login": "Login",
+                "nav.baseConocimiento": "Knowledge Base",
 
                 "hero.title": 'Technology <br>solutions <br>built for <span class="highlight-blue">your business</span>',
                 "hero.desc": "We drive your business growth and efficiency with reliable, innovative and scalable technology.",
@@ -1820,6 +1879,10 @@
                 "vacantes.desc": "Check out the current job openings at ARDABYTEC and apply today.",
                 "vacantes.empty": "There are no open positions right now. Check back soon!",
                 "vacantes.verDetalle": "View details & apply",
+                "kb.title": 'Solve it <span class="highlight-blue">yourself</span>',
+                "kb.desc": "Search our knowledge base and find the solution step by step, no need to wait for a technician.",
+                "kb.buscarPlaceholder": "E.g: can't log into my email, printer, password...",
+                "kb.empty": "We couldn't find any articles matching your search. Try different words or contact us.",
                 "vacantes.modal.descripcion": "Job description",
                 "vacantes.modal.requisitos": "Requirements",
                 "vacantes.modal.postular": "Apply for this position",
@@ -1873,6 +1936,7 @@
             if (openServiceKey) openModal(openServiceKey);
 
             if (typeof window.refreshVacantesLang === 'function') window.refreshVacantesLang();
+            if (typeof window.refreshKbLang === 'function') window.refreshKbLang();
             if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
             if (typeof window.refreshChatLang === 'function') window.refreshChatLang();
         }
@@ -2379,6 +2443,119 @@
 
             window.refreshVacantesLang = cargarVacantes;
             cargarVacantes();
+        })();
+
+        // --- BASE DE CONOCIMIENTO PÚBLICA ---
+        (function () {
+            let kbCache = [];
+            let kbDebounceTimer = null;
+
+            function kbEscapeHtml(str) {
+                const div = document.createElement('div');
+                div.innerText = str == null ? '' : String(str);
+                return div.innerHTML;
+            }
+
+            async function cargarKb(q) {
+                const grid = document.getElementById('kbGrid');
+                const empty = document.getElementById('kbEmpty');
+                if (!grid) return;
+
+                try {
+                    const url = q ? `/api/kb/publicos?q=${encodeURIComponent(q)}` : '/api/kb/publicos';
+                    const res = await fetch(url);
+                    const json = await res.json();
+                    const articulos = Array.isArray(json) ? json : (json.data || []);
+                    kbCache = articulos;
+
+                    if (!articulos.length) {
+                        grid.innerHTML = '';
+                        if (empty) empty.style.display = '';
+                        return;
+                    }
+                    if (empty) empty.style.display = 'none';
+
+                    grid.innerHTML = articulos.map(a => {
+                        const resumen = (a.contenido || '').slice(0, 130);
+                        return `
+                            <div class="vacante-card">
+                                <div class="vacante-card-banner"><span class="vacante-card-banner-icon">📖</span></div>
+                                <div class="vacante-card-content">
+                                    <h3 class="vacante-title">${kbEscapeHtml(a.titulo)}</h3>
+                                    <div class="vacante-meta">
+                                        ${a.categoria ? `<span class="vacante-badge">🏷️ ${kbEscapeHtml(a.categoria)}</span>` : ''}
+                                    </div>
+                                    <p class="vacante-short-desc">${kbEscapeHtml(resumen)}${(a.contenido || '').length > 130 ? '…' : ''}</p>
+                                    <button type="button" class="btn-quick-view" onclick="openKbModal(${a.id})">${currentLang === 'en' ? 'Read solution' : 'Ver solución'}</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
+                } catch (e) {
+                    console.warn('No se pudo cargar la base de conocimiento:', e);
+                    if (empty) empty.style.display = '';
+                }
+            }
+
+            window.openKbModal = function (id) {
+                const articulo = kbCache.find(a => a.id === id);
+                if (!articulo) return;
+
+                const modal = document.getElementById('kbModal');
+                document.getElementById('kbModalTitulo').innerText = articulo.titulo || '';
+                document.getElementById('kbModalContenido').innerText = articulo.contenido || '';
+
+                const categoriaEl = document.getElementById('kbModalCategoria');
+                if (articulo.categoria) {
+                    categoriaEl.innerText = articulo.categoria;
+                    categoriaEl.style.display = '';
+                } else {
+                    categoriaEl.style.display = 'none';
+                }
+
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            };
+
+            window.closeKbModal = function () {
+                const modal = document.getElementById('kbModal');
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+            };
+
+            const kbModalEl = document.getElementById('kbModal');
+            if (kbModalEl) {
+                kbModalEl.addEventListener('click', (event) => {
+                    if (event.target === kbModalEl) closeKbModal();
+                });
+            }
+
+            const kbInput = document.getElementById('kbBuscarInput');
+            if (kbInput) {
+                kbInput.addEventListener('input', () => {
+                    clearTimeout(kbDebounceTimer);
+                    kbDebounceTimer = setTimeout(() => cargarKb(kbInput.value.trim()), 350);
+                });
+                kbInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        clearTimeout(kbDebounceTimer);
+                        cargarKb(kbInput.value.trim());
+                    }
+                });
+            }
+
+            const kbBuscarBtn = document.getElementById('kbBuscarBtn');
+            if (kbBuscarBtn) {
+                kbBuscarBtn.addEventListener('click', () => {
+                    clearTimeout(kbDebounceTimer);
+                    cargarKb(kbInput ? kbInput.value.trim() : '');
+                });
+            }
+
+            window.refreshKbLang = () => cargarKb(kbInput ? kbInput.value.trim() : '');
+            cargarKb();
         })();
 
         // --- EFECTOS DINÁMICOS: SCROLL-REVEAL + PARALLAX ---

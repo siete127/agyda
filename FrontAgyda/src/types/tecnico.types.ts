@@ -22,6 +22,8 @@ export interface Tecnico {
   prioridadesPermitidas: string[] | null
   horarioInicio: string | null
   horarioFin: string | null
+  horarioSabadoInicio: string | null
+  horarioSabadoFin: string | null
   diasSemana: string[] | null
   grupoNombre: string | null
   especialidades: TecnicoItem[]
@@ -40,6 +42,8 @@ export interface ActualizarPerfilTecnicoPayload {
   prioridadesPermitidas: string[]
   horarioInicio?: string | null
   horarioFin?: string | null
+  horarioSabadoInicio?: string | null
+  horarioSabadoFin?: string | null
   diasSemana: string[]
   especialidadesIds: number[]
   categoriasIds: number[]
