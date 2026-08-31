@@ -128,7 +128,13 @@ export function ConfiguracionPage() {
   const category = activeCategory ? CONFIG_NODE_INDEX[activeCategory] : null
   const selectedNode = selectedKey ? CONFIG_NODE_INDEX[selectedKey] : null
   const Screen = selectedNode?.screen ? SCREENS[selectedNode.screen] : undefined
-  const breadcrumb = selectedKey ? findPath(CONFIG_TREE, selectedKey) ?? [] : category ? [category] : []
+  // Ruta completa desde la raíz hasta el nodo activo (hoja seleccionada, o la
+  // categoría en curso) — todos los segmentos intermedios son navegables.
+  const breadcrumb = selectedKey
+    ? findPath(CONFIG_TREE, selectedKey) ?? []
+    : activeCategory
+      ? findPath(CONFIG_TREE, activeCategory) ?? (category ? [category] : [])
+      : []
 
   const openCategory = (key: string) => {
     const node = CONFIG_NODE_INDEX[key]
@@ -145,6 +151,26 @@ export function ConfiguracionPage() {
       setActiveCategory(node.key)
     } else {
       setSelectedKey(node.key)
+    }
+    setSearch('')
+  }
+
+  // Navega a cualquier nodo por su key — usado por los segmentos del breadcrumb.
+  // Un nodo con hijos abre su vista de subsecciones; una hoja abre su pantalla.
+  // Si la hoja no tiene pantalla propia, se muestra dentro de su categoría padre.
+  const navigateToKey = (key: string) => {
+    const node = CONFIG_NODE_INDEX[key]
+    if (!node) return
+    const trail = findPath(CONFIG_TREE, key) ?? []
+    if (node.children?.length) {
+      setActiveCategory(key)
+      setSelectedKey(null)
+    } else {
+      // Ancla la categoría en el ancestro más cercano que tenga hijos, para que
+      // la vista de categoría tenga un contexto que renderizar.
+      const parentWithChildren = [...trail].reverse().find((n) => n.key !== key && n.children?.length)
+      setActiveCategory(parentWithChildren?.key ?? trail[0]?.key ?? key)
+      setSelectedKey(key)
     }
     setSearch('')
   }
@@ -197,6 +223,7 @@ export function ConfiguracionPage() {
           breadcrumb={breadcrumb}
           onBack={goHome}
           onSelect={openNode}
+          onCrumb={navigateToKey}
           selectedKey={selectedKey}
           screen={Screen}
         />
@@ -252,18 +279,23 @@ function countImplemented(node: ConfigNode): number {
 /* ─────────────────────────── Vista de categoría ─────────────────────────── */
 
 function CategoryView({
-  category, breadcrumb, onBack, onSelect, selectedKey, screen: Screen,
+  category, breadcrumb, onBack, onSelect, onCrumb, selectedKey, screen: Screen,
 }: {
   category: ConfigNode
   breadcrumb: ConfigNode[]
   onBack: () => void
   onSelect: (node: ConfigNode) => void
+  onCrumb: (key: string) => void
   selectedKey: string | null
   screen?: ComponentType
 }) {
   const style = CATEGORY_STYLES[breadcrumb[0]?.key ?? ''] ?? DEFAULT_CATEGORY_STYLE
   const Icon = style.icon
   const selectedNode = selectedKey ? CONFIG_NODE_INDEX[selectedKey] : null
+  const lastKey = breadcrumb[breadcrumb.length - 1]?.key
+  // El nivel "actual" (para el botón de retroceso = subir un nivel) es el
+  // penúltimo crumb si hay uno seleccionado, o el penúltimo de la categoría.
+  const upKey = breadcrumb.length >= 2 ? breadcrumb[breadcrumb.length - 2].key : null
 
   return (
     <div className="space-y-4">
@@ -271,9 +303,9 @@ function CategoryView({
       <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <div className="flex items-center gap-3">
           <button
-            onClick={onBack}
+            onClick={() => (upKey ? onCrumb(upKey) : onBack())}
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-            title="Volver a Configuración"
+            title={upKey ? 'Subir un nivel' : 'Volver a Configuración'}
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -285,14 +317,24 @@ function CategoryView({
               <button onClick={onBack} className="flex items-center gap-1 hover:text-brand hover:underline">
                 <LayoutGrid className="h-3 w-3" /> Configuración
               </button>
-              {breadcrumb.map((n) => (
-                <span key={n.key} className="flex items-center gap-1">
-                  <ChevronRight className="h-3 w-3 flex-shrink-0" />
-                  <span className={n.key === selectedNode?.key || (!selectedNode && n.key === breadcrumb[breadcrumb.length - 1].key) ? 'font-semibold text-gray-600' : ''}>
-                    {n.label}
+              {breadcrumb.map((n) => {
+                const esUltimo = n.key === lastKey
+                return (
+                  <span key={n.key} className="flex items-center gap-1">
+                    <ChevronRight className="h-3 w-3 flex-shrink-0" />
+                    {esUltimo ? (
+                      <span className="font-semibold text-gray-600">{n.label}</span>
+                    ) : (
+                      <button
+                        onClick={() => onCrumb(n.key)}
+                        className="hover:text-brand hover:underline"
+                      >
+                        {n.label}
+                      </button>
+                    )}
                   </span>
-                </span>
-              ))}
+                )
+              })}
             </div>
             <p className="mt-0.5 truncate text-[0.98rem] font-bold text-gray-900">{selectedNode?.label ?? category.label}</p>
           </div>

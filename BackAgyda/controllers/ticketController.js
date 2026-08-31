@@ -237,7 +237,10 @@ exports.listReglasSla = async (req, res) => {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
       SELECT TSR_ID as id, TSR_PRIORIDAD as prioridad, TSR_AREA as area, TSR_SERVICIO as servicio,
-             TSR_MIN_PRIMERA_RESPUESTA as minPrimeraRespuesta, TSR_MIN_RESOLUCION as minResolucion,
+             TSR_MIN_PRIMERA_RESPUESTA as minPrimeraRespuesta,
+             TSR_MIN_PRIMERA_RESPUESTA_DESDE as minPrimeraRespuestaDesde,
+             TSR_MIN_RESOLUCION as minResolucion,
+             TSR_MIN_RESOLUCION_DESDE as minResolucionDesde,
              TSR_ACTIVA as activa
       FROM TICKETS_SLA_REGLAS ORDER BY TSR_PRIORIDAD, TSR_AREA
     `);
@@ -251,7 +254,7 @@ exports.listReglasSla = async (req, res) => {
 // POST /api/tickets/sla/reglas
 exports.crearReglaSla = async (req, res) => {
   try {
-    const { prioridad, area, servicio, minPrimeraRespuesta, minResolucion } = req.body;
+    const { prioridad, area, servicio, minPrimeraRespuesta, minPrimeraRespuestaDesde, minResolucion, minResolucionDesde } = req.body;
     if (!prioridad || !minPrimeraRespuesta || !minResolucion) {
       return res.status(400).json({ success: false, message: 'Prioridad, minutos de primera respuesta y de resolución son requeridos' });
     }
@@ -260,12 +263,14 @@ exports.crearReglaSla = async (req, res) => {
       .input('prioridad', sql.NVarChar, prioridad.toString().toUpperCase())
       .input('area', sql.NVarChar, area ? area.toString().toUpperCase() : null)
       .input('servicio', sql.NVarChar, servicio || null)
+      .input('minRespuestaDesde', sql.Int, minPrimeraRespuestaDesde || null)
       .input('minRespuesta', sql.Int, minPrimeraRespuesta)
+      .input('minResolucionDesde', sql.Int, minResolucionDesde || null)
       .input('minResolucion', sql.Int, minResolucion)
       .input('creadoPor', sql.SmallInt, req.headers['usuarioid'] ? Number(req.headers['usuarioid']) : null)
       .query(`
-        INSERT INTO TICKETS_SLA_REGLAS (TSR_PRIORIDAD, TSR_AREA, TSR_SERVICIO, TSR_MIN_PRIMERA_RESPUESTA, TSR_MIN_RESOLUCION, TSR_CREADO_POR)
-        VALUES (@prioridad, @area, @servicio, @minRespuesta, @minResolucion, @creadoPor)
+        INSERT INTO TICKETS_SLA_REGLAS (TSR_PRIORIDAD, TSR_AREA, TSR_SERVICIO, TSR_MIN_PRIMERA_RESPUESTA_DESDE, TSR_MIN_PRIMERA_RESPUESTA, TSR_MIN_RESOLUCION_DESDE, TSR_MIN_RESOLUCION, TSR_CREADO_POR)
+        VALUES (@prioridad, @area, @servicio, @minRespuestaDesde, @minRespuesta, @minResolucionDesde, @minResolucion, @creadoPor)
       `);
     res.status(201).json({ success: true });
   } catch (e) {
@@ -278,20 +283,23 @@ exports.crearReglaSla = async (req, res) => {
 exports.actualizarReglaSla = async (req, res) => {
   try {
     const { id } = req.params;
-    const { prioridad, area, servicio, minPrimeraRespuesta, minResolucion, activa } = req.body;
+    const { prioridad, area, servicio, minPrimeraRespuesta, minPrimeraRespuestaDesde, minResolucion, minResolucionDesde, activa } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
       .input('id', sql.Int, id)
       .input('prioridad', sql.NVarChar, prioridad ? prioridad.toString().toUpperCase() : null)
       .input('area', sql.NVarChar, area ? area.toString().toUpperCase() : null)
       .input('servicio', sql.NVarChar, servicio || null)
+      .input('minRespuestaDesde', sql.Int, minPrimeraRespuestaDesde || null)
       .input('minRespuesta', sql.Int, minPrimeraRespuesta)
+      .input('minResolucionDesde', sql.Int, minResolucionDesde || null)
       .input('minResolucion', sql.Int, minResolucion)
       .input('activa', sql.Bit, activa ? 1 : 0)
       .query(`
         UPDATE TICKETS_SLA_REGLAS
-        SET TSR_PRIORIDAD = @prioridad, TSR_AREA = @area, TSR_SERVICIO = @servicio, TSR_MIN_PRIMERA_RESPUESTA = @minRespuesta,
-            TSR_MIN_RESOLUCION = @minResolucion, TSR_ACTIVA = @activa
+        SET TSR_PRIORIDAD = @prioridad, TSR_AREA = @area, TSR_SERVICIO = @servicio,
+            TSR_MIN_PRIMERA_RESPUESTA_DESDE = @minRespuestaDesde, TSR_MIN_PRIMERA_RESPUESTA = @minRespuesta,
+            TSR_MIN_RESOLUCION_DESDE = @minResolucionDesde, TSR_MIN_RESOLUCION = @minResolucion, TSR_ACTIVA = @activa
         WHERE TSR_ID = @id
       `);
     res.json({ success: true });

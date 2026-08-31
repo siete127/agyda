@@ -754,6 +754,17 @@ BEGIN
 END
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_SERVICIO')
   ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_SERVICIO NVARCHAR(100) NULL;
+-- Mínimo esperado de primera respuesta (meta, no límite estricto de SLA):
+-- TSR_MIN_PRIMERA_RESPUESTA sigue siendo el máximo/límite real que define
+-- cumplimiento; este campo es puramente informativo para mostrar un rango
+-- ("1 a 5 min") en vez de un solo número. NULL = sin mínimo, se muestra igual
+-- que antes (solo el máximo).
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_MIN_PRIMERA_RESPUESTA_DESDE')
+  ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_MIN_PRIMERA_RESPUESTA_DESDE INT NULL;
+-- Mismo patrón para Resolución: TSR_MIN_RESOLUCION sigue siendo el máximo/
+-- límite real de SLA; este campo es puramente informativo para el rango.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_MIN_RESOLUCION_DESDE')
+  ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_MIN_RESOLUCION_DESDE INT NULL;
 
 -- Campos personalizados por categoría: el AD define campos extra (texto,
 -- número, lista o fecha) que aparecen en el formulario de ticket SOLO cuando
@@ -951,6 +962,13 @@ IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STA
   ALTER TABLE dbo.TI_STAFF_STATUS ADD HORARIO_FIN TIME NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STAFF_STATUS' AND COLUMN_NAME='DIAS_SEMANA')
   ALTER TABLE dbo.TI_STAFF_STATUS ADD DIAS_SEMANA NVARCHAR(20) NULL; -- CSV '1,2,3,4,5' (1=lunes); NULL = sin restricción
+-- Sábado puede tener su propio horario (ej. 09:00-14:00 vs 09:00-18:00 entre
+-- semana), mismo patrón ya usado en LIVECHAT_CONFIG (LCF_SABADO_HORARIO_*).
+-- Si no está configurado, cae al horario general (HORARIO_INICIO/FIN).
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STAFF_STATUS' AND COLUMN_NAME='HORARIO_SABADO_INICIO')
+  ALTER TABLE dbo.TI_STAFF_STATUS ADD HORARIO_SABADO_INICIO TIME NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STAFF_STATUS' AND COLUMN_NAME='HORARIO_SABADO_FIN')
+  ALTER TABLE dbo.TI_STAFF_STATUS ADD HORARIO_SABADO_FIN TIME NULL;
 
 -- Puentes técnico <-> especialidad / categoría permitida / sede permitida.
 -- Regla semántica: sin filas = sin restricción (permitido en todo), no "prohibido en todo".
@@ -3096,6 +3114,82 @@ async function ensureTiAreaSchema(pool) {
             REFERENCES dbo.TI_SISTEMAS(SIS_ID) ON DELETE SET NULL
         );
         CREATE INDEX IX_TI_INCIDENTES_SISTEMA_SIS ON dbo.TI_INCIDENTES_SISTEMA(ISI_SISTEMA_ID);
+      END
+
+      /* ── Monitoreo de red en vivo (agente PowerShell → ingesta) ── */
+
+      IF OBJECT_ID('dbo.TI_RED_AGENTES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_AGENTES (
+          RA_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          RA_NOMBRE        NVARCHAR(120)  NOT NULL,        -- hostname o etiqueta
+          RA_ENLACE_ID     INT            NULL,            -- enlace que monitorea
+          RA_VERSION       NVARCHAR(30)   NULL,
+          RA_SO            NVARCHAR(120)  NULL,
+          RA_IP_LOCAL      NVARCHAR(45)   NULL,
+          RA_GATEWAY       NVARCHAR(45)   NULL,
+          RA_ROUTER_ESTADO NVARCHAR(20)   NULL,            -- ok | sin-acceso | deshabilitado | ...
+          RA_ROUTER_MARCA  NVARCHAR(60)   NULL,
+          RA_ROUTER_MODELO NVARCHAR(120)  NULL,
+          RA_ROUTER_METODO NVARCHAR(40)   NULL,            -- que sonda funciono
+          RA_ULTIMA_SENAL  DATETIME       NULL,            -- última ingesta recibida
+          RA_PRIMERA_VEZ   DATETIME       NOT NULL DEFAULT GETDATE(),
+          RA_ACTIVO        BIT            NOT NULL DEFAULT 1,
+          CONSTRAINT UQ_TI_RED_AGENTES_NOMBRE UNIQUE (RA_NOMBRE),
+          CONSTRAINT FK_TI_RED_AGENTES_ENLACE FOREIGN KEY (RA_ENLACE_ID)
+            REFERENCES dbo.TI_ENLACES_RED(ENL_ID) ON DELETE SET NULL
+        );
+      END
+      ELSE
+      BEGIN
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_ESTADO') IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_ESTADO NVARCHAR(20) NULL;
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_MARCA')  IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_MARCA  NVARCHAR(60) NULL;
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_MODELO') IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_MODELO NVARCHAR(120) NULL;
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_METODO') IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_METODO NVARCHAR(40) NULL;
+      END
+
+      IF OBJECT_ID('dbo.TI_RED_MEDICIONES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_MEDICIONES (
+          RM_ID            BIGINT IDENTITY(1,1) PRIMARY KEY,
+          RM_ENLACE_ID     INT            NULL,
+          RM_AGENTE_ID     INT            NULL,
+          RM_FECHA         DATETIME       NOT NULL DEFAULT GETDATE(),
+          RM_ONLINE        BIT            NOT NULL,
+          RM_LATENCIA_MS   DECIMAL(7,2)   NULL,
+          RM_JITTER_MS     DECIMAL(7,2)   NULL,
+          RM_PERDIDA_PCT   DECIMAL(5,2)   NULL,
+          RM_DOWN_MBPS     DECIMAL(9,2)   NULL,
+          RM_UP_MBPS       DECIMAL(9,2)   NULL,
+          RM_LINK_MBPS     DECIMAL(9,2)   NULL,
+          RM_ADAPTADOR_UP  BIT            NULL,
+          RM_DISP_ONLINE   INT            NULL,
+          RM_ORIGEN        NVARCHAR(120)  NULL,
+          CONSTRAINT FK_TI_RED_MEDICIONES_ENLACE FOREIGN KEY (RM_ENLACE_ID)
+            REFERENCES dbo.TI_ENLACES_RED(ENL_ID) ON DELETE SET NULL
+        );
+        CREATE INDEX IX_TI_RED_MEDICIONES_FECHA ON dbo.TI_RED_MEDICIONES(RM_FECHA DESC);
+        CREATE INDEX IX_TI_RED_MEDICIONES_ENLACE ON dbo.TI_RED_MEDICIONES(RM_ENLACE_ID, RM_FECHA DESC);
+      END
+
+      IF OBJECT_ID('dbo.TI_RED_DISPOSITIVOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_DISPOSITIVOS (
+          RD_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          RD_MAC           NVARCHAR(40)   NOT NULL,
+          RD_ENLACE_ID     INT            NULL,
+          RD_IP            NVARCHAR(45)   NULL,
+          RD_HOSTNAME      NVARCHAR(160)  NULL,
+          RD_FABRICANTE    NVARCHAR(140)  NULL,          -- OUI vendor
+          RD_ALIAS         NVARCHAR(160)  NULL,          -- editable por TI
+          RD_ORIGEN        NVARCHAR(20)   NULL,          -- 'arp' | 'dhcp' | 'router'
+          RD_PRIMERA_VEZ   DATETIME       NOT NULL DEFAULT GETDATE(),
+          RD_ULTIMA_VEZ    DATETIME       NOT NULL DEFAULT GETDATE(),
+          RD_ONLINE        BIT            NOT NULL DEFAULT 1,
+          RD_BLOQUEADO     BIT            NOT NULL DEFAULT 0,
+          CONSTRAINT UQ_TI_RED_DISPOSITIVOS_MAC UNIQUE (RD_MAC)
+        );
+        CREATE INDEX IX_TI_RED_DISPOSITIVOS_ULTIMA ON dbo.TI_RED_DISPOSITIVOS(RD_ULTIMA_VEZ DESC);
       END
     `);
   } catch (err) {
@@ -5689,6 +5783,70 @@ END
     logger.info('✅ Esquema de mensajería asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de mensajería:', err.message);
+  }
+
+  // Se separa en pasos independientes (cada uno con su propio try/catch) en
+  // vez de un solo CREATE TABLE con las FK/UNIQUE inline — así, si un tenant
+  // tiene algún problema puntual con una referencia, el resto igual se crea
+  // en vez de que "Could not create constraint or index" tumbe todo el batch
+  // sin decir cuál constraint fue la que realmente falló.
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.MSJ_MENSAJE_REACCIONES (
+    MMR_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    MMR_MENSAJE_ID  INT NOT NULL,
+    MMR_USUARIO_ID  INT NOT NULL,
+    MMR_EMOJI       NVARCHAR(20) NOT NULL,
+    MMR_FECHA       DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+`);
+    logger.info('✅ Tabla MSJ_MENSAJE_REACCIONES asegurada');
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear tabla MSJ_MENSAJE_REACCIONES:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_MSJ_REACCIONES_MENSAJE')
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT FK_MSJ_REACCIONES_MENSAJE
+  FOREIGN KEY (MMR_MENSAJE_ID) REFERENCES dbo.MSJ_MENSAJES(MM_ID) ON DELETE CASCADE;
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear FK_MSJ_REACCIONES_MENSAJE:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_MSJ_REACCIONES_USUARIO')
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT FK_MSJ_REACCIONES_USUARIO
+  FOREIGN KEY (MMR_USUARIO_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID);
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear FK_MSJ_REACCIONES_USUARIO:', err.message);
+  }
+
+  try {
+    // Una sola reacción activa por usuario y mensaje (como WhatsApp): al elegir
+    // otro emoji se reemplaza la fila en vez de acumular varias por la misma persona.
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_MSJ_REACCIONES_MENSAJE_USUARIO' AND object_id = OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES'))
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT UQ_MSJ_REACCIONES_MENSAJE_USUARIO UNIQUE (MMR_MENSAJE_ID, MMR_USUARIO_ID);
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear UQ_MSJ_REACCIONES_MENSAJE_USUARIO:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_MSJ_REACCIONES_MENSAJE' AND object_id = OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES'))
+CREATE INDEX IX_MSJ_REACCIONES_MENSAJE ON dbo.MSJ_MENSAJE_REACCIONES(MMR_MENSAJE_ID);
+`);
+    logger.info('✅ Esquema de reacciones de mensajería asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear IX_MSJ_REACCIONES_MENSAJE:', err.message);
   }
 }
 

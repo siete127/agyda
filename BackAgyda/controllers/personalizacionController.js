@@ -12,10 +12,16 @@ try { socketService = require('../services/socketService'); } catch (_) { socket
 const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login'];
 const HEADER_BUTTON_KEYS = ['marcador', 'contingencia', 'sistemas', 'gestion-mis'];
 // Catálogo de cards del dashboard — el frontend sabe renderizarlas; aquí solo
-// validamos que las keys sean conocidas.
+// validamos que las keys sean conocidas. Debe reflejar CARD_IDS de
+// FrontAgyda/src/pages/dashboard/cardCatalog.ts.
 const DASHBOARD_CARD_IDS = [
+  // Portada
   'bienvenida', 'legales', 'marca', 'lo-importante', 'cita',
   'ultimas-noticias', 'proximos-eventos', 'cumpleanos', 'soporte', 'accesos-rapidos',
+  // Resúmenes de módulos
+  'r-tickets', 'r-proyectos', 'r-encuestas', 'r-quejas', 'r-legal',
+  'r-reglamento', 'r-livechat', 'r-pausas', 'r-vacaciones', 'r-capacitacion',
+  'r-incapacidades', 'r-noticias', 'r-vacantes', 'r-ventas',
 ];
 
 const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];

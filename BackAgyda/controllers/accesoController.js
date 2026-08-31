@@ -316,6 +316,8 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   configuracion: [
+    { key: 'ver', nombre: 'Ver configuración', descripcion: 'Consultar Configuración > Tecnología/TI: catálogos (sedes, categorías, proveedores, servicios), técnicos, SLA y demás secciones de solo lectura' },
+    { key: 'configurar', nombre: 'Editar configuración', descripcion: 'Crear, editar o desactivar catálogos, técnicos, reglas de SLA y demás ajustes de Configuración > Tecnología/TI' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   'direccion-general': [

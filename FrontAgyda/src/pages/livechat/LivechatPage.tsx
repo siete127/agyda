@@ -1104,14 +1104,24 @@ export default function LivechatPage() {
             Configuración
           </Button>
           {puedeAtender && (
-            <Button
-              variant={estado?.disponible ? 'primary' : 'secondary'}
+            // Verde/rojo fijos a propósito — el estado disponible/no disponible
+            // debe leerse igual sin importar el color de marca configurado en
+            // Personalización, así que no usa las variantes 'primary'/'secondary'
+            // de Button (que sí siguen el color de marca).
+            <button
               onClick={() => toggleDisponible.mutate(!estado?.disponible)}
               disabled={toggleDisponible.isPending}
+              className={clsx(
+                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all duration-150',
+                'focus:outline-none focus:ring-2 focus:ring-offset-1 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed',
+                estado?.disponible
+                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 border border-emerald-600 focus:ring-emerald-500/30'
+                  : 'bg-red-600 hover:bg-red-700 shadow-sm shadow-red-600/20 border border-red-600 focus:ring-red-500/30',
+              )}
             >
               <Power size={16} />
               {estado?.disponible ? 'Disponible' : 'No disponible'}
-            </Button>
+            </button>
           )}
         </div>
       </div>

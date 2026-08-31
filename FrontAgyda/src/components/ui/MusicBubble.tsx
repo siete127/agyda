@@ -3,11 +3,13 @@ import { useDraggablePosition } from '@/hooks/useDraggablePosition'
 import { useQuery } from '@tanstack/react-query'
 import {
   Music2, Play, Pause, SkipForward, SkipBack,
-  ChevronDown, Volume2, X, ListMusic,
+  ChevronDown, Volume2, X, ListMusic, Square,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
 import { useMusicStore } from '@/stores/music.store'
+
+const HIDE_HINT = 'Ocultar — se vuelve a mostrar desde el menú de perfil'
 
 interface Track { id: number; titulo: string; artista: string; emoji: string; url: string }
 
@@ -35,6 +37,7 @@ export function MusicBubble() {
   })
 
   const { tracks, setTracks, currentTrack, isPlaying, play, pause, resume, next, prev, stop } = useMusicStore()
+  const setBubbleVisible = useMusicStore((s) => s.setBubbleVisible)
 
   /* ── Cargar lista ── */
   const { data: general = [] } = useQuery({
@@ -134,12 +137,16 @@ export function MusicBubble() {
           {currentTrack && (
             <button onClick={stop} title="Detener"
               className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white/70 transition-colors">
-              <X className="h-3.5 w-3.5" />
+              <Square className="h-3.5 w-3.5" />
             </button>
           )}
-          <button onClick={() => setExpanded(false)}
+          <button onClick={() => setExpanded(false)} title="Minimizar"
             className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white transition-colors">
             <ChevronDown className="h-4 w-4" />
+          </button>
+          <button onClick={() => { stop(); setBubbleVisible(false) }} title={HIDE_HINT}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white transition-colors">
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

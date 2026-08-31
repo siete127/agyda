@@ -18,9 +18,10 @@ export const CONFIG_TREE: ConfigNode[] = [
   },
   {
     key: 'apariencia', label: 'Apariencia',
-    description: 'Identidad visual de la empresa: logo, colores, nombre',
+    description: 'Identidad visual: marca, tema, encabezado y página de inicio',
     children: [
       { key: 'pers-branding', label: 'Marca (logo, colores, nombre)', screen: 'pers-branding' },
+      { key: 'tema', label: 'Tema (modo y plantillas)', screen: 'tema' },
       { key: 'pers-botones', label: 'Botones del encabezado', screen: 'pers-botones' },
       { key: 'pers-dashboard', label: 'Diseño del inicio', screen: 'pers-dashboard' },
     ],
@@ -906,7 +907,7 @@ export const CONFIG_TREE: ConfigNode[] = [
         key: 'cambios-aud', label: 'Cambios',
         children: [
           { key: 'cambio-usuario', label: 'Usuario' },
-          { key: 'cambio-empresa', label: 'Empresa' },
+          { key: 'cambio-empresa-aud', label: 'Empresa' },
           { key: 'cambio-modulo', label: 'Módulo' },
           { key: 'cambio-entidad', label: 'Entidad' },
           { key: 'cambio-registro', label: 'Registro' },
@@ -936,7 +937,7 @@ export const CONFIG_TREE: ConfigNode[] = [
   },
   {
     key: 'sistema', label: 'Sistema',
-    description: 'Apariencia, correo, sesiones, logs y parámetros globales',
+    description: 'Correo, sesiones, logs y parámetros globales',
     children: [
       {
         key: 'general-sistema', label: 'General',
@@ -951,17 +952,6 @@ export const CONFIG_TREE: ConfigNode[] = [
           { key: 'zona-horaria-sistema', label: 'Zona horaria' },
           { key: 'formato-fecha', label: 'Formato de fecha' },
           { key: 'formato-hora', label: 'Formato de hora' },
-        ],
-      },
-      {
-        key: 'apariencia', label: 'Apariencia',
-        children: [
-          { key: 'tema', label: 'Tema', screen: 'tema' },
-          { key: 'colores', label: 'Colores', screen: 'pers-branding' },
-          { key: 'menu-apariencia', label: 'Menú' },
-          { key: 'dashboard-apariencia', label: 'Dashboard', screen: 'pers-dashboard' },
-          { key: 'widgets', label: 'Widgets' },
-          { key: 'branding-empresa', label: 'Branding por empresa', screen: 'pers-branding' },
         ],
       },
       {

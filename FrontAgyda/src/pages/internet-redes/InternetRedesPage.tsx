@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
-  Plus, Wifi, WifiOff, Wrench, Pencil, Trash2, AlertTriangle, CheckCircle2, ListChecks, Router,
+  Plus, Wifi, WifiOff, Wrench, Pencil, Trash2, AlertTriangle, CheckCircle2, ListChecks, Router, Activity,
 } from 'lucide-react'
+import { MonitoreoTab } from './MonitoreoTab'
 import { internetRedesService } from '@/services/internetRedes.service'
 import { useIsADorTI } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
@@ -245,7 +246,7 @@ function IncidentesTab() {
 /* ── Página principal ── */
 export function InternetRedesPage() {
   const isAdmin = useIsADorTI()
-  const [tab, setTab] = useState<'enlaces' | 'incidentes'>('enlaces')
+  const [tab, setTab] = useState<'monitoreo' | 'enlaces' | 'incidentes'>('monitoreo')
   const [showCrear, setShowCrear] = useState(false)
   const [editando, setEditando] = useState<Enlace | null>(null)
   const [confirmEliminar, setConfirmEliminar] = useState<Enlace | null>(null)
@@ -296,6 +297,12 @@ export function InternetRedesPage() {
 
       <div className="flex gap-1 border-b border-gray-100">
         <button
+          onClick={() => setTab('monitoreo')}
+          className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'monitoreo' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
+        >
+          <Activity className="h-3.5 w-3.5" /> Monitoreo en vivo
+        </button>
+        <button
           onClick={() => setTab('enlaces')}
           className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'enlaces' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
         >
@@ -309,7 +316,9 @@ export function InternetRedesPage() {
         </button>
       </div>
 
-      {tab === 'incidentes' ? (
+      {tab === 'monitoreo' ? (
+        <MonitoreoTab />
+      ) : tab === 'incidentes' ? (
         <IncidentesTab />
       ) : isLoading ? (
         <div className="flex justify-center py-16"><Spinner size="lg" /></div>

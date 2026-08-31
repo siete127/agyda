@@ -86,6 +86,35 @@ async function getOtroMiembroDM(pool, canalId, userId) {
   return r.recordset[0] || null;
 }
 
+const SELECT_REACCION = `
+  SELECT
+    r.MMR_ID as id,
+    r.MMR_MENSAJE_ID as mensajeId,
+    r.MMR_USUARIO_ID as usuarioId,
+    u.NEUS_NOMBRES as usuarioNombre,
+    r.MMR_EMOJI as emoji
+  FROM dbo.MSJ_MENSAJE_REACCIONES r
+  JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = r.MMR_USUARIO_ID
+`;
+
+// Trae las reacciones de un lote de mensajes y las agrupa por mensajeId —
+// se usa para anexarlas a la lista de mensajes sin complicar el paginado.
+async function getReaccionesPorMensajes(pool, mensajeIds) {
+  if (!mensajeIds.length) return {};
+  const request = pool.request();
+  const placeholders = mensajeIds.map((id, i) => {
+    request.input(`mid${i}`, sql.Int, id);
+    return `@mid${i}`;
+  }).join(',');
+  const r = await request.query(`${SELECT_REACCION} WHERE r.MMR_MENSAJE_ID IN (${placeholders})`);
+  const porMensaje = {};
+  for (const row of r.recordset) {
+    if (!porMensaje[row.mensajeId]) porMensaje[row.mensajeId] = [];
+    porMensaje[row.mensajeId].push({ id: row.id, usuarioId: row.usuarioId, usuarioNombre: row.usuarioNombre, emoji: row.emoji });
+  }
+  return porMensaje;
+}
+
 function emitirATodos(miembrosIds, canalId, evento, payload, tenantKey) {
   try {
     const io = socketService.getIO(tenantKey);
@@ -399,7 +428,11 @@ exports.getMensajes = async (req, res) => {
     `);
 
     // Se pide DESC para paginar por cursor, pero se devuelve cronológico (ascendente) al cliente.
-    res.json({ success: true, data: result.recordset.reverse() });
+    const mensajes = result.recordset.reverse();
+    const reacciones = await getReaccionesPorMensajes(pool, mensajes.map((m) => m.id));
+    for (const m of mensajes) m.reacciones = reacciones[m.id] || [];
+
+    res.json({ success: true, data: mensajes });
   } catch (error) {
     console.error('Error obteniendo mensajes:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -423,7 +456,7 @@ exports.enviarMensaje = async (req, res) => {
     const insert = await pool.request()
       .input('canalId', sql.Int, canalId)
       .input('emisorId', sql.Int, userId)
-      .input('contenido', sql.NVarChar, contenido ? String(contenido) : '')
+      .input('contenido', sql.NVarChar, contenido ? String(contenido).trim() : '')
       .input('archivoUrl', sql.NVarChar, archivoUrl || null)
       .query(`
         INSERT INTO dbo.MSJ_MENSAJES (MM_CANAL_ID, MM_EMISOR_ID, MM_CONTENIDO, MM_ARCHIVO_URL)
@@ -440,6 +473,7 @@ exports.enviarMensaje = async (req, res) => {
       .input('id', sql.Int, mensajeId)
       .query(`${SELECT_MENSAJE} WHERE m.MM_ID = @id`);
     const data = mensajeRs.recordset[0];
+    data.reacciones = [];
 
     const miembrosIds = await getMiembrosIds(pool, canalId);
     emitirATodos(miembrosIds, canalId, 'mensajeria:nuevo_mensaje', data, req.user?.empresa);
@@ -705,6 +739,163 @@ exports.adjuntarDesdeDrive = async (req, res) => {
     res.json({ success: true, data: { url, nombreOriginal: nombreFinal, tamano: fs.statSync(destinoPath).size } });
   } catch (error) {
     console.error('Error adjuntando archivo desde Drive:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Devuelve MM_CANAL_ID del mensaje, o null si no existe — para validar membresía
+// sin depender de que el cliente mande el canalId correcto en la URL.
+async function getCanalIdDeMensaje(pool, mensajeId) {
+  const r = await pool.request()
+    .input('mid', sql.Int, mensajeId)
+    .query('SELECT MM_CANAL_ID as canalId FROM dbo.MSJ_MENSAJES WHERE MM_ID = @mid');
+  return r.recordset[0]?.canalId ?? null;
+}
+
+// Solo el autor del mensaje puede editarlo o eliminarlo — devuelve el mensaje
+// (canalId + emisorId) o null si no existe.
+async function getMensajeParaEdicion(pool, mensajeId) {
+  const r = await pool.request()
+    .input('mid', sql.Int, mensajeId)
+    .query('SELECT MM_CANAL_ID as canalId, MM_EMISOR_ID as emisorId FROM dbo.MSJ_MENSAJES WHERE MM_ID = @mid');
+  return r.recordset[0] ?? null;
+}
+
+// Autenticado + autor del mensaje — edita el contenido de texto (no toca adjuntos).
+exports.editarMensaje = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mensajeId = Number(req.params.mensajeId);
+    const { contenido } = req.body;
+    if (!contenido || !String(contenido).trim()) {
+      return res.status(400).json({ success: false, message: 'El mensaje no puede quedar vacío' });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const mensaje = await getMensajeParaEdicion(pool, mensajeId);
+    if (!mensaje) return res.status(404).json({ success: false, message: 'Mensaje no encontrado' });
+    if (mensaje.emisorId !== userId) return res.status(403).json({ success: false, message: 'Solo puedes editar tus propios mensajes' });
+
+    await pool.request()
+      .input('id', sql.Int, mensajeId)
+      .input('contenido', sql.NVarChar, String(contenido).trim())
+      .query('UPDATE dbo.MSJ_MENSAJES SET MM_CONTENIDO = @contenido, MM_EDITADO = 1 WHERE MM_ID = @id');
+
+    const mensajeRs = await pool.request()
+      .input('id', sql.Int, mensajeId)
+      .query(`${SELECT_MENSAJE} WHERE m.MM_ID = @id`);
+    const data = mensajeRs.recordset[0];
+    const reacciones = await getReaccionesPorMensajes(pool, [mensajeId]);
+    data.reacciones = reacciones[mensajeId] || [];
+
+    const miembrosIds = await getMiembrosIds(pool, mensaje.canalId);
+    emitirATodos(miembrosIds, mensaje.canalId, 'mensajeria:mensaje_editado', data, req.user?.empresa);
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error editando mensaje:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Autenticado + autor del mensaje — borrado real (desaparece para ambos).
+exports.eliminarMensaje = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mensajeId = Number(req.params.mensajeId);
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const mensaje = await getMensajeParaEdicion(pool, mensajeId);
+    if (!mensaje) return res.status(404).json({ success: false, message: 'Mensaje no encontrado' });
+    if (mensaje.emisorId !== userId) return res.status(403).json({ success: false, message: 'Solo puedes eliminar tus propios mensajes' });
+
+    await pool.request()
+      .input('id', sql.Int, mensajeId)
+      .query('DELETE FROM dbo.MSJ_MENSAJE_REACCIONES WHERE MMR_MENSAJE_ID = @id');
+    await pool.request()
+      .input('id', sql.Int, mensajeId)
+      .query('DELETE FROM dbo.MSJ_MENSAJES WHERE MM_ID = @id');
+
+    const miembrosIds = await getMiembrosIds(pool, mensaje.canalId);
+    emitirATodos(miembrosIds, mensaje.canalId, 'mensajeria:mensaje_eliminado', { mensajeId, canalId: mensaje.canalId }, req.user?.empresa);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error eliminando mensaje:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Autenticado + miembro — agrega o reemplaza la reacción del usuario a un
+// mensaje (una sola reacción activa por usuario y mensaje, como WhatsApp).
+exports.reaccionarMensaje = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mensajeId = Number(req.params.mensajeId);
+    const { emoji } = req.body;
+    if (!emoji || !String(emoji).trim()) {
+      return res.status(400).json({ success: false, message: 'Falta el emoji' });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const canalId = await getCanalIdDeMensaje(pool, mensajeId);
+    if (!canalId) return res.status(404).json({ success: false, message: 'Mensaje no encontrado' });
+    if (!(await assertMiembro(req, res, pool, canalId, userId))) return;
+
+    await pool.request()
+      .input('mensajeId', sql.Int, mensajeId)
+      .input('usuarioId', sql.Int, userId)
+      .input('emoji', sql.NVarChar, String(emoji).trim())
+      .query(`
+        MERGE dbo.MSJ_MENSAJE_REACCIONES AS target
+        USING (SELECT @mensajeId AS mensajeId, @usuarioId AS usuarioId) AS src
+          ON target.MMR_MENSAJE_ID = src.mensajeId AND target.MMR_USUARIO_ID = src.usuarioId
+        WHEN MATCHED THEN UPDATE SET MMR_EMOJI = @emoji, MMR_FECHA = GETDATE()
+        WHEN NOT MATCHED THEN INSERT (MMR_MENSAJE_ID, MMR_USUARIO_ID, MMR_EMOJI) VALUES (@mensajeId, @usuarioId, @emoji);
+      `);
+
+    const reaccionesRs = await pool.request()
+      .input('mensajeId', sql.Int, mensajeId)
+      .query(`${SELECT_REACCION} WHERE r.MMR_MENSAJE_ID = @mensajeId`);
+    const reacciones = reaccionesRs.recordset.map((row) => ({ id: row.id, usuarioId: row.usuarioId, usuarioNombre: row.usuarioNombre, emoji: row.emoji }));
+
+    const miembrosIds = await getMiembrosIds(pool, canalId);
+    emitirATodos(miembrosIds, canalId, 'mensajeria:reaccion', { mensajeId, canalId, reacciones }, req.user?.empresa);
+
+    res.json({ success: true, data: reacciones });
+  } catch (error) {
+    console.error('Error agregando reacción:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Autenticado + miembro — quita la reacción propia de un mensaje.
+exports.quitarReaccion = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mensajeId = Number(req.params.mensajeId);
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const canalId = await getCanalIdDeMensaje(pool, mensajeId);
+    if (!canalId) return res.status(404).json({ success: false, message: 'Mensaje no encontrado' });
+    if (!(await assertMiembro(req, res, pool, canalId, userId))) return;
+
+    await pool.request()
+      .input('mensajeId', sql.Int, mensajeId)
+      .input('usuarioId', sql.Int, userId)
+      .query('DELETE FROM dbo.MSJ_MENSAJE_REACCIONES WHERE MMR_MENSAJE_ID = @mensajeId AND MMR_USUARIO_ID = @usuarioId');
+
+    const reaccionesRs = await pool.request()
+      .input('mensajeId', sql.Int, mensajeId)
+      .query(`${SELECT_REACCION} WHERE r.MMR_MENSAJE_ID = @mensajeId`);
+    const reacciones = reaccionesRs.recordset.map((row) => ({ id: row.id, usuarioId: row.usuarioId, usuarioNombre: row.usuarioNombre, emoji: row.emoji }));
+
+    const miembrosIds = await getMiembrosIds(pool, canalId);
+    emitirATodos(miembrosIds, canalId, 'mensajeria:reaccion', { mensajeId, canalId, reacciones }, req.user?.empresa);
+
+    res.json({ success: true, data: reacciones });
+  } catch (error) {
+    console.error('Error quitando reacción:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

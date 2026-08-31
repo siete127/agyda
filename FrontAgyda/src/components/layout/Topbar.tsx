@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, HelpCircle, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { NotificationBell } from './NotificationBell'
 import { MensajeriaBell } from './MensajeriaBell'
+import { PerfilMenu } from './PerfilMenu'
 import { getRouteLabel, ROUTES } from '@/router/routes.config'
 import { type Ticket } from '@/types/ticket.types'
 import { type Noticia } from '@/types/noticia.types'
@@ -13,6 +14,7 @@ import logoAgyda from '@/assets/Logo_AGYDA.png'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { personalizacionService } from '@/services/personalizacion.service'
 import { useThemeStore } from '@/stores/theme.store'
+import { clsx } from 'clsx'
 
 interface SearchResult {
   id: string
@@ -25,11 +27,16 @@ interface SearchResult {
 
 export function Topbar() {
   const { sidebarCollapsed, toggleSidebar, setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
+  const dashboardEditMode = useUIStore((s) => s.dashboardEditMode)
+  const setDashboardEditMode = useUIStore((s) => s.setDashboardEditMode)
   const user = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const pageTitle = getRouteLabel(location.pathname)
+
+  // El botón "Editar diseño" es fijo mientras estás en el Inicio.
+  const enInicio = location.pathname === '/dashboard'
 
   const handleSwitchSystem = () => {
     navigate('/ventas')
@@ -267,6 +274,22 @@ export function Topbar() {
       {/* Derecha: notificaciones + perfil */}
       <div className="ml-auto flex items-center gap-2.5">
 
+        {/* "Editar diseño" del inicio — fijo mientras estás en la portada */}
+        {enInicio && (
+          <button
+            onClick={() => setDashboardEditMode(!dashboardEditMode)}
+            className={clsx(
+              'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.72rem] font-semibold transition-colors',
+              dashboardEditMode
+                ? 'border-brand bg-brand text-white hover:bg-brand-dark'
+                : 'border-brand/40 bg-brand/10 text-brand hover:bg-brand/15',
+            )}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            {dashboardEditMode ? 'Salir de edición' : 'Editar diseño'}
+          </button>
+        )}
+
         {/* Botones del encabezado — configurables por empresa (Configuración →
             Apariencia → Botones del encabezado). URL vacía = acción interna. */}
         {botonesVisibles.map((b) => {
@@ -301,9 +324,7 @@ export function Topbar() {
           <ThemeIcon className="h-[18px] w-[18px]" />
         </button>
 
-        <button className="hidden text-ink-tertiary hover:text-ink-secondary transition-colors sm:flex" title="Ayuda">
-          <HelpCircle className="h-[19px] w-[19px]" />
-        </button>
+        <PerfilMenu />
       </div>
     </header>
 

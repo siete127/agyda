@@ -55,12 +55,22 @@ async function buscarReglaAplicable(pool, { area, categoriaId, subcategoriaId, s
   return null;
 }
 
-function horaActualEnRango(inicio, fin) {
-  if (!inicio || !fin) return true; // sin restricción
+// sabadoInicio/sabadoFin son opcionales — solo los pasan los candidatos a
+// técnico (TI_STAFF_STATUS), no las reglas (TI_REGLAS_ASIGNACION), que no
+// tienen ese concepto. Si hoy es sábado y el técnico tiene su propio horario
+// de sábado configurado, ese horario reemplaza al general (inicio/fin);
+// mismo patrón ya usado en LIVECHAT_CONFIG (LCF_SABADO_HORARIO_*).
+function horaActualEnRango(inicio, fin, sabadoInicio = null, sabadoFin = null) {
+  const esSabado = new Date().getDay() === 6;
+  const usaHorarioSabado = esSabado && sabadoInicio && sabadoFin;
+  const horaInicioEfectiva = usaHorarioSabado ? sabadoInicio : inicio;
+  const horaFinEfectiva = usaHorarioSabado ? sabadoFin : fin;
+
+  if (!horaInicioEfectiva || !horaFinEfectiva) return true; // sin restricción
   const ahora = new Date();
   const hhmm = ahora.getHours() * 60 + ahora.getMinutes();
-  const [hi, mi] = String(inicio).split(':').map(Number);
-  const [hf, mf] = String(fin).split(':').map(Number);
+  const [hi, mi] = String(horaInicioEfectiva).split(':').map(Number);
+  const [hf, mf] = String(horaFinEfectiva).split(':').map(Number);
   const inicioMin = hi * 60 + (mi || 0);
   const finMin = hf * 60 + (mf || 0);
   return hhmm >= inicioMin && hhmm <= finMin;
@@ -151,6 +161,8 @@ async function asignarTecnico(pool, {
              s.PRIORIDADES_PERMITIDAS as prioridadesPermitidas,
              CONVERT(varchar(5), s.HORARIO_INICIO, 108) as horarioInicio,
              CONVERT(varchar(5), s.HORARIO_FIN, 108) as horarioFin,
+             CONVERT(varchar(5), s.HORARIO_SABADO_INICIO, 108) as horarioSabadoInicio,
+             CONVERT(varchar(5), s.HORARIO_SABADO_FIN, 108) as horarioSabadoFin,
              s.DIAS_SEMANA as diasSemana, s.LAST_ASSIGNED_AT as lastAssignedAt
       FROM NEUS_USUARIOS u
       INNER JOIN TI_STAFF_STATUS s ON s.USER_ID = u.NEUS_ID
@@ -164,7 +176,7 @@ async function asignarTecnico(pool, {
   let candidatos = rs.recordset;
 
   // Filtro de horario/día (NULL = sin restricción)
-  candidatos = candidatos.filter((c) => horaActualEnRango(c.horarioInicio, c.horarioFin) && diaActualPermitido(c.diasSemana));
+  candidatos = candidatos.filter((c) => horaActualEnRango(c.horarioInicio, c.horarioFin, c.horarioSabadoInicio, c.horarioSabadoFin) && diaActualPermitido(c.diasSemana));
 
   // Filtro de prioridades permitidas (NULL o CSV vacío = todas)
   if (prioridad) {

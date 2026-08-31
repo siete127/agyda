@@ -3,6 +3,7 @@ const http = require('http');
 let socketService;
 try { socketService = require('./socketService'); } catch (e) { socketService = null; }
 const pushService = require('./pushService');
+const emailService = require('./emailService');
 const logger = global.logger || require('../utils/logger');
 
 // Tipos de notificación que valen la pena empujar como push del navegador
@@ -12,6 +13,14 @@ const TIPOS_CON_PUSH = new Set([
   'ticket_sla_riesgo', 'ticket_sla_vencido', 'ticket_reabierto',
   'livechat_espera_escalada', 'ticket_estado',
 ]);
+
+// Tipos que además ameritan correo electrónico al técnico — solo el
+// evento más importante (asignación) y los dos de SLA (riesgo/vencido).
+// Deliberadamente NO se incluyen comentarios/transferencias/etc. para no
+// saturar la bandeja del técnico; esos ya se ven en la notificación interna
+// y el push. Requiere que el usuario tenga NEUS_CORREO registrado — si no
+// lo tiene, se omite en silencio (no bloquea nada más).
+const TIPOS_CON_CORREO = new Set(['ticket_nuevo', 'ticket_sla_riesgo', 'ticket_sla_vencido']);
 
 // Relay: emitir al back-intra (puerto 8446) que tiene el socket con los clientes reales
 function relayEmit(room, event, payload) {
@@ -93,6 +102,34 @@ const notificationService = {
         });
       } catch (e) {
         logger.warn('⚠️ Error enviando push para notificación:', e?.message || e);
+      }
+    }
+
+    // Correo electrónico al técnico: solo asignación de ticket + SLA en
+    // riesgo/vencido (ver TIPOS_CON_CORREO). Si el usuario no tiene correo
+    // registrado, se omite en silencio — no bloquea ni afecta el resto.
+    const ticketId = dataExtra && dataExtra.ticketId ? Number(dataExtra.ticketId) : null;
+    if (TIPOS_CON_CORREO.has(tipo) && ticketId) {
+      try {
+        const rsUser = await pool.request().input('uid', sql.Int, usuarioId)
+          .query(`SELECT NEUS_NOMBRES as nombre, NEUS_CORREO as correo FROM NEUS_USUARIOS WHERE NEUS_ID=@uid`);
+        const destino = rsUser.recordset[0];
+        if (destino?.correo) {
+          const rsTicket = await pool.request().input('tid', sql.Int, ticketId)
+            .query(`SELECT TITULO as titulo, PRIORIDAD as prioridad FROM TICKETS WHERE TICKET_ID=@tid`);
+          const ticket = rsTicket.recordset[0];
+          await emailService.sendTicketNotificacionEmail({
+            to: destino.correo,
+            nombreTecnico: destino.nombre,
+            ticketId,
+            tituloTicket: ticket?.titulo || null,
+            prioridad: ticket?.prioridad || null,
+            mensaje,
+            tipo,
+          });
+        }
+      } catch (e) {
+        logger.warn('⚠️ Error enviando correo de notificación de ticket:', e?.message || e);
       }
     }
 

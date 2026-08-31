@@ -166,6 +166,38 @@ exports.getPausaActiva = async (req, res) => {
   }
 };
 
+// GET /api/reports/pausa/hoy — total de segundos por estado consumidos HOY por
+// el usuario autenticado (incluye la sesión abierta hasta ahora). Se usa para
+// que el cronómetro del menú de perfil arranque en el acumulado del día.
+exports.getPausaHoy = async (req, res) => {
+  try {
+    const neusId = req.user?.id;
+    if (!neusId) return res.status(400).json({ success: false });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request()
+      .input('neusId', sql.Int, neusId)
+      .query(`
+        SELECT ut.status_id,
+          SUM(DATEDIFF(SECOND, ut.fecha_inicio, ISNULL(ut.fecha_fin, GETDATE()))) AS totalSegundos
+        FROM USUARIO_TIEMPOS ut
+        WHERE ut.neus_id = @neusId
+          AND ut.status_id IN (2, 3, 5, 6)
+          AND CAST(ut.fecha_inicio AS DATE) = CAST(GETDATE() AS DATE)
+        GROUP BY ut.status_id
+      `);
+
+    // { "2": 45, "3": 552, "5": 2, "6": 0 }
+    const porEstado = { 2: 0, 3: 0, 5: 0, 6: 0 };
+    for (const r of result.recordset) porEstado[r.status_id] = Math.max(0, r.totalSegundos || 0);
+
+    return res.json({ success: true, data: porEstado });
+  } catch (e) {
+    console.error('Error getPausaHoy:', e?.message);
+    return res.json({ success: true, data: { 2: 0, 3: 0, 5: 0, 6: 0 } });
+  }
+};
+
 // GET /api/reports/resumen-general?from=&to=&rol= — resumen consolidado por colaborador (solo AD)
 exports.getResumenGeneral = async (req, res) => {
   try {

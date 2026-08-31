@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 interface Track {
   id: number
@@ -13,6 +14,10 @@ interface MusicStore {
   tracks: Track[]
   setTracks: (t: Track[]) => void
 
+  // Visibilidad de la burbuja flotante (por dispositivo, persistida)
+  bubbleVisible: boolean
+  setBubbleVisible: (v: boolean) => void
+
   // Reproducción
   currentTrack: Track | null
   isPlaying: boolean
@@ -26,9 +31,12 @@ interface MusicStore {
   prev: () => void
 }
 
-export const useMusicStore = create<MusicStore>((set, get) => ({
+export const useMusicStore = create<MusicStore>()(persist((set, get) => ({
   tracks: [],
   setTracks: (tracks) => set({ tracks }),
+
+  bubbleVisible: true,
+  setBubbleVisible: (v) => set({ bubbleVisible: v }),
 
   currentTrack: null,
   isPlaying: false,
@@ -84,4 +92,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     const prev = tracks[idx - 1] ?? tracks[tracks.length - 1]
     if (prev) get().play(prev)
   },
+}), {
+  name: 'music-store',
+  partialize: (s) => ({ bubbleVisible: s.bubbleVisible }),
 }))

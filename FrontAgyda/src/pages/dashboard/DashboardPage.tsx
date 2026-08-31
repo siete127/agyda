@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useSocketStore } from '@/stores/socket.store'
+import { useUIStore } from '@/stores/ui.store'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   LifeBuoy, HardDrive,
   Newspaper, Megaphone, CheckSquare, FolderOpen as FolderOpenIcon, Quote, Lightbulb,
   Music2, Clock,
-  Target, Eye, Heart, Scale, ChevronRight, ChevronDown,
+  Target, Eye, Heart, Scale, ChevronRight,
   X, FileText, Loader2, Upload, Trash2, Gift, Calendar,
   PlaneTakeoff, LayoutGrid, Plus, GripVertical, EyeOff, Check,
 } from 'lucide-react'
@@ -22,10 +23,11 @@ import { ticketsService } from '@/services/tickets.service'
 import { proyectosService } from '@/services/proyectos.service'
 import { NoticiaDetalle } from '@/pages/noticias/NoticiasPage'
 import { type Noticia } from '@/types/noticia.types'
-import { Avatar } from '@/components/ui/Avatar'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
 import { personalizacionService, type DashboardCard } from '@/services/personalizacion.service'
+import { RESUMEN_CARDS } from './resumenCards'
+import { CARD_CATALOG_INDEX } from './cardCatalog'
 
 /* ─── Empresa ───────────────────────────────────────────────── */
 type EmpresaKey = 'mision' | 'vision' | 'valores' | 'legales'
@@ -340,14 +342,6 @@ export function DashboardPage() {
               <span className={clsx('h-1.5 w-1.5 rounded-full', isConnected ? 'bg-success animate-pulse' : 'bg-ink-tertiary')} />
               {isConnected ? 'En línea' : 'Sin conexión'}
             </span>
-            {user && (
-              <Link to="/perfil"
-                className="flex flex-shrink-0 items-center gap-2 rounded-full border border-surface-border pl-1 pr-3 py-1 group hover:border-brand/30 hover:bg-brand-light transition-colors">
-                <Avatar src={user.perfilFotoUrl} name={user.nombres} size="sm" ring="brand" />
-                <p className="hidden text-[0.78rem] font-semibold text-ink group-hover:text-brand transition-colors sm:block">Perfil</p>
-                <ChevronDown className="hidden h-3.5 w-3.5 text-ink-tertiary group-hover:text-brand transition-colors sm:block" />
-              </Link>
-            )}
           </div>
         </div>
       ),
@@ -589,9 +583,16 @@ export function DashboardPage() {
     },
   }
 
+  // Cards de resumen de módulos (catálogo). Solo se registran las de módulos
+  // que la empresa tiene activos — el resto ni siquiera se instancian.
+  for (const rc of RESUMEN_CARDS) {
+    if (rc.moduleKey && !isAllowed(rc.moduleKey)) continue
+    CARDS[rc.id] = { label: rc.titulo, node: rc.render() }
+  }
+
   return (
     <>
-      <DashboardGrid cards={CARDS} isAdmin={isAdmin} />
+      <DashboardGrid cards={CARDS} />
       {selected && <NoticiaDetalle noticia={selected} onClose={() => setSelected(null)} />}
       {empresaModal && <EmpresaModal empresaKey={empresaModal} isAdmin={isAdmin} onClose={() => setEmpresaModal(null)} />}
     </>
@@ -604,22 +605,33 @@ export function DashboardPage() {
 const ROW_H = 64
 const COLS = 12
 
-function DashboardGrid({ cards, isAdmin }: {
+function DashboardGrid({ cards }: {
   cards: Record<string, { label: string; node: React.ReactNode }>
-  isAdmin: boolean
 }) {
   const qc = useQueryClient()
   const { dashboard } = usePersonalizacion()
   const { width, containerRef } = useContainerWidth()
 
+  // El editor se controla desde el topbar (botón "Editar diseño", armado en
+  // Configuración → Diseño del inicio). Aquí solo se lee/reacciona.
+  const editando = useUIStore((s) => s.dashboardEditMode)
+  const setEditMode = useUIStore((s) => s.setDashboardEditMode)
+  const setEditArmed = useUIStore((s) => s.setDashboardEditArmed)
+  const salirEdicion = () => { setEditMode(false); setEditArmed(false) }
+
   const guardada = dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT
 
-  const [editando, setEditando] = useState(false)
   const [draft, setDraft] = useState<DashboardCard[]>(guardada)
   const [seed, setSeed] = useState(guardada)
   if (dashboard.cards !== seed && !editando) {
     setSeed(dashboard.cards)
     setDraft(dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT)
+  }
+  // Al entrar en modo edición, sembrar el borrador con lo guardado.
+  const [prevEditando, setPrevEditando] = useState(editando)
+  if (editando !== prevEditando) {
+    setPrevEditando(editando)
+    if (editando) setDraft(dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT)
   }
 
   const activos = editando ? draft : guardada
@@ -636,7 +648,7 @@ function DashboardGrid({ cards, isAdmin }: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['personalizacion'] })
       toast.success('Diseño del inicio guardado')
-      setEditando(false)
+      salirEdicion()
     },
     onError: () => toast.error('No se pudo guardar el diseño'),
   })
@@ -654,43 +666,28 @@ function DashboardGrid({ cards, isAdmin }: {
       const exists = prev.some((c) => c.id === id)
       if (exists) return prev.map((c) => (c.id === id ? { ...c, visible } : c))
       const def = DASHBOARD_DEFAULT.find((c) => c.id === id)
-      return [...prev, { ...(def ?? { id, x: 0, y: 99, w: 4, h: 3 }), visible }]
+      const cat = CARD_CATALOG_INDEX[id]
+      const base = def ?? { id, x: 0, y: 99, w: cat?.size.w ?? 4, h: cat?.size.h ?? 3 }
+      return [...prev, { ...base, visible }]
     })
-
-  const iniciarEdicion = () => {
-    setDraft(dashboard.cards.length > 0 ? dashboard.cards : DASHBOARD_DEFAULT)
-    setEditando(true)
-  }
 
   return (
     <div className="animate-fade-in" ref={containerRef}>
-      {/* Toolbar de edición */}
-      {isAdmin && (
-        <div className={clsx(
-          'mb-4 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-[0.78rem]',
-          editando ? 'border-brand/30 bg-brand/[0.04]' : 'border-transparent',
-        )}>
-          {editando ? (
-            <>
-              <GripVertical className="h-4 w-4 text-ink-tertiary" />
-              <span className="text-ink-tertiary">Arrastra las tarjetas para moverlas; la esquina inferior derecha para redimensionarlas.</span>
-              <div className="ml-auto flex items-center gap-2">
-                <button onClick={() => setEditando(false)}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold text-ink-tertiary hover:bg-gray-100">
-                  <X className="h-3.5 w-3.5" /> Cancelar
-                </button>
-                <button onClick={() => guardar.mutate()} disabled={guardar.isPending}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-semibold text-white hover:bg-brand-dark disabled:opacity-60">
-                  {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar diseño
-                </button>
-              </div>
-            </>
-          ) : (
-            <button onClick={iniciarEdicion}
-              className="ml-auto flex items-center gap-1.5 rounded-lg border border-surface-border bg-card px-3 py-1.5 font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors">
-              <LayoutGrid className="h-3.5 w-3.5" /> Editar diseño
+      {/* Toolbar — solo mientras se edita (el botón para entrar vive en el topbar) */}
+      {editando && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand/30 bg-brand/[0.04] px-3 py-2 text-[0.78rem]">
+          <GripVertical className="h-4 w-4 text-ink-tertiary" />
+          <span className="text-ink-tertiary">Arrastra las tarjetas para moverlas; la esquina inferior derecha para redimensionarlas.</span>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={salirEdicion}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold text-ink-tertiary hover:bg-gray-100">
+              <X className="h-3.5 w-3.5" /> Cancelar
             </button>
-          )}
+            <button onClick={() => guardar.mutate()} disabled={guardar.isPending}
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-semibold text-white hover:bg-brand-dark disabled:opacity-60">
+              {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar diseño
+            </button>
+          </div>
         </div>
       )}
 
@@ -713,7 +710,7 @@ function DashboardGrid({ cards, isAdmin }: {
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-surface-border bg-card py-16 text-center">
           <LayoutGrid className="h-7 w-7 text-ink-tertiary" />
           <p className="text-sm font-semibold text-ink-secondary">Sin tarjetas en el inicio</p>
-          {isAdmin && <p className="text-[0.75rem] text-ink-tertiary">Pulsa "Editar diseño" para agregar tarjetas.</p>}
+          <p className="text-[0.75rem] text-ink-tertiary">Un administrador puede agregarlas desde Configuración → Diseño del inicio.</p>
         </div>
       ) : width > 0 && width < 768 && !editando ? (
         /* Móvil: pila vertical según el orden guardado (y, x). El editor sigue

@@ -4,6 +4,11 @@ const kbController = require('../controllers/kbController');
 const { authenticateToken } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
 
+// Público (sin sesión) — la página institucional consume esto para que
+// cualquier visitante busque soluciones por su cuenta.
+router.get('/publicos', kbController.getArticulosPublicos);
+router.get('/publicos/:id', kbController.getArticuloPublicoById);
+
 router.use(authenticateToken);
 
 router.get('/articulos', requireActionAccess('tickets', 'ver'), kbController.getArticulos);

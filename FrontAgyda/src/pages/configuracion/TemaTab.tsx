@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Palette, Sun, Moon, MonitorSmartphone, Check, Loader2, RotateCcw } from 'lucide-react'
+import { Palette, Sun, Moon, MonitorSmartphone, Check, Loader2, RotateCcw, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/auth.store'
 import { useThemeStore, type Theme } from '@/stores/theme.store'
 import { personalizacionService } from '@/services/personalizacion.service'
 import { PALETTES, paletteFromColor } from '@/lib/palettes'
+import { THEME_PRESETS, presetMatchesBranding, type ThemePreset } from '@/lib/themePresets'
 
 /* ── Badge numerado (púrpura, como el mockup) ── */
 function SeccionNum({ n, titulo, subtitulo }: { n: number; titulo: string; subtitulo: string }) {
@@ -56,6 +57,34 @@ function MiniMockup({ variant }: { variant: 'light' | 'dark' | 'split' }) {
   )
 }
 
+/* ── Mini-ilustración de una plantilla ── */
+function PresetMockup({ p }: { p: ThemePreset }) {
+  const modoIcon = p.modo === 'light' ? '☀' : p.modo === 'dark' ? '☾' : '⌘'
+  return (
+    <div
+      className="flex h-[92px] w-full overflow-hidden rounded-lg border border-black/5"
+      style={{ background: p.preview.fondo }}
+    >
+      <div className="flex w-7 flex-shrink-0 flex-col gap-1 p-1.5" style={{ background: p.preview.sidebar }}>
+        <span className="h-1 w-full rounded" style={{ background: 'rgba(255,255,255,0.3)' }} />
+        <span className="h-1 w-full rounded" style={{ background: 'rgba(255,255,255,0.18)' }} />
+        <span className="h-1 w-full rounded" style={{ background: 'rgba(255,255,255,0.18)' }} />
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 p-2">
+        <div className="flex items-center justify-between">
+          <span className="h-2 w-8 rounded" style={{ background: p.preview.acento }} />
+          <span className="text-[0.6rem] leading-none" style={{ color: p.preview.texto }}>{modoIcon}</span>
+        </div>
+        <div className="h-full rounded" style={{ background: p.preview.card }} />
+        <div className="flex gap-1.5">
+          <div className="h-5 flex-1 rounded" style={{ background: p.preview.card }} />
+          <div className="h-5 w-8 rounded" style={{ background: p.preview.acento }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const MODOS: { key: Theme; label: string; icon: React.ElementType; desc: string; mockup: 'light' | 'dark' | 'split' }[] = [
   { key: 'light',  label: 'Claro',      icon: Sun,               desc: 'Siempre claro',                 mockup: 'light' },
   { key: 'dark',   label: 'Oscuro',     icon: Moon,              desc: 'Siempre oscuro',                mockup: 'dark' },
@@ -100,6 +129,35 @@ export function TemaTab() {
   const colorActual = data?.branding.colorBrand ?? '#2F6FED'
   const paletaActual = paletteFromColor(colorActual)
 
+  const branding = data?.branding
+  const presetActivo = branding
+    ? THEME_PRESETS.find((p) => p.modo === themeGuardado && presetMatchesBranding(p, branding))
+    : undefined
+
+  const [aplicandoPreset, setAplicandoPreset] = useState<string | null>(null)
+  const aplicarPreset = useMutation({
+    mutationFn: async (preset: ThemePreset) => {
+      setAplicandoPreset(preset.key)
+      // Modo → por dispositivo
+      setPendiente(null)
+      setTheme(preset.modo)
+      // Branding → por empresa (solo si es admin)
+      if (esAdmin && branding) {
+        await personalizacionService.updateBranding({ ...branding, ...preset.branding })
+      }
+    },
+    onSuccess: (_d, preset) => {
+      qc.invalidateQueries({ queryKey: ['personalizacion'] })
+      toast.success(
+        esAdmin
+          ? `Plantilla "${preset.nombre}" aplicada a la empresa`
+          : `Modo de "${preset.nombre}" aplicado en este dispositivo`,
+      )
+    },
+    onError: () => toast.error('No se pudo aplicar la plantilla'),
+    onSettled: () => setAplicandoPreset(null),
+  })
+
   const [aplicando, setAplicando] = useState<string | null>(null)
   const aplicarPaleta = useMutation({
     mutationFn: async (color: string) => {
@@ -124,6 +182,52 @@ export function TemaTab() {
         <div>
           <h2 className="text-[1.35rem] font-bold text-gray-900">Tema</h2>
           <p className="text-[0.82rem] text-gray-400">Modo claro/oscuro y paleta de color de la marca.</p>
+        </div>
+      </div>
+
+      {/* Plantillas de diseño */}
+      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-[0.95rem] font-bold text-gray-900">Plantillas de diseño</p>
+            <p className="text-[0.78rem] text-gray-400">
+              Combinan modo, color, sidebar y fondo de una sola vez.
+              {esAdmin ? ' Se aplican a toda la empresa.' : ' Solo el modo se aplica en tu dispositivo (el resto lo define un administrador).'}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {THEME_PRESETS.map((p) => {
+            const activo = presetActivo?.key === p.key
+            const cargando = aplicandoPreset === p.key
+            return (
+              <button
+                key={p.key}
+                type="button"
+                disabled={aplicarPreset.isPending}
+                onClick={() => aplicarPreset.mutate(p)}
+                className={clsx(
+                  'group flex flex-col gap-2.5 rounded-2xl border p-3 text-left transition-all disabled:opacity-60',
+                  activo ? 'border-violet-500 ring-2 ring-violet-500/20' : 'border-gray-200 hover:border-gray-300',
+                )}
+              >
+                <PresetMockup p={p} />
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[0.82rem] font-bold text-gray-900">{p.nombre}</p>
+                  {cargando && <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />}
+                  {activo && !cargando && (
+                    <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-white">
+                      <Check className="h-3 w-3" />
+                    </span>
+                  )}
+                </div>
+                <p className="text-[0.7rem] leading-snug text-gray-400">{p.descripcion}</p>
+              </button>
+            )
+          })}
         </div>
       </div>
 

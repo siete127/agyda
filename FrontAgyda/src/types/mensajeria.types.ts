@@ -14,6 +14,13 @@ export interface MensajeriaCanal {
   otroUsuarioId: number | null
 }
 
+export interface MensajeriaReaccion {
+  id: number
+  usuarioId: number
+  usuarioNombre: string
+  emoji: string
+}
+
 export interface MensajeriaMensaje {
   id: number
   canalId: number
@@ -23,6 +30,7 @@ export interface MensajeriaMensaje {
   archivoUrl: string | null
   fecha: string
   editado: boolean
+  reacciones: MensajeriaReaccion[]
 }
 
 export interface MensajeriaMiembro {
@@ -80,7 +88,17 @@ export function parseMensajeriaCanal(raw: Record<string, unknown>): MensajeriaCa
   }
 }
 
+export function parseMensajeriaReaccion(raw: Record<string, unknown>): MensajeriaReaccion {
+  return {
+    id: Number(pick(raw, 'id') ?? 0),
+    usuarioId: Number(pick(raw, 'usuarioId') ?? 0),
+    usuarioNombre: String(pick(raw, 'usuarioNombre') ?? ''),
+    emoji: String(pick(raw, 'emoji') ?? ''),
+  }
+}
+
 export function parseMensajeriaMensaje(raw: Record<string, unknown>): MensajeriaMensaje {
+  const reaccionesRaw = pick(raw, 'reacciones')
   return {
     id: Number(pick(raw, 'id') ?? 0),
     canalId: Number(pick(raw, 'canalId') ?? 0),
@@ -90,6 +108,7 @@ export function parseMensajeriaMensaje(raw: Record<string, unknown>): Mensajeria
     archivoUrl: pick(raw, 'archivoUrl') ? String(pick(raw, 'archivoUrl')) : null,
     fecha: String(pick(raw, 'fecha') ?? new Date().toISOString()),
     editado: parseBool(pick(raw, 'editado')),
+    reacciones: Array.isArray(reaccionesRaw) ? (reaccionesRaw as Record<string, unknown>[]).map(parseMensajeriaReaccion) : [],
   }
 }
 

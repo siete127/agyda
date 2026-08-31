@@ -16,5 +16,6 @@ router.get('/banio', authenticateToken, verificarRol(['AD', 'TI', 'admin', 'Admi
 router.post('/pausa/iniciar',  authenticateToken, reportController.iniciarPausa);
 router.post('/pausa/terminar', authenticateToken, reportController.terminarPausa);
 router.get('/pausa/activa',    authenticateToken, reportController.getPausaActiva);
+router.get('/pausa/hoy',       authenticateToken, reportController.getPausaHoy);
 
 module.exports = router;

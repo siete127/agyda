@@ -1290,6 +1290,91 @@ async function sendReporteIndicadoresEmail({ to, periodo, pdfBuffer }) {
 // de este archivo. Se define como función (no exportando `mailer` directo)
 // porque `mailer` se asigna dentro de initialize() después del require() de
 // este módulo — exportar la variable directa congelaría un `undefined`.
+// Correo a un técnico cuando se le asigna un ticket, o cuando el ticket que
+// ya tiene asignado entra en riesgo/vencimiento de SLA. tipo: 'ticket_nuevo' |
+// 'ticket_sla_riesgo' | 'ticket_sla_vencido' — decide encabezado/color/texto.
+const TICKET_EMAIL_PRESET = {
+  ticket_nuevo: { emoji: '🎫', color: '0052FF 0%, #0F2042', titulo: 'Nuevo ticket asignado', accion: 'Ver ticket' },
+  ticket_sla_riesgo: { emoji: '⏰', color: 'D97706 0%, #7C2D12', titulo: 'SLA en riesgo', accion: 'Atender ahora' },
+  ticket_sla_vencido: { emoji: '🚨', color: 'C62828 0%, #7C2D12', titulo: 'SLA vencido', accion: 'Atender ahora' },
+};
+
+async function sendTicketNotificacionEmail({ to, nombreTecnico, ticketId, tituloTicket, prioridad, mensaje, tipo }) {
+  logger.info(`📧 [sendTicketNotificacionEmail] tipo=${tipo} ticket=${ticketId} to=${to}`);
+  try {
+    if (!mailer) {
+      console.warn('⚠️ [sendTicketNotificacionEmail] SMTP no configurado. Email simulado');
+      return;
+    }
+    if (!to || !validateEmail(to)) {
+      console.warn('⚠️ [sendTicketNotificacionEmail] Destino inválido:', to);
+      return;
+    }
+
+    const preset = TICKET_EMAIL_PRESET[tipo] || TICKET_EMAIL_PRESET.ticket_nuevo;
+    const baseRoot = EMAIL_BASE_URL.replace(/\/$/, '');
+    const verUrl = `${baseRoot}/tickets?id=${encodeURIComponent(ticketId)}`;
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${preset.titulo}</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+  <table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f4f4f4;">
+    <tr>
+      <td align="center" style="padding:40px 0;">
+        <table role="presentation" style="width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#${preset.color});padding:30px;text-align:center;border-radius:8px 8px 0 0;">
+              <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:600;">${preset.emoji} ${preset.titulo}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:30px;">
+              <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Hola ${nombreTecnico || ''},</p>
+              <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">${mensaje}</p>
+              <table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f8f9fa;border-radius:6px;margin:16px 0;">
+                <tr><td style="padding:18px;">
+                  <table role="presentation" style="width:100%;border-collapse:collapse;">
+                    <tr><td style="padding:6px 0;color:#666;font-size:13px;width:35%;"><strong>🔢 Ticket:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">#${ticketId}</td></tr>
+                    ${tituloTicket ? `<tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>📋 Título:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${tituloTicket}</td></tr>` : ''}
+                    ${prioridad ? `<tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>⚡ Prioridad:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${prioridad}</td></tr>` : ''}
+                  </table>
+                </td></tr>
+              </table>
+              <div style="margin:24px 0;text-align:center;">
+                <a href="${verUrl}" style="background:#0052FF;color:#fff;text-decoration:none;padding:12px 22px;border-radius:6px;font-weight:600;display:inline-block;">🌐 ${preset.accion}</a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f9fa;padding:20px 30px;text-align:center;border-radius:0 0 8px 8px;border-top:1px solid #e0e0e0;">
+              <p style="margin:0;color:#999;font-size:12px;line-height:1.5;">AGYDA ArdaBytec • Este es un correo automático, por favor no responder.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    const text = `${preset.titulo}\n${mensaje}\nTicket: #${ticketId}${tituloTicket ? '\nTítulo: ' + tituloTicket : ''}${prioridad ? '\nPrioridad: ' + prioridad : ''}\nVer: ${verUrl}`;
+
+    await mailer.sendMail({
+      from: `AGYDA ArdaBytec <${EMAIL_FROM}>`,
+      sender: EMAIL_FROM,
+      replyTo: EMAIL_FROM,
+      to,
+      subject: `[${preset.titulo}] Ticket #${ticketId}${tituloTicket ? ' - ' + tituloTicket : ''}`,
+      text,
+      html,
+    });
+    logger.info(`✅ [sendTicketNotificacionEmail] Enviado a ${to} (ticket #${ticketId}, tipo ${tipo})`);
+  } catch (err) {
+    console.error('❌ [sendTicketNotificacionEmail] Error:', err?.message || err);
+  }
+}
+
 async function sendCorreoGenerico({ to, subject, html, text }) {
   if (!mailer) {
     return { success: false, message: 'SMTP no configurado' };
@@ -1336,5 +1421,6 @@ module.exports = {
   sendCumplimientoVencimientoEmail,
   sendMcVencimientoEmail,
   sendAreaSinReportarEmail,
-  sendReporteIndicadoresEmail
+  sendReporteIndicadoresEmail,
+  sendTicketNotificacionEmail,
 };
