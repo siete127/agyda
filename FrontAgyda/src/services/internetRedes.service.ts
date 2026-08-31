@@ -62,14 +62,15 @@ export const internetRedesService = {
   },
 
   // Descarga el instalador del agente ya preconfigurado para la empresa actual.
-  async descargarAgente(opts: { enlaceId?: number; formato?: 'ps1' | 'exe' } = {}): Promise<void> {
+  async descargarAgente(opts: { enlaceId?: number; formato?: 'ps1' | 'bat' } = {}): Promise<void> {
     const res = await api.get('/tecnologia/red/agente/instalador', {
       params: opts,
       responseType: 'blob',
+      timeout: 60_000,
     })
     const dispo = String(res.headers['content-disposition'] || '')
     const m = dispo.match(/filename="?([^"]+)"?/)
-    const nombre = m ? m[1] : (opts.formato === 'exe' ? 'AgenteRedAGYDA.exe' : 'install-agente-red.ps1')
+    const nombre = m ? m[1] : (opts.formato === 'bat' ? 'Instalar-Agente-Red.bat' : 'install-agente-red.ps1')
     const url = URL.createObjectURL(res.data as Blob)
     const a = document.createElement('a')
     a.href = url

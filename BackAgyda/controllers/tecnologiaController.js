@@ -1,7 +1,5 @@
 const sql = require('mssql');
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
 const logger = global.logger || require('../utils/logger');
@@ -989,13 +987,14 @@ Write-Host "Desinstalar:  Unregister-ScheduledTask -TaskName '$TaskName' -Confir
 `;
 }
 
-// GET /api/tecnologia/red/agente/instalador?enlaceId=&formato=ps1|exe
+// GET /api/tecnologia/red/agente/instalador?enlaceId=&formato=ps1|bat
+// Genera al vuelo el instalador con la API key y la empresa embebidas.
 async function descargarAgente(req, res) {
   try {
     const empresa = req.user?.empresa || 'agyda';
     const pool = await databaseService.getPool(empresa);
     const enlaceId = parseInt(req.query.enlaceId) || null;
-    const formato = (req.query.formato === 'exe') ? 'exe' : 'ps1';
+    const formato = (req.query.formato === 'bat') ? 'bat' : 'ps1';
 
     const apiKey = await obtenerApiKeyAgente(pool, req.user?.id);
     const base = baseUrlDe(req);
@@ -1007,32 +1006,27 @@ async function descargarAgente(req, res) {
       agenteScriptUrl: `${base}/agente-red/agente-red.ps1`,
     });
 
-    if (formato === 'exe') {
-      // Empaquetar con PS2EXE si está disponible; si no, caer a .ps1.
-      const tmpPs1 = path.join(require('os').tmpdir(), `install-${empresa}-${Date.now()}.ps1`);
-      const tmpExe = tmpPs1.replace(/\.ps1$/, '.exe');
-      fs.writeFileSync(tmpPs1, ps1, 'utf8');
-      const { execFile } = require('child_process');
-      const args = ['-NoProfile', '-Command',
-        `try { Import-Module ps2exe -ErrorAction Stop } catch { Install-Module ps2exe -Scope CurrentUser -Force -ErrorAction Stop }; ` +
-        `Invoke-ps2exe -inputFile '${tmpPs1}' -outputFile '${tmpExe}' -noConsole:$false -requireAdmin`];
-      execFile('powershell.exe', args, { timeout: 60000 }, (err) => {
-        if (err || !fs.existsSync(tmpExe)) {
-          logger.warn('descargarAgente: PS2EXE no disponible, se entrega .ps1', err?.message);
-          res.setHeader('Content-Type', 'application/octet-stream');
-          res.setHeader('Content-Disposition', `attachment; filename="install-${empresa}.ps1"`);
-          res.send(ps1);
-          try { fs.unlinkSync(tmpPs1); } catch { /* noop */ }
-          return;
-        }
-        res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
-        res.setHeader('Content-Disposition', `attachment; filename="AgenteRedAGYDA-${empresa}.exe"`);
-        res.sendFile(tmpExe, () => {
-          try { fs.unlinkSync(tmpPs1); } catch { /* noop */ }
-          try { fs.unlinkSync(tmpExe); } catch { /* noop */ }
-        });
-      });
-      return;
+    if (formato === 'bat') {
+      // .bat de doble-click: se auto-eleva a admin y ejecuta el .ps1 embebido
+      // decodificando desde Base64. Sin dependencias, sin compilar nada.
+      const ps1b64 = Buffer.from(ps1, 'utf16le').toString('base64');
+      const bat = [
+        '@echo off',
+        'setlocal',
+        'net session >nul 2>&1',
+        'if %errorlevel% NEQ 0 (',
+        '  echo Solicitando permisos de administrador...',
+        `  powershell -NoProfile -Command "Start-Process -Verb RunAs -FilePath '%~f0'"`,
+        '  exit /b',
+        ')',
+        `set "PS1B64=${ps1b64}"`,
+        `powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($env:PS1B64)); $f=Join-Path $env:TEMP 'agyda-install-red.ps1'; Set-Content -Path $f -Value $s -Encoding Unicode; & $f; Remove-Item $f -Force"`,
+        'echo.',
+        'pause',
+      ].join('\r\n');
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="Instalar-Agente-Red-${empresa}.bat"`);
+      return res.send(bat);
     }
 
     res.setHeader('Content-Type', 'application/octet-stream');

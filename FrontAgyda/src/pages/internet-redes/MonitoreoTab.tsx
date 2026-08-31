@@ -132,18 +132,18 @@ function DispRow({ d, editable }: { d: DispositivoRed; editable: boolean }) {
    embebidas). El admin solo elige el enlace y baja el .ps1 o el .exe. */
 function InstalarAgente({ enlaces = [] }: { enlaces?: { id: number; nombre: string }[] }) {
   const [enlaceId, setEnlaceId] = useState<number | ''>(enlaces[0]?.id ?? '')
-  const [bajando, setBajando] = useState<'ps1' | 'exe' | null>(null)
+  const [bajando, setBajando] = useState<'ps1' | 'bat' | null>(null)
 
-  const bajar = async (formato: 'ps1' | 'exe') => {
+  const bajar = async (formato: 'ps1' | 'bat') => {
     setBajando(formato)
     try {
       await internetRedesService.descargarAgente({
         formato,
         enlaceId: enlaceId === '' ? undefined : Number(enlaceId),
       })
-      toast.success(formato === 'exe'
-        ? 'Ejecutable descargado — córrelo como Administrador en la PC de la oficina'
-        : 'Instalador descargado — click derecho → Ejecutar con PowerShell (Administrador)')
+      toast.success(formato === 'bat'
+        ? 'Instalador .bat descargado — doble-click en la PC de la oficina (pedirá permisos de admin)'
+        : 'Instalador .ps1 descargado — click derecho → Ejecutar con PowerShell (Administrador)')
     } catch {
       toast.error('No se pudo generar el instalador')
     } finally {
@@ -177,25 +177,25 @@ function InstalarAgente({ enlaces = [] }: { enlaces?: { id: number; nombre: stri
 
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => bajar('ps1')}
+          onClick={() => bajar('bat')}
           disabled={bajando !== null}
           className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-[0.78rem] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
         >
-          {bajando === 'ps1' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-          Descargar instalador (.ps1)
+          {bajando === 'bat' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Descargar instalador (.bat)
         </button>
         <button
-          onClick={() => bajar('exe')}
+          onClick={() => bajar('ps1')}
           disabled={bajando !== null}
           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:border-brand hover:text-brand disabled:opacity-50"
         >
-          {bajando === 'exe' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-          Ejecutable (.exe)
+          {bajando === 'ps1' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Script (.ps1)
         </button>
       </div>
       <p className="mt-2 text-[0.66rem] text-gray-400">
-        El .ps1: click derecho → «Ejecutar con PowerShell». El .exe: doble-click.
-        Ambos registran una tarea que reporta cada 2 minutos.
+        El <b>.bat</b>: doble-click, pide permisos de administrador solo. El <b>.ps1</b>: click derecho
+        → «Ejecutar con PowerShell» (como Administrador). Ambos registran una tarea que reporta cada 2 min.
       </p>
     </div>
   )
