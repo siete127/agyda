@@ -9,7 +9,17 @@ interface LoginRawResponse {
   [key: string]: unknown
 }
 
+export interface EmpresaDetectada {
+  key: string
+  nombre: string
+}
+
 export const authService = {
+  async detectarHogar(usuario: string, contra: string): Promise<EmpresaDetectada[]> {
+    const { data } = await api.post('/auth/detectar-hogar', { usuario, password: contra })
+    return (data?.data?.empresas ?? []) as EmpresaDetectada[]
+  },
+
   async login(usuario: string, contra: string, empresa: string): Promise<{ user: User; token: string }> {
     const { data } = await api.post<LoginRawResponse>('/auth/login', { usuario, password: contra, empresa })
     // El backend devuelve { success, data: { id, nombre, accessToken, ... } }

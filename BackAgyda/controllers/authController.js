@@ -44,6 +44,52 @@ exports.getEmpresas = async (req, res) => {
   res.json({ success: true, data: listTenants() });
 };
 
+// Detecta en qué empresa(s) existe un usuario/contraseña, para que el login
+// no requiera elegir el "Hogar" a ciegas antes de escribir credenciales.
+// Busca en paralelo en todos los tenants (agyda, demo, y los dinámicos) —
+// no autentica ni emite token, solo confirma en cuál(es) hace match, para que
+// el frontend muestre el hogar detectado (o, si hay más de una coincidencia,
+// deje elegir solo entre esas).
+exports.detectarHogar = async (req, res) => {
+  try {
+    const { usuario, password } = req.body;
+    if (!usuario || !password) {
+      return res.status(400).json({ success: false, message: 'Usuario y contraseña son requeridos' });
+    }
+
+    const tenants = listTenants();
+    const resultados = await Promise.all(tenants.map(async (t) => {
+      try {
+        const pool = await databaseService.getPool(t.key);
+        const r = await pool.request()
+          .input('usuario', sql.NVarChar, usuario)
+          .input('password', sql.NVarChar, password)
+          .query(`
+            SELECT TOP 1 NEUS_ID
+            FROM dbo.NEUS_USUARIOS
+            WHERE (username = @usuario OR NEUS_USUARIO = @usuario)
+              AND ([password] = @password OR NEUS_CONTRA = @password)
+              AND NEUS_ACTIVO = 1
+          `);
+        return r.recordset.length ? { key: t.key, nombre: t.nombre } : null;
+      } catch (e) {
+        return null;
+      }
+    }));
+
+    const coincidencias = resultados.filter(Boolean);
+
+    if (coincidencias.length === 0) {
+      return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+    }
+
+    return res.json({ success: true, data: { empresas: coincidencias } });
+  } catch (e) {
+    logger.error('❌ Error detectando hogar:', e);
+    return res.status(500).json({ success: false, message: 'Error verificando credenciales' });
+  }
+};
+
 // Reconstruye el usuario completo (mismo shape que login) a partir del id del
 // token vigente. Usado por /auth-bridge de la página pública para entrar a la
 // Intranet reusando la sesión sin pedir usuario/contraseña de nuevo.
