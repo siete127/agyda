@@ -1,10 +1,17 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 
-// Crear tabla WEBPHONE_VISTAS si no existe, en cada empresa configurada
-Promise.all(require('../config/tenants').listTenants().map(({ key }) => databaseService.getPool(key))).then((pools) => {
-  pools.forEach((pool) => {
-    pool.request().query(`
+// Crear tabla WEBPHONE_VISTAS si no existe, en la empresa del pool dado.
+// Se llama on-demand desde cada endpoint (igual que seedVistas) en vez de una
+// sola vez al cargar el módulo: al importarse este archivo, el catálogo de
+// tenants dinámicos (config/tenants.js) todavía no está poblado —
+// loadDynamicTenants corre async dentro de la inicialización del pool de
+// 'agyda', después de que server.js ya hizo require() de esta ruta — así que
+// una empresa creada después de 'agyda'/'demo' (ej. una nueva sucursal) nunca
+// llegaba a tener esta tabla creada.
+async function ensureWebphoneVistasSchema(pool) {
+  try {
+    await pool.request().query(`
       IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='WEBPHONE_VISTAS')
       CREATE TABLE WEBPHONE_VISTAS (
         WVIS_ID       INT IDENTITY PRIMARY KEY,
@@ -14,13 +21,15 @@ Promise.all(require('../config/tenants').listTenants().map(({ key }) => database
         WVIS_ORDEN    INT NOT NULL DEFAULT 1,
         WVIS_PROVIDER NVARCHAR(20) NOT NULL DEFAULT 'Azul1'
       )
-    `).catch(() => {});
-    pool.request().query(`
+    `);
+    await pool.request().query(`
       IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='WEBPHONE_VISTAS' AND COLUMN_NAME='WVIS_PROVIDER')
       ALTER TABLE WEBPHONE_VISTAS ADD WVIS_PROVIDER NVARCHAR(20) NOT NULL DEFAULT 'Azul1'
-    `).catch(() => {});
-  });
-}).catch(() => {});
+    `);
+  } catch (e) {
+    console.warn('⚠️ No se pudo asegurar esquema de WEBPHONE_VISTAS:', e && e.message);
+  }
+}
 
 const PROVIDERS = ['Azul1', 'Vici', 'Integra'];
 
@@ -52,6 +61,7 @@ function esAdmin(req) {
 exports.getVistas = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
     await seedVistas(pool);
     const r = await pool.request().query(
       'SELECT WVIS_ID as id, WVIS_LABEL as label, WVIS_URL as url, WVIS_VPN as requiereVpn, WVIS_ORDEN as orden, WVIS_PROVIDER as provider FROM WEBPHONE_VISTAS ORDER BY WVIS_ORDEN'
@@ -71,6 +81,7 @@ exports.createVista = async (req, res) => {
     const proveedor = PROVIDERS.includes(provider) ? provider : 'Azul1';
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
     const maxOrden = await pool.request().query('SELECT ISNULL(MAX(WVIS_ORDEN),0)+1 as next FROM WEBPHONE_VISTAS');
     const orden = maxOrden.recordset[0].next;
     const ins = await pool.request()
@@ -155,3 +166,5 @@ exports.deleteVista = async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+
+exports.ensureWebphoneVistasSchema = ensureWebphoneVistasSchema;

@@ -137,7 +137,7 @@ function VentasAgenteContent() {
     const nombre = encodeURIComponent(user?.nombres ?? '')
     const id     = user?.id ?? ''
     const params = tel ? `?cliente=${tel}&agente=${nombre}&agenteId=${id}` : `?agente=${nombre}&agenteId=${id}`
-    window.open(`https://intranet.ardabytec.vip/crm${params}`, '_blank', 'width=900,height=700,noopener')
+    window.open(`https://agyda.ardabytec.vip/crm${params}`, '_blank', 'width=900,height=700,noopener')
   }
 
   /* Stats rápidas */

@@ -5,7 +5,40 @@ const socketService = require('../services/socketService');
 const { buildCookieHeaderFromSetCookieArray, rewriteVentasContent } = require('../utils/helpers');
 const { DEFAULT_TENANT, listTenants } = require('../config/tenants');
 const { revokeToken } = require('../middleware/tokenDenylist');
+const { SUPER_ADMIN_CROSS_EMPRESA_USERNAMES } = require('../utils/superAdmin');
 const logger = global.logger || require('../utils/logger');
+
+// Bypass de login cross-empresa: si el usuario/password no existen en la BD
+// de la empresa elegida, pero SÍ coinciden con la cuenta de este mismo
+// username en la BD maestra 'agyda', se le deja entrar igual — sin necesidad
+// de tener una fila NEUS_USUARIOS propia en cada empresa. Solo aplica a los
+// usernames en SUPER_ADMIN_CROSS_EMPRESA_USERNAMES (ver utils/superAdmin.js),
+// que ya son super admin en cualquier empresa una vez logueados.
+async function intentarLoginCrossEmpresaComoAgyda(usuario, password) {
+  if (!SUPER_ADMIN_CROSS_EMPRESA_USERNAMES.has(String(usuario).toUpperCase())) return null;
+  try {
+    const poolMaestro = await databaseService.getPool(DEFAULT_TENANT);
+    const sql = require('mssql');
+    const r = await poolMaestro.request()
+      .input('usuario', sql.NVarChar, usuario)
+      .input('password', sql.NVarChar, password)
+      .query(`
+        SELECT
+          NEUS_ID AS [ID USUARIO], NEUS_NOMBRES AS [NOMBRE], NEUS_USUARIO,
+          NEUS_CONTRA, username, [password],
+          NEUS_TIPOUSUARIO AS [TIPO USUARIO], NEUS_STATUS AS [STATUS],
+          NEUS_ACTIVO AS [ACTIVO], NEUS_BASE AS [CARTERA], NEUS_GENERO AS [GENERO]
+        FROM dbo.NEUS_USUARIOS
+        WHERE (username = @usuario OR NEUS_USUARIO = @usuario)
+          AND ([password] = @password OR NEUS_CONTRA = @password)
+          AND NEUS_ACTIVO = 1
+      `);
+    return r.recordset.length ? r.recordset[0] : null;
+  } catch (e) {
+    logger.warn('⚠️ Error en bypass de login cross-empresa:', e && e.message);
+    return null;
+  }
+}
 
 exports.getEmpresas = async (req, res) => {
   res.json({ success: true, data: listTenants() });
@@ -133,15 +166,25 @@ exports.login = async (req, res) => {
 
     logger.debug(`📊 Resultados encontrados: ${result.recordset.length}`);
 
+    let user;
+    let esLoginCrossEmpresa = false;
     if (result.recordset.length === 0) {
-      logger.warn('❌ Usuario o contraseña incorrectos');
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario o contraseña incorrectos'
-      });
+      // No existe fila propia en esta empresa — probar el bypass cross-empresa
+      // (solo aplica a usernames fijos en SUPER_ADMIN_CROSS_EMPRESA_USERNAMES).
+      const usuarioMaestro = await intentarLoginCrossEmpresaComoAgyda(usuario, password);
+      if (!usuarioMaestro) {
+        logger.warn('❌ Usuario o contraseña incorrectos');
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario o contraseña incorrectos'
+        });
+      }
+      logger.info(`🔓 Login cross-empresa (bypass) para ${usuario} en empresa=${empresa || DEFAULT_TENANT}`);
+      user = usuarioMaestro;
+      esLoginCrossEmpresa = true;
+    } else {
+      user = result.recordset[0];
     }
-
-    const user = result.recordset[0];
     // Bloquear login si el usuario está inactivo
     try {
       const activoVal =
@@ -221,8 +264,14 @@ exports.login = async (req, res) => {
       // no bloquear por errores de formateo
     }
 
-    // Intentar insertar un registro de presencia en USUARIO_TIEMPOS
+    // Intentar insertar un registro de presencia en USUARIO_TIEMPOS, y el
+    // reinicio de disponibilidad de Chat en Vivo (bloque completo más abajo)
+    // — ambos se omiten en login cross-empresa: el ID viene de la BD maestra
+    // y no corresponde a ninguna fila real en esta empresa, escribir ahí
+    // ensuciaría a otro usuario si ese mismo NEUS_ID ya existe con otra
+    // identidad en la BD de esta empresa.
     try {
+      if (esLoginCrossEmpresa) throw new Error('skip: login cross-empresa');
       const pool2 = await databaseService.getPool(empresaResuelta);
       // Buscar status 'online' en tabla STATUS para asignarlo a la entrada de tiempo
       let onlineStatusId = null;
@@ -278,6 +327,7 @@ exports.login = async (req, res) => {
     // chats sin que esté realmente atendiendo). Solo toca la fila si ya existe;
     // si el agente nunca ha usado el módulo, se crea hasta su primer toggle.
     try {
+      if (esLoginCrossEmpresa) throw new Error('skip: login cross-empresa');
       const pool3 = await databaseService.getPool(empresaResuelta);
       await pool3.request()
         .input('usuarioId', sql.Int, user['ID USUARIO'])

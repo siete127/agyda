@@ -323,7 +323,7 @@ function MisVentasTab() {
             {/* Botón Web Form */}
             <button
               type="button"
-              onClick={() => window.open(`https://intranet.ardabytec.vip/crm?cliente=${form.telefonoCliente.replace(/\D/g,'')}&agente=&agenteId=`, '_blank')}
+              onClick={() => window.open(`https://agyda.ardabytec.vip/crm?cliente=${form.telefonoCliente.replace(/\D/g,'')}&agente=&agenteId=`, '_blank')}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-[0.82rem] font-semibold text-white hover:opacity-90 transition-opacity"
             >
               <ExternalLink className="h-4 w-4" />

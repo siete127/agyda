@@ -4480,6 +4480,9 @@ async function ensureAllSchemas(pool) {
   await ensureCumplimientoNormativoSchema(pool);
   await ensureControlDocumentalSchema(pool);
   await ensureProductosServiciosSchema(pool);
+  await ensureActivosSchema(pool);
+  await ensureCampaniasAgentesSchema(pool);
+  await ensureUsuarioTiemposSchema(pool);
 }
 
 // Expediente extendido (tabs "Persona", "Adicionales", "Familiares", "Formación", "Talento")
@@ -5618,7 +5621,7 @@ BEGIN
     MC_NOMBRE       NVARCHAR(150)  NULL,
     MC_DESCRIPCION  NVARCHAR(500)  NULL,
     MC_DM_KEY       NVARCHAR(40)   NULL,
-    MC_CREADO_POR   INT            NOT NULL,
+    MC_CREADO_POR   SMALLINT       NOT NULL,
     MC_FECHA_CREACION DATETIME     NOT NULL DEFAULT GETDATE(),
     MC_ULTIMO_MENSAJE_FECHA DATETIME NULL,
     CONSTRAINT CK_MSJ_CANALES_TIPO CHECK (MC_TIPO IN ('directo','grupo')),
@@ -5633,7 +5636,7 @@ BEGIN
   CREATE TABLE dbo.MSJ_CANAL_MIEMBROS (
     MCM_ID                     INT IDENTITY(1,1) PRIMARY KEY,
     MCM_CANAL_ID                INT NOT NULL,
-    MCM_USUARIO_ID               INT NOT NULL,
+    MCM_USUARIO_ID               SMALLINT NOT NULL,
     MCM_ROL                     NVARCHAR(10) NOT NULL DEFAULT ('miembro'),
     MCM_FECHA_INGRESO           DATETIME NOT NULL DEFAULT GETDATE(),
     MCM_ULTIMO_LEIDO_MENSAJE_ID INT NULL,
@@ -5652,7 +5655,7 @@ BEGIN
   CREATE TABLE dbo.MSJ_MENSAJES (
     MM_ID           INT IDENTITY(1,1) PRIMARY KEY,
     MM_CANAL_ID     INT NOT NULL,
-    MM_EMISOR_ID    INT NOT NULL,
+    MM_EMISOR_ID    SMALLINT NOT NULL,
     MM_CONTENIDO    NVARCHAR(MAX) NOT NULL,
     MM_ARCHIVO_URL  NVARCHAR(500) NULL,
     MM_FECHA        DATETIME NOT NULL DEFAULT GETDATE(),
@@ -5667,7 +5670,7 @@ IF OBJECT_ID('dbo.MSJ_PREFERENCIAS_USUARIO', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.MSJ_PREFERENCIAS_USUARIO (
     MPU_ID                   INT IDENTITY(1,1) PRIMARY KEY,
-    MPU_USUARIO_ID            INT NOT NULL,
+    MPU_USUARIO_ID            SMALLINT NOT NULL,
     MPU_BURBUJA_ACTIVA        BIT NOT NULL DEFAULT (1),
     MPU_BURBUJA_AUTOOCULTAR   BIT NOT NULL DEFAULT (1),
     MPU_BURBUJA_DURACION_SEG  INT NOT NULL DEFAULT (15),
@@ -5897,6 +5900,115 @@ END
   }
 }
 
+// Inventario de activos de la empresa (mouse, teclado, monitor, cpu, laptop)
+// asignables a un usuario. Tabla legado sin CREATE TABLE versionado hasta
+// ahora — existía manualmente en 'agyda' pero nunca se creaba para empresas
+// nuevas (ej. Edomex), causando 500 "Invalid object name 'ACTIVOS'" en
+// cualquier request a /api/activos/*.
+async function ensureActivosSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.ACTIVOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.ACTIVOS (
+    ACT_ID                  INT IDENTITY(1,1) PRIMARY KEY,
+    ACT_TIPO                NVARCHAR(40)  NOT NULL,
+    ACT_MARCA               NVARCHAR(200) NULL,
+    ACT_MODELO              NVARCHAR(200) NULL,
+    ACT_NUMERO_SERIE        NVARCHAR(200) NULL,
+    ACT_ESTADO              NVARCHAR(40)  NOT NULL,
+    ACT_ASIGNADO_A          SMALLINT      NULL,
+    ACT_FECHA_ASIGNACION    DATETIME      NULL,
+    ACT_ACTIVO              BIT           NOT NULL DEFAULT 1,
+    ACT_FECHA_REGISTRO      DATETIME      NOT NULL DEFAULT GETDATE(),
+    ACT_TERMINOS_ACEPTADOS  BIT           NOT NULL DEFAULT 0,
+    ACT_FECHA_ACEPTACION    DATETIME      NULL,
+    CONSTRAINT CK_ACT_TIPO CHECK (ACT_TIPO IN ('mouse','teclado','monitor','cpu','laptop')),
+    CONSTRAINT CK_ACT_ESTADO CHECK (ACT_ESTADO IN ('baja','reparacion','asignado','disponible'))
+  );
+  CREATE INDEX IX_ACTIVOS_TIPO ON dbo.ACTIVOS(ACT_TIPO);
+  CREATE INDEX IX_ACTIVOS_ASIGNADO ON dbo.ACTIVOS(ACT_ASIGNADO_A);
+END
+`);
+    logger.info('✅ Esquema de activos asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de activos:', err.message);
+  }
+}
+
+// Campaña de call center asignada a cada agente (usuarioController la
+// consulta por LEFT JOIN en /api/usuarios, /usuarios/con-area y por área —
+// una tabla inexistente rompe la query completa, no solo el JOIN). Tabla
+// legado sin CREATE TABLE versionado hasta ahora.
+async function ensureCampaniasAgentesSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.AC_CAMPANIAS_AGENTES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.AC_CAMPANIAS_AGENTES (
+    ACA_ID                     INT IDENTITY(1,1) PRIMARY KEY,
+    ACA_NEUS_ID                SMALLINT      NOT NULL,
+    ACA_VENTAS_CAMPANA_ID      INT           NOT NULL,
+    ACA_VENTAS_CAMPANA_NOMBRE  NVARCHAR(400) NOT NULL,
+    ACA_ASIGNADO_POR           INT           NULL,
+    ACA_FECHA_ASIGNACION       DATETIME      NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_ACA_NEUS UNIQUE (ACA_NEUS_ID),
+    CONSTRAINT FK_ACA_NEUS FOREIGN KEY (ACA_NEUS_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID)
+  );
+END
+`);
+    logger.info('✅ Esquema de campañas de agentes asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de campañas de agentes:', err.message);
+  }
+}
+
+// Catálogo de estatus de presencia (online/comida/sanitario/etc.) y bitácora
+// de tiempos por usuario — se consultan desde el login (marca de presencia) y
+// desde el widget global de "pausa activa" (reportController.getPausaActiva),
+// ambos fuera de cualquier gate de módulo. Tablas legado sin CREATE TABLE
+// versionado hasta ahora.
+async function ensureUsuarioTiemposSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.STATUS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.STATUS (
+    status_id   TINYINT PRIMARY KEY,
+    clave       VARCHAR(20)  NOT NULL,
+    descripcion VARCHAR(100) NOT NULL
+  );
+  INSERT INTO dbo.STATUS (status_id, clave, descripcion) VALUES
+    (1, 'online', 'Usuario en línea'),
+    (2, 'comida', 'Usuario en horario de comida'),
+    (3, 'sanitario', 'Usuario ausente momentáneamente'),
+    (4, 'offline', 'Usuario desconectado'),
+    (5, 'capacitacion', 'Usuario en capacitación'),
+    (6, 'permiso', 'Usuario con permiso');
+END
+`);
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.USUARIO_TIEMPOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.USUARIO_TIEMPOS (
+    tiempo_id         INT IDENTITY(1,1) PRIMARY KEY,
+    neus_id           SMALLINT NOT NULL,
+    status_id         TINYINT  NOT NULL,
+    fecha_inicio      DATETIME NOT NULL,
+    fecha_fin         DATETIME NULL,
+    creado_en         DATETIME NOT NULL DEFAULT GETDATE(),
+    duracion_minutos  INT      NULL,
+    CONSTRAINT FK_TIEMPO_USUARIO FOREIGN KEY (neus_id) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID),
+    CONSTRAINT FK_TIEMPO_STATUS FOREIGN KEY (status_id) REFERENCES dbo.STATUS(status_id)
+  );
+END
+`);
+    logger.info('✅ Esquema de STATUS/USUARIO_TIEMPOS asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de STATUS/USUARIO_TIEMPOS:', err.message);
+  }
+}
+
 async function ensureAuditoriaSchema(pool) {
   try {
     await pool.request().batch(`
@@ -5949,6 +6061,9 @@ module.exports = {
     removeClientesUniqueConstraint,
     ensureAuditoriaSchema,
     ensureProductosServiciosSchema,
+    ensureActivosSchema,
+    ensureCampaniasAgentesSchema,
+    ensureUsuarioTiemposSchema,
     ensureVacantesSchema,
     ensureCapacitacionSchema,
     ensureIncapacidadesSchema,
