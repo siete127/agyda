@@ -65,21 +65,27 @@ function Write-Log([string]$msg) {
 #  1. Latencia / jitter / perdida
 # ─────────────────────────────────────────────────────────────
 function Measure-Conectividad {
+    # Usa System.Net.NetworkInformation.Ping (.NET) directamente — idéntico en
+    # Windows PowerShell 5.1 y PowerShell 7+, sin depender de Test-Connection
+    # (cuyos parámetros -TargetName / -ComputerName / -TimeoutSeconds cambiaron
+    # entre versiones). Da la latencia real en ms.
     $rtts = New-Object System.Collections.Generic.List[double]
     $enviados = 0; $recibidos = 0
+    $ping = New-Object System.Net.NetworkInformation.Ping
     foreach ($h in $cfg.PingHosts) {
         for ($i = 0; $i -lt 4; $i++) {
             $enviados++
             try {
-                $r = Test-Connection -TargetName $h -Count 1 -TimeoutSeconds 2 -ErrorAction Stop
-                $ms = $null
-                if ($r.Latency)            { $ms = [double]$r.Latency }
-                elseif ($r.ResponseTime)   { $ms = [double]$r.ResponseTime }
-                elseif ($r.RoundtripTime)  { $ms = [double]$r.RoundtripTime }
-                if ($null -ne $ms) { $rtts.Add($ms); $recibidos++ }
+                $reply = $ping.Send($h, 2000)   # timeout 2s
+                if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+                    $rtts.Add([double]$reply.RoundtripTime)
+                    $recibidos++
+                }
             } catch { }
         }
     }
+    $ping.Dispose()
+
     $online   = $recibidos -gt 0
     $perdida  = if ($enviados -gt 0) { [math]::Round((1 - $recibidos / $enviados) * 100, 1) } else { 100 }
     $lat = $null; $jit = $null
