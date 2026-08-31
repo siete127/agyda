@@ -1,18 +1,21 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   Activity, Gauge, MonitorSmartphone, Wifi, WifiOff, Download, Upload,
-  Radio, Check, Pencil, ShieldAlert, ShieldCheck, Server, RefreshCw,
+  Radio, Check, Pencil, ShieldAlert, ShieldCheck, Server, RefreshCw, Info,
 } from 'lucide-react'
 import { internetRedesService } from '@/services/internetRedes.service'
 import { useIsADorTI } from '@/hooks/useAuth'
 import { Spinner } from '@/components/ui/Spinner'
 import type { DispositivoRed } from '@/types/internetRedes.types'
+
+const VIOLETA = '#7C3AED'
+const VERDE = '#10B981'
 
 /* Recibe segundos transcurridos calculados por el servidor (mismo reloj que la
    BD). Evita el desfase de zona horaria de parsear la fecha en el navegador. */
@@ -30,23 +33,92 @@ function num(n: number | null | undefined, dec = 0): string {
   return n === null || n === undefined ? '—' : n.toFixed(dec)
 }
 
-/* ── Tarjeta KPI ── */
-function Kpi({ icon: Icon, label, value, sub, tono = 'brand' }: {
+/* ── Tarjeta KPI: pill de color a la izquierda, label + valor a la derecha ── */
+function Kpi({ icon: Icon, label, value, sub, tono = 'violet' }: {
   icon: typeof Activity; label: string; value: React.ReactNode; sub?: string
-  tono?: 'brand' | 'emerald' | 'red' | 'amber' | 'violet'
+  tono?: 'emerald' | 'red' | 'amber' | 'violet'
 }) {
-  const tonos: Record<string, string> = {
-    brand: 'text-brand', emerald: 'text-emerald-500', red: 'text-red-500',
-    amber: 'text-amber-500', violet: 'text-violet-500',
+  const tonos: Record<string, { pill: string; icon: string; val: string }> = {
+    emerald: { pill: 'bg-emerald-100', icon: 'text-emerald-600', val: 'text-emerald-600' },
+    red:     { pill: 'bg-red-100',     icon: 'text-red-500',     val: 'text-red-500' },
+    amber:   { pill: 'bg-amber-100',   icon: 'text-amber-600',   val: 'text-amber-600' },
+    violet:  { pill: 'bg-violet-100',  icon: 'text-violet-600',  val: 'text-violet-600' },
   }
+  const t = tonos[tono]
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-card p-4 shadow-sm">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
-        <Icon className={clsx('h-4 w-4', tonos[tono])} />
+    <div className="flex items-center gap-3.5 rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
+      <div className={clsx('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl', t.pill)}>
+        <Icon className={clsx('h-5 w-5', t.icon)} />
       </div>
-      <p className={clsx('text-2xl font-black tabular-nums', tonos[tono])}>{value}</p>
-      {sub && <p className="mt-0.5 text-[0.68rem] text-gray-400">{sub}</p>}
+      <div className="min-w-0">
+        <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+        <p className={clsx('mt-0.5 text-[1.35rem] font-black leading-tight tabular-nums', t.val)}>{value}</p>
+        {sub && <p className="text-[0.68rem] text-gray-400">{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
+/* ── Panel de gráfica con título+icono violeta y selector de agregación ── */
+function GraficaPanel({ titulo, nota, leyenda, agregacion, onAgregacion, children }: {
+  titulo: string
+  nota?: string
+  leyenda?: React.ReactNode
+  agregacion: 'promedio' | 'max' | 'min'
+  onAgregacion: (a: 'promedio' | 'max' | 'min') => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-violet-600" />
+          <h3 className="text-[0.9rem] font-bold text-gray-900">{titulo}</h3>
+          {nota && (
+            <span className="ml-1 flex items-center gap-1 text-[0.68rem] text-gray-400">
+              <Info className="h-3 w-3" /> {nota}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {leyenda}
+          <select
+            value={agregacion}
+            onChange={(e) => onAgregacion(e.target.value as 'promedio' | 'max' | 'min')}
+            className="rounded-lg border border-gray-200 bg-card px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 outline-none focus:border-violet-400"
+          >
+            <option value="promedio">Promedio</option>
+            <option value="max">Máximo</option>
+            <option value="min">Mínimo</option>
+          </select>
+        </div>
+      </div>
+      <div className="h-60">{children}</div>
+    </div>
+  )
+}
+
+/* Tooltip de recharts con la tarjeta blanca flotante de la imagen 2 */
+function TooltipRed({ active, payload, label, unidad, series }: {
+  active?: boolean
+  payload?: { value: number | null; name: string; color: string }[]
+  label?: string
+  unidad: string
+  series?: { key: string; label: string }[]
+}) {
+  if (!active || !payload?.length) return null
+  const filas = series
+    ? series.map((s) => payload.find((p) => p.name === s.label)).filter(Boolean)
+    : payload
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 shadow-lg">
+      {(filas as { value: number | null; name: string; color: string }[]).map((p) => (
+        <p key={p.name} className="flex items-baseline gap-1.5 text-[0.82rem] font-bold text-gray-900">
+          <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+          {p.value ?? '—'}<span className="text-[0.68rem] font-semibold text-gray-400">{unidad}</span>
+        </p>
+      ))}
+      <p className="mt-0.5 text-[0.68rem] text-gray-400">{label}</p>
     </div>
   )
 }
@@ -196,9 +268,42 @@ function InstalarAgente({ enlaces = [] }: { enlaces?: { id: number; nombre: stri
   )
 }
 
+type Agregacion = 'promedio' | 'max' | 'min'
+
+/* Agrupa la serie en ~48 buckets y aplica la agregación elegida. Para rangos
+   cortos con pocos puntos, devuelve los puntos tal cual. */
+function agregarSerie(
+  puntos: { t: string; lat: number | null; down: number | null; up: number | null }[],
+  modo: Agregacion,
+) {
+  if (puntos.length <= 60) return puntos
+  const BUCKETS = 48
+  const tam = Math.ceil(puntos.length / BUCKETS)
+  const out: typeof puntos = []
+  const agg = (vals: (number | null)[]) => {
+    const n = vals.filter((v): v is number => v != null)
+    if (!n.length) return null
+    if (modo === 'max') return Math.max(...n)
+    if (modo === 'min') return Math.min(...n)
+    return Math.round((n.reduce((a, b) => a + b, 0) / n.length) * 10) / 10
+  }
+  for (let i = 0; i < puntos.length; i += tam) {
+    const grupo = puntos.slice(i, i + tam)
+    out.push({
+      t: grupo[Math.floor(grupo.length / 2)].t,
+      lat: agg(grupo.map((g) => g.lat)),
+      down: agg(grupo.map((g) => g.down)),
+      up: agg(grupo.map((g) => g.up)),
+    })
+  }
+  return out
+}
+
 export function MonitoreoTab() {
   const editable = useIsADorTI()
   const [horas, setHoras] = useState(24)
+  const [aggLat, setAggLat] = useState<Agregacion>('promedio')
+  const [aggVel, setAggVel] = useState<Agregacion>('promedio')
 
   const { data: estado, isLoading: loadingEstado } = useQuery({
     queryKey: ['red-estado-actual'],
@@ -218,16 +323,17 @@ export function MonitoreoTab() {
     refetchInterval: 45_000,
   })
 
-  const serie = useMemo(
+  const serieBase = useMemo(
     () => mediciones.map((m) => ({
       t: m.hhmm ?? '',
       lat: m.latenciaMs,
       down: m.downMbps,
       up: m.upMbps,
-      online: m.online ? 1 : 0,
     })),
     [mediciones],
   )
+  const serieLat = useMemo(() => agregarSerie(serieBase, aggLat), [serieBase, aggLat])
+  const serieVel = useMemo(() => agregarSerie(serieBase, aggVel), [serieBase, aggVel])
 
   if (loadingEstado) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
@@ -266,7 +372,7 @@ export function MonitoreoTab() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
           icon={online ? Wifi : WifiOff}
           label="Estado"
@@ -277,18 +383,20 @@ export function MonitoreoTab() {
         <Kpi
           icon={Activity}
           label="Latencia"
-          value={`${num(u?.latenciaMs, 0)} ms`}
+          value={<>{num(u?.latenciaMs, 0)} <span className="text-sm font-bold text-gray-400">ms</span></>}
           sub={u?.perdidaPct != null ? `Pérdida ${num(u.perdidaPct, 1)}%` : undefined}
-          tono={(u?.latenciaMs ?? 0) > 120 ? 'amber' : 'brand'}
+          tono={(u?.latenciaMs ?? 0) > 120 ? 'amber' : 'violet'}
         />
         <Kpi
           icon={Gauge}
           label="Velocidad"
-          value={<span className="flex items-baseline gap-1">
-            <Download className="h-3.5 w-3.5" />{num(vel?.downMbps, 0)}
-            <Upload className="ml-1.5 h-3.5 w-3.5" />{num(vel?.upMbps, 0)}
-            <span className="text-xs font-semibold text-gray-400">Mbps</span>
-          </span>}
+          value={vel && vel.downMbps != null ? (
+            <span className="flex items-baseline gap-2">
+              <span className="flex items-baseline gap-0.5"><Download className="h-3.5 w-3.5 text-emerald-500" />{num(vel.downMbps, 0)}</span>
+              <span className="flex items-baseline gap-0.5"><Upload className="h-3.5 w-3.5 text-violet-500" />{num(vel.upMbps, 0)}</span>
+              <span className="text-[0.7rem] font-bold text-gray-400">Mbps</span>
+            </span>
+          ) : '—'}
           sub={vel ? `Prueba ${haceCuanto(vel.haceSeg)}` : 'Sin prueba de velocidad aún'}
           tono="violet"
         />
@@ -296,8 +404,8 @@ export function MonitoreoTab() {
           icon={MonitorSmartphone}
           label="Dispositivos"
           value={estado?.dispositivos.online ?? 0}
-          sub={`${estado?.dispositivos.total ?? 0} conocidos en total`}
-          tono="brand"
+          sub={`${estado?.dispositivos.total ?? 0} conectados en total`}
+          tono="violet"
         />
       </div>
 
@@ -307,8 +415,8 @@ export function MonitoreoTab() {
           <button
             key={h}
             onClick={() => setHoras(h)}
-            className={clsx('rounded-lg px-2.5 py-1 text-[0.72rem] font-semibold transition-colors',
-              horas === h ? 'bg-brand text-white' : 'bg-gray-100 text-gray-500 hover:text-gray-700')}
+            className={clsx('rounded-full px-3.5 py-1.5 text-[0.72rem] font-semibold transition-colors',
+              horas === h ? 'bg-violet-600 text-white' : 'border border-gray-200 text-gray-500 hover:text-gray-700')}
           >
             {h < 24 ? `${h} h` : h === 24 ? '1 día' : `${h / 24} días`}
           </button>
@@ -316,47 +424,72 @@ export function MonitoreoTab() {
       </div>
 
       {/* Gráfica de latencia */}
-      <div className="rounded-2xl border border-gray-200/60 bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-[0.85rem] font-bold text-gray-900">Latencia (ms)</h3>
-        <div className="h-56">
-          {serie.length === 0 ? (
-            <p className="flex h-full items-center justify-center text-xs text-gray-400">Sin datos en el rango</p>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={serie}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.4} />
-                <XAxis dataKey="t" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={40} />
-                <YAxis tick={{ fontSize: 10 }} width={36} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Line type="monotone" dataKey="lat" name="Latencia" stroke="#2F6FED" strokeWidth={2} dot={false} connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+      <GraficaPanel titulo="Latencia (ms)" nota="Menos es mejor" agregacion={aggLat} onAgregacion={setAggLat}>
+        {serieLat.length === 0 ? (
+          <p className="flex h-full items-center justify-center text-xs text-gray-400">Sin datos en el rango</p>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={serieLat} margin={{ top: 6, right: 8, left: -12, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gLat" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={VIOLETA} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={VIOLETA} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="4 4" stroke="rgb(var(--surface-border))" vertical={false} />
+              <XAxis dataKey="t" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={48} />
+              <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip content={<TooltipRed unidad="ms" />} cursor={{ stroke: VIOLETA, strokeDasharray: '4 4' }} />
+              <Area type="monotone" dataKey="lat" name="Latencia" stroke={VIOLETA} strokeWidth={2.5}
+                fill="url(#gLat)" dot={false} activeDot={{ r: 4, fill: VIOLETA, strokeWidth: 2, stroke: '#fff' }} connectNulls />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </GraficaPanel>
 
       {/* Gráfica de velocidad */}
-      <div className="rounded-2xl border border-gray-200/60 bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-[0.85rem] font-bold text-gray-900">Velocidad (Mbps)</h3>
-        <div className="h-56">
-          {serie.filter((s) => s.down != null).length === 0 ? (
-            <p className="flex h-full items-center justify-center text-xs text-gray-400">
-              Sin pruebas de velocidad en el rango
-            </p>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={serie}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.4} />
-                <XAxis dataKey="t" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={40} />
-                <YAxis tick={{ fontSize: 10 }} width={36} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Area type="monotone" dataKey="down" name="Bajada" stroke="#10B981" fill="#10B98122" strokeWidth={2} connectNulls />
-                <Area type="monotone" dataKey="up" name="Subida" stroke="#8B5CF6" fill="#8B5CF622" strokeWidth={2} connectNulls />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+      <GraficaPanel
+        titulo="Velocidad (Mbps)"
+        agregacion={aggVel}
+        onAgregacion={setAggVel}
+        leyenda={
+          <div className="flex items-center gap-3 text-[0.68rem] font-semibold">
+            <span className="flex items-center gap-1 text-gray-500"><span className="h-2 w-2 rounded-full" style={{ background: VERDE }} /> Descarga</span>
+            <span className="flex items-center gap-1 text-gray-500"><span className="h-2 w-2 rounded-full" style={{ background: VIOLETA }} /> Subida</span>
+          </div>
+        }
+      >
+        {serieVel.filter((s) => s.down != null).length === 0 ? (
+          <p className="flex h-full items-center justify-center text-xs text-gray-400">
+            Sin pruebas de velocidad en el rango
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={serieVel} margin={{ top: 6, right: 8, left: -12, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gDown" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={VERDE} stopOpacity={0.2} />
+                  <stop offset="100%" stopColor={VERDE} stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="gUp" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={VIOLETA} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={VIOLETA} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="4 4" stroke="rgb(var(--surface-border))" vertical={false} />
+              <XAxis dataKey="t" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={48} />
+              <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip
+                content={<TooltipRed unidad="Mbps" series={[{ key: 'down', label: 'Descarga (Mbps)' }, { key: 'up', label: 'Subida (Mbps)' }]} />}
+                cursor={{ stroke: VIOLETA, strokeDasharray: '4 4' }}
+              />
+              <Legend wrapperStyle={{ display: 'none' }} />
+              <Area type="monotone" dataKey="down" name="Descarga (Mbps)" stroke={VERDE} strokeWidth={2.5} fill="url(#gDown)" dot={false} connectNulls />
+              <Area type="monotone" dataKey="up" name="Subida (Mbps)" stroke={VIOLETA} strokeWidth={2.5} fill="url(#gUp)" dot={false} connectNulls />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </GraficaPanel>
 
       {/* Agentes */}
       {(estado?.agentes.length ?? 0) > 0 && (
@@ -439,6 +572,14 @@ export function MonitoreoTab() {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Nota al pie */}
+      <div className="flex items-center gap-2 rounded-2xl border border-violet-100 bg-violet-50/50 px-4 py-3 text-[0.75rem] text-gray-500">
+        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+          <Info className="h-3.5 w-3.5" />
+        </span>
+        El agente reporta cada 2 minutos y esta vista se refresca sola.
       </div>
     </div>
   )
