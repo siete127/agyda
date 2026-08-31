@@ -5,11 +5,13 @@ import {
   parseMensajeriaCanalDetalle,
   parseMensajeriaMiembro,
   parseMensajeriaConfig,
+  parseMensajeriaReaccion,
   type MensajeriaCanal,
   type MensajeriaMensaje,
   type MensajeriaCanalDetalle,
   type MensajeriaMiembro,
   type MensajeriaConfig,
+  type MensajeriaReaccion,
 } from '@/types/mensajeria.types'
 
 export const mensajeriaService = {
@@ -91,5 +93,26 @@ export const mensajeriaService = {
   async adjuntarDesdeDrive(canalId: number, archivoId: number): Promise<{ url: string; nombreOriginal: string; tamano: number }> {
     const { data } = await api.post(`/mensajeria/canales/${canalId}/archivo-drive`, { archivoId })
     return data.data
+  },
+
+  async reaccionarMensaje(mensajeId: number, emoji: string): Promise<MensajeriaReaccion[]> {
+    const { data } = await api.post(`/mensajeria/mensajes/${mensajeId}/reacciones`, { emoji })
+    const list = Array.isArray(data?.data) ? data.data : []
+    return (list as Record<string, unknown>[]).map(parseMensajeriaReaccion)
+  },
+
+  async quitarReaccion(mensajeId: number): Promise<MensajeriaReaccion[]> {
+    const { data } = await api.delete(`/mensajeria/mensajes/${mensajeId}/reacciones`)
+    const list = Array.isArray(data?.data) ? data.data : []
+    return (list as Record<string, unknown>[]).map(parseMensajeriaReaccion)
+  },
+
+  async editarMensaje(mensajeId: number, contenido: string): Promise<MensajeriaMensaje> {
+    const { data } = await api.put(`/mensajeria/mensajes/${mensajeId}`, { contenido })
+    return parseMensajeriaMensaje((data?.data ?? data) as Record<string, unknown>)
+  },
+
+  async eliminarMensaje(mensajeId: number): Promise<void> {
+    await api.delete(`/mensajeria/mensajes/${mensajeId}`)
   },
 }
