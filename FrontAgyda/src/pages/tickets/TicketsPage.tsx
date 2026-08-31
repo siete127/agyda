@@ -49,7 +49,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     titulo: '', descripcion: '', area: 'TI', asignadoA: '',
     clasificacion: '' as TicketClasificacion | '',
     categoria: '', subcategoria: '', elemento: '',
-    sede: '', departamento: '', activoAfectado: '', servicioAfectado: '',
+    sede: '', activoAfectado: '', servicioAfectado: '',
     activoAfectadoId: '' as number | '', servicioAfectadoId: '' as number | '',
     impacto: '' as TicketImpacto | '', urgencia: '' as TicketUrgencia | '',
   })
@@ -105,7 +105,6 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
       subcategoria: form.subcategoria || undefined,
       elemento: form.elemento || undefined,
       sede: form.sede || undefined,
-      departamento: form.departamento || undefined,
       activoAfectado: form.activoAfectado || undefined,
       servicioAfectado: form.servicioAfectado || undefined,
       activoAfectadoId: form.activoAfectadoId || undefined,
@@ -141,136 +140,111 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal isOpen onClose={onClose} title="Nuevo ticket" size="md">
       <div className="space-y-4">
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Título</label>
-          <input
-            value={form.titulo}
-            onChange={(e) => setForm({ ...form, titulo: e.target.value })}
-            className="field"
-            placeholder="Describe brevemente el problema"
-            autoFocus
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Descripción</label>
-          <textarea
-            value={form.descripcion}
-            onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
-            rows={4}
-            className="field resize-none"
-            placeholder="Detalla el problema o solicitud..."
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
+        {/* ── Esencial ── */}
+        <div className="space-y-4 border-b-2 border-brand/10 pb-4">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Clasificación</label>
-            <select value={form.clasificacion} onChange={(e) => setForm({ ...form, clasificacion: e.target.value as TicketClasificacion })} className="field">
-              <option value="">Seleccionar...</option>
-              {Object.entries(CLASIFICACION_LABELS).map(([k, label]) => (
-                <option key={k} value={k}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Área</label>
-            <select value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} className="field">
-              <option value="TI">TI</option>
-              <option value="ST">ST</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Categoría</label>
-            <select
-              value={form.categoria}
-              onChange={(e) => setForm({ ...form, categoria: e.target.value, subcategoria: '', elemento: '' })}
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Título</label>
+            <input
+              value={form.titulo}
+              onChange={(e) => setForm({ ...form, titulo: e.target.value })}
               className="field"
-            >
-              <option value="">Seleccionar...</option>
-              {categorias.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
-            </select>
+              placeholder="Describe brevemente el problema"
+              autoFocus
+            />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Subcategoría</label>
-            <select
-              value={form.subcategoria}
-              onChange={(e) => setForm({ ...form, subcategoria: e.target.value, elemento: '' })}
-              className="field"
-              disabled={!form.categoria}
-            >
-              <option value="">{form.categoria ? 'Seleccionar...' : 'Elegí una categoría primero'}</option>
-              {subcategoriasDisponibles.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
-            </select>
+            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Descripción</label>
+            <textarea
+              value={form.descripcion}
+              onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+              rows={4}
+              className="field resize-none"
+              placeholder="Detalla el problema o solicitud..."
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Área</label>
+              <select value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} className="field">
+                <option value="TI">TI</option>
+                <option value="ST">ST</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Categoría</label>
+              <select
+                value={form.categoria}
+                onChange={(e) => setForm({ ...form, categoria: e.target.value, subcategoria: '', elemento: '' })}
+                className="field"
+              >
+                <option value="">Seleccionar...</option>
+                {categorias.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
-        {elementosDisponibles.length > 0 && (
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Elemento</label>
-            <select
-              value={form.elemento}
-              onChange={(e) => setForm({ ...form, elemento: e.target.value })}
-              className="field"
-            >
-              <option value="">Ninguno / no aplica</option>
-              {elementosDisponibles.map((el) => <option key={el.id} value={el.nombre}>{el.nombre}</option>)}
-            </select>
-          </div>
-        )}
+        {/* ── Clasificación adicional ── */}
+        <div className="rounded-xl border border-surface-border bg-surface/60 p-3.5">
+          <p className="mb-3 flex items-center gap-1.5 text-[0.7rem] font-bold uppercase tracking-wide text-brand">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand" /> Clasificación adicional
+          </p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Clasificación</label>
+                <select value={form.clasificacion} onChange={(e) => setForm({ ...form, clasificacion: e.target.value as TicketClasificacion })} className="field">
+                  <option value="">Seleccionar...</option>
+                  {Object.entries(CLASIFICACION_LABELS).map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Subcategoría</label>
+                <select
+                  value={form.subcategoria}
+                  onChange={(e) => setForm({ ...form, subcategoria: e.target.value, elemento: '' })}
+                  className="field"
+                  disabled={!form.categoria}
+                >
+                  <option value="">{form.categoria ? 'Seleccionar...' : 'Elegí una categoría primero'}</option>
+                  {subcategoriasDisponibles.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+                </select>
+              </div>
+            </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Sede</label>
-            <select value={form.sede} onChange={(e) => setForm({ ...form, sede: e.target.value })} className="field">
-              <option value="">Seleccionar...</option>
-              {sedes.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Departamento</label>
-            <input value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} className="field" placeholder="Opcional" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Activo afectado</label>
-            <select
-              value={form.activoAfectadoId}
-              onChange={(e) => {
-                const id = e.target.value ? Number(e.target.value) : ''
-                const activo = activosGenerales.find((a) => a.id === id)
-                setForm({ ...form, activoAfectadoId: id, activoAfectado: activo?.nombreEquipo || '' })
-              }}
-              className="field"
-            >
-              <option value="">Ninguno / no aplica</option>
-              {activosGenerales.map((a) => (
-                <option key={a.id} value={a.id}>{a.nombreEquipo || `Activo #${a.id}`}{a.numeroSerie ? ` (${a.numeroSerie})` : ''}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+            {elementosDisponibles.length > 0 && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Elemento</label>
+                <select
+                  value={form.elemento}
+                  onChange={(e) => setForm({ ...form, elemento: e.target.value })}
+                  className="field"
+                >
+                  <option value="">Ninguno / no aplica</option>
+                  {elementosDisponibles.map((el) => <option key={el.id} value={el.nombre}>{el.nombre}</option>)}
+                </select>
+              </div>
+            )}
 
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Servicio afectado</label>
-          <select
-            value={form.servicioAfectadoId}
-            onChange={(e) => {
-              const id = e.target.value ? Number(e.target.value) : ''
-              const servicio = servicios.find((s) => s.id === id)
-              setForm({ ...form, servicioAfectadoId: id, servicioAfectado: servicio?.nombre || '' })
-            }}
-            className="field"
-          >
-            <option value="">Ninguno / no aplica</option>
-            {servicios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-          </select>
-        </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Servicio afectado</label>
+              <select
+                value={form.servicioAfectadoId}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : ''
+                  const servicio = servicios.find((s) => s.id === id)
+                  setForm({ ...form, servicioAfectadoId: id, servicioAfectado: servicio?.nombre || '' })
+                }}
+                className="field"
+              >
+                <option value="">Ninguno / no aplica</option>
+                {servicios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>
 
-        {camposPersonalizadosDisponibles.length > 0 && (
-          <div className="space-y-3 rounded-xl border border-gray-100 bg-surface/50 p-3">
-            {camposPersonalizadosDisponibles.map((campo) => (
+            {camposPersonalizadosDisponibles.length > 0 && camposPersonalizadosDisponibles.map((campo) => (
               <div key={campo.id}>
                 <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">
                   {campo.nombre} {campo.requerido && <span className="text-red-500">*</span>}
@@ -295,91 +269,139 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
               </div>
             ))}
           </div>
-        )}
+        </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Impacto</label>
-            <select value={form.impacto} onChange={(e) => setForm({ ...form, impacto: e.target.value as TicketImpacto })} className="field">
-              <option value="">Seleccionar...</option>
-              <option value="BAJO">Bajo</option>
-              <option value="MEDIO">Medio</option>
-              <option value="ALTO">Alto</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Urgencia</label>
-            <select value={form.urgencia} onChange={(e) => setForm({ ...form, urgencia: e.target.value as TicketUrgencia })} className="field">
-              <option value="">Seleccionar...</option>
-              <option value="BAJA">Baja</option>
-              <option value="MEDIA">Media</option>
-              <option value="ALTA">Alta</option>
-            </select>
+        {/* ── Ubicación ── */}
+        <div className="rounded-xl border border-surface-border bg-surface/60 p-3.5">
+          <p className="mb-3 flex items-center gap-1.5 text-[0.7rem] font-bold uppercase tracking-wide text-brand">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand" /> Ubicación
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Sede</label>
+              <select value={form.sede} onChange={(e) => setForm({ ...form, sede: e.target.value })} className="field">
+                <option value="">Seleccionar...</option>
+                {sedes.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Activo afectado</label>
+              <select
+                value={form.activoAfectadoId}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : ''
+                  const activo = activosGenerales.find((a) => a.id === id)
+                  setForm({ ...form, activoAfectadoId: id, activoAfectado: activo?.nombreEquipo || '' })
+                }}
+                className="field"
+              >
+                <option value="">Ninguno / no aplica</option>
+                {activosGenerales.map((a) => {
+                  const dueno = a.asignadoNombre
+                    ? `${a.asignadoNombre}${a.asignadoId ? ` #${a.asignadoId}` : ''}`
+                    : 'Sin asignar'
+                  const area = a.departamento || 'Sin área'
+                  return (
+                    <option key={a.id} value={a.id}>
+                      {a.nombreEquipo || `Activo #${a.id}`}{a.numeroSerie ? ` (${a.numeroSerie})` : ''} — {dueno} · {area}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
           </div>
         </div>
 
-        {prioridadCalculada && (
-          <div className={clsx('flex items-center gap-2 rounded-xl border px-3 py-2 text-sm', PRIORIDAD_COLORS[prioridadCalculada])}>
-            <span className="font-semibold">Prioridad resultante:</span>
-            <span>{PRIORIDAD_LABELS[prioridadCalculada]}</span>
-          </div>
-        )}
-
-        {/* Asignar a */}
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Asignar a</label>
-          {loadingStaff ? (
-            <div className="field flex items-center gap-2 text-ink-tertiary text-sm">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-surface-border border-t-brand inline-block" />
-              Cargando...
-            </div>
-          ) : (
-            <div className="space-y-1.5 max-h-36 overflow-y-auto rounded-xl border border-surface-border p-2">
-              <div
-                onClick={() => setForm((f) => ({ ...f, asignadoA: '' }))}
-                className={clsx(
-                  'flex items-center gap-3 cursor-pointer rounded-lg border px-3 py-2 transition-colors',
-                  form.asignadoA === '' ? 'border-brand/40 bg-brand/5' : 'border-surface-border hover:border-brand/30',
-                )}
-              >
-                <div className={clsx('h-3.5 w-3.5 rounded-full border-2 flex-shrink-0', form.asignadoA === '' ? 'border-brand bg-brand' : 'border-surface-border')} />
-                <span className="text-[0.78rem] text-ink-secondary italic">Asignación automática</span>
+        {/* ── Prioridad y asignación ── */}
+        <div className="rounded-xl border border-surface-border bg-surface/60 p-3.5">
+          <p className="mb-3 flex items-center gap-1.5 text-[0.7rem] font-bold uppercase tracking-wide text-brand">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand" /> Prioridad y asignación
+          </p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Impacto</label>
+                <select value={form.impacto} onChange={(e) => setForm({ ...form, impacto: e.target.value as TicketImpacto })} className="field">
+                  <option value="">Seleccionar...</option>
+                  <option value="BAJO">Bajo</option>
+                  <option value="MEDIO">Medio</option>
+                  <option value="ALTO">Alto</option>
+                </select>
               </div>
-              {staff.map((s) => {
-                const sid = String(s.usuarioId)
-                return (
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Urgencia</label>
+                <select value={form.urgencia} onChange={(e) => setForm({ ...form, urgencia: e.target.value as TicketUrgencia })} className="field">
+                  <option value="">Seleccionar...</option>
+                  <option value="BAJA">Baja</option>
+                  <option value="MEDIA">Media</option>
+                  <option value="ALTA">Alta</option>
+                </select>
+              </div>
+            </div>
+
+            {prioridadCalculada && (
+              <div className={clsx('flex items-center gap-2 rounded-xl border px-3 py-2 text-sm', PRIORIDAD_COLORS[prioridadCalculada])}>
+                <span className="font-semibold">Prioridad resultante:</span>
+                <span>{PRIORIDAD_LABELS[prioridadCalculada]}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Asignar a</label>
+              {loadingStaff ? (
+                <div className="field flex items-center gap-2 text-ink-tertiary text-sm">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-surface-border border-t-brand inline-block" />
+                  Cargando...
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto rounded-xl border border-surface-border bg-white p-2">
                   <div
-                    key={s.usuarioId}
-                    onClick={() => setForm((f) => ({ ...f, asignadoA: sid }))}
+                    onClick={() => setForm((f) => ({ ...f, asignadoA: '' }))}
                     className={clsx(
                       'flex items-center gap-3 cursor-pointer rounded-lg border px-3 py-2 transition-colors',
-                      form.asignadoA === sid ? 'border-brand/40 bg-brand/5' : 'border-surface-border hover:border-brand/30',
+                      form.asignadoA === '' ? 'border-brand/40 bg-brand/5' : 'border-surface-border hover:border-brand/30',
                     )}
                   >
-                    <div className={clsx('h-3.5 w-3.5 rounded-full border-2 flex-shrink-0 transition-colors', form.asignadoA === sid ? 'border-brand bg-brand' : 'border-surface-border')} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[0.78rem] font-semibold text-ink truncate">{s.nombre}</p>
-                      <p className="text-[0.65rem] text-ink-tertiary">{s.area}</p>
-                    </div>
-                    {s.disponible && <span className="h-2 w-2 rounded-full bg-emerald-400 flex-shrink-0" title="Disponible" />}
+                    <div className={clsx('h-3.5 w-3.5 rounded-full border-2 flex-shrink-0', form.asignadoA === '' ? 'border-brand bg-brand' : 'border-surface-border')} />
+                    <span className="text-[0.78rem] text-ink-secondary italic">Asignación automática</span>
                   </div>
-                )
-              })}
+                  {staff.map((s) => {
+                    const sid = String(s.usuarioId)
+                    return (
+                      <div
+                        key={s.usuarioId}
+                        onClick={() => setForm((f) => ({ ...f, asignadoA: sid }))}
+                        className={clsx(
+                          'flex items-center gap-3 cursor-pointer rounded-lg border px-3 py-2 transition-colors',
+                          form.asignadoA === sid ? 'border-brand/40 bg-brand/5' : 'border-surface-border hover:border-brand/30',
+                        )}
+                      >
+                        <div className={clsx('h-3.5 w-3.5 rounded-full border-2 flex-shrink-0 transition-colors', form.asignadoA === sid ? 'border-brand bg-brand' : 'border-surface-border')} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[0.78rem] font-semibold text-ink truncate">{s.nombre}</p>
+                          <p className="text-[0.65rem] text-ink-tertiary">{s.area}</p>
+                        </div>
+                        {s.disponible && <span className="h-2 w-2 rounded-full bg-emerald-400 flex-shrink-0" title="Disponible" />}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Evidencia (opcional)</label>
-          <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:border-teal-400 w-fit">
-            <Paperclip className="h-3.5 w-3.5" />
-            {evidenciaFile ? evidenciaFile.name : 'Adjuntar archivo'}
-            <input
-              type="file"
-              className="hidden"
-              onChange={(e) => setEvidenciaFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Evidencia (opcional)</label>
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:border-teal-400 w-fit">
+                <Paperclip className="h-3.5 w-3.5" />
+                {evidenciaFile ? evidenciaFile.name : 'Adjuntar archivo'}
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => setEvidenciaFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -1705,7 +1727,7 @@ function VistaProductividad({ tickets }: { tickets: Ticket[] }) {
             tab === 'solucionadores' ? 'bg-brand text-white border-brand' : 'bg-white text-ink-secondary border-surface-border hover:border-brand/40',
           )}
         >
-          🛠 Solucionadores
+          🛠 Técnicos
         </button>
         <button
           onClick={() => setTab('solicitantes')}
@@ -1901,7 +1923,7 @@ export function TicketsPage() {
   const [searchParams] = useSearchParams()
   const autoOpenId = searchParams.get('id') ? Number(searchParams.get('id')) : null
   const [search, setSearch] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState<TicketEstado | 'todos'>('abierto')
+  const [filtroEstado, setFiltroEstado] = useState<TicketEstado | 'todos'>('todos')
   const [showNuevo, setShowNuevo] = useState(false)
   const [showApiKeys, setShowApiKeys] = useState(false)
   const [showSla, setShowSla] = useState(false)
@@ -1912,7 +1934,7 @@ export function TicketsPage() {
   const [filtroAsignadoA, setFiltroAsignadoA] = useState<number | ''>('')
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
-  const [vista, setVista] = useState<'lista' | 'tabla' | 'kanban' | 'productividad'>('lista')
+  const [vista, setVista] = useState<'lista' | 'tabla' | 'kanban' | 'productividad'>('productividad')
   const [selected, setSelected] = useState<Ticket | null>(null)
   const currentUser = useAuthStore((s) => s.user)
   const esAD = currentUser?.tipoUsuario?.toUpperCase() === 'AD'
@@ -2184,6 +2206,8 @@ export function TicketsPage() {
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
         </div>
+      ) : vista === 'productividad' ? (
+        <VistaProductividad tickets={tickets} />
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-surface-border bg-white py-20">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-light">
@@ -2206,8 +2230,6 @@ export function TicketsPage() {
             </button>
           )}
         </div>
-      ) : vista === 'productividad' ? (
-        <VistaProductividad tickets={tickets} />
       ) : vista === 'tabla' ? (
         <>
           <p className="text-[0.72rem] text-ink-tertiary">

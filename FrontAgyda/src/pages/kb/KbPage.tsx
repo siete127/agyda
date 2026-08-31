@@ -11,17 +11,44 @@ import toast from 'react-hot-toast'
 
 const TIPOS: KbTipo[] = ['articulo', 'faq']
 
+// El contenido se guarda como un solo texto en la base de datos (KB_ARTICULOS
+// no tiene columnas separadas para problema/solución), con este formato fijo
+// para poder separarlo de nuevo al editar un artículo ya guardado.
+const PROBLEMA_PREFIJO = 'Problema:\n'
+const SOLUCION_PREFIJO = '\n\nSolución:\n'
+
+function separarContenido(contenido: string): { problema: string; solucion: string } {
+  const idx = contenido.indexOf(SOLUCION_PREFIJO)
+  if (contenido.startsWith(PROBLEMA_PREFIJO) && idx !== -1) {
+    return {
+      problema: contenido.slice(PROBLEMA_PREFIJO.length, idx),
+      solucion: contenido.slice(idx + SOLUCION_PREFIJO.length),
+    }
+  }
+  // Artículo previo al cambio (un solo bloque de texto libre): se trata todo como solución.
+  return { problema: '', solucion: contenido }
+}
+
+function combinarContenido(problema: string, solucion: string): string {
+  return `${PROBLEMA_PREFIJO}${problema.trim()}${SOLUCION_PREFIJO}${solucion.trim()}`
+}
+
 function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onClose: () => void }) {
   const qc = useQueryClient()
   const [titulo, setTitulo] = useState(articulo?.titulo ?? '')
-  const [contenido, setContenido] = useState(articulo?.contenido ?? '')
+  const inicial = separarContenido(articulo?.contenido ?? '')
+  const [problema, setProblema] = useState(inicial.problema)
+  const [solucion, setSolucion] = useState(inicial.solucion)
   const [categoria, setCategoria] = useState(articulo?.categoria ?? '')
   const [tipo, setTipo] = useState<KbTipo>(articulo?.tipo ?? 'articulo')
 
   const guardar = useMutation({
-    mutationFn: () => articulo
-      ? kbService.update(articulo.id, { titulo, contenido, categoria: categoria || undefined, tipo })
-      : kbService.create({ titulo, contenido, categoria: categoria || undefined, tipo }),
+    mutationFn: () => {
+      const contenido = combinarContenido(problema, solucion)
+      return articulo
+        ? kbService.update(articulo.id, { titulo, contenido, categoria: categoria || undefined, tipo })
+        : kbService.create({ titulo, contenido, categoria: categoria || undefined, tipo })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kb-articulos'] })
       toast.success(articulo ? 'Artículo actualizado' : 'Artículo creado')
@@ -66,13 +93,19 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">
-            {tipo === 'faq' ? 'Respuesta' : 'Contenido'}
+            {tipo === 'faq' ? 'Pregunta detallada / contexto' : 'Problema'}
           </label>
-          <textarea value={contenido} onChange={(e) => setContenido(e.target.value)} rows={8} className="field resize-none" placeholder="Solución, pasos, referencias..." />
+          <textarea value={problema} onChange={(e) => setProblema(e.target.value)} rows={3} className="field resize-none" placeholder="¿Qué le pasa al usuario? Ej: no puede iniciar sesión, la impresora no responde..." />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">
+            {tipo === 'faq' ? 'Respuesta' : 'Solución'}
+          </label>
+          <textarea value={solucion} onChange={(e) => setSolucion(e.target.value)} rows={6} className="field resize-none" placeholder="Pasos para resolverlo..." />
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button isLoading={guardar.isPending} disabled={!titulo.trim() || !contenido.trim()} onClick={() => guardar.mutate()}>
+          <Button isLoading={guardar.isPending} disabled={!titulo.trim() || !solucion.trim()} onClick={() => guardar.mutate()}>
             {articulo ? 'Guardar cambios' : 'Crear'}
           </Button>
         </div>

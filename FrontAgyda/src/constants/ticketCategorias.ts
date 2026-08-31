@@ -12,11 +12,16 @@ export const TICKET_CATEGORIAS = [
 ] as const
 
 export const TICKET_CODIGOS_CIERRE = [
-  'Resuelto - Solución aplicada',
-  'Resuelto - Solución alternativa',
-  'Resuelto - Capacitación al usuario',
-  'No reproducible',
+  'Solucionado',
+  'Solucionado con workaround',
+  'Solicitud completada',
+  'Configuración/cambio realizado',
+  'Resuelto por proveedor',
+  'Resuelto por desarrollo',
+  'Error de usuario / orientación',
+  'Falla no encontrada',
   'Duplicado',
-  'Cancelado por el usuario',
-  'Fuera de alcance / requiere cambio (RFC)',
+  'Cancelado',
+  'Sin respuesta del usuario',
+  'No procede',
 ] as const

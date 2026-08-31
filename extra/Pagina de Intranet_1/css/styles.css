@@ -2201,6 +2201,70 @@ html[data-theme="dark"] .vacantes-circle-2 {
   color: #dc2626;
 }
 
+/* ==========================================
+   BASE DE CONOCIMIENTO PÚBLICA — buscador pill
+   ========================================== */
+.kb-search-wrap {
+  max-width: 480px;
+  margin: 0 auto 2rem;
+  display: flex;
+  justify-content: center;
+}
+
+.kb-search-pill {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--bg-superficie);
+  border: 1.5px solid var(--borde);
+  border-radius: 999px;
+  padding: 0.75rem 1.1rem;
+  box-shadow: 0 1px 2px rgba(15, 32, 66, 0.04), 0 8px 20px -12px rgba(15, 32, 66, 0.14);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kb-search-pill:focus-within {
+  border-color: var(--azul-electrico);
+  box-shadow: 0 0 0 4px rgba(0, 82, 255, 0.12);
+}
+
+.kb-search-icon {
+  flex-shrink: 0;
+  width: 19px;
+  height: 19px;
+  color: var(--azul-electrico);
+}
+
+.kb-search-pill input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.92rem;
+  color: var(--texto-principal);
+}
+
+.kb-search-pill input::placeholder {
+  color: #9aa5bd;
+}
+
+.kb-search-btn {
+  flex-shrink: 0;
+  border: none;
+  cursor: pointer;
+  background: var(--azul-electrico);
+  color: white;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .postulacion-submit-btn {
   border: none;
   cursor: pointer;

@@ -19,7 +19,13 @@ function formatMinutos(min: number) {
   if (min < 60) return `${min} min`
   const h = Math.floor(min / 60)
   const m = min % 60
-  return m > 0 ? `${h}h ${m}min` : `${h}h`
+  if (h < 24) return m > 0 ? `${h}h ${m}min` : `${h}h`
+  const d = Math.floor(h / 24)
+  const hRestantes = h % 24
+  const partes = [`${d}d`]
+  if (hRestantes > 0) partes.push(`${hRestantes}h`)
+  if (m > 0) partes.push(`${m}min`)
+  return partes.join(' ')
 }
 
 function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose: () => void }) {
@@ -27,7 +33,9 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
   const [prioridad, setPrioridad] = useState(regla?.prioridad ?? 'P3')
   const [area, setArea] = useState(regla?.area ?? '')
   const [servicio, setServicio] = useState(regla?.servicio ?? '')
+  const [minPrimeraRespuestaDesde, setMinPrimeraRespuestaDesde] = useState<number | ''>(regla?.minPrimeraRespuestaDesde ?? '')
   const [minPrimeraRespuesta, setMinPrimeraRespuesta] = useState<number | ''>(regla?.minPrimeraRespuesta ?? '')
+  const [minResolucionDesde, setMinResolucionDesde] = useState<number | ''>(regla?.minResolucionDesde ?? '')
   const [minResolucion, setMinResolucion] = useState<number | ''>(regla?.minResolucion ?? '')
 
   const { data: servicios = [] } = useQuery({
@@ -37,8 +45,8 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
 
   const guardar = useMutation({
     mutationFn: () => regla
-      ? ticketSlaService.actualizarRegla(regla.id, { prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion), activa: regla.activa })
-      : ticketSlaService.crearRegla({ prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucion: Number(minResolucion) }),
+      ? ticketSlaService.actualizarRegla(regla.id, { prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuestaDesde: minPrimeraRespuestaDesde === '' ? undefined : Number(minPrimeraRespuestaDesde), minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucionDesde: minResolucionDesde === '' ? undefined : Number(minResolucionDesde), minResolucion: Number(minResolucion), activa: regla.activa })
+      : ticketSlaService.crearRegla({ prioridad, area: area || undefined, servicio: servicio || undefined, minPrimeraRespuestaDesde: minPrimeraRespuestaDesde === '' ? undefined : Number(minPrimeraRespuestaDesde), minPrimeraRespuesta: Number(minPrimeraRespuesta), minResolucionDesde: minResolucionDesde === '' ? undefined : Number(minResolucionDesde), minResolucion: Number(minResolucion) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets-sla-reglas'] })
       qc.invalidateQueries({ queryKey: ['tickets-sla-reporte'] })
@@ -49,6 +57,8 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
   })
 
   const puedeGuardar = minPrimeraRespuesta !== '' && Number(minPrimeraRespuesta) > 0 && minResolucion !== '' && Number(minResolucion) > 0
+    && (minPrimeraRespuestaDesde === '' || Number(minPrimeraRespuestaDesde) < Number(minPrimeraRespuesta))
+    && (minResolucionDesde === '' || Number(minResolucionDesde) < Number(minResolucion))
 
   return (
     <Modal isOpen onClose={onClose} title={regla ? 'Editar regla SLA' : 'Nueva regla SLA'} size="md">
@@ -81,14 +91,30 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
             {servicios.map((s) => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Minutos — primera respuesta</label>
-            <input type="number" min={1} value={minPrimeraRespuesta} onChange={(e) => setMinPrimeraRespuesta(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 30" />
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Minutos — primera respuesta</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[0.65rem] font-medium text-gray-400">Desde (opcional)</label>
+              <input type="number" min={0} value={minPrimeraRespuestaDesde} onChange={(e) => setMinPrimeraRespuestaDesde(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 1" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[0.65rem] font-medium text-gray-400">Hasta (límite de SLA)</label>
+              <input type="number" min={1} value={minPrimeraRespuesta} onChange={(e) => setMinPrimeraRespuesta(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 5" />
+            </div>
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Minutos — resolución</label>
-            <input type="number" min={1} value={minResolucion} onChange={(e) => setMinResolucion(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 240" />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Minutos — resolución</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[0.65rem] font-medium text-gray-400">Desde (opcional)</label>
+              <input type="number" min={0} value={minResolucionDesde} onChange={(e) => setMinResolucionDesde(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 60" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[0.65rem] font-medium text-gray-400">Hasta (límite de SLA)</label>
+              <input type="number" min={1} value={minResolucion} onChange={(e) => setMinResolucion(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 240" />
+            </div>
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
@@ -184,7 +210,7 @@ export function SlaTab() {
   })
 
   const toggleActiva = useMutation({
-    mutationFn: (r: ReglaSla) => ticketSlaService.actualizarRegla(r.id, { prioridad: r.prioridad, area: r.area ?? undefined, servicio: r.servicio ?? undefined, minPrimeraRespuesta: r.minPrimeraRespuesta, minResolucion: r.minResolucion, activa: !r.activa }),
+    mutationFn: (r: ReglaSla) => ticketSlaService.actualizarRegla(r.id, { prioridad: r.prioridad, area: r.area ?? undefined, servicio: r.servicio ?? undefined, minPrimeraRespuestaDesde: r.minPrimeraRespuestaDesde ?? undefined, minPrimeraRespuesta: r.minPrimeraRespuesta, minResolucionDesde: r.minResolucionDesde ?? undefined, minResolucion: r.minResolucion, activa: !r.activa }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets-sla-reglas'] })
       qc.invalidateQueries({ queryKey: ['tickets-sla-reporte'] })
@@ -281,8 +307,22 @@ export function SlaTab() {
                 </div>
               </div>
               <div className="mt-3 space-y-1 border-t border-gray-100 pt-2">
-                <p className="text-xs text-gray-600">Primera respuesta: <span className="font-semibold text-gray-800">{formatMinutos(r.minPrimeraRespuesta)}</span></p>
-                <p className="text-xs text-gray-600">Resolución: <span className="font-semibold text-gray-800">{formatMinutos(r.minResolucion)}</span></p>
+                <p className="text-xs text-gray-600">
+                  Primera respuesta:{' '}
+                  <span className="font-semibold text-gray-800">
+                    {r.minPrimeraRespuestaDesde
+                      ? `${formatMinutos(r.minPrimeraRespuestaDesde)} a ${formatMinutos(r.minPrimeraRespuesta)}`
+                      : formatMinutos(r.minPrimeraRespuesta)}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-600">
+                  Resolución:{' '}
+                  <span className="font-semibold text-gray-800">
+                    {r.minResolucionDesde
+                      ? `${formatMinutos(r.minResolucionDesde)} a ${formatMinutos(r.minResolucion)}`
+                      : formatMinutos(r.minResolucion)}
+                  </span>
+                </p>
               </div>
             </div>
           ))}

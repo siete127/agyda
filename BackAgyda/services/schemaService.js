@@ -717,6 +717,17 @@ BEGIN
 END
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_SERVICIO')
   ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_SERVICIO NVARCHAR(100) NULL;
+-- Mínimo esperado de primera respuesta (meta, no límite estricto de SLA):
+-- TSR_MIN_PRIMERA_RESPUESTA sigue siendo el máximo/límite real que define
+-- cumplimiento; este campo es puramente informativo para mostrar un rango
+-- ("1 a 5 min") en vez de un solo número. NULL = sin mínimo, se muestra igual
+-- que antes (solo el máximo).
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_MIN_PRIMERA_RESPUESTA_DESDE')
+  ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_MIN_PRIMERA_RESPUESTA_DESDE INT NULL;
+-- Mismo patrón para Resolución: TSR_MIN_RESOLUCION sigue siendo el máximo/
+-- límite real de SLA; este campo es puramente informativo para el rango.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS_SLA_REGLAS' AND COLUMN_NAME='TSR_MIN_RESOLUCION_DESDE')
+  ALTER TABLE dbo.TICKETS_SLA_REGLAS ADD TSR_MIN_RESOLUCION_DESDE INT NULL;
 
 -- Campos personalizados por categoría: el AD define campos extra (texto,
 -- número, lista o fecha) que aparecen en el formulario de ticket SOLO cuando
@@ -914,6 +925,13 @@ IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STA
   ALTER TABLE dbo.TI_STAFF_STATUS ADD HORARIO_FIN TIME NULL;
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STAFF_STATUS' AND COLUMN_NAME='DIAS_SEMANA')
   ALTER TABLE dbo.TI_STAFF_STATUS ADD DIAS_SEMANA NVARCHAR(20) NULL; -- CSV '1,2,3,4,5' (1=lunes); NULL = sin restricción
+-- Sábado puede tener su propio horario (ej. 09:00-14:00 vs 09:00-18:00 entre
+-- semana), mismo patrón ya usado en LIVECHAT_CONFIG (LCF_SABADO_HORARIO_*).
+-- Si no está configurado, cae al horario general (HORARIO_INICIO/FIN).
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STAFF_STATUS' AND COLUMN_NAME='HORARIO_SABADO_INICIO')
+  ALTER TABLE dbo.TI_STAFF_STATUS ADD HORARIO_SABADO_INICIO TIME NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TI_STAFF_STATUS' AND COLUMN_NAME='HORARIO_SABADO_FIN')
+  ALTER TABLE dbo.TI_STAFF_STATUS ADD HORARIO_SABADO_FIN TIME NULL;
 
 -- Puentes técnico <-> especialidad / categoría permitida / sede permitida.
 -- Regla semántica: sin filas = sin restricción (permitido en todo), no "prohibido en todo".

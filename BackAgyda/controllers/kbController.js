@@ -39,6 +39,60 @@ exports.getArticulos = async (req, res) => {
   }
 };
 
+// Público (sin sesión) — la página institucional lo usa para que cualquier
+// visitante busque soluciones por su cuenta, sin necesitar cuenta ni login.
+// Solo artículos activos; nunca expone autor ni fechas de edición.
+exports.getArticulosPublicos = async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const { q, categoria, tipo } = req.query;
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const conditions = ['ART_ACTIVO = 1'];
+    const request = pool.request();
+    if (q) {
+      conditions.push('(ART_TITULO LIKE @q OR ART_CONTENIDO LIKE @q)');
+      request.input('q', sql.NVarChar, `%${q}%`);
+    }
+    if (categoria) {
+      conditions.push('ART_CATEGORIA = @categoria');
+      request.input('categoria', sql.NVarChar, categoria);
+    }
+    if (tipo && TIPOS_VALIDOS.includes(tipo)) {
+      conditions.push('ART_TIPO = @tipo');
+      request.input('tipo', sql.NVarChar, tipo);
+    }
+
+    const rs = await request.query(`
+      SELECT TOP 100
+        ART_ID as id, ART_TITULO as titulo, ART_CONTENIDO as contenido, ART_CATEGORIA as categoria, ART_TIPO as tipo
+      FROM KB_ARTICULOS
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY ART_FECHA_CREACION DESC`);
+
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando artículos KB públicos:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.getArticuloPublicoById = async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().input('id', sql.Int, id).query(`
+      SELECT ART_ID as id, ART_TITULO as titulo, ART_CONTENIDO as contenido, ART_CATEGORIA as categoria, ART_TIPO as tipo
+      FROM KB_ARTICULOS WHERE ART_ID=@id AND ART_ACTIVO=1`);
+    if (!rs.recordset.length) return res.status(404).json({ success: false, message: 'Artículo no encontrado' });
+    res.json({ success: true, data: rs.recordset[0] });
+  } catch (e) {
+    console.error('Error obteniendo artículo KB público:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.getArticuloById = async (req, res) => {
   try {
     const { id } = req.params;

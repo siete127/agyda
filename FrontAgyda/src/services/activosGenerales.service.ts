@@ -5,15 +5,18 @@ export interface ActivoGeneral {
   nombreEquipo: string | null
   numeroSerie: string | null
   departamento: string | null
+  asignadoId: number | null
   asignadoNombre: string | null
 }
 
 function parseActivo(raw: Record<string, unknown>): ActivoGeneral {
+  const asignadoA = raw['asignadoA']
   return {
     id: Number(raw['id'] ?? 0),
     nombreEquipo: (raw['nombreEquipo'] as string | null) ?? null,
     numeroSerie: (raw['numeroSerie'] as string | null) ?? null,
     departamento: (raw['departamento'] as string | null) ?? null,
+    asignadoId: asignadoA != null ? Number(asignadoA) : null,
     asignadoNombre: (raw['asignadoNombre'] as string | null) ?? null,
   }
 }

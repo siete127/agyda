@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { tecnicosService } from '@/services/tecnicos.service'
 import { catalogosTiService } from '@/services/catalogosTi.service'
 import type { Tecnico, ActualizarPerfilTecnicoPayload, TecnicoEstadoTrabajo } from '@/types/tecnico.types'
+import { PRIORIDAD_LABELS, type TicketPrioridad } from '@/types/ticket.types'
 
 const ESTADO_TRABAJO_LABELS: Record<TecnicoEstadoTrabajo, string> = {
   disponible: 'Disponible',
@@ -37,6 +38,8 @@ function EditorTecnico({ tecnico, onClose }: { tecnico: Tecnico; onClose: () => 
     prioridadesPermitidas: tecnico.prioridadesPermitidas ?? [],
     horarioInicio: tecnico.horarioInicio,
     horarioFin: tecnico.horarioFin,
+    horarioSabadoInicio: tecnico.horarioSabadoInicio,
+    horarioSabadoFin: tecnico.horarioSabadoFin,
     diasSemana: tecnico.diasSemana ?? [],
     especialidadesIds: tecnico.especialidades.map((e) => e.id),
     categoriasIds: tecnico.categoriasPermitidas.map((c) => c.id),
@@ -142,7 +145,7 @@ function EditorTecnico({ tecnico, onClose }: { tecnico: Tecnico; onClose: () => 
                     form.prioridadesPermitidas.includes(p) ? 'bg-brand text-white' : 'bg-surface text-ink-secondary',
                   )}
                 >
-                  {p}
+                  {PRIORIDAD_LABELS[p as TicketPrioridad] ?? p}
                 </button>
               ))}
             </div>
@@ -177,6 +180,34 @@ function EditorTecnico({ tecnico, onClose }: { tecnico: Tecnico; onClose: () => 
               ))}
             </div>
           </div>
+
+          {form.diasSemana.includes('6') && (
+            <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
+              <p className="mb-2 text-xs font-medium text-ink-secondary">
+                Horario de sábado (vacío = usa el horario general de arriba)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Inicio sábado</label>
+                  <input
+                    type="time"
+                    className="field mt-1 text-sm"
+                    value={form.horarioSabadoInicio ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, horarioSabadoInicio: e.target.value || null }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Fin sábado</label>
+                  <input
+                    type="time"
+                    className="field mt-1 text-sm"
+                    value={form.horarioSabadoFin ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, horarioSabadoFin: e.target.value || null }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-medium text-gray-600">Especialidades</label>
