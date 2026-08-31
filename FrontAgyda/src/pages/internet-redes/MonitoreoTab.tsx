@@ -128,28 +128,74 @@ function DispRow({ d, editable }: { d: DispositivoRed; editable: boolean }) {
   )
 }
 
-/* Bloque de instrucciones para instalar el agente en una PC de la oficina. */
-function InstalarAgente() {
-  const [copiado, setCopiado] = useState(false)
-  const cmd = 'irm https://intranet.ardabytec.vip/agente-red/install.ps1 | iex'
+/* Descarga del agente PRECONFIGURADO para la empresa (API key + empresa ya
+   embebidas). El admin solo elige el enlace y baja el .ps1 o el .exe. */
+function InstalarAgente({ enlaces = [] }: { enlaces?: { id: number; nombre: string }[] }) {
+  const [enlaceId, setEnlaceId] = useState<number | ''>(enlaces[0]?.id ?? '')
+  const [bajando, setBajando] = useState<'ps1' | 'exe' | null>(null)
+
+  const bajar = async (formato: 'ps1' | 'exe') => {
+    setBajando(formato)
+    try {
+      await internetRedesService.descargarAgente({
+        formato,
+        enlaceId: enlaceId === '' ? undefined : Number(enlaceId),
+      })
+      toast.success(formato === 'exe'
+        ? 'Ejecutable descargado — córrelo como Administrador en la PC de la oficina'
+        : 'Instalador descargado — click derecho → Ejecutar con PowerShell (Administrador)')
+    } catch {
+      toast.error('No se pudo generar el instalador')
+    } finally {
+      setBajando(null)
+    }
+  }
+
   return (
     <div className="mt-2 w-full max-w-lg rounded-xl border border-gray-200 bg-gray-50/60 p-4 text-left">
-      <p className="mb-1.5 text-[0.78rem] font-semibold text-gray-700">Instalar el agente</p>
-      <p className="mb-2 text-[0.7rem] text-gray-400">
-        En una PC Windows de la oficina, abre <b>PowerShell como Administrador</b> y pega:
+      <p className="mb-1 text-[0.78rem] font-semibold text-gray-700">Descargar el agente</p>
+      <p className="mb-3 text-[0.7rem] text-gray-400">
+        Ya viene configurado para tu empresa. Descárgalo, cópialo a una PC Windows de la oficina
+        (siempre encendida) y ejecútalo <b>como Administrador</b>.
       </p>
-      <div className="flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2">
-        <code className="flex-1 truncate text-[0.72rem] text-emerald-300">{cmd}</code>
+
+      {enlaces.length > 0 && (
+        <label className="mb-3 block">
+          <span className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-400">
+            Asociar al enlace
+          </span>
+          <select
+            value={enlaceId}
+            onChange={(e) => setEnlaceId(e.target.value === '' ? '' : Number(e.target.value))}
+            className="w-full rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-[0.8rem]"
+          >
+            <option value="">Sin asociar (genérico)</option>
+            {enlaces.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+          </select>
+        </label>
+      )}
+
+      <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => { navigator.clipboard?.writeText(cmd); setCopiado(true); setTimeout(() => setCopiado(false), 1500) }}
-          className="flex-shrink-0 rounded px-2 py-0.5 text-[0.68rem] font-semibold text-gray-300 hover:bg-white/10"
+          onClick={() => bajar('ps1')}
+          disabled={bajando !== null}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-[0.78rem] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
         >
-          {copiado ? '¡copiado!' : 'copiar'}
+          {bajando === 'ps1' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Descargar instalador (.ps1)
+        </button>
+        <button
+          onClick={() => bajar('exe')}
+          disabled={bajando !== null}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:border-brand hover:text-brand disabled:opacity-50"
+        >
+          {bajando === 'exe' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Ejecutable (.exe)
         </button>
       </div>
-      <p className="mt-2 text-[0.68rem] text-gray-400">
-        Te pedirá la API Key (créala en Configuración → API Keys) y el EnlaceId (pestaña Enlaces).
-        Guía completa: <span className="font-mono">BackAgyda/tools/agente-red/README.md</span>
+      <p className="mt-2 text-[0.66rem] text-gray-400">
+        El .ps1: click derecho → «Ejecutar con PowerShell». El .exe: doble-click.
+        Ambos registran una tarea que reporta cada 2 minutos.
       </p>
     </div>
   )
@@ -194,6 +240,7 @@ export function MonitoreoTab() {
   const vel = estado?.ultimaVelocidad
   const online = u?.online ?? false
   const hayAgente = (estado?.agentes.length ?? 0) > 0
+  const enlaces = estado?.enlaces ?? []
 
   if (!hayAgente && !u) {
     return (
@@ -206,7 +253,9 @@ export function MonitoreoTab() {
             la red cada 2 minutos.
           </p>
         </div>
-        <InstalarAgente />
+        {editable ? <InstalarAgente enlaces={enlaces} /> : (
+          <p className="text-xs text-gray-400">Un administrador de TI puede descargar el agente.</p>
+        )}
       </div>
     )
   }
@@ -357,7 +406,7 @@ export function MonitoreoTab() {
           {editable && (
             <details className="mt-3">
               <summary className="cursor-pointer text-[0.72rem] font-semibold text-brand">Instalar otro agente</summary>
-              <div className="mt-2"><InstalarAgente /></div>
+              <div className="mt-2"><InstalarAgente enlaces={enlaces} /></div>
             </details>
           )}
         </div>

@@ -26,6 +26,8 @@ router.get('/red/estado-actual', auth.authenticateToken, controller.getEstadoAct
 router.get('/red/mediciones', auth.authenticateToken, controller.getMedicionesRed);
 router.get('/red/dispositivos', auth.authenticateToken, controller.getDispositivosRed);
 router.patch('/red/dispositivos/:id', auth.authenticateToken, controller.actualizarDispositivoRed);
+// Descarga del instalador del agente PRECONFIGURADO para la empresa del usuario
+router.get('/red/agente/instalador', auth.authenticateToken, auth.verificarRol(['AD', 'TI']), controller.descargarAgente);
 
 // Respaldos
 router.get('/respaldos/config', auth.authenticateToken, controller.listRespaldosConfig);

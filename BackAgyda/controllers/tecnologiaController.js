@@ -1,4 +1,7 @@
 const sql = require('mssql');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
 const logger = global.logger || require('../utils/logger');
@@ -865,6 +868,182 @@ async function actualizarDispositivoRed(req, res) {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Descarga del agente PRECONFIGURADO para la empresa del usuario
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const AGENTE_KEY_NOMBRE = 'Agente de red — monitoreo';
+
+// Devuelve (creándola si hace falta) la API key en texto plano para el agente
+// de esta empresa. La guarda hasheada en TICKETS_API_KEYS; si ya existe una
+// activa con ese nombre pero no tenemos el texto, se rota (se desactiva la
+// vieja y se crea una nueva) para poder entregar una key funcional.
+async function obtenerApiKeyAgente(pool, userId) {
+  const rawKey = crypto.randomBytes(24).toString('hex');
+  const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
+  // desactiva llaves previas con el mismo nombre (rotación) e inserta la nueva
+  await pool.request()
+    .input('nombre', sql.NVarChar, AGENTE_KEY_NOMBRE)
+    .query(`UPDATE TICKETS_API_KEYS SET ACTIVA = 0 WHERE NOMBRE = @nombre AND ACTIVA = 1`);
+  await pool.request()
+    .input('hash', sql.NVarChar, hash)
+    .input('nombre', sql.NVarChar, AGENTE_KEY_NOMBRE)
+    .input('creadoPor', sql.Int, userId || null)
+    .query(`INSERT INTO TICKETS_API_KEYS (KEY_HASH, NOMBRE, CREADO_POR) VALUES (@hash, @nombre, @creadoPor)`);
+  return rawKey;
+}
+
+function baseUrlDe(req) {
+  if (process.env.AGENTE_PUBLIC_BASE_URL) return process.env.AGENTE_PUBLIC_BASE_URL.replace(/\/$/, '');
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  return `${proto}://${req.get('host')}`;
+}
+
+// Genera el instalador .ps1 autocontenido con la config de la empresa embebida.
+function construirInstaladorPs1({ apiUrl, apiKey, empresa, enlaceId, agenteScriptUrl }) {
+  const cfg = {
+    ApiUrl: apiUrl,
+    ApiKey: apiKey,
+    Empresa: empresa,
+    EnlaceId: enlaceId ?? null,
+    PingHosts: ['8.8.8.8', '1.1.1.1', 'www.google.com'],
+    SpeedtestCadaMin: 30,
+    SpeedtestExe: '',
+    HabilitarRouter: false,
+    RouterHost: '',
+    RouterUser: 'admin',
+    RouterPass: '',
+    RouterSnmpComunidad: 'public',
+    TimeoutSeg: 30,
+  };
+  const cfgJson = JSON.stringify(cfg, null, 2);
+  return `<#
+  AGYDA - Instalador del agente de monitoreo de red (PRECONFIGURADO)
+  Empresa: ${empresa}
+  Generado: ${new Date().toISOString()}
+
+  Este instalador YA trae la API key y la empresa. Solo ejecutalo como
+  Administrador en una PC de la oficina (siempre encendida):
+      powershell -ExecutionPolicy Bypass -File .\\install-${empresa}.ps1
+#>
+$ErrorActionPreference = 'Stop'
+$InstallDir = 'C:\\AGYDA\\agente-red'
+$TaskName   = 'AGYDA - Monitor de Red'
+$AgenteUrl  = '${agenteScriptUrl}'
+
+# ── requiere admin ──
+$pr = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host 'Ejecuta este instalador como Administrador.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host '== AGYDA - Agente de red (empresa: ${empresa}) ==' -ForegroundColor Cyan
+if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null }
+
+# ── 1) descargar el script del agente (siempre el ultimo, sin secretos) ──
+Write-Host '  descargando agente-red.ps1 ...' -ForegroundColor Gray
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Invoke-WebRequest -Uri $AgenteUrl -OutFile (Join-Path $InstallDir 'agente-red.ps1') -UseBasicParsing
+
+# ── 2) escribir la config preconfigurada ──
+$cfg = @'
+${cfgJson}
+'@
+Set-Content -Path (Join-Path $InstallDir 'agente-red.config.json') -Value $cfg -Encoding UTF8
+Write-Host '  config escrita (API key y empresa embebidas).' -ForegroundColor Green
+
+# ── 3) Speedtest CLI ──
+if (-not (Get-Command speedtest -ErrorAction SilentlyContinue)) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try { winget install --id Ookla.Speedtest.CLI --silent --accept-package-agreements --accept-source-agreements | Out-Null } catch {}
+    }
+    if (-not (Get-Command speedtest -ErrorAction SilentlyContinue) -and -not (Test-Path (Join-Path $InstallDir 'speedtest.exe'))) {
+        try {
+            $zip = Join-Path $env:TEMP 'speedtest.zip'
+            Invoke-WebRequest -Uri 'https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip' -OutFile $zip -UseBasicParsing
+            Expand-Archive -Path $zip -DestinationPath $InstallDir -Force
+            Remove-Item $zip -Force
+        } catch { Write-Host '  (Speedtest CLI no instalado; la velocidad quedara sin datos)' -ForegroundColor Yellow }
+    }
+}
+
+# ── 4) tarea programada cada 2 min ──
+$ps1 = Join-Path $InstallDir 'agente-red.ps1'
+$action  = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \`"$ps1\`""
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2)
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+Write-Host "  tarea '$TaskName' registrada (cada 2 min, como SYSTEM)." -ForegroundColor Green
+
+# ── 5) prueba ──
+Start-ScheduledTask -TaskName $TaskName
+Start-Sleep -Seconds 12
+$log = Join-Path $InstallDir 'agente-red.log'
+if (Test-Path $log) { Write-Host '  --- log ---' -ForegroundColor Gray; Get-Content $log -Tail 5 | ForEach-Object { Write-Host "   $_" } }
+
+Write-Host ''
+Write-Host 'Listo. En 2-4 min la primera medicion aparece en Internet y redes -> Monitoreo en vivo.' -ForegroundColor Green
+Write-Host "Desinstalar:  Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:\`$false" -ForegroundColor Gray
+`;
+}
+
+// GET /api/tecnologia/red/agente/instalador?enlaceId=&formato=ps1|exe
+async function descargarAgente(req, res) {
+  try {
+    const empresa = req.user?.empresa || 'agyda';
+    const pool = await databaseService.getPool(empresa);
+    const enlaceId = parseInt(req.query.enlaceId) || null;
+    const formato = (req.query.formato === 'exe') ? 'exe' : 'ps1';
+
+    const apiKey = await obtenerApiKeyAgente(pool, req.user?.id);
+    const base = baseUrlDe(req);
+    const ps1 = construirInstaladorPs1({
+      apiUrl: `${base}/api/tecnologia/red/ingesta`,
+      apiKey,
+      empresa,
+      enlaceId,
+      agenteScriptUrl: `${base}/agente-red/agente-red.ps1`,
+    });
+
+    if (formato === 'exe') {
+      // Empaquetar con PS2EXE si está disponible; si no, caer a .ps1.
+      const tmpPs1 = path.join(require('os').tmpdir(), `install-${empresa}-${Date.now()}.ps1`);
+      const tmpExe = tmpPs1.replace(/\.ps1$/, '.exe');
+      fs.writeFileSync(tmpPs1, ps1, 'utf8');
+      const { execFile } = require('child_process');
+      const args = ['-NoProfile', '-Command',
+        `try { Import-Module ps2exe -ErrorAction Stop } catch { Install-Module ps2exe -Scope CurrentUser -Force -ErrorAction Stop }; ` +
+        `Invoke-ps2exe -inputFile '${tmpPs1}' -outputFile '${tmpExe}' -noConsole:$false -requireAdmin`];
+      execFile('powershell.exe', args, { timeout: 60000 }, (err) => {
+        if (err || !fs.existsSync(tmpExe)) {
+          logger.warn('descargarAgente: PS2EXE no disponible, se entrega .ps1', err?.message);
+          res.setHeader('Content-Type', 'application/octet-stream');
+          res.setHeader('Content-Disposition', `attachment; filename="install-${empresa}.ps1"`);
+          res.send(ps1);
+          try { fs.unlinkSync(tmpPs1); } catch { /* noop */ }
+          return;
+        }
+        res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+        res.setHeader('Content-Disposition', `attachment; filename="AgenteRedAGYDA-${empresa}.exe"`);
+        res.sendFile(tmpExe, () => {
+          try { fs.unlinkSync(tmpPs1); } catch { /* noop */ }
+          try { fs.unlinkSync(tmpExe); } catch { /* noop */ }
+        });
+      });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="install-${empresa}.ps1"`);
+    res.send(ps1);
+  } catch (err) {
+    logger.error('tecnologiaController.descargarAgente', err);
+    res.status(500).json({ success: false, message: 'No se pudo generar el instalador del agente' });
+  }
+}
+
 module.exports = {
   listMantenimientos,
   crearMantenimiento,
@@ -884,6 +1063,7 @@ module.exports = {
   getMedicionesRed,
   getDispositivosRed,
   actualizarDispositivoRed,
+  descargarAgente,
   listRespaldosConfig,
   crearRespaldoConfig,
   actualizarRespaldoConfig,

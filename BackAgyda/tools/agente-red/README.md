@@ -13,7 +13,24 @@ la LAN y le manda las mediciones.
 
 ## Instalación (PC Windows de la oficina, siempre encendida)
 
-### Opción A — una línea (recomendado)
+### Opción A — descargar desde la intranet (recomendado)
+
+En **Internet y redes → Monitoreo en vivo**, un admin de TI baja el instalador
+con el botón **«Descargar instalador (.ps1)»** o **«Ejecutable (.exe)»**. Ese
+archivo **ya trae la API key y la empresa embebidas** — no hay que pegar nada.
+
+1. Elige el enlace de red al que asociarlo (o «Sin asociar»)
+2. Descarga el `.ps1` o el `.exe`
+3. Cópialo a la PC de la oficina y ejecútalo **como Administrador**
+   - `.ps1`: click derecho → «Ejecutar con PowerShell»
+   - `.exe`: doble-click
+4. El instalador crea `C:\AGYDA\agente-red\`, baja el script del agente,
+   escribe la config, instala Speedtest CLI y registra la tarea (cada 2 min)
+
+El `.exe` se genera con PS2EXE en el servidor; si PS2EXE no está instalado,
+la descarga cae automáticamente al `.ps1`.
+
+### Opción B — una línea (genérica, pide la API key)
 
 Abre **PowerShell como Administrador** y pega:
 
@@ -21,14 +38,10 @@ Abre **PowerShell como Administrador** y pega:
 irm https://intranet.ardabytec.vip/agente-red/install.ps1 | iex
 ```
 
-El instalador:
-1. Crea `C:\AGYDA\agente-red\`
-2. Instala el **Speedtest CLI de Ookla** (winget o descarga directa)
-3. Te pide la **API Key**, el **EnlaceId** y el nombre del agente
-4. Registra la tarea programada (cada 2 min, como SYSTEM, arranca al boot)
-5. Corre una prueba
+Este instalador genérico te pide la **API Key**, el **EnlaceId** y el nombre.
+Úsalo si prefieres no descargar el archivo preconfigurado.
 
-### Opción B — manual
+### Opción C — manual
 
 1. Copia esta carpeta a `C:\AGYDA\agente-red\`.
 2. Instala Speedtest CLI: `winget install Ookla.Speedtest.CLI`
