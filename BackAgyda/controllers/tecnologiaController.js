@@ -753,14 +753,16 @@ async function getEstadoActualRed(req, res) {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const ultima = await pool.request().query(`
-      SELECT TOP 1 RM_FECHA as fecha, RM_ONLINE as online, RM_LATENCIA_MS as latenciaMs,
+      SELECT TOP 1 RM_FECHA as fecha, DATEDIFF(SECOND, RM_FECHA, GETDATE()) as haceSeg,
+             RM_ONLINE as online, RM_LATENCIA_MS as latenciaMs,
              RM_JITTER_MS as jitterMs, RM_PERDIDA_PCT as perdidaPct, RM_DOWN_MBPS as downMbps,
              RM_UP_MBPS as upMbps, RM_LINK_MBPS as linkMbps, RM_ADAPTADOR_UP as adaptadorUp,
              RM_DISP_ONLINE as dispOnline, RM_ORIGEN as origen
       FROM dbo.TI_RED_MEDICIONES ORDER BY RM_FECHA DESC
     `);
     const ultimaVel = await pool.request().query(`
-      SELECT TOP 1 RM_FECHA as fecha, RM_DOWN_MBPS as downMbps, RM_UP_MBPS as upMbps
+      SELECT TOP 1 RM_FECHA as fecha, DATEDIFF(SECOND, RM_FECHA, GETDATE()) as haceSeg,
+             RM_DOWN_MBPS as downMbps, RM_UP_MBPS as upMbps
       FROM dbo.TI_RED_MEDICIONES WHERE RM_DOWN_MBPS IS NOT NULL ORDER BY RM_FECHA DESC
     `);
     const disp = await pool.request().query(`
@@ -770,7 +772,9 @@ async function getEstadoActualRed(req, res) {
     `);
     const agentes = await pool.request().query(`
       SELECT RA_ID as id, RA_NOMBRE as nombre, RA_ENLACE_ID as enlaceId, RA_VERSION as version,
-             RA_ULTIMA_SENAL as ultimaSenal, RA_GATEWAY as gateway,
+             RA_ULTIMA_SENAL as ultimaSenal,
+             DATEDIFF(SECOND, RA_ULTIMA_SENAL, GETDATE()) as haceSeg,
+             RA_GATEWAY as gateway,
              RA_ROUTER_ESTADO as routerEstado, RA_ROUTER_MARCA as routerMarca,
              RA_ROUTER_MODELO as routerModelo, RA_ROUTER_METODO as routerMetodo,
              CASE WHEN RA_ULTIMA_SENAL >= DATEADD(MINUTE, -${AGENTE_INACTIVO_MIN}, GETDATE()) THEN 1 ELSE 0 END as vivo
@@ -806,7 +810,10 @@ async function getMedicionesRed(req, res) {
     let filtro = '';
     if (enlaceId) { rq.input('enlaceId', sql.Int, enlaceId); filtro = 'AND RM_ENLACE_ID = @enlaceId'; }
     const rs = await rq.query(`
-      SELECT RM_FECHA as fecha, RM_ONLINE as online, RM_LATENCIA_MS as latenciaMs,
+      SELECT RM_FECHA as fecha,
+             DATEDIFF(SECOND, RM_FECHA, GETDATE()) as haceSeg,
+             CONVERT(varchar(5), RM_FECHA, 108) as hhmm,
+             RM_ONLINE as online, RM_LATENCIA_MS as latenciaMs,
              RM_JITTER_MS as jitterMs, RM_PERDIDA_PCT as perdidaPct,
              RM_DOWN_MBPS as downMbps, RM_UP_MBPS as upMbps, RM_LINK_MBPS as linkMbps,
              RM_DISP_ONLINE as dispOnline
@@ -829,6 +836,7 @@ async function getDispositivosRed(req, res) {
       SELECT RD_ID as id, RD_MAC as mac, RD_IP as ip, RD_HOSTNAME as hostname,
              RD_FABRICANTE as fabricante, RD_ALIAS as alias, RD_ORIGEN as origen,
              RD_PRIMERA_VEZ as primeraVez, RD_ULTIMA_VEZ as ultimaVez,
+             DATEDIFF(SECOND, RD_ULTIMA_VEZ, GETDATE()) as vistoHaceSeg,
              RD_ONLINE as online, RD_BLOQUEADO as bloqueado
       FROM dbo.TI_RED_DISPOSITIVOS
       ORDER BY RD_ONLINE DESC, RD_ULTIMA_VEZ DESC

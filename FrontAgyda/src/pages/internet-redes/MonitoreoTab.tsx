@@ -14,21 +14,16 @@ import { useIsADorTI } from '@/hooks/useAuth'
 import { Spinner } from '@/components/ui/Spinner'
 import type { DispositivoRed } from '@/types/internetRedes.types'
 
-function haceCuanto(iso: string | null | undefined): string {
-  if (!iso) return 'nunca'
-  const ms = Date.now() - new Date(iso).getTime()
-  if (Number.isNaN(ms)) return '—'
-  const min = Math.floor(ms / 60000)
-  if (min < 1) return 'hace segundos'
+/* Recibe segundos transcurridos calculados por el servidor (mismo reloj que la
+   BD). Evita el desfase de zona horaria de parsear la fecha en el navegador. */
+function haceCuanto(seg: number | null | undefined): string {
+  if (seg === null || seg === undefined || Number.isNaN(seg)) return 'nunca'
+  if (seg < 60) return 'hace segundos'
+  const min = Math.floor(seg / 60)
   if (min < 60) return `hace ${min} min`
   const h = Math.floor(min / 60)
   if (h < 24) return `hace ${h} h`
   return `hace ${Math.floor(h / 24)} d`
-}
-
-function fmtHora(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
 }
 
 function num(n: number | null | undefined, dec = 0): string {
@@ -112,7 +107,7 @@ function DispRow({ d, editable }: { d: DispositivoRed; editable: boolean }) {
           <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[0.62rem] font-semibold text-gray-400">arp</span>
         )}
       </td>
-      <td className="px-4 py-2.5 text-gray-400">{haceCuanto(d.ultimaVez)}</td>
+      <td className="px-4 py-2.5 text-gray-400">{haceCuanto(d.vistoHaceSeg)}</td>
       <td className="px-4 py-2.5 text-right">
         {editable && (
           <button
@@ -225,7 +220,7 @@ export function MonitoreoTab() {
 
   const serie = useMemo(
     () => mediciones.map((m) => ({
-      t: fmtHora(m.fecha),
+      t: m.hhmm ?? '',
       lat: m.latenciaMs,
       down: m.downMbps,
       up: m.upMbps,
@@ -266,7 +261,7 @@ export function MonitoreoTab() {
       {!online && u && (
         <div className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
           <WifiOff className="h-4 w-4 flex-shrink-0" />
-          <span><b>Sin conexión a internet.</b> Última lectura {haceCuanto(u.fecha)}.</span>
+          <span><b>Sin conexión a internet.</b> Última lectura {haceCuanto(u.haceSeg)}.</span>
         </div>
       )}
 
@@ -276,7 +271,7 @@ export function MonitoreoTab() {
           icon={online ? Wifi : WifiOff}
           label="Estado"
           value={online ? 'En línea' : 'Caído'}
-          sub={u ? `Lectura ${haceCuanto(u.fecha)}` : undefined}
+          sub={u ? `Lectura ${haceCuanto(u.haceSeg)}` : undefined}
           tono={online ? 'emerald' : 'red'}
         />
         <Kpi
@@ -294,7 +289,7 @@ export function MonitoreoTab() {
             <Upload className="ml-1.5 h-3.5 w-3.5" />{num(vel?.upMbps, 0)}
             <span className="text-xs font-semibold text-gray-400">Mbps</span>
           </span>}
-          sub={vel ? `Prueba ${haceCuanto(vel.fecha)}` : 'Sin prueba de velocidad aún'}
+          sub={vel ? `Prueba ${haceCuanto(vel.haceSeg)}` : 'Sin prueba de velocidad aún'}
           tono="violet"
         />
         <Kpi
@@ -390,7 +385,7 @@ export function MonitoreoTab() {
                     <span className={clsx('h-2 w-2 rounded-full', a.vivo ? 'bg-emerald-500' : 'bg-red-400')} />
                     <span className="font-semibold text-gray-700">{a.nombre}</span>
                     <span className="text-gray-400">
-                      {a.vivo ? 'activo' : 'sin señal'} · {haceCuanto(a.ultimaSenal)}
+                      {a.vivo ? 'activo' : 'sin señal'} · {haceCuanto(a.haceSeg)}
                       {a.version && ` · v${a.version}`}
                     </span>
                   </div>

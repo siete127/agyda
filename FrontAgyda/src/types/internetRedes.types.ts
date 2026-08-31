@@ -39,6 +39,8 @@ export const ESTADO_COLORS: Record<EnlaceEstado, string> = {
 
 export interface MedicionRed {
   fecha: string
+  haceSeg?: number
+  hhmm?: string        // hora HH:mm ya en zona del servidor
   online: boolean
   latenciaMs: number | null
   jitterMs: number | null
@@ -59,6 +61,7 @@ export interface DispositivoRed {
   origen: string | null
   primeraVez: string
   ultimaVez: string
+  vistoHaceSeg?: number
   online: boolean
   bloqueado: boolean
 }
@@ -69,6 +72,7 @@ export interface AgenteRed {
   enlaceId: number | null
   version: string | null
   ultimaSenal: string | null
+  haceSeg?: number
   gateway: string | null
   routerEstado: string | null
   routerMarca: string | null
@@ -79,7 +83,7 @@ export interface AgenteRed {
 
 export interface EstadoActualRed {
   ultima: (MedicionRed & { origen: string | null; adaptadorUp: boolean | null }) | null
-  ultimaVelocidad: { fecha: string; downMbps: number | null; upMbps: number | null } | null
+  ultimaVelocidad: { fecha: string; haceSeg?: number; downMbps: number | null; upMbps: number | null } | null
   dispositivos: { total: number; online: number }
   agentes: AgenteRed[]
   enlaces: { id: number; nombre: string; estado: EnlaceEstado; proveedor: string | null }[]
