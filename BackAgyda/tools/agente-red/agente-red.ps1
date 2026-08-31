@@ -165,12 +165,12 @@ function Get-DispositivosLocales {
         } catch { }
     }
 
-    # hostname best-effort (con timeout corto, solo para los primeros ~40)
-    $i = 0
+    # hostname best-effort: NetBIOS/PTR con tope global de 15s
+    $deadline = (Get-Date).AddSeconds(15)
     foreach ($d in $out.Values) {
-        if ($i++ -ge 40) { break }
+        if ((Get-Date) -gt $deadline) { break }
         try {
-            $n = Resolve-DnsName -Name $d.ip -DnsOnly:$false -QuickTimeout -ErrorAction Stop | Select-Object -First 1
+            $n = Resolve-DnsName -Name $d.ip -LlmnrNetbiosOnly -QuickTimeout -ErrorAction Stop | Select-Object -First 1
             if ($n.NameHost) { $d.hostname = ($n.NameHost -split '\.')[0] }
         } catch { }
     }
@@ -178,9 +178,11 @@ function Get-DispositivosLocales {
 }
 
 # ─────────────────────────────────────────────────────────────
-#  4. RouterProbe — clase grande de deteccion del router (Fase 2)
-#     Intenta, en orden, todos los metodos posibles y devuelve
-#     los dispositivos que pueda leer + metadatos del gateway.
+#  4. RouterProbe — deteccion del router y su tabla DHCP (Fase 2)
+#     Prueba, en orden de fiabilidad, muchos metodos por marca; el
+#     primero que devuelva dispositivos gana. Mantiene sesion/cookies
+#     entre requests (WebSession), timeout por metodo, y reporta que
+#     marca/modelo/metodo funciono en $this.Meta / $this.Metodo.
 # ─────────────────────────────────────────────────────────────
 class RouterProbe {
     [string]$RHost
@@ -192,62 +194,139 @@ class RouterProbe {
     [System.Collections.Generic.List[object]]$Dispositivos
     [hashtable]$Meta
     [string]$Metodo
+    [string]$Estado           # 'ok' | 'sin-acceso' | 'no-intentado' | 'sin-respuesta'
+    [datetime]$Deadline       # tope global: no seguir sondeando despues de esto
+    $Session                  # Microsoft.PowerShell.Commands.WebRequestSession
 
     RouterProbe([string]$h, [string]$u, [string]$p, [string]$snmp, [int]$t, [bool]$skipCert) {
         $this.RHost = $h; $this.User = $u; $this.Pass = $p
-        $this.SnmpComunidad = $snmp; $this.TimeoutSeg = $t
+        $this.SnmpComunidad = $snmp
+        # cap agresivo: cada request al router no debe pasar de 6s
+        $this.TimeoutSeg = [math]::Min([math]::Max($t, 3), 6)
         $this.SkipCert = $skipCert
         $this.Dispositivos = [System.Collections.Generic.List[object]]::new()
-        $this.Meta = @{}
+        $this.Meta = @{ marca = $null; modelo = $null }
         $this.Metodo = 'ninguno'
+        $this.Estado = 'no-intentado'
+        $this.Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+    }
+
+    [bool] _tiempoAgotado() { return (Get-Date) -gt $this.Deadline }
+
+    # ¿el router responde en algun puerto de admin? (evita 20 metodos con timeout)
+    [bool] _responde() {
+        foreach ($port in @(443, 80, 8443, 8080, 8043)) {
+            try {
+                $c = New-Object System.Net.Sockets.TcpClient
+                $iar = $c.BeginConnect($this.RHost, $port, $null, $null)
+                $ok = $iar.AsyncWaitHandle.WaitOne(1200, $false)
+                if ($ok -and $c.Connected) {
+                    $c.EndConnect($iar); $c.Close()
+                    if ($port -in 443, 8443, 8043) { $this.Meta.scheme = 'https' } else { $this.Meta.scheme = 'http' }
+                    return $true
+                }
+                $c.Close()
+            } catch { }
+        }
+        return $false
     }
 
     [void] Run() {
-        if (-not $this.RHost) { return }
-        # 1) Identidad del router por HTTP (marca / modelo por banners)
-        $this.SondearBanner()
-        # 2) Metodos ordenados de mas fiable a mas generico
-        $tries = @(
-            { $this.TryMikroTikRest() },
-            { $this.TryUniFi() },
-            { $this.TryOpenWrtUbus() },
-            { $this.TryFortiGate() },
-            { $this.TryPfSense() },
-            { $this.TryHuaweiHG() },
-            { $this.TryTpLink() },
-            { $this.TrySnmp() },
-            { $this.TryUpnp() },
-            { $this.TryGenericJson() }
-        )
-        foreach ($t in $tries) {
-            if ($this.Dispositivos.Count -gt 0) { break }
-            try { & $t } catch { }
+        if (-not $this.RHost) { $this.Estado = 'no-intentado'; return }
+        # Tope global de 45s para toda la sonda del router.
+        $this.Deadline = (Get-Date).AddSeconds(45)
+
+        $this.TryUpnp()   # UDP, rapido; solo identidad
+        if (-not $this._responde()) {
+            $this.Estado = if (Get-Command snmpwalk -ErrorAction SilentlyContinue) { 'probando-snmp' } else { 'sin-respuesta' }
+            try { $this.TrySnmp() } catch { }
+            if ($this.Dispositivos.Count -gt 0) { $this.Estado = 'ok'; $this.Metodo = 'snmp' }
+            elseif ($this.Estado -eq 'probando-snmp') { $this.Estado = 'sin-acceso' }
+            return
         }
+
+        $this.Estado = 'sin-acceso'
+        $this.SondearBanner()
+
+        # Orden: primero el metodo de la marca detectada, luego el resto.
+        $todos = [ordered]@{
+            'MikroTik'  = { $this.TryMikroTikRest();  $this.TryMikroTikApi() }
+            'Ubiquiti'  = { $this.TryUniFi();          $this.TryEdgeOS() }
+            'OpenWrt'   = { $this.TryOpenWrtUbus();    $this.TryOpenWrtLuci() }
+            'Fortinet'  = { $this.TryFortiGate() }
+            'pfSense'   = { $this.TryPfSense();        $this.TryOpnSense() }
+            'Huawei'    = { $this.TryHuaweiHG() }
+            'TP-Link'   = { $this.TryTpLink();         $this.TryOmada() }
+            'Cisco'     = { $this.TryMeraki();         $this.TryCiscoRv() }
+            'Zyxel'     = { $this.TryZyxel() }
+            'Asus'      = { $this.TryAsus() }
+            'DD-WRT'    = { $this.TryDdWrt() }
+            'MercadoISP'= { $this.TryIspGenerico() }   # Arris/Askey (Telmex), etc.
+        }
+
+        $orden = @()
+        if ($this.Meta.marca -and $todos.Contains($this.Meta.marca)) { $orden += $this.Meta.marca }
+        foreach ($k in $todos.Keys) { if ($k -ne $this.Meta.marca) { $orden += $k } }
+
+        foreach ($k in $orden) {
+            if ($this.Dispositivos.Count -gt 0 -or $this._tiempoAgotado()) { break }
+            try { & $todos[$k] } catch { }
+        }
+        if ($this.Dispositivos.Count -eq 0 -and -not $this._tiempoAgotado()) { try { $this.TrySnmp() }        catch { } }
+        if ($this.Dispositivos.Count -eq 0 -and -not $this._tiempoAgotado()) { try { $this.TryGenericJson() } catch { } }
+
+        if ($this.Dispositivos.Count -gt 0) { $this.Estado = 'ok' }
     }
 
+    # ── helpers HTTP con sesion compartida ──
     [pscustomobject] _http([string]$url, [hashtable]$headers, [string]$method, $body) {
-        $p = @{ Uri = $url; Method = $method; TimeoutSec = $this.TimeoutSeg; ErrorAction = 'Stop' }
+        $p = @{ Uri = $url; Method = $method; TimeoutSec = $this.TimeoutSeg
+                WebSession = $this.Session; ErrorAction = 'Stop' }
         if ($headers) { $p.Headers = $headers }
-        if ($body)    { $p.Body = $body; $p.ContentType = 'application/json' }
-        # ignora certificados self-signed de routers (solo PS 6+)
+        if ($null -ne $body) {
+            if ($body -is [string]) { $p.Body = $body; $p.ContentType = 'application/json' }
+            else { $p.Body = $body }   # hashtable => form-urlencoded
+        }
         if ($this.SkipCert) { $p.SkipCertificateCheck = $true }
         return Invoke-RestMethod @p
+    }
+    [object] _web([string]$url, [string]$method, $body) {
+        $p = @{ Uri = $url; Method = $method; TimeoutSec = $this.TimeoutSeg
+                WebSession = $this.Session; UseBasicParsing = $true; ErrorAction = 'Stop' }
+        if ($null -ne $body) { $p.Body = $body }
+        if ($this.SkipCert) { $p.SkipCertificateCheck = $true }
+        return Invoke-WebRequest @p
+    }
+    [string] _base() {
+        # http o https segun lo que respondio el banner
+        if ($this.Meta.scheme) { return "$($this.Meta.scheme)://$($this.RHost)" }
+        return "http://$($this.RHost)"
     }
 
     [void] SondearBanner() {
         foreach ($scheme in @('https', 'http')) {
             try {
-                $r = Invoke-WebRequest -Uri "$scheme`://$($this.RHost)/" -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-                $txt = "$($r.Headers.Server) $($r.Content)".ToLower()
-                if ($txt -match 'mikrotik|routeros') { $this.Meta.marca = 'MikroTik' }
-                elseif ($txt -match 'unifi|ubnt|ubiquiti') { $this.Meta.marca = 'Ubiquiti' }
-                elseif ($txt -match 'openwrt|luci') { $this.Meta.marca = 'OpenWrt' }
-                elseif ($txt -match 'fortigate|fortinet') { $this.Meta.marca = 'Fortinet' }
-                elseif ($txt -match 'pfsense|netgate') { $this.Meta.marca = 'pfSense' }
-                elseif ($txt -match 'huawei') { $this.Meta.marca = 'Huawei' }
-                elseif ($txt -match 'tp-link|tplink|archer') { $this.Meta.marca = 'TP-Link' }
-                elseif ($txt -match 'dd-wrt') { $this.Meta.marca = 'DD-WRT' }
+                $r = $this._web("$scheme`://$($this.RHost)/", 'GET', $null)
+                $this.Meta.scheme = $scheme
+                $txt = ("$($r.Headers.Server) $($r.Headers.'WWW-Authenticate') $($r.Content)").ToLower()
+                $this.Meta.marca = $(
+                    if     ($txt -match 'mikrotik|routeros')            { 'MikroTik' }
+                    elseif ($txt -match 'unifi|ubnt|ubiquiti|edgeos|edgemax') { 'Ubiquiti' }
+                    elseif ($txt -match 'openwrt|lede|luci')            { 'OpenWrt' }
+                    elseif ($txt -match 'fortigate|fortinet')           { 'Fortinet' }
+                    elseif ($txt -match 'pfsense|netgate|opnsense')     { 'pfSense' }
+                    elseif ($txt -match 'huawei|hg8|hg6|echolife')      { 'Huawei' }
+                    elseif ($txt -match 'tp-link|tplink|archer|omada|tether') { 'TP-Link' }
+                    elseif ($txt -match 'cisco|meraki|rv\d{3}')         { 'Cisco' }
+                    elseif ($txt -match 'zyxel|zyxelcom')               { 'Zyxel' }
+                    elseif ($txt -match 'asuswrt|asus')                 { 'Asus' }
+                    elseif ($txt -match 'dd-wrt')                       { 'DD-WRT' }
+                    elseif ($txt -match 'arris|askey|technicolor|zte|nokia|sagemcom') { 'MercadoISP' }
+                    else { $null }
+                )
                 if ($r.Headers.Server) { $this.Meta.server = "$($r.Headers.Server)" }
+                # titulo de la pagina como pista de modelo
+                if ($r.Content -match '<title>([^<]{2,80})</title>') { $this.Meta.titulo = $Matches[1].Trim() }
                 break
             } catch { }
         }
@@ -255,107 +334,318 @@ class RouterProbe {
 
     [void] _add([string]$mac, [string]$ip, [string]$hn) {
         if (-not $mac) { return }
-        $m = ($mac.ToUpper() -replace '-', ':')
-        $this.Dispositivos.Add([pscustomobject]@{ mac = $m; ip = $ip; hostname = $hn; fabricante = $null; origen = 'router' })
+        $m = ($mac.ToUpper() -replace '[-\.]', ':')
+        if ($m -notmatch '^([0-9A-F]{2}:){5}[0-9A-F]{2}$') { return }
+        if ($m -eq 'FF:FF:FF:FF:FF:FF' -or $m -eq '00:00:00:00:00:00') { return }
+        $this.Dispositivos.Add([pscustomobject]@{
+            mac = $m; ip = $ip; hostname = $hn; fabricante = $null; origen = 'router'
+        })
+    }
+    # recolector generico de leases desde JSON de forma variada
+    [void] _absorberLeases($items) {
+        foreach ($x in @($items)) {
+            $mac = @($x.mac, $x.macaddr, $x.hwaddr, $x.'mac-address', $x.'mac_address', $x.MAC, $x.clientMac) | Where-Object { $_ } | Select-Object -First 1
+            $ip  = @($x.ip, $x.ipaddr, $x.address, $x.'ip-address', $x.'ip_address', $x.IP, $x.clientIp) | Where-Object { $_ } | Select-Object -First 1
+            $hn  = @($x.hostname, $x.name, $x.'host-name', $x.'host_name', $x.clientName, $x.deviceName) | Where-Object { $_ } | Select-Object -First 1
+            if ($mac) { $this._add($mac, $ip, $hn) }
+        }
+    }
+    # extrae pares MAC..IP de HTML/texto crudo (scraping)
+    [void] _absorberTexto([string]$html) {
+        $rx = [regex]::Matches($html, '([0-9A-Fa-f]{2}([:\-][0-9A-Fa-f]{2}){5})[\s\S]{0,160}?(\d{1,3}(\.\d{1,3}){3})')
+        foreach ($m in $rx) { $this._add($m.Groups[1].Value, $m.Groups[3].Value, $null) }
+        if ($this.Dispositivos.Count -eq 0) {
+            $rx2 = [regex]::Matches($html, '(\d{1,3}(\.\d{1,3}){3})[\s\S]{0,160}?([0-9A-Fa-f]{2}([:\-][0-9A-Fa-f]{2}){5})')
+            foreach ($m in $rx2) { $this._add($m.Groups[3].Value, $m.Groups[1].Value, $null) }
+        }
+    }
+    [void] _ok([string]$metodo, [string]$marca) {
+        if ($this.Dispositivos.Count -gt 0) {
+            $this.Metodo = $metodo
+            if ($marca) { $this.Meta.marca = $marca }
+        }
     }
 
-    # ── MikroTik RouterOS REST API (v7+) ──
+    # ─────────── MikroTik ───────────
     [void] TryMikroTikRest() {
         $pair = "$($this.User):$($this.Pass)"
         $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
-        $h = @{ Authorization = "Basic $b64" }
-        $lease = $this._http("https://$($this.RHost)/rest/ip/dhcp-server/lease", $h, 'GET', $null)
-        foreach ($l in $lease) { $this._add($l.'mac-address', $l.address, $l.'host-name') }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'mikrotik-rest'; $this.Meta.marca = 'MikroTik' }
+        $h = @{ Authorization = "Basic $b64"; Accept = 'application/json' }
+        foreach ($sch in @('https', 'http')) {
+            try {
+                $lease = $this._http("$sch`://$($this.RHost)/rest/ip/dhcp-server/lease", $h, 'GET', $null)
+                foreach ($l in $lease) { $this._add($l.'mac-address', $l.'active-address', $l.'host-name') }
+                if ($this.Dispositivos.Count -eq 0) {
+                    $arp = $this._http("$sch`://$($this.RHost)/rest/ip/arp", $h, 'GET', $null)
+                    foreach ($a in $arp) { $this._add($a.'mac-address', $a.address, $null) }
+                }
+                $this._ok('mikrotik-rest', 'MikroTik'); if ($this.Dispositivos.Count) { return }
+            } catch { }
+        }
+    }
+    [void] TryMikroTikApi() {
+        # RouterOS < v7 no tiene REST; el API binario (8728) requiere libreria.
+        # Fallback: webfig print de /ip/dhcp-server/lease via www.
+        try {
+            $h = @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($this.User):$($this.Pass)")) }
+            $r = $this._web("http://$($this.RHost)/webfig/", 'GET', $null)  # solo confirma que responde
+            if ($r.StatusCode -eq 200) { $this.Meta.marca = 'MikroTik' }
+        } catch { }
     }
 
-    # ── UniFi Controller / UDM API ──
+    # ─────────── Ubiquiti ───────────
     [void] TryUniFi() {
         $body = @{ username = $this.User; password = $this.Pass } | ConvertTo-Json
-        # UDM (integrado)
-        try {
-            $null = $this._http("https://$($this.RHost)/api/auth/login", @{}, 'POST', $body)
-            $cli = $this._http("https://$($this.RHost)/proxy/network/api/s/default/stat/sta", @{}, 'GET', $null)
-            foreach ($c in $cli.data) { $hn = if ($c.hostname) { $c.hostname } else { $c.name }; $this._add($c.mac, $c.ip, $hn) }
-        } catch {
-            # Controller clasico
-            $null = $this._http("https://$($this.RHost):8443/api/login", @{}, 'POST', $body)
-            $cli = $this._http("https://$($this.RHost):8443/api/s/default/stat/sta", @{}, 'GET', $null)
-            foreach ($c in $cli.data) { $hn = if ($c.hostname) { $c.hostname } else { $c.name }; $this._add($c.mac, $c.ip, $hn) }
+        $bases = @("https://$($this.RHost)", "https://$($this.RHost):8443", "https://$($this.RHost):443")
+        foreach ($b in $bases) {
+            foreach ($login in @('/api/auth/login', '/api/login')) {
+                try {
+                    $null = $this._http("$b$login", @{}, 'POST', $body)
+                    $paths = @('/proxy/network/api/s/default/stat/sta', '/api/s/default/stat/sta',
+                               '/proxy/network/v2/api/site/default/clients/active')
+                    foreach ($p in $paths) {
+                        try {
+                            $cli = $this._http("$b$p", @{}, 'GET', $null)
+                            $arr = if ($cli.data) { $cli.data } else { $cli }
+                            foreach ($c in $arr) {
+                                $hn = @($c.hostname, $c.name, $c.display_name) | Where-Object { $_ } | Select-Object -First 1
+                                $this._add($c.mac, $c.ip, $hn)
+                            }
+                            if ($this.Dispositivos.Count) { $this._ok('unifi', 'Ubiquiti'); return }
+                        } catch { }
+                    }
+                } catch { }
+            }
         }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'unifi'; $this.Meta.marca = 'Ubiquiti' }
+    }
+    [void] TryEdgeOS() {
+        # EdgeRouter (EdgeOS): /api/edge/data.json?data=dhcp_leases con auth por form
+        try {
+            $null = $this._web("https://$($this.RHost)/", 'POST', @{ username = $this.User; password = $this.Pass })
+            $d = $this._http("https://$($this.RHost)/api/edge/data.json?data=dhcp_leases", @{}, 'GET', $null)
+            $leases = $d.output.'dhcp-server-leases'
+            foreach ($net in $leases.PSObject.Properties) {
+                foreach ($ipEntry in $net.Value.PSObject.Properties) {
+                    $this._add($ipEntry.Value.mac, $ipEntry.Name, $ipEntry.Value.'client-hostname')
+                }
+            }
+            $this._ok('edgeos', 'Ubiquiti')
+        } catch { }
     }
 
-    # ── OpenWrt / LEDE via ubus (LuCI RPC) ──
+    # ─────────── OpenWrt ───────────
     [void] TryOpenWrtUbus() {
-        $login = @{ jsonrpc = '2.0'; id = 1; method = 'call'
-                    params = @('00000000000000000000000000000000', 'session', 'login',
-                               @{ username = $this.User; password = $this.Pass }) } | ConvertTo-Json -Depth 6
-        $r = $this._http("http://$($this.RHost)/ubus", @{}, 'POST', $login)
-        $sid = $r.result[1].ubus_rpc_session
-        if (-not $sid) { return }
-        $q = @{ jsonrpc = '2.0'; id = 2; method = 'call'
-                params = @($sid, 'luci-rpc', 'getDHCPLeases', @{}) } | ConvertTo-Json -Depth 6
-        $d = $this._http("http://$($this.RHost)/ubus", @{}, 'POST', $q)
-        foreach ($l in $d.result[1].dhcp_leases) { $this._add($l.macaddr, $l.ipaddr, $l.hostname) }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'openwrt-ubus'; $this.Meta.marca = 'OpenWrt' }
-    }
-
-    # ── FortiGate REST API (API key en RouterPass) ──
-    [void] TryFortiGate() {
-        $h = @{ Authorization = "Bearer $($this.Pass)" }
-        $d = $this._http("https://$($this.RHost)/api/v2/monitor/user/device/query", $h, 'GET', $null)
-        foreach ($x in $d.results) { $this._add($x.mac, $x.ipv4_address, $x.hostname) }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'fortigate'; $this.Meta.marca = 'Fortinet' }
-    }
-
-    # ── pfSense (FauxAPI / REST paquete) ──
-    [void] TryPfSense() {
-        $h = @{ Authorization = "$($this.User) $($this.Pass)" }
-        $d = $this._http("https://$($this.RHost)/api/v1/services/dhcpd/lease", $h, 'GET', $null)
-        foreach ($l in $d.data) { $this._add($l.mac, $l.ip, $l.hostname) }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'pfsense'; $this.Meta.marca = 'pfSense' }
-    }
-
-    # ── Huawei HG8245/HG659 (form login + tabla) ──
-    [void] TryHuaweiHG() {
-        $r = Invoke-WebRequest -Uri "http://$($this.RHost)/html/bbsp/common/lancfg.asp" -TimeoutSec $this.TimeoutSeg -UseBasicParsing -ErrorAction Stop
-        $rx = [regex]::Matches($r.Content, '([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}).{0,120}?(\d{1,3}(\.\d{1,3}){3})')
-        foreach ($m in $rx) { $this._add($m.Groups[1].Value, $m.Groups[3].Value, $null) }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'huawei-scrape'; $this.Meta.marca = 'Huawei' }
-    }
-
-    # ── TP-Link (Archer / EAP) — endpoint JSON o scrape ──
-    [void] TryTpLink() {
-        try {
-            $d = $this._http("http://$($this.RHost)/cgi-bin/luci/;stok=/admin/dhcps?form=client", @{}, 'GET', $null)
-            foreach ($c in $d) { $this._add($c.macaddr, $c.ipaddr, $c.name) }
-        } catch {
-            $r = Invoke-WebRequest -Uri "http://$($this.RHost)/" -TimeoutSec $this.TimeoutSeg -UseBasicParsing
-            $rx = [regex]::Matches($r.Content, '([0-9A-Fa-f]{2}(-[0-9A-Fa-f]{2}){5}).{0,80}?(\d{1,3}(\.\d{1,3}){3})')
-            foreach ($m in $rx) { $this._add($m.Groups[1].Value, $m.Groups[3].Value, $null) }
+        foreach ($sch in @('http', 'https')) {
+            try {
+                $login = @{ jsonrpc = '2.0'; id = 1; method = 'call'
+                            params = @('00000000000000000000000000000000', 'session', 'login',
+                                       @{ username = $this.User; password = $this.Pass }) } | ConvertTo-Json -Depth 8
+                $r = $this._http("$sch`://$($this.RHost)/ubus", @{}, 'POST', $login)
+                $sid = $r.result[1].ubus_rpc_session
+                if (-not $sid) { continue }
+                $q = @{ jsonrpc = '2.0'; id = 2; method = 'call'
+                        params = @($sid, 'luci-rpc', 'getDHCPLeases', @{}) } | ConvertTo-Json -Depth 8
+                $d = $this._http("$sch`://$($this.RHost)/ubus", @{}, 'POST', $q)
+                foreach ($l in @($d.result[1].dhcp_leases) + @($d.result[1].dhcp6_leases)) {
+                    $this._add($l.macaddr, $l.ipaddr, $l.hostname)
+                }
+                $this._ok('openwrt-ubus', 'OpenWrt'); if ($this.Dispositivos.Count) { return }
+            } catch { }
         }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'tplink'; $this.Meta.marca = 'TP-Link' }
+    }
+    [void] TryOpenWrtLuci() {
+        # LuCI clasico: login por form -> pagina de DHCP leases
+        try {
+            $null = $this._web("http://$($this.RHost)/cgi-bin/luci/", 'POST', @{ luci_username = $this.User; luci_password = $this.Pass })
+            $r = $this._web("http://$($this.RHost)/cgi-bin/luci/admin/network/dhcp", 'GET', $null)
+            $this._absorberTexto($r.Content)
+            $this._ok('openwrt-luci', 'OpenWrt')
+        } catch { }
     }
 
-    # ── SNMP: ipNetToMediaPhysAddress (1.3.6.1.2.1.4.22.1.2) ──
+    # ─────────── Fortinet ───────────
+    [void] TryFortiGate() {
+        # RouterPass = API token
+        $h = @{ Authorization = "Bearer $($this.Pass)" }
+        foreach ($p in @('/api/v2/monitor/system/dhcp', '/api/v2/monitor/user/device/query',
+                         '/api/v2/monitor/user/detected-device')) {
+            try {
+                $d = $this._http("https://$($this.RHost)$p", $h, 'GET', $null)
+                $rows = @($d.results) + @($d.results.list)
+                foreach ($x in $rows) {
+                    $mac = @($x.mac, $x.hardware_address) | Where-Object { $_ } | Select-Object -First 1
+                    $ip  = @($x.ip, $x.ipv4_address, $x.'ip-address') | Where-Object { $_ } | Select-Object -First 1
+                    $hn  = @($x.hostname, $x.host_name) | Where-Object { $_ } | Select-Object -First 1
+                    $this._add($mac, $ip, $hn)
+                }
+                $this._ok('fortigate', 'Fortinet'); if ($this.Dispositivos.Count) { return }
+            } catch { }
+        }
+    }
+
+    # ─────────── pfSense / OPNsense ───────────
+    [void] TryPfSense() {
+        $h = @{ Authorization = "$($this.User) $($this.Pass)" }  # FauxAPI: "<apikey> <apisecret-hash>"
+        try {
+            $d = $this._http("https://$($this.RHost)/api/v1/services/dhcpd/lease", $h, 'GET', $null)
+            $this._absorberLeases($d.data)
+            $this._ok('pfsense-api', 'pfSense')
+        } catch { }
+    }
+    [void] TryOpnSense() {
+        # OPNsense: API key/secret como Basic auth
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($this.User):$($this.Pass)"))
+        try {
+            $d = $this._http("https://$($this.RHost)/api/dhcpv4/leases/searchLease", @{ Authorization = "Basic $b64" }, 'GET', $null)
+            foreach ($l in $d.rows) { $this._add($l.mac, $l.address, $l.hostname) }
+            $this._ok('opnsense', 'pfSense')
+        } catch { }
+    }
+
+    # ─────────── Huawei (ONT de ISP) ───────────
+    [void] TryHuaweiHG() {
+        foreach ($p in @('/html/bbsp/common/lancfg.asp', '/html/status/lancfg.asp',
+                         '/html/network/dhcp.asp', '/html/bbsp/dev/devinfo.asp')) {
+            try {
+                $r = $this._web("http://$($this.RHost)$p", 'GET', $null)
+                $this._absorberTexto($r.Content)
+                if ($this.Dispositivos.Count) { $this._ok('huawei-scrape', 'Huawei'); return }
+            } catch { }
+        }
+    }
+
+    # ─────────── TP-Link ───────────
+    [void] TryTpLink() {
+        # Archer nuevo: JSON RPC; viejo: scrape.
+        try {
+            $body = @{ method = 'do'; login = @{ password = $this.Pass } } | ConvertTo-Json
+            $tok = $this._http("http://$($this.RHost)/cgi-bin/luci/;stok=/login?form=login", @{}, 'POST', $body)
+            $stok = $tok.stok
+            if ($stok) {
+                $d = $this._http("http://$($this.RHost)/cgi-bin/luci/;stok=$stok/admin/dhcps?form=client", @{}, 'GET', $null)
+                $this._absorberLeases($d.data)
+            }
+        } catch { }
+        if ($this.Dispositivos.Count -eq 0) {
+            foreach ($p in @('/', '/userRpm/AssignedIpAddrListRpm.htm', '/DHCPClientList.htm')) {
+                try { $this._absorberTexto((($this._web("http://$($this.RHost)$p", 'GET', $null)).Content)) } catch { }
+                if ($this.Dispositivos.Count) { break }
+            }
+        }
+        $this._ok('tplink', 'TP-Link')
+    }
+    [void] TryOmada() {
+        # TP-Link Omada controller (SDN)
+        $body = @{ name = $this.User; password = $this.Pass } | ConvertTo-Json
+        foreach ($b in @("https://$($this.RHost):8043", "https://$($this.RHost)", "http://$($this.RHost):8088")) {
+            try {
+                $lg = $this._http("$b/api/v2/login", @{}, 'POST', $body)
+                $tok = $lg.result.token
+                $h = @{ 'Csrf-Token' = $tok }
+                $sites = $this._http("$b/api/v2/sites?token=$tok", $h, 'GET', $null)
+                $sid = $sites.result.data[0].id
+                $cli = $this._http("$b/api/v2/sites/$sid/clients?token=$tok", $h, 'GET', $null)
+                foreach ($c in $cli.result.data) { $this._add($c.mac, $c.ip, $c.name) }
+                if ($this.Dispositivos.Count) { $this._ok('omada', 'TP-Link'); return }
+            } catch { }
+        }
+    }
+
+    # ─────────── Cisco ───────────
+    [void] TryMeraki() {
+        # Meraki Dashboard API — RouterPass = API key, RHost = <networkId>@api.meraki.com (o red local no aplica)
+        if ($this.RHost -notmatch 'meraki|^[A-Za-z0-9_-]+@') { return }
+        try {
+            $netId = ($this.RHost -split '@')[0]
+            $h = @{ 'X-Cisco-Meraki-API-Key' = $this.Pass; Accept = 'application/json' }
+            $d = $this._http("https://api.meraki.com/api/v1/networks/$netId/clients?perPage=1000", $h, 'GET', $null)
+            foreach ($c in $d) { $this._add($c.mac, $c.ip, $c.description) }
+            $this._ok('meraki', 'Cisco')
+        } catch { }
+    }
+    [void] TryCiscoRv() {
+        # Cisco RV series: pagina de DHCP status (scrape tras Basic auth)
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($this.User):$($this.Pass)"))
+        foreach ($p in @('/scgi-bin/dynaform/dhcp_status.html', '/DHCPTable.htm', '/StatusLanDhcp.asp')) {
+            try {
+                $r = $this._web("https://$($this.RHost)$p", 'GET', $null)
+                $this._absorberTexto($r.Content)
+                if ($this.Dispositivos.Count) { $this._ok('cisco-rv', 'Cisco'); return }
+            } catch { }
+        }
+    }
+
+    # ─────────── Zyxel / Asus / DD-WRT ───────────
+    [void] TryZyxel() {
+        try {
+            $lg = $this._http("https://$($this.RHost)/UserLogin", @{}, 'POST',
+                (@{ Input_Account = $this.User; Input_Passwd = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($this.Pass)) } | ConvertTo-Json))
+            $d = $this._http("https://$($this.RHost)/cgi-bin/DAL?oid=lanhosts", @{}, 'GET', $null)
+            $this._absorberLeases($d.Object)
+            $this._ok('zyxel', 'Zyxel')
+        } catch { }
+    }
+    [void] TryAsus() {
+        # ASUSWRT: login por Basic, luego update.cgi / appGet.cgi?hook=get_clientlist()
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($this.User):$($this.Pass)"))
+        try {
+            $d = $this._http("http://$($this.RHost)/appGet.cgi?hook=get_clientlist()", @{ Authorization = "Basic $b64" }, 'GET', $null)
+            $lst = $d.get_clientlist
+            foreach ($p in $lst.PSObject.Properties) {
+                $c = $p.Value
+                if ($c.mac) { $this._add($c.mac, $c.ip, $c.nickName) }
+            }
+            $this._ok('asuswrt', 'Asus')
+        } catch { }
+    }
+    [void] TryDdWrt() {
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($this.User):$($this.Pass)"))
+        try {
+            $r = $this._web("http://$($this.RHost)/Status_Lan.live.asp", 'GET', $null)
+            # dhcp_leases='hostname','ip','mac','expires','num'|...
+            $rx = [regex]::Matches($r.Content, "'([^']*)','(\d{1,3}(\.\d{1,3}){3})','([0-9A-Fa-f:]{17})'")
+            foreach ($m in $rx) { $this._add($m.Groups[4].Value, $m.Groups[2].Value, $m.Groups[1].Value) }
+            $this._ok('dd-wrt', 'DD-WRT')
+        } catch { }
+    }
+
+    # ─────────── Routers de ISP mexicanos (Arris/Askey Telmex, ZTE/Nokia Totalplay, etc.) ───────────
+    [void] TryIspGenerico() {
+        $paths = @(
+            '/cgi-bin/dhcpinfo.cgi', '/cgi-bin/DHCPTable', '/DHCPTable.htm', '/dhcpinfo.html',
+            '/RgDhcp.asp', '/VmDhcp.asp', '/connected_devices_computers.php',
+            '/getDeviceList.cgi', '/network_setup.php', '/deviceManage.cmd',
+            '/cgi-bin/status_deviceinfo.asp', '/html/network/wlanaccess.asp'
+        )
+        foreach ($sch in @('http', 'https')) {
+            foreach ($p in $paths) {
+                if ($this._tiempoAgotado()) { return }
+                try {
+                    $r = $this._web("$sch`://$($this.RHost)$p", 'GET', $null)
+                    $this._absorberTexto($r.Content)
+                    if ($this.Dispositivos.Count) { $this._ok("isp:$p", $this.Meta.marca); return }
+                } catch { }
+            }
+        }
+    }
+
+    # ─────────── SNMP (agnostico) ───────────
     [void] TrySnmp() {
-        # Requiere utilitario snmpwalk en PATH (Net-SNMP) o modulo SNMP.
         $snmpwalk = Get-Command snmpwalk -ErrorAction SilentlyContinue
         if (-not $snmpwalk) { return }
-        $raw = & snmpwalk -v2c -c $this.SnmpComunidad -t 2 -r 1 $this.RHost 1.3.6.1.2.1.4.22.1.2 2>$null
+        # ipNetToMediaPhysAddress .1.3.6.1.2.1.4.22.1.2  (ARP del router)
+        $raw = & snmpwalk -v2c -c $this.SnmpComunidad -Oq -t 2 -r 1 $this.RHost 1.3.6.1.2.1.4.22.1.2 2>$null
         foreach ($line in $raw) {
-            if ($line -match '1\.4\.22\.1\.2\.\d+\.(\d+\.\d+\.\d+\.\d+)\s.*(([0-9A-Fa-f]{1,2}[ :]){5}[0-9A-Fa-f]{1,2})') {
+            if ($line -match '1\.4\.22\.1\.2\.\d+\.(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+"?([0-9A-Fa-f]{1,2}([ :][0-9A-Fa-f]{1,2}){5})"?') {
                 $ip = $Matches[1]
-                $mac = ($Matches[2] -replace ' ', ':' -replace '^:', '')
+                $mac = (($Matches[2] -split '[ :]') | ForEach-Object { $_.PadLeft(2, '0') }) -join ':'
                 $this._add($mac, $ip, $null)
             }
         }
-        if ($this.Dispositivos.Count -gt 0) { $this.Metodo = 'snmp' }
+        $this._ok('snmp', $this.Meta.marca)
     }
 
-    # ── UPnP / SSDP: descubre el IGD y lee su modelo (no da clientes,
-    #    pero identifica marca/modelo cuando el banner HTTP falla) ──
+    # ─────────── UPnP / SSDP (solo identidad) ───────────
     [void] TryUpnp() {
         try {
             $msg = "M-SEARCH * HTTP/1.1`r`nHOST: 239.255.255.250:1900`r`nMAN: `"ssdp:discover`"`r`nMX: 2`r`nST: urn:schemas-upnp-org:device:InternetGatewayDevice:1`r`n`r`n"
@@ -368,52 +658,75 @@ class RouterProbe {
             $resp = [Text.Encoding]::ASCII.GetString($udp.Receive([ref]$remote))
             $udp.Close()
             if ($resp -match 'LOCATION:\s*(\S+)') {
-                $loc = $Matches[1]
-                $xml = Invoke-RestMethod -Uri $loc -TimeoutSec 5 -ErrorAction Stop
-                $this.Meta.upnpModelo = "$($xml.root.device.manufacturer) $($xml.root.device.modelName)".Trim()
-                if (-not $this.Meta.marca -and $xml.root.device.manufacturer) { $this.Meta.marca = "$($xml.root.device.manufacturer)" }
+                $xml = Invoke-RestMethod -Uri $Matches[1] -TimeoutSec 5 -ErrorAction Stop
+                $man = "$($xml.root.device.manufacturer)".Trim()
+                $mod = "$($xml.root.device.modelName)".Trim()
+                if ($man -or $mod) { $this.Meta.modelo = ("$man $mod").Trim() }
+                if (-not $this.Meta.marca -and $man) {
+                    $this.Meta.marca = $(
+                        if     ($man -match 'mikrotik')        { 'MikroTik' }
+                        elseif ($man -match 'ubiquiti|ubnt')   { 'Ubiquiti' }
+                        elseif ($man -match 'tp-link')         { 'TP-Link' }
+                        elseif ($man -match 'huawei')          { 'Huawei' }
+                        elseif ($man -match 'cisco')           { 'Cisco' }
+                        elseif ($man -match 'zyxel')           { 'Zyxel' }
+                        elseif ($man -match 'asus')            { 'Asus' }
+                        elseif ($man -match 'arris|askey|zte|nokia|technicolor|sagemcom') { 'MercadoISP' }
+                        else { $null }
+                    )
+                }
             }
         } catch { }
     }
 
-    # ── Ultimo recurso: probar endpoints JSON comunes de DHCP ──
+    # ─────────── endpoints JSON genericos ───────────
     [void] TryGenericJson() {
-        $paths = @('/api/dhcp/leases', '/dhcp-leases.json', '/status_dhcp.json',
-                   '/cgi-bin/dhcp_leases', '/data/dhcp_lease.json', '/api/hosts')
-        foreach ($scheme in @('https', 'http')) {
-            foreach ($p in $paths) {
-                try {
-                    $d = $this._http("$scheme`://$($this.RHost)$p", @{}, 'GET', $null)
-                    $items = if ($d -is [array]) { $d } elseif ($d.leases) { $d.leases } elseif ($d.data) { $d.data } else { @() }
-                    foreach ($x in $items) {
-                        $mac = @($x.mac, $x.macaddr, $x.hwaddr, $x.'mac-address') | Where-Object { $_ } | Select-Object -First 1
-                        $ip  = @($x.ip, $x.ipaddr, $x.address, $x.'ip-address') | Where-Object { $_ } | Select-Object -First 1
-                        $hn  = @($x.hostname, $x.name, $x.'host-name') | Where-Object { $_ } | Select-Object -First 1
-                        if ($mac) { $this._add($mac, $ip, $hn) }
-                    }
-                    if ($this.Dispositivos.Count -gt 0) { $this.Metodo = "generic:$p"; return }
-                } catch { }
-            }
+        $paths = @('/api/dhcp/leases', '/api/hosts', '/api/devices', '/dhcp-leases.json',
+                   '/status_dhcp.json', '/cgi-bin/dhcp_leases', '/data/dhcp_lease.json',
+                   '/goform/getDHCPClientList', '/api/v1/dhcp/leases')
+        $sch = if ($this.Meta.scheme) { $this.Meta.scheme } else { 'http' }
+        foreach ($p in $paths) {
+            if ($this._tiempoAgotado()) { return }
+            try {
+                $d = $this._http("$sch`://$($this.RHost)$p", @{}, 'GET', $null)
+                $items = if ($d -is [array]) { $d }
+                         elseif ($d.leases)  { $d.leases }
+                         elseif ($d.data)    { $d.data }
+                         elseif ($d.clients) { $d.clients }
+                         elseif ($d.hosts)   { $d.hosts }
+                         else { @() }
+                $this._absorberLeases($items)
+                if ($this.Dispositivos.Count) { $this._ok("generic:$p", $this.Meta.marca); return }
+            } catch { }
         }
     }
 }
 
 function Get-DispositivosRouter([string]$gateway) {
-    if (-not $cfg.HabilitarRouter) { return @() }
+    $res = [pscustomobject]@{
+        dispositivos = @(); estado = 'deshabilitado'
+        marca = $null; modelo = $null; metodo = 'ninguno'; host = $null
+    }
+    if (-not $cfg.HabilitarRouter) { return $res }
     $rHost = if ($cfg.RouterHost) { $cfg.RouterHost } else { $gateway }
-    if (-not $rHost) { return @() }
+    if (-not $rHost) { $res.estado = 'sin-gateway'; return $res }
+    $res.host = $rHost
     try {
         $skipCert = $PSVersionTable.PSVersion.Major -ge 6
         $probe = [RouterProbe]::new($rHost, $cfg.RouterUser, $cfg.RouterPass, $cfg.RouterSnmpComunidad, [int]$cfg.TimeoutSeg, $skipCert)
         $probe.Run()
-        if ($probe.Metodo -ne 'ninguno' -and $probe.Metodo -ne '') {
-            Write-Log "Router: metodo=$($probe.Metodo) marca=$($probe.Meta.marca) modelo=$($probe.Meta.upnpModelo) dispositivos=$($probe.Dispositivos.Count)"
-        }
-        return @($probe.Dispositivos)
+        $res.dispositivos = @($probe.Dispositivos)
+        $res.estado = $probe.Estado
+        $res.marca  = $probe.Meta.marca
+        $res.modelo = if ($probe.Meta.modelo) { $probe.Meta.modelo } elseif ($probe.Meta.titulo) { $probe.Meta.titulo } else { $null }
+        $res.metodo = $probe.Metodo
+        Write-Log ("Router: host={0} estado={1} marca={2} modelo={3} metodo={4} disp={5}" -f `
+            $rHost, $res.estado, $res.marca, $res.modelo, $res.metodo, $res.dispositivos.Count)
     } catch {
+        $res.estado = 'error'
         Write-Log "Router: fallo la sonda ($($_.Exception.Message))"
-        return @()
     }
+    return $res
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -458,12 +771,12 @@ try {
     $locales = Get-DispositivosLocales
     $router  = Get-DispositivosRouter $ad.gateway
 
-    # merge por MAC: el router gana (mas fiable) pero conserva hostname del local
+    # merge por MAC: el router gana (mas fiable) pero conserva hostname/fabricante del local
     $mapa = @{}
     foreach ($d in $locales) { $mapa[$d.mac] = $d }
-    foreach ($d in $router) {
+    foreach ($d in $router.dispositivos) {
         if ($mapa.ContainsKey($d.mac)) {
-            if (-not $d.hostname) { $d.hostname = $mapa[$d.mac].hostname }
+            if (-not $d.hostname)   { $d.hostname   = $mapa[$d.mac].hostname }
             if (-not $d.fabricante) { $d.fabricante = $mapa[$d.mac].fabricante }
         }
         $mapa[$d.mac] = $d
@@ -481,6 +794,13 @@ try {
             so      = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
             ipLocal = $ad.ipLocal
             gateway = $ad.gateway
+        }
+        router = [ordered]@{
+            estado = $router.estado    # ok | sin-acceso | deshabilitado | sin-gateway | error | no-intentado
+            marca  = $router.marca
+            modelo = $router.modelo
+            metodo = $router.metodo
+            host   = $router.host
         }
         enlaceId    = $cfg.EnlaceId
         online      = $con.online

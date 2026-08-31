@@ -70,6 +70,10 @@ export interface AgenteRed {
   version: string | null
   ultimaSenal: string | null
   gateway: string | null
+  routerEstado: string | null
+  routerMarca: string | null
+  routerModelo: string | null
+  routerMetodo: string | null
   vivo: 0 | 1
 }
 

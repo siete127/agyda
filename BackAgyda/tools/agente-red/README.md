@@ -60,23 +60,46 @@ automáticos de caída).
 
 Si pones `HabilitarRouter: true` y las credenciales del router, el agente además
 intenta leer la **lista completa de dispositivos desde el router** (no solo lo
-que ve por ARP). La clase `RouterProbe` prueba, en orden, varios métodos:
+que ve por ARP). La clase `RouterProbe`:
 
-| Método | Router |
+1. **Identifica la marca** por el banner HTTP, la cabecera `Server`, el
+   `WWW-Authenticate`, el `<title>` de la página y por SSDP/UPnP.
+2. **Prueba primero el método de esa marca**, luego el resto, en este orden:
+
+| Router | Métodos que intenta |
 |---|---|
-| RouterOS REST API | MikroTik v7+ |
-| API de UniFi / UDM | Ubiquiti |
-| ubus / LuCI RPC | OpenWrt / LEDE |
-| REST `/api/v2/monitor` | FortiGate (API key en `RouterPass`) |
-| REST FauxAPI | pfSense |
-| scrape de `lancfg.asp` | Huawei HG8245 / HG659 |
-| endpoint JSON o scrape | TP-Link Archer / EAP |
-| SNMP `ipNetToMediaPhysAddress` | cualquiera con SNMP (necesita `snmpwalk` en PATH) |
-| SSDP / UPnP | identifica marca/modelo cuando el resto falla |
-| endpoints JSON comunes de DHCP | último recurso genérico |
+| MikroTik | RouterOS REST API (`/rest/ip/dhcp-server/lease` y `/rest/ip/arp`) |
+| Ubiquiti | UniFi Controller / UDM (varios puertos y rutas), EdgeOS (`/api/edge/data.json`) |
+| OpenWrt / LEDE | ubus JSON-RPC (`luci-rpc getDHCPLeases`), LuCI clásico (scrape) |
+| FortiGate | REST `/api/v2/monitor/system/dhcp` y `/user/device` (token en `RouterPass`) |
+| pfSense / OPNsense | FauxAPI REST, API key/secret |
+| Huawei (ONT de ISP) | scrape de `lancfg.asp` / `devinfo.asp` / `dhcp.asp` |
+| TP-Link | JSON-RPC de Archer nuevo, scrape de Archer viejo, controlador Omada |
+| Cisco | Meraki Dashboard API, scrape de RV series |
+| Zyxel | login + `DAL?oid=lanhosts` |
+| Asus (ASUSWRT) | `appGet.cgi?hook=get_clientlist()` |
+| DD-WRT | `Status_Lan.live.asp` (parseo de `dhcp_leases`) |
+| Routers de ISP MX | rutas comunes de Arris/Askey (Telmex), ZTE/Nokia (Totalplay), Technicolor… |
+| Cualquiera con SNMP | `ipNetToMediaPhysAddress` (necesita `snmpwalk` en PATH — Net-SNMP) |
+| Genérico | endpoints JSON de DHCP más comunes |
 
-El primero que devuelva dispositivos gana. Si ninguno funciona, el agente sigue
-reportando lo que ve por ARP local (nada se rompe).
+El primero que devuelva dispositivos gana. Mantiene la sesión/cookies entre
+peticiones (necesario para UniFi, OpenWrt, Omada, etc.). Si ninguno funciona,
+el agente sigue reportando lo que ve por ARP local — **nada se rompe**.
+
+En la pestaña **Monitoreo en vivo** cada agente muestra el estado del router:
+`Router: MikroTik (RB4011) · vía mikrotik-rest` cuando funciona, o
+`Router: sin acceso — usando ARP local` cuando no. Cada dispositivo lleva un
+badge **router** o **arp** según de dónde salió.
+
+### Credenciales del router en el config
+
+- `RouterHost` — IP del router. Vacío = usa el gateway por defecto de la PC.
+- `RouterUser` / `RouterPass` — usuario y contraseña del panel del router.
+  - **FortiGate**: `RouterPass` = API token (deja `RouterUser` vacío).
+  - **pfSense FauxAPI**: `RouterUser` = api-key, `RouterPass` = api-secret hash.
+  - **Meraki**: `RouterHost` = `<networkId>@api.meraki.com`, `RouterPass` = API key.
+- `RouterSnmpComunidad` — comunidad SNMP v2c (por defecto `public`).
 
 ## Verificar / operar
 

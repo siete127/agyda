@@ -105,6 +105,13 @@ function DispRow({ d, editable }: { d: DispositivoRed; editable: boolean }) {
       <td className="px-4 py-2.5 font-mono text-gray-600">{d.ip ?? '—'}</td>
       <td className="px-4 py-2.5 font-mono text-[0.7rem] text-gray-400">{d.mac}</td>
       <td className="px-4 py-2.5 text-gray-500">{d.fabricante ?? '—'}</td>
+      <td className="px-4 py-2.5">
+        {d.origen === 'router' ? (
+          <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[0.62rem] font-semibold text-emerald-600">router</span>
+        ) : (
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[0.62rem] font-semibold text-gray-400">arp</span>
+        )}
+      </td>
       <td className="px-4 py-2.5 text-gray-400">{haceCuanto(d.ultimaVez)}</td>
       <td className="px-4 py-2.5 text-right">
         {editable && (
@@ -313,17 +320,39 @@ export function MonitoreoTab() {
           <h3 className="mb-2 flex items-center gap-1.5 text-[0.85rem] font-bold text-gray-900">
             <Server className="h-4 w-4 text-gray-400" /> Agentes de monitoreo
           </h3>
-          <div className="flex flex-wrap gap-2">
-            {estado!.agentes.map((a) => (
-              <div key={a.id} className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-1.5 text-xs">
-                <span className={clsx('h-2 w-2 rounded-full', a.vivo ? 'bg-emerald-500' : 'bg-red-400')} />
-                <span className="font-semibold text-gray-700">{a.nombre}</span>
-                <span className="text-gray-400">
-                  {a.vivo ? 'activo' : 'sin señal'} · {haceCuanto(a.ultimaSenal)}
-                  {a.version && ` · v${a.version}`}
-                </span>
-              </div>
-            ))}
+          <div className="flex flex-col gap-2">
+            {estado!.agentes.map((a) => {
+              const rEstado = a.routerEstado
+              const rDesc =
+                rEstado === 'ok'
+                  ? `Router: ${a.routerMarca ?? 'detectado'}${a.routerModelo ? ` (${a.routerModelo})` : ''} · vía ${a.routerMetodo ?? '—'}`
+                  : rEstado === 'sin-acceso'
+                    ? `Router: sin acceso${a.routerMarca ? ` (${a.routerMarca}?)` : ''} — usando ARP local`
+                    : rEstado === 'deshabilitado'
+                      ? 'Router: lectura DHCP desactivada'
+                      : rEstado === 'sin-gateway'
+                        ? 'Router: sin gateway'
+                        : rEstado
+                          ? `Router: ${rEstado}`
+                          : null
+              return (
+                <div key={a.id} className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={clsx('h-2 w-2 rounded-full', a.vivo ? 'bg-emerald-500' : 'bg-red-400')} />
+                    <span className="font-semibold text-gray-700">{a.nombre}</span>
+                    <span className="text-gray-400">
+                      {a.vivo ? 'activo' : 'sin señal'} · {haceCuanto(a.ultimaSenal)}
+                      {a.version && ` · v${a.version}`}
+                    </span>
+                  </div>
+                  {rDesc && (
+                    <p className={clsx('mt-1 pl-4 text-[0.68rem]', rEstado === 'ok' ? 'text-emerald-600' : 'text-gray-400')}>
+                      {rDesc}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
           </div>
           {editable && (
             <details className="mt-3">
@@ -355,6 +384,7 @@ export function MonitoreoTab() {
                   <th className="px-4 py-2.5 font-semibold">IP</th>
                   <th className="px-4 py-2.5 font-semibold">MAC</th>
                   <th className="px-4 py-2.5 font-semibold">Fabricante</th>
+                  <th className="px-4 py-2.5 font-semibold">Origen</th>
                   <th className="px-4 py-2.5 font-semibold">Visto</th>
                   <th className="px-4 py-2.5" />
                 </tr>

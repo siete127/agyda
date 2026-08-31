@@ -617,6 +617,7 @@ async function ingestaRed(req, res) {
     const dispositivos = Array.isArray(b.dispositivos) ? b.dispositivos : [];
     const agente = b.agente || {};
     const nombreAgente = String(agente.nombre || b.origen || 'agente-desconocido').slice(0, 120);
+    const router = b.router || {};
 
     // 1) upsert del agente
     let agenteId = null;
@@ -628,15 +629,24 @@ async function ingestaRed(req, res) {
         .input('so', sql.NVarChar, (agente.so || null))
         .input('ipLocal', sql.NVarChar, (agente.ipLocal || null))
         .input('gateway', sql.NVarChar, (agente.gateway || null))
+        .input('rEstado', sql.NVarChar, (router.estado || null))
+        .input('rMarca', sql.NVarChar, (router.marca || null))
+        .input('rModelo', sql.NVarChar, (router.modelo ? String(router.modelo).slice(0, 120) : null))
+        .input('rMetodo', sql.NVarChar, (router.metodo || null))
         .query(`
           MERGE dbo.TI_RED_AGENTES AS t
           USING (SELECT @nombre AS RA_NOMBRE) AS s ON t.RA_NOMBRE = s.RA_NOMBRE
           WHEN MATCHED THEN UPDATE SET
             RA_ENLACE_ID = COALESCE(@enlaceId, t.RA_ENLACE_ID),
             RA_VERSION = @version, RA_SO = @so, RA_IP_LOCAL = @ipLocal,
-            RA_GATEWAY = @gateway, RA_ULTIMA_SENAL = GETDATE()
-          WHEN NOT MATCHED THEN INSERT (RA_NOMBRE, RA_ENLACE_ID, RA_VERSION, RA_SO, RA_IP_LOCAL, RA_GATEWAY, RA_ULTIMA_SENAL)
-            VALUES (@nombre, @enlaceId, @version, @so, @ipLocal, @gateway, GETDATE())
+            RA_GATEWAY = @gateway, RA_ULTIMA_SENAL = GETDATE(),
+            RA_ROUTER_ESTADO = @rEstado, RA_ROUTER_MARCA = COALESCE(@rMarca, t.RA_ROUTER_MARCA),
+            RA_ROUTER_MODELO = COALESCE(@rModelo, t.RA_ROUTER_MODELO), RA_ROUTER_METODO = @rMetodo
+          WHEN NOT MATCHED THEN INSERT
+            (RA_NOMBRE, RA_ENLACE_ID, RA_VERSION, RA_SO, RA_IP_LOCAL, RA_GATEWAY, RA_ULTIMA_SENAL,
+             RA_ROUTER_ESTADO, RA_ROUTER_MARCA, RA_ROUTER_MODELO, RA_ROUTER_METODO)
+            VALUES (@nombre, @enlaceId, @version, @so, @ipLocal, @gateway, GETDATE(),
+                    @rEstado, @rMarca, @rModelo, @rMetodo)
           OUTPUT INSERTED.RA_ID;
         `);
       agenteId = ag.recordset[0]?.RA_ID ?? null;
@@ -760,6 +770,8 @@ async function getEstadoActualRed(req, res) {
     const agentes = await pool.request().query(`
       SELECT RA_ID as id, RA_NOMBRE as nombre, RA_ENLACE_ID as enlaceId, RA_VERSION as version,
              RA_ULTIMA_SENAL as ultimaSenal, RA_GATEWAY as gateway,
+             RA_ROUTER_ESTADO as routerEstado, RA_ROUTER_MARCA as routerMarca,
+             RA_ROUTER_MODELO as routerModelo, RA_ROUTER_METODO as routerMetodo,
              CASE WHEN RA_ULTIMA_SENAL >= DATEADD(MINUTE, -${AGENTE_INACTIVO_MIN}, GETDATE()) THEN 1 ELSE 0 END as vivo
       FROM dbo.TI_RED_AGENTES WHERE RA_ACTIVO = 1 ORDER BY RA_ULTIMA_SENAL DESC
     `);
