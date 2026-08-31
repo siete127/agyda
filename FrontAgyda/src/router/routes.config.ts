@@ -62,7 +62,7 @@ export const ROUTES: RouteConfig[] = [
 
   // ── Áreas de la empresa ────────────────────────────────────────────────
   { path: '/areas',            label: 'Portal de Áreas', icon: 'Building2',            moduleKey: 'areas-portal',      roles: ['AD','TI'],         showInSidebar: true  },
-  { path: '/direccion-general', label: 'Dirección General', icon: 'LayoutDashboard',   moduleKey: 'direccion-general', roles: ['AD'],              showInSidebar: true  },
+  { path: '/direccion-general', label: 'Dirección General', icon: 'LayoutDashboard',   moduleKey: 'direccion-general', roles: ['AD'],              showInSidebar: false  },
   { path: '/direccion-general/planeacion-estrategica',    label: 'Planeación Estratégica',       icon: 'Target',        moduleKey: 'direccion-general', roles: ['AD'], showInSidebar: true },
   { path: '/direccion-general/indicadores-empresariales', label: 'Indicadores Empresariales',    icon: 'Gauge',         moduleKey: 'direccion-general', roles: ['AD'], showInSidebar: true },
   { path: '/direccion-general/toma-decisiones',           label: 'Toma de Decisiones',           icon: 'Gavel',         moduleKey: 'direccion-general', roles: ['AD'], showInSidebar: true },
