@@ -25,7 +25,7 @@ import { NoticiaDetalle } from '@/pages/noticias/NoticiasPage'
 import { type Noticia } from '@/types/noticia.types'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
-import { personalizacionService, type DashboardCard } from '@/services/personalizacion.service'
+import { personalizacionService, type DashboardCard, type Institucional } from '@/services/personalizacion.service'
 import { RESUMEN_CARDS } from './resumenCards'
 import { CARD_CATALOG_INDEX } from './cardCatalog'
 
@@ -39,11 +39,18 @@ const EMPRESA_ITEMS: { label: string; icon: React.ElementType; key: EmpresaKey }
   { label: 'Legales', icon: Scale,  key: 'legales' },
 ]
 
-const MVV_INFO: Record<EmpresaKey, { title: string; image: string; text?: string; chips?: string[] }> = {
-  mision:  { title: 'Nuestra Misión',    image: '/mision.png',  text: 'Soporte TI, marcación y software que hacen crecer tu negocio.' },
-  vision:  { title: 'Nuestra Visión',    image: '/vision.png',  text: 'Liderar la automatización con IA en soluciones empresariales.' },
-  valores: { title: 'Nuestros Valores',  image: '/valores.png', chips: ['Innovación','Enfoque al cliente','Aprendizaje','Calidad','Integridad','Trabajo en equipo','Confianza'] },
-  legales: { title: 'Documentos Legales',image: '/legales.png' },
+type MvvInfo = { title: string; image: string; text?: string; chips?: string[] }
+
+/* Textos de Misión/Visión/Valores por empresa — vienen de la personalización
+   (Configuración → Apariencia → Misión, visión y valores). "Legales" es estático
+   porque su contenido es la lista de documentos, no un texto. */
+function mvvInfo(inst: Institucional): Record<EmpresaKey, MvvInfo> {
+  return {
+    mision:  { title: 'Nuestra Misión',    image: '/mision.png',  text: inst.mision || undefined },
+    vision:  { title: 'Nuestra Visión',    image: '/vision.png',  text: inst.vision || undefined },
+    valores: { title: 'Nuestros Valores',  image: '/valores.png', chips: inst.valores?.length ? inst.valores : undefined },
+    legales: { title: 'Documentos Legales', image: '/legales.png' },
+  }
 }
 
 /* ─── Evento ────────────────────────────────────────────────── */
@@ -185,7 +192,8 @@ function LegalesManager({ isAdmin }: { isAdmin: boolean }) {
 
 /* ─── EmpresaModal ──────────────────────────────────────────── */
 function EmpresaModal({ empresaKey, isAdmin, onClose }: { empresaKey: EmpresaKey; isAdmin: boolean; onClose: () => void }) {
-  const info = MVV_INFO[empresaKey]
+  const { institucional } = usePersonalizacion()
+  const info = mvvInfo(institucional)[empresaKey]
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />

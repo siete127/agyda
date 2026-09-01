@@ -9,6 +9,7 @@ import {
 import { ventasAreaService } from '@/services/ventasArea.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { Modal } from '@/components/ui/Modal'
+import { PausasMetaBloque } from '@/components/ventas/PausasMetaBloque'
 import { Spinner } from '@/components/ui/Spinner'
 import type { MetaVenta, MetaTipo, MetaAlcance } from '@/services/ventasArea.service'
 
@@ -163,6 +164,9 @@ function MetaCard({ meta, puedeGestionar, onDelete }: { meta: MetaVenta; puedeGe
           Meta de monto: <span className="font-semibold text-gray-800">${meta.metaMonto.toLocaleString('es-MX')}</span>
         </p>
       )}
+
+      {/* tiempos de pausa de hoy — clic para desglose por persona */}
+      <PausasMetaBloque metaId={meta.id} nombreMeta={nombre} />
 
       {/* banner motivacional con ilustración */}
       <div className="relative mt-4 flex items-center gap-3.5 overflow-hidden rounded-2xl bg-violet-50 px-4 py-4">

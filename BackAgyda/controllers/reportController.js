@@ -248,6 +248,8 @@ async function getPausasHoyDe(pool, neusId) {
   for (const r of result.recordset) porEstado[r.status_id] = Math.max(0, r.totalSegundos || 0);
   return porEstado;
 }
+// Reutilizable desde otros módulos (p. ej. Ventas Área — pausas por meta).
+exports.getPausasHoyDe = getPausasHoyDe;
 
 // GET /api/reports/tiempos/hoy — tiempo disponible (jornada − pausas) + desglose
 // de pausas del día para el usuario autenticado. Emparejado con /pausa/hoy: misma

@@ -10,6 +10,9 @@ router.get('/metas', auth.authenticateToken, requireActionAccess('ventas-area', 
 router.post('/metas', auth.authenticateToken, requireActionAccess('ventas-area', 'gestionar-metas'), controller.crearMeta);
 router.delete('/metas/:id', auth.authenticateToken, requireActionAccess('ventas-area', 'gestionar-metas'), controller.eliminarMeta);
 router.get('/mis-metas', auth.authenticateToken, controller.getMisMetas);
+// Desglose de tiempos de pausa de HOY de la(s) persona(s) de una meta — visible
+// para cualquier usuario autenticado (mismo dato que el reporte de pausas).
+router.get('/metas/:id/pausas', auth.authenticateToken, controller.getMetaPausas);
 router.get('/campanas', auth.authenticateToken, requireActionAccess('ventas-area', 'gestionar-metas'), controller.listCampanas);
 router.get('/dashboard', auth.authenticateToken, controller.getDashboard);
 router.get('/asesores', auth.authenticateToken, controller.listAsesores);
