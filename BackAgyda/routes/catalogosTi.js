@@ -34,6 +34,12 @@ router.post('/especialidades', requireActionAccess('configuracion', 'configurar'
 router.put('/especialidades/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateEspecialidad);
 router.patch('/especialidades/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleEspecialidadActiva);
 
+// Códigos de cierre — lectura abierta a Tickets (se usa al resolver un ticket).
+router.get('/codigos-cierre', requireActionAccess('tickets', 'ver'), catalogosTiController.getCodigosCierre);
+router.post('/codigos-cierre', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createCodigoCierre);
+router.put('/codigos-cierre/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateCodigoCierre);
+router.patch('/codigos-cierre/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleCodigoCierreActiva);
+
 // Proveedores — lectura abierta a Tickets (se usa al escalar un ticket a Nivel 3).
 router.get('/proveedores', requireActionAccess('tickets', 'ver'), catalogosTiController.getProveedores);
 router.post('/proveedores', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createProveedor);
