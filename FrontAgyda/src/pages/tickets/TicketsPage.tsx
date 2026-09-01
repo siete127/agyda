@@ -2115,7 +2115,10 @@ export function TicketsPage() {
             {(['todos', 'abierto', 'asignado', 'en_proceso', 'en_espera', 'resuelto', 'reabierto', 'cerrado'] as const).map((e) => (
               <button
                 key={e}
-                onClick={() => setFiltroEstado(e)}
+                onClick={() => {
+                  setFiltroEstado(e)
+                  if (vista === 'productividad') setVista('lista')
+                }}
                 className={clsx(
                   'whitespace-nowrap rounded-full px-3 py-1 text-[0.72rem] font-semibold transition-all',
                   filtroEstado === e
