@@ -3,6 +3,7 @@ const databaseService = require('../services/databaseService');
 const dbVentas = require('../config/database_ventas');
 const { upsertKpi } = require('./areasController');
 const { evaluarFormula, validarFormula } = require('../services/formulaService');
+const { getPausasHoyDe } = require('./reportController');
 const logger = global.logger || require('../utils/logger');
 
 // Variables disponibles para escribir fórmulas de incentivo (ver formulaService.js).
@@ -309,6 +310,72 @@ async function getMisMetas(req, res) {
   } catch (err) {
     logger.error('ventasAreaController.getMisMetas', err);
     res.status(500).json({ success: false, message: 'Error al obtener tus metas' });
+  }
+}
+
+// GET /api/ventas-area/metas/:id/pausas — desglose de tiempos de pausa de HOY
+// (baño, comida, capacitación, permiso) de la(s) persona(s) de una meta.
+//   - alcance 'asesor'  -> una fila: el asesor de la meta.
+//   - alcance 'campana' -> una fila por cada agente activo de la campaña.
+// Cruza Users (BD de ventas) -> NEUS_USUARIOS por nombre y suma de USUARIO_TIEMPOS.
+async function getMetaPausas(req, res) {
+  try {
+    const metaId = parseInt(req.params.id, 10);
+    if (!metaId) return res.status(400).json({ success: false, message: 'Meta inválida' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const metaRs = await pool.request()
+      .input('id', sql.Int, metaId)
+      .query(`SELECT VM_ASESOR_ID as asesorId, VM_CAMPANA_ID as campanaId, VM_ALCANCE as alcance FROM VENTAS_METAS WHERE VM_ID = @id`);
+    const meta = metaRs.recordset[0];
+    if (!meta) return res.status(404).json({ success: false, message: 'Meta no encontrada' });
+
+    const ventasPool = await getVentasPool();
+
+    // Lista de agentes { id, nombre } según el alcance.
+    let agentes = [];
+    if (meta.alcance === 'campana' && meta.campanaId) {
+      const rs = await ventasPool.request()
+        .input('c', sql.Int, meta.campanaId)
+        .query(`SELECT idUser as id, nombreAgente as nombre FROM Users WHERE campaign = @c AND role = 'agente' AND Activo = 1 ORDER BY nombreAgente`);
+      agentes = rs.recordset;
+    } else if (meta.asesorId) {
+      const rs = await ventasPool.request()
+        .input('a', sql.Int, meta.asesorId)
+        .query(`SELECT idUser as id, nombreAgente as nombre FROM Users WHERE idUser = @a`);
+      agentes = rs.recordset;
+    }
+    if (!agentes.length) return res.json({ success: true, data: { alcance: meta.alcance, agentes: [] } });
+
+    // Nombre -> NEUS_ID (los usuarios de asistencia/pausas viven en la Intranet).
+    const nombres = [...new Set(agentes.map((a) => a.nombre).filter(Boolean))];
+    const neusPorNombre = new Map();
+    for (const nombre of nombres) {
+      const r = await pool.request()
+        .input('n', sql.NVarChar, nombre)
+        .query(`SELECT TOP 1 NEUS_ID as id FROM NEUS_USUARIOS WHERE LTRIM(RTRIM(NEUS_NOMBRES)) = LTRIM(RTRIM(@n)) AND NEUS_ACTIVO = 1`);
+      if (r.recordset[0]) neusPorNombre.set(nombre, r.recordset[0].id);
+    }
+
+    const data = [];
+    for (const a of agentes) {
+      const neusId = neusPorNombre.get(a.nombre);
+      if (!neusId) {
+        data.push({ agenteId: a.id, nombre: a.nombre, sinRegistro: true, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0, totalSeg: 0 });
+        continue;
+      }
+      const p = await getPausasHoyDe(pool, neusId);
+      const totalSeg = p[2] + p[3] + p[5] + p[6];
+      data.push({
+        agenteId: a.id, nombre: a.nombre, sinRegistro: false,
+        comidaSeg: p[2], banioSeg: p[3], capacitacionSeg: p[5], permisoSeg: p[6], totalSeg,
+      });
+    }
+
+    res.json({ success: true, data: { alcance: meta.alcance, agentes: data } });
+  } catch (err) {
+    logger.error('ventasAreaController.getMetaPausas', err);
+    res.status(500).json({ success: false, message: 'Error al obtener los tiempos de pausa' });
   }
 }
 
@@ -874,6 +941,7 @@ module.exports = {
   eliminarMeta,
   listCampanas,
   getMisMetas,
+  getMetaPausas,
   getDashboard,
   listAsesores,
   getReporteResultados,

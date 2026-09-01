@@ -32,6 +32,23 @@ export interface MiMeta {
   avanceUnidades: number
 }
 
+/** Desglose de tiempos de pausa de HOY de un agente involucrado en una meta. */
+export interface MetaPausaAgente {
+  agenteId: number
+  nombre: string
+  sinRegistro: boolean
+  comidaSeg: number
+  banioSeg: number
+  capacitacionSeg: number
+  permisoSeg: number
+  totalSeg: number
+}
+
+export interface MetaPausas {
+  alcance: MetaAlcance
+  agentes: MetaPausaAgente[]
+}
+
 export interface AsesorVentas {
   id: number
   nombre: string
@@ -86,5 +103,10 @@ export const ventasAreaService = {
   async getMisMetas(): Promise<MiMeta[]> {
     const { data } = await api.get('/ventas-area/mis-metas')
     return data.data ?? []
+  },
+
+  async getMetaPausas(metaId: number): Promise<MetaPausas> {
+    const { data } = await api.get(`/ventas-area/metas/${metaId}/pausas`)
+    return data.data as MetaPausas
   },
 }

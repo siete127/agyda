@@ -23,6 +23,7 @@ import { incapacidadesService } from '@/services/incapacidades.service'
 import { ventasService } from '@/services/ventas.service'
 import { tiemposService } from '@/services/tiempos.service'
 import { ventasAreaService, type MiMeta } from '@/services/ventasArea.service'
+import { PausasMetaBloque } from '@/components/ventas/PausasMetaBloque'
 
 /* ════════════════════════════════════════════════════════════════════════
    CATÁLOGO DE CARDS DE RESUMEN
@@ -466,6 +467,9 @@ function MetaProgreso({ meta }: { meta: MiMeta }) {
         <MetaKpi valor={`${pctReal.toFixed(1)}%`} label="Progreso" tono="text-emerald-600" />
         <MetaKpi valor={cumplida ? 'Lista' : 'Activa'} label="Estado" tono={cumplida ? 'text-emerald-600' : 'text-amber-500'} />
       </div>
+
+      {/* tiempos de pausa de hoy — clic para desglose por persona */}
+      <PausasMetaBloque metaId={meta.id} nombreMeta={nombre} />
 
       {/* banner motivacional */}
       <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-violet-50 px-3 py-2.5">
