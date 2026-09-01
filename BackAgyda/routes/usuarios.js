@@ -14,6 +14,8 @@ router.get('/todas-areas', authenticateToken, usuarioController.getTodosConArea)
 router.get('/nuevos-colaboradores', authenticateToken, usuarioController.getNuevosColaboradores);
 router.get('/aniversarios', authenticateToken, usuarioController.getAniversarios);
 router.get('/:id', authenticateToken, usuarioController.getUsuarioById);
+router.get('/:id/ficha', authenticateToken, usuarioController.getUsuarioFicha);
+router.put('/:id/ficha', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.updateUsuarioFicha);
 router.get('/:id/status', authenticateToken, usuarioController.getCurrentStatus);
 router.get('/:id/online', authenticateToken, usuarioController.checkUserOnline);
 router.get('/:id/times', authenticateToken, usuarioController.getTimes);

@@ -883,3 +883,140 @@ exports.updatePuesto = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error actualizando puesto' });
   }
 };
+
+// ── Ficha rápida del usuario: contacto + fecha de nacimiento + dirección ──
+// Consolida NEUS_USUARIOS (correo, teléfono, fecha_cumpleanos) con el expediente
+// (EXPEDIENTE_PERSONA.FECHA_NACIMIENTO y EXPEDIENTE_CONTACTO para la dirección),
+// para poder ver/editar lo básico sin abrir el expediente completo.
+
+const toISODate = (d) => {
+  if (!d) return null;
+  const dt = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString().slice(0, 10);
+};
+
+exports.getUsuarioFicha = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request()
+      .input('id', sql.Int, id)
+      .query(`
+        SELECT
+          u.NEUS_ID              AS id,
+          u.NEUS_NOMBRES         AS nombre,
+          ISNULL(u.NEUS_CORREO, '')    AS correo,
+          ISNULL(u.NEUS_TELEFONO, '')  AS telefono,
+          u.fecha_cumpleanos           AS fechaNacimientoNeus,
+          per.FECHA_NACIMIENTO         AS fechaNacimientoExp,
+          ISNULL(con.TEL_PRINCIPAL, '') AS telPrincipal,
+          ISNULL(con.DIR_CALLE_NUMERO, '') AS calleNumero,
+          ISNULL(con.DIR_COLONIA, '')      AS colonia,
+          ISNULL(con.DIR_CODIGO_POSTAL, '') AS codigoPostal,
+          ISNULL(con.DIR_CIUDAD, '')       AS ciudad,
+          ISNULL(con.DIR_ESTADO, '')       AS estado,
+          ISNULL(con.DIR_PAIS, '')         AS pais
+        FROM NEUS_USUARIOS u
+        LEFT JOIN EXPEDIENTE_PERSONA  per ON per.USUARIO_ID = u.NEUS_ID
+        LEFT JOIN EXPEDIENTE_CONTACTO con ON con.USUARIO_ID = u.NEUS_ID
+        WHERE u.NEUS_ID = @id
+      `);
+    if (!rs.recordset.length) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    const r = rs.recordset[0];
+    res.json({
+      success: true,
+      data: {
+        id: r.id,
+        nombre: r.nombre,
+        correo: r.correo,
+        telefono: r.telefono || r.telPrincipal,
+        fechaNacimiento: toISODate(r.fechaNacimientoExp) || toISODate(r.fechaNacimientoNeus),
+        direccion: {
+          calleNumero: r.calleNumero,
+          colonia: r.colonia,
+          codigoPostal: r.codigoPostal,
+          ciudad: r.ciudad,
+          estado: r.estado,
+          pais: r.pais,
+        },
+      },
+    });
+  } catch (e) {
+    console.error('Error getUsuarioFicha:', e);
+    res.status(500).json({ success: false, message: 'Error al obtener la ficha del usuario' });
+  }
+};
+
+exports.updateUsuarioFicha = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { correo, telefono, fechaNacimiento, direccion } = req.body || {};
+    const dir = direccion || {};
+    const fnac = fechaNacimiento ? new Date(fechaNacimiento) : null;
+    const fnacValida = fnac && !Number.isNaN(fnac.getTime()) ? fnac : null;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    // 1) NEUS_USUARIOS — correo, teléfono, cumpleaños (se mantiene sincronizado)
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('correo', sql.NVarChar, correo ? String(correo).trim() : null)
+      .input('telefono', sql.NVarChar, telefono ? String(telefono).trim() : null)
+      .input('fnac', sql.Date, fnacValida)
+      .query(`
+        UPDATE NEUS_USUARIOS
+        SET NEUS_CORREO = @correo,
+            NEUS_TELEFONO = @telefono,
+            fecha_cumpleanos = COALESCE(@fnac, fecha_cumpleanos)
+        WHERE NEUS_ID = @id
+      `);
+
+    // 2) EXPEDIENTE_PERSONA — FECHA_NACIMIENTO (fuente de verdad del expediente)
+    if (fnacValida) {
+      await pool.request()
+        .input('id', sql.Int, id)
+        .input('fnac', sql.Date, fnacValida)
+        .query(`
+          MERGE dbo.EXPEDIENTE_PERSONA AS t
+          USING (SELECT @id AS USUARIO_ID) AS s ON t.USUARIO_ID = s.USUARIO_ID
+          WHEN MATCHED THEN UPDATE SET FECHA_NACIMIENTO = @fnac, ACTUALIZADO_EN = GETDATE()
+          WHEN NOT MATCHED THEN INSERT (USUARIO_ID, FECHA_NACIMIENTO) VALUES (@id, @fnac);
+        `);
+    }
+
+    // 3) EXPEDIENTE_CONTACTO — dirección + tel/correo espejo
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('tel', sql.NVarChar, telefono ? String(telefono).trim() : null)
+      .input('correo', sql.NVarChar, correo ? String(correo).trim() : null)
+      .input('calle', sql.NVarChar, dir.calleNumero || null)
+      .input('colonia', sql.NVarChar, dir.colonia || null)
+      .input('cp', sql.NVarChar, dir.codigoPostal || null)
+      .input('ciudad', sql.NVarChar, dir.ciudad || null)
+      .input('estado', sql.NVarChar, dir.estado || null)
+      .input('pais', sql.NVarChar, dir.pais || null)
+      .query(`
+        MERGE dbo.EXPEDIENTE_CONTACTO AS t
+        USING (SELECT @id AS USUARIO_ID) AS s ON t.USUARIO_ID = s.USUARIO_ID
+        WHEN MATCHED THEN UPDATE SET
+          TEL_PRINCIPAL = @tel, CORREO = @correo,
+          DIR_CALLE_NUMERO = @calle, DIR_COLONIA = @colonia, DIR_CODIGO_POSTAL = @cp,
+          DIR_CIUDAD = @ciudad, DIR_ESTADO = @estado, DIR_PAIS = @pais,
+          ACTUALIZADO_EN = GETDATE()
+        WHEN NOT MATCHED THEN INSERT
+          (USUARIO_ID, TEL_PRINCIPAL, CORREO, DIR_CALLE_NUMERO, DIR_COLONIA, DIR_CODIGO_POSTAL, DIR_CIUDAD, DIR_ESTADO, DIR_PAIS)
+          VALUES (@id, @tel, @correo, @calle, @colonia, @cp, @ciudad, @estado, @pais);
+      `);
+
+    await logAudit(pool, {
+      userId: req.user?.id || null, userName: req.user?.nombre || null,
+      modulo: 'usuarios', accion: 'editar-ficha', entidadId: id,
+      detalle: { correo, telefono }, ip: req.ip,
+    }).catch(() => {});
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error updateUsuarioFicha:', e);
+    res.status(500).json({ success: false, message: 'Error al guardar la ficha del usuario' });
+  }
+};
