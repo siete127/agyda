@@ -150,7 +150,7 @@ async function listMetas(req, res) {
 
 async function crearMeta(req, res) {
   try {
-    const { asesorId, campanaId, periodo, tipo, alcance, metaMonto, metaUnidades } = req.body;
+    const { asesorId, campanaId, periodo, periodoFin, tipo, alcance, metaMonto, metaUnidades } = req.body;
     const tipoNorm = tipo === 'diaria' ? 'diaria' : 'mensual';
     const alcanceNorm = alcance === 'campana' ? 'campana' : 'asesor';
 
@@ -161,23 +161,44 @@ async function crearMeta(req, res) {
     const asesorIdFinal = alcanceNorm === 'campana' ? 0 : Number(asesorId);
     const campanaIdFinal = campanaId ? Number(campanaId) : null;
 
+    // Meta diaria con rango: la misma meta se replica en cada día del rango
+    // [periodo .. periodoFin]. Sin periodoFin (o meta mensual) = un solo periodo.
+    const fechas = [];
+    if (tipoNorm === 'diaria' && periodoFin && periodoFin > periodo) {
+      const d = new Date(periodo + 'T00:00:00');
+      const fin = new Date(periodoFin + 'T00:00:00');
+      if (Number.isNaN(d.getTime()) || Number.isNaN(fin.getTime())) {
+        return res.status(400).json({ success: false, message: 'Fechas del rango inválidas' });
+      }
+      // tope de seguridad: máximo 366 días
+      let guard = 0;
+      while (d <= fin && guard++ < 366) {
+        fechas.push(d.toISOString().slice(0, 10));
+        d.setDate(d.getDate() + 1);
+      }
+    } else {
+      fechas.push(periodo);
+    }
+
     const pool = await databaseService.getPool(req.user?.empresa);
-    await pool.request()
-      .input('asesorId', sql.Int, asesorIdFinal)
-      .input('periodo', sql.NVarChar, periodo)
-      .input('campanaId', sql.Int, campanaIdFinal)
-      .input('tipo', sql.NVarChar, tipoNorm)
-      .input('alcance', sql.NVarChar, alcanceNorm)
-      .input('metaMonto', sql.Decimal(18, 2), metaMonto || 0)
-      .input('metaUnidades', sql.Int, metaUnidades || 0)
-      .query(`
-        MERGE VENTAS_METAS AS t
-        USING (SELECT @asesorId AS a, @periodo AS p, @campanaId AS c) AS s
-          ON t.VM_ASESOR_ID = s.a AND t.VM_PERIODO = s.p AND (t.VM_CAMPANA_ID = s.c OR (t.VM_CAMPANA_ID IS NULL AND s.c IS NULL))
-        WHEN MATCHED THEN UPDATE SET VM_META_MONTO = @metaMonto, VM_META_UNIDADES = @metaUnidades, VM_TIPO = @tipo, VM_ALCANCE = @alcance
-        WHEN NOT MATCHED THEN INSERT (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID, VM_TIPO, VM_ALCANCE, VM_META_MONTO, VM_META_UNIDADES)
-          VALUES (@asesorId, @periodo, @campanaId, @tipo, @alcance, @metaMonto, @metaUnidades);
-      `);
+    for (const f of fechas) {
+      await pool.request()
+        .input('asesorId', sql.Int, asesorIdFinal)
+        .input('periodo', sql.NVarChar, f)
+        .input('campanaId', sql.Int, campanaIdFinal)
+        .input('tipo', sql.NVarChar, tipoNorm)
+        .input('alcance', sql.NVarChar, alcanceNorm)
+        .input('metaMonto', sql.Decimal(18, 2), metaMonto || 0)
+        .input('metaUnidades', sql.Int, metaUnidades || 0)
+        .query(`
+          MERGE VENTAS_METAS AS t
+          USING (SELECT @asesorId AS a, @periodo AS p, @campanaId AS c) AS s
+            ON t.VM_ASESOR_ID = s.a AND t.VM_PERIODO = s.p AND (t.VM_CAMPANA_ID = s.c OR (t.VM_CAMPANA_ID IS NULL AND s.c IS NULL))
+          WHEN MATCHED THEN UPDATE SET VM_META_MONTO = @metaMonto, VM_META_UNIDADES = @metaUnidades, VM_TIPO = @tipo, VM_ALCANCE = @alcance
+          WHEN NOT MATCHED THEN INSERT (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID, VM_TIPO, VM_ALCANCE, VM_META_MONTO, VM_META_UNIDADES)
+            VALUES (@asesorId, @periodo, @campanaId, @tipo, @alcance, @metaMonto, @metaUnidades);
+        `);
+    }
 
     const countRs = await pool.request()
       .input('periodo', sql.NVarChar, periodo)
@@ -192,7 +213,7 @@ async function crearMeta(req, res) {
       periodo,
     });
 
-    res.json({ success: true });
+    res.json({ success: true, data: { creadas: fechas.length } });
   } catch (err) {
     logger.error('ventasAreaController.crearMeta', err);
     res.status(500).json({ success: false, message: 'Error al guardar meta' });

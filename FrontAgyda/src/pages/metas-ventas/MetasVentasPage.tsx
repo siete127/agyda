@@ -128,6 +128,7 @@ function CrearMetaModal({ onClose }: { onClose: () => void }) {
   const [asesorId, setAsesorId] = useState<number | ''>('')
   const [campanaId, setCampanaId] = useState<number | ''>('')
   const [periodo, setPeriodo] = useState(hoyDia())
+  const [periodoFin, setPeriodoFin] = useState(hoyDia())
   const [metaMonto, setMetaMonto] = useState<number | ''>('')
   const [metaUnidades, setMetaUnidades] = useState<number | ''>('')
 
@@ -142,21 +143,28 @@ function CrearMetaModal({ onClose }: { onClose: () => void }) {
 
   const cambiarTipo = (t: MetaTipo) => {
     setTipo(t)
-    setPeriodo(t === 'diaria' ? hoyDia() : hoyMes())
+    const hoy = t === 'diaria' ? hoyDia() : hoyMes()
+    setPeriodo(hoy)
+    setPeriodoFin(hoyDia())
   }
+
+  const rangoDias = tipo === 'diaria' && periodoFin > periodo
+    ? Math.round((new Date(periodoFin + 'T00:00:00').getTime() - new Date(periodo + 'T00:00:00').getTime()) / 86400000) + 1
+    : 1
 
   const crear = useMutation({
     mutationFn: () => ventasAreaService.createMeta({
       asesorId: alcance === 'asesor' ? Number(asesorId) : undefined,
       campanaId: campanaId === '' ? undefined : Number(campanaId),
       periodo, tipo, alcance,
+      periodoFin: tipo === 'diaria' && periodoFin > periodo ? periodoFin : undefined,
       metaMonto: metaMonto === '' ? undefined : Number(metaMonto),
       metaUnidades: metaUnidades === '' ? undefined : Number(metaUnidades),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ventas-area-metas'] })
       qc.invalidateQueries({ queryKey: ['ventas-area-dashboard'] })
-      toast.success('Meta guardada')
+      toast.success(rangoDias > 1 ? `${rangoDias} metas creadas (una por día)` : 'Meta guardada')
       onClose()
     },
     onError: (e) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar la meta'),
@@ -212,14 +220,51 @@ function CrearMetaModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <CampoIcono label={tipo === 'diaria' ? 'Día' : 'Mes'} icon={Calendar} tono="blue">
-          <input
-            type={tipo === 'diaria' ? 'date' : 'month'}
-            value={periodo}
-            onChange={(e) => setPeriodo(e.target.value)}
-            className={inputCls}
-          />
-        </CampoIcono>
+        {tipo === 'diaria' ? (
+          <div>
+            <label className="mb-1.5 block text-[0.72rem] font-bold uppercase tracking-wide text-gray-500">Rango de fechas</label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                  <Calendar className="h-4 w-4" />
+                </span>
+                <input
+                  type="date"
+                  value={periodo}
+                  max={periodoFin}
+                  onChange={(e) => setPeriodo(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                  <Calendar className="h-4 w-4" />
+                </span>
+                <input
+                  type="date"
+                  value={periodoFin}
+                  min={periodo}
+                  onChange={(e) => setPeriodoFin(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+            {rangoDias > 1 && (
+              <p className="mt-1.5 text-[0.72rem] text-gray-400">
+                Se creará la misma meta para <b className="text-gray-600">{rangoDias} días</b> (una por cada fecha del rango).
+              </p>
+            )}
+          </div>
+        ) : (
+          <CampoIcono label="Mes" icon={Calendar} tono="blue">
+            <input
+              type="month"
+              value={periodo}
+              onChange={(e) => setPeriodo(e.target.value)}
+              className={inputCls}
+            />
+          </CampoIcono>
+        )}
 
         {alcance === 'asesor' ? (
           <CampoIcono label="Asesor" icon={User} tono="violet">
