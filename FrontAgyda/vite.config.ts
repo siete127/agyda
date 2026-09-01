@@ -14,18 +14,18 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8447',
+        target: 'http://localhost:8445',
         changeOrigin: true,
         secure: false,
         ws: true,
       },
       '/uploads': {
-        target: 'http://localhost:8447',
+        target: 'http://localhost:8445',
         changeOrigin: true,
         secure: false,
       },
       '/audio': {
-        target: 'http://localhost:8447',
+        target: 'http://localhost:8445',
         changeOrigin: true,
         secure: false,
       },

@@ -2837,6 +2837,12 @@
                     liveChatSugerencia: 'Parece que no estoy resolviendo tu duda. ¿Quieres hablar con un agente?',
                     liveChatAsignado: (nombre) => `¡${nombre || 'Un agente'} se unió a la conversación! 👋`,
                     liveChatSalirCola: 'Prefiero dejar mis datos',
+                    liveChatPedirRating: 'Antes de irte, ¿cómo calificarías la atención que recibiste?',
+                    liveChatOpcionesRating: ['⭐ 1', '⭐⭐ 2', '⭐⭐⭐ 3', '⭐⭐⭐⭐ 4', '⭐⭐⭐⭐⭐ 5'],
+                    liveChatPedirComentarioRating: '¡Gracias! ¿Quieres dejar algún comentario sobre tu experiencia? (Si no, escribe "omitir".)',
+                    liveChatOmitirComentario: 'omitir',
+                    liveChatRatingEnviado: '¡Gracias por tu calificación! Si necesitas algo más, aquí estoy. 🙂',
+                    liveChatRatingError: 'No pudimos guardar tu calificación, pero ya quedó registrado que tu conversación se cerró. ¡Gracias igual!',
                 },
                 en: {
                     saludo: 'Hi! 👋 I\'m ARDABYTEC\'s virtual assistant. How can I help you today?',
@@ -2867,6 +2873,12 @@
                     liveChatSugerencia: 'Looks like I\'m not solving your question. Would you like to talk to an agent?',
                     liveChatAsignado: (nombre) => `${nombre || 'An agent'} joined the conversation! 👋`,
                     liveChatSalirCola: 'I\'d rather leave my details',
+                    liveChatPedirRating: 'Before you go, how would you rate the support you received?',
+                    liveChatOpcionesRating: ['⭐ 1', '⭐⭐ 2', '⭐⭐⭐ 3', '⭐⭐⭐⭐ 4', '⭐⭐⭐⭐⭐ 5'],
+                    liveChatPedirComentarioRating: 'Thanks! Want to leave a comment about your experience? (If not, type "skip".)',
+                    liveChatOmitirComentario: 'skip',
+                    liveChatRatingEnviado: 'Thanks for your rating! Let me know if you need anything else. 🙂',
+                    liveChatRatingError: 'We couldn\'t save your rating, but your conversation was already closed. Thanks anyway!',
                 },
             };
 
@@ -2941,7 +2953,8 @@
                     }));
                     sessionStorage.setItem(CHAT_ESTADO_KEY, JSON.stringify({
                         estado, leadData, turnosSinLead, quickRepliesTipo, mensajes,
-                        liveChatConversacionId, chatIniciado, panelAbierto: panel.classList.contains('active'),
+                        liveChatConversacionId, liveChatRatingConversacionId, liveChatRatingElegido,
+                        chatIniciado, panelAbierto: panel.classList.contains('active'),
                     }));
                 } catch (e) { /* almacenamiento no disponible (modo privado, cuota llena): sin persistencia, no rompe el chat */ }
             }
@@ -3090,6 +3103,11 @@
             let liveChatSocket = null;
             let liveChatConversacionId = null;
             let liveChatColaPollTimer = null;
+            // Conversación pendiente de calificar y el rating ya elegido (mientras se
+            // pide el comentario opcional) — separado de liveChatConversacionId porque
+            // ese ya se limpia al cerrar el chat en vivo (ver finalizarChatVivo).
+            let liveChatRatingConversacionId = null;
+            let liveChatRatingElegido = null;
 
             function conectarSocketLiveChat() {
                 if (liveChatSocket) return liveChatSocket;
@@ -3119,11 +3137,13 @@
                 });
                 // El agente cerró desde su lado (motivo incluido) — el backend ya manda
                 // un mensaje de sistema con el motivo por receive_livechat_message, así
-                // que aquí solo se cierra el modo chat_vivo y vuelve al menú; no hace
-                // falta repetir el motivo en una segunda burbuja.
+                // que aquí no hace falta repetir el motivo en una segunda burbuja. En vez
+                // de cerrar directo, se pide la calificación (ver iniciarCalificacion) —
+                // sin esto la conversación quedaba en 'pendiente_rating' para siempre y
+                // nunca llegaba al Historial (LC_ESTADO solo pasa a 'cerrada' al calificar).
                 liveChatSocket.on('livechat:pendiente_calificacion', (payload) => {
                     if (!payload || payload.conversacionId !== liveChatConversacionId) return;
-                    finalizarChatVivo(null);
+                    iniciarCalificacion(payload.conversacionId);
                 });
                 return liveChatSocket;
             }
@@ -3144,6 +3164,38 @@
                 if (mensajeFn) await botDice(mensajeFn, 400);
                 estado = 'explorar';
                 setQuickReplies(t().menuInicial, 'menu');
+            }
+
+            // El agente ya cerró su lado; se guarda el id aparte porque
+            // finalizarChatVivo (llamado al terminar la calificación) limpia
+            // liveChatConversacionId. POST /calificar es público — el visitante no
+            // tiene sesión — y solo funciona mientras la conversación siga en
+            // 'pendiente_rating' (ver validación en el backend).
+            async function iniciarCalificacion(conversacionId) {
+                detenerPollingCola();
+                liveChatRatingConversacionId = conversacionId;
+                liveChatRatingElegido = null;
+                estado = 'chat_vivo_calificar_rating';
+                await botDice(() => t().liveChatPedirRating, 400);
+                setQuickReplies(t().liveChatOpcionesRating, null);
+            }
+
+            async function enviarCalificacion(comentario) {
+                const convId = liveChatRatingConversacionId;
+                const rating = liveChatRatingElegido;
+                liveChatRatingConversacionId = null;
+                liveChatRatingElegido = null;
+                try {
+                    const res = await fetch(`/api/livechat/conversaciones/${convId}/calificar`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ rating, comentario: comentario || undefined }),
+                    });
+                    if (!res.ok) throw new Error('rating request failed');
+                    await finalizarChatVivo(() => t().liveChatRatingEnviado);
+                } catch (e) {
+                    await finalizarChatVivo(() => t().liveChatRatingError);
+                }
             }
 
             async function salirDeLaCola() {
@@ -3373,6 +3425,25 @@
                     return;
                 }
 
+                if (estado === 'chat_vivo_calificar_rating') {
+                    const opciones = t().liveChatOpcionesRating;
+                    const idx = opciones.findIndex((op) => normalizar(op) === normalizar(mensaje));
+                    if (idx === -1) {
+                        setQuickReplies(opciones, null);
+                        return;
+                    }
+                    liveChatRatingElegido = idx + 1;
+                    estado = 'chat_vivo_calificar_comentario';
+                    await botDice(() => t().liveChatPedirComentarioRating, 350);
+                    return;
+                }
+
+                if (estado === 'chat_vivo_calificar_comentario') {
+                    const comentario = normalizar(mensaje) === normalizar(t().liveChatOmitirComentario) ? '' : mensaje.slice(0, 500);
+                    await enviarCalificacion(comentario);
+                    return;
+                }
+
                 if (estado === 'chat_vivo') {
                     if (liveChatSocket && liveChatConversacionId) {
                         try {
@@ -3541,6 +3612,8 @@
                 turnosSinLead = guardado.turnosSinLead || 0;
                 quickRepliesTipo = guardado.quickRepliesTipo || null;
                 liveChatConversacionId = guardado.liveChatConversacionId || null;
+                liveChatRatingConversacionId = guardado.liveChatRatingConversacionId || null;
+                liveChatRatingElegido = guardado.liveChatRatingElegido || null;
                 chatIniciado = !!guardado.chatIniciado;
 
                 (guardado.mensajes || []).forEach(m => addBubble(m.texto, m.tipo));
@@ -3548,6 +3621,7 @@
                 if (quickRepliesTipo === 'menu') setQuickReplies(t().menuInicial, 'menu');
                 else if (quickRepliesTipo === 'presupuesto') setQuickReplies(t().rangosPresupuesto, 'presupuesto');
                 else if (estado === 'chat_vivo_cola') setQuickReplies([t().liveChatSalirCola], null);
+                else if (estado === 'chat_vivo_calificar_rating') setQuickReplies(t().liveChatOpcionesRating, null);
 
                 if (liveChatConversacionId && (estado === 'chat_vivo' || estado === 'chat_vivo_cola')) {
                     conectarSocketLiveChat().emit('join_livechat_conversation', { conversacionId: liveChatConversacionId });

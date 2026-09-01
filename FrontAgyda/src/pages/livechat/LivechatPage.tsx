@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, Settings, ArrowRightLeft, History, Download, FileText, Megaphone } from 'lucide-react'
+import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, ArrowRightLeft, History, Download, FileText, Megaphone, UsersRound, Star, Search, Inbox } from 'lucide-react'
 import { livechatService } from '@/services/livechat.service'
 import { getSocket } from '@/lib/socket'
 import { useCurrentUser } from '@/hooks/useAuth'
@@ -13,16 +13,7 @@ import { parseLivechatMensaje } from '@/types/livechat.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { CampaniasModal } from './CampaniasModal'
-
-const DIAS = [
-  { valor: 1, label: 'Lun' },
-  { valor: 2, label: 'Mar' },
-  { valor: 3, label: 'Mié' },
-  { valor: 4, label: 'Jue' },
-  { valor: 5, label: 'Vie' },
-  { valor: 6, label: 'Sáb' },
-  { valor: 0, label: 'Dom' },
-]
+import { UsuariosCampaniasModal } from './UsuariosCampaniasModal'
 
 function formatFecha(iso: string | null) {
   if (!iso) return '—'
@@ -31,8 +22,40 @@ function formatFecha(iso: string | null) {
   return d.toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
 }
 
-function HistorialModal({ onClose }: { onClose: () => void }) {
-  const [filtros, setFiltros] = useState<LivechatHistorialFiltros>({})
+function formatDuracion(inicioIso: string, cierreIso: string | null): string {
+  if (!cierreIso) return '—'
+  const inicio = new Date(inicioIso).getTime()
+  const cierre = new Date(cierreIso).getTime()
+  if (Number.isNaN(inicio) || Number.isNaN(cierre) || cierre < inicio) return '—'
+  const minutos = Math.round((cierre - inicio) / 60000)
+  if (minutos < 1) return '<1 min'
+  if (minutos < 60) return `${minutos} min`
+  const horas = Math.floor(minutos / 60)
+  const resto = minutos % 60
+  return `${horas} h ${String(resto).padStart(2, '0')} min`
+}
+
+function EstrellasRating({ rating }: { rating: number | null }) {
+  if (!rating) return <span className="text-xs text-ink-tertiary">Sin calificar</span>
+  return (
+    <div className="flex items-center gap-0.5" title={`${rating} de 5`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          size={12}
+          className={n <= rating ? 'fill-amber-400 text-amber-400' : 'text-ink-tertiary/40'}
+        />
+      ))}
+    </div>
+  )
+}
+
+function HistorialModal({ onClose, puedeSupervisar, agenteId }: { onClose: () => void; puedeSupervisar: boolean; agenteId?: number }) {
+  // Un agente normal solo debe ver su propio historial; quien puede supervisar
+  // (gestionar-campanas) ve el de todos, igual que en el resto del módulo.
+  const [filtros, setFiltros] = useState<LivechatHistorialFiltros>(
+    puedeSupervisar ? {} : { agenteId },
+  )
   const [texto, setTexto] = useState('')
 
   const { data: historial = [], isLoading } = useQuery({
@@ -52,80 +75,100 @@ function HistorialModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal isOpen onClose={onClose} title="Historial de conversaciones" size="xl">
       <div className="space-y-4">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-surface-border bg-surface p-3">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Desde</label>
+            <label className="mb-1 block text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Desde</label>
             <input
               type="date"
               value={filtros.fechaDesde ?? ''}
               onChange={(e) => setFiltros((prev) => ({ ...prev, fechaDesde: e.target.value || undefined }))}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              className="rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Hasta</label>
+            <label className="mb-1 block text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Hasta</label>
             <input
               type="date"
               value={filtros.fechaHasta ?? ''}
               onChange={(e) => setFiltros((prev) => ({ ...prev, fechaHasta: e.target.value || undefined }))}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              className="rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
             />
           </div>
           <div className="flex-1 min-w-[160px]">
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Buscar (nombre, email, motivo)</label>
-            <input
-              type="text"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && aplicarBusqueda()}
-              placeholder="Buscar..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-            />
+            <label className="mb-1 block text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Buscar</label>
+            <div className="relative">
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-tertiary" />
+              <input
+                type="text"
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && aplicarBusqueda()}
+                placeholder="Nombre, email, motivo..."
+                className="w-full rounded-lg border border-surface-border bg-card pl-8 pr-3 py-1.5 text-sm text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
+              />
+            </div>
           </div>
           <Button size="sm" variant="secondary" onClick={aplicarBusqueda}>Buscar</Button>
-          <Button size="sm" variant="ghost" onClick={() => { setFiltros({}); setTexto('') }}>Limpiar</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setFiltros(puedeSupervisar ? {} : { agenteId }); setTexto('') }}>Limpiar</Button>
           <Button size="sm" onClick={() => exportar.mutate()} disabled={exportar.isPending}>
             {exportar.isPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             Exportar CSV
           </Button>
         </div>
 
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <div className="max-h-[55vh] overflow-y-auto">
-            {isLoading ? (
-              <div className="flex justify-center py-10"><Spinner /></div>
-            ) : historial.length === 0 ? (
-              <p className="text-center text-sm text-gray-400 py-10">Sin conversaciones cerradas para estos filtros</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
-                  <tr>
-                    <th className="text-left px-4 py-2">Visitante</th>
-                    <th className="text-left px-4 py-2">Motivo</th>
-                    <th className="text-left px-4 py-2">Agente</th>
-                    <th className="text-left px-4 py-2">Inicio</th>
-                    <th className="text-left px-4 py-2">Cierre</th>
-                    <th className="text-left px-4 py-2">Motivo cierre</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {historial.map((c) => (
-                    <tr key={c.id}>
-                      <td className="px-4 py-2">
-                        <div className="font-medium text-gray-800">{c.visitanteNombre || 'Anónimo'}</div>
-                        <div className="text-xs text-gray-400">{c.visitanteEmail || c.visitanteTelefono || '—'}</div>
-                      </td>
-                      <td className="px-4 py-2 max-w-[200px] truncate text-gray-600">{c.motivo || '—'}</td>
-                      <td className="px-4 py-2 text-gray-600">{c.agenteNombre || '—'}</td>
-                      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{formatFecha(c.fechaInicio)}</td>
-                      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{formatFecha(c.fechaCierre)}</td>
-                      <td className="px-4 py-2 text-gray-500">{c.motivoCierre || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+        <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+          {isLoading ? (
+            <div className="flex justify-center py-14"><Spinner /></div>
+          ) : historial.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-14 text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-ink-tertiary/15 text-ink-tertiary">
+                <Inbox size={18} />
+              </div>
+              <p className="text-sm text-ink-tertiary">Sin conversaciones cerradas para estos filtros</p>
+            </div>
+          ) : (
+            historial.map((c) => (
+              <div key={c.id} className="rounded-xl border border-surface-border bg-card px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-ink truncate">{c.visitanteNombre || 'Anónimo'}</p>
+                      {c.motivoCierre && (
+                        <span className="shrink-0 rounded-full bg-ink-tertiary/15 px-2 py-0.5 text-[10px] font-semibold text-ink-tertiary">
+                          {c.motivoCierre}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-ink-tertiary truncate">
+                      {c.visitanteEmail || c.visitanteTelefono || 'Sin contacto'}
+                      {c.motivo ? ` · ${c.motivo}` : ''}
+                    </p>
+                  </div>
+                  <EstrellasRating rating={c.rating} />
+                </div>
+
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-surface-border pt-2.5 text-xs text-ink-tertiary">
+                  <span className="flex items-center gap-1.5">
+                    <UserCheck size={12} />
+                    {c.agenteNombre || 'Sin agente'}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={12} />
+                    {formatFecha(c.fechaInicio)} → {formatFecha(c.fechaCierre)}
+                  </span>
+                  <span className="flex items-center gap-1.5 font-medium text-ink-secondary">
+                    Duración: {formatDuracion(c.fechaInicio, c.fechaCierre)}
+                  </span>
+                </div>
+
+                {c.comentarioCierre && c.rating && (
+                  <p className="mt-2 rounded-lg bg-surface px-3 py-2 text-xs italic text-ink-secondary">
+                    "{c.comentarioCierre}"
+                  </p>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </Modal>
@@ -135,10 +178,14 @@ function HistorialModal({ onClose }: { onClose: () => void }) {
 // Tiempo transcurrido desde que el visitante entró a la cola, en formato corto
 // ("2 min", "1 h 05 min") — ayuda a un supervisor a ver de un vistazo quién
 // lleva más tiempo esperando sin tener que restar fechas mentalmente.
-function tiempoEsperando(iso: string): string {
+function minutosEsperando(iso: string): number {
   const inicio = new Date(iso).getTime()
-  if (Number.isNaN(inicio)) return '—'
-  const minutos = Math.max(0, Math.floor((Date.now() - inicio) / 60000))
+  if (Number.isNaN(inicio)) return 0
+  return Math.max(0, Math.floor((Date.now() - inicio) / 60000))
+}
+
+function tiempoEsperando(iso: string): string {
+  const minutos = minutosEsperando(iso)
   if (minutos < 60) return `${minutos} min`
   const horas = Math.floor(minutos / 60)
   const resto = minutos % 60
@@ -171,54 +218,87 @@ function BandejaEsperaModal({ onClose, onTomada }: { onClose: () => void; onToma
   return (
     <Modal isOpen onClose={onClose} title="Bandeja de espera" size="lg">
       <div className="space-y-3">
-        <p className="text-xs text-gray-500">
-          Todos los leads que están en cola ahora mismo, sin importar a qué agente le toquen. Cualquiera puede tomarlos.
-        </p>
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <div className="max-h-[60vh] overflow-y-auto">
-            {isLoading ? (
-              <div className="flex justify-center py-10"><Spinner /></div>
-            ) : esperando.length === 0 ? (
-              <p className="text-center text-sm text-gray-400 py-10">Nadie esperando ahora mismo</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
-                  <tr>
-                    <th className="text-left px-4 py-2">Posición</th>
-                    <th className="text-left px-4 py-2">Visitante</th>
-                    <th className="text-left px-4 py-2">Motivo</th>
-                    <th className="text-left px-4 py-2">Esperando</th>
-                    <th className="text-right px-4 py-2">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {esperando.map((c) => (
-                    <tr key={c.id} className={c.posicionCola === 1 ? 'bg-amber-50' : undefined}>
-                      <td className="px-4 py-2 font-semibold text-gray-700">
-                        {c.posicionCola ? `${c.posicionCola} de ${c.totalCola}` : '—'}
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="font-medium text-gray-800">{c.visitanteNombre || 'Anónimo'}</div>
-                        <div className="text-xs text-gray-400">{c.visitanteEmail || c.visitanteTelefono || '—'}</div>
-                      </td>
-                      <td className="px-4 py-2 max-w-[220px] truncate text-gray-600">{c.motivo || '—'}</td>
-                      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock size={12} />
-                          {tiempoEsperando(c.fechaInicio)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <Button size="sm" onClick={() => tomar.mutate(c.id)} disabled={tomar.isPending}>
-                          Tomar
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div className="flex items-start gap-2 rounded-xl bg-brand/5 border border-brand/10 px-3.5 py-2.5">
+          <Users size={15} className="text-brand shrink-0 mt-0.5" />
+          <p className="text-xs text-ink-secondary leading-relaxed">
+            Todos los leads en cola ahora mismo, sin importar a qué agente le toquen. Cualquiera puede tomarlos.
+            {!isLoading && esperando.length > 0 && (
+              <span className="text-ink-tertiary"> · {esperando.length} esperando</span>
             )}
-          </div>
+          </p>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+          {isLoading ? (
+            <div className="flex justify-center py-14"><Spinner /></div>
+          ) : esperando.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-14 text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
+                <CheckCircle2 size={18} />
+              </div>
+              <p className="text-sm text-ink-tertiary">Nadie esperando ahora mismo</p>
+            </div>
+          ) : (
+            esperando
+              .slice()
+              .sort((a, b) => (a.posicionCola ?? 999) - (b.posicionCola ?? 999))
+              .map((c) => {
+                const minutos = minutosEsperando(c.fechaInicio)
+                const urgente = minutos >= 10
+                const critico = minutos >= 15
+                return (
+                  <div
+                    key={c.id}
+                    className={clsx(
+                      'flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors',
+                      critico
+                        ? 'border-red-500/30 bg-red-500/[0.06]'
+                        : urgente
+                        ? 'border-amber-500/30 bg-amber-500/[0.06]'
+                        : 'border-surface-border bg-card',
+                    )}
+                  >
+                    <span
+                      className={clsx(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                        critico ? 'bg-red-500/15 text-red-500' : urgente ? 'bg-amber-500/15 text-amber-500' : 'bg-brand/15 text-brand',
+                      )}
+                    >
+                      {c.posicionCola ?? '—'}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-ink truncate">{c.visitanteNombre || 'Anónimo'}</p>
+                        {c.posicionCola === 1 && (
+                          <span className="shrink-0 rounded-full bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+                            Siguiente
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-ink-tertiary truncate">
+                        {c.visitanteEmail || c.visitanteTelefono || 'Sin contacto'}
+                        {c.motivo ? ` · ${c.motivo}` : ''}
+                      </p>
+                    </div>
+
+                    <div
+                      className={clsx(
+                        'flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold',
+                        critico ? 'bg-red-500/15 text-red-500' : urgente ? 'bg-amber-500/15 text-amber-500' : 'text-ink-tertiary',
+                      )}
+                    >
+                      <Clock size={12} />
+                      {tiempoEsperando(c.fechaInicio)}
+                    </div>
+
+                    <Button size="sm" onClick={() => tomar.mutate(c.id)} disabled={tomar.isPending}>
+                      Tomar
+                    </Button>
+                  </div>
+                )
+              })
+          )}
         </div>
       </div>
     </Modal>
@@ -308,57 +388,79 @@ function AgentesEstadoModal({ onClose }: { onClose: () => void }) {
     refetchInterval: 8_000,
   })
 
+  const disponibles = agentes.filter((a) => a.online && a.disponible).length
+
   return (
     <Modal isOpen onClose={onClose} title="Agentes de Chat en Vivo" size="lg">
       <div className="space-y-3">
-        <p className="text-xs text-gray-500">
-          Solo los marcados como <span className="font-semibold text-emerald-600">Disponible</span> pueden recibir la
-          siguiente conversación (bot escalando o cola liberándose).
-        </p>
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="flex items-start gap-2 rounded-xl bg-brand/5 border border-brand/10 px-3.5 py-2.5">
+          <UserCheck size={15} className="text-brand shrink-0 mt-0.5" />
+          <p className="text-xs text-ink-secondary leading-relaxed">
+            Solo los marcados como <span className="font-semibold text-emerald-500">Disponible</span> pueden recibir la
+            siguiente conversación (bot escalando o cola liberándose).
+            {!isLoading && agentes.length > 0 && (
+              <span className="text-ink-tertiary"> · {disponibles} de {agentes.length} disponibles ahora</span>
+            )}
+          </p>
+        </div>
+        <div className="border border-surface-border rounded-xl overflow-hidden">
           <div className="max-h-[60vh] overflow-y-auto">
             {isLoading ? (
               <div className="flex justify-center py-10"><Spinner /></div>
             ) : agentes.length === 0 ? (
-              <p className="text-center text-sm text-gray-400 py-10">Ningún agente ha usado Chat en Vivo todavía</p>
+              <p className="text-center text-sm text-ink-tertiary py-10">Ningún agente ha usado Chat en Vivo todavía</p>
             ) : (
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
+                <thead className="bg-surface text-xs uppercase text-ink-tertiary sticky top-0">
                   <tr>
-                    <th className="text-left px-4 py-2">Agente</th>
-                    <th className="text-left px-4 py-2">Estado</th>
-                    <th className="text-left px-4 py-2">Chats activos</th>
-                    <th className="text-left px-4 py-2">Última conexión</th>
+                    <th className="text-left px-4 py-2 font-semibold">Agente</th>
+                    <th className="text-left px-4 py-2 font-semibold">Estado</th>
+                    <th className="text-left px-4 py-2 font-semibold">Chats activos</th>
+                    <th className="text-left px-4 py-2 font-semibold">Última conexión</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-surface-border">
                   {agentes.map((a) => {
                     const puedeRecibir = a.online && a.disponible
                     return (
-                      <tr key={a.usuarioId}>
-                        <td className="px-4 py-2 font-medium text-gray-800">{a.nombre}</td>
-                        <td className="px-4 py-2">
+                      <tr key={a.usuarioId} className="hover:bg-surface/60">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/15 text-[10px] font-bold text-brand">
+                              {a.nombre.trim().charAt(0).toUpperCase() || '?'}
+                            </span>
+                            <span className="font-medium text-ink">{a.nombre}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5">
                           <span
                             className={clsx(
                               'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
                               puedeRecibir
-                                ? 'bg-emerald-50 text-emerald-700'
+                                ? 'bg-emerald-500/15 text-emerald-500'
                                 : a.online
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-gray-100 text-gray-500',
+                                ? 'bg-amber-500/15 text-amber-500'
+                                : 'bg-ink-tertiary/15 text-ink-tertiary',
                             )}
                           >
                             <span
                               className={clsx(
                                 'h-1.5 w-1.5 rounded-full',
-                                puedeRecibir ? 'bg-emerald-500' : a.online ? 'bg-amber-500' : 'bg-gray-400',
+                                puedeRecibir ? 'bg-emerald-500' : a.online ? 'bg-amber-500' : 'bg-ink-tertiary',
                               )}
                             />
                             {puedeRecibir ? 'Disponible' : a.online ? 'En línea, no disponible' : 'Desconectado'}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-gray-600">{a.conversacionesActivas}</td>
-                        <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{formatFecha(a.ultimaConexion)}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={clsx(
+                            'inline-flex items-center justify-center min-w-[1.5rem] rounded-full px-2 py-0.5 text-xs font-semibold',
+                            a.conversacionesActivas > 0 ? 'bg-brand/15 text-brand' : 'text-ink-tertiary',
+                          )}>
+                            {a.conversacionesActivas}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-ink-tertiary whitespace-nowrap">{formatFecha(a.ultimaConexion)}</td>
                       </tr>
                     )
                   })}
@@ -366,188 +468,6 @@ function AgentesEstadoModal({ onClose }: { onClose: () => void }) {
               </table>
             )}
           </div>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-function ConfigModal({ onClose }: { onClose: () => void }) {
-  const qc = useQueryClient()
-  const { data, isLoading } = useQuery({
-    queryKey: ['livechat-config'],
-    queryFn: () => livechatService.getConfig(),
-  })
-
-  const [form, setForm] = useState<Partial<LivechatConfig> | null>(null)
-
-  useEffect(() => {
-    if (data) setForm(data)
-  }, [data])
-
-  const diasSeleccionados = new Set(
-    (form?.diasSemana ?? '').split(',').map((d) => Number(d.trim())).filter((d) => !Number.isNaN(d)),
-  )
-
-  const toggleDia = (dia: number) => {
-    const next = new Set(diasSeleccionados)
-    if (next.has(dia)) next.delete(dia)
-    else next.add(dia)
-    setForm((prev) => (prev ? { ...prev, diasSemana: Array.from(next).sort().join(',') } : prev))
-  }
-
-  const guardar = useMutation({
-    mutationFn: () => livechatService.updateConfig(form ?? {}),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['livechat-config'] })
-      toast.success('Configuración guardada')
-      onClose()
-    },
-    onError: () => toast.error('No se pudo guardar la configuración'),
-  })
-
-  if (isLoading || !form) {
-    return (
-      <Modal isOpen onClose={onClose} title="Configuración de Chat en Vivo">
-        <div className="flex justify-center py-8"><Spinner /></div>
-      </Modal>
-    )
-  }
-
-  return (
-    <Modal isOpen onClose={onClose} title="Configuración de Chat en Vivo" size="lg">
-      <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Horario inicio</label>
-            <input
-              type="time"
-              value={form.horarioInicio ?? ''}
-              onChange={(e) => setForm({ ...form, horarioInicio: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Horario fin</label>
-            <input
-              type="time"
-              value={form.horarioFin ?? ''}
-              onChange={(e) => setForm({ ...form, horarioFin: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Días de atención</label>
-          <div className="flex gap-1.5 flex-wrap">
-            {DIAS.map((d) => (
-              <button
-                key={d.valor}
-                type="button"
-                onClick={() => toggleDia(d.valor)}
-                className={clsx(
-                  'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors',
-                  diasSeleccionados.has(d.valor)
-                    ? 'bg-brand text-white border-brand'
-                    : 'bg-card text-gray-600 border-gray-200 hover:bg-gray-50',
-                )}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {diasSeleccionados.has(6) && (
-          <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3">
-            <div className="col-span-2 -mb-1 text-xs font-semibold text-gray-500">
-              Horario de Sábado (si se deja vacío, usa el horario general de arriba)
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Sábado inicio</label>
-              <input
-                type="time"
-                value={form.sabadoHorarioInicio ?? ''}
-                onChange={(e) => setForm({ ...form, sabadoHorarioInicio: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Sábado fin</label>
-              <input
-                type="time"
-                value={form.sabadoHorarioFin ?? ''}
-                onChange={(e) => setForm({ ...form, sabadoHorarioFin: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Máximo de chats simultáneos por agente</label>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={form.maxChatsPorAgente ?? 5}
-            onChange={(e) => setForm({ ...form, maxChatsPorAgente: Number(e.target.value) })}
-            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Mensaje de bienvenida</label>
-          <textarea
-            value={form.mensajeBienvenida ?? ''}
-            onChange={(e) => setForm({ ...form, mensajeBienvenida: e.target.value })}
-            rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Mensaje fuera de horario</label>
-          <textarea
-            value={form.mensajeFueraHorario ?? ''}
-            onChange={(e) => setForm({ ...form, mensajeFueraHorario: e.target.value })}
-            rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Mensaje sin agentes disponibles</label>
-          <textarea
-            value={form.mensajeSinAgentes ?? ''}
-            onChange={(e) => setForm({ ...form, mensajeSinAgentes: e.target.value })}
-            rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">
-            Mensaje en cola de espera
-            <span className="normal-case font-normal text-gray-400 ml-1">
-              (usa {'{posicion_cola}'}, {'{total_cola}'}, {'{tiempo_espera}'})
-            </span>
-          </label>
-          <textarea
-            value={form.mensajeEnCola ?? ''}
-            onChange={(e) => setForm({ ...form, mensajeEnCola: e.target.value })}
-            rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
-            {guardar.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
-            Guardar
-          </Button>
         </div>
       </div>
     </Modal>
@@ -975,9 +895,9 @@ export default function LivechatPage() {
   const puedeAtender = can('livechat', 'atender')
   const puedeSupervisar = can('livechat', 'gestionar-campanas')
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [configOpen, setConfigOpen] = useState(false)
   const [historialOpen, setHistorialOpen] = useState(false)
   const [bandejaOpen, setBandejaOpen] = useState(false)
+  const [usuariosCampaniasOpen, setUsuariosCampaniasOpen] = useState(false)
   const [campaniasOpen, setCampaniasOpen] = useState(false)
   const [agentesOpen, setAgentesOpen] = useState(false)
   const [supervisionOpen, setSupervisionOpen] = useState(false)
@@ -1085,6 +1005,10 @@ export default function LivechatPage() {
               </span>
             )}
           </Button>
+          <Button variant="ghost" onClick={() => setUsuariosCampaniasOpen(true)}>
+            <UsersRound size={16} />
+            Grupo de Agentes
+          </Button>
           <Button variant="ghost" onClick={() => setAgentesOpen(true)}>
             <UserCheck size={16} />
             Agentes
@@ -1098,10 +1022,6 @@ export default function LivechatPage() {
           <Button variant="ghost" onClick={() => setHistorialOpen(true)}>
             <History size={16} />
             Historial
-          </Button>
-          <Button variant="ghost" onClick={() => setConfigOpen(true)}>
-            <Settings size={16} />
-            Configuración
           </Button>
           {puedeAtender && (
             // Verde/rojo fijos a propósito — el estado disponible/no disponible
@@ -1126,14 +1046,20 @@ export default function LivechatPage() {
         </div>
       </div>
 
-      {configOpen && <ConfigModal onClose={() => setConfigOpen(false)} />}
-      {historialOpen && <HistorialModal onClose={() => setHistorialOpen(false)} />}
+      {historialOpen && (
+        <HistorialModal
+          onClose={() => setHistorialOpen(false)}
+          puedeSupervisar={puedeSupervisar}
+          agenteId={user?.id}
+        />
+      )}
       {bandejaOpen && (
         <BandejaEsperaModal
           onClose={() => setBandejaOpen(false)}
           onTomada={(conversacionId) => { setSelectedId(conversacionId); refetchMias(); refetchEsperando() }}
         />
       )}
+      {usuariosCampaniasOpen && <UsuariosCampaniasModal onClose={() => setUsuariosCampaniasOpen(false)} />}
       {campaniasOpen && <CampaniasModal onClose={() => setCampaniasOpen(false)} />}
       {agentesOpen && <AgentesEstadoModal onClose={() => setAgentesOpen(false)} />}
       {supervisionOpen && <SupervisionModal onClose={() => setSupervisionOpen(false)} />}

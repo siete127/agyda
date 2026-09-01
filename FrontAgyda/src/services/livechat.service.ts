@@ -127,11 +127,11 @@ export const livechatService = {
     const list = Array.isArray(data) ? data : (data?.data ?? [])
     return (list as Record<string, unknown>[]).map(parseLivechatCampania)
   },
-  async createCampania(payload: { nombre: string; descripcion?: string; fechaInicio?: string; fechaFin?: string; maxChatsPorAgente?: number }): Promise<LivechatCampania> {
+  async createCampania(payload: { nombre: string; descripcion?: string; fechaInicio?: string; fechaFin?: string; maxChatsPorAgente?: number; area?: string }): Promise<LivechatCampania> {
     const { data } = await api.post('/livechat/campanias', payload)
     return parseLivechatCampania((data?.data ?? data) as Record<string, unknown>)
   },
-  async updateCampania(id: number, payload: Partial<{ nombre: string; descripcion: string; activo: boolean; fechaInicio: string; fechaFin: string; maxChatsPorAgente: number }>): Promise<LivechatCampania> {
+  async updateCampania(id: number, payload: Partial<{ nombre: string; descripcion: string; activo: boolean; fechaInicio: string; fechaFin: string; maxChatsPorAgente: number; area: string }>): Promise<LivechatCampania> {
     const { data } = await api.put(`/livechat/campanias/${id}`, payload)
     return parseLivechatCampania((data?.data ?? data) as Record<string, unknown>)
   },

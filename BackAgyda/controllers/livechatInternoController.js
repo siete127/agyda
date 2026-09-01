@@ -35,7 +35,7 @@ exports.iniciarConversacionInterna = async (req, res) => {
     const camp = await resolverCampaniaGrupoSoporteTI(pool);
     if (!camp) return res.status(500).json({ success: false, message: 'La campaña "Soporte TI" no está configurada' });
 
-    const config = await livechatController.getConfig(pool, camp.campaniaId);
+    const config = await livechatController.getConfigInterna(pool, camp.campaniaId);
     if (livechatController.isFueraDeHorario(config)) {
       return res.status(503).json({ success: false, code: 'FUERA_DE_HORARIO', message: config?.LCF_MSG_FUERA_HORARIO || 'Fuera de horario de atención.' });
     }

@@ -7,9 +7,10 @@ import type { LivechatConfig } from '@/types/livechat.types'
 
 export function ChatEnVivoTab() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['livechat-config'],
     queryFn: () => livechatService.getConfig(),
+    retry: false,
   })
 
   const [form, setForm] = useState<LivechatConfig | null>(null)
@@ -26,6 +27,13 @@ export function ChatEnVivoTab() {
     },
     onError: () => toast.error('No se pudo guardar la configuración'),
   })
+
+  if (isError) {
+    const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      || (error as Error)?.message
+      || 'No se pudo cargar la configuración'
+    return <p className="text-sm text-red-500">{msg}</p>
+  }
 
   if (isLoading || !form) {
     return <p className="text-sm text-ink-tertiary">Cargando...</p>
