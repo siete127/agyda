@@ -117,7 +117,7 @@ function EstatusSelector({ quejaId, estatus }: { quejaId: number; estatus: strin
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden">
+          <div className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-xl border border-gray-200 bg-card shadow-xl overflow-hidden">
             {Object.entries(ESTATUSES).map(([key, s]) => (
               <button
                 key={key}
@@ -285,7 +285,7 @@ function ResponsableAutocomplete({
         autoComplete="off"
       />
       {open && filtrados.length > 0 && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+        <div className="absolute left-0 top-full z-30 mt-1 w-full rounded-xl border border-gray-200 bg-card shadow-xl overflow-hidden max-h-48 overflow-y-auto">
           {filtrados.slice(0, 8).map((u) => (
             <button
               key={u.id}
@@ -376,7 +376,7 @@ function AccionCorrectivaSection({
         </div>
       ) : esSupervisor ? (
         // ── Formulario de captura (solo supervisor, una vez) ──
-        <div className="rounded-xl border border-rose-200 bg-white px-4 py-4 space-y-3">
+        <div className="rounded-xl border border-rose-200 bg-card px-4 py-4 space-y-3">
           <p className="text-[0.72rem] text-rose-500 font-semibold">
             Redacta la acción correctiva. Una vez guardada <span className="underline">no podrá ser modificada</span>.
           </p>
@@ -622,7 +622,7 @@ function QuejaCard({
     <div
       onClick={onClick}
       className={clsx(
-        'flex h-full flex-col rounded-2xl border bg-white shadow-sm p-5 gap-3 transition-all cursor-pointer hover:shadow-md hover:border-brand/40',
+        'flex h-full flex-col rounded-2xl border bg-card shadow-sm p-5 gap-3 transition-all cursor-pointer hover:shadow-md hover:border-brand/40',
         destacada ? 'border-brand ring-2 ring-brand/20' : 'border-gray-200/60'
       )}
     >
@@ -781,7 +781,7 @@ export function QuejasPage() {
               )}
               {puedeCrear && (
                 <Button onClick={() => setShowNueva(true)}
-                  className="bg-white !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                  className="bg-card !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Plus className="h-3.5 w-3.5" /> Nueva queja
                 </Button>
               )}
@@ -805,7 +805,7 @@ export function QuejasPage() {
 
       {/* Filtros AD */}
       {isAD && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex flex-wrap gap-3 items-end">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-[0.72rem] font-semibold text-gray-500 uppercase tracking-wide">Desde</label>
             <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}

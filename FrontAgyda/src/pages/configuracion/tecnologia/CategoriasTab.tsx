@@ -63,7 +63,7 @@ function ElementoRow({ elem }: { elem: CategoriaConSubcategorias['subcategorias'
   )
 }
 
-function SubcategoriaRow({ categoriaId, sub }: { categoriaId: number; sub: CategoriaConSubcategorias['subcategorias'][number] }) {
+function SubcategoriaRow({ sub }: { sub: CategoriaConSubcategorias['subcategorias'][number] }) {
   const qc = useQueryClient()
   const [editando, setEditando] = useState(false)
   const [nombre, setNombre] = useState(sub.nombre)
@@ -229,7 +229,7 @@ function CategoriaRow({ categoria }: { categoria: CategoriaConSubcategorias }) {
       {abierta && (
         <div className="pb-2">
           {categoria.subcategorias.map((s) => (
-            <SubcategoriaRow key={s.id} categoriaId={categoria.id} sub={s} />
+            <SubcategoriaRow key={s.id} sub={s} />
           ))}
           <div className="flex items-center gap-2 px-2 py-1.5 pl-8">
             <input
@@ -267,12 +267,13 @@ function CampoFormModal({ campo, categorias, onClose }: { campo: CampoPersonaliz
   const [opcionesTexto, setOpcionesTexto] = useState((campo?.opciones ?? []).join(', '))
 
   const guardar = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const payload: CampoPersonalizadoPayload = {
         ...form,
         opciones: form.tipo === 'lista' ? opcionesTexto.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
       }
-      return campo ? camposPersonalizadosService.updateCampo(campo.id, payload) : camposPersonalizadosService.createCampo(payload)
+      if (campo) await camposPersonalizadosService.updateCampo(campo.id, payload)
+      else await camposPersonalizadosService.createCampo(payload)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['campos-personalizados'] })
@@ -293,7 +294,7 @@ function CampoFormModal({ campo, categorias, onClose }: { campo: CampoPersonaliz
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <p className="text-base font-bold text-ink">{campo ? 'Editar campo' : 'Nuevo campo personalizado'}</p>
           <button onClick={onClose} className="text-ink-tertiary hover:text-ink"><X className="h-5 w-5" /></button>
@@ -393,7 +394,7 @@ export function CamposPersonalizadosPanel() {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ListChecks className="h-4 w-4 text-brand" />
@@ -471,7 +472,7 @@ export function CategoriasTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Categorías y subcategorías</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Árbol usado al crear/clasificar tickets. Desactivar una categoría la oculta de los formularios

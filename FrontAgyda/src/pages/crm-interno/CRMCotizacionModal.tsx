@@ -98,7 +98,7 @@ export function CRMCotizacionModal({ opoId, cot, onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0D1B3E] to-[#1B4FD8] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div>
@@ -108,7 +108,7 @@ export function CRMCotizacionModal({ opoId, cot, onClose, onSaved }: Props) {
               {ESTATUS_STEPS.map((s, i) => (
                 <div key={s} className="flex items-center gap-1.5">
                   {i > 0 && <div className="h-px w-6 bg-white/30" />}
-                  <span className={clsx('rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold capitalize', estatusActual === s ? 'bg-white text-[#1B4FD8]' : 'bg-white/20 text-white/70')}>{s}</span>
+                  <span className={clsx('rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold capitalize', estatusActual === s ? 'bg-card text-[#1B4FD8]' : 'bg-white/20 text-white/70')}>{s}</span>
                 </div>
               ))}
               {estatusActual === 'rechazada' && <span className="rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold bg-red-200 text-red-700">Rechazada</span>}
@@ -242,7 +242,7 @@ function CRMCotizacionPdfInline({ cotId, onClose }: { cotId: number; onClose: ()
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0">
           <span className="font-semibold text-gray-800">Vista previa PDF</span>
           <div className="flex gap-2">

@@ -13,7 +13,7 @@ export function MesaServicioTab() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Clasificaciones de ticket</p>
         <p className="mb-3 text-xs text-ink-tertiary">Catálogo fijo, usado al crear un ticket.</p>
         <div className="flex flex-wrap gap-2">
@@ -25,7 +25,7 @@ export function MesaServicioTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Motivos de espera</p>
         <p className="mb-3 text-xs text-ink-tertiary">Motivos disponibles al poner un ticket en estado "en espera".</p>
         <div className="flex flex-wrap gap-2">

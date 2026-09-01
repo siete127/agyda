@@ -222,7 +222,7 @@ function AnuncioItem({ anuncio, onDelete }: { anuncio: AnuncioPublicidad; onDele
         {anuncio.imagenArchivo ? (
           <img src={publicidadService.getUrlVerImagen(anuncio.id)} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
         ) : (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-gray-300"><ImageIcon className="h-4 w-4" /></div>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card text-gray-300"><ImageIcon className="h-4 w-4" /></div>
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-semibold text-ink">{anuncio.titulo}</p>
@@ -364,7 +364,7 @@ function CampaniaDetalleModal({ campania, onClose }: { campania: CampaniaPublici
 function CampaniaCard({ campania, onClick, onEliminar }: { campania: CampaniaPublicidad; onClick: () => void; onEliminar: () => void }) {
   const cfg = ESTATUS_CAMPANIA_CONFIG[campania.estatus]
   return (
-    <button onClick={onClick} className="group relative flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
+    <button onClick={onClick} className="group relative flex h-full flex-col rounded-2xl border border-gray-100 bg-card p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
       <span
         onClick={(e) => { e.stopPropagation(); onEliminar() }}
         role="button"
@@ -446,7 +446,7 @@ function PublicidadPageContent() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay campañas publicitarias registradas.</p>
         </div>
       ) : (

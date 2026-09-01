@@ -51,7 +51,7 @@ export function GeneralTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <div className="flex items-start gap-3">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
           <div>
@@ -66,7 +66,7 @@ export function GeneralTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+        <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
           <div className="mb-2 flex items-center gap-2">
             <Clock className="h-4 w-4 text-brand" />
             <p className="text-sm font-semibold text-ink">Horario de atención</p>
@@ -94,7 +94,7 @@ export function GeneralTab() {
           </button>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+        <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
           <div className="mb-2 flex items-center gap-2">
             <CalendarOff className="h-4 w-4 text-brand" />
             <p className="text-sm font-semibold text-ink">Próximos días festivos</p>
@@ -117,7 +117,7 @@ export function GeneralTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-1 flex items-center gap-2">
           <Globe className="h-4 w-4 text-brand" />
           <p className="text-sm font-semibold text-ink">Zona horaria</p>

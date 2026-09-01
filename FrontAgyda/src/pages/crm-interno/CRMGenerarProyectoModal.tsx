@@ -113,7 +113,7 @@ export function CRMGenerarProyectoModal({
                     <select
                       value={i.rol}
                       onChange={(e) => cambiarRol(i.nombre, e.target.value as Rol)}
-                      className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[0.7rem] font-semibold text-gray-600"
+                      className="rounded-lg border border-gray-200 bg-card px-2 py-1 text-[0.7rem] font-semibold text-gray-600"
                     >
                       {(Object.keys(ROL_LABEL) as Rol[]).map((r) => <option key={r} value={r}>{ROL_LABEL[r]}</option>)}
                     </select>

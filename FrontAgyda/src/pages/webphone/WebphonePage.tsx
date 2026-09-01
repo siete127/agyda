@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Phone, RefreshCw, Settings, ShieldAlert, ExternalLink, X,
@@ -11,6 +11,7 @@ import { useWebphoneStore } from '@/stores/webphone.store'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { parseVista, type VistaWebphone } from '@/components/ui/WebphoneFrame'
+import { configuracionService } from '@/services/configuracion.service'
 import toast from 'react-hot-toast'
 
 const VPN_CHECK_TIMEOUT_MS = 5_000
@@ -81,9 +82,36 @@ export function WebphonePage() {
       const list = Array.isArray(data) ? data : (data?.data ?? [])
       return (list as Record<string, unknown>[]).map(parseVista)
     },
+    staleTime: 30_000,
   })
 
+  // Si el agente tiene una vista fija asignada (Configuración > Telefonía >
+  // Asignación de Vistas), esa gana siempre — no cae a la predeterminada
+  // global ni el agente puede elegir otra desde este módulo.
+  const { data: vistaAsignadaId = null } = useQuery({
+    queryKey: ['webphone-mi-asignacion'],
+    queryFn: () => configuracionService.getMiAsignacionVista(),
+    staleTime: 30_000,
+  })
+  const tieneAsignacionFija = vistaAsignadaId != null
+
   const vista = vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null
+
+  // Si el usuario no eligió una vista a mano en esta sesión, seguir siempre a
+  // la vista predeterminada (la de menor orden) aunque cambie en Configuración
+  // sin necesidad de recargar la página. Con asignación fija, ese mecanismo
+  // no aplica: siempre gana la vista asignada, sin importar elección manual.
+  const vistaElegidaManualmente = useRef(false)
+  useEffect(() => {
+    if (!vistas.length) return
+    if (tieneAsignacionFija) {
+      if (vistaId !== vistaAsignadaId && vistas.some((v) => v.id === vistaAsignadaId)) setVistaId(vistaAsignadaId)
+      return
+    }
+    if (vistaElegidaManualmente.current) return
+    const predeterminada = vistas[0]
+    if (vistaId !== predeterminada.id) setVistaId(predeterminada.id)
+  }, [vistas, vistaId, setVistaId, tieneAsignacionFija, vistaAsignadaId])
 
   const crear = useMutation({
     mutationFn: (body: { label: string; url: string; requiereVpn: boolean }) => api.post('/webphone/vistas', body),
@@ -113,6 +141,10 @@ export function WebphonePage() {
   })
 
   const cargarVista = (v: VistaWebphone) => {
+    // Con vista asignada fija, solo un admin puede cambiarla manualmente
+    // (ej. para probar otra vista) — un agente normal queda anclado a la suya.
+    if (tieneAsignacionFija && !isAdmin) return
+    vistaElegidaManualmente.current = true
     setVistaId(v.id)
     setShowConfig(false)
     setVpnCheck('idle')
@@ -180,7 +212,7 @@ export function WebphonePage() {
                     onClick={() => setZoom(z)}
                     className={clsx(
                       'rounded-md px-2 py-1 text-[0.7rem] font-semibold transition-colors',
-                      zoom === z ? 'bg-white text-brand' : 'text-white/70 hover:text-white',
+                      zoom === z ? 'bg-card text-brand' : 'text-white/70 hover:text-white',
                     )}
                     title={`Zoom ${z}x`}
                   >
@@ -201,12 +233,6 @@ export function WebphonePage() {
                   <PictureInPicture2 className="h-3.5 w-3.5" /> {pipActive ? 'Flotando' : 'Modo flotante'}
                 </button>
               )}
-              <button
-                onClick={() => setShowConfig(true)}
-                className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-white/20 transition-colors"
-              >
-                <Settings className="h-3.5 w-3.5" /> Cambiar vista
-              </button>
               {vista && (
                 <a
                   href={vista.url}
@@ -235,7 +261,7 @@ export function WebphonePage() {
         <div data-webphone-slot className="absolute inset-0 rounded-2xl" />
 
         {!loadingVistas && !vista && (
-          <div className="card absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+          <div className="card absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card px-6 text-center">
             <Phone className="h-8 w-8 text-gray-300" />
             <p className="text-sm font-semibold text-gray-700">No hay vistas configuradas</p>
             {isAdmin && (
@@ -259,7 +285,7 @@ export function WebphonePage() {
             {vista.requiereVpn && (
               <button
                 onClick={verificarVpn}
-                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 shadow-md hover:bg-amber-50 transition-colors"
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-card px-3 py-1.5 text-xs font-semibold text-amber-700 shadow-md hover:bg-amber-50 transition-colors"
               >
                 {vpnCheck === 'checking' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5" />}
                 Verificar VPN
@@ -282,7 +308,7 @@ export function WebphonePage() {
       {/* ── Modal: cambiar vista ── */}
       {showConfig && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+          <div className="w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-[#0D1B3E] to-[#1B4FD8] flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Settings className="h-4 w-4 text-white" />
@@ -359,7 +385,7 @@ export function WebphonePage() {
       {/* ── Modal: aviso VPN ── */}
       {showVpnWarning && vista && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+          <div className="w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden">
             <div className="flex flex-col items-center gap-3 p-6 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50">
                 <ShieldAlert className="h-7 w-7 text-amber-500" />

@@ -15,7 +15,14 @@ router.get('/incoming-call', webphoneController.incomingCall);
 router.get('/vistas', authenticateToken, webphoneVistasController.getVistas);
 router.post('/vistas', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.createVista);
 router.put('/vistas/:id', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.updateVista);
+router.put('/vistas/:id/predeterminada', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.setPredeterminada);
 router.delete('/vistas/:id', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.deleteVista);
+
+// Asignación dura de vista por usuario — declarada antes de /asignaciones/:neusId
+// para que Express no confunda "mi-asignacion" con un :neusId.
+router.get('/vistas/asignaciones/mi-asignacion', authenticateToken, webphoneVistasController.getMiAsignacion);
+router.get('/vistas/asignaciones', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.getAsignaciones);
+router.put('/vistas/asignaciones/:neusId', authenticateToken, verificarRol(['AD', 'TI']), webphoneVistasController.setAsignacion);
 
 // Credenciales de VICIdial por agente y por vista (para auto-login) —
 // administración exclusiva AD/TI. Los passwords nunca se devuelven en texto

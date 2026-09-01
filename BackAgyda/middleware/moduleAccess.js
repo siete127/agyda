@@ -2,6 +2,18 @@ const databaseService = require('../services/databaseService');
 const { DEFAULT_TENANT } = require('../config/tenants');
 const { SUPER_ADMIN_IDS, esSuperAdminFijo } = require('../utils/superAdmin');
 
+// ADM_0001 (id 1) y TI_0110 (id 64) dejaron de ser intocables SOLO frente al
+// bloqueo de módulos por empresa — a petición explícita: si su empresa
+// desactiva un módulo, a ellos también se les bloquea. Conservan el resto de
+// privilegios de esSuperAdminFijo (gestionar Módulos por Empresa, crear
+// empresas, etc.) sin cambios.
+const EMPRESA_BLOQUEO_EXCEPCIONES = new Set([1, 64]);
+function esSuperAdminInmuneEmpresa(req) {
+  if (!esSuperAdminFijo(req)) return false;
+  const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
+  return !EMPRESA_BLOQUEO_EXCEPCIONES.has(parseInt(uid));
+}
+
 // Cache simple en memoria para reducir lecturas frecuentes (opcional).
 // Se indexa también por empresa: el mismo userId numérico puede existir en
 // más de un tenant con permisos distintos.
@@ -70,12 +82,14 @@ function requireModuleAccess(modKey) {
   const keyNorm = String(modKey || '').toLowerCase();
   return async (req, res, next) => {
     try {
-      if (esSuperAdminFijo(req)) return next();
+      if (esSuperAdminInmuneEmpresa(req)) return next();
 
       const blocked = await getEmpresaModulosBloqueados(req.user?.empresa);
       if (blocked.has(keyNorm)) {
         return res.status(403).json({ success: false, message: 'Módulo desactivado para tu empresa', modulo: modKey });
       }
+
+      if (esSuperAdminFijo(req)) return next();
 
       const tipo = (req.user && (req.user.tipoUsuario || req.user.role || req.user.tipousuario) || '').toString().toLowerCase();
       const adminAliases = new Set(['ad','admin','administrador','administradora']);
@@ -142,12 +156,14 @@ function requireActionAccess(moduloKey, accionKey) {
     try {
       const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
       if (!uid) return res.status(401).json({ success: false, message: 'Token inválido' });
-      if (esSuperAdminFijo(req)) return next();
+      if (esSuperAdminInmuneEmpresa(req)) return next();
 
       const blocked = await getEmpresaModulosBloqueados(req.user?.empresa);
       if (blocked.has(modNorm)) {
         return res.status(403).json({ success: false, message: 'Módulo desactivado para tu empresa', modulo: moduloKey });
       }
+
+      if (esSuperAdminFijo(req)) return next();
 
       const allowed = await getUserAllowedActions(uid, modNorm, req.user?.empresa);
       if (allowed.has('*') || allowed.has(accNorm)) return next();
@@ -170,12 +186,14 @@ function requireAnyActionAccess(pares) {
     try {
       const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
       if (!uid) return res.status(401).json({ success: false, message: 'Token inválido' });
-      if (esSuperAdminFijo(req)) return next();
+      if (esSuperAdminInmuneEmpresa(req)) return next();
 
       const blocked = await getEmpresaModulosBloqueados(req.user?.empresa);
+      const esFijoNoInmune = esSuperAdminFijo(req);
       for (const [moduloKey, accionKey] of pares) {
         const modNorm = String(moduloKey || '').toLowerCase();
         if (blocked.has(modNorm)) continue; // este par está bloqueado a nivel empresa, probar el siguiente
+        if (esFijoNoInmune) return next();
         const allowed = await getUserAllowedActions(uid, modNorm, req.user?.empresa);
         if (allowed.has('*') || allowed.has(String(accionKey || '').toLowerCase())) return next();
       }
@@ -214,4 +232,5 @@ module.exports = {
   invalidateEmpresaModulosCache,
   SUPER_ADMIN_IDS,
   esSuperAdminFijo,
+  esSuperAdminInmuneEmpresa,
 };

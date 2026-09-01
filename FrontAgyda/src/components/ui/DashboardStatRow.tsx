@@ -28,7 +28,7 @@ export function DashboardStatRow({ stats }: DashboardStatRowProps) {
         const tone = TONE_CLASSES[s.tone ?? 'brand']
         const Icon = s.icon
         return (
-          <div key={s.key} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+          <div key={s.key} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
             <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl', tone.bg)}>
               <Icon className={clsx('h-4.5 w-4.5', tone.text)} />
             </div>

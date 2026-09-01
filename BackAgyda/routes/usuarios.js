@@ -14,6 +14,8 @@ router.get('/todas-areas', authenticateToken, usuarioController.getTodosConArea)
 router.get('/nuevos-colaboradores', authenticateToken, usuarioController.getNuevosColaboradores);
 router.get('/aniversarios', authenticateToken, usuarioController.getAniversarios);
 router.get('/:id', authenticateToken, usuarioController.getUsuarioById);
+router.get('/:id/ficha', authenticateToken, usuarioController.getUsuarioFicha);
+router.put('/:id/ficha', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.updateUsuarioFicha);
 router.get('/:id/status', authenticateToken, usuarioController.getCurrentStatus);
 router.get('/:id/online', authenticateToken, usuarioController.checkUserOnline);
 router.get('/:id/times', authenticateToken, usuarioController.getTimes);
@@ -21,6 +23,7 @@ router.post('/:id/status', authenticateToken, usuarioController.changeStatus);
 router.post('/', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.createUsuario);
 router.put('/:id/activo', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.toggleActivo);
 router.put('/:id/status-ventas', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.toggleStatus);
+router.put('/:id/rol', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.cambiarRol);
 router.put('/:id/puesto', authenticateToken, verificarRol(['AD']), requireActionAccess('mi-area', 'editar-puesto'), usuarioController.updatePuesto);
 router.put('/:id', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.updateUsuario);
 router.delete('/:id', authenticateToken, verificarRol(['AD', 'TI']), usuarioController.deleteUsuario);

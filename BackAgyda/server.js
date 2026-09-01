@@ -63,6 +63,9 @@ app.use(loggingMiddleware);
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 app.use('/audio', express.static(process.env.AUDIO_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Musica'));
 app.use('/capacitacion-materiales', express.static(process.env.CAPACITACION_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Capacitacion'));
+// Instalador y script del agente de monitoreo de red (descarga sin auth — el
+// script no contiene secretos; la API key la pega el instalador en la PC).
+app.use('/agente-red', express.static(path.join(__dirname, 'tools', 'agente-red')));
 
 /* =====================================================
    🔴 PROXY (ANTES DEL SPA)
@@ -107,6 +110,7 @@ app.use('/api/organigrama', require('./routes/organigrama'));
 app.use('/api/drive', require('./routes/drive'));
 app.use('/api/checklists', require('./routes/checklists'));
 app.use('/api/clientes', require('./routes/clientes'));
+app.use('/api/productos-servicios', require('./routes/productosServicios'));
 app.use('/api/expedientes', require('./routes/expedientes'));
 app.use('/api/vacaciones', require('./routes/vacaciones'));
 app.use('/api/legales', require('./routes/legales'));
@@ -127,6 +131,9 @@ app.use('/api/rh-area', require('./routes/rhArea'));
 app.use('/api/notificaciones-correo', require('./routes/notificacionesCorreo'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/accesos', require('./routes/accesos'));
+app.use('/api/roles', require('./routes/roles'));
+app.use('/api/perfiles', require('./routes/perfiles'));
+app.use('/api/personalizacion', require('./routes/personalizacion'));
 app.use('/api/ui', require('./routes/ui'));
 app.use('/api/webphone', require('./routes/webphone'));
 app.use('/api/playlist', require('./routes/playlist'));
@@ -238,7 +245,6 @@ const socketService = require('./services/socketService');
 const emailService = require('./services/emailService');
 
 socketService.initialize(server);
-emailService.initialize();
 
 (async () => {
   if (process.env.SKIP_DB !== 'true') {
@@ -248,6 +254,19 @@ emailService.initialize();
     } catch (err) {
       logger.error('❌ Error inicializando BD:', err.message);
     }
+  }
+
+  // El transporte de correo se inicializa después de la BD para poder leer
+  // la config guardada desde Configuración > Notificaciones > Correo (si
+  // existe y está habilitada); si falla o no hay nada guardado, cae de
+  // vuelta a las variables de entorno de siempre (ver config/email.js).
+  try {
+    const notificacionesCorreoController = require('./controllers/notificacionesCorreoController');
+    const dbConfigRow = await notificacionesCorreoController.getConfigServidorCorreo();
+    emailService.initialize(dbConfigRow);
+  } catch (err) {
+    logger.warn('⚠️ No se pudo leer config de servidor de correo desde BD, usando .env:', err.message);
+    emailService.initialize();
   }
 })();
 

@@ -86,7 +86,7 @@ export function CRMPortalPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-card border-b border-gray-200 px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10">
             <TrendingUp className="h-5 w-5 text-brand" />
@@ -100,7 +100,7 @@ export function CRMPortalPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Bienvenida */}
-        <div className="rounded-2xl bg-white border border-gray-200 p-5">
+        <div className="rounded-2xl bg-card border border-gray-200 p-5">
           <p className="text-[1rem] font-bold text-gray-900">Hola, {contacto.nombre} 👋</p>
           {contacto.empresa && (
             <p className="text-[0.8rem] text-gray-500 flex items-center gap-1 mt-0.5">
@@ -116,13 +116,13 @@ export function CRMPortalPage() {
         <div className="space-y-3">
           <h2 className="text-[0.82rem] font-bold text-gray-700 uppercase tracking-wide px-1">Tus proyectos</h2>
           {oportunidades.length === 0 ? (
-            <div className="rounded-2xl bg-white border border-gray-200 p-8 text-center text-gray-400 text-[0.85rem]">Sin proyectos activos</div>
+            <div className="rounded-2xl bg-card border border-gray-200 p-8 text-center text-gray-400 text-[0.85rem]">Sin proyectos activos</div>
           ) : oportunidades.map((o) => (
             <button
               key={o.id}
               onClick={() => setOpoSel(opoSel === o.id ? null : o.id)}
               className={clsx(
-                'w-full text-left rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition-all',
+                'w-full text-left rounded-2xl border bg-card p-4 shadow-sm hover:shadow-md transition-all',
                 opoSel === o.id ? 'border-brand ring-2 ring-brand/20' : 'border-gray-200',
               )}
             >
@@ -236,7 +236,7 @@ export function CRMPortalPage() {
         {documentos && documentos.length > 0 && (
           <div className="space-y-3">
             <h2 className="text-[0.82rem] font-bold text-gray-700 uppercase tracking-wide px-1">Documentos</h2>
-            <div className="rounded-2xl bg-white border border-gray-200 divide-y divide-gray-50 overflow-hidden">
+            <div className="rounded-2xl bg-card border border-gray-200 divide-y divide-gray-50 overflow-hidden">
               {documentos.map((d) => (
                 <a
                   key={d.id}

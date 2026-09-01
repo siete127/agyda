@@ -133,7 +133,7 @@ export function HeroCarousel({ items, onOpen, size = 'compact' }: HeroCarouselPr
         <button
           onClick={() => onOpen(item)}
           className={clsx(
-            'group inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/50 bg-white/15 font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:bg-white hover:text-[#0B1730] hover:border-white active:scale-95',
+            'group inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/50 bg-white/15 font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:bg-card hover:text-[#0B1730] hover:border-white active:scale-95',
             size === 'large' ? 'px-4 py-2 text-[0.8rem]' : 'px-3 py-1.5 text-[0.72rem]',
           )}
         >
@@ -169,7 +169,7 @@ export function HeroCarousel({ items, onOpen, size = 'compact' }: HeroCarouselPr
               onClick={() => go(i, i > index ? 'right' : 'left')}
               className={clsx(
                 'rounded-full transition-all duration-300',
-                i === index ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/70',
+                i === index ? 'w-4 h-1.5 bg-card' : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/70',
               )}
             />
           ))}

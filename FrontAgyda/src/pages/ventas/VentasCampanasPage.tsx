@@ -58,7 +58,7 @@ function CampanasContent() {
         </button>
       </div>
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : campanas.length === 0 ? (

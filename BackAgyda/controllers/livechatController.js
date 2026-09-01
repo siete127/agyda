@@ -166,14 +166,28 @@ async function buscarAgenteDisponible(pool, maxChatsGlobal, { grupoId = null, ca
   return r.recordset[0] || null;
 }
 
+// Emite el mensaje por socket además de insertarlo — sin esto, mensajes de
+// sistema (bienvenida, transferencia, motivo de cierre, etc.) solo aparecían
+// al recargar la conversación, no en vivo, tanto para el visitante como para
+// el agente que la tenga abierta.
 async function insertarMensajeSistema(pool, conversacionId, contenido) {
-  await pool.request()
+  const insert = await pool.request()
     .input('convId', sql.Int, conversacionId)
     .input('contenido', sql.NVarChar, contenido)
     .query(`
       INSERT INTO dbo.LIVECHAT_MENSAJES (LM_CONVERSACION_ID, LM_EMISOR, LM_CONTENIDO)
+      OUTPUT INSERTED.LM_ID as id
       VALUES (@convId, 'sistema', @contenido)
     `);
+
+  try {
+    const mensaje = await pool.request()
+      .input('id', sql.Int, insert.recordset[0].id)
+      .query(`${SELECT_MENSAJE} WHERE LM_ID = @id`);
+    socketService.getIO().to(`livechat:${conversacionId}`).emit('receive_livechat_message', mensaje.recordset[0]);
+  } catch (e) {
+    console.warn('⚠️ No se pudo emitir mensaje de sistema en vivo:', e?.message || e);
+  }
 }
 
 // Heurística simple: minutos estimados = (visitantes en cola / agentes online) * 5, acotado 1-30.
@@ -572,6 +586,8 @@ async function cerrarConversacionPorVisitante(pool, conversacion, tenantKey) {
       WHERE LC_ID = @convId
     `);
 
+  await insertarMensajeSistema(pool, conversacionId, 'El visitante salió de la conversación.');
+
   // Si venía de 'pendiente_rating', cerrarConversacion ya le liberó el cupo
   // al agente cuando él cerró desde su lado — no restar de nuevo aquí.
   const agenteId = conversacion.estado === 'activa' ? conversacion.agenteId : null;
@@ -928,8 +944,21 @@ exports.cerrarConversacion = async (req, res) => {
         `);
     }
 
+    // Mensaje de sistema visible en el chat con el motivo — así el visitante lo
+    // ve directo en la conversación sin depender de que el widget interprete
+    // el payload del evento de socket (su código fuente no está disponible
+    // para agregarle esa lógica hoy).
+    await insertarMensajeSistema(
+      pool,
+      conversacionId,
+      motivoCierreTexto ? `El agente cerró la conversación. Motivo: ${motivoCierreTexto}` : 'El agente cerró la conversación.',
+    );
+
     try {
-      socketService.getIO().to(`livechat:${conversacionId}`).emit('livechat:pendiente_calificacion', { conversacionId: Number(conversacionId) });
+      socketService.getIO().to(`livechat:${conversacionId}`).emit('livechat:pendiente_calificacion', {
+        conversacionId: Number(conversacionId),
+        motivoCierre: motivoCierreTexto,
+      });
     } catch (e) {
       console.warn('⚠️ No se pudo emitir livechat:pendiente_calificacion:', e?.message || e);
     }
@@ -1530,7 +1559,7 @@ cron.schedule('* * * * *', () => {
 // autenticados hacia la campaña "Soporte TI") para no duplicar la lógica de
 // horario/ruteo/mensajes de sistema del flujo público.
 exports.buscarAgenteDisponible = buscarAgenteDisponible;
-exports.getConfig = getConfig;
+exports.getConfigInterna = getConfig;
 exports.isFueraDeHorario = isFueraDeHorario;
 exports.insertarMensajeSistema = insertarMensajeSistema;
 exports.calcularTiempoEsperaEstimado = calcularTiempoEsperaEstimado;

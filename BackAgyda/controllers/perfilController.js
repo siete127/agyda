@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { ensureUploadDirectories } = require('../utils/helpers');
+const { empresaRequierePolitica, validarPoliticaPassword } = require('../utils/passwordPolicy');
 
 // Asegurar directorios al inicializar
 ensureUploadDirectories();
@@ -120,11 +121,16 @@ exports.updatePassword = async (req, res) => {
     const currentPassword = String(req.body?.currentPassword || '');
     const newPassword = String(req.body?.newPassword || '');
     
-    if (!currentPassword || !newPassword) 
+    if (!currentPassword || !newPassword)
       return res.status(400).json({ success:false, message:'Contraseñas requeridas' });
-    if (newPassword.length < 6) 
+
+    if (empresaRequierePolitica(req.user?.empresa)) {
+      const errorPolitica = validarPoliticaPassword(newPassword);
+      if (errorPolitica) return res.status(400).json({ success:false, message: errorPolitica });
+    } else if (newPassword.length < 6) {
       return res.status(400).json({ success:false, message:'La contraseña nueva es muy corta' });
-    
+    }
+
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().input('id', sql.Int, id).query(`
       SELECT 
@@ -142,10 +148,11 @@ exports.updatePassword = async (req, res) => {
     const matches = (row.pass === currentPassword) || (row.neus === currentPassword);
     if (!matches) return res.status(401).json({ success:false, message:'Contraseña actual incorrecta' });
     
-    // 1. Actualizar NEUS_USUARIOS: username = NEUS_USUARIO, password = NEUS_CONTRA
+    // 1. Actualizar NEUS_USUARIOS: username = NEUS_USUARIO, password = NEUS_CONTRA,
+    //    y limpiar la bandera de "debe cambiar contraseña" si estaba pendiente.
     await pool.request().input('id', sql.Int, id).input('np', sql.NVarChar, newPassword).query(`
-      UPDATE dbo.NEUS_USUARIOS 
-      SET NEUS_CONTRA=@np, [password]=@np, username=NEUS_USUARIO
+      UPDATE dbo.NEUS_USUARIOS
+      SET NEUS_CONTRA=@np, [password]=@np, username=NEUS_USUARIO, NEUS_DEBE_CAMBIAR_PASSWORD=0
       WHERE NEUS_ID=@id`);
 
     // 2. Obtener los valores actualizados de NEUS_USUARIO, NEUS_CONTRA y NEUS_NOMBRES

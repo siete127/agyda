@@ -26,21 +26,21 @@ function MotivoForm({ grupoId, motivo, orden, onDone }: { grupoId: number; motiv
   })
 
   return (
-    <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-2 bg-white">
+    <div className="flex items-center gap-2 border border-surface-border rounded-lg p-2 bg-card">
       <input
         type="text"
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         placeholder="Ej. Resuelto, No contestó…"
-        className="flex-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs"
+        className="flex-1 rounded-lg border border-surface-border bg-card px-2.5 py-1 text-xs text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
         autoFocus
         onKeyDown={(e) => e.key === 'Enter' && texto.trim() && guardar.mutate()}
       />
-      <label className="flex items-center gap-1 text-[11px] text-gray-500 whitespace-nowrap">
+      <label className="flex items-center gap-1 text-[11px] text-ink-tertiary whitespace-nowrap">
         <input type="checkbox" checked={requiereComentario} onChange={(e) => setRequiereComentario(e.target.checked)} />
         Requiere comentario
       </label>
-      <button type="button" onClick={onDone} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+      <button type="button" onClick={onDone} className="text-ink-tertiary hover:text-ink-secondary"><X size={14} /></button>
       <Button size="sm" onClick={() => guardar.mutate()} disabled={!texto.trim() || guardar.isPending}>
         {guardar.isPending ? <Loader2 size={12} className="animate-spin" /> : 'Guardar'}
       </Button>
@@ -70,7 +70,7 @@ export function MotivosCierrePanel({ grupoId }: { grupoId: number }) {
       {isLoading ? (
         <Spinner size="sm" />
       ) : motivos.length === 0 && !creando ? (
-        <p className="text-xs text-gray-400 flex items-center gap-1.5">
+        <p className="text-xs text-ink-tertiary flex items-center gap-1.5">
           <MessageSquareWarning size={13} />
           Sin motivos de cierre — el agente no podrá cerrar chats de este grupo hasta que agregues al menos uno.
         </p>
@@ -80,18 +80,18 @@ export function MotivosCierrePanel({ grupoId }: { grupoId: number }) {
             editandoId === m.id ? (
               <MotivoForm key={m.id} grupoId={grupoId} motivo={m} orden={m.orden} onDone={() => setEditandoId(null)} />
             ) : (
-              <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 bg-white">
-                <span className="text-xs text-gray-700 flex items-center gap-1.5">
+              <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg border border-surface-border px-2.5 py-1.5 bg-card">
+                <span className="text-xs text-ink-secondary flex items-center gap-1.5">
                   {m.motivo}
                   {m.requiereComentario && (
-                    <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700')}>
+                    <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500')}>
                       requiere comentario
                     </span>
                   )}
                 </span>
                 <div className="flex gap-1 shrink-0">
-                  <button type="button" onClick={() => setEditandoId(m.id)} className="text-gray-300 hover:text-brand p-1"><Edit2 size={12} /></button>
-                  <button type="button" onClick={() => { if (window.confirm('¿Eliminar este motivo?')) eliminar.mutate(m.id) }} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={12} /></button>
+                  <button type="button" onClick={() => setEditandoId(m.id)} className="text-ink-tertiary hover:text-brand p-1"><Edit2 size={12} /></button>
+                  <button type="button" onClick={() => { if (window.confirm('¿Eliminar este motivo?')) eliminar.mutate(m.id) }} className="text-ink-tertiary hover:text-red-500 p-1"><Trash2 size={12} /></button>
                 </div>
               </div>
             )

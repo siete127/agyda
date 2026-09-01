@@ -36,7 +36,7 @@ export function RHPage() {
             ]}
           />
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+          <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
             <h2 className="mb-3 text-sm font-bold text-ink">Candidatos por etapa</h2>
             <StatusBar
               segments={data.porEtapa.map((e, i) => ({

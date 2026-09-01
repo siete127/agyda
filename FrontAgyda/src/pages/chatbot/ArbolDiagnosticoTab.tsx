@@ -10,7 +10,7 @@ import { NODO_TIPO_LABELS, type ChatbotNodo, type ChatbotNodoTipo } from '@/type
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
-function NodoFormModal({ nodo, nodos, onClose }: { nodo?: ChatbotNodo; nodos: ChatbotNodo[]; onClose: () => void }) {
+function NodoFormModal({ nodo, onClose }: { nodo?: ChatbotNodo; onClose: () => void }) {
   const qc = useQueryClient()
   const isEdit = !!nodo
   const [form, setForm] = useState({
@@ -20,9 +20,10 @@ function NodoFormModal({ nodo, nodos, onClose }: { nodo?: ChatbotNodo; nodos: Ch
   })
 
   const guardar = useMutation({
-    mutationFn: () => isEdit
-      ? chatbotArbolService.updateNodo(nodo!.id, { texto: form.texto, tipo: form.tipo })
-      : chatbotArbolService.createNodo({ codigo: form.codigo, texto: form.texto, tipo: form.tipo }),
+    mutationFn: async () => {
+      if (isEdit) await chatbotArbolService.updateNodo(nodo!.id, { texto: form.texto, tipo: form.tipo })
+      else await chatbotArbolService.createNodo({ codigo: form.codigo, texto: form.texto, tipo: form.tipo })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chatbot-nodos'] })
       toast.success(isEdit ? 'Nodo actualizado' : 'Nodo creado')
@@ -174,8 +175,8 @@ export function ArbolDiagnosticoTab() {
         </div>
       ))}
 
-      {showNuevoNodo && <NodoFormModal nodos={nodos} onClose={() => setShowNuevoNodo(false)} />}
-      {editandoNodo && <NodoFormModal nodo={editandoNodo} nodos={nodos} onClose={() => setEditandoNodo(null)} />}
+      {showNuevoNodo && <NodoFormModal onClose={() => setShowNuevoNodo(false)} />}
+      {editandoNodo && <NodoFormModal nodo={editandoNodo} onClose={() => setEditandoNodo(null)} />}
       {agregandoOpcionA !== null && <OpcionFormModal nodoId={agregandoOpcionA} nodos={nodos} onClose={() => setAgregandoOpcionA(null)} />}
     </div>
   )

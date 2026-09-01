@@ -91,7 +91,7 @@ export function QuejasDashboardPage() {
       </div>
 
       {/* Filtro de fechas */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex flex-wrap gap-3 items-end">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[0.72rem] font-semibold text-gray-500 uppercase tracking-wide">Desde</label>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
@@ -117,7 +117,7 @@ export function QuejasDashboardPage() {
       )}
 
       {/* Ranking */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {/* Cabecera del panel */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>

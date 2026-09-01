@@ -50,7 +50,7 @@ function antiguedad(fecha: string | null): string {
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-2xl border border-gray-100 bg-white p-5 flex flex-col items-center gap-3">
+    <div className="animate-pulse rounded-2xl border border-gray-100 bg-card p-5 flex flex-col items-center gap-3">
       <div className="h-16 w-16 rounded-full bg-gray-100" />
       <div className="h-3.5 w-28 rounded-full bg-gray-100" />
       <div className="h-2.5 w-20 rounded-full bg-gray-100" />
@@ -66,7 +66,7 @@ function CompañeroCard({ c, isMe, onClick }: { c: Compañero; isMe?: boolean; o
   return (
     <button
       onClick={onClick}
-      className="relative rounded-2xl border border-gray-200/70 bg-white p-5 flex flex-col items-center gap-2 shadow-sm hover:shadow-md hover:border-brand/30 transition-all text-left cursor-pointer"
+      className="relative rounded-2xl border border-gray-200/70 bg-card p-5 flex flex-col items-center gap-2 shadow-sm hover:shadow-md hover:border-brand/30 transition-all text-left cursor-pointer"
     >
       {isMe && (
         <span className="absolute -top-1.5 -right-1.5 rounded-full bg-brand px-2 py-0.5 text-[0.6rem] font-bold text-white shadow">
@@ -560,7 +560,7 @@ function CompañeroDetalleModal({ c, onClose }: { c: Compañero; onClose: () => 
       {/* Picker: elegir documento del expediente como carta responsiva */}
       {mostrarPicker && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+          <div className="w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
                 <p className="text-[0.88rem] font-bold text-gray-900">

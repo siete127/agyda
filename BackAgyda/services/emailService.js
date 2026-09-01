@@ -1,7 +1,7 @@
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const sql = require('mssql');
-const { smtpConfig, EMAIL_FROM, EMAIL_BASE_URL, PERMISOS_MAIL_TO, SMTP_DEBUG } = require('../config/email');
+const envEmailConfig = require('../config/email');
 const databaseService = require('./databaseService');
 const { validateEmail } = require('../utils/validators');
 
@@ -9,30 +9,193 @@ const logger = global.logger || require('../utils/logger');
 
 let mailer;
 
-function initialize() {
-  try {
-    if (smtpConfig.host) {
-      mailer = nodemailer.createTransport(smtpConfig);
-    }
-  } catch (err) {
-    console.warn('⚠️ Error configurando nodemailer:', err.message);
+// Config activa del servicio — arranca con lo que haya en .env
+// (config/email.js) y se sobreescribe con lo guardado en la tabla
+// EMAIL_SERVIDOR_CONFIG (panel Configuración > Notificaciones > Correo) si
+// existe y está habilitada. Son `let` (no `const`) precisamente para poder
+// recargarlas en caliente desde el panel sin reiniciar el proceso — ver
+// reloadConfig() más abajo, invocada por notificacionesCorreoController al
+// guardar cambios.
+let smtpConfig = envEmailConfig.smtpConfig;
+let EMAIL_FROM = envEmailConfig.EMAIL_FROM;
+let EMAIL_BASE_URL = envEmailConfig.EMAIL_BASE_URL;
+let PERMISOS_MAIL_TO = envEmailConfig.PERMISOS_MAIL_TO;
+let SMTP_DEBUG = envEmailConfig.SMTP_DEBUG;
+let USE_OAUTH2 = envEmailConfig.USE_OAUTH2;
+let oauth2Config = envEmailConfig.oauth2Config;
+let USE_RESEND = envEmailConfig.USE_RESEND;
+let RESEND_API_KEY = envEmailConfig.RESEND_API_KEY;
+let EMAIL_FROM_NOMBRE = 'AGYDA ArdaBytec';
+
+// Token de aplicación (client credentials) contra Azure AD — no es un token
+// de usuario, es la app autenticándose a sí misma para poder enviar como
+// oauth2Config.senderEmail. Se cachea y se renueva sola cuando nodemailer la
+// invoca (accessToken puede ser una función async, ver createTransport abajo)
+// para no pedir un token nuevo en cada correo.
+let cachedToken = null;
+let cachedTokenExpiresAt = 0;
+
+async function getAzureAccessToken() {
+  const now = Date.now();
+  if (cachedToken && now < cachedTokenExpiresAt - 60_000) return cachedToken;
+
+  const url = `https://login.microsoftonline.com/${oauth2Config.tenantId}/oauth2/v2.0/token`;
+  const body = new URLSearchParams({
+    client_id: oauth2Config.clientId,
+    client_secret: oauth2Config.clientSecret,
+    scope: 'https://outlook.office365.com/.default',
+    grant_type: 'client_credentials',
+  });
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Azure AD token error: ${data.error} — ${data.error_description || ''}`);
   }
 
-  // Fallback para Gmail
-  try {
-    const smtpHostLower = String(smtpConfig.host || '').toLowerCase();
-    const smtpUser = process.env.SMTP_USER || '';
-    if (!mailer && smtpHostLower.includes('gmail.com') && smtpUser && smtpConfig.auth.pass) {
-      logger.info('ℹ️ Intentando crear transporte con service="gmail" como fallback');
+  cachedToken = data.access_token;
+  cachedTokenExpiresAt = now + (Number(data.expires_in) || 3600) * 1000;
+  return cachedToken;
+}
+
+// Adaptador con la misma interfaz que usa el resto del archivo
+// (mailer.sendMail({from,to,subject,text,html}) → {messageId}) para que
+// ninguna de las funciones de envío de abajo tenga que enterarse de que el
+// transporte real es la API HTTP de Resend y no SMTP. verify() es un no-op
+// porque Resend no tiene un equivalente real a "probar la conexión" — la
+// API key se valida en el primer envío real.
+function createResendTransport(apiKey, defaultFrom) {
+  return {
+    async sendMail({ from, to, subject, text, html, replyTo }) {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: from || defaultFrom,
+          to: Array.isArray(to) ? to : [to],
+          subject,
+          text,
+          html,
+          reply_to: replyTo || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(`Resend error (${res.status}): ${data.message || JSON.stringify(data)}`);
+      }
+      return { messageId: data.id };
+    },
+    async verify() {
+      return true;
+    },
+  };
+}
+
+// Sobreescribe la config activa con lo guardado en la tabla
+// EMAIL_SERVIDOR_CONFIG (panel de administración), si `habilitado=true`.
+// Si no hay fila o está deshabilitada, deja la config de .env intacta — el
+// panel es un override opcional, nunca un requisito para que el correo siga
+// funcionando con la configuración de siempre.
+function applyDbConfig(row) {
+  if (!row || !row.habilitado) return;
+
+  EMAIL_FROM_NOMBRE = row.nombreRemitente || EMAIL_FROM_NOMBRE;
+
+  if (row.tipo === 'graph') {
+    USE_OAUTH2 = Boolean(row.tenantId && row.clientId && row.clientSecret);
+    oauth2Config = {
+      tenantId: row.tenantId || '',
+      clientId: row.clientId || '',
+      clientSecret: row.clientSecret || '',
+      senderEmail: row.buzonRemitente || row.correoFrom || '',
+    };
+    EMAIL_FROM = row.correoFrom || row.buzonRemitente || EMAIL_FROM;
+    USE_RESEND = false;
+    // Credenciales nuevas → el token cacheado (si lo hay) ya no aplica.
+    cachedToken = null;
+    cachedTokenExpiresAt = 0;
+  } else if (row.tipo === 'smtp') {
+    smtpConfig = {
+      host: row.smtpHost || '',
+      port: row.smtpPort || 465,
+      secure: row.smtpSecure !== false,
+      auth: row.smtpUser ? { user: row.smtpUser, pass: row.smtpPass || '' } : undefined,
+      logger: SMTP_DEBUG,
+      debug: SMTP_DEBUG,
+    };
+    EMAIL_FROM = row.correoFrom || row.smtpUser || EMAIL_FROM;
+    USE_OAUTH2 = false;
+    USE_RESEND = false;
+  }
+}
+
+function initialize(dbConfigRow) {
+  applyDbConfig(dbConfigRow);
+  mailer = null; // fuerza a re-evaluar la cascada de transportes con la config actual
+
+  // Resend (API HTTP transaccional) — tiene prioridad sobre M365/Gmail si
+  // hay API key configurada (ver config/email.js para el porqué).
+  if (USE_RESEND) {
+    mailer = createResendTransport(RESEND_API_KEY, `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`);
+    logger.info(`ℹ️ Transporte configurado: Resend (${EMAIL_FROM})`);
+  }
+
+  // Microsoft 365 / Exchange Online vía OAuth2 — solo si Resend no está
+  // configurado (ver config/email.js).
+  if (!mailer && USE_OAUTH2) {
+    try {
       mailer = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: smtpUser, pass: smtpConfig.auth.pass },
+        host: 'smtp.office365.com',
+        port: 587,
+        secure: false, // STARTTLS en el puerto 587, no TLS directo
+        auth: {
+          type: 'OAuth2',
+          user: oauth2Config.senderEmail,
+          accessToken: getAzureAccessToken, // nodemailer acepta una función async y la re-invoca por envío
+        },
         logger: SMTP_DEBUG,
         debug: SMTP_DEBUG,
       });
+      logger.info(`ℹ️ Transporte configurado: Microsoft 365 OAuth2 (${oauth2Config.senderEmail})`);
+    } catch (err) {
+      console.warn('⚠️ Error configurando transporte OAuth2 de Microsoft 365:', err.message);
     }
-  } catch (e) {
-    console.warn('⚠️ Fallback gmail service falló:', e.message);
+  }
+
+  // Gmail / SMTP tradicional — comportamiento original, sin cambios. Solo se
+  // usa si OAuth2 no quedó configurado arriba.
+  if (!mailer) {
+    try {
+      if (smtpConfig.host) {
+        mailer = nodemailer.createTransport(smtpConfig);
+      }
+    } catch (err) {
+      console.warn('⚠️ Error configurando nodemailer:', err.message);
+    }
+
+    // Fallback para Gmail
+    try {
+      const smtpHostLower = String(smtpConfig.host || '').toLowerCase();
+      const smtpUser = process.env.SMTP_USER || '';
+      if (!mailer && smtpHostLower.includes('gmail.com') && smtpUser && smtpConfig.auth.pass) {
+        logger.info('ℹ️ Intentando crear transporte con service="gmail" como fallback');
+        mailer = nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user: smtpUser, pass: smtpConfig.auth.pass },
+          logger: SMTP_DEBUG,
+          debug: SMTP_DEBUG,
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️ Fallback gmail service falló:', e.message);
+    }
   }
 
   // Verificación opcional
@@ -40,7 +203,7 @@ function initialize() {
     try {
         if (mailer) {
         await mailer.verify();
-        logger.info('✅ SMTP verificado correctamente');
+        logger.info(`✅ ${USE_RESEND ? 'Resend' : USE_OAUTH2 ? 'Microsoft 365 (OAuth2)' : 'SMTP'} verificado correctamente`);
       } else {
         logger.warn('⚠️ SMTP no configurado (mailer nulo)');
       }
@@ -176,16 +339,23 @@ async function sendPermisoEmail({ permisoId, usuarioId, motivo, fechaInicio, fec
       </html>
     `;
 
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
     
     if (!mailer) {
       console.warn('⚠️ [sendPermisoEmail] SMTP no configurado. Email simulado');
       return;
     }
     
-    logger.info('📧 [sendPermisoEmail] Iniciando envío a', PERMISOS_MAIL_TO.length, 'destinatarios');
-    
-    for (const rcpt of PERMISOS_MAIL_TO) {
+    // Destinatarios administrables desde Configuración > Notificaciones >
+    // Correo (tabla NOTIFICACIONES_CORREO_DESTINATARIOS) — require diferido
+    // para evitar el ciclo de módulos con notificacionesCorreoController,
+    // que a su vez importa este archivo.
+    const { getDestinatariosCorreo } = require('../controllers/notificacionesCorreoController');
+    const destinatarios = await getDestinatariosCorreo('permisos', tenantKey);
+
+    logger.info('📧 [sendPermisoEmail] Iniciando envío a', destinatarios.length, 'destinatarios');
+
+    for (const rcpt of destinatarios) {
       try {
         logger.debug(`📧 [sendPermisoEmail] Enviando a: ${rcpt}`);
         
@@ -222,6 +392,7 @@ async function sendVacacionSolicitudEmail({
   puesto,
   departamento,
   correoSolicitante,
+  tenantKey,
 }) {
   logger.debug('📧 [sendVacacionSolicitudEmail] Iniciando para solicitud:', solicitudId);
 
@@ -246,9 +417,14 @@ async function sendVacacionSolicitudEmail({
       solicitudId
     )}`;
 
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
-    for (const rcpt of PERMISOS_MAIL_TO) {
+    // Destinatarios administrables desde Configuración (ver nota en
+    // sendPermisoEmail sobre el require diferido).
+    const { getDestinatariosCorreo } = require('../controllers/notificacionesCorreoController');
+    const destinatariosVacaciones = await getDestinatariosCorreo('vacaciones', tenantKey);
+
+    for (const rcpt of destinatariosVacaciones) {
       const adminNombre = rcpt.split('@')[0];
 
       // Tokens por administrador para aprobar/rechazar desde email
@@ -554,7 +730,7 @@ async function sendPermisoResultadoEmail({ permisoId, usuarioId, estatus, motivo
     const text = `Hola ${nombre}, tu solicitud de permiso #${permisoId} ha sido ${prettyStatus.toLowerCase()}\nMotivo: ${motivo || '-'}\nDesde: ${fechaInicio || '-'}\nHasta: ${fechaFin || '-'}\n${comentarioAdmin ? 'Comentario: ' + comentarioAdmin : ''}`;
 
     await mailer.sendMail({
-      from: `AGYDA ArdaBytec <${EMAIL_FROM}>`,
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`,
       to: toEmail,
       subject,
       text,
@@ -621,7 +797,7 @@ async function sendVacacionRespuestaEmail({
     const text = `Hola ${nombreEmpleado || ''}, tu solicitud de ${tipoLegible.toLowerCase()} ha sido ${prettyEstado.toLowerCase()}\nDesde: ${fechaInicio || '-'}\nHasta: ${fechaFin || '-'}\nDías: ${diasSolicitados || 0}\n${comentarioAdmin ? 'Comentario: ' + comentarioAdmin : ''}`;
 
     await mailer.sendMail({
-      from: `AGYDA ArdaBytec <${EMAIL_FROM}>`,
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`,
       to: email,
       subject,
       text,
@@ -718,7 +894,7 @@ async function sendNuevoPostulanteEmail({ vacanteTitulo, nombre, email, telefono
 </html>`;
 
     const text = `Nueva postulación para: ${vacanteTitulo}\nNombre: ${nombre}\nEmail: ${email}\nTeléfono: ${telefono || '-'}\n${mensaje ? 'Mensaje: ' + mensaje + '\n' : ''}CV: ${cvUrl}`;
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
     for (const rcpt of PERMISOS_MAIL_TO) {
       try {
@@ -797,7 +973,7 @@ async function sendNuevoLeadChatbotEmail({ nombre, email, telefono, empresa, car
 </html>`;
 
     const text = `Nuevo lead del chatbot\nNombre: ${nombre}\n${empresa ? 'Empresa: ' + empresa + '\n' : ''}${cargo ? 'Cargo: ' + cargo + '\n' : ''}Email: ${email || '-'}\nTeléfono: ${telefono || '-'}\n${interes ? 'Interés: ' + interes + '\n' : ''}${presupuesto ? 'Presupuesto: ' + presupuesto + '\n' : ''}${urgencia ? 'Urgencia: ' + urgencia + '\n' : ''}`;
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
     for (const rcpt of PERMISOS_MAIL_TO) {
       try {
@@ -874,7 +1050,7 @@ async function sendRecordatorioPagoEmail({ contactoNombre, contactoCorreo, conce
 </html>`;
 
     const text = `Recordatorio de pago\nConcepto: ${concepto}\nMonto: ${montoFmt}\nFecha límite: ${fechaFmt}${opoNombre ? '\nRelacionado a: ' + opoNombre : ''}`;
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
     await mailer.sendMail({
       from: fromWithName,
@@ -946,7 +1122,7 @@ async function sendAlertaVencimientoProximo({ contactoNombre, contactoCorreo, co
 </html>`;
 
     const text = `Tu pago vence en ${diasRestantes} día(s)\nConcepto: ${concepto}\nMonto: ${montoFmt}\nFecha límite: ${fechaFmt}${opoNombre ? '\nRelacionado a: ' + opoNombre : ''}`;
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
     await mailer.sendMail({
       from: fromWithName,
@@ -1021,7 +1197,7 @@ async function sendAlertaFechaImportanteEmail({ responsableNombre, responsableCo
 </html>`;
 
     const text = `${tipoLabel} próximo (${diasRestantes} día(s))\nCliente: ${contactoNombre}\nDescripción: ${descripcion}\nFecha: ${fechaFmt}`;
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
     await mailer.sendMail({
       from: fromWithName,
@@ -1086,7 +1262,7 @@ async function sendEncuestaSeguimientoEmail({ contactoNombre, contactoCorreo, en
 </html>`;
 
     const text = `Encuesta de satisfacción: ${encuestaTitulo}\nResponde aquí: ${encuestaUrl}`;
-    const fromWithName = `AGYDA ArdaBytec <${EMAIL_FROM}>`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
     await mailer.sendMail({
       from: fromWithName,
@@ -1361,7 +1537,7 @@ async function sendTicketNotificacionEmail({ to, nombreTecnico, ticketId, titulo
     const text = `${preset.titulo}\n${mensaje}\nTicket: #${ticketId}${tituloTicket ? '\nTítulo: ' + tituloTicket : ''}${prioridad ? '\nPrioridad: ' + prioridad : ''}\nVer: ${verUrl}`;
 
     await mailer.sendMail({
-      from: `AGYDA ArdaBytec <${EMAIL_FROM}>`,
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`,
       sender: EMAIL_FROM,
       replyTo: EMAIL_FROM,
       to,
@@ -1381,7 +1557,7 @@ async function sendCorreoGenerico({ to, subject, html, text }) {
   }
   try {
     const info = await mailer.sendMail({
-      from: `AGYDA ArdaBytec <${EMAIL_FROM}>`,
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`,
       sender: EMAIL_FROM,
       replyTo: EMAIL_FROM,
       to,
@@ -1397,6 +1573,13 @@ async function sendCorreoGenerico({ to, subject, html, text }) {
 
 function isMailerListo() {
   return !!mailer;
+}
+
+function getTransporteActivo() {
+  if (!mailer) return 'ninguno';
+  if (USE_RESEND) return 'resend';
+  if (USE_OAUTH2) return 'graph';
+  return 'smtp';
 }
 
 module.exports = {
@@ -1423,4 +1606,5 @@ module.exports = {
   sendAreaSinReportarEmail,
   sendReporteIndicadoresEmail,
   sendTicketNotificacionEmail,
+  getTransporteActivo,
 };

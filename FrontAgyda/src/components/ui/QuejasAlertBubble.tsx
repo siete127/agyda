@@ -71,7 +71,7 @@ export function QuejasAlertBubble() {
       {alertas.map((alerta) => (
         <div
           key={alerta.uid}
-          className="pointer-events-auto flex items-start gap-3 rounded-2xl border border-orange-200 bg-white shadow-2xl p-4 animate-fade-in cursor-pointer hover:border-orange-400 transition-colors"
+          className="pointer-events-auto flex items-start gap-3 rounded-2xl border border-orange-200 bg-card shadow-2xl p-4 animate-fade-in cursor-pointer hover:border-orange-400 transition-colors"
           onClick={() => irAQueja(alerta)}
         >
           {/* Icono pulsante */}

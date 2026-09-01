@@ -47,7 +47,7 @@ function PushNotificacionesPanel() {
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="mb-1 flex items-center gap-2">
         {activo ? <BellRing className="h-4 w-4 text-brand" /> : <BellOff className="h-4 w-4 text-ink-tertiary" />}
         <p className="text-sm font-semibold text-ink">Notificaciones push del navegador</p>
@@ -80,7 +80,7 @@ export function NotificacionesTecTab() {
     <div className="space-y-4">
       <PushNotificacionesPanel />
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-3 flex items-center gap-2">
           <Bell className="h-4 w-4 text-brand" />
           <p className="text-sm font-semibold text-ink">Eventos que disparan notificación</p>

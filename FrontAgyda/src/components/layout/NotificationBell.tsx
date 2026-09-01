@@ -3,6 +3,7 @@ import { Bell, BellOff, ArrowRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificationStore } from '@/stores/notification.store'
 import { notificationService } from '@/services/notification.service'
+import { notificationTarget } from '@/lib/notificationTarget'
 import { Badge } from '@/components/ui/Badge'
 import { clsx } from 'clsx'
 
@@ -40,7 +41,7 @@ export function NotificationBell() {
         <>
           <div className="fixed inset-0 z-30" onClick={() => setIsOpen(false)} />
 
-          <div className="absolute right-0 top-full mt-2 w-80 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card-lg">
+          <div className="absolute right-0 top-full mt-2 w-80 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-card shadow-card-lg">
 
             {/* Header del panel */}
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
@@ -71,21 +72,21 @@ export function NotificationBell() {
                   <p className="text-sm text-gray-400">Sin notificaciones</p>
                 </div>
               ) : (
-                recent.map((n) => (
+                recent.map((n) => {
+                  const target = notificationTarget(n)
+                  return (
                   <div
                     key={n.id}
                     onClick={() => {
-                      handleMarkAsRead(n.id)
-                      if (n.tipo === 'queja_nueva' && n.dataExtra?.quejaId) {
+                      if (!n.leida) handleMarkAsRead(n.id)
+                      if (target) {
                         setIsOpen(false)
-                        navigate(`/quejas?quejaId=${n.dataExtra.quejaId}`)
-                      } else if (n.dataExtra?.encuestaId || n.dataExtra?.action === 'responder_encuesta') {
-                        setIsOpen(false)
-                        navigate(n.dataExtra?.encuestaId ? `/mis-encuestas?encuesta=${n.dataExtra.encuestaId}` : '/mis-encuestas')
+                        navigate(target)
                       }
                     }}
                     className={clsx(
-                      'flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-gray-50',
+                      'flex items-start gap-3 px-4 py-3 transition-colors hover:bg-gray-50',
+                      (target || !n.leida) && 'cursor-pointer',
                       !n.leida && 'bg-brand/[0.03]',
                     )}
                   >
@@ -107,7 +108,8 @@ export function NotificationBell() {
                       )}
                     </div>
                   </div>
-                ))
+                  )
+                })
               )}
             </div>
 

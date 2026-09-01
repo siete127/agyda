@@ -37,6 +37,7 @@ export interface LivechatCampania {
   fechaFin: string | null
   fechaCreacion: string
   maxChatsPorAgente: number | null
+  area: string | null
 }
 
 export interface LivechatGrupo {
@@ -185,6 +186,7 @@ export function parseLivechatCampania(raw: Record<string, unknown>): LivechatCam
     fechaFin: pick(raw, 'fechaFin') ? String(pick(raw, 'fechaFin')) : null,
     fechaCreacion: String(pick(raw, 'fechaCreacion') ?? new Date().toISOString()),
     maxChatsPorAgente: pick(raw, 'maxChatsPorAgente') != null ? Number(pick(raw, 'maxChatsPorAgente')) : null,
+    area: pick(raw, 'area') ? String(pick(raw, 'area')) : null,
   }
 }
 

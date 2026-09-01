@@ -434,7 +434,7 @@ export function ChecklistPage() {
         <>
           {/* Stats rápidas */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex items-center gap-3">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
                 <Clock className="h-4 w-4 text-emerald-600" />
               </div>
@@ -452,7 +452,7 @@ export function ChecklistPage() {
                 <p className="text-xl font-bold text-gray-800">{totalTolerancia}</p>
               </div>
             </div>
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex items-center gap-3">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100">
                 <AlertCircle className="h-4 w-4 text-red-600" />
               </div>
@@ -461,7 +461,7 @@ export function ChecklistPage() {
                 <p className="text-xl font-bold text-gray-800">{totalRetardos}</p>
               </div>
             </div>
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex items-center gap-3">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100">
                 <CheckSquare className="h-4 w-4 text-blue-600" />
               </div>
@@ -473,7 +473,7 @@ export function ChecklistPage() {
           </div>
 
           {/* Filtros */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex flex-wrap gap-3 items-end">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label className="text-[0.72rem] font-semibold text-gray-500 uppercase tracking-wide">Desde</label>
               <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
@@ -534,7 +534,7 @@ export function ChecklistPage() {
           )}
 
           {vista === 'barras' ? (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-5">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-sm font-semibold text-gray-700">Ranking de retardos</h2>
@@ -557,7 +557,7 @@ export function ChecklistPage() {
               )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700">Detalle de entradas</h2>
                 <span className="text-[0.72rem] text-gray-400">{registros.length} registro{registros.length !== 1 ? 's' : ''}</span>

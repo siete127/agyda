@@ -36,7 +36,7 @@ export function EmailMarketingPage() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex-1 overflow-y-auto bg-card rounded-xl border border-gray-200 p-5">
         {tab === 'campanias' ? <CampaniasEmailTab /> : <PlantillasEmailTab />}
       </div>
     </div>

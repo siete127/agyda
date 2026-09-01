@@ -12,8 +12,10 @@ import { SidebarItem } from './SidebarItem'
 import { SidebarFlyout, type FlyoutPosition } from './SidebarFlyout'
 import { ROUTES } from '@/router/routes.config'
 import { disconnectSocket } from '@/lib/socket'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { personalizacionService } from '@/services/personalizacion.service'
 import { clsx } from 'clsx'
-import { Link } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 // Burbujas del efecto de agua: posición horizontal (%), tamaño (px), opacidad,
 // duración del ascenso (s) y retraso inicial (s) — variados para que no suban en fila.
@@ -52,7 +54,7 @@ const GROUPS = [
   },
   {
     label: 'Ventas',
-    keys: ['ventas-area', 'clientes', 'crm', 'email-marketing'],
+    keys: ['ventas-area', 'clientes', 'productos-servicios', 'crm', 'email-marketing'],
   },
   {
     label: 'Contact Center',
@@ -68,7 +70,7 @@ const GROUPS = [
   },
   {
     label: 'Tecnología / TI',
-    keys: ['tecnologia', 'tickets', 'activos', 'staff-ti', 'usuarios'],
+    keys: ['tecnologia', 'tickets', 'activos', 'staff-ti'],
   },
   {
     label: 'Atención al Cliente',
@@ -89,12 +91,26 @@ const GROUPS = [
 ]
 
 export function Sidebar() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const { sidebarCollapsed, isMobileMenuOpen, setMobileMenuOpen } = useUIStore()
   const clearSession  = useAuthStore((s) => s.clearSession)
   const user          = useCurrentUser()
   const userRole      = user?.tipoUsuario?.toUpperCase() ?? ''
   const { isAllowed } = useModuleAccess()
   const unreadCount   = useNotificationStore((s) => s.unreadCount)
+  const { branding }  = usePersonalizacion()
+  const logoCompactoSrc = personalizacionService.assetUrl(branding.logoCompactoId)
+
+  // ── Estilo del sidebar (preset por empresa). Los 4 presets son oscuros para
+  //    que el texto claro del menú (text-[#B8C2E0]…) siga legible. ──
+  const estilo = branding.sidebarEstilo ?? 'degradado-azul'
+  const sidebarBg: React.CSSProperties =
+    estilo === 'solido-oscuro'    ? { background: '#0B1730' }
+    : estilo === 'color-marca'    ? { background: 'rgb(var(--color-brand-dark))' }
+    : estilo === 'gradiente-marca' ? { background: 'linear-gradient(180deg, rgb(var(--color-brand-dark)) 0%, rgb(var(--color-brand)) 100%)' }
+    : /* degradado-azul */          { background: 'linear-gradient(180deg, #14225C 0%, #1E3D8F 55%, #2C57C4 100%)' }
+  const mostrarBurbujas = branding.sidebarBurbujas ?? true
 
   const ticketsPendientes = 0
 
@@ -196,35 +212,38 @@ export function Sidebar() {
           'fixed left-0 top-0 z-40 md:relative md:z-auto',
           isMobileMenuOpen ? 'flex' : 'hidden md:flex',
         )}
-        style={{ background: 'linear-gradient(180deg, #14225C 0%, #1E3D8F 55%, #2C57C4 100%)' }}
+        style={sidebarBg}
       >
         {/* ── Efecto de flujo de agua: blobs de luz + burbujas ascendentes ── */}
-        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-          <div
-            className="animate-water-a absolute -left-1/4 -top-1/4 h-[85%] w-[85%] rounded-full opacity-60 blur-2xl"
-            style={{ background: 'radial-gradient(circle, rgba(140,190,255,0.7) 0%, transparent 65%)' }}
-          />
-          <div
-            className="animate-water-b absolute -bottom-1/4 -right-1/4 h-[80%] w-[80%] rounded-full opacity-50 blur-2xl"
-            style={{ background: 'radial-gradient(circle, rgba(110,165,255,0.65) 0%, transparent 65%)' }}
-          />
-          {/* Burbujas — suben flotando de abajo hacia arriba en bucle */}
-          {BUBBLES.map((b, i) => (
-            <span
-              key={i}
-              className="animate-bubble-rise absolute rounded-full bg-white"
-              style={{
-                left: `${b.left}%`,
-                bottom: `-${b.size}px`,
-                width: b.size,
-                height: b.size,
-                opacity: b.opacity,
-                animationDuration: `${b.duration}s`,
-                animationDelay: `${b.delay}s`,
-              }}
+        {mostrarBurbujas && (
+          <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+            <div
+              className="animate-water-a absolute -left-1/4 -top-1/4 h-[85%] w-[85%] rounded-full opacity-60 blur-2xl"
+              style={{ background: 'radial-gradient(circle, rgba(140,190,255,0.7) 0%, transparent 65%)' }}
             />
-          ))}
-        </div>
+            <div
+              className="animate-water-b absolute -bottom-1/4 -right-1/4 h-[80%] w-[80%] rounded-full opacity-50 blur-2xl"
+              style={{ background: 'radial-gradient(circle, rgba(110,165,255,0.65) 0%, transparent 65%)' }}
+            />
+            {/* Burbujas — suben flotando de abajo hacia arriba en bucle */}
+            {BUBBLES.map((b, i) => (
+              <span
+                key={i}
+                className="animate-bubble-rise absolute rounded-full"
+                style={{
+                  left: `${b.left}%`,
+                  bottom: `-${b.size}px`,
+                  width: b.size,
+                  height: b.size,
+                  opacity: b.opacity,
+                  background: 'rgba(255,255,255,0.9)',
+                  animationDuration: `${b.duration}s`,
+                  animationDelay: `${b.delay}s`,
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         {isMobileMenuOpen && (
           <button
@@ -238,11 +257,15 @@ export function Sidebar() {
         {/* ── Logo — solo visible en modo colapsado, para no perder identidad ── */}
         {sidebarCollapsed && (
           <div className="relative z-10 flex h-[64px] flex-shrink-0 items-center justify-center">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand">
-              <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 1 L23 13 L13 23" />
-              </svg>
-            </div>
+            {logoCompactoSrc ? (
+              <img src={logoCompactoSrc} alt={branding.nombreCorto} className="h-9 w-9 rounded-lg object-contain" />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand">
+                <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 1 L23 13 L13 23" />
+                </svg>
+              </div>
+            )}
           </div>
         )}
 
@@ -251,11 +274,51 @@ export function Sidebar() {
           {GROUPS.map((group) => {
             const routes = getGroupRoutes(group.keys)
             if (routes.length === 0) return null
-            const isOpen = openGroup === group.label
             const GroupIcon = routes[0].icon
               ? (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[routes[0].icon]
               : undefined
 
+            // Grupo con un solo módulo (ej. Configuración) — link directo, sin
+            // toggle ni submenú duplicando la misma etiqueta. Mismo estilo
+            // visual que un grupo normal (círculo grande, sin chevron).
+            if (routes.length === 1) {
+              const isActive = location.pathname === routes[0].path || location.pathname.startsWith(routes[0].path + '/')
+              return (
+                <button
+                  key={group.label}
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    navigate(routes[0].path)
+                  }}
+                  title={sidebarCollapsed ? group.label : undefined}
+                  className={clsx(
+                    'group flex w-full items-center gap-3 rounded-xl transition-colors',
+                    sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-3.5 py-3',
+                    isActive ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]',
+                  )}
+                >
+                  <span className={clsx(
+                    'flex flex-shrink-0 items-center justify-center rounded-full',
+                    sidebarCollapsed ? 'h-11 w-11' : 'h-9 w-9',
+                    isActive ? 'bg-brand/25 text-brand-muted' : 'text-[#B8C2E0] group-hover:text-white',
+                  )}>
+                    {GroupIcon && <GroupIcon className={sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]'} />}
+                  </span>
+                  {!sidebarCollapsed && (
+                    <span className={clsx('flex-1 text-left text-[0.9rem] font-medium', isActive ? 'text-white' : 'text-[#DCE3F5]')}>
+                      {group.label}
+                    </span>
+                  )}
+                  {!sidebarCollapsed && !!BADGES[routes[0].path] && BADGES[routes[0].path] > 0 && (
+                    <span className="flex-shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[0.6rem] font-bold text-white leading-none">
+                      {BADGES[routes[0].path] > 99 ? '99+' : BADGES[routes[0].path]}
+                    </span>
+                  )}
+                </button>
+              )
+            }
+
+            const isOpen = openGroup === group.label
             const isFlyoutOpen = flyoutGroup === group.label
 
             return (
@@ -350,7 +413,7 @@ export function Sidebar() {
 
           {!sidebarCollapsed && (
             <p className="mt-3 px-2 text-[0.6rem] text-[#6B79AD]">
-              © {new Date().getFullYear()} ArdaBytec · Todos los derechos reservados · AGYDA v20.11.0
+              © {new Date().getFullYear()} {branding.nombreLargo} · Todos los derechos reservados
             </p>
           )}
         </div>

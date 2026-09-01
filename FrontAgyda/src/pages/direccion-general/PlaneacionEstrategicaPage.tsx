@@ -746,7 +746,7 @@ function ObjetivoCardCompacta({ objetivo, onClick, onEliminar, puedeEliminar }: 
   return (
     <button
       onClick={onClick}
-      className="group relative flex flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
+      className="group relative flex flex-col rounded-2xl border border-gray-100 bg-card p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
     >
       {puedeEliminar && (
         <span
@@ -1037,7 +1037,7 @@ function FiltrosBar({ etiquetasDisponibles, filtros, onChange }: {
   const hayFiltrosActivos = filtros.etiquetas.length > 0 || filtros.estatusManual !== 'todos' || filtros.nivel !== 'todos'
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white p-3">
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-card p-3">
       <select
         className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
         value={filtros.estatusManual}
@@ -1117,7 +1117,7 @@ function DashboardEjecutivo({ objetivos }: { objetivos: ObjetivoEstrategico[] })
 
   if (total === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
         <p className="text-sm text-ink-tertiary">No hay objetivos para mostrar en el dashboard.</p>
       </div>
     )
@@ -1127,11 +1127,11 @@ function DashboardEjecutivo({ objetivos }: { objetivos: ObjetivoEstrategico[] })
     <div className="space-y-4">
       <DashboardStatRow stats={stats} />
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+        <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
           <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-tertiary">Objetivos más rezagados</h3>
           <ProgressBarList items={ranking} />
         </div>
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+        <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
           <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-tertiary">Distribución por estatus</h3>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -1337,13 +1337,13 @@ export function PlaneacionEstrategicaPage() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay objetivos estratégicos para este periodo.</p>
         </div>
       ) : vista === 'dashboard' ? (
         <DashboardEjecutivo objetivos={objetivosFiltrados} />
       ) : objetivosFiltrados.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Ningún objetivo coincide con los filtros aplicados.</p>
         </div>
       ) : (

@@ -93,7 +93,7 @@ export function CRMInternoPage() {
             onClick={() => setTab(t.key)}
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[0.78rem] font-semibold transition-all',
-              tab === t.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700',
+              tab === t.key ? 'bg-card shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700',
             )}
           >
             {t.icon}{t.label}
@@ -226,14 +226,14 @@ function PipelineTab({
               onClick={() => setShowFiltrosDropdown((v) => !v)}
               className={clsx(
                 'flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[0.78rem] font-semibold transition-colors',
-                filtros.preset ? 'border-brand/40 bg-brand/5 text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                filtros.preset ? 'border-brand/40 bg-brand/5 text-brand' : 'border-gray-200 bg-card text-gray-600 hover:bg-gray-50',
               )}
             >
               {filtros.preset ? PRESETS.find((p) => p.key === filtros.preset)?.label : 'Filtros'}
               <ChevronRight className={clsx('h-3.5 w-3.5 text-gray-400 transition-transform', showFiltrosDropdown && 'rotate-90')} />
             </button>
             {showFiltrosDropdown && (
-              <div className="absolute left-0 top-full mt-1 z-20 w-44 rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden">
+              <div className="absolute left-0 top-full mt-1 z-20 w-44 rounded-xl border border-gray-200 bg-card shadow-xl overflow-hidden">
                 <div className="py-1">
                   <button
                     type="button"
@@ -262,7 +262,7 @@ function PipelineTab({
             value={filtros.busqueda}
             onChange={(e) => setFiltros((f) => ({ ...f, busqueda: e.target.value }))}
             placeholder="Buscar..."
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 w-40"
+            className="rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 w-40"
           />
 
           {/* Responsable */}
@@ -282,14 +282,14 @@ function PipelineTab({
             type="date"
             value={filtros.fechaDesde}
             onChange={(e) => setFiltros((f) => ({ ...f, fechaDesde: e.target.value }))}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
+            className="rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             title="Fecha cierre desde"
           />
           <input
             type="date"
             value={filtros.fechaHasta}
             onChange={(e) => setFiltros((f) => ({ ...f, fechaHasta: e.target.value }))}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
+            className="rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             title="Fecha cierre hasta"
           />
 
@@ -312,7 +312,7 @@ function PipelineTab({
               type="button"
               onClick={() => setVista('kanban')}
               title="Vista Kanban"
-              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors', vista === 'kanban' ? 'bg-brand text-white' : 'bg-white text-gray-500 hover:bg-gray-50')}
+              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors', vista === 'kanban' ? 'bg-brand text-white' : 'bg-card text-gray-500 hover:bg-gray-50')}
             >
               <Kanban className="h-4 w-4" />
             </button>
@@ -320,7 +320,7 @@ function PipelineTab({
               type="button"
               onClick={() => setVista('lista')}
               title="Vista Lista"
-              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors border-l border-gray-200', vista === 'lista' ? 'bg-brand text-white' : 'bg-white text-gray-500 hover:bg-gray-50')}
+              className={clsx('flex items-center gap-1 px-3 py-2 text-[0.78rem] transition-colors border-l border-gray-200', vista === 'lista' ? 'bg-brand text-white' : 'bg-card text-gray-500 hover:bg-gray-50')}
             >
               <List className="h-4 w-4" />
             </button>
@@ -336,7 +336,7 @@ function PipelineTab({
 
       {/* Vista Lista */}
       {vista === 'lista' && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           {oposFiltradas.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
               <MoreHorizontal className="h-10 w-10 opacity-20" />
@@ -537,7 +537,7 @@ function OportunidadCard({ opo, onClick, onDelete, onDragStart, onDragOver }: { 
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); onDragOver() }}
       onClick={onClick}
       className={clsx(
-        'group relative cursor-pointer rounded-xl border-l-4 border border-gray-100 bg-white p-3 shadow-sm hover:shadow-md transition-all active:opacity-60',
+        'group relative cursor-pointer rounded-xl border-l-4 border border-gray-100 bg-card p-3 shadow-sm hover:shadow-md transition-all active:opacity-60',
         etapa?.borderColor ?? 'border-gray-400',
       )}
     >
@@ -708,7 +708,7 @@ function OportunidadDrawer({
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[500px] flex-col bg-white shadow-2xl">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[500px] flex-col bg-card shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
           <div className="min-w-0 flex-1">
@@ -759,7 +759,7 @@ function OportunidadDrawer({
           {(['actividades', 'historial', 'cotizaciones'] as const).map(tab => (
             <button key={tab} onClick={() => setDrawerTab(tab)}
               className={clsx('px-3 py-1.5 text-sm font-medium rounded-t-lg capitalize transition-colors',
-                drawerTab === tab ? 'bg-white border border-b-white text-blue-600 -mb-px' : 'text-gray-500 hover:text-gray-700')}>
+                drawerTab === tab ? 'bg-card border border-b-white text-blue-600 -mb-px' : 'text-gray-500 hover:text-gray-700')}>
               {tab}
             </button>
           ))}
@@ -814,7 +814,7 @@ function OportunidadDrawer({
             ) : (
               <div className="space-y-1.5">
                 {actividades.map((a) => (
-                  <div key={a.id} className={clsx('flex items-start gap-2 rounded-xl border p-2.5 transition-colors', a.completada ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200')}>
+                  <div key={a.id} className={clsx('flex items-start gap-2 rounded-xl border p-2.5 transition-colors', a.completada ? 'bg-gray-50 border-gray-100' : 'bg-card border-gray-200')}>
                     <button onClick={() => toggleAct.mutate(a)} className="mt-0.5 flex-shrink-0">
                       {a.completada
                         ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
@@ -872,7 +872,7 @@ function OportunidadDrawer({
                 onChange={(e) => setIntCon(e.target.value)}
                 placeholder="Escribe aquí el detalle de la interacción..."
                 rows={3}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-[0.8rem] text-gray-700 placeholder-gray-400 outline-none resize-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-[0.8rem] text-gray-700 placeholder-gray-400 outline-none resize-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/10"
               />
               <button
                 onClick={() => addInteraccion.mutate()}
@@ -916,7 +916,7 @@ function OportunidadDrawer({
             </div>
             {cotizaciones.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Sin cotizaciones</p>}
             {cotizaciones.map((c: any) => (
-              <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-3 space-y-1.5">
+              <div key={c.id} className="rounded-xl border border-gray-200 bg-card p-3 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-mono font-bold text-blue-600">{c.folio}</span>
                   <span className={clsx('rounded-full px-2 py-0.5 text-[0.65rem] font-semibold capitalize', ESTATUS_COLORS_COT[c.estatus] ?? 'bg-gray-100 text-gray-600')}>{c.estatus}</span>
@@ -1034,7 +1034,7 @@ function CustomSelect({ value, onChange, options, placeholder }: {
             width: rect.width,
             zIndex: 9999,
           }}
-          className="rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden"
+          className="rounded-xl border border-gray-200 bg-card shadow-2xl overflow-hidden"
         >
           <div className="max-h-52 overflow-y-auto py-1">
             <button
@@ -1458,7 +1458,7 @@ function InteraccionItem({ interaccion: i, tipoIcon, currentUserId, onDeleted, o
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={3}
-              className="w-full rounded-xl border border-brand/30 bg-gray-50 p-2 text-[0.75rem] text-gray-700 outline-none resize-none focus:border-brand focus:bg-white"
+              className="w-full rounded-xl border border-brand/30 bg-gray-50 p-2 text-[0.75rem] text-gray-700 outline-none resize-none focus:border-brand focus:bg-card"
             />
             <div className="flex gap-1.5">
               <button
@@ -1538,7 +1538,7 @@ function ContactosTab() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar por nombre, empresa, correo..."
-          className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[0.82rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
+          className="flex-1 rounded-xl border border-gray-200 bg-card px-4 py-2.5 text-[0.82rem] outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
         />
         <button
           onClick={() => { setSelected(null); setModal(true) }}
@@ -1549,7 +1549,7 @@ function ContactosTab() {
       </div>
 
       {isLoading ? <div className="flex justify-center py-10"><Spinner size="lg" /></div> : (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           {contactos.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
               <Users className="h-10 w-10 opacity-20" />
@@ -1713,7 +1713,7 @@ function ActividadesTab({ onOpenOpo }: { onOpenOpo: (opoId: number) => void }) {
   return (
     <div className="space-y-5">
       {grupos.map((g) => g.items.length === 0 ? null : (
-        <div key={g.label} className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div key={g.label} className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className={clsx('flex items-center gap-2 border-b border-gray-100 px-5 py-3', g.bg)}>
             <span className={clsx('text-[0.82rem] font-bold', g.color)}>{g.label}</span>
             <span className={clsx('rounded-full px-2 py-0.5 text-[0.65rem] font-bold bg-white/70', g.color)}>{g.items.length}</span>

@@ -137,7 +137,7 @@ function VentasAgenteContent() {
     const nombre = encodeURIComponent(user?.nombres ?? '')
     const id     = user?.id ?? ''
     const params = tel ? `?cliente=${tel}&agente=${nombre}&agenteId=${id}` : `?agente=${nombre}&agenteId=${id}`
-    window.open(`https://intranet.ardabytec.vip/crm${params}`, '_blank', 'width=900,height=700,noopener')
+    window.open(`https://agyda.ardabytec.vip/crm${params}`, '_blank', 'width=900,height=700,noopener')
   }
 
   /* Stats rápidas */
@@ -160,7 +160,7 @@ function VentasAgenteContent() {
             <select
               value={activeCampaignId ?? ''}
               onChange={(e) => setActiveCampaign(Number(e.target.value))}
-              className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10"
+              className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10"
             >
               {ventasCampaigns.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
@@ -185,7 +185,7 @@ function VentasAgenteContent() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[400px_1fr]">
         {/* ── Formulario ── */}
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-4">
             <h2 className="text-[0.88rem] font-bold text-gray-900">Nueva venta</h2>
           </div>
@@ -199,7 +199,7 @@ function VentasAgenteContent() {
                   value={form.nombreCliente}
                   onChange={(e) => setForm((f) => ({ ...f, nombreCliente: e.target.value }))}
                   placeholder="Nombre completo"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-3 text-[0.82rem] text-gray-800 placeholder-gray-400 outline-none transition focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-3 text-[0.82rem] text-gray-800 placeholder-gray-400 outline-none transition focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/10"
                 />
               </div>
             </div>
@@ -215,7 +215,7 @@ function VentasAgenteContent() {
                   placeholder="10 dígitos"
                   maxLength={15}
                   className={clsx(
-                    'w-full rounded-xl border bg-gray-50 py-2.5 pl-9 pr-3 text-[0.82rem] text-gray-800 placeholder-gray-400 outline-none transition focus:bg-white focus:ring-2',
+                    'w-full rounded-xl border bg-gray-50 py-2.5 pl-9 pr-3 text-[0.82rem] text-gray-800 placeholder-gray-400 outline-none transition focus:bg-card focus:ring-2',
                     phoneWarning
                       ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
                       : 'border-gray-200 focus:border-brand focus:ring-brand/10',
@@ -250,7 +250,7 @@ function VentasAgenteContent() {
                     setForm((f) => ({ ...f, estatus: v }))
                     setAgendada(v === 'Agendada')
                   }}
-                  className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-3 pr-8 text-[0.82rem] text-gray-800 outline-none transition focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10"
+                  className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-3 pr-8 text-[0.82rem] text-gray-800 outline-none transition focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/10"
                 >
                   {estatusOptions.map((e) => (
                     <option key={e} value={e}>{e}</option>
@@ -315,7 +315,7 @@ function VentasAgenteContent() {
         </div>
 
         {/* ── Lista ventas del día ── */}
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <h2 className="text-[0.88rem] font-bold text-gray-900">Ventas del día</h2>
             <span className="rounded-full bg-brand/10 px-2.5 py-0.5 text-[0.72rem] font-bold text-brand">{ventas.length}</span>

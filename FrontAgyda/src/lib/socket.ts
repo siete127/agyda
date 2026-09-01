@@ -10,7 +10,7 @@ export function getSocket(): Socket {
   const token = localStorage.getItem('auth_token')
 
   socket = io(ENV.SOCKET_URL, {
-    transports: ['polling'],
+    transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,

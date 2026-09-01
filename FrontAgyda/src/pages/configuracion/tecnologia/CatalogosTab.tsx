@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Ban, CheckCircle2, MapPin, Truck, Wrench } from 'lucide-react'
+import { Plus, Pencil, Ban, CheckCircle2, MapPin, Truck, Wrench, FileCheck } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { catalogosTiService } from '@/services/catalogosTi.service'
-import type { Sede, Proveedor, Servicio } from '@/types/catalogosTi.types'
+import type { Sede, Proveedor, Servicio, CodigoCierre } from '@/types/catalogosTi.types'
 
 function SedeRow({ sede }: { sede: Sede }) {
   const qc = useQueryClient()
@@ -56,6 +56,109 @@ function SedeRow({ sede }: { sede: Sede }) {
       >
         {sede.activa ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
       </button>
+    </div>
+  )
+}
+
+function CodigoCierreRow({ codigo }: { codigo: CodigoCierre }) {
+  const qc = useQueryClient()
+  const [editando, setEditando] = useState(false)
+  const [nombre, setNombre] = useState(codigo.nombre)
+
+  const guardar = useMutation({
+    mutationFn: () => catalogosTiService.updateCodigoCierre(codigo.id, { nombre: nombre.trim(), orden: codigo.orden }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['catalogos-ti-codigos-cierre'] })
+      qc.invalidateQueries({ queryKey: ['ticket-codigos-cierre'] })
+      setEditando(false)
+    },
+    onError: () => toast.error('No se pudo actualizar el código de cierre'),
+  })
+
+  const toggle = useMutation({
+    mutationFn: () => catalogosTiService.toggleCodigoCierreActiva(codigo.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['catalogos-ti-codigos-cierre'] })
+      qc.invalidateQueries({ queryKey: ['ticket-codigos-cierre'] })
+    },
+  })
+
+  if (editando) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm">
+        <input className="field flex-1 py-1 text-sm" value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
+        <button className="btn-secondary px-2 py-1 text-xs" onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+          Guardar
+        </button>
+        <button className="px-2 py-1 text-xs text-ink-tertiary" onClick={() => setEditando(false)}>
+          Cancelar
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-surface">
+      <FileCheck className="h-4 w-4 shrink-0 text-ink-tertiary" />
+      <span className={clsx('flex-1 font-medium', !codigo.activa && 'text-ink-tertiary line-through')}>{codigo.nombre}</span>
+      <button className="text-ink-tertiary hover:text-brand" onClick={() => setEditando(true)} title="Editar">
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      <button
+        className={clsx('hover:opacity-70', codigo.activa ? 'text-red-400' : 'text-green-500')}
+        onClick={() => toggle.mutate()}
+        title={codigo.activa ? 'Desactivar' : 'Activar'}
+      >
+        {codigo.activa ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  )
+}
+
+function CodigosCierrePanel() {
+  const qc = useQueryClient()
+  const [nombre, setNombre] = useState('')
+
+  const { data: codigos = [], isLoading } = useQuery({
+    queryKey: ['catalogos-ti-codigos-cierre'],
+    queryFn: () => catalogosTiService.getCodigosCierre(true),
+  })
+
+  const crear = useMutation({
+    mutationFn: () => catalogosTiService.createCodigoCierre({ nombre: nombre.trim(), orden: codigos.length + 1 }),
+    onSuccess: () => {
+      setNombre('')
+      qc.invalidateQueries({ queryKey: ['catalogos-ti-codigos-cierre'] })
+      qc.invalidateQueries({ queryKey: ['ticket-codigos-cierre'] })
+    },
+    onError: () => toast.error('No se pudo crear el código de cierre'),
+  })
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
+      <p className="mb-1 text-sm font-semibold text-ink">Códigos de cierre</p>
+      <p className="mb-3 text-xs text-ink-tertiary">
+        Opciones disponibles al resolver un ticket, en el campo "Código de cierre".
+      </p>
+
+      {isLoading ? (
+        <p className="text-sm text-ink-tertiary">Cargando...</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {codigos.map((c) => <CodigoCierreRow key={c.id} codigo={c} />)}
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
+        <input className="field flex-1 text-sm" placeholder="Nuevo código de cierre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        <button
+          className="btn-primary flex items-center gap-1 px-3 py-1.5 text-xs"
+          disabled={!nombre.trim() || crear.isPending}
+          onClick={() => crear.mutate()}
+        >
+          <Plus className="h-3.5 w-3.5" /> Agregar
+        </button>
+      </div>
     </div>
   )
 }
@@ -206,7 +309,7 @@ function ProveedoresYServiciosPanel() {
 
   return (
     <>
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Proveedores</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Terceros que dan soporte a servicios externos (ej. ISP, VICIdial hosting, licenciamiento).
@@ -232,7 +335,7 @@ function ProveedoresYServiciosPanel() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Servicios</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Servicios que un ticket puede afectar (ej. Correo corporativo, VICIdial, VPN). Se usan para
@@ -288,7 +391,7 @@ export function CatalogosTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="mb-1 text-sm font-semibold text-ink">Sedes</p>
         <p className="mb-3 text-xs text-ink-tertiary">
           Ubicaciones físicas usadas para asignar tickets a técnicos con cobertura en esa sede.
@@ -317,7 +420,9 @@ export function CatalogosTab() {
 
       <ProveedoresYServiciosPanel />
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <CodigosCierrePanel />
+
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="text-sm font-semibold text-ink">Activos</p>
         <p className="mt-1 text-xs text-ink-tertiary">
           El catálogo de activos generales (equipos, licencias) se administra en su propio módulo.

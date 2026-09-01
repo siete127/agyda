@@ -62,7 +62,7 @@ function SelectorFuenteCard({ fuente, activa, label, descripcion, onClick }: {
       onClick={onClick}
       className={clsx(
         'flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-all',
-        activa ? 'border-brand bg-brand/5 shadow-card' : 'border-gray-100 bg-white hover:border-gray-200',
+        activa ? 'border-brand bg-brand/5 shadow-card' : 'border-gray-100 bg-card hover:border-gray-200',
       )}
     >
       <div className={clsx('flex h-9 w-9 items-center justify-center rounded-xl', activa ? 'bg-brand text-white' : 'bg-gray-100 text-gray-500')}>
@@ -211,13 +211,13 @@ function FiltrosPanel({ fuente, filtrosDisponibles, filtros, onChange }: {
 function TablaResultados({ resultado }: { resultado: ResultadoReporte }) {
   if (resultado.filas.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
         <p className="text-sm text-ink-tertiary">No hay datos para esta selección de filtros.</p>
       </div>
     )
   }
   return (
-    <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-card">
       <table className="w-full text-left text-xs">
         <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-ink-tertiary">
           <tr>
@@ -339,14 +339,14 @@ function PlantillasPanel({ onEjecutar }: { onEjecutar: (fuente: FuenteReporte, r
 
   if (!plantillas || plantillas.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
         <p className="text-sm text-ink-tertiary">Todavía no hay plantillas guardadas. Genera un reporte y usa "Guardar como plantilla".</p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card">
       <table className="w-full text-left text-xs">
         <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-ink-tertiary">
           <tr>
@@ -550,25 +550,25 @@ export function ReportesEjecutivosPage() {
 
           {fuenteData && (
             <>
-              <div className="space-y-2 rounded-2xl border border-gray-100 bg-white p-4">
+              <div className="space-y-2 rounded-2xl border border-gray-100 bg-card p-4">
                 <h2 className="text-sm font-bold text-ink">2. Métricas ({metricas.length}/{LIMITE_METRICAS})</h2>
                 <CampoCheckboxList campos={fuenteData.metricas} seleccionados={metricas} onToggle={toggleMetrica} limite={LIMITE_METRICAS} />
               </div>
 
-              <div className="space-y-2 rounded-2xl border border-gray-100 bg-white p-4">
+              <div className="space-y-2 rounded-2xl border border-gray-100 bg-card p-4">
                 <h2 className="text-sm font-bold text-ink">3. Dimensiones ({dimensiones.length}/{LIMITE_DIMENSIONES})</h2>
                 <CampoCheckboxList campos={fuenteData.dimensiones} seleccionados={dimensiones} onToggle={toggleDimension} limite={LIMITE_DIMENSIONES} />
               </div>
 
               {fuenteData.filtros.length > 0 && (
-                <div className="space-y-2 rounded-2xl border border-gray-100 bg-white p-4">
+                <div className="space-y-2 rounded-2xl border border-gray-100 bg-card p-4">
                   <h2 className="text-sm font-bold text-ink">4. Filtros (opcional)</h2>
                   <FiltrosPanel fuente={fuente} filtrosDisponibles={fuenteData.filtros} filtros={filtros} onChange={setFiltros} />
                 </div>
               )}
 
               {dimensiones.length > 0 && (
-                <div className="space-y-2 rounded-2xl border border-gray-100 bg-white p-4">
+                <div className="space-y-2 rounded-2xl border border-gray-100 bg-card p-4">
                   <h2 className="text-sm font-bold text-ink">5. Agrupar por (opcional)</h2>
                   <select
                     className="w-full max-w-xs rounded-lg border border-gray-200 px-3 py-2 text-sm"

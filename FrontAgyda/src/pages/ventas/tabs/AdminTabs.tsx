@@ -144,7 +144,7 @@ function StatsTab() {
             )}
             <div className="relative">
               <select value={campaignId ?? ''} onChange={(e) => setCampaignId(e.target.value ? Number(e.target.value) : undefined)}
-                className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
+                className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
                 <option value="">Todas las campañas</option>
                 {campaigns.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
@@ -157,15 +157,15 @@ function StatsTab() {
             <Calendar className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input type="date" value={selectedDate} max={new Date().toISOString().slice(0, 10)}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10" />
+              className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-3 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10" />
           </div>
           <button onClick={() => setSelectedDate('')} style={{ visibility: selectedDate ? 'visible' : 'hidden' }}
-            className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-[0.75rem] font-medium text-gray-500 hover:bg-gray-50 transition-colors">
+            className="rounded-xl border border-gray-200 bg-card px-2.5 py-2 text-[0.75rem] font-medium text-gray-500 hover:bg-gray-50 transition-colors">
             ✕ Fecha actual
           </button>
         </div>
         {isPlata && (
-          <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm hover:bg-gray-50 transition-colors">
+          <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-gray-200 bg-card px-3 py-2 shadow-sm hover:bg-gray-50 transition-colors">
             <input type="checkbox" checked={showAgendada} onChange={(e) => setShowAgendada(e.target.checked)}
               className="h-3.5 w-3.5 rounded accent-blue-500" />
             <span className="h-2.5 w-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: '#3b82f6' }} />
@@ -275,7 +275,7 @@ function StatColumnDynamic({ title, subtitle, data, isLoading, period, campaignI
   const grandTotal = Object.values(totales).reduce((s, v) => s + v, 0)
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden flex flex-col">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden flex flex-col">
       {/* Header */}
       <div className="flex items-start justify-between px-5 pt-5 pb-3">
         <div>
@@ -470,7 +470,7 @@ function StatColumn({ title, subtitle, data, isLoading, period, campaignId, date
   const CHART_H = 300 // px altura del área de barras — mayor para 1920×1080
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden flex flex-col">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden flex flex-col">
       {/* Header */}
       <div className="flex items-start justify-between px-6 pt-6 pb-4">
         <div>
@@ -500,7 +500,7 @@ function StatColumn({ title, subtitle, data, isLoading, period, campaignId, date
       {/* Zona de contenido */}
       <div className="flex flex-col min-h-0 relative">
         {/* Loading overlay */}
-        <div style={{ display: isLoading ? 'flex' : 'none' }} className="absolute inset-0 z-10 items-center justify-center bg-white rounded-b-2xl">
+        <div style={{ display: isLoading ? 'flex' : 'none' }} className="absolute inset-0 z-10 items-center justify-center bg-card rounded-b-2xl">
           <Spinner size="lg" />
         </div>
 
@@ -691,7 +691,7 @@ function TodasVentasTab({ canEdit = true }: { canEdit?: boolean }) {
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             placeholder="Buscar por agente, cliente o teléfono..."
-            className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+            className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
         </div>
 
         <FilterSelect value={filtAgent} onChange={(v) => { setFiltAgent(v); setPage(1) }}>
@@ -718,7 +718,7 @@ function TodasVentasTab({ canEdit = true }: { canEdit?: boolean }) {
             <input type="date" value={dateFrom} max={dateTo || new Date().toISOString().slice(0, 10)}
               onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
               title="Desde"
-              className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10 w-[148px]" />
+              className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10 w-[148px]" />
           </div>
           <span className="text-[0.72rem] text-gray-400 font-medium">—</span>
           <div className="relative">
@@ -726,25 +726,25 @@ function TodasVentasTab({ canEdit = true }: { canEdit?: boolean }) {
             <input type="date" value={dateTo} min={dateFrom} max={new Date().toISOString().slice(0, 10)}
               onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
               title="Hasta"
-              className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10 w-[148px]" />
+              className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10 w-[148px]" />
           </div>
           <button
             onClick={clearDates}
             style={{ visibility: (dateFrom || dateTo) ? 'visible' : 'hidden' }}
-            className="rounded-xl border border-gray-200 bg-white px-2 py-2 text-[0.72rem] font-medium text-gray-400 hover:bg-gray-50 transition-colors"
+            className="rounded-xl border border-gray-200 bg-card px-2 py-2 text-[0.72rem] font-medium text-gray-400 hover:bg-gray-50 transition-colors"
             title="Limpiar fechas">
             ✕
           </button>
         </div>
 
         <button onClick={exportExcel} disabled={!filtered.length || exporting}
-          className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-colors disabled:opacity-40">
+          className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-colors disabled:opacity-40">
           {exporting ? <Spinner size="sm" /> : <Download className="h-3.5 w-3.5" />} Exportar Excel
         </button>
       </div>
 
       {/* Tabla */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
           <h2 className="text-[0.85rem] font-bold text-gray-900">
             {filtered.length} venta{filtered.length !== 1 ? 's' : ''}
@@ -1021,7 +1021,7 @@ function AgentesTab() {
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre o usuario..."
-            className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+            className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
         </div>
         <FilterSelect value={filtroRol} onChange={setFiltroRol}>
           <option value="">Todos los roles</option>
@@ -1030,7 +1030,7 @@ function AgentesTab() {
       </div>
 
       {/* Tabla */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : filtered.length === 0 ? (
@@ -1474,12 +1474,12 @@ function AsignacionesTab() {
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar agente..."
-            className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+            className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
         </div>
         <p className="text-[0.75rem] text-gray-400">Activa o desactiva las campañas de cada agente</p>
       </div>
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : (
@@ -1581,10 +1581,10 @@ function NotificacionesTab() {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por agente, cliente o teléfono..."
-          className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+          className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
       </div>
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <h2 className="text-[0.85rem] font-bold text-gray-900 flex items-center gap-2">
             <Bell className="h-4 w-4 text-brand" /> Ventas agendadas del equipo
@@ -1683,7 +1683,7 @@ function CampanasTab({ canCreate }: { canCreate: boolean }) {
         )}
       </div>
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : campanas.length === 0 ? (
@@ -2055,7 +2055,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
 
   // ── Sub-components ───────────────────────────────────────
   const StatCard = ({ label, value, sub, color = 'text-gray-900' }: { label: string; value: number; sub?: string; color?: string }) => (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm px-4 py-3.5 flex flex-col gap-0.5">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm px-4 py-3.5 flex flex-col gap-0.5">
       <p className="text-[0.68rem] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
       <p className={`text-[1.5rem] font-black leading-tight ${color}`}>{value.toLocaleString()}</p>
       {sub && <p className="text-[0.65rem] text-gray-400">{sub}</p>}
@@ -2108,7 +2108,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
     <div className="relative">
       <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
       <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder ?? 'Buscar...'}
-        className="w-full max-w-sm rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+        className="w-full max-w-sm rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
     </div>
   )
 
@@ -2135,7 +2135,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
             </FilterSelect>
           )}
           <button onClick={() => syncMut.mutate()} disabled={anyBusy}
-            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors">
+            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors">
             {syncMut.isPending ? <Spinner size="sm" /> : <RefreshCw className="h-3.5 w-3.5" />} Sync Status Ventas
           </button>
           <button onClick={() => pubMut.mutate()} disabled={anyBusy}
@@ -2159,7 +2159,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
 
           {/* Barra de consumo */}
           {madreRaw > 0 && (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm px-5 py-4">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm px-5 py-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[0.75rem] font-semibold text-gray-700">Consumo de Base Madre</p>
                 <p className="text-[0.72rem] text-gray-400">{trabajados.toLocaleString()} trabajados · {disponible.toLocaleString()} disponibles</p>
@@ -2199,23 +2199,23 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
           </p>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setShowMigrar(true)} disabled={anyBusy}
-              className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-white px-3 py-2 text-[0.75rem] font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors">
+              className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-card px-3 py-2 text-[0.75rem] font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors">
               <Plus className="h-3.5 w-3.5" /> Migrar a Lote 1
             </button>
             <button onClick={() => { if (window.confirm('¿Avanzar cola? v2→Madre, v1→v2')) avzMut.mutate() }} disabled={anyBusy}
-              className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-white px-3 py-2 text-[0.75rem] font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors">
+              className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-card px-3 py-2 text-[0.75rem] font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors">
               {avzMut.isPending ? <Spinner size="sm" /> : <ChevronRight className="h-3.5 w-3.5" />} Avanzar Cola
             </button>
             <button onClick={() => { if (window.confirm('¿Rotar lotes? Lote 1→Cola, completados→Madre')) rotMut.mutate() }} disabled={anyBusy}
-              className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-white px-3 py-2 text-[0.75rem] font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors">
+              className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-card px-3 py-2 text-[0.75rem] font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors">
               {rotMut.isPending ? <Spinner size="sm" /> : <RefreshCw className="h-3.5 w-3.5" />} Rotar Lotes
             </button>
             <button onClick={() => { if (window.confirm('¿Descartar Lote 1? No se puede deshacer.')) desMut.mutate('lote1') }} disabled={anyBusy}
-              className="flex items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3 py-2 text-[0.75rem] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors">
+              className="flex items-center gap-1.5 rounded-xl border border-red-300 bg-card px-3 py-2 text-[0.75rem] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors">
               {desMut.isPending ? <Spinner size="sm" /> : <Trash2 className="h-3.5 w-3.5" />} Descartar Lote 1
             </button>
             <button onClick={() => { if (window.confirm('¿Descartar AMBOS lotes? No se puede deshacer.')) desMut.mutate('ambos') }} disabled={anyBusy}
-              className="flex items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3 py-2 text-[0.75rem] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors">
+              className="flex items-center gap-1.5 rounded-xl border border-red-300 bg-card px-3 py-2 text-[0.75rem] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors">
               {desMut.isPending ? <Spinner size="sm" /> : <Trash2 className="h-3.5 w-3.5" />} Descartar Ambos
             </button>
           </div>
@@ -2260,20 +2260,20 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
 
       {/* ══ BASE MADRE tab ══ */}
       {subTab === 'madre' && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
             <h3 className="text-[0.85rem] font-bold text-gray-900">Base Madre — {(madreRes?.total ?? 0).toLocaleString()} registros</h3>
             <div className="flex flex-wrap gap-2">
               <SearchBar value={mSearch} onChange={v => { setMSearch(v); setMPage(1) }} placeholder="Teléfono, nombre o status..." />
               <select value={mStatus} onChange={e => { setMStatus(e.target.value); setMPage(1) }}
-                className="rounded-xl border border-gray-200 bg-white py-2 px-3 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none">
+                className="rounded-xl border border-gray-200 bg-card py-2 px-3 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none">
                 <option value="">— Todos los status —</option>
                 {statuses.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <input type="date" value={mDesde} onChange={e => { setMDesde(e.target.value); setMPage(1) }}
-                className="rounded-xl border border-gray-200 bg-white py-2 px-3 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
+                className="rounded-xl border border-gray-200 bg-card py-2 px-3 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
               <input type="date" value={mHasta} onChange={e => { setMHasta(e.target.value); setMPage(1) }}
-                className="rounded-xl border border-gray-200 bg-white py-2 px-3 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
+                className="rounded-xl border border-gray-200 bg-card py-2 px-3 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
             </div>
           </div>
           <BMTable
@@ -2285,7 +2285,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
 
       {/* ══ CARGAR tab ══ */}
       {subTab === 'cargar' && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-4">
             <h3 className="text-[0.85rem] font-bold text-gray-900">Cargar / Migrar lotes</h3>
             <p className="text-[0.75rem] text-gray-400 mt-0.5">Usa los botones de superadmin para mover registros entre tablas.</p>
@@ -2356,7 +2356,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
           {/* Chart stats */}
           {chartStats && chartStats.totalLote > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm px-5 py-4">
+              <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm px-5 py-4">
                 <p className="text-[0.78rem] font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><TrendingUp className="h-3.5 w-3.5 text-brand" /> Por resultado</p>
                 <div className="space-y-2">
                   {chartStats.byResultado.slice(0, 8).map((r, i) => {
@@ -2373,7 +2373,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
                   })}
                 </div>
               </div>
-              <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm px-5 py-4">
+              <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm px-5 py-4">
                 <p className="text-[0.78rem] font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-brand" /> Por agente (Top 10)</p>
                 <div className="space-y-2">
                   {chartStats.byAgente.slice(0, 10).map((a, i) => {
@@ -2392,7 +2392,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
               </div>
             </div>
           )}
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
               <h3 className="text-[0.85rem] font-bold text-gray-900">Lote 1 — {(lote1Res?.total ?? 0).toLocaleString()} registros</h3>
               <div className="flex gap-2">
@@ -2411,7 +2411,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
 
       {/* ══ COLA tab ══ */}
       {subTab === 'cola' && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
             <h3 className="text-[0.85rem] font-bold text-gray-900">
               Cola — {(colaRes?.total ?? 0).toLocaleString()} registros
@@ -2426,7 +2426,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
 
       {/* ══ HISTÓRICO tab ══ */}
       {subTab === 'historico' && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
             <h3 className="text-[0.85rem] font-bold text-gray-900">Histórico — {(histRes?.total ?? 0).toLocaleString()} registros</h3>
             <SearchBar value={hiSearch} onChange={v => { setHiSearch(v); setHiPage(1) }} />
@@ -2438,7 +2438,7 @@ function BaseMadreTab({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
 
       {/* ══ REPETIDOS tab ══ */}
       {subTab === 'repetidos' && (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-3">
             <h3 className="text-[0.85rem] font-bold text-gray-900">Repetidos — {(repRes?.total ?? 0).toLocaleString()} registros</h3>
           </div>
@@ -2519,13 +2519,13 @@ function BaseCRMTab() {
           <p className="text-[0.75rem] text-gray-400 mt-0.5">Importaciones y registros del CRM</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => exportarReporte('gestiones')} className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.75rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          <button onClick={() => exportarReporte('gestiones')} className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.75rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
             <Download className="h-3.5 w-3.5" /> Gestiones
           </button>
-          <button onClick={() => exportarReporte('ventas')} className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.75rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          <button onClick={() => exportarReporte('ventas')} className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.75rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
             <Download className="h-3.5 w-3.5" /> Ventas CRM
           </button>
-          <button onClick={() => exportarReporte('base-completa')} className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.75rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          <button onClick={() => exportarReporte('base-completa')} className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.75rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
             <Download className="h-3.5 w-3.5" /> Base completa
           </button>
           <button onClick={() => setShowNueva(true)}
@@ -2569,7 +2569,7 @@ function BaseCRMTab() {
         <div className="space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => { setSelectedImp(null); setSubView('lista') }}
-              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
               ← Volver
             </button>
             <h3 className="text-[0.9rem] font-bold text-gray-900">{selectedImp.nombre}</h3>
@@ -2588,7 +2588,7 @@ function BaseCRMTab() {
             <TabBtn active={subView === 'campos'}    onClick={() => setSubView('campos')}    icon={<Settings  className="h-3.5 w-3.5" />} label="Campos" />
           </div>
           {subView === 'registros' && (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
               {ldReg ? <div className="flex justify-center py-10"><Spinner size="lg" /></div> : registros.length === 0 ? (
                 <div className="flex items-center justify-center py-10 text-gray-400 text-[0.82rem]">Sin registros</div>
               ) : (
@@ -2619,7 +2619,7 @@ function BaseCRMTab() {
             </div>
           )}
           {subView === 'campos' && (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
               {ldCampos ? <div className="flex justify-center py-10"><Spinner size="lg" /></div> : campos.length === 0 ? (
                 <div className="flex items-center justify-center py-10 text-gray-400 text-[0.82rem]">Sin configuración de campos</div>
               ) : (
@@ -2652,7 +2652,7 @@ function BaseCRMTab() {
         isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : importaciones.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400 rounded-2xl border border-gray-200/60 bg-white shadow-sm">
+          <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400 rounded-2xl border border-gray-200/60 bg-card shadow-sm">
             <FileText className="h-8 w-8 opacity-25" />
             <p className="text-[0.82rem]">Sin importaciones</p>
           </div>
@@ -2701,7 +2701,7 @@ function ImportacionCard({ imp, campaNombre, onOpen, onCampos, onToggle, onDelet
   const topTips = [...tips].sort((a, b) => b.total - a.total).slice(0, 6)
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+    <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden hover:shadow-md transition-shadow">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-start justify-between gap-2">
@@ -2790,17 +2790,17 @@ function ImportacionCard({ imp, campaNombre, onOpen, onCampos, onToggle, onDelet
       {/* Actions */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-100 bg-gray-50/50">
         <div className="flex items-center gap-1">
-          <button onClick={onOpen} className="rounded-lg p-1.5 text-gray-400 hover:bg-white hover:text-brand transition-colors" title="Ver registros">
+          <button onClick={onOpen} className="rounded-lg p-1.5 text-gray-400 hover:bg-card hover:text-brand transition-colors" title="Ver registros">
             <Eye className="h-3.5 w-3.5" />
           </button>
-          <button onClick={onCampos} className="rounded-lg p-1.5 text-gray-400 hover:bg-white hover:text-brand transition-colors" title="Configurar campos">
+          <button onClick={onCampos} className="rounded-lg p-1.5 text-gray-400 hover:bg-card hover:text-brand transition-colors" title="Configurar campos">
             <Settings className="h-3.5 w-3.5" />
           </button>
           <button onClick={onDelete} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Eliminar">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
-        <button onClick={onToggle} className="rounded-lg p-1 text-gray-400 hover:bg-white transition-colors" title={imp.activa ? 'Desactivar' : 'Activar'}>
+        <button onClick={onToggle} className="rounded-lg p-1 text-gray-400 hover:bg-card transition-colors" title={imp.activa ? 'Desactivar' : 'Activar'}>
           {imp.activa ? <ToggleRight className="h-5 w-5 text-emerald-500" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}
         </button>
       </div>
@@ -3006,22 +3006,22 @@ function TrazabilidadTab() {
           {(['hoy','7d','30d','todo'] as TrazPeriod[]).map(p => (
             <button key={p} onClick={() => setPeriod(p)}
               className={clsx('rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-colors',
-                period === p ? 'bg-brand text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                period === p ? 'bg-brand text-white shadow-sm' : 'bg-card border border-gray-200 text-gray-600 hover:bg-gray-50')}>
               {p === 'hoy' ? 'Hoy' : p === '7d' ? '7 días' : p === '30d' ? '30 días' : 'Todo'}
             </button>
           ))}
           <button onClick={() => setPeriod('custom')}
             className={clsx('rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-colors',
-              period === 'custom' ? 'bg-brand text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50')}>
+              period === 'custom' ? 'bg-brand text-white shadow-sm' : 'bg-card border border-gray-200 text-gray-600 hover:bg-gray-50')}>
             <Calendar className="h-3.5 w-3.5 inline mr-1" />Rango
           </button>
           {period === 'custom' && (
             <>
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-white py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
+                className="rounded-xl border border-gray-200 bg-card py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
               <span className="text-gray-400 text-[0.78rem]">—</span>
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-white py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
+                className="rounded-xl border border-gray-200 bg-card py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
             </>
           )}
         </div>
@@ -3037,7 +3037,7 @@ function TrazabilidadTab() {
               { label: 'Gestionados',      value: gestionados,      color: 'text-emerald-600' },
               { label: 'Sin gestión',      value: sinGestion,       color: 'text-gray-400' },
             ].map(c => (
-              <div key={c.label} className="rounded-2xl border border-gray-200/60 bg-white shadow-sm px-5 py-4">
+              <div key={c.label} className="rounded-2xl border border-gray-200/60 bg-card shadow-sm px-5 py-4">
                 <p className="text-[0.7rem] font-semibold text-gray-400 uppercase tracking-wider">{c.label}</p>
                 <p className={`text-2xl font-black mt-1 ${c.color}`}>{c.value.toLocaleString()}</p>
               </div>
@@ -3045,7 +3045,7 @@ function TrazabilidadTab() {
           </div>
 
           {/* Stacked bar chart by TipCRM */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 px-5 py-3">
               <h3 className="text-[0.85rem] font-bold text-gray-900">Frecuencia por tipificación CRM</h3>
               <p className="text-[0.7rem] text-gray-400 mt-0.5">Registros agrupados por TipCRM, coloreados por estatus de venta</p>
@@ -3117,7 +3117,7 @@ function TrazabilidadTab() {
           </div>
 
           {/* Aprobadas/Rechazadas by TipCRM */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 px-5 py-3">
               <h3 className="text-[0.85rem] font-bold text-gray-900">Aprobadas y Rechazadas por tipificación</h3>
             </div>
@@ -3170,7 +3170,7 @@ function TrazabilidadTab() {
 
           {/* Evolución mensual */}
           {statsArr.length > 0 && (
-            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
               <div className="border-b border-gray-100 px-5 py-3">
                 <h3 className="text-[0.85rem] font-bold text-gray-900">Evolución mensual</h3>
               </div>
@@ -3207,10 +3207,10 @@ function TrazabilidadTab() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input value={search} onChange={e => { setSearch(e.target.value); setDetPage(1) }} placeholder="Buscar por teléfono, nombre o agente..."
-              className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+              className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
           </div>
 
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
               <h3 className="text-[0.85rem] font-bold text-gray-900">{detTotal.toLocaleString()} registros trazados</h3>
               {detTotal > DET_LIMIT && (
@@ -3286,7 +3286,7 @@ function TrazabilidadTab() {
               <select
                 value={impId ?? ''}
                 onChange={e => { setImpId(e.target.value ? Number(e.target.value) : null); setImpSearch('') }}
-                className="w-full rounded-xl border border-gray-200 bg-white py-2 px-3 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none shadow-sm"
+                className="w-full rounded-xl border border-gray-200 bg-card py-2 px-3 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none shadow-sm"
               >
                 <option value="">— Seleccionar importación CRM —</option>
                 {importaciones.map(imp => (
@@ -3300,22 +3300,22 @@ function TrazabilidadTab() {
               {(['hoy','7d','30d','todo'] as TrazPeriod[]).map(p => (
                 <button key={p} onClick={() => setImpPeriod(p)}
                   className={clsx('rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-colors',
-                    impPeriod === p ? 'bg-brand text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                    impPeriod === p ? 'bg-brand text-white shadow-sm' : 'bg-card border border-gray-200 text-gray-600 hover:bg-gray-50')}>
                   {p === 'hoy' ? 'Hoy' : p === '7d' ? '7 días' : p === '30d' ? '30 días' : 'Todo'}
                 </button>
               ))}
               <button onClick={() => setImpPeriod('custom')}
                 className={clsx('rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-colors',
-                  impPeriod === 'custom' ? 'bg-brand text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                  impPeriod === 'custom' ? 'bg-brand text-white shadow-sm' : 'bg-card border border-gray-200 text-gray-600 hover:bg-gray-50')}>
                 <Calendar className="h-3.5 w-3.5 inline mr-1" />Rango
               </button>
               {impPeriod === 'custom' && (
                 <>
                   <input type="date" value={impDateFrom} onChange={e => setImpDateFrom(e.target.value)}
-                    className="rounded-xl border border-gray-200 bg-white py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
+                    className="rounded-xl border border-gray-200 bg-card py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
                   <span className="text-gray-400 text-[0.78rem]">—</span>
                   <input type="date" value={impDateTo} onChange={e => setImpDateTo(e.target.value)}
-                    className="rounded-xl border border-gray-200 bg-white py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
+                    className="rounded-xl border border-gray-200 bg-card py-1.5 px-2.5 text-[0.78rem] text-gray-700 focus:border-brand focus:outline-none" />
                 </>
               )}
             </div>
@@ -3351,7 +3351,7 @@ function TrazabilidadTab() {
               </div>
 
               {/* Gráfica: tipificación → estatus de venta */}
-              <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+              <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
                 <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
                   <div>
                     <h3 className="text-[0.85rem] font-bold text-gray-900">Tipificación CRM → Estatus de venta</h3>
@@ -3404,7 +3404,7 @@ function TrazabilidadTab() {
               </div>
 
               {/* Tabla de detalle */}
-              <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+              <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
                 <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between gap-3">
                   <h3 className="text-[0.85rem] font-bold text-gray-900">
                     Detalle individual
@@ -3528,7 +3528,7 @@ function AccesosTab() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Lista importaciones */}
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-4 py-3">
             <h3 className="text-[0.82rem] font-bold text-gray-900">Importaciones</h3>
           </div>
@@ -3547,7 +3547,7 @@ function AccesosTab() {
         </div>
 
         {/* Lista agentes con acceso */}
-        <div className="md:col-span-2 rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="md:col-span-2 rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           {!selectedImp ? (
             <div className="flex flex-col items-center justify-center h-full py-16 gap-2 text-gray-400">
               <Shield className="h-10 w-10 opacity-20" />
@@ -3608,7 +3608,7 @@ function VicidialTab() {
     <div className="animate-fade-in" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
       <iframe
         src="/gestion-vicidial/"
-        className="w-full h-full rounded-2xl border border-gray-200/60 shadow-sm bg-white"
+        className="w-full h-full rounded-2xl border border-gray-200/60 shadow-sm bg-card"
         style={{ display: 'block' }}
         title="Gestión Vicidial"
       />
@@ -3623,7 +3623,7 @@ function FilterSelect({ value, onChange, children }: {
   return (
     <div className="relative">
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
+        className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-3 pr-8 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
         {children}
       </select>
       <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />

@@ -89,7 +89,7 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
       onClick={onClick}
       className={clsx(
         'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.78rem] font-semibold transition-colors',
-        active ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700'
+        active ? 'bg-card text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700'
       )}
     >
       {icon} {label}
@@ -164,14 +164,14 @@ function MisGastosTab() {
             </button>
           )}
           <button onClick={() => setShowNuevo(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[0.78rem] font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
             <Plus className="h-3.5 w-3.5" /> Nuevo gasto
           </button>
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : sinReporte.length === 0 ? (
@@ -517,7 +517,7 @@ function MisReportesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <h2 className="text-[0.85rem] font-bold text-gray-900 flex items-center gap-2">
             <FileText className="h-4 w-4 text-brand" /> Mis reportes
@@ -843,7 +843,7 @@ function AdminGastosTab() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative">
           <select value={filtEst} onChange={e => setFiltEst(e.target.value)}
-            className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none">
+            className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-3 pr-8 text-[0.82rem] font-medium text-gray-700 shadow-sm focus:border-brand focus:outline-none">
             <option value="">Todos los estados</option>
             {Object.entries(LABEL_EST).filter(([k]) => k !== 'en_reporte').map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
@@ -855,22 +855,22 @@ function AdminGastosTab() {
           <div className="relative">
             <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input type="date" value={filtFechaDesde} onChange={e => setFiltFechaDesde(e.target.value)}
-              className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none w-[148px]" />
+              className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none w-[148px]" />
           </div>
           <span className="text-[0.72rem] text-gray-400">—</span>
           <div className="relative">
             <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input type="date" value={filtFechaHasta} onChange={e => setFiltFechaHasta(e.target.value)}
-              className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none w-[148px]" />
+              className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-8 pr-2 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none w-[148px]" />
           </div>
           {(filtFechaDesde || filtFechaHasta) && (
             <button onClick={() => { setFiltFechaDesde(''); setFiltFechaHasta('') }}
-              className="rounded-xl border border-gray-200 bg-white px-2 py-2 text-[0.72rem] font-medium text-gray-400 hover:bg-gray-50">✕</button>
+              className="rounded-xl border border-gray-200 bg-card px-2 py-2 text-[0.72rem] font-medium text-gray-400 hover:bg-gray-50">✕</button>
           )}
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <h2 className="text-[0.85rem] font-bold text-gray-900">Todos los reportes</h2>
           <span className="rounded-full bg-brand/10 px-2.5 py-0.5 text-[0.72rem] font-bold text-brand">{reportes.length}</span>
@@ -968,7 +968,7 @@ function CategoriasTab() {
         </button>
       </div>
 
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : categorias.length === 0 ? (

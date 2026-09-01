@@ -98,7 +98,7 @@ export function CronometroCurso({ curso, isAdmin }: { curso: Curso; isAdmin: boo
               <Plus className="h-4 w-4" />
             </button>
             {showAgregar && (
-              <div className="absolute right-0 top-11 z-10 w-48 rounded-xl border border-gray-200 bg-white p-3 shadow-lg">
+              <div className="absolute right-0 top-11 z-10 w-48 rounded-xl border border-gray-200 bg-card p-3 shadow-lg">
                 <label className="mb-1 block text-[0.65rem] font-semibold text-gray-500 uppercase tracking-wide">Minutos a agregar</label>
                 <div className="flex items-center gap-1.5">
                   <input

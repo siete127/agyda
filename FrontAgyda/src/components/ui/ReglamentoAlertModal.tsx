@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, CheckCircle2, FileText, X, ChevronLeft } from 'lucide-react'
 import { api } from '@/lib/axios'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
 import toast from 'react-hot-toast'
 
 function usePdfBlob(enabled: boolean) {
@@ -36,7 +37,13 @@ function usePdfBlob(enabled: boolean) {
 
 export function ReglamentoAlertModal() {
   const qc = useQueryClient()
+  const { isAllowed } = useModuleAccess()
   const [showPdf, setShowPdf] = useState(false)
+
+  // Si el módulo 'reglamento' está desactivado para la empresa, /accept
+  // devolvería 403 y el modal encerraría al usuario sin salida. En ese caso
+  // no se consulta el estado ni se muestra el modal.
+  const reglamentoActivo = isAllowed('reglamento')
 
   const { data, isLoading } = useQuery({
     queryKey: ['reglamento-status'],
@@ -46,6 +53,7 @@ export function ReglamentoAlertModal() {
       return payload as { pending: boolean | number; currentVersion?: number; acceptedVersion?: number }
     },
     staleTime: 60_000,
+    enabled: reglamentoActivo,
   })
 
   const { blobUrl, loading: pdfLoading, error: pdfError } = usePdfBlob(showPdf)
@@ -60,7 +68,7 @@ export function ReglamentoAlertModal() {
   })
 
   // Mostrar para TODOS los roles si tienen reglamento pendiente
-  const pendiente = !isLoading && data != null && (data.pending === true || data.pending === 1)
+  const pendiente = reglamentoActivo && !isLoading && data != null && (data.pending === true || data.pending === 1)
   if (!pendiente) return null
 
   return createPortal(
@@ -70,7 +78,7 @@ export function ReglamentoAlertModal() {
 
       {showPdf ? (
         /* ── Panel visor de PDF ── */
-        <div className="relative flex flex-col w-full max-w-3xl h-[90vh] rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up border border-indigo-100">
+        <div className="relative flex flex-col w-full max-w-3xl h-[90vh] rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up border border-indigo-100">
           {/* Header del visor */}
           <div className="flex items-center justify-between px-5 py-3 bg-indigo-600 flex-shrink-0">
             <div className="flex items-center gap-2">
@@ -108,7 +116,7 @@ export function ReglamentoAlertModal() {
           </div>
 
           {/* Footer con botón de aceptar */}
-          <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+          <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 bg-card flex-shrink-0">
             <p className="text-xs text-gray-400">Debes leer el reglamento antes de aceptar.</p>
             <button
               onClick={() => aceptar.mutate()}
@@ -124,7 +132,7 @@ export function ReglamentoAlertModal() {
         </div>
       ) : (
         /* ── Tarjeta inicial ── */
-        <div className="relative w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up border-2 border-indigo-100">
+        <div className="relative w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up border-2 border-indigo-100">
           <div className="h-1.5 w-full bg-gradient-to-r from-indigo-600 to-indigo-400" />
 
           <div className="px-7 py-8 flex flex-col items-center gap-5 text-center">

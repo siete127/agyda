@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getSocket } from '@/lib/socket'
+import { accessService } from '@/services/access.service'
 import { useSocketStore } from '@/stores/socket.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { useNotificationStore, type NotificationItem } from '@/stores/notification.store'
@@ -10,6 +12,16 @@ import { api } from '@/lib/axios'
 export function useSocketInit() {
   const { setStatus, setSocketId } = useSocketStore()
   const user = useAuthStore((s) => s.user)
+
+  // Comparte la misma queryKey que useModuleAccess: no dispara request extra,
+  // solo lee el resultado ya cacheado de los módulos permitidos.
+  const { data: modulos = [] } = useQuery({
+    queryKey: ['accesos-self', user?.id],
+    queryFn: () => accessService.getSelfModules(),
+    enabled: !!user?.id,
+    staleTime: 0,
+  })
+  const puedeMensajeria = modulos.includes('*') || modulos.includes('mensajeria')
 
   // Refs estables — nunca cambian de referencia, así el useEffect no se re-ejecuta
   const addNotificationRef  = useRef(useNotificationStore.getState().addNotification)
@@ -134,13 +146,14 @@ export function useSocketInit() {
       .catch(() => { /* silencioso si falla */ })
   }, [user?.id])
 
-  // Cargar canales de mensajería iniciales (para el badge del Topbar)
+  // Cargar canales de mensajería iniciales (para el badge del Topbar).
+  // Solo si el módulo 'mensajeria' está activo para la empresa — evita el 403.
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || !puedeMensajeria) return
     mensajeriaService.getMisCanales()
       .then((canales) => setCanalesRef.current(canales))
       .catch(() => { /* silencioso si el usuario no tiene acceso al módulo */ })
-  }, [user?.id])
+  }, [user?.id, puedeMensajeria])
 }
 
 export function useSocketEvent<T = unknown>(event: string, handler: (data: T) => void) {

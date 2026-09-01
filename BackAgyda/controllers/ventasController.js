@@ -15,6 +15,18 @@ async function getVentasPool() {
   return _pool;
 }
 
+/* Normaliza un teléfono a 10 dígitos (México), quitando el prefijo de país
+   52/521 cuando venga incluido — VICIdial y las listas importadas mezclan
+   ambos formatos, y la búsqueda en CRMInteracciones/CRMGestiones/CRMRegistros
+   es por igualdad exacta, así que sin esto un mismo número con y sin lada
+   nunca hace match. */
+function normalizarTelefono(v) {
+  const digitos = String(v ?? '').replace(/\D/g, '');
+  if (digitos.length === 12 && digitos.startsWith('52')) return digitos.slice(2);
+  if (digitos.length === 13 && digitos.startsWith('521')) return digitos.slice(3);
+  return digitos;
+}
+
 /* Middleware: verificar JWT de ventas */
 exports.verifyVentasToken = (req, res, next) => {
   const token = req.headers['x-access-token'] || (req.headers['authorization'] || '').split(' ')[1];
@@ -1294,7 +1306,7 @@ exports.addCRMRegistros = async (req, res) => {
       table.rows.add(
         parseInt(importacionId),
         parseInt(campaignId),
-        String(r.telefono ?? '').trim().replace(/\D/g, '').slice(0, 30),
+        normalizarTelefono(r.telefono).slice(0, 30),
         String(r.nombre ?? '').trim().slice(0, 200),
         JSON.stringify(r.datos ?? {})
       );
@@ -1460,7 +1472,7 @@ exports.getCRMCliente = async (req, res) => {
   try {
     const pool = await getVentasPool();
     await ensureCRMTables(pool);
-    const telefono = String(req.query.cliente || req.params.telefono || '').trim().replace(/\D/g, '');
+    const telefono = normalizarTelefono(req.query.cliente || req.params.telefono);
     if (!telefono) return res.status(400).json({ message: 'Telefono requerido' });
 
     /* Buscar en interacciones (puede existir en varias campañas) */
@@ -1524,7 +1536,7 @@ exports.registrarGestionCRM = async (req, res) => {
     const { telefono, campaignId, tipo, datos } = req.body;
     if (!telefono) return res.status(400).json({ message: 'Telefono requerido' });
 
-    const tel = String(telefono).trim().replace(/\D/g, '');
+    const tel = normalizarTelefono(telefono);
     const idUser      = req.ventasUserId || 0;
     const nombreAgente = req.ventasNombreAgente || '';
 
@@ -1569,7 +1581,7 @@ exports.registrarGestionCRMPublica = async (req, res) => {
     const { telefono, campaignId, agente, agenteId } = req.body;
     if (!telefono) return res.status(400).json({ message: 'Telefono requerido' });
 
-    const tel = String(telefono).trim().replace(/\D/g, '');
+    const tel = normalizarTelefono(telefono);
     await pool.request()
       .input('telefono',     sql.NVarChar, tel)
       .input('campaignId',   sql.Int,      parseInt(campaignId) || 0)
@@ -1597,7 +1609,7 @@ exports.updateCRMInteraccion = async (req, res) => {
     const pool = await getVentasPool();
     const { telefono, campaignId, datos } = req.body;
     if (!telefono) return res.status(400).json({ message: 'Telefono requerido' });
-    const tel = String(telefono).trim().replace(/\D/g, '');
+    const tel = normalizarTelefono(telefono);
     await pool.request()
       .input('tel',  sql.NVarChar, tel)
       .input('cid',  sql.Int,      parseInt(campaignId) || 0)
@@ -1682,7 +1694,7 @@ exports.importarListaVICIdial = async (req, res) => {
     tableR.columns.add('extra_data',   sql.NVarChar(sql.MAX), { nullable: true });
 
     for (const r of registros) {
-      const phone = String(r.phone_number ?? '').trim().replace(/\D/g, '').slice(0, 30);
+      const phone = normalizarTelefono(r.phone_number).slice(0, 30);
       if (!phone) continue;
       const extra = {};
       for (const k of Object.keys(r)) {
@@ -1747,7 +1759,7 @@ exports.importarListaVICIdial = async (req, res) => {
 
     let insertadosCRM = 0;
     for (const r of registros) {
-      const phone = String(r.phone_number ?? '').trim().replace(/\D/g, '').slice(0, 30);
+      const phone = normalizarTelefono(r.phone_number).slice(0, 30);
       if (!phone) continue;
       const nombreCompleto = [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || phone;
       const datos = {
@@ -2062,7 +2074,7 @@ exports.registrarTipificacionCRMPublica = async (req, res) => {
     const { telefono, campaignId, agente, agenteId, resultado, notas, datosExtra } = req.body;
     if (!telefono) return res.status(400).json({ message: 'Telefono requerido' });
 
-    const tel = String(telefono).trim().replace(/\D/g, '');
+    const tel = normalizarTelefono(telefono);
     const datos = { resultado: resultado ?? '', notas: notas ?? '', ...(datosExtra ?? {}) };
 
     await pool.request()

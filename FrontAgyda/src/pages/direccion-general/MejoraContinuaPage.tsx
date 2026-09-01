@@ -871,7 +871,7 @@ function HallazgoCard({ hallazgo, onClick, onEliminar, puedeEliminar }: { hallaz
   const sevCfg = SEVERIDAD_CONFIG[hallazgo.severidad] ?? { label: hallazgo.severidad, cls: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' }
   const estCfg = ESTATUS_CONFIG[hallazgo.estatus] ?? { label: hallazgo.estatus, cls: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' }
   return (
-    <button onClick={onClick} className="group relative flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
+    <button onClick={onClick} className="group relative flex h-full flex-col rounded-2xl border border-gray-100 bg-card p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
       {puedeEliminar && (
         <span
           onClick={(e) => { e.stopPropagation(); onEliminar() }}
@@ -1061,7 +1061,7 @@ export function MejoraContinuaPage() {
       </div>
 
       {!isLoading && data && data.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-card p-3">
           <select className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs" value={filtroArea} onChange={(e) => setFiltroArea(e.target.value as AreaKey | '')}>
             <option value="">Todas las áreas</option>
             {AREA_KEYS.map((k) => <option key={k} value={k}>{AREA_LABELS[k]}</option>)}
@@ -1094,14 +1094,14 @@ export function MejoraContinuaPage() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay hallazgos registrados.</p>
         </div>
       ) : (
         <>
           <DashboardStatRow stats={stats} />
           {hallazgosFiltrados.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
               <p className="text-sm text-ink-tertiary">Ningún hallazgo coincide con los filtros aplicados.</p>
             </div>
           ) : (

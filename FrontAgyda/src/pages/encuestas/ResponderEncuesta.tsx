@@ -62,7 +62,7 @@ export function ResponderEncuesta({
                     'h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors',
                     respuestas[p.id] === opt ? 'border-brand bg-brand' : 'border-gray-300',
                   )}>
-                    {respuestas[p.id] === opt && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    {respuestas[p.id] === opt && <div className="h-1.5 w-1.5 rounded-full bg-card" />}
                   </div>
                   <input type="radio" name={`p-${p.id}`} value={opt} checked={respuestas[p.id] === opt}
                     onChange={() => setRespuestas({ ...respuestas, [p.id]: opt })} className="sr-only" />

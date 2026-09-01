@@ -88,7 +88,7 @@ export function CarouselManagerModal({ isOpen, onClose }: { isOpen: boolean; onC
         className={clsx(
           'flex items-center gap-2.5 rounded-xl border px-3 py-2 transition-all',
           inCarrusel
-            ? clsx('bg-white', dragId === n.id ? 'opacity-40 border-brand/40 bg-brand/5' : 'border-gray-200 hover:border-gray-300 cursor-grab active:cursor-grabbing')
+            ? clsx('bg-card', dragId === n.id ? 'opacity-40 border-brand/40 bg-brand/5' : 'border-gray-200 hover:border-gray-300 cursor-grab active:cursor-grabbing')
             : 'bg-gray-50/60 border-gray-100 hover:border-gray-200',
           disabled && !inCarrusel && 'opacity-50 cursor-not-allowed',
         )}
@@ -224,7 +224,7 @@ export function CarouselManagerModal({ isOpen, onClose }: { isOpen: boolean; onC
 
       <div className="mt-4 flex justify-end border-t border-gray-100 pt-4">
         <button onClick={onClose}
-          className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+          className="rounded-xl border border-gray-200 bg-card px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
           Cerrar
         </button>
       </div>

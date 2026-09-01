@@ -104,7 +104,7 @@ export function ClimaLaboralPage() {
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {pendientes.length > 0 && (
-              <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+              <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
                   <div className="flex items-center gap-2">
                     <ClipboardList className="h-4 w-4 text-brand" />
@@ -133,7 +133,7 @@ export function ClimaLaboralPage() {
               </div>
             )}
 
-            <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+            <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
                 <h3 className="text-[0.9rem] font-semibold text-ink">Próximos eventos</h3>
                 {eventos.length > 0 && (

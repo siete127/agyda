@@ -76,7 +76,7 @@ function SaldoBar({ saldo }: { saldo: Saldo }) {
   const color = saldo.diasDisponibles > 6 ? 'bg-emerald-500' : saldo.diasDisponibles > 2 ? 'bg-amber-400' : 'bg-red-500'
 
   return (
-    <div className="rounded-2xl border border-surface-border bg-white p-4 space-y-2">
+    <div className="rounded-2xl border border-surface-border bg-card p-4 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-brand" />
@@ -122,7 +122,7 @@ function TablaSolicitudes({ solicitudes, isAdmin, puedeAprobar, showAcciones = t
 }) {
   const mostrarAcciones = puedeAprobar && showAcciones
   return (
-    <div className="rounded-2xl border border-surface-border bg-white overflow-x-auto">
+    <div className="rounded-2xl border border-surface-border bg-card overflow-x-auto">
       <table className="w-full text-[0.78rem]">
         <thead>
           <tr className="border-b border-surface-border text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">
@@ -207,7 +207,7 @@ function ListaSolicitudes({ solicitudes, isLoading, isAdmin, puedeAprobar, tipoF
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-surface-border bg-white p-4 animate-pulse space-y-3">
+      <div className="rounded-2xl border border-surface-border bg-card p-4 animate-pulse space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex gap-3 items-center">
             <div className="h-5 w-20 rounded-full bg-surface" />
@@ -220,7 +220,7 @@ function ListaSolicitudes({ solicitudes, isLoading, isAdmin, puedeAprobar, tipoF
 
   if (filtradas.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-surface-border bg-white py-14">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-surface-border bg-card py-14">
         <Umbrella className="h-8 w-8 text-surface-border" />
         <p className="text-sm text-ink-tertiary">Sin solicitudes</p>
       </div>
@@ -466,7 +466,7 @@ export function VacacionesPage() {
     <div className="space-y-5 animate-fade-in">
 
       {/* Banner */}
-      <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+      <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
         <div className="relative overflow-hidden px-6 py-5" style={{ background: 'linear-gradient(135deg, #0B1730 0%, #14274E 100%)' }}>
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
           <div className="relative flex items-center justify-between flex-wrap gap-3">
@@ -488,7 +488,7 @@ export function VacacionesPage() {
                 </button>
               )}
               {puedeNuevaSolicitud && (
-                <Button onClick={() => setShowNueva(true)} className="bg-white !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                <Button onClick={() => setShowNueva(true)} className="bg-card !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Plus className="h-3.5 w-3.5" /> Nueva solicitud
                 </Button>
               )}
@@ -509,7 +509,7 @@ export function VacacionesPage() {
               title={bloqueada ? 'Disponible al cumplir 1 año de antigüedad' : undefined}
               className={clsx(
                 'rounded-lg px-5 py-2 text-[0.78rem] font-semibold transition-all',
-                tabEfectiva === key ? 'bg-white text-brand' : 'text-ink-secondary hover:text-ink',
+                tabEfectiva === key ? 'bg-card text-brand' : 'text-ink-secondary hover:text-ink',
                 bloqueada && 'opacity-40 cursor-not-allowed hover:text-ink-secondary',
               )}
             >
@@ -523,7 +523,7 @@ export function VacacionesPage() {
             onClick={() => setTab('resumen')}
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-5 py-2 text-[0.78rem] font-semibold transition-all',
-              tabEfectiva === 'resumen' ? 'bg-white text-brand' : 'text-ink-secondary hover:text-ink',
+              tabEfectiva === 'resumen' ? 'bg-card text-brand' : 'text-ink-secondary hover:text-ink',
             )}
           >
             <BarChart2 className="h-3.5 w-3.5" /> Días por agente

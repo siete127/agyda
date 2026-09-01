@@ -40,7 +40,7 @@ export function IntegracionesTab() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-3 flex items-center gap-2">
           <Plug className="h-4 w-4 text-brand" />
           <p className="text-sm font-semibold text-ink">Integraciones</p>

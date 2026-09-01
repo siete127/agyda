@@ -82,7 +82,7 @@ export function IncidenciasPage() {
           <p className="text-sm font-semibold text-gray-700">Sin incidencias</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="divide-y divide-gray-50">
             {incidencias.map((inc) => {
               const prioCfg = PRIORIDAD_INCIDENCIA_CONFIG[inc.prioridad]

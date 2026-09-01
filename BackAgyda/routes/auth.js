@@ -4,6 +4,7 @@ const authController = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth');
 
 router.get('/empresas', authController.getEmpresas);
+router.post('/detectar-hogar', authController.detectarHogar);
 router.post('/login', authController.login);
 router.post('/ventas-login', authController.ventasLogin);
 router.post('/ventas-auto-login', authController.ventasAutoLogin);

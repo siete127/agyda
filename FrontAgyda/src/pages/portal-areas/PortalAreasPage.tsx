@@ -48,7 +48,7 @@ export function PortalAreasPage() {
             <Link
               key={areaKey}
               to={AREA_PATHS[areaKey]}
-              className="group flex flex-col gap-3 rounded-2xl border border-gray-100 bg-white p-5 shadow-card transition-all hover:shadow-card-lg hover:border-brand/30"
+              className="group flex flex-col gap-3 rounded-2xl border border-gray-100 bg-card p-5 shadow-card transition-all hover:shadow-card-lg hover:border-brand/30"
             >
               <div className="flex items-center justify-between">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand/10">

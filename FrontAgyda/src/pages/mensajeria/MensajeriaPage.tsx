@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus } from 'lucide-react'
+import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus, MoreVertical, Pencil, Trash2, Check } from 'lucide-react'
 import { mensajeriaService } from '@/services/mensajeria.service'
 import { useMensajeriaStore } from '@/stores/mensajeria.store'
 import { getSocket } from '@/lib/socket'
@@ -12,7 +13,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { EmojiPicker } from '@/components/ui/EmojiPicker'
 import { NuevoGrupoModal } from './NuevoGrupoModal'
 import { DriveArchivoPicker } from './DriveArchivoPicker'
-import type { MensajeriaCanal, MensajeriaMensaje, MensajeriaConfig } from '@/types/mensajeria.types'
+import type { MensajeriaCanal, MensajeriaMensaje, MensajeriaConfig, MensajeriaReaccion } from '@/types/mensajeria.types'
 import { parseMensajeriaMensaje } from '@/types/mensajeria.types'
 import { getContrastTextColor } from '@/lib/color'
 import { api } from '@/lib/axios'
@@ -20,6 +21,18 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
 const MAX_ADJUNTO_MB = 15
+const REACCIONES_RAPIDAS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
+// Agrupa las reacciones de un mensaje por emoji, para mostrar "👍 2" en vez de
+// una burbuja repetida por cada persona que reaccionó igual.
+function agruparReacciones(reacciones: MensajeriaReaccion[]) {
+  const grupos = new Map<string, MensajeriaReaccion[]>()
+  for (const r of reacciones) {
+    if (!grupos.has(r.emoji)) grupos.set(r.emoji, [])
+    grupos.get(r.emoji)!.push(r)
+  }
+  return Array.from(grupos.entries()).map(([emoji, lista]) => ({ emoji, lista }))
+}
 
 function esImagen(url: string): boolean {
   return /\.(png|jpe?g|gif|webp|svg)$/i.test(url)
@@ -82,7 +95,7 @@ function NuevoDMPicker({ onClose, onCreado }: { onClose: () => void; onCreado: (
     .filter((u) => u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
 
   return (
-    <div className="absolute inset-x-3 top-14 z-20 rounded-xl border border-gray-200 bg-white shadow-lg">
+    <div className="absolute inset-x-3 top-14 z-20 rounded-xl border border-gray-200 bg-card shadow-lg">
       <div className="p-2 border-b border-gray-100">
         <input
           autoFocus
@@ -160,15 +173,40 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   const [mensajes, setMensajes] = useState<MensajeriaMensaje[]>([])
   const [texto, setTexto] = useState('')
   const [archivo, setArchivo] = useState<File | null>(null)
+  const [arrastrandoArchivo, setArrastrandoArchivo] = useState(false)
+  const dragCounterRef = useRef(0)
   const [drivePickerOpen, setDrivePickerOpen] = useState(false)
   const [aparienciaOpen, setAparienciaOpen] = useState(false)
+  const [miembrosOpen, setMiembrosOpen] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [otrosEscribiendo, setOtrosEscribiendo] = useState<string | null>(null)
+  // Id del mensaje sobre el que se muestra la barra de reacciones rápidas
+  // (hover/click), y si además está abierto el selector completo de emojis.
+  const [reaccionandoId, setReaccionandoId] = useState<number | null>(null)
+  const [pickerReaccionId, setPickerReaccionId] = useState<number | null>(null)
+  // Menú "..." (editar/eliminar) del mensaje propio abierto, id del mensaje en
+  // edición inline y su texto en curso, y el mensaje pendiente de confirmar borrado.
+  const [menuMensajeId, setMenuMensajeId] = useState<number | null>(null)
+  const [editandoId, setEditandoId] = useState<number | null>(null)
+  const [textoEdicion, setTextoEdicion] = useState('')
+  const [confirmarEliminarId, setConfirmarEliminarId] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const mensajesContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stopTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Cierra el menú "..." (editar/eliminar) al hacer clic fuera de él.
+  useEffect(() => {
+    if (menuMensajeId === null) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuMensajeId(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuMensajeId])
 
   const qc = useQueryClient()
   const { data: config } = useQuery({
@@ -181,6 +219,13 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     mutationFn: (payload: Partial<MensajeriaConfig>) => mensajeriaService.actualizarMiConfig(payload),
     onSuccess: (nuevaConfig) => qc.setQueryData(['mensajeria-mi-config'], nuevaConfig),
     onError: () => toast.error('No se pudo guardar la apariencia'),
+  })
+
+  // Solo se piden al abrir el panel — no hace falta cargarlos en cada mensaje.
+  const { data: canalDetalle, isLoading: cargandoMiembros } = useQuery({
+    queryKey: ['mensajeria-canal-detalle', canal.id],
+    queryFn: () => mensajeriaService.getCanal(canal.id),
+    enabled: miembrosOpen && canal.tipo === 'grupo',
   })
 
   const oscuro = config?.tema === 'oscuro'
@@ -221,6 +266,22 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     }
   })
 
+  useSocketEvent<{ mensajeId: number; canalId: number; reacciones: MensajeriaReaccion[] }>('mensajeria:reaccion', (payload) => {
+    if (payload.canalId !== canal.id) return
+    setMensajes((prev) => prev.map((m) => (m.id === payload.mensajeId ? { ...m, reacciones: payload.reacciones } : m)))
+  })
+
+  useSocketEvent<Record<string, unknown>>('mensajeria:mensaje_editado', (raw) => {
+    const msg = parseMensajeriaMensaje(raw)
+    if (msg.canalId !== canal.id) return
+    setMensajes((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
+  })
+
+  useSocketEvent<{ mensajeId: number; canalId: number }>('mensajeria:mensaje_eliminado', (payload) => {
+    if (payload.canalId !== canal.id) return
+    setMensajes((prev) => prev.filter((m) => m.id !== payload.mensajeId))
+  })
+
   useSocketEvent<{ canalId: number; usuarioId: number; usuarioNombre: string; isTyping: boolean }>('mensajeria:typing', (payload) => {
     if (payload.canalId !== canal.id || payload.usuarioId === user?.id) return
     if (stopTypingTimeoutRef.current) clearTimeout(stopTypingTimeoutRef.current)
@@ -232,8 +293,12 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     }
   })
 
+  // Solo hace auto-scroll si el usuario ya estaba cerca del final — así no lo
+  // interrumpe si está leyendo mensajes viejos hacia arriba cuando llega uno nuevo.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = mensajesContainerRef.current
+    const cercaDelFinal = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 150
+    if (cercaDelFinal) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensajes])
 
   const enviar = useMutation({
@@ -261,15 +326,56 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     typingTimeoutRef.current = setTimeout(() => emitTyping(false), 2000)
   }
 
-  const handleSeleccionArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
+  // Punto único de validación/asignación de archivo — usado por el selector de
+  // archivos, pegar del portapapeles (Ctrl+V) y arrastrar-soltar.
+  const adjuntarArchivo = (file: File) => {
+    if (config?.permitirAdjuntos === false) return
     if (file.size > MAX_ADJUNTO_MB * 1024 * 1024) {
       toast.error(`El archivo supera el límite de ${MAX_ADJUNTO_MB}MB`)
       return
     }
     setArchivo(file)
+  }
+
+  const handleSeleccionArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    adjuntarArchivo(file)
+  }
+
+  // Pegar una imagen copiada (captura de pantalla, "Copiar imagen" desde el
+  // navegador, etc.) directamente en el campo de texto con Ctrl+V.
+  const handlePegarArchivo = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const archivoPegado = Array.from(e.clipboardData.items)
+      .find((item) => item.kind === 'file')
+      ?.getAsFile()
+    if (!archivoPegado) return
+    e.preventDefault()
+    adjuntarArchivo(archivoPegado)
+  }
+
+  // Arrastrar y soltar un archivo sobre el panel del chat — dragCounterRef evita
+  // que el overlay parpadee al pasar por encima de elementos hijos (cada uno
+  // dispara su propio dragenter/dragleave).
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (!e.dataTransfer.types.includes('Files')) return
+    dragCounterRef.current += 1
+    setArrastrandoArchivo(true)
+  }
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current -= 1
+    if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setArrastrandoArchivo(false) }
+  }
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault() }
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setArrastrandoArchivo(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) adjuntarArchivo(file)
   }
 
   const handleEnviar = () => {
@@ -279,6 +385,50 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     emitTyping(false)
     enviar.mutate({ contenido, file: archivo })
   }
+
+  // Toca la misma reacción propia = la quita (toggle); toca otra = la reemplaza
+  // (una sola reacción activa por usuario y mensaje, igual que WhatsApp).
+  const handleReaccionar = (mensajeId: number, emoji: string) => {
+    const mensaje = mensajes.find((m) => m.id === mensajeId)
+    const propia = mensaje?.reacciones.find((r) => r.usuarioId === user?.id)
+    const accion = propia?.emoji === emoji
+      ? mensajeriaService.quitarReaccion(mensajeId)
+      : mensajeriaService.reaccionarMensaje(mensajeId, emoji)
+    accion
+      .then((reacciones) => setMensajes((prev) => prev.map((m) => (m.id === mensajeId ? { ...m, reacciones } : m))))
+      .catch(() => {})
+    setReaccionandoId(null)
+    setPickerReaccionId(null)
+  }
+
+  const iniciarEdicion = (m: MensajeriaMensaje) => {
+    setEditandoId(m.id)
+    setTextoEdicion(m.contenido)
+    setMenuMensajeId(null)
+  }
+
+  const editarMensaje = useMutation({
+    mutationFn: ({ mensajeId, contenido }: { mensajeId: number; contenido: string }) =>
+      mensajeriaService.editarMensaje(mensajeId, contenido),
+    onSuccess: (msg) => {
+      setMensajes((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
+      setEditandoId(null)
+    },
+  })
+
+  const guardarEdicion = (mensajeId: number) => {
+    const contenido = textoEdicion.trim()
+    if (!contenido) return
+    editarMensaje.mutate({ mensajeId, contenido })
+  }
+
+  const eliminarMensaje = useMutation({
+    mutationFn: (mensajeId: number) => mensajeriaService.eliminarMensaje(mensajeId),
+    onSuccess: (_data, mensajeId) => {
+      setMensajes((prev) => prev.filter((m) => m.id !== mensajeId))
+      setConfirmarEliminarId(null)
+    },
+  })
 
   const handleSeleccionEmoji = (emoji: string) => {
     const input = inputRef.current
@@ -308,7 +458,21 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   }
 
   return (
-    <div className={clsx('flex-1 flex flex-col min-h-0', oscuro && 'bg-gray-900')}>
+    <div
+      className={clsx('relative flex-1 flex flex-col min-h-0', oscuro && 'bg-gray-900')}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {arrastrandoArchivo && config?.permitirAdjuntos !== false && (
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-4 border-dashed border-brand bg-brand/10 backdrop-blur-[1px]">
+          <div className="flex flex-col items-center gap-2 rounded-2xl bg-card px-6 py-4 shadow-xl">
+            <Paperclip className="h-8 w-8 text-brand" />
+            <p className="text-sm font-semibold text-brand">Suelta el archivo para adjuntarlo</p>
+          </div>
+        </div>
+      )}
       <div className={clsx('px-5 py-3 border-b flex items-center gap-2.5 shrink-0 relative', oscuro ? 'border-gray-700' : 'border-gray-100')}>
         {canal.tipo === 'grupo' ? (
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/10 text-brand">
@@ -339,6 +503,15 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
             <X className="h-4 w-4" />
           </button>
         )}
+        {canal.tipo === 'grupo' && (
+          <button
+            onClick={() => setMiembrosOpen((v) => !v)}
+            className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100')}
+            title="Ver integrantes del grupo"
+          >
+            <Users className="h-4 w-4" />
+          </button>
+        )}
         <button
           onClick={() => setAparienciaOpen((v) => !v)}
           className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100')}
@@ -347,12 +520,45 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
           <Settings className="h-4 w-4" />
         </button>
 
+        {miembrosOpen && canal.tipo === 'grupo' && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setMiembrosOpen(false)} />
+            <div className={clsx(
+              'absolute right-4 top-12 z-20 w-64 rounded-xl border shadow-lg p-3',
+              oscuro ? 'bg-gray-800 border-gray-700' : 'bg-card border-gray-200',
+            )}>
+              <p className={clsx('mb-2 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>
+                Integrantes {canalDetalle ? `(${canalDetalle.miembros.length})` : ''}
+              </p>
+              {cargandoMiembros ? (
+                <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+              ) : (
+                <div className="max-h-64 space-y-1 overflow-y-auto">
+                  {canalDetalle?.miembros.map((m) => (
+                    <div key={m.usuarioId} className="flex items-center gap-2 rounded-lg px-1.5 py-1.5">
+                      <Avatar name={m.nombre} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className={clsx('truncate text-sm', oscuro ? 'text-gray-100' : 'text-gray-800')}>
+                          {m.nombre}{m.usuarioId === user?.id && ' (tú)'}
+                        </p>
+                        {m.usuarioId === canal.creadoPor && (
+                          <p className="text-[0.65rem] text-brand">Creador del grupo</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {aparienciaOpen && config && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setAparienciaOpen(false)} />
             <div className={clsx(
               'absolute right-4 top-12 z-20 w-64 rounded-xl border shadow-lg p-3',
-              oscuro ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200',
+              oscuro ? 'bg-gray-800 border-gray-700' : 'bg-card border-gray-200',
             )}>
               <p className={clsx('mb-2 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>Apariencia del chat</p>
 
@@ -394,51 +600,219 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
         )}
       </div>
 
-      <div className={clsx('flex-1 overflow-y-auto px-5 py-4 space-y-3', oscuro ? 'bg-gray-900' : 'bg-gray-50')}>
-        {mensajes.map((m) => {
+      <div ref={mensajesContainerRef} className={clsx('flex-1 overflow-y-auto px-5 py-4', oscuro ? 'bg-gray-900' : 'bg-gray-50')}>
+        {mensajes.map((m, i) => {
           const esMio = m.emisorId === user?.id
           const bgColor = esMio ? colorPropio : colorAjeno
           const textColor = esMio ? textColorPropio : textColorAjeno
+          const grupos = agruparReacciones(m.reacciones)
+          const miReaccion = m.reacciones.find((r) => r.usuarioId === user?.id)?.emoji
+          // Mensajes consecutivos del mismo remitente quedan más pegados entre
+          // sí (como WhatsApp agrupa una racha); más aire cuando cambia quién habla.
+          const mismoRemitenteQueAnterior = i > 0 && mensajes[i - 1].emisorId === m.emisorId
           return (
-            <div key={m.id} className={clsx('flex', esMio ? 'justify-end' : 'justify-start')}>
+            <div key={m.id} className={clsx('flex flex-col animate-fade-in', esMio ? 'items-end' : 'items-start', mismoRemitenteQueAnterior ? 'mt-1' : 'mt-4')}>
               <div
-                className={clsx(
-                  'max-w-[70%] rounded-2xl px-4 py-2 text-sm',
-                  esMio ? 'rounded-br-sm' : 'rounded-bl-sm border',
-                  !esMio && (oscuro ? 'border-gray-700' : 'border-gray-200'),
-                )}
-                style={{ backgroundColor: bgColor, color: textColor }}
+                className={clsx('relative flex', esMio ? 'justify-end' : 'justify-start')}
+                onMouseEnter={() => setReaccionandoId(m.id)}
+                onMouseLeave={() => setReaccionandoId((v) => (v === m.id ? null : v))}
               >
-                {!esMio && canal.tipo === 'grupo' && (
-                  <div className="text-[0.68rem] font-semibold text-brand mb-0.5">{m.emisorNombre}</div>
-                )}
-                {m.contenido && <p>{m.contenido}</p>}
-                {m.archivoUrl && (
-                  esImagen(m.archivoUrl) ? (
-                    <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="block mt-1">
-                      <img src={m.archivoUrl} alt={nombreDeUrl(m.archivoUrl)} className="max-w-[220px] rounded-lg" />
-                    </a>
-                  ) : (
-                    <div
-                      className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium"
-                      style={{ backgroundColor: `${textColor === 'white' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'}` }}
+                {/* Barra de reacciones rápidas — aparece al hacer hover del mensaje */}
+                {reaccionandoId === m.id && (
+                  <div
+                    className={clsx(
+                      'absolute -top-9 z-20 flex items-center gap-0.5 rounded-full border px-1 py-1 shadow-lg',
+                      esMio ? 'right-0' : 'left-0',
+                      oscuro ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white',
+                    )}
+                  >
+                    {REACCIONES_RAPIDAS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleReaccionar(m.id, emoji)}
+                        className={clsx(
+                          'flex h-7 w-7 items-center justify-center rounded-full text-base transition-transform hover:scale-125',
+                          miReaccion === emoji && 'bg-brand-light',
+                        )}
+                        title={emoji}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setPickerReaccionId(m.id)}
+                      className={clsx(
+                        'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full',
+                        oscuro ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-400 hover:bg-gray-100',
+                      )}
+                      title="Más emojis"
                     >
-                      <FileText className="h-3.5 w-3.5 flex-shrink-0" />
-                      {esPrevisualizable(m.archivoUrl) ? (
-                        <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="truncate max-w-[140px] hover:underline">
-                          {nombreDeUrl(m.archivoUrl)}
+                      <Smile size={14} />
+                    </button>
+                    {esMio && (
+                      <button
+                        onClick={() => setMenuMensajeId((v) => (v === m.id ? null : m.id))}
+                        className={clsx(
+                          'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full',
+                          oscuro ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-400 hover:bg-gray-100',
+                        )}
+                        title="Más opciones"
+                      >
+                        <MoreVertical size={14} />
+                      </button>
+                    )}
+                    {pickerReaccionId === m.id && (
+                      <div className={clsx('absolute top-9 z-30', esMio ? 'right-0' : 'left-0')}>
+                        <EmojiPicker
+                          onSelect={(emoji) => handleReaccionar(m.id, emoji)}
+                          onClose={() => setPickerReaccionId(null)}
+                          className="w-72"
+                        />
+                      </div>
+                    )}
+                    {menuMensajeId === m.id && (
+                      <div ref={menuRef} className={clsx(
+                        'absolute top-9 right-0 z-30 w-36 overflow-hidden rounded-xl border shadow-lg animate-fade-in',
+                        oscuro ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white',
+                      )}>
+                        {!m.archivoUrl && (
+                          <button
+                            onClick={() => iniciarEdicion(m)}
+                            className={clsx(
+                              'flex w-full items-center gap-2 px-3 py-2 text-left text-xs',
+                              oscuro ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                          >
+                            <Pencil size={13} /> Editar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setConfirmarEliminarId(m.id); setMenuMensajeId(null) }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 size={13} /> Eliminar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {editandoId === m.id ? (
+                  <div
+                    className={clsx(
+                      'max-w-[70%] rounded-2xl px-4 py-2 text-sm',
+                      esMio ? 'rounded-br-sm' : 'rounded-bl-sm border',
+                      !esMio && (oscuro ? 'border-gray-700' : 'border-gray-200'),
+                    )}
+                    style={{ backgroundColor: bgColor, color: textColor }}
+                  >
+                    <input
+                      autoFocus
+                      value={textoEdicion}
+                      onChange={(e) => setTextoEdicion(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') guardarEdicion(m.id)
+                        if (e.key === 'Escape') setEditandoId(null)
+                      }}
+                      className="w-full min-w-[160px] border-b bg-transparent text-sm outline-none"
+                      style={{ borderColor: textColor === 'white' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)', color: textColor }}
+                    />
+                    <div className="mt-1 flex items-center justify-end gap-2">
+                      <button onClick={() => setEditandoId(null)} className="text-[10px] opacity-80 hover:opacity-100" style={{ color: textColor }}>
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => guardarEdicion(m.id)}
+                        disabled={!textoEdicion.trim() || editarMensaje.isPending}
+                        className="flex items-center gap-0.5 text-[10px] font-semibold opacity-90 hover:opacity-100 disabled:opacity-40"
+                        style={{ color: textColor }}
+                      >
+                        <Check size={11} /> Guardar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className={clsx(
+                      'inline-flex min-w-[64px] max-w-[70%] flex-col overflow-hidden rounded-2xl px-4 py-2 text-sm',
+                      esMio ? 'rounded-br-sm' : 'rounded-bl-sm border',
+                      !esMio && (oscuro ? 'border-gray-700' : 'border-gray-200'),
+                    )}
+                    style={{ backgroundColor: bgColor, color: textColor }}
+                  >
+                    {!esMio && canal.tipo === 'grupo' && (
+                      <div className="text-[0.68rem] font-semibold text-brand mb-0.5">{m.emisorNombre}</div>
+                    )}
+                    {m.contenido && <p className="whitespace-pre-wrap break-words">{m.contenido.trim()}</p>}
+                    {m.archivoUrl && (
+                      esImagen(m.archivoUrl) ? (
+                        <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="block mt-1">
+                          <img src={m.archivoUrl} alt={nombreDeUrl(m.archivoUrl)} className="block w-full max-w-[220px] h-auto rounded-lg object-cover" />
                         </a>
                       ) : (
-                        <span className="truncate max-w-[140px]">{nombreDeUrl(m.archivoUrl)}</span>
-                      )}
-                      <a href={m.archivoUrl} download className="flex-shrink-0 hover:opacity-70" title="Descargar">
-                        <Download className="h-3 w-3" />
-                      </a>
+                        <div
+                          className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium"
+                          style={{ backgroundColor: `${textColor === 'white' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'}` }}
+                        >
+                          <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+                          {esPrevisualizable(m.archivoUrl) ? (
+                            <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="truncate max-w-[140px] hover:underline">
+                              {nombreDeUrl(m.archivoUrl)}
+                            </a>
+                          ) : (
+                            <span className="truncate max-w-[140px]">{nombreDeUrl(m.archivoUrl)}</span>
+                          )}
+                          <a href={m.archivoUrl} download className="flex-shrink-0 hover:opacity-70" title="Descargar">
+                            <Download className="h-3 w-3" />
+                          </a>
+                        </div>
+                      )
+                    )}
+                    <div className="flex items-center justify-end gap-1 text-[10px] mt-1 opacity-70 whitespace-nowrap" style={{ color: textColor }}>
+                      {m.editado && <span className="italic">editado ·</span>}
+                      <span>{formatHora(m.fecha)}</span>
                     </div>
-                  )
+                  </div>
                 )}
-                <div className={clsx('text-[10px] mt-1 opacity-70')} style={{ color: textColor }}>{formatHora(m.fecha)}</div>
               </div>
+              {confirmarEliminarId === m.id && (
+                <div className={clsx(
+                  'mt-1 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs',
+                  oscuro ? 'border-red-900 bg-red-950/40' : 'border-red-200 bg-red-50',
+                )}>
+                  <span className="text-red-500">¿Eliminar este mensaje?</span>
+                  <button
+                    onClick={() => eliminarMensaje.mutate(m.id)}
+                    disabled={eliminarMensaje.isPending}
+                    className="font-semibold text-red-600 hover:text-red-800"
+                  >
+                    Sí
+                  </button>
+                  <button onClick={() => setConfirmarEliminarId(null)} className={oscuro ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}>
+                    No
+                  </button>
+                </div>
+              )}
+              {/* Chips de reacciones agrupadas por emoji */}
+              {grupos.length > 0 && (
+                <div className={clsx('mt-0.5 flex flex-wrap gap-1', esMio ? 'justify-end' : 'justify-start')}>
+                  {grupos.map(({ emoji, lista }) => (
+                    <button
+                      key={emoji}
+                      onClick={() => handleReaccionar(m.id, emoji)}
+                      title={lista.map((r) => r.usuarioNombre).join(', ')}
+                      className={clsx(
+                        'flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs transition-colors',
+                        lista.some((r) => r.usuarioId === user?.id)
+                          ? 'border-brand bg-brand-light'
+                          : oscuro ? 'border-gray-700 bg-gray-800 hover:bg-gray-700' : 'border-gray-200 bg-white hover:bg-gray-50',
+                      )}
+                    >
+                      <span>{emoji}</span>
+                      {lista.length > 1 && <span className={oscuro ? 'text-gray-400' : 'text-gray-500'}>{lista.length}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
@@ -498,6 +872,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
             value={texto}
             onChange={(e) => handleChangeTexto(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleEnviar()}
+            onPaste={handlePegarArchivo}
             placeholder="Escribe un mensaje..."
             className={clsx(
               'flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
@@ -541,6 +916,18 @@ export function MensajeriaPage() {
     setCanales(canales)
   }, [canales, setCanales])
 
+  // Deep-link ?canal=<id> (desde notificaciones) — abre esa conversación.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [linkAbierto, setLinkAbierto] = useState<string | null>(null)
+  const canalParam = searchParams.get('canal')
+  if (canalParam && canalParam !== linkAbierto && canales.length > 0) {
+    setLinkAbierto(canalParam)
+    if (canales.some((c) => c.id === Number(canalParam))) abrirChat(Number(canalParam))
+    const next = new URLSearchParams(searchParams)
+    next.delete('canal')
+    setSearchParams(next, { replace: true })
+  }
+
   // Al salir del módulo, ya no hay "canal abierto" — así la burbuja flotante
   // vuelve a poder mostrar avisos de cualquier conversación.
   useEffect(() => {
@@ -574,7 +961,7 @@ export function MensajeriaPage() {
         </Button>
       </div>
 
-      <div className="flex-1 flex bg-white rounded-xl border border-gray-200 overflow-hidden min-h-0">
+      <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
         <div className="w-72 border-r border-gray-100 flex flex-col shrink-0 relative">
           <div className="p-3 border-b border-gray-100">
             <Button size="sm" variant="ghost" className="w-full" onClick={() => setPickerOpen((v) => !v)}>
@@ -633,7 +1020,7 @@ export function MensajeriaPage() {
             <button
               key={canal.id}
               onClick={() => restaurarChat(canal.id)}
-              className="group relative flex items-center gap-2 rounded-full border border-gray-200 bg-white pl-1.5 pr-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors"
+              className="group relative flex items-center gap-2 rounded-full border border-gray-200 bg-card pl-1.5 pr-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors"
               title={canal.nombre || 'Conversación'}
             >
               {canal.tipo === 'grupo' ? (

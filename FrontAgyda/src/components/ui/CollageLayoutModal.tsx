@@ -223,7 +223,7 @@ export function CollageLayoutModal({ isOpen, onClose, onNuevaNoticia }: Props) {
                       ? 'border-brand/50 bg-brand/5 shadow-sm'
                       : dragOver === idx
                       ? 'border-brand/30 bg-brand/3'
-                      : 'border-gray-100 bg-white hover:border-gray-200',
+                      : 'border-gray-100 bg-card hover:border-gray-200',
                     dragIdx === idx && 'opacity-40',
                   )}
                 >

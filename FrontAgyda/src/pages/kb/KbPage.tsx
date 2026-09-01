@@ -43,11 +43,10 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
   const [tipo, setTipo] = useState<KbTipo>(articulo?.tipo ?? 'articulo')
 
   const guardar = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const contenido = combinarContenido(problema, solucion)
-      return articulo
-        ? kbService.update(articulo.id, { titulo, contenido, categoria: categoria || undefined, tipo })
-        : kbService.create({ titulo, contenido, categoria: categoria || undefined, tipo })
+      if (articulo) await kbService.update(articulo.id, { titulo, contenido, categoria: categoria || undefined, tipo })
+      else await kbService.create({ titulo, contenido, categoria: categoria || undefined, tipo })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kb-articulos'] })
@@ -138,7 +137,7 @@ export function KbPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="rounded-2xl border border-surface-border bg-white overflow-hidden">
+      <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
         <div className="relative overflow-hidden px-6 py-5" style={{ background: 'linear-gradient(135deg, #0B1730 0%, #14274E 100%)' }}>
           <div className="relative flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -146,12 +145,12 @@ export function KbPage() {
                 <BookOpen className="h-5 w-5 text-brand-muted" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Base de Conocimiento</h1>
+                <h1 className="text-lg font-bold text-white tracking-tight">ArdaWiki</h1>
                 <p className="mt-0.5 text-xs text-white/50">{articulos.length} artículos</p>
               </div>
             </div>
             {isTI && (
-              <Button onClick={() => setEditing('nuevo')} className="bg-white !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+              <Button onClick={() => setEditing('nuevo')} className="bg-card !text-brand hover:bg-surface !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <Plus className="h-3.5 w-3.5" /> Nuevo contenido
               </Button>
             )}

@@ -22,7 +22,7 @@ function NewsCard({ noticia, onOpen }: { noticia: Noticia; onOpen: (n: Noticia) 
   return (
     <article
       className={clsx(
-        'flex-shrink-0 w-[260px] flex flex-col overflow-hidden rounded-2xl bg-white border border-gray-200/60 cursor-pointer transition-all duration-200',
+        'flex-shrink-0 w-[260px] flex flex-col overflow-hidden rounded-2xl bg-card border border-gray-200/60 cursor-pointer transition-all duration-200',
         hovered ? '-translate-y-1 shadow-card-lg border-gray-300/60' : 'shadow-card',
       )}
       onMouseEnter={() => setHovered(true)}
@@ -123,7 +123,7 @@ export function NewsSection({ title, items, onOpen, onVerTodas }: NewsSectionPro
             className={clsx(
               'flex h-7 w-7 items-center justify-center rounded-lg border transition-all',
               canLeft
-                ? 'border-gray-200 bg-white text-gray-600 hover:border-brand hover:text-brand shadow-sm'
+                ? 'border-gray-200 bg-card text-gray-600 hover:border-brand hover:text-brand shadow-sm'
                 : 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed',
             )}
           >
@@ -135,7 +135,7 @@ export function NewsSection({ title, items, onOpen, onVerTodas }: NewsSectionPro
             className={clsx(
               'flex h-7 w-7 items-center justify-center rounded-lg border transition-all',
               canRight
-                ? 'border-gray-200 bg-white text-gray-600 hover:border-brand hover:text-brand shadow-sm'
+                ? 'border-gray-200 bg-card text-gray-600 hover:border-brand hover:text-brand shadow-sm'
                 : 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed',
             )}
           >

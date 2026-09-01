@@ -34,6 +34,8 @@ function PonerMetaModal({ periodo, onClose }: { periodo: string; onClose: () => 
     mutationFn: () => ventasAreaService.createMeta({
       asesorId: Number(asesorId),
       periodo,
+      tipo: 'mensual',
+      alcance: 'asesor',
       metaMonto: metaMonto === '' ? undefined : Number(metaMonto),
       metaUnidades: metaUnidades === '' ? undefined : Number(metaUnidades),
     }),

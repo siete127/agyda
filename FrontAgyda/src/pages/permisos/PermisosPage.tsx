@@ -124,7 +124,7 @@ function PermisoCard({ permiso, isAdmin, isMine, onApprove, onReject, onCancelar
   return (
     <div
       className={clsx(
-        'overflow-hidden rounded-2xl bg-white border transition-all duration-200 p-4',
+        'overflow-hidden rounded-2xl bg-card border transition-all duration-200 p-4',
         hovered ? '-translate-y-0.5 shadow-card-md border-gray-300/60' : 'shadow-card border-gray-200/60',
       )}
       onMouseEnter={() => setHovered(true)}
@@ -251,7 +251,7 @@ export function PermisosPage() {
               <button onClick={() => refetch()} className={clsx('flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors', isRefetching && 'animate-spin')}>
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              <Button onClick={() => setShowNuevo(true)} className="bg-white !text-emerald-700 hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+              <Button onClick={() => setShowNuevo(true)} className="bg-card !text-emerald-700 hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                 <Plus className="h-3.5 w-3.5" /> Solicitar
               </Button>
             </div>

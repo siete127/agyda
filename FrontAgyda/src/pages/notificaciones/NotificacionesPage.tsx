@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Bell, BellOff, CheckCheck, Trash2 } from 'lucide-react'
 import { useNotificationStore, type NotificationItem } from '@/stores/notification.store'
 import { notificationService } from '@/services/notification.service'
+import { notificationTarget } from '@/lib/notificationTarget'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -211,29 +212,12 @@ export function NotificacionesPage() {
 
 /* ── Fila de notificación ── */
 function NotifRow({ n, onRead, onNavigate }: { n: NotificationItem; onRead: () => void; onNavigate: (path: string) => void }) {
-  const ticketId  = (n.dataExtra as any)?.ticketId
-  const quejaId   = (n.dataExtra as any)?.quejaId
-  const proyectoId = (n.dataExtra as any)?.proyectoId
-  const encuestaId = (n.dataExtra as any)?.encuestaId
-  const isTicket   = !!ticketId  || n.tipo?.toLowerCase().includes('ticket')
-  const isQueja    = !!quejaId   || n.tipo === 'queja_nueva' || n.tipo === 'queja'
-  const isTarea    = n.tipo === 'tarea_completada' || n.tipo === 'tarea'
-  const isEncuesta = !!encuestaId || (n.dataExtra as any)?.action === 'responder_encuesta'
-  const isNavegable = isTicket || isQueja || (isTarea && !!proyectoId) || isEncuesta
+  const target = notificationTarget(n)
+  const isNavegable = !!target
 
   function handleClick() {
     if (!n.leida) onRead()
-    if (isQueja && quejaId) {
-      onNavigate(`/quejas?quejaId=${quejaId}`)
-    } else if (isTicket && ticketId) {
-      onNavigate(`/tickets?id=${ticketId}`)
-    } else if (isTicket) {
-      onNavigate('/tickets')
-    } else if (isTarea && proyectoId) {
-      onNavigate(`/proyectos?id=${proyectoId}`)
-    } else if (isEncuesta) {
-      onNavigate(encuestaId ? `/mis-encuestas?encuesta=${encuestaId}` : '/mis-encuestas')
-    }
+    if (target) onNavigate(target)
   }
 
   return (
@@ -242,7 +226,7 @@ function NotifRow({ n, onRead, onNavigate }: { n: NotificationItem; onRead: () =
       className={clsx(
         'flex items-start gap-3 px-5 py-4 transition-colors',
         isNavegable ? 'cursor-pointer' : (!n.leida ? 'cursor-pointer' : ''),
-        !n.leida ? 'bg-brand/[0.015] hover:bg-brand/[0.03]' : 'bg-white hover:bg-gray-50/50',
+        !n.leida ? 'bg-brand/[0.015] hover:bg-brand/[0.03]' : 'bg-card hover:bg-gray-50/50',
       )}
     >
       <div className={clsx('mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full', getDot(n.tipo))} />

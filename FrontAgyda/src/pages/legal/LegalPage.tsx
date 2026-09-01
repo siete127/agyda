@@ -64,7 +64,7 @@ export function LegalPage() {
         ]}
       />
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-ink">Documentos legales</p>
           {!pendingFile && (
@@ -86,14 +86,14 @@ export function LegalPage() {
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               placeholder="Título del documento"
-              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
             />
             <input
               type="text"
               value={categoria}
               onChange={(e) => setCategoria(e.target.value)}
               placeholder="Categoría (opcional)"
-              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
             />
             <div className="flex justify-end gap-2">
               <button

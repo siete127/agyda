@@ -85,7 +85,7 @@ export function ResponderExamen({
                       'h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors',
                       seleccionada ? 'border-brand bg-brand' : 'border-gray-300',
                     )}>
-                      {seleccionada && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      {seleccionada && <div className="h-1.5 w-1.5 rounded-full bg-card" />}
                     </div>
                     <input
                       type="radio" name={`p-${p.id}`} value={opt.id} checked={seleccionada}

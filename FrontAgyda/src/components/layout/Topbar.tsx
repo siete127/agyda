@@ -1,15 +1,20 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, HelpCircle, BarChart3, MonitorCog } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { NotificationBell } from './NotificationBell'
 import { MensajeriaBell } from './MensajeriaBell'
+import { PerfilMenu } from './PerfilMenu'
 import { getRouteLabel, ROUTES } from '@/router/routes.config'
 import { type Ticket } from '@/types/ticket.types'
 import { type Noticia } from '@/types/noticia.types'
 import logoAgyda from '@/assets/Logo_AGYDA.png'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { personalizacionService } from '@/services/personalizacion.service'
+import { useThemeStore } from '@/stores/theme.store'
+import { clsx } from 'clsx'
 
 interface SearchResult {
   id: string
@@ -22,15 +27,28 @@ interface SearchResult {
 
 export function Topbar() {
   const { sidebarCollapsed, toggleSidebar, setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
+  const dashboardEditMode = useUIStore((s) => s.dashboardEditMode)
+  const setDashboardEditMode = useUIStore((s) => s.setDashboardEditMode)
   const user = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const pageTitle = getRouteLabel(location.pathname)
 
+  // El botón "Editar diseño" es fijo mientras estás en el Inicio.
+  const enInicio = location.pathname === '/dashboard'
+
   const handleSwitchSystem = () => {
     navigate('/ventas')
   }
+
+  const { branding, headerButtons } = usePersonalizacion()
+  const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
+
+  const theme = useThemeStore((s) => s.theme)
+  const cycleTheme = useThemeStore((s) => s.cycle)
+  const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : MonitorSmartphone
+  const themeLabel = theme === 'dark' ? 'Tema: oscuro' : theme === 'light' ? 'Tema: claro' : 'Tema: automático'
 
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -40,7 +58,7 @@ export function Topbar() {
   const canUseMarcador = ['AD', 'CC'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
 
   const openMarcador = () => {
-    window.open('https://web21.rc9.com.mx/', '_blank', 'noopener,noreferrer')
+    window.open('https://dialer20450.pbxhosting.com.mx/', '_blank', 'noopener,noreferrer')
   }
 
   const openMarcadorContingencia = () => {
@@ -64,6 +82,42 @@ export function Topbar() {
   const openGestionMis = () => {
     window.open('https://mis.ardabytec.vip', '_blank', 'noopener,noreferrer')
   }
+
+  // Acción por defecto (URL interna) de cada botón, por key. Si la config trae
+  // una `url`, se abre esa en pestaña nueva en lugar de la acción interna.
+  const accionInterna: Record<string, () => void> = {
+    marcador: openMarcador,
+    contingencia: openMarcadorContingencia,
+    sistemas: handleSwitchSystem,
+    'gestion-mis': openGestionMis,
+  }
+
+  // Estilo + gate por rol de cada botón. `gate` decide si el usuario puede verlo
+  // (además de `visible` en la config: un admin puede ocultar un botón, pero el
+  // rol sigue restringiendo quién lo ve aunque esté visible).
+  const BUTTON_STYLE: Record<string, { className: string; icon: React.ElementType; gate: boolean }> = {
+    contingencia: {
+      className: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
+      icon: Headset, gate: canUseMarcador,
+    },
+    marcador: {
+      className: 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
+      icon: Headset, gate: canUseMarcador,
+    },
+    sistemas: {
+      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
+      icon: BarChart3, gate: true,
+    },
+    'gestion-mis': {
+      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
+      icon: MonitorCog, gate: canUseGestionMis,
+    },
+  }
+
+  const botonesVisibles = headerButtons.filter((b) => {
+    const style = BUTTON_STYLE[b.key]
+    return style && style.gate && b.visible
+  })
 
   const userRoles = user?.tipoUsuario ? [user.tipoUsuario.toUpperCase()] : []
 
@@ -133,7 +187,7 @@ export function Topbar() {
 
   return (
     <>
-    <header className="flex h-[64px] flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-5">
+    <header className="flex h-[64px] flex-shrink-0 items-center gap-3 border-b border-surface-border bg-card px-5">
 
       {/* Izquierda: toggle + logo */}
       <div className="flex items-center gap-2 min-w-0">
@@ -160,14 +214,16 @@ export function Topbar() {
 
         {/* Logo */}
         <div className="hidden items-center gap-2 md:flex">
-          <img src={logoAgyda} alt="AGYDA" className="h-8 w-8 flex-shrink-0 object-contain" />
+          <img src={logoSrc} alt={branding.nombreCorto} className="h-8 w-auto max-w-[120px] flex-shrink-0 object-contain" />
           <div className="leading-tight">
             <p className="text-[1rem] font-extrabold tracking-tight text-ink">
-              ARDABY<span className="text-brand">TEC</span>
+              {branding.nombreCorto}
             </p>
-            <p className="text-[7.5px] font-semibold -mt-0.5 text-ink-tertiary" style={{ letterSpacing: '0.12em' }}>
-              SOLUCIONES EN TECNOLOGÍA
-            </p>
+            {branding.eslogan && (
+              <p className="text-[7.5px] font-semibold -mt-0.5 text-ink-tertiary uppercase" style={{ letterSpacing: '0.12em' }}>
+                {branding.eslogan}
+              </p>
+            )}
           </div>
         </div>
 
@@ -192,7 +248,7 @@ export function Topbar() {
         </div>
 
         {open && results.length > 0 && (
-          <div className="absolute top-full mt-1.5 w-72 rounded-2xl border border-surface-border bg-white shadow-lg z-50 overflow-hidden">
+          <div className="absolute top-full mt-1.5 w-72 rounded-2xl border border-surface-border bg-card shadow-lg z-50 overflow-hidden">
             {results.map((r) => {
               const Icon = ICONS[r.type]
               return (
@@ -218,47 +274,41 @@ export function Topbar() {
       {/* Derecha: notificaciones + perfil */}
       <div className="ml-auto flex items-center gap-2.5">
 
-        {/* Botón marcador contingencia (AzulDial) */}
-        {canUseMarcador && (
+        {/* "Editar diseño" del inicio — fijo mientras estás en la portada */}
+        {enInicio && (
           <button
-            onClick={openMarcadorContingencia}
-            title="Marcador AzulDial"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-sm hover:bg-red-700 transition-colors"
+            onClick={() => setDashboardEditMode(!dashboardEditMode)}
+            className={clsx(
+              'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.72rem] font-semibold transition-colors',
+              dashboardEditMode
+                ? 'border-brand bg-brand text-white hover:bg-brand-dark'
+                : 'border-brand/40 bg-brand/10 text-brand hover:bg-brand/15',
+            )}
           >
-            <Headset className="h-3.5 w-3.5" />
+            <LayoutGrid className="h-3.5 w-3.5" />
+            {dashboardEditMode ? 'Salir de edición' : 'Editar diseño'}
           </button>
         )}
 
-        {/* Botón marcador (Plata) */}
-        {canUseMarcador && (
-          <button
-            onClick={openMarcador}
-            title="Marcador Plata"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 transition-colors"
-          >
-            <Headset className="h-3.5 w-3.5" />
-          </button>
-        )}
-
-        {/* Cambiar de sistema (Intranet / Ventas) */}
-        <button
-          onClick={handleSwitchSystem}
-          title="Ventas"
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand transition-colors"
-        >
-          <BarChart3 className="h-3.5 w-3.5" />
-        </button>
-
-        {/* Gestión MIS — solo para usuarios autorizados */}
-        {canUseGestionMis && (
-          <button
-            onClick={openGestionMis}
-            title="Gestión MIS"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand transition-colors"
-          >
-            <MonitorCog className="h-3.5 w-3.5" />
-          </button>
-        )}
+        {/* Botones del encabezado — configurables por empresa (Configuración →
+            Apariencia → Botones del encabezado). URL vacía = acción interna. */}
+        {botonesVisibles.map((b) => {
+          const style = BUTTON_STYLE[b.key]
+          const Icon = style.icon
+          const onClick = b.url
+            ? () => window.open(b.url, '_blank', 'noopener,noreferrer')
+            : accionInterna[b.key]
+          return (
+            <button
+              key={b.key}
+              onClick={onClick}
+              title={b.label}
+              className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors ${style.className}`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          )
+        })}
 
         <div className="mx-0.5 h-5 w-px bg-surface-border hidden md:block" />
 
@@ -266,9 +316,15 @@ export function Topbar() {
 
         <NotificationBell />
 
-        <button className="hidden text-ink-tertiary hover:text-ink-secondary transition-colors sm:flex" title="Ayuda">
-          <HelpCircle className="h-[19px] w-[19px]" />
+        <button
+          onClick={cycleTheme}
+          title={`${themeLabel} · clic para cambiar`}
+          className="flex text-ink-tertiary hover:text-ink-secondary transition-colors"
+        >
+          <ThemeIcon className="h-[18px] w-[18px]" />
         </button>
+
+        <PerfilMenu />
       </div>
     </header>
 

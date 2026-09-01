@@ -63,7 +63,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', variant =
 
       {/* Panel */}
       <div className={clsx(
-        'relative w-full rounded-2xl bg-white shadow-2xl border border-gray-100/50 overflow-hidden animate-slide-up flex flex-col max-h-[90vh]',
+        'relative w-full rounded-2xl bg-card shadow-2xl border border-gray-100/50 overflow-hidden animate-slide-up flex flex-col max-h-[90vh]',
         sizeClasses[size],
       )}>
         {/* Header */}

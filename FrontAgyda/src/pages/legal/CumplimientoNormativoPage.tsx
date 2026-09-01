@@ -86,7 +86,7 @@ function IntegracionRatCard() {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-blue-600" />
@@ -501,7 +501,7 @@ function TablaObligaciones({ obligaciones, onSelect, onEliminar, puedeEliminar }
   puedeEliminar: boolean
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-card">
       <table className="w-full text-left text-xs">
         <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-ink-tertiary">
           <tr>
@@ -686,7 +686,7 @@ export function CumplimientoNormativoPage() {
       </div>
 
       {data && data.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-card p-3">
           <input
             className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
             placeholder="Buscar por nombre..."
@@ -720,7 +720,7 @@ export function CumplimientoNormativoPage() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay obligaciones normativas registradas.</p>
         </div>
       ) : (

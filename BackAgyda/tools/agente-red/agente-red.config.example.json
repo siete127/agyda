@@ -1,0 +1,18 @@
+{
+  "ApiUrl": "https://intranet.ardabytec.vip:8444/api/tecnologia/red/ingesta",
+  "ApiKey": "PEGAR_AQUI_LA_API_KEY",
+  "Empresa": "agyda",
+  "EnlaceId": null,
+  "AgenteNombre": "PC-RECEPCION",
+  "PingHosts": ["8.8.8.8", "1.1.1.1", "www.google.com"],
+  "SpeedtestCadaMin": 30,
+  "SpeedtestExe": "",
+
+  "HabilitarRouter": true,
+  "RouterHost": "",
+  "RouterUser": "admin",
+  "RouterPass": "",
+  "RouterSnmpComunidad": "public",
+
+  "TimeoutSeg": 30
+}

@@ -4,10 +4,91 @@ const databaseService = require('../services/databaseService');
 const socketService = require('../services/socketService');
 const { buildCookieHeaderFromSetCookieArray, rewriteVentasContent } = require('../utils/helpers');
 const { DEFAULT_TENANT, listTenants } = require('../config/tenants');
+const { revokeToken } = require('../middleware/tokenDenylist');
+const { SUPER_ADMIN_CROSS_EMPRESA_USERNAMES } = require('../utils/superAdmin');
+const { empresaRequierePolitica } = require('../utils/passwordPolicy');
 const logger = global.logger || require('../utils/logger');
+
+// Bypass de login cross-empresa: si el usuario/password no existen en la BD
+// de la empresa elegida, pero SÍ coinciden con la cuenta de este mismo
+// username en la BD maestra 'agyda', se le deja entrar igual — sin necesidad
+// de tener una fila NEUS_USUARIOS propia en cada empresa. Solo aplica a los
+// usernames en SUPER_ADMIN_CROSS_EMPRESA_USERNAMES (ver utils/superAdmin.js),
+// que ya son super admin en cualquier empresa una vez logueados.
+async function intentarLoginCrossEmpresaComoAgyda(usuario, password) {
+  if (!SUPER_ADMIN_CROSS_EMPRESA_USERNAMES.has(String(usuario).toUpperCase())) return null;
+  try {
+    const poolMaestro = await databaseService.getPool(DEFAULT_TENANT);
+    const sql = require('mssql');
+    const r = await poolMaestro.request()
+      .input('usuario', sql.NVarChar, usuario)
+      .input('password', sql.NVarChar, password)
+      .query(`
+        SELECT
+          NEUS_ID AS [ID USUARIO], NEUS_NOMBRES AS [NOMBRE], NEUS_USUARIO,
+          NEUS_CONTRA, username, [password],
+          NEUS_TIPOUSUARIO AS [TIPO USUARIO], NEUS_STATUS AS [STATUS],
+          NEUS_ACTIVO AS [ACTIVO], NEUS_BASE AS [CARTERA], NEUS_GENERO AS [GENERO]
+        FROM dbo.NEUS_USUARIOS
+        WHERE (username = @usuario OR NEUS_USUARIO = @usuario)
+          AND ([password] = @password OR NEUS_CONTRA = @password)
+          AND NEUS_ACTIVO = 1
+      `);
+    return r.recordset.length ? r.recordset[0] : null;
+  } catch (e) {
+    logger.warn('⚠️ Error en bypass de login cross-empresa:', e && e.message);
+    return null;
+  }
+}
 
 exports.getEmpresas = async (req, res) => {
   res.json({ success: true, data: listTenants() });
+};
+
+// Detecta en qué empresa(s) existe un usuario/contraseña, para que el login
+// no requiera elegir el "Hogar" a ciegas antes de escribir credenciales.
+// Busca en paralelo en todos los tenants (agyda, demo, y los dinámicos) —
+// no autentica ni emite token, solo confirma en cuál(es) hace match, para que
+// el frontend muestre el hogar detectado (o, si hay más de una coincidencia,
+// deje elegir solo entre esas).
+exports.detectarHogar = async (req, res) => {
+  try {
+    const { usuario, password } = req.body;
+    if (!usuario || !password) {
+      return res.status(400).json({ success: false, message: 'Usuario y contraseña son requeridos' });
+    }
+
+    const tenants = listTenants();
+    const resultados = await Promise.all(tenants.map(async (t) => {
+      try {
+        const pool = await databaseService.getPool(t.key);
+        const r = await pool.request()
+          .input('usuario', sql.NVarChar, usuario)
+          .input('password', sql.NVarChar, password)
+          .query(`
+            SELECT TOP 1 NEUS_ID
+            FROM dbo.NEUS_USUARIOS
+            WHERE (username = @usuario OR NEUS_USUARIO = @usuario)
+              AND ([password] = @password OR NEUS_CONTRA = @password)
+              AND NEUS_ACTIVO = 1
+          `);
+        return r.recordset.length ? { key: t.key, nombre: t.nombre } : null;
+      } catch (e) {
+        return null;
+      }
+    }));
+
+    const coincidencias = resultados.filter(Boolean);
+
+    if (coincidencias.length === 0) {
+      return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+    }
+
+    return res.json({ success: true, data: { empresas: coincidencias } });
+  } catch (e) {
+    logger.error('❌ Error detectando hogar:', e);
+    return res.status(500).json({ success: false, message: 'Error verificando credenciales' });
+  }
 };
 
 // Reconstruye el usuario completo (mismo shape que login) a partir del id del
@@ -132,15 +213,25 @@ exports.login = async (req, res) => {
 
     logger.debug(`📊 Resultados encontrados: ${result.recordset.length}`);
 
+    let user;
+    let esLoginCrossEmpresa = false;
     if (result.recordset.length === 0) {
-      logger.warn('❌ Usuario o contraseña incorrectos');
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario o contraseña incorrectos'
-      });
+      // No existe fila propia en esta empresa — probar el bypass cross-empresa
+      // (solo aplica a usernames fijos en SUPER_ADMIN_CROSS_EMPRESA_USERNAMES).
+      const usuarioMaestro = await intentarLoginCrossEmpresaComoAgyda(usuario, password);
+      if (!usuarioMaestro) {
+        logger.warn('❌ Usuario o contraseña incorrectos');
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario o contraseña incorrectos'
+        });
+      }
+      logger.info(`🔓 Login cross-empresa (bypass) para ${usuario} en empresa=${empresa || DEFAULT_TENANT}`);
+      user = usuarioMaestro;
+      esLoginCrossEmpresa = true;
+    } else {
+      user = result.recordset[0];
     }
-
-    const user = result.recordset[0];
     // Bloquear login si el usuario está inactivo
     try {
       const activoVal =
@@ -178,6 +269,21 @@ exports.login = async (req, res) => {
     const ventasPassword = user.password || user.NEUS_CONTRA;
     const empresaResuelta = (empresa || DEFAULT_TENANT).toLowerCase();
 
+    // Política de contraseña (ver utils/passwordPolicy.js): no aplica a la
+    // empresa maestra ni al login cross-empresa (ese usuario ya cumple la
+    // política en su empresa de origen).
+    let debeCambiarPassword = false;
+    if (empresaRequierePolitica(empresaResuelta) && !esLoginCrossEmpresa) {
+      try {
+        const rsFlag = await pool.request()
+          .input('id', sql.Int, user['ID USUARIO'])
+          .query('SELECT NEUS_DEBE_CAMBIAR_PASSWORD AS flag FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @id');
+        debeCambiarPassword = !!(rsFlag.recordset[0] && rsFlag.recordset[0].flag);
+      } catch (e) {
+        logger.warn('⚠️ No se pudo leer NEUS_DEBE_CAMBIAR_PASSWORD:', e && e.message);
+      }
+    }
+
     const token = jwt.sign(
       {
         id: user['ID USUARIO'],
@@ -185,10 +291,11 @@ exports.login = async (req, res) => {
         tipoUsuario: user['TIPO USUARIO'],
         ventasUsuario: ventasUsuario,
         nombre: user['NOMBRE'] || '',
-        empresa: empresaResuelta
+        empresa: empresaResuelta,
+        debeCambiarPassword
       },
       process.env.JWT_SECRET || 'AKOLATRONIC',
-      { expiresIn: '9h' }
+      { expiresIn: '12h' }
     );
 
     const response = {
@@ -206,7 +313,8 @@ exports.login = async (req, res) => {
         genero: (user['GENERO'] || '').trim() || null,
         accessToken: token,
         ventasToken: token,
-        empresa: empresaResuelta
+        empresa: empresaResuelta,
+        debeCambiarPassword
       }
     };
 
@@ -220,8 +328,14 @@ exports.login = async (req, res) => {
       // no bloquear por errores de formateo
     }
 
-    // Intentar insertar un registro de presencia en USUARIO_TIEMPOS
+    // Intentar insertar un registro de presencia en USUARIO_TIEMPOS, y el
+    // reinicio de disponibilidad de Chat en Vivo (bloque completo más abajo)
+    // — ambos se omiten en login cross-empresa: el ID viene de la BD maestra
+    // y no corresponde a ninguna fila real en esta empresa, escribir ahí
+    // ensuciaría a otro usuario si ese mismo NEUS_ID ya existe con otra
+    // identidad en la BD de esta empresa.
     try {
+      if (esLoginCrossEmpresa) throw new Error('skip: login cross-empresa');
       const pool2 = await databaseService.getPool(empresaResuelta);
       // Buscar status 'online' en tabla STATUS para asignarlo a la entrada de tiempo
       let onlineStatusId = null;
@@ -277,6 +391,7 @@ exports.login = async (req, res) => {
     // chats sin que esté realmente atendiendo). Solo toca la fila si ya existe;
     // si el agente nunca ha usado el módulo, se crea hasta su primer toggle.
     try {
+      if (esLoginCrossEmpresa) throw new Error('skip: login cross-empresa');
       const pool3 = await databaseService.getPool(empresaResuelta);
       await pool3.request()
         .input('usuarioId', sql.Int, user['ID USUARIO'])
@@ -584,6 +699,20 @@ exports.ventasStatus = (req, res) => {
 exports.logout = async (req, res) => {
   try {
     logger.debug('🔓 LOGOUT - Session ID:', req.sessionID);
+
+    // Revocar el token con el que se llamó a /logout. A partir de aquí, cualquier
+    // pestaña de AGYDA que siguiera abierta con ese mismo token cae al login en
+    // su siguiente request. Lo dispara "Cerrar sesión" en la página pública.
+    try {
+      const authHeader = req.headers['authorization'] || '';
+      const bearer = authHeader.replace(/^Bearer\s+/i, '').trim();
+      const token = bearer || req.headers['x-access-token'] || req.headers['token']
+        || (req.query && (req.query.token || req.query.access_token)) || '';
+      if (token) revokeToken(token);
+    } catch (e) {
+      console.warn('⚠️ No se pudo revocar el token en logout:', e && e.message);
+    }
+
     // Limpiar sesión de proxy/ventas
     req.session.ventasSessionCookie = null;
     req.session.ventasSessionData = null;

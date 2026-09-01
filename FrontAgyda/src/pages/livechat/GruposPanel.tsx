@@ -11,7 +11,7 @@ import toast from 'react-hot-toast'
 import { PlantillasPanel } from './PlantillasPanel'
 import { MotivosCierrePanel } from './MotivosCierrePanel'
 
-function CrearGrupoForm({ campaniaId, onCreated }: { campaniaId: number; onCreated: () => void }) {
+export function CrearGrupoForm({ campaniaId, onCreated }: { campaniaId: number; onCreated: () => void }) {
   const [nombre, setNombre] = useState('')
   const [open, setOpen] = useState(false)
 
@@ -42,21 +42,21 @@ function CrearGrupoForm({ campaniaId, onCreated }: { campaniaId: number; onCreat
         value={nombre}
         onChange={(e) => setNombre(e.target.value)}
         placeholder="Nombre del grupo"
-        className="flex-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs"
+        className="flex-1 rounded-lg border border-surface-border bg-card px-2.5 py-1 text-xs text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
         autoFocus
         onKeyDown={(e) => e.key === 'Enter' && nombre.trim() && crear.mutate()}
       />
       <Button size="sm" onClick={() => crear.mutate()} disabled={!nombre.trim() || crear.isPending}>
         {crear.isPending ? <Loader2 size={12} className="animate-spin" /> : 'Crear'}
       </Button>
-      <button type="button" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
+      <button type="button" onClick={() => setOpen(false)} className="text-ink-tertiary hover:text-ink-secondary">
         <X size={14} />
       </button>
     </div>
   )
 }
 
-function AgentesDeGrupo({ grupoId }: { grupoId: number }) {
+export function AgentesDeGrupo({ grupoId }: { grupoId: number }) {
   const qc = useQueryClient()
   const { data: agentes = [], isLoading } = useQuery({
     queryKey: ['livechat-grupo-agentes', grupoId],
@@ -91,13 +91,13 @@ function AgentesDeGrupo({ grupoId }: { grupoId: number }) {
       {isLoading ? (
         <Spinner size="sm" />
       ) : agentes.length === 0 ? (
-        <p className="text-xs text-gray-400">Sin agentes asignados a este grupo</p>
+        <p className="text-xs text-ink-tertiary">Sin agentes asignados a este grupo</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {agentes.map((a) => (
-            <span key={a.id} className="inline-flex items-center gap-1 rounded-full bg-white border border-gray-200 pl-2.5 pr-1 py-1 text-xs">
+            <span key={a.id} className="inline-flex items-center gap-1 rounded-full bg-card border border-surface-border pl-2.5 pr-1 py-1 text-xs text-ink-secondary">
               {a.nombre}
-              <button type="button" onClick={() => quitar.mutate(a.usuarioId)} className="text-gray-400 hover:text-red-500 rounded-full p-0.5">
+              <button type="button" onClick={() => quitar.mutate(a.usuarioId)} className="text-ink-tertiary hover:text-red-500 rounded-full p-0.5">
                 <X size={11} />
               </button>
             </span>
@@ -108,7 +108,7 @@ function AgentesDeGrupo({ grupoId }: { grupoId: number }) {
         <select
           value={usuarioSel}
           onChange={(e) => setUsuarioSel(e.target.value)}
-          className="flex-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs"
+          className="flex-1 rounded-lg border border-surface-border bg-card px-2.5 py-1 text-xs text-ink-secondary focus:border-brand focus:outline-none"
         >
           <option value="">Elegir agente para asignar…</option>
           {disponibles.map((u) => (
@@ -128,29 +128,31 @@ function AgentesDeGrupo({ grupoId }: { grupoId: number }) {
   )
 }
 
-type SubTab = 'agentes' | 'plantillas' | 'motivos'
+// Asignar/quitar agentes es exclusivo de "Grupo de Agentes" (ver
+// UsuariosCampaniasModal) — acá solo se administra el contenido propio del
+// grupo (plantillas y motivos de cierre), no quién lo atiende.
+type SubTab = 'plantillas' | 'motivos'
 
 function GrupoRow({ grupo }: { grupo: LivechatGrupo }) {
   const [expandido, setExpandido] = useState(false)
-  const [tab, setTab] = useState<SubTab>('agentes')
+  const [tab, setTab] = useState<SubTab>('plantillas')
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+    <div className="border border-surface-border rounded-lg overflow-hidden bg-card">
       <button
         type="button"
         onClick={() => setExpandido((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface"
       >
-        <ChevronRight size={14} className={clsx('text-gray-400 transition-transform shrink-0', expandido && 'rotate-90')} />
+        <ChevronRight size={14} className={clsx('text-ink-tertiary transition-transform shrink-0', expandido && 'rotate-90')} />
         <span>{grupo.icono}</span>
-        <span className="text-sm font-medium text-gray-700">{grupo.nombre}</span>
+        <span className="text-sm font-medium text-ink-secondary">{grupo.nombre}</span>
       </button>
 
       {expandido && (
-        <div className="border-t border-gray-100 p-3 space-y-3">
-          <div className="flex gap-1 border-b border-gray-100 -mt-1">
+        <div className="border-t border-surface-border p-3 space-y-3">
+          <div className="flex gap-1 border-b border-surface-border -mt-1">
             {([
-              { key: 'agentes' as const, label: 'Agentes', icon: UserPlus },
               { key: 'plantillas' as const, label: 'Plantillas', icon: FileText },
               { key: 'motivos' as const, label: 'Motivos de cierre', icon: ListChecks },
             ]).map(({ key, label, icon: Icon }) => (
@@ -160,7 +162,7 @@ function GrupoRow({ grupo }: { grupo: LivechatGrupo }) {
                 onClick={() => setTab(key)}
                 className={clsx(
                   'flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border-b-2 -mb-px',
-                  tab === key ? 'border-brand text-brand' : 'border-transparent text-gray-400 hover:text-gray-600',
+                  tab === key ? 'border-brand text-brand' : 'border-transparent text-ink-tertiary hover:text-ink-secondary',
                 )}
               >
                 <Icon size={12} />
@@ -168,7 +170,6 @@ function GrupoRow({ grupo }: { grupo: LivechatGrupo }) {
               </button>
             ))}
           </div>
-          {tab === 'agentes' && <AgentesDeGrupo grupoId={grupo.id} />}
           {tab === 'plantillas' && <PlantillasPanel grupoId={grupo.id} />}
           {tab === 'motivos' && <MotivosCierrePanel grupoId={grupo.id} />}
         </div>
@@ -186,13 +187,13 @@ export function GruposPanel({ campaniaId }: { campaniaId: number }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Grupos de atención</p>
+        <p className="text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Grupos de atención</p>
         <CrearGrupoForm campaniaId={campaniaId} onCreated={refetch} />
       </div>
       {isLoading ? (
         <Spinner size="sm" />
       ) : grupos.length === 0 ? (
-        <p className="text-xs text-gray-400">Esta campaña todavía no tiene grupos</p>
+        <p className="text-xs text-ink-tertiary">Esta campaña todavía no tiene grupos</p>
       ) : (
         <div className="space-y-1.5">
           {grupos.map((g) => <GrupoRow key={g.id} grupo={g} />)}

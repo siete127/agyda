@@ -43,6 +43,30 @@ END
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de NEUS_USUARIOS:', err.message);
   }
+
+  // Bandera de política de contraseña (empresas ≠ agyda, ver
+  // utils/passwordPolicy.js): fuerza cambio de contraseña en el próximo
+  // login hasta que cumpla la política nueva. La BD de la empresa maestra
+  // (agyda) se llama 'intranet' — es la única excluida del sembrado masivo,
+  // consistente con utils/passwordPolicy.empresaRequierePolitica.
+  try {
+    const yaExisteColumna = await pool.request().query(
+      `SELECT 1 AS existe FROM sys.columns WHERE object_id = OBJECT_ID('dbo.NEUS_USUARIOS') AND name = 'NEUS_DEBE_CAMBIAR_PASSWORD'`
+    );
+    if (!yaExisteColumna.recordset.length) {
+      await pool.request().batch(`ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_DEBE_CAMBIAR_PASSWORD BIT NOT NULL DEFAULT 0;`);
+      // Sembrado único: al crear la columna, marcar a todos los usuarios
+      // activos como pendientes de cambio — salvo en la BD maestra.
+      const dbActual = await pool.request().query(`SELECT DB_NAME() AS nombre`);
+      if (dbActual.recordset[0].nombre.toLowerCase() !== 'intranet') {
+        await pool.request().query(
+          `UPDATE dbo.NEUS_USUARIOS SET NEUS_DEBE_CAMBIAR_PASSWORD = 1 WHERE NEUS_ACTIVO = 1`
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ No se pudo agregar NEUS_DEBE_CAMBIAR_PASSWORD:', err.message);
+  }
 }
 
 async function ensureCommentsSchema(pool) {
@@ -446,6 +470,43 @@ END
   }
 }
 
+// Personalización de marca por empresa (tenant): logo, colores, favicon, nombre.
+// Una sola fila de config (la última gana, igual que INTRANET_NOTICIAS_LAYOUT) +
+// una tabla de assets (binarios en disco, metadatos aquí).
+async function ensurePersonalizacionSchema(pool) {
+  try {
+    const batchSql = `
+IF OBJECT_ID('dbo.INTRANET_PERSONALIZACION', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_PERSONALIZACION (
+    ID          INT IDENTITY(1,1) PRIMARY KEY,
+    CONFIG_DATA NVARCHAR(MAX) NOT NULL,
+    UPDATED_AT  DATETIME NOT NULL DEFAULT GETDATE(),
+    UPDATED_BY  INT NULL
+  );
+END
+
+IF OBJECT_ID('dbo.INTRANET_PERSONALIZACION_ASSETS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_PERSONALIZACION_ASSETS (
+    ASSET_ID        INT IDENTITY(1,1) PRIMARY KEY,
+    ASSET_TIPO      NVARCHAR(30) NOT NULL,          -- logo-principal | logo-compacto | favicon | login
+    NOMBRE_ARCHIVO  NVARCHAR(300) NOT NULL,
+    NOMBRE_ORIGINAL NVARCHAR(300) NULL,
+    MIME            NVARCHAR(100) NULL,
+    TAMANIO         INT NULL,
+    SUBIDO_POR      INT NULL,
+    CREATED_AT      DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+`;
+    await pool.request().batch(batchSql);
+    logger.info('✅ Esquema de personalización asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de personalización:', err.message);
+  }
+}
+
 async function ensureReglamentoSchema(pool) {
   try {
     const batchSql = `
@@ -546,6 +607,20 @@ BEGIN
     CONSTRAINT UQ_TI_ESPECIALIDADES_NOMBRE UNIQUE (ESP_NOMBRE)
   );
 END
+
+-- Reemplaza el array fijo BackAgyda/constants/ticketCierre.js — el frontend
+-- pasa a leer estos códigos de la BD para poder administrarlos desde
+-- Configuración > Tecnología/TI, igual que Especialidades.
+IF OBJECT_ID('dbo.TICKET_CODIGOS_CIERRE', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_CODIGOS_CIERRE (
+    COD_ID INT IDENTITY(1,1) PRIMARY KEY,
+    COD_NOMBRE NVARCHAR(100) NOT NULL,
+    COD_ORDEN INT NOT NULL DEFAULT 0,
+    COD_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_CODIGOS_CIERRE_NOMBRE UNIQUE (COD_NOMBRE)
+  );
+END
 `;
     await pool.request().batch(batchSql);
 
@@ -574,7 +649,18 @@ END
       `);
     }
 
-    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades)');
+    const seedCodigosCierre = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_CODIGOS_CIERRE');
+    if (seedCodigosCierre.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_CODIGOS_CIERRE (COD_NOMBRE, COD_ORDEN) VALUES
+          ('Solucionado',1),('Solucionado con workaround',2),('Solicitud completada',3),
+          ('Configuración/cambio realizado',4),('Resuelto por proveedor',5),('Resuelto por desarrollo',6),
+          ('Error de usuario / orientación',7),('Falla no encontrada',8),('Duplicado',9),
+          ('Cancelado',10),('Sin respuesta del usuario',11),('No procede',12)
+      `);
+    }
+
+    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades, Códigos de Cierre)');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar catálogos de Tecnología/TI:', err.message);
   }
@@ -1980,6 +2066,123 @@ async function loadDynamicTenants(pool) {
   }
 }
 
+// Roles = plantillas nombradas de permisos (módulos + acciones). Al crear un
+// usuario se elige un rol y sus permisos se COPIAN a INTRANET_USUARIOS_MODULOS /
+// INTRANET_USUARIOS_ACCIONES. El rol lleva ROL_BASE (AD/TI/CC/ST/VE/CL) que es lo
+// que se guarda en NEUS_TIPOUSUARIO para no romper verificarRol ni el login.
+async function ensureRolesSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.INTRANET_ROLES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.INTRANET_ROLES (
+          ROL_ID       INT IDENTITY(1,1) PRIMARY KEY,
+          NOMBRE       NVARCHAR(80)  NOT NULL,
+          DESCRIPCION  NVARCHAR(255) NULL,
+          ROL_BASE     NVARCHAR(10)  NOT NULL,
+          ES_SISTEMA   BIT           NOT NULL DEFAULT 0,
+          ACTIVO       BIT           NOT NULL DEFAULT 1,
+          CREADO_EN    DATETIME      NOT NULL DEFAULT GETDATE(),
+          CREADO_POR   INT           NULL,
+          CONSTRAINT UQ_INTRANET_ROLES_NOMBRE UNIQUE (NOMBRE)
+        );
+      END
+
+      IF OBJECT_ID('dbo.INTRANET_ROLES_PERMISOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.INTRANET_ROLES_PERMISOS (
+          ID          INT IDENTITY(1,1) PRIMARY KEY,
+          ROL_ID      INT           NOT NULL,
+          MODULO_KEY  NVARCHAR(100) NOT NULL,
+          ACCION_KEY  NVARCHAR(100) NOT NULL,
+          CONSTRAINT UQ_INTRANET_ROLES_PERMISOS UNIQUE (ROL_ID, MODULO_KEY, ACCION_KEY)
+        );
+        CREATE INDEX IX_INTRANET_ROLES_PERMISOS_ROL ON dbo.INTRANET_ROLES_PERMISOS(ROL_ID);
+      END
+    `);
+
+    // Seed de los 6 roles de sistema — SOLO en el primer arranque (tabla vacía).
+    // Si el usuario borra un rol de sistema después, no reaparece.
+    const cnt = await pool.request().query(`SELECT COUNT(*) AS n FROM dbo.INTRANET_ROLES`);
+    if (cnt.recordset[0].n > 0) {
+      logger.info('✅ Esquema de roles asegurado');
+      return;
+    }
+
+    // Permisos = los módulos por defecto de ese rol, con ACCION_KEY='*' (acceso al módulo).
+    const { DEFAULT_MODULES_BY_ROLE, MODULOS_DISPONIBLES } = require('../controllers/accesoController');
+    const SISTEMA = [
+      { base: 'AD', nombre: 'Administrador',  desc: 'Acceso completo de administracion' },
+      { base: 'TI', nombre: 'Tecnologia',     desc: 'Acceso completo del equipo de TI' },
+      { base: 'CC', nombre: 'Call Center',    desc: 'Agente de Call Center' },
+      { base: 'ST', nombre: 'Staff',          desc: 'Personal interno' },
+      { base: 'VE', nombre: 'Ventas',         desc: 'Equipo de ventas' },
+      { base: 'CL', nombre: 'Cliente',        desc: 'Cliente externo - acceso minimo' },
+    ];
+    const todosLosModulos = MODULOS_DISPONIBLES.map((m) => m.key);
+    for (const r of SISTEMA) {
+      const ins = await pool.request()
+        .input('nombre', require('mssql').NVarChar, r.nombre)
+        .input('desc', require('mssql').NVarChar, r.desc)
+        .input('base', require('mssql').NVarChar, r.base)
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM dbo.INTRANET_ROLES WHERE ROL_BASE=@base AND ES_SISTEMA=1)
+          BEGIN
+            INSERT INTO dbo.INTRANET_ROLES (NOMBRE, DESCRIPCION, ROL_BASE, ES_SISTEMA, ACTIVO)
+            VALUES (@nombre, @desc, @base, 1, 1);
+            SELECT SCOPE_IDENTITY() AS ROL_ID;
+          END
+          ELSE SELECT NULL AS ROL_ID;
+        `);
+      const rolId = ins.recordset && ins.recordset[0] ? ins.recordset[0].ROL_ID : null;
+      if (!rolId) continue; // ya existía
+      const defaults = DEFAULT_MODULES_BY_ROLE[r.base.toLowerCase()] ?? [];
+      const mods = defaults[0] === '*' ? todosLosModulos : defaults;
+      for (const modKey of mods) {
+        await pool.request()
+          .input('rolId', require('mssql').Int, rolId)
+          .input('modKey', require('mssql').NVarChar, modKey)
+          .query(`
+            IF NOT EXISTS (SELECT 1 FROM dbo.INTRANET_ROLES_PERMISOS WHERE ROL_ID=@rolId AND MODULO_KEY=@modKey AND ACCION_KEY='*')
+              INSERT INTO dbo.INTRANET_ROLES_PERMISOS (ROL_ID, MODULO_KEY, ACCION_KEY) VALUES (@rolId, @modKey, '*')
+          `);
+      }
+    }
+    logger.info('✅ Esquema de roles asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de roles:', err.message);
+  }
+}
+
+// Perfiles = plantillas de datos de usuario. Predefinen puesto, departamento,
+// horario, vacaciones/permisos y el ROL de permisos. Al crear un usuario se
+// elige un perfil y esos campos se autocompletan (quedan editables).
+async function ensurePerfilesSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.INTRANET_PERFILES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.INTRANET_PERFILES (
+          PERFIL_ID       INT IDENTITY(1,1) PRIMARY KEY,
+          NOMBRE          NVARCHAR(80)  NOT NULL,
+          DESCRIPCION     NVARCHAR(255) NULL,
+          ROL_ID          INT           NULL,
+          PUESTO          NVARCHAR(150) NULL,
+          DEPARTAMENTO    NVARCHAR(150) NULL,
+          ID_HORARIO      INT           NULL,
+          ACTIVO          BIT           NOT NULL DEFAULT 1,
+          CREADO_EN       DATETIME      NOT NULL DEFAULT GETDATE(),
+          CREADO_POR      INT           NULL,
+          CONSTRAINT UQ_INTRANET_PERFILES_NOMBRE UNIQUE (NOMBRE)
+        );
+      END
+    `);
+    logger.info('✅ Esquema de perfiles asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de perfiles:', err.message);
+  }
+}
+
 async function ensureAccesosSchema(pool) {
   try {
     await pool.request().batch(`
@@ -2681,7 +2884,9 @@ async function ensureFinanzasSchema(pool) {
   }
 }
 
-// Ventas: metas por asesor/periodo (complementa CRM/ventas existentes)
+// Ventas: metas por asesor/periodo (complementa CRM/ventas existentes).
+// VM_CAMPANA_ID/VM_TIPO/VM_ALCANCE permiten metas diarias por campaña (global,
+// VM_ASESOR_ID=0) además de las mensuales por asesor originales.
 async function ensureVentasMetasSchema(pool) {
   try {
     await pool.request().batch(`
@@ -2693,8 +2898,35 @@ async function ensureVentasMetasSchema(pool) {
           VM_PERIODO       NVARCHAR(20)   NOT NULL,
           VM_META_MONTO    DECIMAL(18,2)  NULL,
           VM_META_UNIDADES INT            NULL,
-          CONSTRAINT UQ_VENTAS_META UNIQUE (VM_ASESOR_ID, VM_PERIODO)
+          VM_CAMPANA_ID    INT            NULL,
+          VM_TIPO          NVARCHAR(10)   NOT NULL DEFAULT 'mensual',
+          VM_ALCANCE       NVARCHAR(10)   NOT NULL DEFAULT 'asesor',
+          CONSTRAINT UQ_VENTAS_META UNIQUE (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID)
         );
+      END
+      ELSE
+      BEGIN
+        IF COL_LENGTH('dbo.VENTAS_METAS','VM_CAMPANA_ID') IS NULL
+          ALTER TABLE dbo.VENTAS_METAS ADD VM_CAMPANA_ID INT NULL;
+        IF COL_LENGTH('dbo.VENTAS_METAS','VM_TIPO') IS NULL
+          ALTER TABLE dbo.VENTAS_METAS ADD VM_TIPO NVARCHAR(10) NOT NULL DEFAULT 'mensual';
+        IF COL_LENGTH('dbo.VENTAS_METAS','VM_ALCANCE') IS NULL
+          ALTER TABLE dbo.VENTAS_METAS ADD VM_ALCANCE NVARCHAR(10) NOT NULL DEFAULT 'asesor';
+
+        -- La UNIQUE original (VM_ASESOR_ID, VM_PERIODO) no admite dos metas del
+        -- mismo asesor/día en campañas distintas. Se reemplaza por una que
+        -- incluye VM_CAMPANA_ID, una sola vez (detectada por su nombre).
+        IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'UQ_VENTAS_META' AND parent_object_id = OBJECT_ID('dbo.VENTAS_METAS'))
+          AND NOT EXISTS (
+            SELECT 1 FROM sys.index_columns ic
+            JOIN sys.key_constraints kc ON kc.unique_index_id = ic.index_id AND kc.parent_object_id = ic.object_id
+            JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+            WHERE kc.name = 'UQ_VENTAS_META' AND c.name = 'VM_CAMPANA_ID'
+          )
+        BEGIN
+          ALTER TABLE dbo.VENTAS_METAS DROP CONSTRAINT UQ_VENTAS_META;
+          ALTER TABLE dbo.VENTAS_METAS ADD CONSTRAINT UQ_VENTAS_META UNIQUE (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID);
+        END
       END
     `);
   } catch (err) {
@@ -2831,7 +3063,7 @@ async function ensureCallCenterSchema(pool) {
       BEGIN
         CREATE TABLE dbo.AC_CAMPANIAS_AGENTES (
           ACA_ID                  INT IDENTITY(1,1) PRIMARY KEY,
-          ACA_NEUS_ID             INT NOT NULL,
+          ACA_NEUS_ID             SMALLINT NOT NULL,
           ACA_VENTAS_CAMPANA_ID   INT NOT NULL,
           ACA_VENTAS_CAMPANA_NOMBRE NVARCHAR(200) NOT NULL,
           ACA_ASIGNADO_POR        INT NULL,
@@ -2960,6 +3192,82 @@ async function ensureTiAreaSchema(pool) {
             REFERENCES dbo.TI_SISTEMAS(SIS_ID) ON DELETE SET NULL
         );
         CREATE INDEX IX_TI_INCIDENTES_SISTEMA_SIS ON dbo.TI_INCIDENTES_SISTEMA(ISI_SISTEMA_ID);
+      END
+
+      /* ── Monitoreo de red en vivo (agente PowerShell → ingesta) ── */
+
+      IF OBJECT_ID('dbo.TI_RED_AGENTES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_AGENTES (
+          RA_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          RA_NOMBRE        NVARCHAR(120)  NOT NULL,        -- hostname o etiqueta
+          RA_ENLACE_ID     INT            NULL,            -- enlace que monitorea
+          RA_VERSION       NVARCHAR(30)   NULL,
+          RA_SO            NVARCHAR(120)  NULL,
+          RA_IP_LOCAL      NVARCHAR(45)   NULL,
+          RA_GATEWAY       NVARCHAR(45)   NULL,
+          RA_ROUTER_ESTADO NVARCHAR(20)   NULL,            -- ok | sin-acceso | deshabilitado | ...
+          RA_ROUTER_MARCA  NVARCHAR(60)   NULL,
+          RA_ROUTER_MODELO NVARCHAR(120)  NULL,
+          RA_ROUTER_METODO NVARCHAR(40)   NULL,            -- que sonda funciono
+          RA_ULTIMA_SENAL  DATETIME       NULL,            -- última ingesta recibida
+          RA_PRIMERA_VEZ   DATETIME       NOT NULL DEFAULT GETDATE(),
+          RA_ACTIVO        BIT            NOT NULL DEFAULT 1,
+          CONSTRAINT UQ_TI_RED_AGENTES_NOMBRE UNIQUE (RA_NOMBRE),
+          CONSTRAINT FK_TI_RED_AGENTES_ENLACE FOREIGN KEY (RA_ENLACE_ID)
+            REFERENCES dbo.TI_ENLACES_RED(ENL_ID) ON DELETE SET NULL
+        );
+      END
+      ELSE
+      BEGIN
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_ESTADO') IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_ESTADO NVARCHAR(20) NULL;
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_MARCA')  IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_MARCA  NVARCHAR(60) NULL;
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_MODELO') IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_MODELO NVARCHAR(120) NULL;
+        IF COL_LENGTH('dbo.TI_RED_AGENTES','RA_ROUTER_METODO') IS NULL ALTER TABLE dbo.TI_RED_AGENTES ADD RA_ROUTER_METODO NVARCHAR(40) NULL;
+      END
+
+      IF OBJECT_ID('dbo.TI_RED_MEDICIONES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_MEDICIONES (
+          RM_ID            BIGINT IDENTITY(1,1) PRIMARY KEY,
+          RM_ENLACE_ID     INT            NULL,
+          RM_AGENTE_ID     INT            NULL,
+          RM_FECHA         DATETIME       NOT NULL DEFAULT GETDATE(),
+          RM_ONLINE        BIT            NOT NULL,
+          RM_LATENCIA_MS   DECIMAL(7,2)   NULL,
+          RM_JITTER_MS     DECIMAL(7,2)   NULL,
+          RM_PERDIDA_PCT   DECIMAL(5,2)   NULL,
+          RM_DOWN_MBPS     DECIMAL(9,2)   NULL,
+          RM_UP_MBPS       DECIMAL(9,2)   NULL,
+          RM_LINK_MBPS     DECIMAL(9,2)   NULL,
+          RM_ADAPTADOR_UP  BIT            NULL,
+          RM_DISP_ONLINE   INT            NULL,
+          RM_ORIGEN        NVARCHAR(120)  NULL,
+          CONSTRAINT FK_TI_RED_MEDICIONES_ENLACE FOREIGN KEY (RM_ENLACE_ID)
+            REFERENCES dbo.TI_ENLACES_RED(ENL_ID) ON DELETE SET NULL
+        );
+        CREATE INDEX IX_TI_RED_MEDICIONES_FECHA ON dbo.TI_RED_MEDICIONES(RM_FECHA DESC);
+        CREATE INDEX IX_TI_RED_MEDICIONES_ENLACE ON dbo.TI_RED_MEDICIONES(RM_ENLACE_ID, RM_FECHA DESC);
+      END
+
+      IF OBJECT_ID('dbo.TI_RED_DISPOSITIVOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.TI_RED_DISPOSITIVOS (
+          RD_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          RD_MAC           NVARCHAR(40)   NOT NULL,
+          RD_ENLACE_ID     INT            NULL,
+          RD_IP            NVARCHAR(45)   NULL,
+          RD_HOSTNAME      NVARCHAR(160)  NULL,
+          RD_FABRICANTE    NVARCHAR(140)  NULL,          -- OUI vendor
+          RD_ALIAS         NVARCHAR(160)  NULL,          -- editable por TI
+          RD_ORIGEN        NVARCHAR(20)   NULL,          -- 'arp' | 'dhcp' | 'router'
+          RD_PRIMERA_VEZ   DATETIME       NOT NULL DEFAULT GETDATE(),
+          RD_ULTIMA_VEZ    DATETIME       NOT NULL DEFAULT GETDATE(),
+          RD_ONLINE        BIT            NOT NULL DEFAULT 1,
+          RD_BLOQUEADO     BIT            NOT NULL DEFAULT 0,
+          CONSTRAINT UQ_TI_RED_DISPOSITIVOS_MAC UNIQUE (RD_MAC)
+        );
+        CREATE INDEX IX_TI_RED_DISPOSITIVOS_ULTIMA ON dbo.TI_RED_DISPOSITIVOS(RD_ULTIMA_VEZ DESC);
       END
     `);
   } catch (err) {
@@ -4283,6 +4591,7 @@ async function ensureAllSchemas(pool) {
   await ensureCommentsSchema(pool);
   await ensureReaccionesNoticiasSchema(pool);
   await ensureLayoutSchema(pool);
+  await ensurePersonalizacionSchema(pool);
   await ensureReglamentoSchema(pool);
   await ensureCatalogosTiSchema(pool);
   await ensureTicketsSchema(pool);
@@ -4312,6 +4621,8 @@ async function ensureAllSchemas(pool) {
   await ensureCrmSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
   await ensureEmailMarketingSchema(pool);
+  await ensureRolesSchema(pool);
+  await ensurePerfilesSchema(pool);
   await ensureAccesosSchema(pool);
   await ensureAreasSchema(pool);
   await ensureCalidadSchema(pool);
@@ -4340,6 +4651,9 @@ async function ensureAllSchemas(pool) {
   await ensureProteccionDatosSchema(pool);
   await ensureCumplimientoNormativoSchema(pool);
   await ensureControlDocumentalSchema(pool);
+  await ensureProductosServiciosSchema(pool);
+  await ensureActivosSchema(pool);
+  await ensureUsuarioTiemposSchema(pool);
 }
 
 // Expediente extendido (tabs "Persona", "Adicionales", "Familiares", "Formación", "Talento")
@@ -5137,6 +5451,103 @@ END
       await crearOpcion(inicioId, 'Quiero hablar con un técnico', hablarTecnico, 3);
     }
 
+    // Botones del menú inicial del widget público — antes vivían hardcodeados
+    // como un arreglo fijo de 4 strings en extra/Pagina de Intranet_1/index.html.
+    // Ahora son filas editables: 'respuesta' dispara el diccionario de siempre
+    // (por texto), 'escalar_campania' escala directo a Chat en Vivo con el
+    // campaignToken de una campaña específica (sin pasar por el flujo genérico
+    // "Hablar con alguien" que no elige campaña), y 'arbol_diagnostico' abre el
+    // árbol de decisión de arriba. ETQ_CAMPANIA_ID es NULL salvo en ese último caso.
+    await pool.request().query(`
+      IF OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CHATBOT_ETIQUETAS_MENU (
+          ETQ_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          ETQ_TEXTO_ES         NVARCHAR(150)   NOT NULL,
+          ETQ_TEXTO_EN         NVARCHAR(150)   NULL,
+          ETQ_TIPO             NVARCHAR(30)    NOT NULL DEFAULT ('respuesta'),
+          ETQ_CAMPANIA_ID      INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_CAMPANIAS(LCA_ID),
+          ETQ_GRUPO_ID         INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_GRUPOS(LG_ID),
+          ETQ_ORDEN            INT             NOT NULL DEFAULT (0),
+          ETQ_ACTIVA           BIT             NOT NULL DEFAULT (1),
+          ETQ_FECHA_CREACION   DATETIME        NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO CHECK (ETQ_TIPO IN ('respuesta','escalar_campania','escalar_generico','arbol_diagnostico'))
+        );
+        CREATE INDEX IX_CHATBOT_ETIQUETAS_ACTIVA ON dbo.CHATBOT_ETIQUETAS_MENU(ETQ_ACTIVA, ETQ_ORDEN);
+      END
+    `);
+
+    // Tenants donde la tabla ya existía antes de agregar 'escalar_generico' al
+    // tipo tienen el CHECK constraint viejo — lo recrea con la lista completa
+    // para que el UPDATE/INSERT de abajo no choque contra un constraint desfasado.
+    await pool.request().query(`
+      IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CHATBOT_ETIQUETAS_TIPO')
+      BEGIN
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO;
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO
+          CHECK (ETQ_TIPO IN ('respuesta','escalar_campania','escalar_generico','arbol_diagnostico'));
+      END
+    `);
+
+    const etiquetasCount = await pool.request().query('SELECT COUNT(*) as total FROM dbo.CHATBOT_ETIQUETAS_MENU');
+    if (etiquetasCount.recordset[0].total === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.CHATBOT_ETIQUETAS_MENU (ETQ_TEXTO_ES, ETQ_TEXTO_EN, ETQ_TIPO, ETQ_ORDEN) VALUES
+          (N'Conocer servicios', N'Our services', 'respuesta', 1),
+          (N'Precios y cotización', N'Pricing & quote', 'escalar_generico', 2),
+          (N'Hablar con alguien', N'Talk to someone', 'escalar_generico', 3),
+          (N'Diagnóstico guiado', N'Guided diagnosis', 'arbol_diagnostico', 4)
+      `);
+    } else {
+      // Corrige el seed inicial que salió con tipo 'respuesta' en estas dos filas
+      // (deploy anterior a agregar el tipo 'escalar_generico') — filtra por
+      // ETQ_ID (1-4, los únicos que pudo haber creado el seed original) en vez de
+      // texto, para no depender de collation/acentos.
+      await pool.request().query(`
+        UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ETQ_TIPO = 'escalar_generico'
+        WHERE ETQ_ID IN (2, 3) AND ETQ_TIPO = 'respuesta'
+          AND ETQ_CAMPANIA_ID IS NULL AND ETQ_GRUPO_ID IS NULL
+      `);
+    }
+
+    // Flujo visual (canvas de arrastrar y conectar) — cada tabla que puede
+    // aparecer como caja en el lienzo (respuestas, etiquetas del menú, nodos
+    // del árbol) gana su posición X/Y. Las campañas de LIVECHAT_CAMPANIAS no
+    // llevan posición propia: el frontend les asigna una por defecto la
+    // primera vez que aparecen, sin tocar esa tabla.
+    await pool.request().query(`
+      IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_POS_X') IS NULL
+        ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_POS_X FLOAT NULL, RESP_POS_Y FLOAT NULL;
+      IF COL_LENGTH('dbo.CHATBOT_ETIQUETAS_MENU', 'ETQ_POS_X') IS NULL
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD ETQ_POS_X FLOAT NULL, ETQ_POS_Y FLOAT NULL;
+      IF COL_LENGTH('dbo.CHATBOT_NODOS', 'NODO_POS_X') IS NULL
+        ALTER TABLE dbo.CHATBOT_NODOS ADD NODO_POS_X FLOAT NULL, NODO_POS_Y FLOAT NULL;
+    `);
+
+    // Conexiones del canvas — genérica por (tipo, id) en vez de FKs tipadas,
+    // porque el origen/destino puede ser cualquiera de los 4 tipos de caja
+    // (respuesta, etiqueta, nodo_arbol, campania) en cualquier combinación.
+    // La integridad referencial real la valida el controller al crear la
+    // conexión, no la base de datos.
+    await pool.request().query(`
+      IF OBJECT_ID('dbo.CHATBOT_FLUJO_CONEXIONES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CHATBOT_FLUJO_CONEXIONES (
+          FCX_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          FCX_ORIGEN_TIPO      NVARCHAR(20)    NOT NULL,
+          FCX_ORIGEN_ID        INT             NOT NULL,
+          FCX_DESTINO_TIPO     NVARCHAR(20)    NOT NULL,
+          FCX_DESTINO_ID       INT             NOT NULL,
+          FCX_ETIQUETA         NVARCHAR(150)   NULL,
+          FCX_FECHA_CREACION   DATETIME        NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT CK_CHATBOT_FCX_ORIGEN_TIPO CHECK (FCX_ORIGEN_TIPO IN ('respuesta','etiqueta','nodo_arbol')),
+          CONSTRAINT CK_CHATBOT_FCX_DESTINO_TIPO CHECK (FCX_DESTINO_TIPO IN ('respuesta','etiqueta','nodo_arbol','campania')),
+          CONSTRAINT UQ_CHATBOT_FCX UNIQUE (FCX_ORIGEN_TIPO, FCX_ORIGEN_ID, FCX_DESTINO_TIPO, FCX_DESTINO_ID)
+        );
+        CREATE INDEX IX_CHATBOT_FCX_ORIGEN ON dbo.CHATBOT_FLUJO_CONEXIONES(FCX_ORIGEN_TIPO, FCX_ORIGEN_ID);
+      END
+    `);
+
     logger.info('✅ Esquema de chatbot asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de chatbot:', err.message);
@@ -5358,6 +5769,9 @@ IF COL_LENGTH('dbo.LIVECHAT_AGENTE_ESTADO', 'LAE_MAX_CHATS_OVERRIDE') IS NULL
 
 IF COL_LENGTH('dbo.LIVECHAT_CAMPANIAS', 'LCA_MAX_CHATS_POR_AGENTE') IS NULL
   ALTER TABLE dbo.LIVECHAT_CAMPANIAS ADD LCA_MAX_CHATS_POR_AGENTE INT NULL;
+
+IF COL_LENGTH('dbo.LIVECHAT_CAMPANIAS', 'LCA_AREA') IS NULL
+  ALTER TABLE dbo.LIVECHAT_CAMPANIAS ADD LCA_AREA NVARCHAR(100) NULL;
 `);
 
     await pool.request().batch(`
@@ -5478,7 +5892,7 @@ BEGIN
     MC_NOMBRE       NVARCHAR(150)  NULL,
     MC_DESCRIPCION  NVARCHAR(500)  NULL,
     MC_DM_KEY       NVARCHAR(40)   NULL,
-    MC_CREADO_POR   INT            NOT NULL,
+    MC_CREADO_POR   SMALLINT       NOT NULL,
     MC_FECHA_CREACION DATETIME     NOT NULL DEFAULT GETDATE(),
     MC_ULTIMO_MENSAJE_FECHA DATETIME NULL,
     CONSTRAINT CK_MSJ_CANALES_TIPO CHECK (MC_TIPO IN ('directo','grupo')),
@@ -5493,7 +5907,7 @@ BEGIN
   CREATE TABLE dbo.MSJ_CANAL_MIEMBROS (
     MCM_ID                     INT IDENTITY(1,1) PRIMARY KEY,
     MCM_CANAL_ID                INT NOT NULL,
-    MCM_USUARIO_ID               INT NOT NULL,
+    MCM_USUARIO_ID               SMALLINT NOT NULL,
     MCM_ROL                     NVARCHAR(10) NOT NULL DEFAULT ('miembro'),
     MCM_FECHA_INGRESO           DATETIME NOT NULL DEFAULT GETDATE(),
     MCM_ULTIMO_LEIDO_MENSAJE_ID INT NULL,
@@ -5512,7 +5926,7 @@ BEGIN
   CREATE TABLE dbo.MSJ_MENSAJES (
     MM_ID           INT IDENTITY(1,1) PRIMARY KEY,
     MM_CANAL_ID     INT NOT NULL,
-    MM_EMISOR_ID    INT NOT NULL,
+    MM_EMISOR_ID    SMALLINT NOT NULL,
     MM_CONTENIDO    NVARCHAR(MAX) NOT NULL,
     MM_ARCHIVO_URL  NVARCHAR(500) NULL,
     MM_FECHA        DATETIME NOT NULL DEFAULT GETDATE(),
@@ -5527,7 +5941,7 @@ IF OBJECT_ID('dbo.MSJ_PREFERENCIAS_USUARIO', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.MSJ_PREFERENCIAS_USUARIO (
     MPU_ID                   INT IDENTITY(1,1) PRIMARY KEY,
-    MPU_USUARIO_ID            INT NOT NULL,
+    MPU_USUARIO_ID            SMALLINT NOT NULL,
     MPU_BURBUJA_ACTIVA        BIT NOT NULL DEFAULT (1),
     MPU_BURBUJA_AUTOOCULTAR   BIT NOT NULL DEFAULT (1),
     MPU_BURBUJA_DURACION_SEG  INT NOT NULL DEFAULT (15),
@@ -5546,6 +5960,70 @@ END
     logger.info('✅ Esquema de mensajería asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de mensajería:', err.message);
+  }
+
+  // Se separa en pasos independientes (cada uno con su propio try/catch) en
+  // vez de un solo CREATE TABLE con las FK/UNIQUE inline — así, si un tenant
+  // tiene algún problema puntual con una referencia, el resto igual se crea
+  // en vez de que "Could not create constraint or index" tumbe todo el batch
+  // sin decir cuál constraint fue la que realmente falló.
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.MSJ_MENSAJE_REACCIONES (
+    MMR_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    MMR_MENSAJE_ID  INT NOT NULL,
+    MMR_USUARIO_ID  SMALLINT NOT NULL,
+    MMR_EMOJI       NVARCHAR(20) NOT NULL,
+    MMR_FECHA       DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+`);
+    logger.info('✅ Tabla MSJ_MENSAJE_REACCIONES asegurada');
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear tabla MSJ_MENSAJE_REACCIONES:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_MSJ_REACCIONES_MENSAJE')
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT FK_MSJ_REACCIONES_MENSAJE
+  FOREIGN KEY (MMR_MENSAJE_ID) REFERENCES dbo.MSJ_MENSAJES(MM_ID) ON DELETE CASCADE;
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear FK_MSJ_REACCIONES_MENSAJE:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_MSJ_REACCIONES_USUARIO')
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT FK_MSJ_REACCIONES_USUARIO
+  FOREIGN KEY (MMR_USUARIO_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID);
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear FK_MSJ_REACCIONES_USUARIO:', err.message);
+  }
+
+  try {
+    // Una sola reacción activa por usuario y mensaje (como WhatsApp): al elegir
+    // otro emoji se reemplaza la fila en vez de acumular varias por la misma persona.
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_MSJ_REACCIONES_MENSAJE_USUARIO' AND object_id = OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES'))
+ALTER TABLE dbo.MSJ_MENSAJE_REACCIONES ADD CONSTRAINT UQ_MSJ_REACCIONES_MENSAJE_USUARIO UNIQUE (MMR_MENSAJE_ID, MMR_USUARIO_ID);
+`);
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear UQ_MSJ_REACCIONES_MENSAJE_USUARIO:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_MSJ_REACCIONES_MENSAJE' AND object_id = OBJECT_ID('dbo.MSJ_MENSAJE_REACCIONES'))
+CREATE INDEX IX_MSJ_REACCIONES_MENSAJE ON dbo.MSJ_MENSAJE_REACCIONES(MMR_MENSAJE_ID);
+`);
+    logger.info('✅ Esquema de reacciones de mensajería asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear IX_MSJ_REACCIONES_MENSAJE:', err.message);
   }
 }
 
@@ -5699,6 +6177,146 @@ async function ensureEncuestaSatisfaccionClienteSeed(pool) {
   }
 }
 
+// Catálogo unificado de productos/servicios (con precio y recurrencia) y su
+// relación con clientes. Reemplaza en uso a las tablas legado PRODUCTOS/
+// SERVICIOS/CLIENTE_PRODUCTOS/CLIENTE_SERVICIOS (que se dejan intactas por
+// compatibilidad con clienteController.getProductos/getServicios), migrando
+// su contenido una sola vez al crear la tabla nueva.
+async function ensureProductosServiciosSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.PRODUCTOS_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.PRODUCTOS_SERVICIOS (
+    PS_ID             INT IDENTITY(1,1) PRIMARY KEY,
+    PS_TIPO           NVARCHAR(20)  NOT NULL,
+    PS_NOMBRE         NVARCHAR(200) NOT NULL,
+    PS_DESCRIPCION    NVARCHAR(500) NULL,
+    PS_PRECIO         DECIMAL(18,2) NOT NULL DEFAULT 0,
+    PS_RECURRENCIA    NVARCHAR(20)  NOT NULL DEFAULT 'UNICO',
+    PS_ACTIVO         BIT           NOT NULL DEFAULT 1,
+    PS_FECHA_REGISTRO DATETIME      NOT NULL DEFAULT GETDATE()
+  );
+
+  IF OBJECT_ID('dbo.PRODUCTOS', 'U') IS NOT NULL
+  BEGIN
+    INSERT INTO dbo.PRODUCTOS_SERVICIOS (PS_TIPO, PS_NOMBRE, PS_ACTIVO)
+      SELECT 'PRODUCTO', PROD_NOMBRE, PROD_ACTIVO FROM dbo.PRODUCTOS;
+  END
+
+  IF OBJECT_ID('dbo.SERVICIOS', 'U') IS NOT NULL
+  BEGIN
+    INSERT INTO dbo.PRODUCTOS_SERVICIOS (PS_TIPO, PS_NOMBRE, PS_ACTIVO)
+      SELECT 'SERVICIO', SERV_NOMBRE, SERV_ACTIVO FROM dbo.SERVICIOS;
+  END
+END
+`);
+  } catch (err) {
+    console.warn('⚠️ ProductosServiciosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.CLIENTE_PRODUCTOS_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CLIENTE_PRODUCTOS_SERVICIOS (
+    CPS_ID         INT IDENTITY(1,1) PRIMARY KEY,
+    CL_ID          INT NOT NULL,
+    PS_ID          INT NOT NULL,
+    CPS_FECHA_ALTA DATETIME NOT NULL DEFAULT GETDATE(),
+    CPS_ACTIVO     BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_CLIENTE_PS UNIQUE (CL_ID, PS_ID)
+  );
+  CREATE INDEX IX_CPS_CLIENTE ON dbo.CLIENTE_PRODUCTOS_SERVICIOS(CL_ID);
+END
+`);
+  } catch (err) {
+    console.warn('⚠️ ClienteProductosServiciosSchema:', err.message);
+  }
+}
+
+// Inventario de activos de la empresa (mouse, teclado, monitor, cpu, laptop)
+// asignables a un usuario. Tabla legado sin CREATE TABLE versionado hasta
+// ahora — existía manualmente en 'agyda' pero nunca se creaba para empresas
+// nuevas (ej. Edomex), causando 500 "Invalid object name 'ACTIVOS'" en
+// cualquier request a /api/activos/*.
+async function ensureActivosSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.ACTIVOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.ACTIVOS (
+    ACT_ID                  INT IDENTITY(1,1) PRIMARY KEY,
+    ACT_TIPO                NVARCHAR(40)  NOT NULL,
+    ACT_MARCA               NVARCHAR(200) NULL,
+    ACT_MODELO              NVARCHAR(200) NULL,
+    ACT_NUMERO_SERIE        NVARCHAR(200) NULL,
+    ACT_ESTADO              NVARCHAR(40)  NOT NULL,
+    ACT_ASIGNADO_A          SMALLINT      NULL,
+    ACT_FECHA_ASIGNACION    DATETIME      NULL,
+    ACT_ACTIVO              BIT           NOT NULL DEFAULT 1,
+    ACT_FECHA_REGISTRO      DATETIME      NOT NULL DEFAULT GETDATE(),
+    ACT_TERMINOS_ACEPTADOS  BIT           NOT NULL DEFAULT 0,
+    ACT_FECHA_ACEPTACION    DATETIME      NULL,
+    CONSTRAINT CK_ACT_TIPO CHECK (ACT_TIPO IN ('mouse','teclado','monitor','cpu','laptop')),
+    CONSTRAINT CK_ACT_ESTADO CHECK (ACT_ESTADO IN ('baja','reparacion','asignado','disponible'))
+  );
+  CREATE INDEX IX_ACTIVOS_TIPO ON dbo.ACTIVOS(ACT_TIPO);
+  CREATE INDEX IX_ACTIVOS_ASIGNADO ON dbo.ACTIVOS(ACT_ASIGNADO_A);
+END
+`);
+    logger.info('✅ Esquema de activos asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de activos:', err.message);
+  }
+}
+
+// Catálogo de estatus de presencia (online/comida/sanitario/etc.) y bitácora
+// de tiempos por usuario — se consultan desde el login (marca de presencia) y
+// desde el widget global de "pausa activa" (reportController.getPausaActiva),
+// ambos fuera de cualquier gate de módulo. Tablas legado sin CREATE TABLE
+// versionado hasta ahora.
+async function ensureUsuarioTiemposSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.STATUS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.STATUS (
+    status_id   TINYINT PRIMARY KEY,
+    clave       VARCHAR(20)  NOT NULL,
+    descripcion VARCHAR(100) NOT NULL
+  );
+  INSERT INTO dbo.STATUS (status_id, clave, descripcion) VALUES
+    (1, 'online', 'Usuario en línea'),
+    (2, 'comida', 'Usuario en horario de comida'),
+    (3, 'sanitario', 'Usuario ausente momentáneamente'),
+    (4, 'offline', 'Usuario desconectado'),
+    (5, 'capacitacion', 'Usuario en capacitación'),
+    (6, 'permiso', 'Usuario con permiso');
+END
+`);
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.USUARIO_TIEMPOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.USUARIO_TIEMPOS (
+    tiempo_id         INT IDENTITY(1,1) PRIMARY KEY,
+    neus_id           SMALLINT NOT NULL,
+    status_id         TINYINT  NOT NULL,
+    fecha_inicio      DATETIME NOT NULL,
+    fecha_fin         DATETIME NULL,
+    creado_en         DATETIME NOT NULL DEFAULT GETDATE(),
+    duracion_minutos  INT      NULL,
+    CONSTRAINT FK_TIEMPO_USUARIO FOREIGN KEY (neus_id) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID),
+    CONSTRAINT FK_TIEMPO_STATUS FOREIGN KEY (status_id) REFERENCES dbo.STATUS(status_id)
+  );
+END
+`);
+    logger.info('✅ Esquema de STATUS/USUARIO_TIEMPOS asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de STATUS/USUARIO_TIEMPOS:', err.message);
+  }
+}
+
 async function ensureAuditoriaSchema(pool) {
   try {
     await pool.request().batch(`
@@ -5735,6 +6353,7 @@ module.exports = {
     ensureCommentsSchema,
     ensureReaccionesNoticiasSchema,
     ensureLayoutSchema,
+    ensurePersonalizacionSchema,
     ensureReglamentoSchema,
     ensureTicketsSchema,
     ensureProfileSchema,
@@ -5749,6 +6368,9 @@ module.exports = {
     ensureExpedienteCompletoSchema,
     removeClientesUniqueConstraint,
     ensureAuditoriaSchema,
+    ensureProductosServiciosSchema,
+    ensureActivosSchema,
+    ensureUsuarioTiemposSchema,
     ensureVacantesSchema,
     ensureCapacitacionSchema,
     ensureIncapacidadesSchema,
@@ -5758,5 +6380,7 @@ module.exports = {
     ensureLivechatCampanasSchema,
     ensureEmailMarketingSchema,
     ensureMensajeriaSchema,
-    ensureEncuestasSchema
+    ensureEncuestasSchema,
+    ensureRolesSchema,
+    ensurePerfilesSchema
 };

@@ -41,6 +41,7 @@ const MODULOS_DISPONIBLES = [
   { key: 'quejas',      nombre: 'Quejas',              descripcion: 'Registro y seguimiento de quejas' },
   { key: 'reglamento',  nombre: 'Reglamento',          descripcion: 'Políticas y reglamento interno' },
   { key: 'clientes',    nombre: 'Clientes',            descripcion: 'Gestión de clientes' },
+  { key: 'productos-servicios', nombre: 'Productos y Servicios', descripcion: 'Catálogo de productos y servicios' },
   { key: 'crm',         nombre: 'CRM',                 descripcion: 'Pipeline de ventas, contactos y seguimiento a clientes' },
   { key: 'usuarios',    nombre: 'Usuarios',            descripcion: 'Administración de usuarios del sistema' },
   { key: 'encuestas',   nombre: 'Encuestas',           descripcion: 'Creación y gestión de encuestas' },
@@ -91,6 +92,8 @@ exports.getModules = async (req, res) => {
 // Catálogo canónico de módulos, reusado por empresaModulosController para
 // validar moduloKey contra la lista real (evita togglear un módulo inexistente).
 exports.MODULOS_DISPONIBLES = MODULOS_DISPONIBLES;
+// Reusados por rolController (validar acciones) y schemaService (seed de roles).
+exports.DEFAULT_MODULES_BY_ROLE = DEFAULT_MODULES_BY_ROLE;
 
 /* ══════════════════════════════════════════════════════
    PERMISOS GRANULARES POR ACCIÓN
@@ -252,6 +255,12 @@ const ACCIONES_POR_MODULO = {
     { key: 'eliminar',             nombre: 'Eliminar cliente',      descripcion: 'Borrar un cliente' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
+  'productos-servicios': [
+    { key: 'ver',      nombre: 'Ver catálogo',              descripcion: 'Consultar productos y servicios' },
+    { key: 'crear',    nombre: 'Crear producto/servicio',   descripcion: 'Alta de un nuevo producto o servicio en el catálogo' },
+    { key: 'editar',   nombre: 'Editar producto/servicio',  descripcion: 'Modificar nombre, precio o recurrencia' },
+    { key: 'eliminar', nombre: 'Eliminar producto/servicio', descripcion: 'Borrar del catálogo (o desactivar si tiene clientes asignados)' },
+  ],
   usuarios: [
     { key: 'ver',                nombre: 'Ver usuarios',          descripcion: 'Consultar listado, perfil, estatus y horarios de usuarios' },
     { key: 'crear',               nombre: 'Crear usuario',         descripcion: 'Dar de alta un nuevo usuario' },
@@ -272,6 +281,7 @@ const ACCIONES_POR_MODULO = {
   reports: [
     { key: 'ver-reportes',       nombre: 'Ver reportes',          descripcion: 'Consultar reporte de tiempos por usuario, resumen general y reporte de baño (AD/TI)' },
     { key: 'gestionar-pausas',    nombre: 'Gestionar pausas',      descripcion: 'Iniciar, terminar y consultar la pausa activa propia' },
+    { key: 'ver-equipo',          nombre: 'Ver tiempos del equipo', descripcion: 'Ver el tiempo disponible y en pausa de todos los usuarios del área, en la tarjeta del Inicio' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   activos: [
@@ -360,6 +370,9 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   'ventas-area': [
+    { key: 'ver',              nombre: 'Ver módulo',            descripcion: 'Ver el panel de Ventas (Área): metas, asesores, resultados y prospección' },
+    { key: 'ver-metas',        nombre: 'Ver metas del equipo',  descripcion: 'Ver las metas de todos los asesores y campañas, y el avance de la campaña completa' },
+    { key: 'gestionar-metas',  nombre: 'Gestionar metas',       descripcion: 'Crear, editar y eliminar metas diarias o mensuales por asesor o por campaña' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   operaciones: [
@@ -395,6 +408,9 @@ const ACCIONES_POR_MODULO = {
   ],
 };
 
+// Reusado por rolController para validar que cada acción de un rol exista.
+exports.ACCIONES_POR_MODULO = ACCIONES_POR_MODULO;
+
 exports.getModuleActions = async (req, res) => {
   const { moduloKey } = req.params;
   const acciones = ACCIONES_POR_MODULO[String(moduloKey || '').toLowerCase()] ?? [];
@@ -411,14 +427,19 @@ exports.getSelfActions = async (req, res) => {
     const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
     if (!uid) return res.status(401).json({ success: false, message: 'Token inválido' });
 
-    if (esSuperAdminFijo(req)) {
+    const { getEmpresaModulosBloqueados, esSuperAdminInmuneEmpresa } = require('../middleware/moduleAccess');
+    const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+
+    if (esSuperAdminInmuneEmpresa(req)) {
       const todas = {};
       for (const mod of Object.keys(ACCIONES_POR_MODULO)) todas[mod] = ['*'];
       return res.json({ success: true, data: { usuarioId: parseInt(uid), acciones: todas } });
     }
-
-    const { getEmpresaModulosBloqueados } = require('../middleware/moduleAccess');
-    const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+    if (esSuperAdminFijo(req)) {
+      const todas = {};
+      for (const mod of Object.keys(ACCIONES_POR_MODULO)) todas[mod] = bloqueados.has(mod) ? [] : ['*'];
+      return res.json({ success: true, data: { usuarioId: parseInt(uid), acciones: todas } });
+    }
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request()
@@ -557,17 +578,26 @@ exports.getSelfAccess = async (req, res) => {
     const tipo = (req.user && (req.user.tipoUsuario || req.user.role || req.user.tipousuario) || '').toString().toLowerCase();
     if (!uid) return res.status(401).json({ success:false, message:'Token inválido' });
 
-    // Solo super-admins fijos reciben comodín — el resto de ADs respeta permisos normales
-    if (esSuperAdminFijo(req)) {
-      return res.json({ success:true, data: { usuarioId: parseInt(uid), modules: ['*'] } });
-    }
-
     // Módulos desactivados a nivel empresa completa (tabla exclusiva de la BD
     // maestra 'agyda') — se intersectan con lo que el usuario tiene permitido
     // más abajo. Un módulo bloqueado para la empresa nunca se devuelve, sin
     // importar lo que diga INTRANET_USUARIOS_MODULOS.
-    const { getEmpresaModulosBloqueados } = require('../middleware/moduleAccess');
+    const { getEmpresaModulosBloqueados, esSuperAdminInmuneEmpresa } = require('../middleware/moduleAccess');
     const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+
+    // Super-admin fijo con inmunidad al bloqueo de empresa: comodín total.
+    // ADM_0001 (id 1) y TI_0110 (id 64) ya no son inmunes aquí — reciben el
+    // catálogo completo menos lo bloqueado para su empresa, igual que el
+    // resto del flujo de abajo.
+    if (esSuperAdminInmuneEmpresa(req)) {
+      return res.json({ success:true, data: { usuarioId: parseInt(uid), modules: ['*'] } });
+    }
+    if (esSuperAdminFijo(req)) {
+      const finalModules = bloqueados.size > 0
+        ? MODULOS_DISPONIBLES.map((m) => m.key).filter((k) => !bloqueados.has(k))
+        : ['*'];
+      return res.json({ success:true, data: { usuarioId: parseInt(uid), modules: finalModules } });
+    }
 
     const pool2 = await databaseService.getPool(req.user?.empresa);
     const rs = await pool2.request()
@@ -757,7 +787,39 @@ exports.listEmpresas = async (req, res) => {
   try {
     if (!esSuperAdminFijo(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const { listTenants } = require('../config/tenants');
-    return res.json({ success: true, data: listTenants() });
+    const tenants = listTenants();
+
+    // Overrides ALLOW=0 por empresa (todas viven en el tenant maestro) para
+    // resolver "N módulos activos" sin una query por empresa.
+    const modulosTotal = MODULOS_DISPONIBLES.length;
+    let bloqueadosPorEmpresa = new Map();
+    try {
+      const master = await databaseService.getPool(DEFAULT_TENANT);
+      const rs = await master.request().query(
+        `SELECT EMP_KEY, COUNT(*) AS n FROM INTRANET_EMPRESAS_MODULOS
+         WHERE ALLOW = 0 GROUP BY EMP_KEY`,
+      );
+      bloqueadosPorEmpresa = new Map(rs.recordset.map((r) => [String(r.EMP_KEY).toLowerCase(), r.n]));
+    } catch (_) { /* si falla, todos cuentan como activos */ }
+
+    const data = await Promise.all(tenants.map(async (t) => {
+      let usuarios = null;
+      try {
+        const pool = await databaseService.getPool(t.key);
+        const r = await pool.request().query('SELECT COUNT(*) AS n FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1');
+        usuarios = r.recordset[0]?.n ?? null;
+      } catch (_) { /* empresa sin BD accesible: usuarios = null */ }
+      const bloqueados = bloqueadosPorEmpresa.get(t.key.toLowerCase()) ?? 0;
+      return {
+        key: t.key,
+        nombre: t.nombre,
+        usuarios,
+        modulosActivos: Math.max(0, modulosTotal - bloqueados),
+        modulosTotal,
+      };
+    }));
+
+    return res.json({ success: true, data });
   } catch (e) {
     console.error('Error listEmpresas:', e);
     return res.status(500).json({ success: false, message: 'Error al listar empresas' });
@@ -827,8 +889,8 @@ exports.createEmpresa = async (req, res) => {
         .input('contra', sql.NVarChar, adminPassword)
         .query(`
           INSERT INTO NEUS_USUARIOS
-          (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password])
-          VALUES (@nombres, @usuario, @contra, 'AD', 1, 1, 1, GETDATE(), @usuario, @contra);
+          (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password], NEUS_DEBE_CAMBIAR_PASSWORD)
+          VALUES (@nombres, @usuario, @contra, 'AD', 1, 1, 1, GETDATE(), @usuario, @contra, 1);
           SELECT SCOPE_IDENTITY() AS NEUS_ID;
         `);
       nuevoAdminId = insert.recordset[0]?.NEUS_ID || null;

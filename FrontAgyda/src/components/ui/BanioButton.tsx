@@ -83,7 +83,7 @@ function BanioAlertModal({ slot, onClose }: { slot: BanioSlot; onClose: () => vo
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
       <div
-        className="pointer-events-auto w-full max-w-xs rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up"
+        className="pointer-events-auto w-full max-w-xs rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up"
         style={{ border: `2px solid ${color}33` }}
       >
         <div className="h-1.5 w-full" style={{ background: color }} />
@@ -208,7 +208,7 @@ export function BanioButton() {
 
         {/* Tooltip — quién está en el baño */}
         {miSlot.ocupado && miSlot.porNombre && (
-          <div className={`flex items-center gap-2 rounded-xl border bg-white px-3 py-1.5 text-[0.72rem] font-medium shadow-md whitespace-nowrap ${esF ? 'border-pink-200 text-pink-700' : 'border-blue-200 text-blue-700'}`}>
+          <div className={`flex items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-[0.72rem] font-medium shadow-md whitespace-nowrap ${esF ? 'border-pink-200 text-pink-700' : 'border-blue-200 text-blue-700'}`}>
             <span>{iconoMi}</span>
             <span>
               {esElMio ? 'Tú estás en el baño' : `${miSlot.porNombre} está en el baño`}

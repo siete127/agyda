@@ -8,24 +8,53 @@ import { ActaRetardosModal } from '@/components/ui/ActaRetardosModal'
 import { ActivoTerminosModal } from '@/components/ui/ActivoTerminosModal'
 import { QuejasAlertBubble } from '@/components/ui/QuejasAlertBubble'
 import { MensajeriaFloatingBubble } from '@/components/ui/MensajeriaFloatingBubble'
-import { SoporteTIWidget } from '@/components/ui/SoporteTIWidget'
 import { WebphoneFrame } from '@/components/ui/WebphoneFrame'
 import { useUIStore } from '@/stores/ui.store'
 import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { useAuthStore } from '@/stores/auth.store'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
+import { PersonalizacionProvider } from '@/providers/PersonalizacionProvider'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { useMusicStore } from '@/stores/music.store'
 
 export function AppLayout() {
   const setActiveRoute = useUIStore((s) => s.setActiveRoute)
+  const setDashboardEditArmed = useUIStore((s) => s.setDashboardEditArmed)
+  const setDashboardEditMode = useUIStore((s) => s.setDashboardEditMode)
   const location = useLocation()
   const tipoUsuario = useAuthStore((s) => s.user?.tipoUsuario?.toUpperCase())
-  const showMusic = tipoUsuario !== 'CC' && tipoUsuario !== 'CL'
+  const { isAllowed } = useModuleAccess()
+  // Las burbujas flotantes solo se montan si el módulo está activo para la
+  // empresa — así no disparan llamadas a /api que devolverían 403.
+  const musicBubbleVisible = useMusicStore((s) => s.bubbleVisible)
+  const puedeMusica = tipoUsuario !== 'CC' && tipoUsuario !== 'CL' && isAllowed('musica')
+  const showMusic = puedeMusica && musicBubbleVisible
+  const showMensajeria = isAllowed('mensajeria')
 
   useInactivityTimer()
 
   useEffect(() => {
     setActiveRoute(location.pathname)
-  }, [location.pathname, setActiveRoute])
+    // Al salir del inicio, desarmar el editor de diseño.
+    if (location.pathname !== '/dashboard') {
+      setDashboardEditArmed(false)
+      setDashboardEditMode(false)
+    }
+  }, [location.pathname, setActiveRoute, setDashboardEditArmed, setDashboardEditMode])
 
+  return (
+    <PersonalizacionProvider>
+      <Layout location={location} showMusic={showMusic} showMensajeria={showMensajeria} />
+    </PersonalizacionProvider>
+  )
+}
+
+function Layout({ location, showMusic, showMensajeria }: {
+  location: ReturnType<typeof useLocation>
+  showMusic: boolean
+  showMensajeria: boolean
+}) {
+  const { branding } = usePersonalizacion()
   return (
     <div className="flex h-screen overflow-hidden bg-surface">
       <Sidebar />
@@ -36,7 +65,7 @@ export function AppLayout() {
             <Outlet />
           </div>
           <footer className="mt-8 pb-2 text-center text-[0.68rem] text-ink-tertiary">
-            © {new Date().getFullYear()} ARDABYTEC. Todos los derechos reservados.
+            © {new Date().getFullYear()} {branding.nombreLargo.toUpperCase()}. Todos los derechos reservados.
           </footer>
         </main>
         {showMusic && <MusicBubble />}
@@ -45,8 +74,7 @@ export function AppLayout() {
       <ActaRetardosModal />
       <ActivoTerminosModal />
       <QuejasAlertBubble />
-      <MensajeriaFloatingBubble />
-      <SoporteTIWidget />
+      {showMensajeria && <MensajeriaFloatingBubble />}
       <WebphoneFrame />
     </div>
   )

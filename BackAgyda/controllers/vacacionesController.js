@@ -720,6 +720,7 @@ exports.crearSolicitud = async (req, res) => {
         puesto,
         departamento,
         correoSolicitante,
+        tenantKey: req.user?.empresa,
       });
       console.log(
         notificadoPorCorreo
@@ -1343,6 +1344,7 @@ exports.editarSolicitud = async (req, res) => {
         diasSolicitados,
         puesto,
         departamento,
+        tenantKey: req.user?.empresa,
       });
       console.log("✅ Emails de edición de solicitud enviados a PERMISOS_MAIL_TO");
     } catch (emailError) {

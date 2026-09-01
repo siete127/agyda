@@ -66,7 +66,7 @@ export function TicketAlertModal() {
 
       {/* Tarjeta */}
       <div
-        className="relative w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up"
+        className="relative w-full max-w-sm rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up"
         style={{ border: `2px solid ${meta.color}22` }}
       >
         {/* Franja de color superior */}

@@ -31,7 +31,7 @@ export function ActaRetardosModal() {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-100/50 overflow-hidden animate-slide-up">
+      <div className="relative w-full max-w-md rounded-2xl bg-card shadow-2xl border border-gray-100/50 overflow-hidden animate-slide-up">
         <div className="relative overflow-hidden bg-gradient-to-r from-[#7A1B1B] to-[#D82B2B] px-6 py-6">
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
           <div className="relative flex items-center gap-3">

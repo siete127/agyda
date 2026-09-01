@@ -2,10 +2,18 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/ventasAreaController');
 const auth = require('../middleware/auth');
+const { requireActionAccess } = require('../middleware/moduleAccess');
 
-router.get('/metas', auth.authenticateToken, controller.listMetas);
-router.post('/metas', auth.authenticateToken, controller.crearMeta);
-router.delete('/metas/:id', auth.authenticateToken, controller.eliminarMeta);
+// Metas de todos los asesores/campañas — requiere ver-metas (supervisor / a quien
+// se le dé la función). Las metas PROPIAS de un agente van por /mis-metas, sin ese permiso.
+router.get('/metas', auth.authenticateToken, requireActionAccess('ventas-area', 'ver-metas'), controller.listMetas);
+router.post('/metas', auth.authenticateToken, requireActionAccess('ventas-area', 'gestionar-metas'), controller.crearMeta);
+router.delete('/metas/:id', auth.authenticateToken, requireActionAccess('ventas-area', 'gestionar-metas'), controller.eliminarMeta);
+router.get('/mis-metas', auth.authenticateToken, controller.getMisMetas);
+// Desglose de tiempos de pausa de HOY de la(s) persona(s) de una meta — visible
+// para cualquier usuario autenticado (mismo dato que el reporte de pausas).
+router.get('/metas/:id/pausas', auth.authenticateToken, controller.getMetaPausas);
+router.get('/campanas', auth.authenticateToken, requireActionAccess('ventas-area', 'gestionar-metas'), controller.listCampanas);
 router.get('/dashboard', auth.authenticateToken, controller.getDashboard);
 router.get('/asesores', auth.authenticateToken, controller.listAsesores);
 router.get('/asesores/:id/perfil', auth.authenticateToken, controller.getPerfilAsesor);

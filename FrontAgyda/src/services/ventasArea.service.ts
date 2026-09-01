@@ -5,14 +5,48 @@ export interface VentasAreaDashboard {
   metaMontoTotal: number
 }
 
+export type MetaTipo = 'mensual' | 'diaria'
+export type MetaAlcance = 'asesor' | 'campana'
+
 export interface MetaVenta {
   id: number
   asesorId: number
-  asesorNombre: string
+  asesorNombre: string | null
   periodo: string
   metaMonto: number
   metaUnidades: number
   avanceUnidades: number
+  campanaId: number | null
+  campanaNombre: string | null
+  tipo: MetaTipo
+  alcance: MetaAlcance
+}
+
+/** Metas de HOY del usuario autenticado — para la card del Inicio. */
+export interface MiMeta {
+  id: number
+  alcance: MetaAlcance
+  campanaId: number | null
+  campanaNombre: string | null
+  metaUnidades: number
+  avanceUnidades: number
+}
+
+/** Desglose de tiempos de pausa de HOY de un agente involucrado en una meta. */
+export interface MetaPausaAgente {
+  agenteId: number
+  nombre: string
+  sinRegistro: boolean
+  comidaSeg: number
+  banioSeg: number
+  capacitacionSeg: number
+  permisoSeg: number
+  totalSeg: number
+}
+
+export interface MetaPausas {
+  alcance: MetaAlcance
+  agentes: MetaPausaAgente[]
 }
 
 export interface AsesorVentas {
@@ -20,9 +54,19 @@ export interface AsesorVentas {
   nombre: string
 }
 
+export interface CampanaVentas {
+  id: number
+  nombre: string
+}
+
 export interface CrearMetaVentaPayload {
-  asesorId: number
+  asesorId?: number
+  campanaId?: number
   periodo: string
+  /** Solo para tipo 'diaria': si viene, la meta se replica en cada día de [periodo..periodoFin]. */
+  periodoFin?: string
+  tipo: MetaTipo
+  alcance: MetaAlcance
   metaMonto?: number
   metaUnidades?: number
 }
@@ -49,5 +93,20 @@ export const ventasAreaService = {
   async getAsesores(): Promise<AsesorVentas[]> {
     const { data } = await api.get('/ventas-area/asesores')
     return data.data
+  },
+
+  async getCampanas(): Promise<CampanaVentas[]> {
+    const { data } = await api.get('/ventas-area/campanas')
+    return data.data
+  },
+
+  async getMisMetas(): Promise<MiMeta[]> {
+    const { data } = await api.get('/ventas-area/mis-metas')
+    return data.data ?? []
+  },
+
+  async getMetaPausas(metaId: number): Promise<MetaPausas> {
+    const { data } = await api.get(`/ventas-area/metas/${metaId}/pausas`)
+    return data.data as MetaPausas
   },
 }

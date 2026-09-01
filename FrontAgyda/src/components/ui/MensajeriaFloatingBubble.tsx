@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Send, X, Users } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useSocketEvent } from '@/hooks/useSocket'
 import { useMensajeriaStore } from '@/stores/mensajeria.store'
@@ -114,6 +115,7 @@ export function MensajeriaFloatingBubble() {
         setBorradores((prev) => ({ ...prev, [alerta.uid]: '' }))
         if (config?.burbujaAutoocultar !== false) armarTimer(alerta.uid, config?.burbujaDuracionSeg ?? 15)
       },
+      onError: () => toast.error('No se pudo enviar la respuesta'),
     })
   }
 
@@ -151,20 +153,20 @@ export function MensajeriaFloatingBubble() {
           >
             <div className="rounded-full ring-2 ring-white shadow-lg transition-transform group-hover:scale-105">
               {canal.tipo === 'grupo' ? (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-white">
-                  <Users className="h-4 w-4" />
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white">
+                  <Users className="h-6 w-6" />
                 </div>
               ) : (
-                <Avatar name={canal.nombre ?? '?'} size="md" />
+                <Avatar name={canal.nombre ?? '?'} size="lg" />
               )}
             </div>
-            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white" />
+            <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
             <span
               role="button"
               onClick={(e) => { e.stopPropagation(); cerrarChatFlotante(canal.id) }}
-              className="absolute -top-1 -left-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-400 text-white opacity-0 group-hover:opacity-100 hover:bg-gray-600 transition-all"
+              className="absolute -top-1.5 -left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-400 text-white opacity-0 group-hover:opacity-100 hover:bg-gray-600 transition-all"
             >
-              <X className="h-2.5 w-2.5" />
+              <X className="h-3 w-3" />
             </span>
           </button>
         ))}
@@ -175,7 +177,7 @@ export function MensajeriaFloatingBubble() {
       {alertas.map((alerta) => (
         <div
           key={alerta.uid}
-          className="pointer-events-auto rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden animate-fade-in"
+          className="pointer-events-auto rounded-2xl border border-gray-200 bg-card shadow-2xl overflow-hidden animate-fade-in"
         >
           <div
             className="flex items-start gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"

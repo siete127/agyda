@@ -217,7 +217,7 @@ function NodeBottomSheet({ node, hasChildren, expanded, onExpand, onAction, onCl
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative w-full max-w-sm overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-full max-w-sm overflow-hidden rounded-t-2xl bg-card shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
           <div>
             <p className="text-sm font-bold text-gray-900">{node.titulo}</p>
@@ -274,7 +274,7 @@ function OrgCard({ node, depth, branchIdx, editMode, hasChildren, onContextMenu 
       <div className="absolute left-1/2 z-10" style={{ top: -(avatarSize / 2), transform: 'translateX(-50%)' }}>
         <div className={clsx(
           'rounded-full border-[3px] border-white shadow-md overflow-hidden',
-          isRoot ? 'bg-[#0D1B3E]' : isSubDir ? 'bg-white border-gray-200' : bc.avatar,
+          isRoot ? 'bg-[#0D1B3E]' : isSubDir ? 'bg-card border-gray-200' : bc.avatar,
         )} style={{ width: avatarSize, height: avatarSize }}>
           {isGroup ? (
             <div className={clsx('w-full h-full flex items-center justify-center', bc.avatar)}>
@@ -295,7 +295,7 @@ function OrgCard({ node, depth, branchIdx, editMode, hasChildren, onContextMenu 
 
       {/* Card body */}
       <div className={clsx(
-        'rounded-2xl border-2 bg-white text-center transition-all',
+        'rounded-2xl border-2 bg-card text-center transition-all',
         isRoot
           ? 'border-[#C9A84C] bg-[#0D1B3E] shadow-[0_6px_24px_rgba(0,0,0,0.35)]'
           : isSubDir
@@ -416,7 +416,7 @@ function TreeNode({ node, depth, branchIdx, editMode, allNodes }: {
           <div style={{ width: 1.5, height: V_STEM, background: lineColor, opacity: 0.5 }} />
           <button
             onClick={() => setExpanded(!expanded)}
-            className="relative z-10 flex h-[20px] w-[20px] items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all"
+            className="relative z-10 flex h-[20px] w-[20px] items-center justify-center rounded-full border-2 bg-card shadow-sm transition-all"
             style={{ borderColor: lineColor, color: lineColor }}
           >
             {expanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
@@ -527,7 +527,7 @@ function ListItem({ node, depth, branchIdx, editMode, allNodes }: {
         </div>
         <div
           className={clsx(
-            'group/card flex flex-1 min-w-0 items-center gap-3 rounded-2xl border-2 bg-white px-3 py-3 transition-all shadow-sm',
+            'group/card flex flex-1 min-w-0 items-center gap-3 rounded-2xl border-2 bg-card px-3 py-3 transition-all shadow-sm',
             editMode && 'cursor-pointer hover:scale-[1.01]',
           )}
           style={{ borderColor: isRoot ? '#C9A84C' : `${bc.line}60` }}
@@ -654,7 +654,7 @@ export function OrganigramaPage() {
 
             {editMode && (
               <button onClick={() => setShowCrear(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-brand shadow hover:bg-blue-50 transition-colors">
+                className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-xs font-bold text-brand shadow hover:bg-blue-50 transition-colors">
                 <Plus className="h-4 w-4" /> Nodo raíz
               </button>
             )}
@@ -677,7 +677,7 @@ export function OrganigramaPage() {
           <p className="text-sm text-gray-400">Cargando organigrama…</p>
         </div>
       ) : sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-gray-200 bg-white px-8 py-16 text-center shadow-sm">
+        <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-gray-200 bg-card px-8 py-16 text-center shadow-sm">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#0D1B3E]/5">
             <Users className="h-10 w-10 text-[#0D1B3E]/30" />
           </div>
@@ -694,7 +694,7 @@ export function OrganigramaPage() {
         </div>
       ) : viewMode === 'list' ? (
         /* Vista lista sobre fondo blanco */
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-card p-5 shadow-sm">
           {sorted.length > 1 ? (
             <div className="flex gap-6 items-start">
               {sorted.map((root) => (

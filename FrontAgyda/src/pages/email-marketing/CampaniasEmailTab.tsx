@@ -121,7 +121,7 @@ function CrearCampaniaModal({ onClose }: { onClose: () => void }) {
                 onClick={() => setFiltro(key)}
                 className={clsx(
                   'px-3 py-1.5 rounded-lg text-xs font-semibold border',
-                  filtro === key ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200',
+                  filtro === key ? 'bg-brand text-white border-brand' : 'bg-card text-gray-600 border-gray-200',
                 )}
               >
                 {label}
@@ -206,7 +206,7 @@ function CampaniaRow({ campania }: { campania: EmailCampania }) {
   })
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 bg-white">
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 bg-card">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-gray-800 truncate">{campania.nombre}</p>

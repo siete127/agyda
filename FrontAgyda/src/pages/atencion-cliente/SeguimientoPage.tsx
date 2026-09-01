@@ -126,7 +126,7 @@ export function SeguimientoPage() {
               <button
                 key={`${c.tipo}-${c.id}`}
                 onClick={() => navigate(c.linkTo)}
-                className="w-full flex items-center gap-3 rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 text-left transition-all hover:shadow-md hover:border-brand/40"
+                className="w-full flex items-center gap-3 rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 text-left transition-all hover:shadow-md hover:border-brand/40"
               >
                 <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl', tipoCfg.bg)}>
                   <TipoIcon className={clsx('h-4 w-4', tipoCfg.text)} />

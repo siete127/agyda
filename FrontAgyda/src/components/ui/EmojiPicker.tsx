@@ -73,7 +73,7 @@ export function EmojiPicker({ onSelect, onClose, className }: EmojiPickerProps) 
   return (
     <div
       ref={containerRef}
-      className={clsx('w-80 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden flex flex-col', className)}
+      className={clsx('w-80 rounded-2xl border border-gray-200 bg-card shadow-xl overflow-hidden flex flex-col', className)}
     >
       <div className="p-2 border-b border-gray-100">
         <div className="relative">

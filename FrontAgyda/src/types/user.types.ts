@@ -20,4 +20,5 @@ export interface User {
   perfilAlias?: string | null
   perfilFotoUrl?: string | null
   perfilPortadaUrl?: string | null
+  debeCambiarPassword?: boolean
 }

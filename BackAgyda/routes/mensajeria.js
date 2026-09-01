@@ -24,6 +24,12 @@ router.post('/canales/:canalId/leido', authenticateToken, requireActionAccess('m
 router.post('/canales/:canalId/archivo', authenticateToken, requireActionAccess('mensajeria', 'ver'), uploadMensajeriaArchivo.single('archivo'), mensajeriaController.subirArchivo);
 router.post('/canales/:canalId/archivo-drive', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.adjuntarDesdeDrive);
 
+router.put('/mensajes/:mensajeId', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.editarMensaje);
+router.delete('/mensajes/:mensajeId', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.eliminarMensaje);
+
+router.post('/mensajes/:mensajeId/reacciones', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.reaccionarMensaje);
+router.delete('/mensajes/:mensajeId/reacciones', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.quitarReaccion);
+
 router.post('/canales/:canalId/miembros', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.agregarMiembros);
 router.delete('/canales/:canalId/miembros/:usuarioId', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.quitarMiembro);
 router.post('/canales/:canalId/salir', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.salirDeGrupo);

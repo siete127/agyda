@@ -45,6 +45,15 @@ api.interceptors.response.use(
     const esTokenInvalido = status === 401 ||
       (status === 403 && (msg?.includes('expirado') || msg?.includes('inválido') || msg?.includes('invalido')))
     if (esTokenInvalido) {
+      // El puente de sesión (/auth-bridge) maneja su propia autenticación: valida
+      // el ?token= de la URL contra /auth/me y decide a dónde ir. Si aquí
+      // redirigimos a /login por un 401 de otra request en vuelo (p.ej. el
+      // /auth/validate de AppInitializer con un token viejo), matamos el puente
+      // a mitad de camino — de forma intermitente, según qué request gane la
+      // carrera. En esa ruta no tocamos nada.
+      if (window.location.pathname === '/auth-bridge') {
+        return Promise.reject(error)
+      }
       localStorage.removeItem('auth_token')
       localStorage.removeItem('auth-store')
       if (window.location.pathname !== '/login') {

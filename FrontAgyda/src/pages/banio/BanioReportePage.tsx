@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Clock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
+import { getSocket } from '@/lib/socket'
 
 // ── Configuración de tipos de pausa ──────────────────────────────────────────
 const PAUSAS = [
@@ -68,14 +69,6 @@ function fmtFecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function badgeDuracion(seg: number, activo: boolean, limiteMin: number | null, esAcumulado = false, totalAcumSeg = 0) {
-  if (activo) return 'bg-amber-100 text-amber-700 border-amber-200'
-  const checkSeg = esAcumulado ? totalAcumSeg : seg
-  if (limiteMin !== null && checkSeg > limiteMin * 60) return 'bg-red-100 text-red-700 border-red-200'
-  if (limiteMin !== null && checkSeg > limiteMin * 60 * 0.75) return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-  return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-}
-
 function localDateStr(d = new Date()) {
   const y  = d.getFullYear()
   const m  = String(d.getMonth() + 1).padStart(2, '0')
@@ -92,6 +85,7 @@ export function BanioReportePage() {
   const [area,     setArea]    = useState('')
 
   const pausaActiva = PAUSAS[tabIdx]
+  const qc = useQueryClient()
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['pausas-reporte', from, to, pausaActiva.statusId, area],
@@ -102,9 +96,59 @@ export function BanioReportePage() {
       const { data } = await api.get<{ success: boolean; data: PausaRecord[] }>(`/reports/banio?${params}`)
       return data.data ?? []
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 8_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
+
+  // Ancla del contador en vivo: por id de registro activo, el instante (reloj
+  // del cliente) en que empezó la pausa. Se fija UNA sola vez, la primera vez
+  // que vemos ese id, y ya no se vuelve a tocar mientras la pausa siga abierta
+  // → el contador es monótono y no retrocede en los refetches.
+  // (No mutamos los datos de la query: react-query los congela con Object.freeze.)
+  const [anclas, setAnclas] = useState<Record<number, number>>({})
+  useEffect(() => {
+    if (!data) return
+    const activos = data.filter((r) => r.activo)
+    const idsActivos = new Set(activos.map((r) => r.id))
+    const faltanAnclas = activos.some((r) => anclas[r.id] == null)
+    const sobranAnclas = Object.keys(anclas).some((id) => !idsActivos.has(Number(id)))
+    if (!faltanAnclas && !sobranAnclas) return
+    const ahora = Date.now()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deriva anclas de la respuesta de la query; sólo corre al aparecer/cerrarse una pausa
+    setAnclas(() => {
+      const next: Record<number, number> = {}
+      for (const r of activos) {
+        next[r.id] = anclas[r.id] ?? ahora - r.duracionSegundos * 1000
+      }
+      return next
+    })
+  }, [data, anclas])
+
+  // Tiempo real: al toggle de baño de cualquiera → refrescar el reporte.
+  useEffect(() => {
+    const sock = getSocket()
+    const onBanio = () => qc.invalidateQueries({ queryKey: ['pausas-reporte'] })
+    sock.on('banio:status', onBanio)
+    return () => { sock.off('banio:status', onBanio) }
+  }, [qc])
+
+  // Reloj que avanza cada segundo — para que las filas ACTIVAS muestren su
+  // duración subiendo sin esperar al siguiente refetch.
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  // Duración a mostrar: para pausas activas, segundos transcurridos desde el
+  // inicio anclado (monótono, no retrocede en cada refetch). Para cerradas, el
+  // valor del servidor tal cual.
+  const liveDur = (r: PausaRecord) => {
+    if (!r.activo) return r.duracionSegundos
+    const startMs = anclas[r.id]
+    if (startMs == null) return r.duracionSegundos
+    return Math.max(r.duracionSegundos, Math.floor((nowTick - startMs) / 1000))
+  }
 
   const registros = (data ?? []).filter((r) =>
     buscar === ''
@@ -121,7 +165,7 @@ export function BanioReportePage() {
     if (!resumen[r.usuarioId]) resumen[r.usuarioId] = { id: r.usuarioId, nombre: r.nombre, area: r.area, activo: false, porTipo: {} }
     if (!resumen[r.usuarioId].porTipo[r.statusId]) resumen[r.usuarioId].porTipo[r.statusId] = { visitas: 0, totalSeg: 0 }
     resumen[r.usuarioId].porTipo[r.statusId].visitas++
-    resumen[r.usuarioId].porTipo[r.statusId].totalSeg += r.duracionSegundos
+    resumen[r.usuarioId].porTipo[r.statusId].totalSeg += liveDur(r)
     if (r.activo) resumen[r.usuarioId].activo = true
   }
   const resumenList = Object.values(resumen)
@@ -133,10 +177,14 @@ export function BanioReportePage() {
 
   const activos = registros.filter((r) => r.activo)
 
-  // Totales generales
+  // Totales generales — incluyen la pausa activa (con su tiempo en vivo), para
+  // que "Tiempo total" avance mientras alguien está en pausa.
   const totalVisitas = registros.length
-  const totalSeg = registros.filter(r => !r.activo).reduce((s, r) => s + r.duracionSegundos, 0)
-  const promSeg = totalVisitas > 0 ? Math.round(totalSeg / registros.filter(r => !r.activo).length || 0) : 0
+  const totalSeg = registros.reduce((s, r) => s + liveDur(r), 0)
+  const cerradas = registros.filter(r => !r.activo).length
+  const promSeg = cerradas > 0
+    ? Math.round(registros.filter(r => !r.activo).reduce((s, r) => s + r.duracionSegundos, 0) / cerradas)
+    : 0
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -178,7 +226,7 @@ export function BanioReportePage() {
               'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[0.8rem] font-semibold border transition-all',
               tabIdx === i
                 ? 'bg-brand text-white border-brand shadow-sm'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
+                : 'bg-card text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
             ].join(' ')}>
             <span>{p.emoji}</span>
             {p.label}
@@ -207,7 +255,7 @@ export function BanioReportePage() {
       )}
 
       {/* Filtros */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4 flex flex-wrap gap-3 items-end">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4 flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[0.72rem] font-semibold text-gray-500 uppercase tracking-wide">Desde</label>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
@@ -235,15 +283,15 @@ export function BanioReportePage() {
       {/* Cards de totales */}
       {registros.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4">
             <p className="text-[0.7rem] font-semibold text-gray-400 uppercase tracking-wide">Visitas</p>
             <p className="text-2xl font-black text-gray-800 mt-1">{totalVisitas}</p>
           </div>
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4">
             <p className="text-[0.7rem] font-semibold text-gray-400 uppercase tracking-wide">Tiempo total</p>
             <p className="text-2xl font-black text-gray-800 mt-1">{fmt(totalSeg)}</p>
           </div>
-          <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm p-4">
+          <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm p-4">
             <p className="text-[0.7rem] font-semibold text-gray-400 uppercase tracking-wide">Promedio/visita</p>
             <p className="text-2xl font-black text-gray-800 mt-1">{promSeg > 0 ? fmt(promSeg) : '—'}</p>
           </div>
@@ -262,7 +310,7 @@ export function BanioReportePage() {
                 const pausa = PAUSAS.find(p => p.statusId === r.statusId)
                 return (
                   <span key={r.id} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold ${st.badge}`}>
-                    {pausa?.emoji} {r.nombre.split(' ').slice(0,2).join(' ')} · {fmt(r.duracionSegundos)}
+                    {pausa?.emoji} {r.nombre.split(' ').slice(0,2).join(' ')} · <span className="font-mono tabular-nums">{fmt(liveDur(r))}</span>
                   </span>
                 )
               })}
@@ -286,7 +334,7 @@ export function BanioReportePage() {
               })
               const hayExcede = tipos.some(t => t.excede)
               return (
-                <div key={r.id} className={`rounded-2xl border bg-white shadow-sm p-4 flex flex-col gap-2 ${hayExcede ? 'border-red-300' : 'border-gray-200/60'}`}>
+                <div key={r.id} className={`rounded-2xl border bg-card shadow-sm p-4 flex flex-col gap-2 ${hayExcede ? 'border-red-300' : 'border-gray-200/60'}`}>
                   <p className="text-[0.78rem] font-bold text-gray-800 leading-tight" title={r.nombre}>
                     {r.nombre.split(' ').slice(0,3).join(' ')}
                   </p>
@@ -315,7 +363,7 @@ export function BanioReportePage() {
       )}
 
       {/* Tabla detalle */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">Detalle de registros</h2>
           <span className="text-[0.72rem] text-gray-400">{registros.length} registro{registros.length !== 1 ? 's' : ''}</span>
@@ -378,15 +426,15 @@ export function BanioReportePage() {
                       <td className="px-4 py-3 text-[0.8rem] text-gray-600 font-mono">{fmtHora(r.entrada)}</td>
                       <td className="px-4 py-3 text-[0.8rem] font-mono">
                         {r.activo
-                          ? <span className="text-amber-500 font-semibold">Activo ⏱</span>
+                          ? <span className="text-amber-500 font-semibold tabular-nums">En curso · {fmt(liveDur(r))} ⏱</span>
                           : <span className="text-gray-600">{fmtHora(r.salida!)}</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold tabular-nums
                           ${r.activo ? 'bg-amber-100 text-amber-700 border-amber-200'
                             : excede ? 'bg-red-100 text-red-700 border-red-200'
                             : 'bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
-                          {fmt(r.duracionSegundos)}{r.activo ? ' ⏱' : excede ? ' ⚠️' : ''}
+                          {fmt(liveDur(r))}{r.activo ? ' ⏱' : excede ? ' ⚠️' : ''}
                         </span>
                       </td>
                     </tr>

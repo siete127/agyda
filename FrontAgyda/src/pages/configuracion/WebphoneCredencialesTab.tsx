@@ -158,7 +158,7 @@ export function WebphoneCredencialesTab() {
                 onClick={() => setVistaActiva(v.id)}
                 className={clsx(
                   'flex flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-colors',
-                  vistaSeleccionada === v.id ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                  vistaSeleccionada === v.id ? 'bg-card text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700',
                 )}
               >
                 {v.label}
@@ -166,7 +166,7 @@ export function WebphoneCredencialesTab() {
             ))}
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-card">
+          <div className="rounded-2xl border border-gray-100 bg-card shadow-card">
             <div className="max-h-[60vh] space-y-2 overflow-y-auto p-4">
               {vistaSeleccionada && credenciales.map((agente) => (
                 <FilaAgente key={agente.neusId} agente={agente} vistaId={vistaSeleccionada} />

@@ -77,11 +77,11 @@ function AgentesContent() {
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nombre o usuario..."
-            className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+            className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-4 text-[0.82rem] text-gray-700 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
         </div>
         <div className="relative">
           <select value={filtroRol} onChange={(e) => setFiltroRol(e.target.value)}
-            className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
+            className="appearance-none rounded-xl border border-gray-200 bg-card py-2 pl-3 pr-8 text-[0.82rem] text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10">
             <option value="">Todos los roles</option>
             {ROLES.map((r) => <option key={r} value={r} className="capitalize">{r}</option>)}
           </select>
@@ -90,7 +90,7 @@ function AgentesContent() {
       </div>
 
       {/* Tabla */}
-      <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner size="lg" /></div>
         ) : filtered.length === 0 ? (

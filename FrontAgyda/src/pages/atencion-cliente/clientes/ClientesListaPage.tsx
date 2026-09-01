@@ -55,7 +55,7 @@ export function ClientesListaPage() {
             {puedeGestionar && (
               <button
                 onClick={() => setShowNuevo(true)}
-                className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[0.78rem] font-semibold text-brand shadow-sm hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-brand shadow-sm hover:bg-blue-50 transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" /> Nuevo cliente
               </button>
@@ -70,7 +70,7 @@ export function ClientesListaPage() {
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar cliente por nombre, empresa o correo..."
-          className="w-full rounded-xl border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
+          className="w-full rounded-xl border border-gray-200 bg-card pl-10 pr-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
         />
       </div>
 
@@ -98,7 +98,7 @@ export function ClientesListaPage() {
               <button
                 key={c.id}
                 onClick={() => navigate(`/atencion-cliente/clientes/${c.id}`)}
-                className="flex flex-col gap-2 rounded-2xl border border-gray-200/60 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                className="flex flex-col gap-2 rounded-2xl border border-gray-200/60 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold text-gray-800 truncate">{c.nombre}</p>

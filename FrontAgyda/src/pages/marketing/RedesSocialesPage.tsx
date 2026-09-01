@@ -107,7 +107,7 @@ function CuentasSection({ cuentas }: { cuentas: CuentaRedSocial[] }) {
   })
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-1.5 text-sm font-bold text-ink"><Users2 className="h-4 w-4" /> Cuentas de redes sociales</h2>
         <Button size="sm" variant="secondary" onClick={() => setNuevaOpen(true)}>
@@ -121,7 +121,7 @@ function CuentasSection({ cuentas }: { cuentas: CuentaRedSocial[] }) {
           {cuentas.map((c) => (
             <div
               key={c.id}
-              className={clsx('group flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs', c.activa ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60')}
+              className={clsx('group flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs', c.activa ? 'border-gray-200 bg-card' : 'border-gray-100 bg-gray-50 opacity-60')}
             >
               <button
                 onClick={() => toggleMutation.mutate(c)}
@@ -411,7 +411,7 @@ function PostCard({ post, onClick }: { post: PostRedSocial; onClick: () => void 
   const estCfg = ESTATUS_CONFIG[post.estatus]
   const fecha = post.fechaProgramada || post.createdAt
   return (
-    <button onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
+    <button onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-card p-3 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
       {post.imagenArchivo ? (
         <img src={marketingService.getUrlVerImagen(post.id)} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
       ) : (
@@ -494,7 +494,7 @@ function RedesSocialesPageContent() {
       </div>
 
       {posts && posts.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-card p-3">
           <select className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs" value={filtroCuenta} onChange={(e) => setFiltroCuenta(e.target.value)}>
             <option value="">Todas las cuentas</option>
             {cuentas?.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -514,11 +514,11 @@ function RedesSocialesPageContent() {
       {isLoading ? (
         <p className="text-sm text-ink-tertiary">Cargando...</p>
       ) : !posts || posts.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Aún no hay publicaciones registradas.</p>
         </div>
       ) : postsFiltrados.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-card p-8 text-center">
           <p className="text-sm text-ink-tertiary">Ninguna publicación coincide con los filtros aplicados.</p>
         </div>
       ) : (

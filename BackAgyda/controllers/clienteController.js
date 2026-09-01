@@ -30,6 +30,76 @@ exports.getServicios = async (req, res) => {
 };
 
 
+exports.getProductosServiciosCliente = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ success: false, message: 'ID de cliente inválido' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request()
+      .input('id', sql.Int, id)
+      .query(`
+        SELECT
+          CPS.CPS_ID as id, PS.PS_ID as productoServicioId, PS.PS_TIPO as tipo,
+          PS.PS_NOMBRE as nombre, PS.PS_DESCRIPCION as descripcion,
+          PS.PS_PRECIO as precio, PS.PS_RECURRENCIA as recurrencia,
+          CPS.CPS_FECHA_ALTA as fechaAlta
+        FROM CLIENTE_PRODUCTOS_SERVICIOS CPS
+        JOIN PRODUCTOS_SERVICIOS PS ON PS.PS_ID = CPS.PS_ID
+        WHERE CPS.CL_ID = @id AND CPS.CPS_ACTIVO = 1
+        ORDER BY PS.PS_NOMBRE ASC
+      `);
+    return res.json({ success: true, data: result.recordset });
+  } catch (e) {
+    console.error('Error listando productos/servicios del cliente:', e);
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.asignarProductoServicio = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const psId = parseInt(req.body.productoServicioId, 10);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(psId) || psId <= 0) {
+      return res.status(400).json({ success: false, message: 'Datos inválidos' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('clId', sql.Int, id)
+      .input('psId', sql.Int, psId)
+      .query(`
+        IF EXISTS (SELECT 1 FROM CLIENTE_PRODUCTOS_SERVICIOS WHERE CL_ID = @clId AND PS_ID = @psId)
+          UPDATE CLIENTE_PRODUCTOS_SERVICIOS SET CPS_ACTIVO = 1 WHERE CL_ID = @clId AND PS_ID = @psId
+        ELSE
+          INSERT INTO CLIENTE_PRODUCTOS_SERVICIOS (CL_ID, PS_ID) VALUES (@clId, @psId)
+      `);
+    return res.status(201).json({ success: true });
+  } catch (e) {
+    console.error('Error asignando producto/servicio a cliente:', e);
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.quitarProductoServicio = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const psId = parseInt(req.params.psId, 10);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(psId) || psId <= 0) {
+      return res.status(400).json({ success: false, message: 'Datos inválidos' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('clId', sql.Int, id)
+      .input('psId', sql.Int, psId)
+      .query(`DELETE FROM CLIENTE_PRODUCTOS_SERVICIOS WHERE CL_ID = @clId AND PS_ID = @psId`);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('Error quitando producto/servicio de cliente:', e);
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.getClientes = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);

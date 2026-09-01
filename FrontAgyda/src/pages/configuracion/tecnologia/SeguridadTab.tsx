@@ -42,7 +42,7 @@ function AuditoriaTiPanel() {
   const rows = (data?.data ?? []).filter((r) => MODULOS_AUDITORIA_TI.includes(r.modulo))
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
       <div className="mb-1 flex items-center gap-2">
         <ScrollText className="h-4 w-4 text-brand" />
         <p className="text-sm font-semibold text-ink">Auditoría — actividad reciente en Tecnología/TI</p>
@@ -89,7 +89,7 @@ export function SeguridadTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-1 flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-brand" />
           <p className="text-sm font-semibold text-ink">Permisos — tu sesión</p>
@@ -113,7 +113,7 @@ export function SeguridadTab() {
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {permisos.map((p) => (
-                        <span key={p} className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[0.7rem] font-medium text-ink-secondary">
+                        <span key={p} className="flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[0.7rem] font-medium text-ink-secondary">
                           <Check className="h-3 w-3 text-green-500" /> {p}
                         </span>
                       ))}

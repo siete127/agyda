@@ -38,7 +38,7 @@ export function MensajeriaConfigTab() {
   return (
     <div className="space-y-4">
       {/* Burbuja flotante */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="text-sm font-semibold text-ink">Burbuja flotante de chat</p>
         <p className="mb-3 text-xs text-ink-tertiary">Aviso emergente cuando llega un mensaje nuevo y no estás viendo esa conversación.</p>
 
@@ -81,7 +81,7 @@ export function MensajeriaConfigTab() {
       </div>
 
       {/* Adjuntos */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <p className="text-sm font-semibold text-ink">Archivos adjuntos</p>
         <p className="mb-3 text-xs text-ink-tertiary">Permite enviar fotos y archivos en tus conversaciones (máximo 15MB por archivo).</p>
         <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-surface">

@@ -6,6 +6,7 @@ import { router } from '@/router'
 import { queryClient } from '@/lib/queryClient'
 import { useAuthStore } from '@/stores/auth.store'
 import { authService } from '@/services/auth.service'
+import { ThemeProvider } from '@/providers/ThemeProvider'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -39,6 +40,14 @@ function AppInitializer() {
 
   useEffect(() => {
     async function init() {
+      // En /auth-bridge, esa página es la dueña de la autenticación: valida el
+      // ?token= de la URL contra el backend y navega. Si aquí lanzáramos
+      // /auth/validate en paralelo con un token viejo del store, su 401 podría
+      // (según quién gane la carrera) tumbar el puente y mandar a /login.
+      if (window.location.pathname === '/auth-bridge') {
+        setInitialized()
+        return
+      }
       if (token && isAuthenticated) {
         const valid = await authService.validate()
         if (!valid) clearSession()
@@ -55,17 +64,25 @@ function AppInitializer() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AppInitializer />
-        <RouterProvider router={router} />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: { borderRadius: '10px', fontSize: '14px' },
-          }}
-        />
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppInitializer />
+          <RouterProvider router={router} />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                borderRadius: '10px',
+                fontSize: '14px',
+                background: 'rgb(var(--card))',
+                color: 'rgb(var(--ink))',
+                border: '1px solid rgb(var(--surface-border))',
+              },
+            }}
+          />
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }

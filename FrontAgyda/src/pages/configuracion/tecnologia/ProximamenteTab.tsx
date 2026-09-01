@@ -2,7 +2,7 @@ import { HardHat } from 'lucide-react'
 
 export function ProximamenteTab({ seccion }: { seccion: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-gray-200/60 bg-white py-20 shadow-sm">
+    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-gray-200/60 bg-card py-20 shadow-sm">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
         <HardHat className="h-8 w-8 text-amber-500" />
       </div>

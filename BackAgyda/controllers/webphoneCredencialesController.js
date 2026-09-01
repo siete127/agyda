@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { encryptText, decryptText } = require('../utils/crypto');
+const { ensureWebphoneVistasSchema } = require('./webphoneVistasController');
 
 // Credenciales REALES de cada agente en VICIdial — una fila por (agente, vista),
 // ya que cada vista de Webphone (WEBPHONE_VISTAS) puede apuntar a un servidor
@@ -14,9 +15,15 @@ const { encryptText, decryptText } = require('../utils/crypto');
 // await entre ellos, lo que generaba una condición de carrera real: el DROP de
 // migración y el CREATE podían ejecutarse en cualquier orden relativo entre
 // reinicios, dejando la tabla sin crear en algunos arranques.
-async function ensureSchema(tenantKey) {
-  const pool = await databaseService.getPool(tenantKey);
-
+// Recibe el pool ya resuelto (no el tenantKey) y se llama on-demand desde
+// cada endpoint, en vez de una sola vez al cargar el módulo con
+// listTenants(): al importarse este archivo, el catálogo de tenants
+// dinámicos (config/tenants.js) todavía no está poblado — loadDynamicTenants
+// corre async dentro de la inicialización del pool de 'agyda', después de
+// que server.js ya hizo require() de esta ruta — así que una empresa creada
+// después de 'agyda'/'demo' (ej. una nueva sucursal) nunca llegaba a tener
+// esta tabla creada. Requiere que WEBPHONE_VISTAS ya exista (FK_WCRE_VISTA).
+async function ensureSchema(pool) {
   // Migración: tablas creadas antes de que existiera WCRE_VISTA_ID (esquema
   // previo, por agente sin distinguir vista) — se recrean vacías porque no hay
   // forma segura de inferir a qué vista pertenecía cada fila vieja.
@@ -45,12 +52,6 @@ async function ensureSchema(tenantKey) {
   `);
 }
 
-require('../config/tenants').listTenants().forEach(({ key }) => {
-  ensureSchema(key).catch((e) => {
-    console.error(`⚠️ No se pudo asegurar el esquema de WEBPHONE_CREDENCIALES (empresa: ${key}):`, e.message);
-  });
-});
-
 function esAdmin(req) {
   const tipo = String(req.user?.tipoUsuario || req.headers['tipousuario'] || '').toUpperCase();
   return ['AD', 'TI'].includes(tipo);
@@ -63,6 +64,8 @@ exports.getCredenciales = async (req, res) => {
     if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureSchema(pool);
     const usuarios = await pool.request().query(`
       SELECT NEUS_ID as neusId, NEUS_NOMBRES as nombre, NEUS_USUARIO as usuarioAgyda, NEUS_TIPOUSUARIO as tipoUsuario
       FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1 ORDER BY NEUS_NOMBRES
@@ -117,6 +120,8 @@ exports.upsertCredencial = async (req, res) => {
     }
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureSchema(pool);
     const existe = await pool.request()
       .input('nid', sql.Int, neusId)
       .input('vid', sql.Int, vistaId)
@@ -183,6 +188,8 @@ exports.deleteCredencial = async (req, res) => {
     const neusId = Number(req.params.neusId);
     const vistaId = Number(req.params.vistaId);
     const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureSchema(pool);
     await pool.request()
       .input('nid', sql.Int, neusId)
       .input('vid', sql.Int, vistaId)
@@ -206,6 +213,8 @@ exports.getAutoLoginUrl = async (req, res) => {
     }
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureSchema(pool);
     const vistaR = await pool.request()
       .input('vid', sql.Int, vistaId)
       .query('SELECT WVIS_URL as url FROM WEBPHONE_VISTAS WHERE WVIS_ID=@vid');
