@@ -8,7 +8,6 @@ import { ActaRetardosModal } from '@/components/ui/ActaRetardosModal'
 import { ActivoTerminosModal } from '@/components/ui/ActivoTerminosModal'
 import { QuejasAlertBubble } from '@/components/ui/QuejasAlertBubble'
 import { MensajeriaFloatingBubble } from '@/components/ui/MensajeriaFloatingBubble'
-import { SoporteTIWidget } from '@/components/ui/SoporteTIWidget'
 import { WebphoneFrame } from '@/components/ui/WebphoneFrame'
 import { useUIStore } from '@/stores/ui.store'
 import { useInactivityTimer } from '@/hooks/useInactivityTimer'
@@ -76,7 +75,6 @@ function Layout({ location, showMusic, showMensajeria }: {
       <ActivoTerminosModal />
       <QuejasAlertBubble />
       {showMensajeria && <MensajeriaFloatingBubble />}
-      <SoporteTIWidget />
       <WebphoneFrame />
     </div>
   )
