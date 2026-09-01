@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { PERMISOS_MAIL_TO } = require('../config/email');
+const emailService = require('../services/emailService');
 
 // Módulos que notifican a un grupo configurable de usuarios por correo.
 const MODULOS = [
@@ -78,6 +79,186 @@ function esAdmin(req) {
   const tipo = String(req.user?.tipoUsuario || '').toUpperCase();
   return ['AD', 'TI'].includes(tipo);
 }
+
+// ── Servidor de correo (credenciales SMTP / Microsoft Graph) ─────────────
+// Fila única por tenant — reemplaza las variables de entorno SMTP_*/AZURE_*
+// para que sean editables desde Configuración sin tocar .env ni reiniciar
+// el servidor. Client secret se guarda en texto plano (misma limitación que
+// TI_INTEGRACIONES_CONFIG en otros módulos del proyecto) — aceptable porque
+// el acceso a este endpoint ya está restringido a AD/TI.
+async function ensureTablaServidor(pool) {
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='EMAIL_SERVIDOR_CONFIG')
+    CREATE TABLE EMAIL_SERVIDOR_CONFIG (
+      ESC_ID            INT IDENTITY PRIMARY KEY,
+      ESC_HABILITADO    BIT NOT NULL DEFAULT 0,
+      ESC_TIPO          NVARCHAR(10) NOT NULL DEFAULT 'smtp',
+      ESC_SMTP_HOST     NVARCHAR(150) NULL,
+      ESC_SMTP_PORT     INT NULL,
+      ESC_SMTP_SECURE   BIT NOT NULL DEFAULT 1,
+      ESC_SMTP_USER     NVARCHAR(150) NULL,
+      ESC_SMTP_PASS     NVARCHAR(300) NULL,
+      ESC_TENANT_ID     NVARCHAR(100) NULL,
+      ESC_CLIENT_ID     NVARCHAR(100) NULL,
+      ESC_CLIENT_SECRET NVARCHAR(300) NULL,
+      ESC_BUZON_REMITENTE NVARCHAR(150) NULL,
+      ESC_CORREO_FROM   NVARCHAR(150) NULL,
+      ESC_NOMBRE_REMITENTE NVARCHAR(100) NULL,
+      ESC_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+    )
+  `);
+}
+
+function mapFilaServidor(r) {
+  if (!r) return null;
+  return {
+    habilitado: !!r.ESC_HABILITADO,
+    tipo: r.ESC_TIPO,
+    smtpHost: r.ESC_SMTP_HOST,
+    smtpPort: r.ESC_SMTP_PORT,
+    smtpSecure: !!r.ESC_SMTP_SECURE,
+    smtpUser: r.ESC_SMTP_USER,
+    smtpPass: r.ESC_SMTP_PASS,
+    tenantId: r.ESC_TENANT_ID,
+    clientId: r.ESC_CLIENT_ID,
+    clientSecret: r.ESC_CLIENT_SECRET,
+    buzonRemitente: r.ESC_BUZON_REMITENTE,
+    correoFrom: r.ESC_CORREO_FROM,
+    nombreRemitente: r.ESC_NOMBRE_REMITENTE,
+  };
+}
+
+// Usada por server.js al arrancar (antes de que exista req) — por eso acepta
+// tenantKey directo en vez de leerlo de req.user.
+async function getConfigServidorCorreo(tenantKey) {
+  const pool = await databaseService.getPool(tenantKey);
+  await ensureTablaServidor(pool);
+  const r = await pool.request().query('SELECT TOP 1 * FROM EMAIL_SERVIDOR_CONFIG ORDER BY ESC_ID DESC');
+  return mapFilaServidor(r.recordset[0]);
+}
+
+// GET — trae la config guardada. El client secret / password NO se regresan
+// tal cual al frontend (solo un booleano "yaConfigurado") para no exponer el
+// secreto en cada carga de pantalla; el admin debe volver a escribirlo si
+// quiere cambiarlo (igual que un password field típico).
+exports.getServidorConfig = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureTablaServidor(pool);
+    const r = await pool.request().query('SELECT TOP 1 * FROM EMAIL_SERVIDOR_CONFIG ORDER BY ESC_ID DESC');
+    const row = mapFilaServidor(r.recordset[0]);
+    if (!row) return res.json({ success: true, data: null });
+
+    return res.json({
+      success: true,
+      data: {
+        habilitado: row.habilitado,
+        tipo: row.tipo,
+        smtpHost: row.smtpHost,
+        smtpPort: row.smtpPort,
+        smtpSecure: row.smtpSecure,
+        smtpUser: row.smtpUser,
+        smtpPassConfigurado: Boolean(row.smtpPass),
+        tenantId: row.tenantId,
+        clientId: row.clientId,
+        clientSecretConfigurado: Boolean(row.clientSecret),
+        buzonRemitente: row.buzonRemitente,
+        correoFrom: row.correoFrom,
+        nombreRemitente: row.nombreRemitente,
+        transporteActivo: emailService.getTransporteActivo(),
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// PUT — guarda la config y recarga el transporte de correo en caliente (sin
+// reiniciar el proceso). Si smtpPass/clientSecret vienen vacíos en el body,
+// conserva el valor guardado anteriormente (patrón "no lo mando de vuelta,
+// no lo borres" — evita que la UI tenga que reenviar el secreto en cada
+// guardado de un campo que no lo tocó).
+exports.saveServidorConfig = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureTablaServidor(pool);
+
+    const existenteR = await pool.request().query('SELECT TOP 1 * FROM EMAIL_SERVIDOR_CONFIG ORDER BY ESC_ID DESC');
+    const existente = mapFilaServidor(existenteR.recordset[0]);
+
+    const body = req.body || {};
+    const tipo = body.tipo === 'graph' ? 'graph' : 'smtp';
+    const smtpPass = body.smtpPass ? String(body.smtpPass) : (existente?.smtpPass || null);
+    const clientSecret = body.clientSecret ? String(body.clientSecret) : (existente?.clientSecret || null);
+
+    const reqDb = pool.request()
+      .input('habilitado', sql.Bit, !!body.habilitado)
+      .input('tipo', sql.NVarChar, tipo)
+      .input('smtpHost', sql.NVarChar, body.smtpHost || null)
+      .input('smtpPort', sql.Int, body.smtpPort ? Number(body.smtpPort) : null)
+      .input('smtpSecure', sql.Bit, body.smtpSecure !== false)
+      .input('smtpUser', sql.NVarChar, body.smtpUser || null)
+      .input('smtpPass', sql.NVarChar, smtpPass)
+      .input('tenantId', sql.NVarChar, body.tenantId || null)
+      .input('clientId', sql.NVarChar, body.clientId || null)
+      .input('clientSecret', sql.NVarChar, clientSecret)
+      .input('buzonRemitente', sql.NVarChar, body.buzonRemitente || null)
+      .input('correoFrom', sql.NVarChar, body.correoFrom || null)
+      .input('nombreRemitente', sql.NVarChar, body.nombreRemitente || null);
+
+    if (existenteR.recordset.length) {
+      await reqDb.query(`
+        UPDATE EMAIL_SERVIDOR_CONFIG SET
+          ESC_HABILITADO=@habilitado, ESC_TIPO=@tipo,
+          ESC_SMTP_HOST=@smtpHost, ESC_SMTP_PORT=@smtpPort, ESC_SMTP_SECURE=@smtpSecure,
+          ESC_SMTP_USER=@smtpUser, ESC_SMTP_PASS=@smtpPass,
+          ESC_TENANT_ID=@tenantId, ESC_CLIENT_ID=@clientId, ESC_CLIENT_SECRET=@clientSecret,
+          ESC_BUZON_REMITENTE=@buzonRemitente, ESC_CORREO_FROM=@correoFrom, ESC_NOMBRE_REMITENTE=@nombreRemitente,
+          ESC_FECHA_ACTUALIZACION=GETDATE()
+      `);
+    } else {
+      await reqDb.query(`
+        INSERT INTO EMAIL_SERVIDOR_CONFIG (
+          ESC_HABILITADO, ESC_TIPO, ESC_SMTP_HOST, ESC_SMTP_PORT, ESC_SMTP_SECURE,
+          ESC_SMTP_USER, ESC_SMTP_PASS, ESC_TENANT_ID, ESC_CLIENT_ID, ESC_CLIENT_SECRET,
+          ESC_BUZON_REMITENTE, ESC_CORREO_FROM, ESC_NOMBRE_REMITENTE
+        ) VALUES (
+          @habilitado, @tipo, @smtpHost, @smtpPort, @smtpSecure,
+          @smtpUser, @smtpPass, @tenantId, @clientId, @clientSecret,
+          @buzonRemitente, @correoFrom, @nombreRemitente
+        )
+      `);
+    }
+
+    // Recarga en caliente: la próxima notificación ya usa la config nueva.
+    const nuevaConfig = await getConfigServidorCorreo(req.user?.empresa);
+    emailService.initialize(nuevaConfig);
+
+    return res.json({ success: true, transporteActivo: emailService.getTransporteActivo() });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST — envía un correo de prueba con la config actualmente activa (la que
+// ya está cargada en memoria, sea de BD o de .env) para validar que
+// realmente funciona antes de confiar en ella.
+exports.enviarPrueba = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const { correo } = req.body || {};
+    if (!correo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+      return res.status(400).json({ success: false, message: 'Correo destino inválido' });
+    }
+    const result = await emailService.sendTestEmail(correo);
+    if (!result.success) return res.status(500).json(result);
+    return res.json(result);
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
 
 // Estado completo para la pantalla de administración: por cada módulo, la
 // lista de usuarios activos con su correo (o null si no tienen) y si están
@@ -204,3 +385,4 @@ async function getDestinatariosUsuarios(modulo, tenantKey) {
 
 module.exports.getDestinatariosCorreo = getDestinatariosCorreo;
 module.exports.getDestinatariosUsuarios = getDestinatariosUsuarios;
+module.exports.getConfigServidorCorreo = getConfigServidorCorreo;

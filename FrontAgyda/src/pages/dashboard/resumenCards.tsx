@@ -7,11 +7,12 @@ import { useNavigate } from 'react-router-dom'
 import {
   Ticket, FolderKanban, ClipboardList, MessageSquareWarning, Scale, BookOpenCheck,
   Headset, CalendarClock, Newspaper, PlaneTakeoff, GraduationCap, HeartPulse,
-  Users, Target, ChevronRight, type LucideIcon,
+  Users, Target, ChevronRight, Star, TrendingUp, type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
 import { useCurrentUser } from '@/hooks/useAuth'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import { ticketsService } from '@/services/tickets.service'
 import { proyectosService } from '@/services/proyectos.service'
 import { encuestasService } from '@/services/encuestas.service'
@@ -20,6 +21,9 @@ import { livechatService } from '@/services/livechat.service'
 import { capacitacionService } from '@/services/capacitacion.service'
 import { incapacidadesService } from '@/services/incapacidades.service'
 import { ventasService } from '@/services/ventas.service'
+import { tiemposService } from '@/services/tiempos.service'
+import { ventasAreaService, type MiMeta } from '@/services/ventasArea.service'
+import { PausasMetaBloque } from '@/components/ventas/PausasMetaBloque'
 
 /* ════════════════════════════════════════════════════════════════════════
    CATÁLOGO DE CARDS DE RESUMEN
@@ -110,6 +114,21 @@ function MiniLista({ items }: { items: { k: string; a: string; b?: string }[] })
         </li>
       ))}
     </ul>
+  )
+}
+
+function Barra({ pct, tono = 'brand' }: { pct: number; tono?: 'brand' | 'emerald' | 'amber' | 'rose' | 'violet' }) {
+  const colores: Record<string, string> = {
+    brand: 'bg-brand', emerald: 'bg-emerald-500', amber: 'bg-amber-500',
+    rose: 'bg-rose-500', violet: 'bg-violet-500',
+  }
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-border">
+      <div
+        className={clsx('h-full rounded-full transition-all', colores[tono])}
+        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+      />
+    </div>
   )
 }
 
@@ -249,32 +268,231 @@ function LivechatResumen() {
   )
 }
 
-function PausasHoyResumen() {
+function fmtDuracion(s: number): string {
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+/* "Mis tiempos de hoy" — disponible (jornada − pausas) + desglose de pausas,
+   con barras proporcionales a la jornada del día. Mismo id que la card
+   anterior ("r-pausas") para no romper los layouts ya guardados. */
+function MisTiemposResumen() {
   const { data } = useQuery({
-    queryKey: ['pausa-hoy'],
-    queryFn: async () => {
-      const { data } = await api.get('/reports/pausa/hoy')
-      return data.data as Record<number, number>
-    },
+    queryKey: ['tiempos-hoy'],
+    queryFn: () => tiemposService.getTiemposHoy(),
     staleTime: 30_000, refetchInterval: 60_000,
   })
-  const fmt = (s: number) => {
-    const m = Math.floor(s / 60)
-    return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
+
+  if (!data) return <CardShell titulo="Mis tiempos de hoy" Icon={CalendarClock} to="/reportes/pausas" verLabel="Reporte"><p className="text-[0.72rem] text-ink-tertiary">Cargando…</p></CardShell>
+
+  if (data.sinEntrada) {
+    return (
+      <CardShell titulo="Mis tiempos de hoy" Icon={CalendarClock} to="/reportes/pausas" verLabel="Reporte">
+        <p className="text-center text-[0.72rem] text-ink-tertiary py-4">Sin registro de entrada hoy</p>
+      </CardShell>
+    )
   }
-  const total = data ? Object.values(data).reduce((a, b) => a + b, 0) : 0
-  const LABELS: Record<number, string> = { 2: 'Comida', 3: 'Baño', 5: 'Capacitación', 6: 'Permiso' }
+
+  const filas: { label: string; seg: number; tono: 'emerald' | 'amber' | 'brand' | 'violet' | 'rose' }[] = [
+    { label: 'Disponible', seg: data.disponibleSeg, tono: 'emerald' },
+    { label: 'Comida', seg: data.comidaSeg, tono: 'amber' },
+    { label: 'Baño', seg: data.banioSeg, tono: 'brand' },
+    { label: 'Capacitación', seg: data.capacitacionSeg, tono: 'violet' },
+    { label: 'Permiso', seg: data.permisoSeg, tono: 'rose' },
+  ]
+
   return (
-    <CardShell titulo="Mis pausas de hoy" Icon={CalendarClock} to="/reportes/pausas" verLabel="Reporte">
-      <BigStat value={fmt(total)} label="tiempo en pausa hoy" />
-      {data && (
-        <div className="mt-3">
-          <MiniLista items={Object.entries(data)
-            .filter(([, s]) => s > 0)
-            .map(([sid, s]) => ({ k: sid, a: LABELS[Number(sid)] ?? `Estado ${sid}`, b: fmt(s) }))} />
-        </div>
+    <CardShell titulo="Mis tiempos de hoy" Icon={CalendarClock} to="/reportes/pausas" verLabel="Reporte" tono="emerald">
+      <BigStat value={fmtDuracion(data.disponibleSeg)} label="disponible hoy" tono="emerald" />
+      <div className="mt-3 flex flex-col gap-2.5">
+        {filas.filter((f) => f.label === 'Disponible' || f.seg > 0).map((f) => (
+          <div key={f.label}>
+            <div className="mb-1 flex items-center justify-between text-[0.7rem]">
+              <span className="text-ink-secondary">{f.label}</span>
+              <span className="font-semibold text-ink-tertiary">{fmtDuracion(f.seg)}</span>
+            </div>
+            <Barra pct={data.jornadaSeg > 0 ? (f.seg / data.jornadaSeg) * 100 : 0} tono={f.tono} />
+          </div>
+        ))}
+      </div>
+    </CardShell>
+  )
+}
+
+/* "Tiempos del equipo" — mismo desglose por agente, solo para quien tenga
+   reports:ver-equipo (supervisor / a quien se le dé la función). Si no tiene
+   el permiso, la card no se renderiza aunque esté en el layout guardado. */
+function TiemposEquipoResumen() {
+  const { can, isLoading: cargandoPermiso } = useActionAccess()
+  const puedeVerEquipo = can('reports', 'ver-equipo')
+
+  const { data = [] } = useQuery({
+    queryKey: ['tiempos-hoy-equipo'],
+    queryFn: () => tiemposService.getTiemposHoyEquipo(),
+    staleTime: 30_000, refetchInterval: 60_000,
+    enabled: puedeVerEquipo,
+  })
+
+  if (cargandoPermiso) return null
+  if (!puedeVerEquipo) {
+    return (
+      <CardShell titulo="Tiempos del equipo" Icon={Users} to="/reportes/pausas" verLabel="Reporte" tono="brand">
+        <p className="text-center text-[0.72rem] text-ink-tertiary py-4">No tienes permiso para ver esta tarjeta</p>
+      </CardShell>
+    )
+  }
+  return (
+    <CardShell titulo="Tiempos del equipo" Icon={Users} to="/reportes/pausas" verLabel="Reporte" tono="brand">
+      {data.length === 0 ? (
+        <p className="text-center text-[0.72rem] text-ink-tertiary py-4">Sin datos aún</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-surface-border/60">
+          {data.slice(0, 8).map((u) => (
+            <li key={u.usuarioId} className="py-2">
+              <div className="flex items-center justify-between text-[0.74rem]">
+                <span className="min-w-0 flex-1 truncate text-ink">{u.nombre}</span>
+                <span className="flex-shrink-0 font-semibold text-emerald-600">
+                  {u.sinEntrada ? '—' : fmtDuracion(u.disponibleSeg)}
+                </span>
+              </div>
+              {!u.sinEntrada && u.jornadaSeg > 0 && (
+                <div className="mt-1"><Barra pct={(u.disponibleSeg / u.jornadaSeg) * 100} tono="emerald" /></div>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </CardShell>
+  )
+}
+
+/* "Metas de ventas" — barra que avanza con ventas exitosas del día. Incluye la
+   meta individual del agente y, si aplica, la meta global de su campaña. */
+function MetasVentasResumen() {
+  const { data = [] } = useQuery({
+    queryKey: ['mis-metas-ventas'],
+    queryFn: () => ventasAreaService.getMisMetas(),
+    staleTime: 30_000, refetchInterval: 60_000,
+  })
+
+  if (data.length === 0) {
+    return (
+      <CardShell titulo="Metas de ventas" Icon={Target} to="/ventas-area/metas" verLabel="Ver metas" tono="violet">
+        <p className="text-center text-[0.72rem] text-ink-tertiary py-4">Sin metas asignadas hoy</p>
+      </CardShell>
+    )
+  }
+
+  return (
+    <CardShell titulo="Metas de ventas" Icon={Target} to="/ventas-area/metas" verLabel="Ver metas" tono="violet">
+      <div className="flex flex-col gap-4">
+        {data.map((m) => (
+          <MetaProgreso key={m.id} meta={m} />
+        ))}
+      </div>
+    </CardShell>
+  )
+}
+
+/* Tarjeta de progreso de una meta — estilo "hero": avatar de campaña, badge de
+   alcance, contador grande, barra tipo slider con extremos, grid de KPIs y
+   banner motivacional. */
+function MetaProgreso({ meta }: { meta: MiMeta }) {
+  const objetivo = meta.metaUnidades > 0 ? meta.metaUnidades : 0
+  const actual = meta.avanceUnidades
+  const pct = objetivo > 0 ? Math.min(100, (actual / objetivo) * 100) : 0
+  const pctReal = objetivo > 0 ? (actual / objetivo) * 100 : 0
+  const cumplida = pct >= 100
+  const esEquipo = meta.alcance === 'campana'
+  const nombre = meta.campanaNombre ?? 'Meta de ventas'
+  const iniciales = nombre.replace(/[^A-Za-zÁÉÍÓÚÑ ]/g, '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'MV'
+
+  return (
+    <div className="rounded-2xl border border-surface-border bg-surface/50 p-4">
+      {/* cabecera: avatar + nombre + contador */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className={clsx(
+            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold text-white',
+            cumplida ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' : 'bg-gradient-to-br from-violet-500 to-violet-700',
+          )}>
+            {iniciales}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-[0.85rem] font-bold text-ink">{nombre}</span>
+              <span className={clsx(
+                'flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide',
+                esEquipo ? 'bg-violet-100 text-violet-700' : 'bg-brand/10 text-brand',
+              )}>
+                {esEquipo ? 'Equipo' : 'Individual'}
+              </span>
+            </div>
+            <p className="text-[0.68rem] text-ink-tertiary">Meta de ventas</p>
+          </div>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <p className={clsx('text-[1.15rem] font-black leading-none tabular-nums', cumplida ? 'text-emerald-600' : 'text-violet-600')}>
+            {actual} <span className="text-ink-tertiary">/ {objetivo}</span>
+          </p>
+          <p className="mt-0.5 text-[0.66rem] text-ink-tertiary">{pctReal.toFixed(1)}% del objetivo</p>
+        </div>
+      </div>
+
+      {/* barra tipo slider con extremos */}
+      <div className="mt-3.5">
+        <div className="relative h-2 w-full rounded-full bg-surface-border">
+          <div
+            className={clsx('absolute inset-y-0 left-0 rounded-full', cumplida ? 'bg-emerald-500' : 'bg-violet-500')}
+            style={{ width: `${Math.max(pct, 3)}%` }}
+          />
+          <div
+            className={clsx(
+              'absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card shadow',
+              cumplida ? 'bg-emerald-500' : 'bg-violet-500',
+            )}
+            style={{ left: `${Math.max(pct, 2)}%` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-[0.62rem] text-ink-tertiary">
+          <span>0</span>
+          <span>{objetivo}</span>
+        </div>
+      </div>
+
+      {/* grid de KPIs */}
+      <div className="mt-3.5 grid grid-cols-4 gap-1 border-t border-surface-border pt-3 text-center">
+        <MetaKpi valor={actual} label="Actual" tono="text-violet-600" />
+        <MetaKpi valor={objetivo} label="Objetivo" tono="text-brand" />
+        <MetaKpi valor={`${pctReal.toFixed(1)}%`} label="Progreso" tono="text-emerald-600" />
+        <MetaKpi valor={cumplida ? 'Lista' : 'Activa'} label="Estado" tono={cumplida ? 'text-emerald-600' : 'text-amber-500'} />
+      </div>
+
+      {/* tiempos de pausa de hoy — clic para desglose por persona */}
+      <PausasMetaBloque metaId={meta.id} nombreMeta={nombre} />
+
+      {/* banner motivacional */}
+      <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-violet-50 px-3 py-2.5">
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-violet-100">
+          {cumplida ? <Star className="h-3.5 w-3.5 text-violet-600" /> : <TrendingUp className="h-3.5 w-3.5 text-violet-600" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[0.72rem] font-bold text-ink">{cumplida ? '¡Meta cumplida! 🎉' : '¡Sigue así!'}</p>
+          <p className="text-[0.66rem] text-ink-tertiary">
+            {cumplida ? 'Excelente trabajo del equipo' : 'Cada venta te acerca más a tu objetivo'}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MetaKpi({ valor, label, tono }: { valor: ReactNode; label: string; tono: string }) {
+  return (
+    <div>
+      <p className={clsx('text-[0.95rem] font-black leading-none tabular-nums', tono)}>{valor}</p>
+      <p className="mt-1 text-[0.6rem] uppercase tracking-wide text-ink-tertiary">{label}</p>
+    </div>
   )
 }
 
@@ -427,13 +645,15 @@ export const RESUMEN_CARDS: ResumenCardDef[] = [
   { id: 'r-legal', titulo: 'Legal — por firmar', descripcion: 'Documentos legales que requieren tu firma.', categoria: 'Contenido', moduleKey: 'legal', size: { w: 3, h: 3 }, Icon: Scale, render: () => <LegalesResumen /> },
   { id: 'r-reglamento', titulo: 'Reglamento interno', descripcion: 'Estado de aceptación del reglamento.', categoria: 'Personas', moduleKey: 'reglamento', size: { w: 3, h: 3 }, Icon: BookOpenCheck, render: () => <ReglamentoResumen /> },
   { id: 'r-livechat', titulo: 'Chat en vivo — cola', descripcion: 'Conversaciones activas asignadas a ti.', categoria: 'Operación', moduleKey: 'livechat', size: { w: 3, h: 3 }, Icon: Headset, render: () => <LivechatResumen /> },
-  { id: 'r-pausas', titulo: 'Mis pausas de hoy', descripcion: 'Tiempo acumulado en pausa hoy por tipo.', categoria: 'Personas', moduleKey: 'reports', size: { w: 3, h: 4 }, Icon: CalendarClock, render: () => <PausasHoyResumen /> },
+  { id: 'r-pausas', titulo: 'Mis tiempos de hoy', descripcion: 'Disponible, comida, baño, capacitación y permiso de hoy.', categoria: 'Personas', moduleKey: 'reports', size: { w: 3, h: 5 }, Icon: CalendarClock, render: () => <MisTiemposResumen /> },
+  { id: 'r-tiempos-equipo', titulo: 'Tiempos del equipo', descripcion: 'Tiempo disponible de cada agente del área, hoy.', categoria: 'Personas', moduleKey: 'reports', size: { w: 3, h: 5 }, Icon: Users, render: () => <TiemposEquipoResumen /> },
   { id: 'r-vacaciones', titulo: 'Vacaciones', descripcion: 'Solicitudes de vacaciones por aprobar.', categoria: 'Personas', moduleKey: 'vacaciones', size: { w: 3, h: 3 }, Icon: PlaneTakeoff, render: () => <VacacionesResumen /> },
   { id: 'r-capacitacion', titulo: 'Capacitación', descripcion: 'Tus cursos en curso e inscritos.', categoria: 'Personas', moduleKey: 'capacitacion', size: { w: 3, h: 3 }, Icon: GraduationCap, render: () => <CapacitacionResumen /> },
   { id: 'r-incapacidades', titulo: 'Incapacidades', descripcion: 'Incapacidades vigentes.', categoria: 'Personas', moduleKey: 'incapacidades', size: { w: 3, h: 3 }, Icon: HeartPulse, render: () => <IncapacidadesResumen /> },
   { id: 'r-noticias', titulo: 'Noticias sin leer', descripcion: 'Publicaciones que aún no has visto.', categoria: 'Contenido', moduleKey: 'noticias', size: { w: 3, h: 3 }, Icon: Newspaper, render: () => <NoticiasNuevasResumen /> },
   { id: 'r-vacantes', titulo: 'Reclutamiento', descripcion: 'Vacantes abiertas y postulantes nuevos.', categoria: 'Personas', moduleKey: 'vacantes', size: { w: 3, h: 3 }, Icon: Users, render: () => <VacantesResumen /> },
   { id: 'r-ventas', titulo: 'Ventas del día', descripcion: 'Ventas aprobadas y rechazadas de hoy (VICIdial).', categoria: 'Comercial', moduleKey: 'ventas', size: { w: 3, h: 4 }, Icon: Target, render: () => <VentasResumen /> },
+  { id: 'r-metas-ventas', titulo: 'Metas de ventas', descripcion: 'Avance de tus metas diarias por campaña, individual y de equipo.', categoria: 'Comercial', moduleKey: 'ventas-area', size: { w: 3, h: 5 }, Icon: Target, render: () => <MetasVentasResumen /> },
 ]
 
 export const RESUMEN_CARD_IDS = RESUMEN_CARDS.map((c) => c.id)

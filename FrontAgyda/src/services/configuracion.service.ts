@@ -30,6 +30,41 @@ export interface ConfiguracionCorreo {
   destinatarios: Record<string, number[]>
 }
 
+export type ServidorCorreoTipo = 'smtp' | 'graph'
+
+export interface ServidorCorreoConfig {
+  habilitado: boolean
+  tipo: ServidorCorreoTipo
+  smtpHost: string | null
+  smtpPort: number | null
+  smtpSecure: boolean
+  smtpUser: string | null
+  smtpPassConfigurado: boolean
+  tenantId: string | null
+  clientId: string | null
+  clientSecretConfigurado: boolean
+  buzonRemitente: string | null
+  correoFrom: string | null
+  nombreRemitente: string | null
+  transporteActivo: 'ninguno' | 'resend' | 'graph' | 'smtp'
+}
+
+export interface GuardarServidorCorreoPayload {
+  habilitado: boolean
+  tipo: ServidorCorreoTipo
+  smtpHost?: string
+  smtpPort?: number
+  smtpSecure?: boolean
+  smtpUser?: string
+  smtpPass?: string
+  tenantId?: string
+  clientId?: string
+  clientSecret?: string
+  buzonRemitente?: string
+  correoFrom?: string
+  nombreRemitente?: string
+}
+
 export interface WebphoneCredencialVista {
   vistaId: number
   vistaLabel: string
@@ -81,6 +116,19 @@ export const configuracionService = {
   },
   async setCorreoUsuario(usuarioId: number, correo: string): Promise<void> {
     await api.put(`/notificaciones-correo/usuario/${usuarioId}/correo`, { correo })
+  },
+
+  async getServidorCorreoConfig(): Promise<ServidorCorreoConfig | null> {
+    const { data } = await api.get('/notificaciones-correo/servidor')
+    return data.data
+  },
+  async guardarServidorCorreoConfig(payload: GuardarServidorCorreoPayload): Promise<{ transporteActivo: string }> {
+    const { data } = await api.put('/notificaciones-correo/servidor', payload)
+    return data
+  },
+  async enviarCorreoPrueba(correo: string): Promise<{ success: boolean; message?: string }> {
+    const { data } = await api.post('/notificaciones-correo/servidor/prueba', { correo })
+    return data
   },
 
   async getCredencialesVicidial(): Promise<WebphoneCredencial[]> {

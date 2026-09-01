@@ -18,7 +18,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/dashboard',        label: 'Inicio',          icon: 'Home',                 moduleKey: '*',                roles: INT,                  showInSidebar: true  },
   { path: '/noticias',         label: 'Noticias',        icon: 'Newspaper',            moduleKey: 'noticias',         roles: INT,                  showInSidebar: true  },
   { path: '/tickets',          label: 'Tickets',         icon: 'LifeBuoy',             moduleKey: 'tickets',          roles: [],                   showInSidebar: true  },
-  { path: '/kb',               label: 'Base de Conocimiento', icon: 'BookOpen',        moduleKey: 'tickets',          roles: NO_CC,                showInSidebar: true  },
+  { path: '/kb',               label: 'ArdaWiki',        icon: 'BookOpen',             moduleKey: 'tickets',          roles: NO_CC,                showInSidebar: true  },
   { path: '/mensajeria',       label: 'Mensajería',      icon: 'MessagesSquare',       moduleKey: 'mensajeria',       roles: INT,                  showInSidebar: true  },
 
   // ── Mi Espacio ─────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/finanzas/cuentas-pagar', label: 'Cuentas por pagar', icon: 'CreditCard',   moduleKey: 'finanzas',         roles: ['AD','TI'],          showInSidebar: true,  description: 'Saldos pendientes con proveedores' },
   { path: '/finanzas/bancos',  label: 'Bancos',          icon: 'Landmark',             moduleKey: 'finanzas',         roles: ['AD','TI'],          showInSidebar: true,  description: 'Cuentas bancarias y movimientos' },
   { path: '/finanzas/reportes-financieros', label: 'Reportes financieros', icon: 'BarChart2', moduleKey: 'finanzas', roles: ['AD','TI'],          showInSidebar: true,  description: 'Reportes financieros consolidados' },
-  { path: '/ventas-area',      label: 'Ventas (Área)',   icon: 'Target',               moduleKey: 'ventas-area',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Seguimiento de metas comerciales' },
+  { path: '/ventas-area',      label: 'Ventas (Área)',   icon: 'Target',               moduleKey: 'ventas-area',      roles: ['AD','TI'],          showInSidebar: false, description: 'Seguimiento de metas comerciales' },
   { path: '/ventas-area/metas', label: 'Metas',          icon: 'ListChecks',           moduleKey: 'ventas-area',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Metas diaria, semanal y mensual' },
   { path: '/ventas-area/asesores', label: 'Asesores',    icon: 'Headphones',           moduleKey: 'ventas-area',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Productividad, ventas y conversión por asesor' },
   { path: '/ventas-area/prospeccion', label: 'Prospección', icon: 'Contact',           moduleKey: 'ventas-area',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Seguimiento de prospectos' },

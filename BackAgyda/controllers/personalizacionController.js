@@ -22,6 +22,7 @@ const DASHBOARD_CARD_IDS = [
   'r-tickets', 'r-proyectos', 'r-encuestas', 'r-quejas', 'r-legal',
   'r-reglamento', 'r-livechat', 'r-pausas', 'r-vacaciones', 'r-capacitacion',
   'r-incapacidades', 'r-noticias', 'r-vacantes', 'r-ventas',
+  'r-tiempos-equipo', 'r-metas-ventas',
 ];
 
 const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];
@@ -49,15 +50,28 @@ const DEFAULT_CONFIG = {
     { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
   ],
   dashboard: { cards: [] },
+  // Identidad institucional — misión, visión y valores por empresa. Los textos
+  // por defecto reflejan lo que hoy está hardcodeado en el frontend (ArdaByTec).
+  institucional: {
+    mision: 'Soporte TI, marcación y software que hacen crecer tu negocio.',
+    vision: 'Liderar la automatización con IA en soluciones empresariales.',
+    valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
+  },
 };
 
 function mergeConfig(stored) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   if (!stored || typeof stored !== 'object') return base;
+  const inst = stored.institucional && typeof stored.institucional === 'object' ? stored.institucional : {};
   return {
     branding: { ...base.branding, ...(stored.branding || {}) },
     headerButtons: Array.isArray(stored.headerButtons) ? stored.headerButtons : base.headerButtons,
     dashboard: { ...base.dashboard, ...(stored.dashboard || {}) },
+    institucional: {
+      mision: typeof inst.mision === 'string' ? inst.mision : base.institucional.mision,
+      vision: typeof inst.vision === 'string' ? inst.vision : base.institucional.vision,
+      valores: Array.isArray(inst.valores) ? inst.valores : base.institucional.valores,
+    },
   };
 }
 
@@ -196,6 +210,39 @@ exports.updateHeaderButtons = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateHeaderButtons', e);
     return res.status(500).json({ success: false, message: 'Error al guardar los botones del encabezado' });
+  }
+};
+
+// PUT /api/personalizacion/institucional
+// Body: { mision, vision, valores: [] }
+exports.updateInstitucional = async (req, res) => {
+  try {
+    const b = req.body || {};
+    const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    const D = DEFAULT_CONFIG.institucional;
+
+    const valores = Array.isArray(b.valores)
+      ? b.valores.map((v) => s(v, 60)).filter(Boolean).slice(0, 20)
+      : D.valores;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.institucional = {
+      mision: s(b.mision, 600),
+      vision: s(b.vision, 600),
+      valores,
+    };
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-institucional', detalle: JSON.stringify(config.institucional),
+      ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'institucional');
+    return res.json({ success: true, data: config.institucional });
+  } catch (e) {
+    logger.error('personalizacionController.updateInstitucional', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la identidad institucional' });
   }
 };
 

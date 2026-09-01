@@ -607,6 +607,20 @@ BEGIN
     CONSTRAINT UQ_TI_ESPECIALIDADES_NOMBRE UNIQUE (ESP_NOMBRE)
   );
 END
+
+-- Reemplaza el array fijo BackAgyda/constants/ticketCierre.js — el frontend
+-- pasa a leer estos códigos de la BD para poder administrarlos desde
+-- Configuración > Tecnología/TI, igual que Especialidades.
+IF OBJECT_ID('dbo.TICKET_CODIGOS_CIERRE', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_CODIGOS_CIERRE (
+    COD_ID INT IDENTITY(1,1) PRIMARY KEY,
+    COD_NOMBRE NVARCHAR(100) NOT NULL,
+    COD_ORDEN INT NOT NULL DEFAULT 0,
+    COD_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_CODIGOS_CIERRE_NOMBRE UNIQUE (COD_NOMBRE)
+  );
+END
 `;
     await pool.request().batch(batchSql);
 
@@ -635,7 +649,18 @@ END
       `);
     }
 
-    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades)');
+    const seedCodigosCierre = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_CODIGOS_CIERRE');
+    if (seedCodigosCierre.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_CODIGOS_CIERRE (COD_NOMBRE, COD_ORDEN) VALUES
+          ('Solucionado',1),('Solucionado con workaround',2),('Solicitud completada',3),
+          ('Configuración/cambio realizado',4),('Resuelto por proveedor',5),('Resuelto por desarrollo',6),
+          ('Error de usuario / orientación',7),('Falla no encontrada',8),('Duplicado',9),
+          ('Cancelado',10),('Sin respuesta del usuario',11),('No procede',12)
+      `);
+    }
+
+    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades, Códigos de Cierre)');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar catálogos de Tecnología/TI:', err.message);
   }
@@ -2859,7 +2884,9 @@ async function ensureFinanzasSchema(pool) {
   }
 }
 
-// Ventas: metas por asesor/periodo (complementa CRM/ventas existentes)
+// Ventas: metas por asesor/periodo (complementa CRM/ventas existentes).
+// VM_CAMPANA_ID/VM_TIPO/VM_ALCANCE permiten metas diarias por campaña (global,
+// VM_ASESOR_ID=0) además de las mensuales por asesor originales.
 async function ensureVentasMetasSchema(pool) {
   try {
     await pool.request().batch(`
@@ -2871,8 +2898,35 @@ async function ensureVentasMetasSchema(pool) {
           VM_PERIODO       NVARCHAR(20)   NOT NULL,
           VM_META_MONTO    DECIMAL(18,2)  NULL,
           VM_META_UNIDADES INT            NULL,
-          CONSTRAINT UQ_VENTAS_META UNIQUE (VM_ASESOR_ID, VM_PERIODO)
+          VM_CAMPANA_ID    INT            NULL,
+          VM_TIPO          NVARCHAR(10)   NOT NULL DEFAULT 'mensual',
+          VM_ALCANCE       NVARCHAR(10)   NOT NULL DEFAULT 'asesor',
+          CONSTRAINT UQ_VENTAS_META UNIQUE (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID)
         );
+      END
+      ELSE
+      BEGIN
+        IF COL_LENGTH('dbo.VENTAS_METAS','VM_CAMPANA_ID') IS NULL
+          ALTER TABLE dbo.VENTAS_METAS ADD VM_CAMPANA_ID INT NULL;
+        IF COL_LENGTH('dbo.VENTAS_METAS','VM_TIPO') IS NULL
+          ALTER TABLE dbo.VENTAS_METAS ADD VM_TIPO NVARCHAR(10) NOT NULL DEFAULT 'mensual';
+        IF COL_LENGTH('dbo.VENTAS_METAS','VM_ALCANCE') IS NULL
+          ALTER TABLE dbo.VENTAS_METAS ADD VM_ALCANCE NVARCHAR(10) NOT NULL DEFAULT 'asesor';
+
+        -- La UNIQUE original (VM_ASESOR_ID, VM_PERIODO) no admite dos metas del
+        -- mismo asesor/día en campañas distintas. Se reemplaza por una que
+        -- incluye VM_CAMPANA_ID, una sola vez (detectada por su nombre).
+        IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'UQ_VENTAS_META' AND parent_object_id = OBJECT_ID('dbo.VENTAS_METAS'))
+          AND NOT EXISTS (
+            SELECT 1 FROM sys.index_columns ic
+            JOIN sys.key_constraints kc ON kc.unique_index_id = ic.index_id AND kc.parent_object_id = ic.object_id
+            JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+            WHERE kc.name = 'UQ_VENTAS_META' AND c.name = 'VM_CAMPANA_ID'
+          )
+        BEGIN
+          ALTER TABLE dbo.VENTAS_METAS DROP CONSTRAINT UQ_VENTAS_META;
+          ALTER TABLE dbo.VENTAS_METAS ADD CONSTRAINT UQ_VENTAS_META UNIQUE (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID);
+        END
       END
     `);
   } catch (err) {

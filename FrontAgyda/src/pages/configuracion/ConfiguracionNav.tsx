@@ -26,7 +26,7 @@ export const CONFIGURACION_SECCIONES: ConfiguracionSeccion[] = [
   { key: 'escalamientos',  label: 'Escalamientos',            icon: ArrowUpCircle, disponible: true },
   { key: 'automatizaciones', label: 'Automatizaciones',       icon: Zap,           disponible: true },
   { key: 'notificaciones', label: 'Notificaciones',           icon: Bell,          disponible: true },
-  { key: 'kb',             label: 'Base de Conocimiento',     icon: BookOpen,      disponible: true },
+  { key: 'kb',             label: 'ArdaWiki',                 icon: BookOpen,      disponible: true },
   { key: 'encuestas',      label: 'Encuestas',                icon: ClipboardList, disponible: true },
   { key: 'plantillas',     label: 'Plantillas',                icon: FileText,      disponible: true },
   { key: 'campos-personalizados', label: 'Campos Personalizados', icon: ListChecks, disponible: true },

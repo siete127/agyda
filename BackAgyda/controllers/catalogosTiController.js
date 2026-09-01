@@ -290,6 +290,62 @@ exports.toggleEspecialidadActiva = async (req, res) => {
   }
 };
 
+/* ── Códigos de cierre de tickets ── */
+exports.getCodigosCierre = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const rs = await pool.request().query(`
+      SELECT COD_ID as id, COD_NOMBRE as nombre, COD_ORDEN as orden, COD_ACTIVA as activa
+      FROM TICKET_CODIGOS_CIERRE ${incluirInactivas ? '' : 'WHERE COD_ACTIVA = 1'}
+      ORDER BY COD_ORDEN, COD_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando códigos de cierre:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createCodigoCierre = async (req, res) => {
+  try {
+    const { nombre, orden } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request().input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_CODIGOS_CIERRE (COD_NOMBRE, COD_ORDEN) VALUES (@nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando código de cierre:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateCodigoCierre = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_CODIGOS_CIERRE SET COD_NOMBRE=@nombre, COD_ORDEN=@orden WHERE COD_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando código de cierre:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleCodigoCierreActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_CODIGOS_CIERRE SET COD_ACTIVA = 1 - COD_ACTIVA WHERE COD_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de código de cierre:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 /* ── Proveedores ── */
 exports.getProveedores = async (req, res) => {
   try {

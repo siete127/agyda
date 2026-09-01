@@ -145,7 +145,7 @@ export function KbPage() {
                 <BookOpen className="h-5 w-5 text-brand-muted" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Base de Conocimiento</h1>
+                <h1 className="text-lg font-bold text-white tracking-tight">ArdaWiki</h1>
                 <p className="mt-0.5 text-xs text-white/50">{articulos.length} artículos</p>
               </div>
             </div>

@@ -1829,11 +1829,19 @@ exports.resolverTicket = async (req, res) => {
     if (!diagnostico || !accionesRealizadas) {
       return res.status(400).json({ success: false, message: 'diagnostico y accionesRealizadas son requeridos' });
     }
-    const codigo = codigoCierre && TICKET_CODIGOS_CIERRE.includes(codigoCierre)
-      ? codigoCierre
-      : TICKET_CODIGOS_CIERRE[0];
 
     const pool = await databaseService.getPool(req.user?.empresa);
+
+    // Códigos de cierre administrables desde Configuración (ver
+    // catalogosTiController.js) — se valida contra la tabla en vez del array
+    // fijo legacy de constants/ticketCierre.js.
+    const codigosRs = await pool.request().query(
+      `SELECT COD_NOMBRE as nombre FROM TICKET_CODIGOS_CIERRE WHERE COD_ACTIVA = 1 ORDER BY COD_ORDEN, COD_NOMBRE`
+    );
+    const codigosValidos = codigosRs.recordset.map(r => r.nombre);
+    const codigo = codigoCierre && codigosValidos.includes(codigoCierre)
+      ? codigoCierre
+      : (codigosValidos[0] || TICKET_CODIGOS_CIERRE[0]);
     const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT SOLICITANTE_ID, ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
     if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     if (['cerrado'].includes(hdr.recordset[0].ESTADO)) {
@@ -1990,7 +1998,17 @@ exports.getCategorias = async (req, res) => {
 };
 
 exports.getCodigosCierre = async (req, res) => {
-  res.json({ success: true, data: TICKET_CODIGOS_CIERRE });
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(
+      `SELECT COD_NOMBRE as nombre FROM TICKET_CODIGOS_CIERRE WHERE COD_ACTIVA = 1 ORDER BY COD_ORDEN, COD_NOMBRE`
+    );
+    const data = rs.recordset.map(r => r.nombre);
+    return res.json({ success: true, data: data.length ? data : TICKET_CODIGOS_CIERRE });
+  } catch (e) {
+    console.error('Error obteniendo códigos de cierre, usando fallback fijo:', e.message);
+    return res.json({ success: true, data: TICKET_CODIGOS_CIERRE });
+  }
 };
 
 // ── API keys para creación pública de tickets (solo AD) ──────────────────

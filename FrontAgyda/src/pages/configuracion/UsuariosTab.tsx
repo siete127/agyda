@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { Fragment, useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, UserPlus, Edit2, Trash2, Users, UserX, UserCheck, RefreshCw,
   SlidersHorizontal, MoreVertical, ShieldCheck, UserCog, Clock,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, X,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +13,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { type Usuario, parseUsuario, fotoUsuarioSrc, ROL_COLORS } from '../usuarios/usuario.model'
 import { UsuarioModal } from '../usuarios/UsuarioModal'
+import { UsuarioFichaExpandida } from '../usuarios/UsuarioFichaExpandida'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
@@ -132,6 +133,7 @@ export function UsuariosTab() {
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState<Usuario | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Usuario | null>(null)
+  const [expandido, setExpandido] = useState<number | null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const qc = useQueryClient()
@@ -402,13 +404,23 @@ export function UsuariosTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {pageRows.map((u) => (
+                  {pageRows.map((u) => {
+                    const abierto = expandido === u.id
+                    return (
+                    <Fragment key={u.id}>
                     <tr
-                      key={u.id}
-                      className={clsx('transition-colors', tab === 'desactivados' ? 'opacity-75 hover:opacity-100 hover:bg-red-50/40' : 'hover:bg-gray-50')}
+                      onClick={() => tab === 'activos' && setExpandido(abierto ? null : u.id)}
+                      className={clsx(
+                        'transition-colors',
+                        tab === 'desactivados' ? 'opacity-75 hover:opacity-100 hover:bg-red-50/40' : 'cursor-pointer hover:bg-gray-50',
+                        abierto && 'bg-gray-50',
+                      )}
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
+                          {tab === 'activos' && (
+                            <ChevronDown className={clsx('h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-transform', abierto && 'rotate-180 text-brand')} />
+                          )}
                           <Avatar src={fotoUsuarioSrc(u.fotoPerfil)} name={`${u.nombres} ${u.apellidos}`} size="sm" />
                           <div className="min-w-0">
                             <p className="truncate text-[0.82rem] font-semibold text-gray-900">{u.nombres} {u.apellidos}</p>
@@ -446,7 +458,7 @@ export function UsuariosTab() {
                           {fmtFecha(u.fechaIngreso)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end">
                           <RowMenu
                             esDesactivado={tab === 'desactivados'}
@@ -457,7 +469,15 @@ export function UsuariosTab() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    {abierto && (
+                      <tr>
+                        <td colSpan={6} className="p-0">
+                          <UsuarioFichaExpandida usuarioId={u.id} puedeEditar />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                  )})}
                 </tbody>
               </table>
             </div>

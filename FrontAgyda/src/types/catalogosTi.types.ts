@@ -34,6 +34,13 @@ export interface Especialidad {
   activa: boolean
 }
 
+export interface CodigoCierre {
+  id: number
+  nombre: string
+  orden: number
+  activa: boolean
+}
+
 export interface IntegracionConfig {
   id: number
   clave: string

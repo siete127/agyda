@@ -198,6 +198,132 @@ exports.getPausaHoy = async (req, res) => {
   }
 };
 
+// Resuelve la jornada esperada de HOY para un usuario: hora de entrada real
+// (checada, ASISTENCIA_ENTRADAS) y hora de salida esperada (excepción del día
+// de la semana en ASISTENCIA_HORARIOS_ESP si existe, si no el horario general
+// de ASISTENCIA_HORARIOS por rol). Devuelve null si no hay checada hoy.
+async function getJornadaHoy(pool, neusId, rol) {
+  const r = await pool.request()
+    .input('neusId', sql.Int, neusId)
+    .input('rol', sql.NVarChar, rol)
+    .query(`
+      DECLARE @diaSemana TINYINT = ((DATEPART(WEEKDAY, GETDATE()) + @@DATEFIRST - 2) % 7) + 1; -- 1=lunes..7=domingo
+
+      SELECT
+        e.HORA_ENTRADA AS horaEntradaReal,
+        COALESCE(esp.HORA_SALIDA, h.HORA_SALIDA, '18:00:00') AS horaSalidaEsperada
+      FROM ASISTENCIA_ENTRADAS e
+      LEFT JOIN ASISTENCIA_HORARIOS h ON h.ROL = @rol AND h.ACTIVO = 1
+      LEFT JOIN ASISTENCIA_HORARIOS_ESP esp ON esp.HORARIO_ID = h.ID AND esp.DIA_SEMANA = @diaSemana AND esp.ACTIVO = 1
+      WHERE e.NEUS_ID = @neusId AND e.FECHA = CAST(GETDATE() AS date)
+    `);
+  if (!r.recordset.length) return null;
+  const { horaEntradaReal, horaSalidaEsperada } = r.recordset[0];
+
+  const jr = await pool.request()
+    .input('entrada', sql.DateTime, horaEntradaReal)
+    .input('salidaEsp', sql.VarChar, horaSalidaEsperada)
+    .query(`
+      DECLARE @salidaHoy DATETIME = CAST(CAST(GETDATE() AS date) AS datetime) + CAST(@salidaEsp AS datetime);
+      DECLARE @tope DATETIME = CASE WHEN GETDATE() < @salidaHoy THEN GETDATE() ELSE @salidaHoy END;
+      SELECT CASE WHEN @tope > @entrada THEN DATEDIFF(SECOND, @entrada, @tope) ELSE 0 END AS jornadaSeg;
+    `);
+  return { jornadaSeg: Math.max(0, jr.recordset[0].jornadaSeg || 0), horaEntrada: horaEntradaReal };
+}
+
+// Suma de pausas de HOY por status_id para un usuario: { 2: seg, 3: seg, 5: seg, 6: seg }
+async function getPausasHoyDe(pool, neusId) {
+  const result = await pool.request()
+    .input('neusId', sql.Int, neusId)
+    .query(`
+      SELECT ut.status_id,
+        SUM(DATEDIFF(SECOND, ut.fecha_inicio, ISNULL(ut.fecha_fin, GETDATE()))) AS totalSegundos
+      FROM USUARIO_TIEMPOS ut
+      WHERE ut.neus_id = @neusId
+        AND ut.status_id IN (2, 3, 5, 6)
+        AND CAST(ut.fecha_inicio AS DATE) = CAST(GETDATE() AS DATE)
+      GROUP BY ut.status_id
+    `);
+  const porEstado = { 2: 0, 3: 0, 5: 0, 6: 0 };
+  for (const r of result.recordset) porEstado[r.status_id] = Math.max(0, r.totalSegundos || 0);
+  return porEstado;
+}
+// Reutilizable desde otros módulos (p. ej. Ventas Área — pausas por meta).
+exports.getPausasHoyDe = getPausasHoyDe;
+
+// GET /api/reports/tiempos/hoy — tiempo disponible (jornada − pausas) + desglose
+// de pausas del día para el usuario autenticado. Emparejado con /pausa/hoy: misma
+// fuente (USUARIO_TIEMPOS) y mismo criterio de "hoy".
+exports.getTiemposHoy = async (req, res) => {
+  try {
+    const neusId = req.user?.id;
+    const rol = (req.user?.tipoUsuario || '').toString().toUpperCase();
+    if (!neusId) return res.status(400).json({ success: false });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const jornada = await getJornadaHoy(pool, neusId, rol);
+    const pausas = await getPausasHoyDe(pool, neusId);
+    const pausasSeg = pausas[2] + pausas[3] + pausas[5] + pausas[6];
+
+    if (!jornada) {
+      return res.json({
+        success: true,
+        data: { sinEntrada: true, jornadaSeg: 0, disponibleSeg: 0, comidaSeg: pausas[2], banioSeg: pausas[3], capacitacionSeg: pausas[5], permisoSeg: pausas[6] },
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        sinEntrada: false,
+        jornadaSeg: jornada.jornadaSeg,
+        disponibleSeg: Math.max(0, jornada.jornadaSeg - pausasSeg),
+        comidaSeg: pausas[2], banioSeg: pausas[3], capacitacionSeg: pausas[5], permisoSeg: pausas[6],
+      },
+    });
+  } catch (e) {
+    console.error('Error getTiemposHoy:', e?.message);
+    return res.json({ success: true, data: { sinEntrada: true, jornadaSeg: 0, disponibleSeg: 0, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0 } });
+  }
+};
+
+// GET /api/reports/tiempos/hoy/equipo?area= — mismo desglose por cada usuario
+// activo del área (o de todas si no se especifica). Requiere reports:ver-equipo.
+exports.getTiemposHoyEquipo = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const area = req.query.area ? String(req.query.area).toUpperCase() : null;
+
+    const req1 = pool.request();
+    if (area) req1.input('area', sql.NVarChar, area);
+    const usuarios = await req1.query(`
+      SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_TIPOUSUARIO as rol
+      FROM NEUS_USUARIOS
+      WHERE NEUS_ACTIVO = 1 ${area ? 'AND NEUS_TIPOUSUARIO = @area' : ''}
+      ORDER BY NEUS_NOMBRES
+    `);
+
+    const data = [];
+    for (const u of usuarios.recordset) {
+      const jornada = await getJornadaHoy(pool, u.id, u.rol);
+      const pausas = await getPausasHoyDe(pool, u.id);
+      const pausasSeg = pausas[2] + pausas[3] + pausas[5] + pausas[6];
+      data.push({
+        usuarioId: u.id, nombre: u.nombre, area: u.rol,
+        sinEntrada: !jornada,
+        jornadaSeg: jornada ? jornada.jornadaSeg : 0,
+        disponibleSeg: jornada ? Math.max(0, jornada.jornadaSeg - pausasSeg) : 0,
+        comidaSeg: pausas[2], banioSeg: pausas[3], capacitacionSeg: pausas[5], permisoSeg: pausas[6],
+      });
+    }
+
+    return res.json({ success: true, data });
+  } catch (e) {
+    console.error('Error getTiemposHoyEquipo:', e?.message);
+    return res.status(500).json({ success: false, message: 'Error al obtener los tiempos del equipo' });
+  }
+};
+
 // GET /api/reports/resumen-general?from=&to=&rol= — resumen consolidado por colaborador (solo AD)
 exports.getResumenGeneral = async (req, res) => {
   try {

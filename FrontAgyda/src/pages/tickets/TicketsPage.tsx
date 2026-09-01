@@ -576,7 +576,8 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
   const { data: codigos = [] } = useQuery({
     queryKey: ['ticket-codigos-cierre'],
     queryFn: () => ticketsService.getCodigosCierre(),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 
   const { data: articulosKb = [] } = useQuery({
@@ -640,7 +641,7 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Base de conocimiento (opcional)</label>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">ArdaWiki (opcional)</label>
         <div className="mb-1.5 flex gap-1.5">
           <button
             type="button"
@@ -2114,7 +2115,10 @@ export function TicketsPage() {
             {(['todos', 'abierto', 'asignado', 'en_proceso', 'en_espera', 'resuelto', 'reabierto', 'cerrado'] as const).map((e) => (
               <button
                 key={e}
-                onClick={() => setFiltroEstado(e)}
+                onClick={() => {
+                  setFiltroEstado(e)
+                  if (vista === 'productividad') setVista('lista')
+                }}
                 className={clsx(
                   'whitespace-nowrap rounded-full px-3 py-1 text-[0.72rem] font-semibold transition-all',
                   filtroEstado === e

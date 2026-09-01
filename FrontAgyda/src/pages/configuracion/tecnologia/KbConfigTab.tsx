@@ -24,11 +24,11 @@ export function KbConfigTab() {
       <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
         <div className="mb-1 flex items-center gap-2">
           <BookOpen className="h-4 w-4 text-brand" />
-          <p className="text-sm font-semibold text-ink">Base de Conocimiento</p>
+          <p className="text-sm font-semibold text-ink">ArdaWiki</p>
         </div>
         <p className="mb-4 text-xs text-ink-tertiary">
           Los artículos usan las mismas categorías de Tecnología/TI definidas en la pestaña Categorías.
-          La creación y edición de artículos se hace en el módulo de Base de Conocimiento completo.
+          La creación y edición de artículos se hace en el módulo de ArdaWiki completo.
         </p>
 
         <div className="mb-4 grid grid-cols-2 gap-2">
@@ -64,7 +64,7 @@ export function KbConfigTab() {
         )}
 
         <a href="/kb" className="mt-4 inline-block text-xs font-semibold text-brand hover:underline">
-          Ir a Base de Conocimiento →
+          Ir a ArdaWiki →
         </a>
       </div>
     </div>

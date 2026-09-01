@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, RefreshCw, UserPlus, Edit2, Trash2, Users, UserX, UserCheck } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Edit2, Trash2, Users, UserX, UserCheck, ChevronDown } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Avatar } from '@/components/ui/Avatar'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
+import { useIsADorTI } from '@/hooks/useAuth'
 import { type Usuario, parseUsuario, ROL_COLORS } from './usuario.model'
 import { UsuarioModal } from './UsuarioModal'
+import { UsuarioFichaExpandida } from './UsuarioFichaExpandida'
 
 /* ── Skeleton ── */
 function SkeletonRow() {
@@ -39,6 +41,8 @@ export function UsuariosPage() {
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState<Usuario | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Usuario | null>(null)
+  const [expandido, setExpandido] = useState<number | null>(null)
+  const puedeEditarFicha = useIsADorTI()
   const qc = useQueryClient()
 
   const { data: usuarios = [], isLoading, refetch, isRefetching } = useQuery({
@@ -252,10 +256,23 @@ export function UsuariosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map((u) => (
-                <tr key={u.id} className={clsx('transition-colors group', tab === 'desactivados' ? 'hover:bg-red-50/40 opacity-75 hover:opacity-100' : 'hover:bg-gray-50')}>
+              {filtered.map((u) => {
+                const abierto = expandido === u.id
+                return (
+                <Fragment key={u.id}>
+                <tr
+                  onClick={() => tab === 'activos' && setExpandido(abierto ? null : u.id)}
+                  className={clsx(
+                    'transition-colors group',
+                    tab === 'desactivados' ? 'hover:bg-red-50/40 opacity-75 hover:opacity-100' : 'cursor-pointer hover:bg-gray-50',
+                    abierto && 'bg-gray-50',
+                  )}
+                >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
+                      {tab === 'activos' && (
+                        <ChevronDown className={clsx('h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-transform', abierto && 'rotate-180 text-brand')} />
+                      )}
                       <Avatar src={u.fotoPerfil ? `/uploads/${u.fotoPerfil}` : undefined} name={`${u.nombres} ${u.apellidos}`} size="sm" />
                       <div>
                         <p className="text-[0.82rem] font-semibold text-gray-900">{u.nombres} {u.apellidos}</p>
@@ -284,7 +301,7 @@ export function UsuariosPage() {
                       {u.activo ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {tab === 'desactivados' ? (
                         <button
@@ -309,7 +326,15 @@ export function UsuariosPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                {abierto && (
+                  <tr>
+                    <td colSpan={5} className="p-0">
+                      <UsuarioFichaExpandida usuarioId={u.id} puedeEditar={puedeEditarFicha} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+              )})}
             </tbody>
           </table>
         </div>
