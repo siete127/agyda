@@ -11,6 +11,7 @@ import { useWebphoneStore } from '@/stores/webphone.store'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { parseVista, type VistaWebphone } from '@/components/ui/WebphoneFrame'
+import { configuracionService } from '@/services/configuracion.service'
 import toast from 'react-hot-toast'
 
 const VPN_CHECK_TIMEOUT_MS = 5_000
@@ -84,18 +85,33 @@ export function WebphonePage() {
     staleTime: 30_000,
   })
 
+  // Si el agente tiene una vista fija asignada (Configuración > Telefonía >
+  // Asignación de Vistas), esa gana siempre — no cae a la predeterminada
+  // global ni el agente puede elegir otra desde este módulo.
+  const { data: vistaAsignadaId = null } = useQuery({
+    queryKey: ['webphone-mi-asignacion'],
+    queryFn: () => configuracionService.getMiAsignacionVista(),
+    staleTime: 30_000,
+  })
+  const tieneAsignacionFija = vistaAsignadaId != null
+
   const vista = vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null
 
   // Si el usuario no eligió una vista a mano en esta sesión, seguir siempre a
   // la vista predeterminada (la de menor orden) aunque cambie en Configuración
-  // sin necesidad de recargar la página.
+  // sin necesidad de recargar la página. Con asignación fija, ese mecanismo
+  // no aplica: siempre gana la vista asignada, sin importar elección manual.
   const vistaElegidaManualmente = useRef(false)
   useEffect(() => {
-    if (vistaElegidaManualmente.current) return
     if (!vistas.length) return
+    if (tieneAsignacionFija) {
+      if (vistaId !== vistaAsignadaId && vistas.some((v) => v.id === vistaAsignadaId)) setVistaId(vistaAsignadaId)
+      return
+    }
+    if (vistaElegidaManualmente.current) return
     const predeterminada = vistas[0]
     if (vistaId !== predeterminada.id) setVistaId(predeterminada.id)
-  }, [vistas, vistaId, setVistaId])
+  }, [vistas, vistaId, setVistaId, tieneAsignacionFija, vistaAsignadaId])
 
   const crear = useMutation({
     mutationFn: (body: { label: string; url: string; requiereVpn: boolean }) => api.post('/webphone/vistas', body),
@@ -125,6 +141,9 @@ export function WebphonePage() {
   })
 
   const cargarVista = (v: VistaWebphone) => {
+    // Con vista asignada fija, solo un admin puede cambiarla manualmente
+    // (ej. para probar otra vista) — un agente normal queda anclado a la suya.
+    if (tieneAsignacionFija && !isAdmin) return
     vistaElegidaManualmente.current = true
     setVistaId(v.id)
     setShowConfig(false)
