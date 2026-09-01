@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   Target, Plus, Trash2, User, Users, X, CalendarDays, Calendar, Megaphone,
-  BarChart3, DollarSign, Save, ChevronDown,
+  Save, ChevronDown,
 } from 'lucide-react'
 import { ventasAreaService } from '@/services/ventasArea.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -298,12 +298,50 @@ function CrearMetaModal({ onClose }: { onClose: () => void }) {
           <p className="-mt-2 text-[0.72rem] text-gray-400">La meta se compara contra el total de ventas de la campaña.</p>
         )}
 
-        <CampoIcono label="Meta de unidades vendidas" icon={BarChart3} tono="blue">
-          <input type="number" min={0} value={metaUnidades} onChange={(e) => setMetaUnidades(e.target.value ? Number(e.target.value) : '')} className={inputCls} placeholder="Ej. 20" />
-        </CampoIcono>
-        <CampoIcono label="Meta de monto ($)" icon={DollarSign} tono="emerald">
-          <input type="number" min={0} value={metaMonto} onChange={(e) => setMetaMonto(e.target.value ? Number(e.target.value) : '')} className={inputCls} placeholder="Ej. 50000" />
-        </CampoIcono>
+        {/* Metas — mismo estilo sobrio que la configuración de nómina: inputs
+            del sistema (.field), label pequeño, sin decoración de icono. */}
+        <div className="rounded-xl border border-gray-100">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-gray-100">
+              <tr>
+                <td className="px-4 py-3">
+                  <p className="font-medium text-gray-800">Meta de unidades vendidas</p>
+                  <p className="mt-0.5 text-[0.68rem] text-gray-400">Ventas exitosas que se deben alcanzar</p>
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number" min={0} step={1}
+                    value={metaUnidades}
+                    onChange={(e) => setMetaUnidades(e.target.value ? Number(e.target.value) : '')}
+                    className="field ml-auto w-28 py-1 text-right text-[0.85rem]"
+                    placeholder="0"
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td className="px-4 py-3">
+                  <p className="font-medium text-gray-800">Meta de monto</p>
+                  <p className="mt-0.5 text-[0.68rem] text-gray-400">Importe total esperado, en pesos</p>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="text-[0.72rem] text-gray-400">$</span>
+                    <input
+                      type="number" min={0} step={1}
+                      value={metaMonto}
+                      onChange={(e) => setMetaMonto(e.target.value ? Number(e.target.value) : '')}
+                      className="field w-28 py-1 text-right text-[0.85rem]"
+                      placeholder="0"
+                    />
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="-mt-1 text-[0.68rem] text-gray-400">
+          Puedes definir solo unidades, solo monto, o ambas. La barra del Inicio usa las unidades.
+        </p>
 
         <div className="-mx-5 mt-2 flex justify-end gap-2 border-t border-gray-100 px-5 pt-4">
           <button onClick={onClose} className="rounded-xl border border-gray-200 px-5 py-2.5 text-[0.85rem] font-semibold text-gray-600 transition-colors hover:bg-gray-50">
