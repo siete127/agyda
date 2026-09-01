@@ -46,6 +46,8 @@ export interface CrearMetaVentaPayload {
   asesorId?: number
   campanaId?: number
   periodo: string
+  /** Solo para tipo 'diaria': si viene, la meta se replica en cada día de [periodo..periodoFin]. */
+  periodoFin?: string
   tipo: MetaTipo
   alcance: MetaAlcance
   metaMonto?: number
