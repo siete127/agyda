@@ -739,7 +739,7 @@ export const CONFIG_TREE: ConfigNode[] = [
       { key: 'ti-campania-soporte', label: 'Campaña de chat Soporte TI', screen: 'ti-campania-soporte' },
       { key: 'ti-chat-vivo',        label: 'Chat en vivo',            screen: 'ti-chat-vivo' },
       { key: 'ti-chatbot',          label: 'Chatbot de diagnóstico',  screen: 'ti-chatbot' },
-      { key: 'ti-kb',               label: 'Base de conocimiento',    screen: 'ti-kb' },
+      { key: 'ti-kb',               label: 'ArdaWiki',                screen: 'ti-kb' },
       { key: 'ti-encuestas',        label: 'Encuestas de satisfacción', screen: 'ti-encuestas' },
       { key: 'ti-plantillas',       label: 'Plantillas',              screen: 'ti-plantillas' },
       { key: 'ti-notificaciones',   label: 'Notificaciones de TI',    screen: 'ti-notificaciones' },
@@ -798,7 +798,7 @@ export const CONFIG_TREE: ConfigNode[] = [
       { key: 'licencias', label: 'Licencias' },
       { key: 'alertas-ti', label: 'Alertas' },
       { key: 'monitoreo', label: 'Monitoreo' },
-      { key: 'base-conocimiento', label: 'Base de conocimiento' },
+      { key: 'base-conocimiento', label: 'ArdaWiki' },
     ],
   },
   {

@@ -641,7 +641,7 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Base de conocimiento (opcional)</label>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">ArdaWiki (opcional)</label>
         <div className="mb-1.5 flex gap-1.5">
           <button
             type="button"
