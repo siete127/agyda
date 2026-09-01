@@ -3,6 +3,7 @@ import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, Layou
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
+import { useWebphoneStore } from '@/stores/webphone.store'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { NotificationBell } from './NotificationBell'
 import { MensajeriaBell } from './MensajeriaBell'
@@ -38,7 +39,15 @@ export function Topbar() {
   // El botón "Editar diseño" es fijo mientras estás en el Inicio.
   const enInicio = location.pathname === '/dashboard'
 
+  const onNavigateAwayWebphone = useWebphoneStore((s) => s.onNavigateAway)
+
   const handleSwitchSystem = () => {
+    // Mismo mecanismo que SidebarItem.tsx: si hay un Webphone activo y nos
+    // vamos a otro módulo, se abre la ventana flotante en el mismo click
+    // (único momento con gesto de usuario válido) antes de cambiar de ruta —
+    // sin esto, este botón (a diferencia de la navegación del Sidebar) dejaba
+    // el Webphone "atrás" en su slot de /webphone y desaparecía de la vista.
+    if (location.pathname !== '/ventas') onNavigateAwayWebphone?.()
     navigate('/ventas')
   }
 
