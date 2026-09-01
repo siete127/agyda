@@ -576,7 +576,8 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
   const { data: codigos = [] } = useQuery({
     queryKey: ['ticket-codigos-cierre'],
     queryFn: () => ticketsService.getCodigosCierre(),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 
   const { data: articulosKb = [] } = useQuery({

@@ -69,6 +69,7 @@ function CodigoCierreRow({ codigo }: { codigo: CodigoCierre }) {
     mutationFn: () => catalogosTiService.updateCodigoCierre(codigo.id, { nombre: nombre.trim(), orden: codigo.orden }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['catalogos-ti-codigos-cierre'] })
+      qc.invalidateQueries({ queryKey: ['ticket-codigos-cierre'] })
       setEditando(false)
     },
     onError: () => toast.error('No se pudo actualizar el código de cierre'),
@@ -76,7 +77,10 @@ function CodigoCierreRow({ codigo }: { codigo: CodigoCierre }) {
 
   const toggle = useMutation({
     mutationFn: () => catalogosTiService.toggleCodigoCierreActiva(codigo.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['catalogos-ti-codigos-cierre'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['catalogos-ti-codigos-cierre'] })
+      qc.invalidateQueries({ queryKey: ['ticket-codigos-cierre'] })
+    },
   })
 
   if (editando) {
@@ -125,6 +129,7 @@ function CodigosCierrePanel() {
     onSuccess: () => {
       setNombre('')
       qc.invalidateQueries({ queryKey: ['catalogos-ti-codigos-cierre'] })
+      qc.invalidateQueries({ queryKey: ['ticket-codigos-cierre'] })
     },
     onError: () => toast.error('No se pudo crear el código de cierre'),
   })
