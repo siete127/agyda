@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import type { Sede, CategoriaConSubcategorias, Especialidad, IntegracionConfig, Proveedor, Servicio, DiaFestivo, Elemento } from '@/types/catalogosTi.types'
+import type { Sede, CategoriaConSubcategorias, Especialidad, CodigoCierre, IntegracionConfig, Proveedor, Servicio, DiaFestivo, Elemento } from '@/types/catalogosTi.types'
 
 export const catalogosTiService = {
   // Sedes
@@ -69,6 +69,22 @@ export const catalogosTiService = {
   },
   async toggleEspecialidadActiva(id: number): Promise<void> {
     await api.patch(`/catalogos-ti/especialidades/${id}/activa`)
+  },
+
+  // Códigos de cierre de tickets
+  async getCodigosCierre(incluirInactivas = false): Promise<CodigoCierre[]> {
+    const { data } = await api.get('/catalogos-ti/codigos-cierre', { params: incluirInactivas ? { incluirInactivas: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createCodigoCierre(payload: { nombre: string; orden?: number }): Promise<CodigoCierre> {
+    const { data } = await api.post('/catalogos-ti/codigos-cierre', payload)
+    return data.data
+  },
+  async updateCodigoCierre(id: number, payload: { nombre: string; orden?: number }): Promise<void> {
+    await api.put(`/catalogos-ti/codigos-cierre/${id}`, payload)
+  },
+  async toggleCodigoCierreActiva(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/codigos-cierre/${id}/activa`)
   },
 
   // Proveedores

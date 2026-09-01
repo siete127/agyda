@@ -607,6 +607,20 @@ BEGIN
     CONSTRAINT UQ_TI_ESPECIALIDADES_NOMBRE UNIQUE (ESP_NOMBRE)
   );
 END
+
+-- Reemplaza el array fijo BackAgyda/constants/ticketCierre.js — el frontend
+-- pasa a leer estos códigos de la BD para poder administrarlos desde
+-- Configuración > Tecnología/TI, igual que Especialidades.
+IF OBJECT_ID('dbo.TICKET_CODIGOS_CIERRE', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_CODIGOS_CIERRE (
+    COD_ID INT IDENTITY(1,1) PRIMARY KEY,
+    COD_NOMBRE NVARCHAR(100) NOT NULL,
+    COD_ORDEN INT NOT NULL DEFAULT 0,
+    COD_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_CODIGOS_CIERRE_NOMBRE UNIQUE (COD_NOMBRE)
+  );
+END
 `;
     await pool.request().batch(batchSql);
 
@@ -635,7 +649,18 @@ END
       `);
     }
 
-    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades)');
+    const seedCodigosCierre = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_CODIGOS_CIERRE');
+    if (seedCodigosCierre.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_CODIGOS_CIERRE (COD_NOMBRE, COD_ORDEN) VALUES
+          ('Solucionado',1),('Solucionado con workaround',2),('Solicitud completada',3),
+          ('Configuración/cambio realizado',4),('Resuelto por proveedor',5),('Resuelto por desarrollo',6),
+          ('Error de usuario / orientación',7),('Falla no encontrada',8),('Duplicado',9),
+          ('Cancelado',10),('Sin respuesta del usuario',11),('No procede',12)
+      `);
+    }
+
+    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades, Códigos de Cierre)');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar catálogos de Tecnología/TI:', err.message);
   }
