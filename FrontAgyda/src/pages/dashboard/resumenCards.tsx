@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Ticket, FolderKanban, ClipboardList, MessageSquareWarning, Scale, BookOpenCheck,
   Headset, CalendarClock, Newspaper, PlaneTakeoff, GraduationCap, HeartPulse,
-  Users, Target, ChevronRight, type LucideIcon,
+  Users, Target, ChevronRight, Star, TrendingUp, type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
@@ -22,7 +22,7 @@ import { capacitacionService } from '@/services/capacitacion.service'
 import { incapacidadesService } from '@/services/incapacidades.service'
 import { ventasService } from '@/services/ventas.service'
 import { tiemposService } from '@/services/tiempos.service'
-import { ventasAreaService } from '@/services/ventasArea.service'
+import { ventasAreaService, type MiMeta } from '@/services/ventasArea.service'
 
 /* ════════════════════════════════════════════════════════════════════════
    CATÁLOGO DE CARDS DE RESUMEN
@@ -384,30 +384,111 @@ function MetasVentasResumen() {
 
   return (
     <CardShell titulo="Metas de ventas" Icon={Target} to="/ventas-area/metas" verLabel="Ver metas" tono="violet">
-      <div className="flex flex-col gap-3.5">
-        {data.map((m) => {
-          const pct = m.metaUnidades > 0 ? (m.avanceUnidades / m.metaUnidades) * 100 : 0
-          const cumplida = pct >= 100
-          return (
-            <div key={m.id}>
-              <div className="mb-1 flex items-center justify-between text-[0.74rem]">
-                <span className="min-w-0 flex-1 truncate font-semibold text-ink">
-                  {m.campanaNombre ?? 'Meta'}
-                  <span className="ml-1.5 rounded-full bg-surface px-1.5 py-0.5 text-[0.6rem] font-semibold text-ink-tertiary">
-                    {m.alcance === 'campana' ? 'equipo' : 'individual'}
-                  </span>
-                </span>
-                <span className={clsx('flex-shrink-0 font-bold tabular-nums', cumplida ? 'text-emerald-600' : 'text-violet-600')}>
-                  {m.avanceUnidades} / {m.metaUnidades}
-                </span>
-              </div>
-              <Barra pct={pct} tono={cumplida ? 'emerald' : 'violet'} />
-              {cumplida && <p className="mt-1 text-[0.68rem] font-semibold text-emerald-600">✓ Meta cumplida</p>}
-            </div>
-          )
-        })}
+      <div className="flex flex-col gap-4">
+        {data.map((m) => (
+          <MetaProgreso key={m.id} meta={m} />
+        ))}
       </div>
     </CardShell>
+  )
+}
+
+/* Tarjeta de progreso de una meta — estilo "hero": avatar de campaña, badge de
+   alcance, contador grande, barra tipo slider con extremos, grid de KPIs y
+   banner motivacional. */
+function MetaProgreso({ meta }: { meta: MiMeta }) {
+  const objetivo = meta.metaUnidades > 0 ? meta.metaUnidades : 0
+  const actual = meta.avanceUnidades
+  const pct = objetivo > 0 ? Math.min(100, (actual / objetivo) * 100) : 0
+  const pctReal = objetivo > 0 ? (actual / objetivo) * 100 : 0
+  const cumplida = pct >= 100
+  const esEquipo = meta.alcance === 'campana'
+  const nombre = meta.campanaNombre ?? 'Meta de ventas'
+  const iniciales = nombre.replace(/[^A-Za-zÁÉÍÓÚÑ ]/g, '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'MV'
+
+  return (
+    <div className="rounded-2xl border border-surface-border bg-surface/50 p-4">
+      {/* cabecera: avatar + nombre + contador */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className={clsx(
+            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold text-white',
+            cumplida ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' : 'bg-gradient-to-br from-violet-500 to-violet-700',
+          )}>
+            {iniciales}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-[0.85rem] font-bold text-ink">{nombre}</span>
+              <span className={clsx(
+                'flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide',
+                esEquipo ? 'bg-violet-100 text-violet-700' : 'bg-brand/10 text-brand',
+              )}>
+                {esEquipo ? 'Equipo' : 'Individual'}
+              </span>
+            </div>
+            <p className="text-[0.68rem] text-ink-tertiary">Meta de ventas</p>
+          </div>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <p className={clsx('text-[1.15rem] font-black leading-none tabular-nums', cumplida ? 'text-emerald-600' : 'text-violet-600')}>
+            {actual} <span className="text-ink-tertiary">/ {objetivo}</span>
+          </p>
+          <p className="mt-0.5 text-[0.66rem] text-ink-tertiary">{pctReal.toFixed(1)}% del objetivo</p>
+        </div>
+      </div>
+
+      {/* barra tipo slider con extremos */}
+      <div className="mt-3.5">
+        <div className="relative h-2 w-full rounded-full bg-surface-border">
+          <div
+            className={clsx('absolute inset-y-0 left-0 rounded-full', cumplida ? 'bg-emerald-500' : 'bg-violet-500')}
+            style={{ width: `${Math.max(pct, 3)}%` }}
+          />
+          <div
+            className={clsx(
+              'absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card shadow',
+              cumplida ? 'bg-emerald-500' : 'bg-violet-500',
+            )}
+            style={{ left: `${Math.max(pct, 2)}%` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-[0.62rem] text-ink-tertiary">
+          <span>0</span>
+          <span>{objetivo}</span>
+        </div>
+      </div>
+
+      {/* grid de KPIs */}
+      <div className="mt-3.5 grid grid-cols-4 gap-1 border-t border-surface-border pt-3 text-center">
+        <MetaKpi valor={actual} label="Actual" tono="text-violet-600" />
+        <MetaKpi valor={objetivo} label="Objetivo" tono="text-brand" />
+        <MetaKpi valor={`${pctReal.toFixed(1)}%`} label="Progreso" tono="text-emerald-600" />
+        <MetaKpi valor={cumplida ? 'Lista' : 'Activa'} label="Estado" tono={cumplida ? 'text-emerald-600' : 'text-amber-500'} />
+      </div>
+
+      {/* banner motivacional */}
+      <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-violet-50 px-3 py-2.5">
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-violet-100">
+          {cumplida ? <Star className="h-3.5 w-3.5 text-violet-600" /> : <TrendingUp className="h-3.5 w-3.5 text-violet-600" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[0.72rem] font-bold text-ink">{cumplida ? '¡Meta cumplida! 🎉' : '¡Sigue así!'}</p>
+          <p className="text-[0.66rem] text-ink-tertiary">
+            {cumplida ? 'Excelente trabajo del equipo' : 'Cada venta te acerca más a tu objetivo'}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MetaKpi({ valor, label, tono }: { valor: ReactNode; label: string; tono: string }) {
+  return (
+    <div>
+      <p className={clsx('text-[0.95rem] font-black leading-none tabular-nums', tono)}>{valor}</p>
+      <p className="mt-1 text-[0.6rem] uppercase tracking-wide text-ink-tertiary">{label}</p>
+    </div>
   )
 }
 
