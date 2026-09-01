@@ -953,7 +953,15 @@ exports.updateUsuarioFicha = async (req, res) => {
     const { correo, telefono, fechaNacimiento, direccion } = req.body || {};
     const dir = direccion || {};
     const fnac = fechaNacimiento ? new Date(fechaNacimiento) : null;
-    const fnacValida = fnac && !Number.isNaN(fnac.getTime()) ? fnac : null;
+    // Solo se acepta una fecha de nacimiento plausible: entre 1940 y hoy.
+    // Evita ensuciar la card de cumpleaños / el calendario con años futuros o basura.
+    let fnacValida = fnac && !Number.isNaN(fnac.getTime()) ? fnac : null;
+    if (fnacValida) {
+      const y = fnacValida.getFullYear();
+      if (y < 1940 || fnacValida > new Date()) {
+        return res.status(400).json({ success: false, message: 'La fecha de nacimiento no es válida' });
+      }
+    }
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
@@ -1007,6 +1015,16 @@ exports.updateUsuarioFicha = async (req, res) => {
           (USUARIO_ID, TEL_PRINCIPAL, CORREO, DIR_CALLE_NUMERO, DIR_COLONIA, DIR_CODIGO_POSTAL, DIR_CIUDAD, DIR_ESTADO, DIR_PAIS)
           VALUES (@id, @tel, @correo, @calle, @colonia, @cp, @ciudad, @estado, @pais);
       `);
+
+    // 4) Si cambió la fecha de nacimiento, resincronizar los eventos de cumpleaños
+    //    del calendario (mismo SP que usa el módulo de perfil).
+    if (fnacValida) {
+      try {
+        await pool.request().execute('sp_sincronizar_cumpleanos');
+      } catch (syncError) {
+        console.error('updateUsuarioFicha: error al sincronizar cumpleaños en calendario:', syncError.message);
+      }
+    }
 
     await logAudit(pool, {
       userId: req.user?.id || null, userName: req.user?.nombre || null,
