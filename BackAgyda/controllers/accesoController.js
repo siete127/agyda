@@ -281,6 +281,7 @@ const ACCIONES_POR_MODULO = {
   reports: [
     { key: 'ver-reportes',       nombre: 'Ver reportes',          descripcion: 'Consultar reporte de tiempos por usuario, resumen general y reporte de baño (AD/TI)' },
     { key: 'gestionar-pausas',    nombre: 'Gestionar pausas',      descripcion: 'Iniciar, terminar y consultar la pausa activa propia' },
+    { key: 'ver-equipo',          nombre: 'Ver tiempos del equipo', descripcion: 'Ver el tiempo disponible y en pausa de todos los usuarios del área, en la tarjeta del Inicio' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   activos: [
@@ -369,6 +370,9 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   'ventas-area': [
+    { key: 'ver',              nombre: 'Ver módulo',            descripcion: 'Ver el panel de Ventas (Área): metas, asesores, resultados y prospección' },
+    { key: 'ver-metas',        nombre: 'Ver metas del equipo',  descripcion: 'Ver las metas de todos los asesores y campañas, y el avance de la campaña completa' },
+    { key: 'gestionar-metas',  nombre: 'Gestionar metas',       descripcion: 'Crear, editar y eliminar metas diarias o mensuales por asesor o por campaña' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   operaciones: [

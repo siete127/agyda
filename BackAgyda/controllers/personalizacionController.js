@@ -22,6 +22,7 @@ const DASHBOARD_CARD_IDS = [
   'r-tickets', 'r-proyectos', 'r-encuestas', 'r-quejas', 'r-legal',
   'r-reglamento', 'r-livechat', 'r-pausas', 'r-vacaciones', 'r-capacitacion',
   'r-incapacidades', 'r-noticias', 'r-vacantes', 'r-ventas',
+  'r-tiempos-equipo', 'r-metas-ventas',
 ];
 
 const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];

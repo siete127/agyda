@@ -36,9 +36,23 @@ async function listAsesores(req, res) {
   }
 }
 
-// GET /api/ventas-area/metas?periodo=YYYY-MM — metas del periodo (o todas si no se
-// especifica), con avance real de unidades vendidas (ventas Aprobada/Formalizada/
-// Garantizada) leído desde la BD del sistema de Ventas (plata_prospectPRO).
+// GET /api/ventas-area/campanas — campañas activas del sistema de Ventas, para el
+// selector del formulario de metas.
+async function listCampanas(req, res) {
+  try {
+    const pool = await getVentasPool();
+    const rs = await pool.request().query(`SELECT id, nombre FROM [Campanas] WHERE activo = 1 ORDER BY nombre`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('ventasAreaController.listCampanas', err);
+    res.status(500).json({ success: false, message: 'Error al obtener las campañas' });
+  }
+}
+
+// GET /api/ventas-area/metas?periodo= — metas del periodo (o todas si no se especifica),
+// con avance real de unidades vendidas (ventas Aprobada/Formalizada/Garantizada) leído
+// desde la BD del sistema de Ventas (plata_prospectPRO). VM_TIPO='diaria' -> periodo
+// YYYY-MM-DD, comparado con CONVERT(DATE, fecha); 'mensual' -> YYYY-MM, con FORMAT.
 async function listMetas(req, res) {
   try {
     const periodo = req.query.periodo ? req.query.periodo.toString() : null;
@@ -46,7 +60,9 @@ async function listMetas(req, res) {
     const req1 = pool.request();
     if (periodo) req1.input('periodo', sql.NVarChar, periodo);
     const rs = await req1.query(`
-      SELECT VM_ID as id, VM_ASESOR_ID as asesorId, VM_PERIODO as periodo, VM_META_MONTO as metaMonto, VM_META_UNIDADES as metaUnidades
+      SELECT VM_ID as id, VM_ASESOR_ID as asesorId, VM_PERIODO as periodo,
+             VM_META_MONTO as metaMonto, VM_META_UNIDADES as metaUnidades,
+             VM_CAMPANA_ID as campanaId, VM_TIPO as tipo, VM_ALCANCE as alcance
       FROM VENTAS_METAS
       ${periodo ? 'WHERE VM_PERIODO = @periodo' : ''}
       ORDER BY VM_PERIODO DESC, VM_ASESOR_ID
@@ -55,26 +71,75 @@ async function listMetas(req, res) {
 
     if (metas.length === 0) return res.json({ success: true, data: [] });
 
-    const asesorIds = [...new Set(metas.map((m) => m.asesorId))];
     const ventasPool = await getVentasPool();
-    const nombresRs = await ventasPool.request().query(`SELECT idUser as id, nombreAgente as nombre FROM Users WHERE idUser IN (${asesorIds.join(',')})`);
-    const nombrePorId = new Map(nombresRs.recordset.map((u) => [u.id, u.nombre]));
 
-    const periodos = [...new Set(metas.map((m) => m.periodo))];
-    const avanceRs = await ventasPool.request().query(`
-      SELECT idUser as asesorId, FORMAT(fecha, 'yyyy-MM') as periodo, COUNT(*) as unidades
-      FROM Ventas
-      WHERE estatus IN ('Aprobada', 'Formalizada', 'Formalizado', 'Garantizada')
-        AND FORMAT(fecha, 'yyyy-MM') IN (${periodos.map((p) => `'${p}'`).join(',')})
-      GROUP BY idUser, FORMAT(fecha, 'yyyy-MM')
-    `);
-    const avancePorClave = new Map(avanceRs.recordset.map((a) => [`${a.asesorId}|${a.periodo}`, a.unidades]));
+    const asesorIds = [...new Set(metas.filter((m) => m.asesorId).map((m) => m.asesorId))];
+    const nombrePorId = new Map();
+    if (asesorIds.length) {
+      const nombresRs = await ventasPool.request().query(`SELECT idUser as id, nombreAgente as nombre FROM Users WHERE idUser IN (${asesorIds.join(',')})`);
+      for (const u of nombresRs.recordset) nombrePorId.set(u.id, u.nombre);
+    }
 
-    const data = metas.map((m) => ({
-      ...m,
-      asesorNombre: nombrePorId.get(m.asesorId) ?? `Asesor #${m.asesorId}`,
-      avanceUnidades: avancePorClave.get(`${m.asesorId}|${m.periodo}`) ?? 0,
-    }));
+    const campanaIds = [...new Set(metas.filter((m) => m.campanaId).map((m) => m.campanaId))];
+    const campanaPorId = new Map();
+    if (campanaIds.length) {
+      const campRs = await ventasPool.request().query(`SELECT id, nombre FROM [Campanas] WHERE id IN (${campanaIds.join(',')})`);
+      for (const c of campRs.recordset) campanaPorId.set(c.id, c.nombre);
+    }
+
+    // Avance mensual: agrupado por asesor+periodo(YYYY-MM), sin filtrar campaña
+    // (una meta mensual histórica no distinguía campaña).
+    const mensuales = metas.filter((m) => m.tipo !== 'diaria');
+    const avanceMensualPorClave = new Map();
+    if (mensuales.length) {
+      const periodos = [...new Set(mensuales.map((m) => m.periodo))];
+      const avanceRs = await ventasPool.request().query(`
+        SELECT idUser as asesorId, FORMAT(fecha, 'yyyy-MM') as periodo, COUNT(*) as unidades
+        FROM Ventas
+        WHERE estatus IN ('Aprobada', 'Formalizada', 'Formalizado', 'Garantizada')
+          AND FORMAT(fecha, 'yyyy-MM') IN (${periodos.map((p) => `'${p}'`).join(',')})
+        GROUP BY idUser, FORMAT(fecha, 'yyyy-MM')
+      `);
+      for (const a of avanceRs.recordset) avanceMensualPorClave.set(`${a.asesorId}|${a.periodo}`, a.unidades);
+    }
+
+    // Avance diario: por asesor+campaña+día (alcance 'asesor') o por campaña+día
+    // completa (alcance 'campana', suma de todos los agentes de esa campaña).
+    const diarias = metas.filter((m) => m.tipo === 'diaria');
+    const avanceDiarioAsesor = new Map();   // "asesorId|campanaId|fecha" -> unidades
+    const avanceDiarioCampana = new Map();  // "campanaId|fecha" -> unidades
+    if (diarias.length) {
+      const fechas = [...new Set(diarias.map((m) => m.periodo))];
+      const fechasSql = fechas.map((f) => `'${f}'`).join(',');
+      const rsAsesor = await ventasPool.request().query(`
+        SELECT idUser as asesorId, campaignId as campanaId, CONVERT(varchar(10), fecha, 120) as dia, COUNT(*) as unidades
+        FROM Ventas
+        WHERE estatus IN ('Aprobada', 'Formalizada', 'Formalizado', 'Garantizada')
+          AND CONVERT(varchar(10), fecha, 120) IN (${fechasSql})
+        GROUP BY idUser, campaignId, CONVERT(varchar(10), fecha, 120)
+      `);
+      for (const a of rsAsesor.recordset) {
+        avanceDiarioAsesor.set(`${a.asesorId}|${a.campanaId}|${a.dia}`, a.unidades);
+        avanceDiarioCampana.set(`${a.campanaId}|${a.dia}`, (avanceDiarioCampana.get(`${a.campanaId}|${a.dia}`) ?? 0) + a.unidades);
+      }
+    }
+
+    const data = metas.map((m) => {
+      let avanceUnidades = 0;
+      if (m.tipo === 'diaria') {
+        avanceUnidades = m.alcance === 'campana'
+          ? avanceDiarioCampana.get(`${m.campanaId}|${m.periodo}`) ?? 0
+          : avanceDiarioAsesor.get(`${m.asesorId}|${m.campanaId}|${m.periodo}`) ?? 0;
+      } else {
+        avanceUnidades = avanceMensualPorClave.get(`${m.asesorId}|${m.periodo}`) ?? 0;
+      }
+      return {
+        ...m,
+        asesorNombre: m.asesorId ? (nombrePorId.get(m.asesorId) ?? `Asesor #${m.asesorId}`) : null,
+        campanaNombre: m.campanaId ? (campanaPorId.get(m.campanaId) ?? `Campaña #${m.campanaId}`) : null,
+        avanceUnidades,
+      };
+    });
 
     res.json({ success: true, data });
   } catch (err) {
@@ -85,21 +150,33 @@ async function listMetas(req, res) {
 
 async function crearMeta(req, res) {
   try {
-    const { asesorId, periodo, metaMonto, metaUnidades } = req.body;
-    if (!asesorId || !periodo) return res.status(400).json({ success: false, message: 'Asesor y periodo son requeridos' });
+    const { asesorId, campanaId, periodo, tipo, alcance, metaMonto, metaUnidades } = req.body;
+    const tipoNorm = tipo === 'diaria' ? 'diaria' : 'mensual';
+    const alcanceNorm = alcance === 'campana' ? 'campana' : 'asesor';
+
+    if (!periodo) return res.status(400).json({ success: false, message: 'El periodo es requerido' });
+    if (alcanceNorm === 'asesor' && !asesorId) return res.status(400).json({ success: false, message: 'El asesor es requerido' });
+    if (alcanceNorm === 'campana' && !campanaId) return res.status(400).json({ success: false, message: 'La campaña es requerida' });
+
+    const asesorIdFinal = alcanceNorm === 'campana' ? 0 : Number(asesorId);
+    const campanaIdFinal = campanaId ? Number(campanaId) : null;
+
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
-      .input('asesorId', sql.Int, asesorId)
+      .input('asesorId', sql.Int, asesorIdFinal)
       .input('periodo', sql.NVarChar, periodo)
+      .input('campanaId', sql.Int, campanaIdFinal)
+      .input('tipo', sql.NVarChar, tipoNorm)
+      .input('alcance', sql.NVarChar, alcanceNorm)
       .input('metaMonto', sql.Decimal(18, 2), metaMonto || 0)
       .input('metaUnidades', sql.Int, metaUnidades || 0)
       .query(`
-        IF EXISTS (SELECT 1 FROM VENTAS_METAS WHERE VM_ASESOR_ID = @asesorId AND VM_PERIODO = @periodo)
-          UPDATE VENTAS_METAS SET VM_META_MONTO = @metaMonto, VM_META_UNIDADES = @metaUnidades
-          WHERE VM_ASESOR_ID = @asesorId AND VM_PERIODO = @periodo
-        ELSE
-          INSERT INTO VENTAS_METAS (VM_ASESOR_ID, VM_PERIODO, VM_META_MONTO, VM_META_UNIDADES)
-          VALUES (@asesorId, @periodo, @metaMonto, @metaUnidades)
+        MERGE VENTAS_METAS AS t
+        USING (SELECT @asesorId AS a, @periodo AS p, @campanaId AS c) AS s
+          ON t.VM_ASESOR_ID = s.a AND t.VM_PERIODO = s.p AND (t.VM_CAMPANA_ID = s.c OR (t.VM_CAMPANA_ID IS NULL AND s.c IS NULL))
+        WHEN MATCHED THEN UPDATE SET VM_META_MONTO = @metaMonto, VM_META_UNIDADES = @metaUnidades, VM_TIPO = @tipo, VM_ALCANCE = @alcance
+        WHEN NOT MATCHED THEN INSERT (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID, VM_TIPO, VM_ALCANCE, VM_META_MONTO, VM_META_UNIDADES)
+          VALUES (@asesorId, @periodo, @campanaId, @tipo, @alcance, @metaMonto, @metaUnidades);
       `);
 
     const countRs = await pool.request()
@@ -132,6 +209,85 @@ async function eliminarMeta(req, res) {
   } catch (err) {
     logger.error('ventasAreaController.eliminarMeta', err);
     res.status(500).json({ success: false, message: 'Error al eliminar la meta' });
+  }
+}
+
+// GET /api/ventas-area/mis-metas — metas de HOY del usuario autenticado, para la
+// card del Inicio: su meta individual diaria (si tiene) + las metas globales de
+// campaña de la(s) campaña(s) donde está asignado. Vincula NEUS_USUARIOS -> Users
+// (BD de ventas) por nombre, igual que el resto del módulo (no hay id compartido).
+async function getMisMetas(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const nombreRs = await pool.request()
+      .input('id', sql.Int, req.user?.id)
+      .query(`SELECT NEUS_NOMBRES as nombre FROM NEUS_USUARIOS WHERE NEUS_ID = @id`);
+    const nombre = nombreRs.recordset[0]?.nombre;
+    if (!nombre) return res.json({ success: true, data: [] });
+
+    const ventasPool = await getVentasPool();
+    const asesorRs = await ventasPool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .query(`SELECT TOP 1 idUser as id, campaign as campanaId FROM Users WHERE LTRIM(RTRIM(nombreAgente)) = LTRIM(RTRIM(@nombre)) AND Activo = 1`);
+    const asesor = asesorRs.recordset[0];
+    if (!asesor) return res.json({ success: true, data: [] });
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    const metasRs = await pool.request()
+      .input('asesorId', sql.Int, asesor.id)
+      .input('campanaId', sql.Int, asesor.campanaId ?? 0)
+      .input('hoy', sql.NVarChar, hoy)
+      .query(`
+        SELECT VM_ID as id, VM_ASESOR_ID as asesorId, VM_PERIODO as periodo,
+               VM_META_UNIDADES as metaUnidades, VM_CAMPANA_ID as campanaId, VM_ALCANCE as alcance
+        FROM VENTAS_METAS
+        WHERE VM_TIPO = 'diaria' AND VM_PERIODO = @hoy
+          AND ((VM_ALCANCE = 'asesor' AND VM_ASESOR_ID = @asesorId)
+            OR (VM_ALCANCE = 'campana' AND VM_CAMPANA_ID = @campanaId))
+      `);
+    const metas = metasRs.recordset;
+    if (!metas.length) return res.json({ success: true, data: [] });
+
+    const campanaNombreRs = asesor.campanaId
+      ? await ventasPool.request().input('id', sql.Int, asesor.campanaId).query(`SELECT nombre FROM [Campanas] WHERE id = @id`)
+      : { recordset: [] };
+    const campanaNombre = campanaNombreRs.recordset[0]?.nombre ?? null;
+
+    const avanceIndividualRs = await ventasPool.request()
+      .input('asesorId', sql.Int, asesor.id)
+      .input('hoy', sql.NVarChar, hoy)
+      .query(`
+        SELECT COUNT(*) as unidades FROM Ventas
+        WHERE idUser = @asesorId AND estatus IN ('Aprobada','Formalizada','Formalizado','Garantizada')
+          AND CONVERT(varchar(10), fecha, 120) = @hoy
+      `);
+    const avanceIndividual = avanceIndividualRs.recordset[0]?.unidades ?? 0;
+
+    const avanceCampanaRs = asesor.campanaId
+      ? await ventasPool.request()
+          .input('campanaId', sql.Int, asesor.campanaId)
+          .input('hoy', sql.NVarChar, hoy)
+          .query(`
+            SELECT COUNT(*) as unidades FROM Ventas
+            WHERE campaignId = @campanaId AND estatus IN ('Aprobada','Formalizada','Formalizado','Garantizada')
+              AND CONVERT(varchar(10), fecha, 120) = @hoy
+          `)
+      : { recordset: [{ unidades: 0 }] };
+    const avanceCampana = avanceCampanaRs.recordset[0]?.unidades ?? 0;
+
+    const data = metas.map((m) => ({
+      id: m.id,
+      alcance: m.alcance,
+      campanaId: m.campanaId,
+      campanaNombre,
+      metaUnidades: m.metaUnidades ?? 0,
+      avanceUnidades: m.alcance === 'campana' ? avanceCampana : avanceIndividual,
+    }));
+
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('ventasAreaController.getMisMetas', err);
+    res.status(500).json({ success: false, message: 'Error al obtener tus metas' });
   }
 }
 
@@ -695,6 +851,8 @@ module.exports = {
   listMetas,
   crearMeta,
   eliminarMeta,
+  listCampanas,
+  getMisMetas,
   getDashboard,
   listAsesores,
   getReporteResultados,
