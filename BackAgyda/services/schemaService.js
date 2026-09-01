@@ -5397,6 +5397,103 @@ END
       await crearOpcion(inicioId, 'Quiero hablar con un técnico', hablarTecnico, 3);
     }
 
+    // Botones del menú inicial del widget público — antes vivían hardcodeados
+    // como un arreglo fijo de 4 strings en extra/Pagina de Intranet_1/index.html.
+    // Ahora son filas editables: 'respuesta' dispara el diccionario de siempre
+    // (por texto), 'escalar_campania' escala directo a Chat en Vivo con el
+    // campaignToken de una campaña específica (sin pasar por el flujo genérico
+    // "Hablar con alguien" que no elige campaña), y 'arbol_diagnostico' abre el
+    // árbol de decisión de arriba. ETQ_CAMPANIA_ID es NULL salvo en ese último caso.
+    await pool.request().query(`
+      IF OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CHATBOT_ETIQUETAS_MENU (
+          ETQ_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          ETQ_TEXTO_ES         NVARCHAR(150)   NOT NULL,
+          ETQ_TEXTO_EN         NVARCHAR(150)   NULL,
+          ETQ_TIPO             NVARCHAR(30)    NOT NULL DEFAULT ('respuesta'),
+          ETQ_CAMPANIA_ID      INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_CAMPANIAS(LCA_ID),
+          ETQ_GRUPO_ID         INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_GRUPOS(LG_ID),
+          ETQ_ORDEN            INT             NOT NULL DEFAULT (0),
+          ETQ_ACTIVA           BIT             NOT NULL DEFAULT (1),
+          ETQ_FECHA_CREACION   DATETIME        NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO CHECK (ETQ_TIPO IN ('respuesta','escalar_campania','escalar_generico','arbol_diagnostico'))
+        );
+        CREATE INDEX IX_CHATBOT_ETIQUETAS_ACTIVA ON dbo.CHATBOT_ETIQUETAS_MENU(ETQ_ACTIVA, ETQ_ORDEN);
+      END
+    `);
+
+    // Tenants donde la tabla ya existía antes de agregar 'escalar_generico' al
+    // tipo tienen el CHECK constraint viejo — lo recrea con la lista completa
+    // para que el UPDATE/INSERT de abajo no choque contra un constraint desfasado.
+    await pool.request().query(`
+      IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CHATBOT_ETIQUETAS_TIPO')
+      BEGIN
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO;
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO
+          CHECK (ETQ_TIPO IN ('respuesta','escalar_campania','escalar_generico','arbol_diagnostico'));
+      END
+    `);
+
+    const etiquetasCount = await pool.request().query('SELECT COUNT(*) as total FROM dbo.CHATBOT_ETIQUETAS_MENU');
+    if (etiquetasCount.recordset[0].total === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.CHATBOT_ETIQUETAS_MENU (ETQ_TEXTO_ES, ETQ_TEXTO_EN, ETQ_TIPO, ETQ_ORDEN) VALUES
+          (N'Conocer servicios', N'Our services', 'respuesta', 1),
+          (N'Precios y cotización', N'Pricing & quote', 'escalar_generico', 2),
+          (N'Hablar con alguien', N'Talk to someone', 'escalar_generico', 3),
+          (N'Diagnóstico guiado', N'Guided diagnosis', 'arbol_diagnostico', 4)
+      `);
+    } else {
+      // Corrige el seed inicial que salió con tipo 'respuesta' en estas dos filas
+      // (deploy anterior a agregar el tipo 'escalar_generico') — filtra por
+      // ETQ_ID (1-4, los únicos que pudo haber creado el seed original) en vez de
+      // texto, para no depender de collation/acentos.
+      await pool.request().query(`
+        UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ETQ_TIPO = 'escalar_generico'
+        WHERE ETQ_ID IN (2, 3) AND ETQ_TIPO = 'respuesta'
+          AND ETQ_CAMPANIA_ID IS NULL AND ETQ_GRUPO_ID IS NULL
+      `);
+    }
+
+    // Flujo visual (canvas de arrastrar y conectar) — cada tabla que puede
+    // aparecer como caja en el lienzo (respuestas, etiquetas del menú, nodos
+    // del árbol) gana su posición X/Y. Las campañas de LIVECHAT_CAMPANIAS no
+    // llevan posición propia: el frontend les asigna una por defecto la
+    // primera vez que aparecen, sin tocar esa tabla.
+    await pool.request().query(`
+      IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_POS_X') IS NULL
+        ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_POS_X FLOAT NULL, RESP_POS_Y FLOAT NULL;
+      IF COL_LENGTH('dbo.CHATBOT_ETIQUETAS_MENU', 'ETQ_POS_X') IS NULL
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD ETQ_POS_X FLOAT NULL, ETQ_POS_Y FLOAT NULL;
+      IF COL_LENGTH('dbo.CHATBOT_NODOS', 'NODO_POS_X') IS NULL
+        ALTER TABLE dbo.CHATBOT_NODOS ADD NODO_POS_X FLOAT NULL, NODO_POS_Y FLOAT NULL;
+    `);
+
+    // Conexiones del canvas — genérica por (tipo, id) en vez de FKs tipadas,
+    // porque el origen/destino puede ser cualquiera de los 4 tipos de caja
+    // (respuesta, etiqueta, nodo_arbol, campania) en cualquier combinación.
+    // La integridad referencial real la valida el controller al crear la
+    // conexión, no la base de datos.
+    await pool.request().query(`
+      IF OBJECT_ID('dbo.CHATBOT_FLUJO_CONEXIONES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CHATBOT_FLUJO_CONEXIONES (
+          FCX_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          FCX_ORIGEN_TIPO      NVARCHAR(20)    NOT NULL,
+          FCX_ORIGEN_ID        INT             NOT NULL,
+          FCX_DESTINO_TIPO     NVARCHAR(20)    NOT NULL,
+          FCX_DESTINO_ID       INT             NOT NULL,
+          FCX_ETIQUETA         NVARCHAR(150)   NULL,
+          FCX_FECHA_CREACION   DATETIME        NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT CK_CHATBOT_FCX_ORIGEN_TIPO CHECK (FCX_ORIGEN_TIPO IN ('respuesta','etiqueta','nodo_arbol')),
+          CONSTRAINT CK_CHATBOT_FCX_DESTINO_TIPO CHECK (FCX_DESTINO_TIPO IN ('respuesta','etiqueta','nodo_arbol','campania')),
+          CONSTRAINT UQ_CHATBOT_FCX UNIQUE (FCX_ORIGEN_TIPO, FCX_ORIGEN_ID, FCX_DESTINO_TIPO, FCX_DESTINO_ID)
+        );
+        CREATE INDEX IX_CHATBOT_FCX_ORIGEN ON dbo.CHATBOT_FLUJO_CONEXIONES(FCX_ORIGEN_TIPO, FCX_ORIGEN_ID);
+      END
+    `);
+
     logger.info('✅ Esquema de chatbot asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de chatbot:', err.message);

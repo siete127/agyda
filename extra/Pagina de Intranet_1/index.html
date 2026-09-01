@@ -2843,6 +2843,7 @@
                     liveChatOmitirComentario: 'omitir',
                     liveChatRatingEnviado: '¡Gracias por tu calificación! Si necesitas algo más, aquí estoy. 🙂',
                     liveChatRatingError: 'No pudimos guardar tu calificación, pero ya quedó registrado que tu conversación se cerró. ¡Gracias igual!',
+                    sugerenciaHablarConAlguien: 'Hablar con alguien',
                 },
                 en: {
                     saludo: 'Hi! 👋 I\'m ARDABYTEC\'s virtual assistant. How can I help you today?',
@@ -2879,6 +2880,7 @@
                     liveChatOmitirComentario: 'skip',
                     liveChatRatingEnviado: 'Thanks for your rating! Let me know if you need anything else. 🙂',
                     liveChatRatingError: 'We couldn\'t save your rating, but your conversation was already closed. Thanks anyway!',
+                    sugerenciaHablarConAlguien: 'Talk to someone',
                 },
             };
 
@@ -2930,6 +2932,46 @@
                 return mejorMatch;
             }
 
+            // Botones del menú inicial — configurables desde AGYDA (Chatbot > Menú del
+            // Widget), reemplaza el arreglo fijo `menuInicial` de TEXTOS. Cada etiqueta
+            // trae su propio tipo de acción (respuesta / escalar_campania /
+            // arbol_diagnostico), así que el click ya no depende de comparar texto.
+            let etiquetasMenu = [];
+            let cargandoEtiquetasMenu = false;
+
+            async function cargarEtiquetasMenu() {
+                if (cargandoEtiquetasMenu || etiquetasMenu.length) return etiquetasMenu;
+                cargandoEtiquetasMenu = true;
+                try {
+                    const res = await fetch('/api/chatbot/etiquetas-menu/publicas');
+                    const json = await res.json();
+                    etiquetasMenu = Array.isArray(json) ? json : (json.data || []);
+                } catch (e) {
+                    console.warn('No se pudo cargar el menú del chatbot:', e);
+                    etiquetasMenu = [];
+                } finally {
+                    cargandoEtiquetasMenu = false;
+                }
+                return etiquetasMenu;
+            }
+
+            function textoEtiqueta(etiqueta) {
+                return (currentLang === 'en' && etiqueta.textoEn) ? etiqueta.textoEn : etiqueta.textoEs;
+            }
+
+            // Menú por defecto (arreglo fijo TEXTOS.menuInicial) mientras cargan las
+            // etiquetas, o si la carga falla — así el widget nunca se queda sin botones.
+            async function menuInicialDinamico() {
+                const etiquetas = await cargarEtiquetasMenu();
+                if (!etiquetas.length) return t().menuInicial;
+                return etiquetas.map(textoEtiqueta);
+            }
+
+            function resolverEtiquetaPorTexto(texto) {
+                const norm = normalizar(texto);
+                return etiquetasMenu.find((e) => normalizar(textoEtiqueta(e)) === norm) || null;
+            }
+
             // --- Estado de la conversación ---
             let estado = 'explorar'; // explorar | pedir_nombre | pedir_contacto | pedir_empresa | pedir_presupuesto | confirmar | arbol_diagnostico
             let turnosSinLead = 0;
@@ -2937,6 +2979,8 @@
             let chatIniciado = false;
             let arbolSesionToken = null; // token de CHATBOT_SESIONES mientras estado === 'arbol_diagnostico'
             let ultimoNodoArbol = null; // último nodo mostrado, para resolver el opcionId elegido
+            let leadDataCampaniaPendiente = null; // { token, grupoId } mientras se piden nombre/contacto para una etiqueta 'escalar_campania'
+            let botonesFlujoActuales = []; // botones reales (Flujo Visual) de la última Respuesta mostrada
 
             // Persistencia de la conversación en sessionStorage: si el visitante recarga la página
             // (o navega entre secciones con anclas), el chat se restaura tal cual estaba — burbujas,
@@ -3031,6 +3075,14 @@
                 });
             }
 
+            // Reemplaza los `setQuickReplies(t().menuInicial, 'menu')` de siempre — cada
+            // vez que el bot vuelve al menú principal, ahora consulta las etiquetas
+            // configuradas en AGYDA en vez del arreglo fijo.
+            async function mostrarMenuInicial() {
+                botonesFlujoActuales = [];
+                setQuickReplies(await menuInicialDinamico(), 'menu');
+            }
+
             function validarContacto(texto) {
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                 const telRegex = /^[\d\s()+-]{7,20}$/;
@@ -3074,7 +3126,7 @@
                 if (enviadoOk) {
                     leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
                 }
-                setQuickReplies(t().menuInicial, 'menu');
+                await mostrarMenuInicial();
             }
 
             // Micro "sesión" del visitante dentro de esta pestaña: si ya tenemos su nombre y un
@@ -3163,7 +3215,7 @@
                 liveChatConversacionId = null;
                 if (mensajeFn) await botDice(mensajeFn, 400);
                 estado = 'explorar';
-                setQuickReplies(t().menuInicial, 'menu');
+                await mostrarMenuInicial();
             }
 
             // El agente ya cerró su lado; se guarda el id aparte porque
@@ -3229,20 +3281,24 @@
             // conversaciones de "Visitante anónimo" sin ningún dato de contacto.
             // Ahora pide nombre y contacto primero (ver estados pedir_nombre_livechat
             // / pedir_contacto_livechat) y solo entonces escala.
-            async function iniciarChatEnVivoConDatos(motivo) {
+            // `campania` opcional: { token, grupoId } — solo lo mandan las etiquetas de
+            // tipo 'escalar_campania' (ver resolverEtiquetaPorTexto), así el chat se
+            // enruta directo a esa campaña en vez del flujo genérico sin campaña.
+            async function iniciarChatEnVivoConDatos(motivo, campania) {
                 leadData.interes = motivo || leadData.interes;
                 if (tieneIdentidad()) {
-                    await iniciarChatEnVivo(motivo);
+                    await iniciarChatEnVivo(motivo, campania);
                     return;
                 }
                 setQuickReplies([]);
                 estado = 'pedir_nombre_livechat';
+                leadDataCampaniaPendiente = campania || null;
                 await botDice(() => t().pedirNombre, 400);
             }
 
             // Intenta escalar a un agente humano en vivo. Si no hay agente disponible pero hay cola
             // configurada, el visitante espera con posición visible; si no, cae a captura de lead.
-            async function iniciarChatEnVivo(motivo) {
+            async function iniciarChatEnVivo(motivo, campania) {
                 setQuickReplies([]);
                 await botDice(() => t().liveChatConectando, 300);
                 try {
@@ -3255,6 +3311,8 @@
                             telefono: leadData.telefono || undefined,
                             motivo: motivo || leadData.interes || undefined,
                             origen: 'chatbot_escalado',
+                            campaignToken: campania?.token || undefined,
+                            grupoId: campania?.grupoId || undefined,
                         }),
                     });
                     const json = await res.json().catch(() => ({}));
@@ -3297,7 +3355,7 @@
 
             // Muestra un nodo del árbol de diagnóstico: el texto del bot + sus opciones
             // como quick-replies (mismo widget visual, ruteo propio vía avanzarArbol).
-            function mostrarNodoArbol(nodo) {
+            async function mostrarNodoArbol(nodo) {
                 ultimoNodoArbol = nodo;
                 addBubble(nodo.texto, 'bot');
                 if (nodo.opciones && nodo.opciones.length) {
@@ -3305,7 +3363,7 @@
                 } else {
                     setQuickReplies([]);
                     estado = 'explorar';
-                    setQuickReplies(t().menuInicial, 'menu');
+                    await mostrarMenuInicial();
                 }
             }
 
@@ -3317,10 +3375,10 @@
                     if (!res.ok || !json.success) throw new Error(json.message || 'Error al iniciar el diagnóstico');
                     arbolSesionToken = json.data.sesionToken;
                     estado = 'arbol_diagnostico';
-                    mostrarNodoArbol(json.data.nodo);
+                    await mostrarNodoArbol(json.data.nodo);
                 } catch (e) {
                     await botDice(() => t().arbolError, 300);
-                    setQuickReplies(t().menuInicial, 'menu');
+                    await mostrarMenuInicial();
                 }
             }
 
@@ -3345,12 +3403,12 @@
                     if (accion && accion.tipo === 'resolucion') {
                         addBubble(nodo.texto, 'bot');
                         estado = 'explorar';
-                        setQuickReplies(t().menuInicial, 'menu');
+                        await mostrarMenuInicial();
                     } else if (accion && accion.tipo === 'escalar_chat') {
                         if (accion.error) {
                             await botDice(() => accion.error, 300);
                             estado = 'explorar';
-                            setQuickReplies(t().menuInicial, 'menu');
+                            await mostrarMenuInicial();
                         } else {
                             await iniciarChatEnVivo(nodo.texto);
                         }
@@ -3361,7 +3419,7 @@
                             await botDice(() => t().arbolTicketCreado(accion.ticketId), 400);
                         }
                         estado = 'explorar';
-                        setQuickReplies(t().menuInicial, 'menu');
+                        await mostrarMenuInicial();
                     } else if (accion && accion.tipo === 'consultar_tickets') {
                         if (accion.error) {
                             await botDice(() => t().arbolConsultarIniciarSesion, 300);
@@ -3373,22 +3431,15 @@
                             addBubble(lista, 'bot');
                         }
                         estado = 'explorar';
-                        setQuickReplies(t().menuInicial, 'menu');
+                        await mostrarMenuInicial();
                     } else {
-                        mostrarNodoArbol(nodo);
+                        await mostrarNodoArbol(nodo);
                     }
                 } catch (e) {
                     await botDice(() => t().arbolError, 300);
                     estado = 'explorar';
-                    setQuickReplies(t().menuInicial, 'menu');
+                    await mostrarMenuInicial();
                 }
-            }
-
-            // Botones del menú inicial que además detonan captura directa de lead.
-            function esBotonDeContacto(texto) {
-                const n = normalizar(texto);
-                return n.includes('hablar con alguien') || n.includes('cotizacion') || n.includes('cotización') ||
-                       n.includes('talk to someone') || n.includes('quote') || n.includes('contactenme') || n.includes('contáctenme');
             }
 
             async function handleUserMessage(mensajeCrudo) {
@@ -3401,14 +3452,76 @@
                 }
             }
 
+            // Despacho común para cualquier botón con acción real (etiqueta del menú
+            // O botón de una Respuesta conectado en Flujo Visual) — evita repetir el
+            // switch de tipos en los dos lugares que lo necesitan.
+            async function ejecutarAccionBoton(boton, textoMostrado) {
+                if (boton.accion === 'arbol_diagnostico') {
+                    await iniciarArbolDiagnostico();
+                    return true;
+                }
+                if (boton.accion === 'escalar_campania') {
+                    const campania = boton.campaniaToken ? { token: boton.campaniaToken, grupoId: boton.grupoId || null } : null;
+                    await iniciarChatEnVivoConDatos(textoMostrado, campania);
+                    return true;
+                }
+                if (boton.accion === 'escalar_generico') {
+                    await iniciarChatEnVivoConDatos(textoMostrado);
+                    return true;
+                }
+                if (boton.accion === 'respuesta' && boton.respuestaPk) {
+                    await cargarDiccionario();
+                    const destino = diccionario.find((r) => r.pk === boton.respuestaPk);
+                    if (destino) {
+                        await mostrarRespuesta(destino);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // Muestra el texto de una Respuesta y arma sus quick-replies: prioriza
+            // los botones reales conectados en Flujo Visual (botonesFlujo) sobre el
+            // campo de texto libre 'botones' (modo viejo, sin destino real) — si hay
+            // conexiones de flujo, esas ganan.
+            async function mostrarRespuesta(match) {
+                await botDice(() => (currentLang === 'en' && match.textoEn) ? match.textoEn : match.textoEs, 500);
+                if (match.senalInteres) {
+                    botonesFlujoActuales = [];
+                    await iniciarCapturaLead(match.id);
+                } else if (match.botonesFlujo && match.botonesFlujo.length) {
+                    botonesFlujoActuales = match.botonesFlujo;
+                    setQuickReplies(match.botonesFlujo.map((b) => (currentLang === 'en' && b.textoEn) ? b.textoEn : b.texto), null);
+                } else if (match.botones && match.botones.length) {
+                    botonesFlujoActuales = [];
+                    setQuickReplies(match.botones, null);
+                } else {
+                    botonesFlujoActuales = [];
+                    await mostrarMenuInicial();
+                }
+            }
+
             async function handleUserMessageInterno(mensaje) {
                 addBubble(mensaje, 'user');
                 inputEl.value = '';
                 setQuickReplies([]);
 
-                if (estado === 'explorar' && normalizar(mensaje) === normalizar(t().menuInicial[3])) {
-                    await iniciarArbolDiagnostico();
-                    return;
+                // Botón de una Respuesta conectado en Flujo Visual (ver botonesFlujo) —
+                // se revisa primero porque, a diferencia del diccionario por palabra
+                // clave, acá el texto exacto del botón ya se conoce de antemano.
+                if (estado === 'explorar' && botonesFlujoActuales.length) {
+                    const boton = botonesFlujoActuales.find((b) => normalizar(b.texto) === normalizar(mensaje));
+                    if (boton && await ejecutarAccionBoton(boton, boton.texto)) return;
+                }
+
+                // Botón del menú inicial configurado en AGYDA (Chatbot > Menú del
+                // Widget): se resuelve por su tipo de acción en vez de comparar texto
+                // fijo, así el admin puede renombrar/reordenar sin romper el despacho.
+                if (estado === 'explorar') {
+                    const etiqueta = resolverEtiquetaPorTexto(mensaje);
+                    if (etiqueta && await ejecutarAccionBoton({ accion: etiqueta.tipo, campaniaToken: etiqueta.campaniaToken, grupoId: etiqueta.grupoId }, textoEtiqueta(etiqueta))) return;
+                    // tipo === 'respuesta' sin conexión de flujo real: cae al buscador
+                    // de diccionario de abajo, igual que un botón de siempre.
                 }
 
                 if (estado === 'arbol_diagnostico') {
@@ -3457,11 +3570,6 @@
                     return;
                 }
 
-                if (estado === 'explorar' && esBotonDeContacto(mensaje)) {
-                    await iniciarChatEnVivoConDatos(mensaje);
-                    return;
-                }
-
                 // Camino corto antes de escalar a un agente: solo nombre + contacto,
                 // sin pasar por empresa/presupuesto/confirmación del lead completo —
                 // quien pide hablar con alguien quiere avanzar rápido, no llenar un
@@ -3483,7 +3591,9 @@
                     if (contacto.tipo === 'email') leadData.email = contacto.valor;
                     else leadData.telefono = contacto.valor;
                     estado = 'explorar';
-                    await iniciarChatEnVivo(leadData.interes);
+                    const campaniaPendiente = leadDataCampaniaPendiente;
+                    leadDataCampaniaPendiente = null;
+                    await iniciarChatEnVivo(leadData.interes, campaniaPendiente);
                     return;
                 }
 
@@ -3560,21 +3670,16 @@
 
                 if (match) {
                     turnosSinLead = 0;
-                    await botDice(() => (currentLang === 'en' && match.textoEn) ? match.textoEn : match.textoEs, 500);
-                    if (match.senalInteres) {
-                        await iniciarCapturaLead(match.id);
-                    } else {
-                        setQuickReplies(match.botones && match.botones.length ? match.botones : t().menuInicial, match.botones && match.botones.length ? null : 'menu');
-                    }
+                    await mostrarRespuesta(match);
                 } else {
                     turnosSinLead++;
                     await botDice(() => t().sinMatch, 450);
                     if (turnosSinLead >= 3) {
                         turnosSinLead = 0;
                         await botDice(() => t().liveChatSugerencia, 400);
-                        setQuickReplies([t().menuInicial[2]], null);
+                        setQuickReplies([t().sugerenciaHablarConAlguien], null);
                     } else {
-                        setQuickReplies(t().menuInicial, 'menu');
+                        await mostrarMenuInicial();
                     }
                 }
             }
@@ -3587,7 +3692,7 @@
                     chatIniciado = true;
                     await cargarDiccionario();
                     await botDice(() => t().saludo, 350);
-                    setQuickReplies(t().menuInicial, 'menu');
+                    await mostrarMenuInicial();
                 }
                 guardarEstadoChat();
                 inputEl.focus();
@@ -3603,7 +3708,7 @@
             // Repinta el historial guardado y reconstruye el estado del flujo tal cual estaba antes
             // de la recarga — solo corre una vez, al cargar el script. Si había un chat en vivo activo,
             // reconecta el socket a esa misma conversación en vez de perder el hilo con el agente.
-            function restaurarEstadoChat() {
+            async function restaurarEstadoChat() {
                 const guardado = leerEstadoChatGuardado();
                 if (!guardado) return;
 
@@ -3618,7 +3723,7 @@
 
                 (guardado.mensajes || []).forEach(m => addBubble(m.texto, m.tipo));
 
-                if (quickRepliesTipo === 'menu') setQuickReplies(t().menuInicial, 'menu');
+                if (quickRepliesTipo === 'menu') await mostrarMenuInicial();
                 else if (quickRepliesTipo === 'presupuesto') setQuickReplies(t().rangosPresupuesto, 'presupuesto');
                 else if (estado === 'chat_vivo_cola') setQuickReplies([t().liveChatSalirCola], null);
                 else if (estado === 'chat_vivo_calificar_rating') setQuickReplies(t().liveChatOpcionesRating, null);
@@ -3651,9 +3756,9 @@
             // Refresca los textos visibles del chat (header, placeholder, quick-replies fijas, y toda
             // la conversación del BOT ya mostrada) cuando el usuario cambia de idioma sin recargar la
             // página. Los mensajes que escribió el propio usuario no se traducen (son texto libre suyo).
-            window.refreshChatLang = function () {
+            window.refreshChatLang = async function () {
                 if (inputEl) inputEl.placeholder = t().placeholder;
-                if (quickRepliesTipo === 'menu') setQuickReplies(t().menuInicial, 'menu');
+                if (quickRepliesTipo === 'menu') await mostrarMenuInicial();
                 else if (quickRepliesTipo === 'presupuesto') setQuickReplies(t().rangosPresupuesto, 'presupuesto');
 
                 messagesEl.querySelectorAll('.chat-bubble-bot').forEach(bubble => {
