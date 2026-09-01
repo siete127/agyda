@@ -18,7 +18,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/dashboard',        label: 'Inicio',          icon: 'Home',                 moduleKey: '*',                roles: INT,                  showInSidebar: true  },
   { path: '/noticias',         label: 'Noticias',        icon: 'Newspaper',            moduleKey: 'noticias',         roles: INT,                  showInSidebar: true  },
   { path: '/tickets',          label: 'Tickets',         icon: 'LifeBuoy',             moduleKey: 'tickets',          roles: [],                   showInSidebar: true  },
-  { path: '/kb',               label: 'Base de Conocimiento', icon: 'BookOpen',        moduleKey: 'tickets',          roles: NO_CC,                showInSidebar: true  },
+  { path: '/kb',               label: 'ArdaWiki',        icon: 'BookOpen',             moduleKey: 'tickets',          roles: NO_CC,                showInSidebar: true  },
   { path: '/mensajeria',       label: 'Mensajería',      icon: 'MessagesSquare',       moduleKey: 'mensajeria',       roles: INT,                  showInSidebar: true  },
 
   // ── Mi Espacio ─────────────────────────────────────────────────────────
