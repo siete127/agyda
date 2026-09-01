@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Target, Plus, Trash2, User, Users } from 'lucide-react'
+import {
+  Target, Plus, Trash2, User, Users, X, CalendarDays, Calendar, Megaphone,
+  BarChart3, DollarSign, Save, ChevronDown,
+} from 'lucide-react'
 import { ventasAreaService } from '@/services/ventasArea.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { Button } from '@/components/ui/Button'
@@ -65,6 +68,59 @@ function MetaCard({ meta, puedeGestionar, onDelete }: { meta: MetaVenta; puedeGe
   )
 }
 
+/* ── Campo con icono en pill de color ── */
+function CampoIcono({ label, icon: Icon, tono, children }: {
+  label: string; icon: typeof Calendar; tono: 'blue' | 'violet' | 'emerald'; children: React.ReactNode
+}) {
+  const tonos = {
+    blue: 'bg-blue-100 text-blue-600',
+    violet: 'bg-violet-100 text-violet-600',
+    emerald: 'bg-emerald-100 text-emerald-600',
+  }
+  return (
+    <div>
+      <label className="mb-1.5 block text-[0.72rem] font-bold uppercase tracking-wide text-gray-500">{label}</label>
+      <div className="relative">
+        <span className={clsx('pointer-events-none absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg', tonos[tono])}>
+          <Icon className="h-4 w-4" />
+        </span>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+const inputCls =
+  'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-11 pr-3 text-[0.9rem] text-gray-900 ' +
+  'outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15'
+const selectCls = inputCls + ' appearance-none pr-9 cursor-pointer'
+
+function Toggle({ opciones, valor, onChange, activoCls }: {
+  opciones: { key: string; label: string; icon: typeof Calendar }[]
+  valor: string; onChange: (k: string) => void; activoCls: string
+}) {
+  return (
+    <div className="flex gap-2 rounded-xl border border-gray-200 bg-gray-50/60 p-1">
+      {opciones.map((o) => {
+        const activo = valor === o.key
+        return (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => onChange(o.key)}
+            className={clsx(
+              'flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-[0.82rem] font-semibold transition-all',
+              activo ? `${activoCls} shadow-sm` : 'text-gray-500 hover:text-gray-700',
+            )}
+          >
+            <o.icon className="h-4 w-4" /> {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function CrearMetaModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
   const [tipo, setTipo] = useState<MetaTipo>('diaria')
@@ -111,87 +167,110 @@ function CrearMetaModal({ onClose }: { onClose: () => void }) {
     && (metaMonto !== '' || metaUnidades !== '')
 
   return (
-    <Modal isOpen onClose={onClose} title="Nueva meta" size="md">
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Periodicidad</label>
-            <div className="flex rounded-xl border border-gray-200 p-1">
-              {(['diaria', 'mensual'] as MetaTipo[]).map((t) => (
-                <button key={t} type="button" onClick={() => cambiarTipo(t)}
-                  className={clsx('flex-1 rounded-lg py-1.5 text-xs font-semibold capitalize transition-colors',
-                    tipo === t ? 'bg-brand text-white' : 'text-gray-500 hover:text-gray-700')}>
-                  {t}
-                </button>
-              ))}
-            </div>
+    <Modal isOpen onClose={onClose} size="lg">
+      {/* Header propio */}
+      <div className="-m-5 mb-5 flex items-start justify-between border-b border-gray-100 px-6 py-5">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
+            <Target className="h-5 w-5" />
           </div>
-          <div className="flex-1">
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Alcance</label>
-            <div className="flex rounded-xl border border-gray-200 p-1">
-              {([['asesor', 'Asesor'], ['campana', 'Campaña']] as [MetaAlcance, string][]).map(([a, label]) => (
-                <button key={a} type="button" onClick={() => setAlcance(a)}
-                  className={clsx('flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors',
-                    alcance === a ? 'bg-violet-600 text-white' : 'text-gray-500 hover:text-gray-700')}>
-                  {label}
-                </button>
-              ))}
-            </div>
+          <div>
+            <h2 className="text-[1.15rem] font-bold text-gray-900">Nueva meta</h2>
+            <p className="text-[0.8rem] text-gray-400">Define los detalles de tu nueva meta</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-[0.72rem] font-bold uppercase tracking-wide text-gray-500">Periodicidad</label>
+            <Toggle
+              opciones={[
+                { key: 'diaria', label: 'Diaria', icon: CalendarDays },
+                { key: 'mensual', label: 'Mensual', icon: Calendar },
+              ]}
+              valor={tipo}
+              onChange={(k) => cambiarTipo(k as MetaTipo)}
+              activoCls="bg-blue-600 text-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[0.72rem] font-bold uppercase tracking-wide text-gray-500">Alcance</label>
+            <Toggle
+              opciones={[
+                { key: 'asesor', label: 'Asesor', icon: User },
+                { key: 'campana', label: 'Campaña', icon: Users },
+              ]}
+              valor={alcance}
+              onChange={(k) => setAlcance(k as MetaAlcance)}
+              activoCls="bg-violet-600 text-white"
+            />
           </div>
         </div>
 
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">
-            {tipo === 'diaria' ? 'Día' : 'Mes'}
-          </label>
+        <CampoIcono label={tipo === 'diaria' ? 'Día' : 'Mes'} icon={Calendar} tono="blue">
           <input
             type={tipo === 'diaria' ? 'date' : 'month'}
             value={periodo}
             onChange={(e) => setPeriodo(e.target.value)}
-            className="field"
+            className={inputCls}
           />
-        </div>
+        </CampoIcono>
 
         {alcance === 'asesor' ? (
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Asesor</label>
-            <select value={asesorId} onChange={(e) => setAsesorId(e.target.value ? Number(e.target.value) : '')} className="field">
+          <CampoIcono label="Asesor" icon={User} tono="violet">
+            <select value={asesorId} onChange={(e) => setAsesorId(e.target.value ? Number(e.target.value) : '')} className={selectCls}>
               <option value="">Selecciona un asesor</option>
               {asesores.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
             </select>
-          </div>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </CampoIcono>
         ) : (
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaña</label>
-            <select value={campanaId} onChange={(e) => setCampanaId(e.target.value ? Number(e.target.value) : '')} className="field">
+          <CampoIcono label="Campaña" icon={Megaphone} tono="violet">
+            <select value={campanaId} onChange={(e) => setCampanaId(e.target.value ? Number(e.target.value) : '')} className={selectCls}>
               <option value="">Selecciona una campaña</option>
               {campanas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
-            <p className="mt-1 text-[0.68rem] text-gray-400">La meta se compara contra el total de ventas de la campaña.</p>
-          </div>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </CampoIcono>
         )}
 
         {alcance === 'asesor' && (
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaña (opcional)</label>
-            <select value={campanaId} onChange={(e) => setCampanaId(e.target.value ? Number(e.target.value) : '')} className="field">
+          <CampoIcono label="Campaña (opcional)" icon={Megaphone} tono="violet">
+            <select value={campanaId} onChange={(e) => setCampanaId(e.target.value ? Number(e.target.value) : '')} className={selectCls}>
               <option value="">Todas sus campañas</option>
               {campanas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
-          </div>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </CampoIcono>
         )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Meta de unidades vendidas</label>
-          <input type="number" min={0} value={metaUnidades} onChange={(e) => setMetaUnidades(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 20" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Meta de monto ($)</label>
-          <input type="number" min={0} value={metaMonto} onChange={(e) => setMetaMonto(e.target.value ? Number(e.target.value) : '')} className="field" placeholder="Ej. 50000" />
-        </div>
-        <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button isLoading={crear.isPending} disabled={!puedeCrear} onClick={() => crear.mutate()}>Guardar meta</Button>
+        {alcance === 'campana' && (
+          <p className="-mt-2 text-[0.72rem] text-gray-400">La meta se compara contra el total de ventas de la campaña.</p>
+        )}
+
+        <CampoIcono label="Meta de unidades vendidas" icon={BarChart3} tono="blue">
+          <input type="number" min={0} value={metaUnidades} onChange={(e) => setMetaUnidades(e.target.value ? Number(e.target.value) : '')} className={inputCls} placeholder="Ej. 20" />
+        </CampoIcono>
+        <CampoIcono label="Meta de monto ($)" icon={DollarSign} tono="emerald">
+          <input type="number" min={0} value={metaMonto} onChange={(e) => setMetaMonto(e.target.value ? Number(e.target.value) : '')} className={inputCls} placeholder="Ej. 50000" />
+        </CampoIcono>
+
+        <div className="-mx-5 mt-2 flex justify-end gap-2 border-t border-gray-100 px-5 pt-4">
+          <button onClick={onClose} className="rounded-xl border border-gray-200 px-5 py-2.5 text-[0.85rem] font-semibold text-gray-600 transition-colors hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={() => crear.mutate()}
+            disabled={!puedeCrear || crear.isPending}
+            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-[0.85rem] font-semibold text-white shadow-sm transition-all hover:bg-violet-700 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" /> Guardar meta
+          </button>
         </div>
       </div>
     </Modal>
