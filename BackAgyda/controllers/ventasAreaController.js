@@ -332,34 +332,53 @@ async function getMetaPausas(req, res) {
 
     const ventasPool = await getVentasPool();
 
-    // Lista de agentes { id, nombre } según el alcance.
+    // Lista de agentes { id, nombre, username } según el alcance.
     let agentes = [];
     if (meta.alcance === 'campana' && meta.campanaId) {
       const rs = await ventasPool.request()
         .input('c', sql.Int, meta.campanaId)
-        .query(`SELECT idUser as id, nombreAgente as nombre FROM Users WHERE campaign = @c AND role = 'agente' AND Activo = 1 ORDER BY nombreAgente`);
+        .query(`SELECT idUser as id, nombreAgente as nombre, username FROM Users WHERE campaign = @c AND role = 'agente' AND Activo = 1 ORDER BY nombreAgente`);
       agentes = rs.recordset;
     } else if (meta.asesorId) {
       const rs = await ventasPool.request()
         .input('a', sql.Int, meta.asesorId)
-        .query(`SELECT idUser as id, nombreAgente as nombre FROM Users WHERE idUser = @a`);
+        .query(`SELECT idUser as id, nombreAgente as nombre, username FROM Users WHERE idUser = @a`);
       agentes = rs.recordset;
     }
     if (!agentes.length) return res.json({ success: true, data: { alcance: meta.alcance, agentes: [] } });
 
-    // Nombre -> NEUS_ID (los usuarios de asistencia/pausas viven en la Intranet).
-    const nombres = [...new Set(agentes.map((a) => a.nombre).filter(Boolean))];
-    const neusPorNombre = new Map();
-    for (const nombre of nombres) {
-      const r = await pool.request()
-        .input('n', sql.NVarChar, nombre)
-        .query(`SELECT TOP 1 NEUS_ID as id FROM NEUS_USUARIOS WHERE LTRIM(RTRIM(NEUS_NOMBRES)) = LTRIM(RTRIM(@n)) AND NEUS_ACTIVO = 1`);
-      if (r.recordset[0]) neusPorNombre.set(nombre, r.recordset[0].id);
+    // Cada agente de Ventas -> NEUS_ID (los tiempos de pausa viven en la Intranet).
+    // El vínculo más fiable es el usuario de VICIdial (Users.username == NEUS_USUARIO
+    // / username en NEUS_USUARIOS); si no, se intenta por nombre normalizado.
+    const norm = (s) => (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+    // Sin filtrar NEUS_ACTIVO: un agente puede tener el flag desactualizado y aun
+    // así registrar pausas hoy (igual que el reporte de pausas, que no lo filtra).
+    // Se ordena por activos primero para que una fila activa gane la clave frente
+    // a un homónimo inactivo.
+    const neusRs = await pool.request().query(`
+      SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_USUARIO as usuario, username
+      FROM NEUS_USUARIOS ORDER BY NEUS_ACTIVO DESC, NEUS_ID
+    `);
+    const porUsuario = new Map();
+    const porNombre = new Map();
+    for (const n of neusRs.recordset) {
+      const set = (map, k) => { if (k && !map.has(k)) map.set(k, n.id); };
+      if (n.usuario) set(porUsuario, String(n.usuario).trim().toLowerCase());
+      if (n.username) set(porUsuario, String(n.username).trim().toLowerCase());
+      if (n.nombre) set(porNombre, norm(n.nombre));
     }
+    const resolverNeus = (a) => {
+      const u = a.username ? String(a.username).trim().toLowerCase() : '';
+      if (u && porUsuario.has(u)) return porUsuario.get(u);
+      const nn = norm(a.nombre);
+      if (porNombre.has(nn)) return porNombre.get(nn);
+      return null;
+    };
 
     const data = [];
     for (const a of agentes) {
-      const neusId = neusPorNombre.get(a.nombre);
+      const neusId = resolverNeus(a);
       if (!neusId) {
         data.push({ agenteId: a.id, nombre: a.nombre, sinRegistro: true, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0, totalSeg: 0 });
         continue;
