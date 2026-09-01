@@ -245,7 +245,6 @@ const socketService = require('./services/socketService');
 const emailService = require('./services/emailService');
 
 socketService.initialize(server);
-emailService.initialize();
 
 (async () => {
   if (process.env.SKIP_DB !== 'true') {
@@ -255,6 +254,19 @@ emailService.initialize();
     } catch (err) {
       logger.error('❌ Error inicializando BD:', err.message);
     }
+  }
+
+  // El transporte de correo se inicializa después de la BD para poder leer
+  // la config guardada desde Configuración > Notificaciones > Correo (si
+  // existe y está habilitada); si falla o no hay nada guardado, cae de
+  // vuelta a las variables de entorno de siempre (ver config/email.js).
+  try {
+    const notificacionesCorreoController = require('./controllers/notificacionesCorreoController');
+    const dbConfigRow = await notificacionesCorreoController.getConfigServidorCorreo();
+    emailService.initialize(dbConfigRow);
+  } catch (err) {
+    logger.warn('⚠️ No se pudo leer config de servidor de correo desde BD, usando .env:', err.message);
+    emailService.initialize();
   }
 })();
 
