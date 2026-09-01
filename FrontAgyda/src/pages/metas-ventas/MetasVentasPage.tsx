@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   Target, Plus, Trash2, User, Users, X, CalendarDays, Calendar, Megaphone,
-  Save, ChevronDown,
+  Save, ChevronDown, Star, TrendingUp,
 } from 'lucide-react'
 import { ventasAreaService } from '@/services/ventasArea.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -20,49 +20,113 @@ function hoyDia() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function MetaKpi({ valor, label, tono }: { valor: React.ReactNode; label: string; tono: string }) {
+  return (
+    <div>
+      <p className={clsx('text-[0.95rem] font-black leading-none tabular-nums', tono)}>{valor}</p>
+      <p className="mt-1 text-[0.58rem] uppercase tracking-wide text-gray-400">{label}</p>
+    </div>
+  )
+}
+
 function MetaCard({ meta, puedeGestionar, onDelete }: { meta: MetaVenta; puedeGestionar: boolean; onDelete: (id: number) => void }) {
-  const pct = meta.metaUnidades > 0 ? Math.min(100, Math.round((meta.avanceUnidades / meta.metaUnidades) * 100)) : 0
+  const objetivo = meta.metaUnidades > 0 ? meta.metaUnidades : 0
+  const actual = meta.avanceUnidades
+  const pct = objetivo > 0 ? Math.min(100, (actual / objetivo) * 100) : 0
+  const pctReal = objetivo > 0 ? (actual / objetivo) * 100 : 0
   const cumplida = pct >= 100
   const esCampana = meta.alcance === 'campana'
+  const nombre = esCampana ? (meta.campanaNombre ?? 'Campaña') : (meta.asesorNombre ?? 'Asesor')
+  const iniciales = nombre.replace(/[^A-Za-zÁÉÍÓÚÑ ]/g, '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'MV'
+
   return (
     <div className="card p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg',
-            esCampana ? 'bg-violet-100 text-violet-600' : 'bg-brand/10 text-brand')}>
-            {esCampana ? <Users className="h-4 w-4" /> : <User className="h-4 w-4" />}
+      {/* cabecera: avatar + nombre + contador + eliminar */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className={clsx(
+            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold text-white',
+            cumplida ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' : 'bg-gradient-to-br from-violet-500 to-violet-700',
+          )}>
+            {iniciales}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">
-              {esCampana ? (meta.campanaNombre ?? 'Campaña') : meta.asesorNombre}
-            </p>
-            <p className="text-[0.68rem] text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-[0.85rem] font-bold text-gray-900">{nombre}</span>
+              <span className={clsx(
+                'flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-wide',
+                esCampana ? 'bg-violet-100 text-violet-700' : 'bg-brand/10 text-brand',
+              )}>
+                {esCampana ? 'Equipo' : 'Individual'}
+              </span>
+            </div>
+            <p className="text-[0.66rem] text-gray-400">
               {meta.periodo} · {meta.tipo === 'diaria' ? 'diaria' : 'mensual'}
               {!esCampana && meta.campanaNombre && ` · ${meta.campanaNombre}`}
             </p>
           </div>
         </div>
-        {puedeGestionar && (
-          <button onClick={() => onDelete(meta.id)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-      <div className="mt-3 space-y-2">
-        {meta.metaUnidades > 0 && (
-          <div>
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="font-medium text-gray-600">{meta.avanceUnidades} / {meta.metaUnidades} unidades</span>
-              <span className={clsx('font-bold', cumplida ? 'text-emerald-600' : 'text-gray-700')}>{pct}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-              <div className={clsx('h-full rounded-full transition-all', cumplida ? 'bg-emerald-500' : (esCampana ? 'bg-violet-500' : 'bg-brand'))} style={{ width: `${pct}%` }} />
-            </div>
+        <div className="flex flex-shrink-0 items-start gap-2">
+          <div className="text-right">
+            <p className={clsx('text-[1.05rem] font-black leading-none tabular-nums', cumplida ? 'text-emerald-600' : 'text-violet-600')}>
+              {actual} <span className="text-gray-400">/ {objetivo}</span>
+            </p>
+            <p className="mt-0.5 text-[0.62rem] text-gray-400">{pctReal.toFixed(1)}% del objetivo</p>
           </div>
-        )}
-        {meta.metaMonto > 0 && (
-          <p className="text-xs text-gray-500">Meta de monto: <span className="font-semibold text-gray-800">${meta.metaMonto.toLocaleString('es-MX')}</span></p>
-        )}
+          {puedeGestionar && (
+            <button onClick={() => onDelete(meta.id)} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* barra tipo slider con extremos */}
+      <div className="mt-3.5">
+        <div className="relative h-2 w-full rounded-full bg-gray-100">
+          <div
+            className={clsx('absolute inset-y-0 left-0 rounded-full', cumplida ? 'bg-emerald-500' : 'bg-violet-500')}
+            style={{ width: `${Math.max(pct, 3)}%` }}
+          />
+          <div
+            className={clsx(
+              'absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow',
+              cumplida ? 'bg-emerald-500' : 'bg-violet-500',
+            )}
+            style={{ left: `${Math.max(pct, 2)}%` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-[0.6rem] text-gray-400">
+          <span>0</span>
+          <span>{objetivo}</span>
+        </div>
+      </div>
+
+      {/* grid de KPIs */}
+      <div className="mt-3.5 grid grid-cols-4 gap-1 border-t border-gray-100 pt-3 text-center">
+        <MetaKpi valor={actual} label="Actual" tono="text-violet-600" />
+        <MetaKpi valor={objetivo} label="Objetivo" tono="text-brand" />
+        <MetaKpi valor={`${pctReal.toFixed(1)}%`} label="Progreso" tono="text-emerald-600" />
+        <MetaKpi valor={cumplida ? 'Lista' : 'Activa'} label="Estado" tono={cumplida ? 'text-emerald-600' : 'text-amber-500'} />
+      </div>
+
+      {meta.metaMonto > 0 && (
+        <p className="mt-2.5 text-[0.7rem] text-gray-500">
+          Meta de monto: <span className="font-semibold text-gray-800">${meta.metaMonto.toLocaleString('es-MX')}</span>
+        </p>
+      )}
+
+      {/* banner motivacional */}
+      <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-violet-50 px-3 py-2.5">
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-violet-100">
+          {cumplida ? <Star className="h-3.5 w-3.5 text-violet-600" /> : <TrendingUp className="h-3.5 w-3.5 text-violet-600" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[0.72rem] font-bold text-gray-900">{cumplida ? '¡Meta cumplida! 🎉' : '¡Sigue así!'}</p>
+          <p className="text-[0.64rem] text-gray-400">
+            {cumplida ? 'Excelente trabajo del equipo' : 'Cada venta acerca más al objetivo'}
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -428,7 +492,7 @@ export function MetasVentasPage() {
           <p className="text-sm">Sin metas {tipoFiltro === 'diaria' ? 'diarias' : 'mensuales'} para este periodo</p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {metas.map((m) => <MetaCard key={m.id} meta={m} puedeGestionar={puedeGestionar} onDelete={(id) => eliminar.mutate(id)} />)}
         </div>
       )}
