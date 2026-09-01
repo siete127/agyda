@@ -15,6 +15,7 @@ import { UsuariosTab } from './UsuariosTab'
 import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
+import { InstitucionalTab } from './InstitucionalTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
 import { DashboardDisenoTab } from './DashboardDisenoTab'
 import { TemaTab } from './TemaTab'
@@ -50,6 +51,7 @@ const SCREENS: Record<string, ComponentType> = {
   roles: RolesTab,
   perfiles: PerfilesTab,
   'pers-branding': BrandingTab,
+  'pers-institucional': InstitucionalTab,
   'pers-botones': BotonesHeaderTab,
   'pers-dashboard': DashboardDisenoTab,
   tema: TemaTab,

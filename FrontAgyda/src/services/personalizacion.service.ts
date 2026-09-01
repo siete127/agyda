@@ -36,10 +36,17 @@ export interface DashboardCard {
   visible: boolean
 }
 
+export interface Institucional {
+  mision: string
+  vision: string
+  valores: string[]
+}
+
 export interface PersonalizacionConfig {
   branding: Branding
   headerButtons: HeaderButton[]
   dashboard: { cards: DashboardCard[] }
+  institucional: Institucional
 }
 
 export const personalizacionService = {
@@ -56,6 +63,11 @@ export const personalizacionService = {
   async updateHeaderButtons(buttons: HeaderButton[]): Promise<HeaderButton[]> {
     const { data } = await api.put('/personalizacion/header-buttons', buttons)
     return data.data as HeaderButton[]
+  },
+
+  async updateInstitucional(inst: Institucional): Promise<Institucional> {
+    const { data } = await api.put('/personalizacion/institucional', inst)
+    return data.data as Institucional
   },
 
   async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {

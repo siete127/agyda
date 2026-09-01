@@ -25,6 +25,11 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
     { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
   ],
   dashboard: { cards: [] },
+  institucional: {
+    mision: 'Soporte TI, marcación y software que hacen crecer tu negocio.',
+    vision: 'Liderar la automatización con IA en soluciones empresariales.',
+    valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
+  },
 }
 
 // Layout por defecto del inicio — el orden/tamaño que ya tenía la portada,

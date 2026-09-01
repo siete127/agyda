@@ -21,6 +21,7 @@ export const CONFIG_TREE: ConfigNode[] = [
     description: 'Identidad visual: marca, tema, encabezado y página de inicio',
     children: [
       { key: 'pers-branding', label: 'Marca (logo, colores, nombre)', screen: 'pers-branding' },
+      { key: 'pers-institucional', label: 'Misión, visión y valores', screen: 'pers-institucional' },
       { key: 'tema', label: 'Tema (modo y plantillas)', screen: 'tema' },
       { key: 'pers-botones', label: 'Botones del encabezado', screen: 'pers-botones' },
       { key: 'pers-dashboard', label: 'Diseño del inicio', screen: 'pers-dashboard' },
