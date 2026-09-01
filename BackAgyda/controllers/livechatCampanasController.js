@@ -25,7 +25,8 @@ const SELECT_CAMPANIA = `
     LCA_FECHA_INICIO as fechaInicio,
     LCA_FECHA_FIN as fechaFin,
     LCA_FECHA_CREACION as fechaCreacion,
-    LCA_MAX_CHATS_POR_AGENTE as maxChatsPorAgente
+    LCA_MAX_CHATS_POR_AGENTE as maxChatsPorAgente,
+    LCA_AREA as area
   FROM dbo.LIVECHAT_CAMPANIAS
 `;
 
@@ -84,7 +85,7 @@ exports.getCampanias = async (req, res) => {
 // Autenticado (gestionar-campanas) — crea campaña con token público único para el widget.
 exports.createCampania = async (req, res) => {
   try {
-    const { nombre, descripcion, fechaInicio, fechaFin, maxChatsPorAgente } = req.body;
+    const { nombre, descripcion, fechaInicio, fechaFin, maxChatsPorAgente, area } = req.body;
     if (!nombre || !nombre.trim()) {
       return res.status(400).json({ success: false, message: 'El nombre de la campaña es requerido' });
     }
@@ -99,11 +100,12 @@ exports.createCampania = async (req, res) => {
       .input('fechaInicio', sql.DateTime, fechaInicio ? new Date(fechaInicio) : null)
       .input('fechaFin', sql.DateTime, fechaFin ? new Date(fechaFin) : null)
       .input('maxChats', sql.Int, Number.isFinite(maxChatsPorAgente) ? maxChatsPorAgente : null)
+      .input('area', sql.NVarChar(100), area || null)
       .query(`
         INSERT INTO dbo.LIVECHAT_CAMPANIAS
-          (LCA_NOMBRE, LCA_DESCRIPCION, LCA_TOKEN, LCA_FECHA_INICIO, LCA_FECHA_FIN, LCA_MAX_CHATS_POR_AGENTE)
+          (LCA_NOMBRE, LCA_DESCRIPCION, LCA_TOKEN, LCA_FECHA_INICIO, LCA_FECHA_FIN, LCA_MAX_CHATS_POR_AGENTE, LCA_AREA)
         OUTPUT INSERTED.LCA_ID as id
-        VALUES (@nombre, @descripcion, @token, @fechaInicio, @fechaFin, @maxChats)
+        VALUES (@nombre, @descripcion, @token, @fechaInicio, @fechaFin, @maxChats, @area)
       `);
 
     const campania = await pool.request()
@@ -120,7 +122,7 @@ exports.createCampania = async (req, res) => {
 exports.updateCampania = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, descripcion, activo, fechaInicio, fechaFin, maxChatsPorAgente } = req.body;
+    const { nombre, descripcion, activo, fechaInicio, fechaFin, maxChatsPorAgente, area } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
 
     const existente = await pool.request().input('id', sql.Int, id).query(`${SELECT_CAMPANIA} WHERE LCA_ID = @id`);
@@ -137,10 +139,12 @@ exports.updateCampania = async (req, res) => {
       .input('fechaInicio', sql.DateTime, fechaInicio !== undefined ? (fechaInicio ? new Date(fechaInicio) : null) : actual.fechaInicio)
       .input('fechaFin', sql.DateTime, fechaFin !== undefined ? (fechaFin ? new Date(fechaFin) : null) : actual.fechaFin)
       .input('maxChats', sql.Int, maxChatsPorAgente !== undefined ? maxChatsPorAgente : actual.maxChatsPorAgente)
+      .input('area', sql.NVarChar(100), area !== undefined ? area : actual.area)
       .query(`
         UPDATE dbo.LIVECHAT_CAMPANIAS
         SET LCA_NOMBRE = @nombre, LCA_DESCRIPCION = @descripcion, LCA_ACTIVO = @activo,
-            LCA_FECHA_INICIO = @fechaInicio, LCA_FECHA_FIN = @fechaFin, LCA_MAX_CHATS_POR_AGENTE = @maxChats
+            LCA_FECHA_INICIO = @fechaInicio, LCA_FECHA_FIN = @fechaFin, LCA_MAX_CHATS_POR_AGENTE = @maxChats,
+            LCA_AREA = @area
         WHERE LCA_ID = @id
       `);
 
@@ -185,7 +189,7 @@ exports.getGrupos = async (req, res) => {
     const pool = await databaseService.getPool(req.user?.empresa);
     const result = await pool.request()
       .input('campaniaId', sql.Int, campaniaId)
-      .query(`${SELECT_GRUPO} WHERE LG_CAMPANIA_ID = @campaniaId ORDER BY LG_NOMBRE ASC`);
+      .query(`${SELECT_GRUPO} WHERE LG_CAMPANIA_ID = @campaniaId AND LG_ACTIVO = 1 ORDER BY LG_NOMBRE ASC`);
     res.json({ success: true, data: result.recordset });
   } catch (error) {
     console.error('Error obteniendo grupos de livechat:', error);

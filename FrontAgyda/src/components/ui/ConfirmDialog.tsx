@@ -32,7 +32,7 @@ export function ConfirmDialog({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm" elevated={elevated}>
       <div className="space-y-4">
-        <p className="text-sm text-gray-600 leading-relaxed">{message}</p>
+        <p className="text-sm text-ink-secondary leading-relaxed">{message}</p>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={isPending}>Cancelar</Button>
           <Button

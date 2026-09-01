@@ -1559,7 +1559,7 @@ cron.schedule('* * * * *', () => {
 // autenticados hacia la campaña "Soporte TI") para no duplicar la lógica de
 // horario/ruteo/mensajes de sistema del flujo público.
 exports.buscarAgenteDisponible = buscarAgenteDisponible;
-exports.getConfig = getConfig;
+exports.getConfigInterna = getConfig;
 exports.isFueraDeHorario = isFueraDeHorario;
 exports.insertarMensajeSistema = insertarMensajeSistema;
 exports.calcularTiempoEsperaEstimado = calcularTiempoEsperaEstimado;

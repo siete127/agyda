@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, Copy, ChevronRight, Users2 } from 'lucide-react'
+import { Loader2, Plus, Copy, ChevronRight, Users2, MessagesSquare, Inbox, X } from 'lucide-react'
 import { livechatService } from '@/services/livechat.service'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -16,19 +16,25 @@ import { GruposPanel } from './GruposPanel'
 // verificar el dominio/puerto real donde está desplegado el widget público.
 const WIDGET_BASE_URL = `${window.location.origin.replace(/:\d+$/, ':8080')}`
 
+// Áreas de negocio disponibles para etiquetar una campaña — determinan qué
+// tipo de conversaciones/skill atiende el grupo de agentes de esa campaña.
+export const AREAS_CAMPANIA = ['Ventas', 'Soporte', 'Cobranza', 'Atención a Cliente', 'Otro']
+
 function CrearCampaniaForm({ onCreated }: { onCreated: () => void }) {
   const qc = useQueryClient()
   const [nombre, setNombre] = useState('')
   const [descripcion, setDescripcion] = useState('')
+  const [area, setArea] = useState('')
   const [open, setOpen] = useState(false)
 
   const crear = useMutation({
-    mutationFn: () => livechatService.createCampania({ nombre: nombre.trim(), descripcion: descripcion.trim() || undefined }),
+    mutationFn: () => livechatService.createCampania({ nombre: nombre.trim(), descripcion: descripcion.trim() || undefined, area: area || undefined }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['livechat-campanias'] })
       toast.success('Campaña creada')
       setNombre('')
       setDescripcion('')
+      setArea('')
       setOpen(false)
       onCreated()
     },
@@ -45,13 +51,19 @@ function CrearCampaniaForm({ onCreated }: { onCreated: () => void }) {
   }
 
   return (
-    <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
+    <div className="border border-brand/30 rounded-xl p-4 space-y-3 bg-brand/5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-ink-secondary">Nueva campaña</p>
+        <button type="button" onClick={() => setOpen(false)} className="text-ink-tertiary hover:text-ink-secondary rounded-lg p-0.5">
+          <X size={14} />
+        </button>
+      </div>
       <input
         type="text"
         value={nombre}
         onChange={(e) => setNombre(e.target.value)}
         placeholder="Nombre de la campaña"
-        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+        className="w-full rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
         autoFocus
       />
       <input
@@ -59,8 +71,18 @@ function CrearCampaniaForm({ onCreated }: { onCreated: () => void }) {
         value={descripcion}
         onChange={(e) => setDescripcion(e.target.value)}
         placeholder="Descripción (opcional)"
-        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+        className="w-full rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
       />
+      <select
+        value={area}
+        onChange={(e) => setArea(e.target.value)}
+        className="w-full rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink-secondary focus:border-brand focus:outline-none"
+      >
+        <option value="">Área (opcional)</option>
+        {AREAS_CAMPANIA.map((a) => (
+          <option key={a} value={a}>{a}</option>
+        ))}
+      </select>
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
         <Button size="sm" onClick={() => crear.mutate()} disabled={!nombre.trim() || crear.isPending}>
@@ -92,31 +114,46 @@ function CampaniaRow({ campania, expandida, onToggle }: { campania: LivechatCamp
   }
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className={clsx(
+      'rounded-xl border overflow-hidden bg-card transition-all',
+      expandida ? 'border-brand/40 shadow-sm' : 'border-surface-border',
+    )}>
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50"
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <ChevronRight size={16} className={clsx('text-gray-400 transition-transform shrink-0', expandida && 'rotate-90')} />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <ChevronRight size={16} className={clsx('text-ink-tertiary transition-transform shrink-0', expandida && 'rotate-90')} />
+          <span className={clsx(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
+            campania.activo ? 'bg-brand/15 text-brand' : 'bg-ink-tertiary/15 text-ink-tertiary',
+          )}>
+            <MessagesSquare size={14} />
+          </span>
           <div className="min-w-0">
-            <p className="font-medium text-gray-800 truncate">{campania.nombre}</p>
-            {campania.descripcion && <p className="text-xs text-gray-400 truncate">{campania.descripcion}</p>}
+            <p className="font-medium text-ink truncate">{campania.nombre}</p>
+            {campania.descripcion && <p className="text-xs text-ink-tertiary truncate">{campania.descripcion}</p>}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {campania.area && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-500">
+              {campania.area}
+            </span>
+          )}
           <span className={clsx(
-            'text-[11px] font-semibold px-2 py-0.5 rounded-full',
-            campania.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500',
+            'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full',
+            campania.activo ? 'bg-emerald-500/15 text-emerald-500' : 'bg-ink-tertiary/15 text-ink-tertiary',
           )}>
+            <span className={clsx('h-1.5 w-1.5 rounded-full', campania.activo ? 'bg-emerald-500' : 'bg-ink-tertiary')} />
             {campania.activo ? 'Activa' : 'Inactiva'}
           </span>
         </div>
       </button>
 
       {expandida && (
-        <div className="border-t border-gray-100 px-4 py-3 space-y-3 bg-gray-50">
+        <div className="border-t border-surface-border px-4 py-3 space-y-3 bg-surface">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="ghost" onClick={copiarLink}>
               <Copy size={13} />
@@ -143,20 +180,27 @@ export function CampaniasModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal isOpen onClose={onClose} title="Campañas" size="xl">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-500 flex items-center gap-1.5">
-            <Users2 size={13} />
-            Cada campaña puede tener varios grupos de atención, con sus propios agentes, plantillas y motivos de cierre.
-          </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2 rounded-xl bg-brand/5 border border-brand/10 px-3.5 py-2.5 flex-1">
+            <Users2 size={15} className="text-brand shrink-0 mt-0.5" />
+            <p className="text-xs text-ink-secondary leading-relaxed">
+              Cada campaña puede tener varios grupos de atención, con sus propios agentes, plantillas y motivos de cierre.
+            </p>
+          </div>
           <CrearCampaniaForm onCreated={refetch} />
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-10"><Spinner /></div>
+          <div className="flex justify-center py-14"><Spinner /></div>
         ) : campanias.length === 0 ? (
-          <p className="text-center text-sm text-gray-400 py-10">Todavía no hay campañas creadas</p>
+          <div className="flex flex-col items-center gap-2 py-14 text-center">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-ink-tertiary/15 text-ink-tertiary">
+              <Inbox size={18} />
+            </div>
+            <p className="text-sm text-ink-tertiary">Todavía no hay campañas creadas</p>
+          </div>
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
             {campanias.map((c) => (
               <CampaniaRow
                 key={c.id}
