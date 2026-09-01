@@ -14,6 +14,21 @@ export interface RespuestaChatbot {
   activa: boolean
 }
 
+export type TipoEtiquetaMenu = 'respuesta' | 'escalar_campania' | 'escalar_generico' | 'arbol_diagnostico'
+
+export interface EtiquetaMenuChatbot {
+  id: number
+  textoEs: string
+  textoEn: string | null
+  tipo: TipoEtiquetaMenu
+  campaniaId: number | null
+  campaniaNombre: string | null
+  campaniaToken: string | null
+  grupoId: number | null
+  orden: number
+  activa: boolean
+}
+
 export interface LeadChatbot {
   id: number
   nombre: string
@@ -75,6 +90,24 @@ export function parseRespuestaChatbot(raw: Record<string, unknown>): RespuestaCh
     autorNombre: pick(raw, 'autorNombre', 'autor_nombre') ? String(pick(raw, 'autorNombre', 'autor_nombre')) : null,
     fechaCreacion: String(pick(raw, 'fechaCreacion', 'fecha_creacion') ?? new Date().toISOString()),
     fechaActualizacion: pick(raw, 'fechaActualizacion', 'fecha_actualizacion') ? String(pick(raw, 'fechaActualizacion', 'fecha_actualizacion')) : null,
+    activa: parseBool(pick(raw, 'activa'), true),
+  }
+}
+
+const TIPOS_ETIQUETA_MENU: TipoEtiquetaMenu[] = ['respuesta', 'escalar_campania', 'escalar_generico', 'arbol_diagnostico']
+
+export function parseEtiquetaMenuChatbot(raw: Record<string, unknown>): EtiquetaMenuChatbot {
+  const tipoRaw = String(pick(raw, 'tipo') ?? 'respuesta')
+  return {
+    id: Number(pick(raw, 'id', 'Id', 'ID') ?? 0),
+    textoEs: String(pick(raw, 'textoEs', 'texto_es') ?? ''),
+    textoEn: pick(raw, 'textoEn', 'texto_en') ? String(pick(raw, 'textoEn', 'texto_en')) : null,
+    tipo: (TIPOS_ETIQUETA_MENU as string[]).includes(tipoRaw) ? (tipoRaw as TipoEtiquetaMenu) : 'respuesta',
+    campaniaId: pick(raw, 'campaniaId', 'campania_id') != null ? Number(pick(raw, 'campaniaId', 'campania_id')) : null,
+    campaniaNombre: pick(raw, 'campaniaNombre', 'campania_nombre') ? String(pick(raw, 'campaniaNombre', 'campania_nombre')) : null,
+    campaniaToken: pick(raw, 'campaniaToken', 'campania_token') ? String(pick(raw, 'campaniaToken', 'campania_token')) : null,
+    grupoId: pick(raw, 'grupoId', 'grupo_id') != null ? Number(pick(raw, 'grupoId', 'grupo_id')) : null,
+    orden: Number(pick(raw, 'orden') ?? 0),
     activa: parseBool(pick(raw, 'activa'), true),
   }
 }

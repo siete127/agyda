@@ -81,6 +81,14 @@ export interface WebphoneCredencial {
   credencialesPorVista: WebphoneCredencialVista[]
 }
 
+export interface WebphoneAsignacion {
+  neusId: number
+  nombre: string
+  usuarioAgyda: string
+  tipoUsuario: string
+  vistaId: number | null
+}
+
 export const configuracionService = {
   async getVistas(): Promise<WebphoneVista[]> {
     const { data } = await api.get('/webphone/vistas')
@@ -136,5 +144,18 @@ export const configuracionService = {
   async getAutoLoginUrl(vistaId: number): Promise<string | null> {
     const { data } = await api.get('/webphone/credenciales/auto-login-url', { params: { vistaId } })
     return data.url ?? null
+  },
+
+  // ── Asignación dura de vista por usuario ──
+  async getMiAsignacionVista(): Promise<number | null> {
+    const { data } = await api.get('/webphone/vistas/asignaciones/mi-asignacion')
+    return data.vistaId ?? null
+  },
+  async getAsignaciones(): Promise<WebphoneAsignacion[]> {
+    const { data } = await api.get('/webphone/vistas/asignaciones')
+    return data.data
+  },
+  async setAsignacion(neusId: number, vistaId: number | null): Promise<void> {
+    await api.put(`/webphone/vistas/asignaciones/${neusId}`, { vistaId })
   },
 }

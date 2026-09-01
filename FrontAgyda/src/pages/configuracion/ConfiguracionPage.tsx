@@ -9,6 +9,7 @@ import { ModulosEmpresaTab } from './ModulosEmpresaTab'
 import { PermisosTab } from './PermisosTab'
 import { WebphoneVistasTab } from './WebphoneVistasTab'
 import { WebphoneCredencialesTab } from './WebphoneCredencialesTab'
+import { WebphoneAsignacionesTab } from './WebphoneAsignacionesTab'
 import { NotificacionesCorreoTab } from './NotificacionesCorreoTab'
 import { MensajeriaConfigTab } from './MensajeriaConfigTab'
 import { UsuariosTab } from './UsuariosTab'
@@ -57,6 +58,7 @@ const SCREENS: Record<string, ComponentType> = {
   tema: TemaTab,
   'webphone-vistas': WebphoneVistasTab,
   'webphone-credenciales': WebphoneCredencialesTab,
+  'webphone-asignaciones': WebphoneAsignacionesTab,
   notificaciones: NotificacionesCorreoTab,
   mensajeria: MensajeriaConfigTab,
   // ── Tecnología/TI ──

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Phone, Minus, X } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { useWebphoneStore } from '@/stores/webphone.store'
+import { configuracionService } from '@/services/configuracion.service'
 
 interface VistaWebphone {
   id: number
@@ -207,13 +208,29 @@ export function WebphoneFrame() {
     enabled: everVisited,
   })
 
-  const vista = vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null
+  // Vista fija asignada al agente (Configuración > Telefonía > Asignación de
+  // Vistas) — si existe, gana siempre sobre la predeterminada global o
+  // cualquier vista elegida antes en el store (ver WebphonePage.tsx, misma regla).
+  const { data: vistaAsignadaId = null } = useQuery({
+    queryKey: ['webphone-mi-asignacion'],
+    queryFn: () => configuracionService.getMiAsignacionVista(),
+    enabled: everVisited,
+    staleTime: 30_000,
+  })
+
+  const vista = vistaAsignadaId != null
+    ? (vistas.find((v) => v.id === vistaAsignadaId) ?? vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null)
+    : (vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null)
 
   const iframeSrc = vista?.url || ''
 
   useEffect(() => {
+    if (vistaAsignadaId != null) {
+      if (vistaId !== vistaAsignadaId) setVistaId(vistaAsignadaId)
+      return
+    }
     if (!vistaId && vistas.length > 0) setVistaId(vistas[0].id)
-  }, [vistas, vistaId, setVistaId])
+  }, [vistas, vistaId, setVistaId, vistaAsignadaId])
 
   useEffect(() => {
     if (!vista) return

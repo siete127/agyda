@@ -167,4 +167,104 @@ exports.deleteVista = async (req, res) => {
   }
 };
 
+// Asignación dura por usuario: cada NEUS_ID puede tener a lo sumo UNA vista
+// fija asignada. A diferencia de WEBPHONE_CREDENCIALES (agente x vista, N:N,
+// solo credenciales de auto-login), esto decide QUÉ vista ve el agente en el
+// Marcador — si tiene una asignada, el frontend oculta el selector y usa esa
+// siempre, ignorando la vista predeterminada global.
+async function ensureAsignacionesSchema(pool) {
+  try {
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='WEBPHONE_ASIGNACIONES')
+      CREATE TABLE WEBPHONE_ASIGNACIONES (
+        WASG_ID       INT IDENTITY PRIMARY KEY,
+        WASG_NEUS_ID  SMALLINT NOT NULL,
+        WASG_VISTA_ID INT NOT NULL,
+        CONSTRAINT UQ_WASG_NEUS UNIQUE (WASG_NEUS_ID),
+        CONSTRAINT FK_WASG_VISTA FOREIGN KEY (WASG_VISTA_ID) REFERENCES WEBPHONE_VISTAS(WVIS_ID) ON DELETE CASCADE
+      )
+    `);
+  } catch (e) {
+    console.warn('⚠️ No se pudo asegurar esquema de WEBPHONE_ASIGNACIONES:', e && e.message);
+  }
+}
+
+// Admin — matriz de todos los usuarios activos con su vista asignada (o
+// ninguna, si todavía caen en la predeterminada global).
+exports.getAsignaciones = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureAsignacionesSchema(pool);
+
+    const usuarios = await pool.request().query(`
+      SELECT NEUS_ID as neusId, NEUS_NOMBRES as nombre, NEUS_USUARIO as usuarioAgyda, NEUS_TIPOUSUARIO as tipoUsuario
+      FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1 ORDER BY NEUS_NOMBRES
+    `);
+    const asignaciones = await pool.request().query(`
+      SELECT WASG_NEUS_ID as neusId, WASG_VISTA_ID as vistaId FROM WEBPHONE_ASIGNACIONES
+    `);
+    const mapa = new Map(asignaciones.recordset.map((a) => [a.neusId, a.vistaId]));
+
+    const data = usuarios.recordset.map((u) => ({ ...u, vistaId: mapa.get(u.neusId) ?? null }));
+    return res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.setAsignacion = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const neusId = Number(req.params.neusId);
+    const { vistaId } = req.body || {};
+    if (!Number.isFinite(neusId) || neusId <= 0) {
+      return res.status(400).json({ success: false, message: 'neusId inválido' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureAsignacionesSchema(pool);
+
+    if (!vistaId) {
+      await pool.request().input('nid', sql.Int, neusId).query('DELETE FROM WEBPHONE_ASIGNACIONES WHERE WASG_NEUS_ID=@nid');
+      return res.json({ success: true });
+    }
+
+    const existe = await pool.request().input('nid', sql.Int, neusId)
+      .query('SELECT WASG_ID FROM WEBPHONE_ASIGNACIONES WHERE WASG_NEUS_ID=@nid');
+    if (existe.recordset.length > 0) {
+      await pool.request().input('nid', sql.Int, neusId).input('vid', sql.Int, Number(vistaId))
+        .query('UPDATE WEBPHONE_ASIGNACIONES SET WASG_VISTA_ID=@vid WHERE WASG_NEUS_ID=@nid');
+    } else {
+      await pool.request().input('nid', sql.Int, neusId).input('vid', sql.Int, Number(vistaId))
+        .query('INSERT INTO WEBPHONE_ASIGNACIONES (WASG_NEUS_ID, WASG_VISTA_ID) VALUES (@nid, @vid)');
+    }
+    return res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// El propio agente — no requiere ser admin, cada quien solo puede pedir su
+// asignación. null si no tiene ninguna (cae a la predeterminada global, como
+// antes de esta función existir).
+exports.getMiAsignacion = async (req, res) => {
+  try {
+    const neusId = Number(req.user?.id);
+    if (!Number.isFinite(neusId) || neusId <= 0) {
+      return res.status(400).json({ success: false, message: 'Sesión inválida' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureAsignacionesSchema(pool);
+    const r = await pool.request().input('nid', sql.Int, neusId)
+      .query('SELECT WASG_VISTA_ID as vistaId FROM WEBPHONE_ASIGNACIONES WHERE WASG_NEUS_ID=@nid');
+    return res.json({ success: true, vistaId: r.recordset[0]?.vistaId ?? null });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.ensureWebphoneVistasSchema = ensureWebphoneVistasSchema;
+exports.ensureAsignacionesSchema = ensureAsignacionesSchema;
