@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
-  Users, UserCheck, Clock, BarChart3, Plus, Trash2, Coffee,
+  Users, UserCheck, Clock, BarChart3, Plus, Trash2, Coffee, History,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { supervisoresService } from '@/services/supervisores.service'
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { TIPO_PAUSA_LABELS, type AgenteEstado } from '@/types/supervisores.types'
+import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
 
 interface Usuario { id: number; nombre: string; tipoUsuario: string }
 interface Campania { id: number; nombre: string; estatus: string }
@@ -271,8 +272,8 @@ export function SupervisoresPage() {
   const isAdmin = useIsADorTI()
   const [searchParams] = useSearchParams()
   const tabInicial = searchParams.get('tab')
-  const [tab, setTab] = useState<'panel' | 'productividad' | 'administrar'>(
-    tabInicial === 'productividad' || tabInicial === 'administrar' ? tabInicial : 'panel',
+  const [tab, setTab] = useState<'panel' | 'productividad' | 'historial' | 'administrar'>(
+    tabInicial === 'productividad' || tabInicial === 'historial' || tabInicial === 'administrar' ? tabInicial : 'panel',
   )
 
   return (
@@ -299,6 +300,14 @@ export function SupervisoresPage() {
         </button>
         {isAdmin && (
           <button
+            onClick={() => setTab('historial')}
+            className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'historial' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
+          >
+            <History className="h-3.5 w-3.5" /> Historial
+          </button>
+        )}
+        {isAdmin && (
+          <button
             onClick={() => setTab('administrar')}
             className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'administrar' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
           >
@@ -309,6 +318,9 @@ export function SupervisoresPage() {
 
       {tab === 'panel' && <PanelEnVivoTab />}
       {tab === 'productividad' && <ProductividadTab />}
+      {/* Solo admins: no existe "mi propio historial" en Supervisores, así
+          que siempre ve el historial completo de todos los agentes (puedeSupervisar=true). */}
+      {tab === 'historial' && isAdmin && <HistorialConversacionesPanel puedeSupervisar />}
       {tab === 'administrar' && isAdmin && <AdministrarTab />}
     </div>
   )
