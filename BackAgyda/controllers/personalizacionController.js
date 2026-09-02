@@ -44,8 +44,11 @@ const DEFAULT_CONFIG = {
     fondoOscuro: '#0F131B',
   },
   headerButtons: [
-    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: true },
-    { key: 'marcador', label: 'Marcador', url: '', visible: true },
+    // Marcador / contingencia arrancan OCULTOS: son propios del Contact Center y
+    // no todas las empresas los usan. Un admin los activa desde
+    // Configuración → Apariencia → Botones del encabezado cuando aplique.
+    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: false },
+    { key: 'marcador', label: 'Marcador', url: '', visible: false },
     { key: 'sistemas', label: 'Ventas', url: '', visible: true },
     { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
   ],
