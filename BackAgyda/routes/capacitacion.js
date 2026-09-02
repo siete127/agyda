@@ -11,6 +11,11 @@ const { uploadMaterial } = require('../middleware/capacitacionUpload');
 router.get('/examenes/publico/:slug', capacitacionExamenController.getPublicoBySlug);
 router.post('/examenes/publico/:slug/responder', capacitacionExamenController.responderPublico);
 
+// ── Curso público (sin sesión: número + nombre) ────────────────────────────
+router.get('/publico/:slug', capacitacionController.getCursoPublicoBySlug);
+router.post('/publico/:slug/registrar', capacitacionController.registrarTomaPublica);
+router.post('/publico/:slug/completar', capacitacionController.completarTomaPublica);
+
 // Catálogo — cualquier empleado autenticado
 router.get('/cursos', authenticateToken, capacitacionController.getCursos);
 router.get('/cursos/:id', authenticateToken, capacitacionController.getCursoById);
@@ -30,6 +35,11 @@ router.post('/cursos/:id/timer/agregar', authenticateToken, verificarRol(['AD', 
 router.delete('/cursos/:id', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'eliminar'), capacitacionController.deleteCurso);
 router.post('/cursos/:id/materiales', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'editar'), uploadMaterial.single('archivo'), capacitacionController.subirMaterial);
 router.delete('/materiales/:materialId', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'editar'), capacitacionController.eliminarMaterial);
+
+// Asignación de cursos a usuarios — solo admin (AD/TI)
+router.get('/cursos/:id/asignados', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'editar'), capacitacionController.getAsignados);
+router.post('/cursos/:id/asignar', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'editar'), capacitacionController.asignarUsuarios);
+router.delete('/cursos/:id/asignados/:usuarioId', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'editar'), capacitacionController.desasignarUsuario);
 
 // ── Exámenes: privado (usuario autenticado) ─────────────────────────────────
 router.get('/cursos/:cursoId/examenes', authenticateToken, capacitacionExamenController.listByCurso);

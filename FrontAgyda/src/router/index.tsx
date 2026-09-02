@@ -41,6 +41,7 @@ const EncuestasPage   = lz(() => import('@/pages/encuestas/EncuestasPage'),    '
 const MisEncuestasPage = lz(() => import('@/pages/encuestas/MisEncuestasPage'), 'MisEncuestasPage')
 const EncuestaPublicaPage = lazy(() => import('@/pages/encuestas/EncuestaPublicaPage').then((m) => ({ default: m.EncuestaPublicaPage })))
 const ExamenPublicoPage = lazy(() => import('@/pages/capacitacion/ExamenPublicoPage').then((m) => ({ default: m.ExamenPublicoPage })))
+const CursoPublicoPage = lazy(() => import('@/pages/capacitacion/CursoPublicoPage').then((m) => ({ default: m.CursoPublicoPage })))
 const ReportesPage    = lz(() => import('@/pages/reportes/ReportesPage'),      'ReportesPage')
 const UsuariosPage    = lz(() => import('@/pages/usuarios/UsuariosPage'),      'UsuariosPage')
 const PermisosPage         = lz(() => import('@/pages/permisos/PermisosPage'),              'PermisosPage')
@@ -173,6 +174,9 @@ export const router = createBrowserRouter([
 
   // Examen de capacitación público (sin sesión de intranet)
   { path: '/examen/:slug', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><ExamenPublicoPage /></Suspense> },
+
+  // Curso de capacitación público (sin sesión — número + nombre)
+  { path: '/capacitacion/publico/:slug', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><CursoPublicoPage /></Suspense> },
 
   // Indicadores empresariales — link público de solo lectura (sin sesión de intranet)
   { path: '/indicadores-publico', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><IndicadoresPublicoPage /></Suspense> },
