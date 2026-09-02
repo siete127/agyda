@@ -1282,7 +1282,7 @@ END
   }
 }
 
-// Base de conocimiento (artículos vinculables a la resolución de tickets)
+// ArdaWiki (artículos vinculables a la resolución de tickets)
 async function ensureKbSchema(pool) {
   try {
     await pool.request().batch(`
@@ -1304,10 +1304,30 @@ async function ensureKbSchema(pool) {
       END
       IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TIPO')
         ALTER TABLE dbo.KB_ARTICULOS ADD ART_TIPO NVARCHAR(10) NOT NULL DEFAULT 'articulo';
+      -- Caché de traducción al inglés para ArdaWiki (KB pública): se
+      -- llena la primera vez que alguien pide el artículo en inglés (traducción
+      -- automática con Google, gratuita pero con rate-limit) y de ahí en
+      -- adelante se sirve directo de aquí sin volver a llamar al traductor.
+      -- NULL = aún no traducido.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TITULO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TITULO_EN NVARCHAR(200) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_CONTENIDO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_CONTENIDO_EN NVARCHAR(MAX) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_CATEGORIA_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_CATEGORIA_EN NVARCHAR(50) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TRADUCIDO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TRADUCIDO_EN DATETIME NULL;
+      -- Visibilidad del artículo: público (aparece también en el sitio web
+      -- institucional, además de ArdaWiki interno) o privado (solo dentro de
+      -- AGYDA). Independiente de ART_ACTIVO — un artículo puede estar activo
+      -- pero marcado privado. Default 1 para no ocultar de golpe los
+      -- artículos ya existentes en el sitio público al agregar la columna.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_PUBLICO')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_PUBLICO BIT NOT NULL DEFAULT 1;
     `);
-    logger.info('✅ Esquema de base de conocimiento asegurado');
+    logger.info('✅ Esquema de ArdaWiki asegurado');
   } catch (err) {
-    console.warn('⚠️ No se pudo asegurar esquema de base de conocimiento:', err.message);
+    console.warn('⚠️ No se pudo asegurar esquema de ArdaWiki:', err.message);
   }
 }
 
@@ -4905,6 +4925,18 @@ BEGIN
   );
   CREATE INDEX IX_VACANTES_ACTIVO_FECHA ON dbo.INTRANET_VACANTES(VAC_ACTIVO, VAC_FECHA_CREACION DESC);
 END
+-- Caché de traducción al inglés para la página pública de Careers — mismo
+-- patrón que KB_ARTICULOS.ART_*_EN (ver ensureKbSchema). NULL = sin traducir.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_TITULO_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_TITULO_EN NVARCHAR(150) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_DESCRIPCION_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_DESCRIPCION_EN NVARCHAR(MAX) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_REQUISITOS_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_REQUISITOS_EN NVARCHAR(MAX) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_UBICACION_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_UBICACION_EN NVARCHAR(150) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_TRADUCIDO_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_TRADUCIDO_EN DATETIME NULL;
 
 IF OBJECT_ID('dbo.INTRANET_VACANTES_POSTULANTES', 'U') IS NULL
 BEGIN

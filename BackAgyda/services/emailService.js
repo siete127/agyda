@@ -122,10 +122,17 @@ function applyDbConfig(row) {
     cachedToken = null;
     cachedTokenExpiresAt = 0;
   } else if (row.tipo === 'smtp') {
+    const port = row.smtpPort || 465;
+    // El puerto decide el protocolo, no una preferencia del usuario: 465 es
+    // TLS directo (secure:true); cualquier otro puerto (587, típico de
+    // Office365/Outlook y muchos proveedores) es STARTTLS, que en nodemailer
+    // se pide con secure:false — usar secure:true ahí causa el error de
+    // OpenSSL "wrong version number" porque el cliente intenta un TLS
+    // handshake directo contra un puerto que espera texto plano primero.
     smtpConfig = {
       host: row.smtpHost || '',
-      port: row.smtpPort || 465,
-      secure: row.smtpSecure !== false,
+      port,
+      secure: port === 465,
       auth: row.smtpUser ? { user: row.smtpUser, pass: row.smtpPass || '' } : undefined,
       logger: SMTP_DEBUG,
       debug: SMTP_DEBUG,

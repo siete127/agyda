@@ -1284,17 +1284,17 @@ async function evaluarPosibleBaja(pool, neusId, fecha, tenantKey) {
     await pool.request().input('neusId', sql.Int, neusId)
       .query('UPDATE ASISTENCIA_RACHA_FALTAS SET ALERTADO = 1 WHERE NEUS_ID=@neusId');
 
-    const destinatariosR = await pool.request().query(`
-      SELECT nu.NEUS_ID as id, nu.NEUS_CORREO as correo
-      FROM ASISTENCIA_BAJAS_DESTINATARIOS d
-      INNER JOIN NEUS_USUARIOS nu ON nu.NEUS_ID = d.NEUS_ID
-      WHERE nu.NEUS_ACTIVO = 1
-    `);
-    if (destinatariosR.recordset.length === 0) return;
+    // Destinatarios administrables desde Configuración > Notificaciones >
+    // Correo, tab "Alerta de posible baja" (tabla
+    // NOTIFICACIONES_CORREO_DESTINATARIOS) — reemplaza la tabla vieja
+    // ASISTENCIA_BAJAS_DESTINATARIOS, que quedó desconectada del panel.
+    const { getDestinatariosUsuarios } = require('./notificacionesCorreoController');
+    const destinatarios = await getDestinatariosUsuarios('posible_baja', tenantKey);
+    if (destinatarios.length === 0) return;
 
     const mensaje = `${usuario.NEUS_NOMBRES} acumula ${racha} días de falta consecutivos. Posible baja.`;
 
-    for (const dest of destinatariosR.recordset) {
+    for (const dest of destinatarios) {
       await notificationService.createNotification({
         usuarioId: dest.id,
         tipo: 'posible_baja',
@@ -1304,7 +1304,7 @@ async function evaluarPosibleBaja(pool, neusId, fecha, tenantKey) {
       });
     }
 
-    const correos = destinatariosR.recordset.map(d => d.correo).filter(Boolean);
+    const correos = destinatarios.map(d => d.correo).filter(Boolean);
     if (correos.length > 0) {
       await emailService.sendPosibleBajaEmail({
         to: correos,

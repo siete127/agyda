@@ -16,5 +16,6 @@ router.get('/articulos/:id', requireActionAccess('tickets', 'ver'), kbController
 router.post('/articulos', requireActionAccess('tickets', 'gestionar-estado'), kbController.createArticulo);
 router.put('/articulos/:id', requireActionAccess('tickets', 'gestionar-estado'), kbController.updateArticulo);
 router.post('/articulos/:id/toggle-activo', requireActionAccess('tickets', 'gestionar-estado'), kbController.toggleActivo);
+router.post('/articulos/:id/toggle-publico', requireActionAccess('tickets', 'gestionar-estado'), kbController.togglePublico);
 
 module.exports = router;

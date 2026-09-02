@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Search, Plus, Pencil, Archive, HelpCircle, FileText } from 'lucide-react'
+import { BookOpen, Search, Plus, Pencil, Archive, HelpCircle, FileText, Globe, Lock } from 'lucide-react'
 import { kbService, KB_TIPO_LABELS, type KbArticulo, type KbTipo } from '@/services/kb.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/Button'
@@ -135,6 +135,14 @@ export function KbPage() {
     },
   })
 
+  const togglePublico = useMutation({
+    mutationFn: (a: KbArticulo) => kbService.togglePublico(a.id),
+    onSuccess: (_data, a) => {
+      qc.invalidateQueries({ queryKey: ['kb-articulos'] })
+      toast.success(a.publico ? 'Artículo marcado como privado' : 'Artículo publicado en el sitio web')
+    },
+  })
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="rounded-2xl border border-surface-border bg-card overflow-hidden">
@@ -193,12 +201,29 @@ export function KbPage() {
                         </span>
                         <h3 className="font-semibold text-ink">{a.titulo}</h3>
                         {a.categoria && <span className="chip bg-surface text-ink-secondary text-[0.62rem]">{a.categoria}</span>}
+                        <span className={clsx(
+                          'flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] font-semibold',
+                          a.publico ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600',
+                        )}>
+                          {a.publico ? <Globe className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                          {a.publico ? 'Público' : 'Privado'}
+                        </span>
                       </div>
                       <p className={clsx('mt-1 text-[0.8rem] text-ink-secondary', 'line-clamp-2')}>{a.contenido}</p>
                       <p className="mt-1 text-[0.65rem] text-ink-tertiary">{a.autorNombre ?? 'Sistema'}</p>
                     </div>
                     {isTI && (
                       <div className="flex flex-shrink-0 gap-1">
+                        <button
+                          onClick={() => togglePublico.mutate(a)}
+                          className={clsx(
+                            'rounded-lg p-1.5 hover:bg-surface',
+                            a.publico ? 'text-green-600 hover:text-green-700' : 'text-ink-tertiary hover:text-ink',
+                          )}
+                          title={a.publico ? 'Público — clic para hacerlo privado' : 'Privado — clic para publicarlo en el sitio web'}
+                        >
+                          {a.publico ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                        </button>
                         <button onClick={() => setEditing(a)} className="rounded-lg p-1.5 text-ink-tertiary hover:bg-surface hover:text-ink" title="Editar">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>

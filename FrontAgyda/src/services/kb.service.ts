@@ -16,6 +16,7 @@ export interface KbArticulo {
   autorNombre: string | null
   fechaCreacion: string
   fechaActualizacion: string | null
+  publico: boolean
 }
 
 function parseArticulo(raw: Record<string, unknown>): KbArticulo {
@@ -28,6 +29,7 @@ function parseArticulo(raw: Record<string, unknown>): KbArticulo {
     autorNombre: (raw['autorNombre'] as string | null) ?? null,
     fechaCreacion: String(raw['fechaCreacion'] ?? ''),
     fechaActualizacion: (raw['fechaActualizacion'] as string | null) ?? null,
+    publico: raw['publico'] === undefined ? true : Boolean(raw['publico']),
   }
 }
 
@@ -54,5 +56,9 @@ export const kbService = {
 
   async toggleActivo(id: number): Promise<void> {
     await api.post(`/kb/articulos/${id}/toggle-activo`)
+  },
+
+  async togglePublico(id: number): Promise<void> {
+    await api.post(`/kb/articulos/${id}/toggle-publico`)
   },
 }
