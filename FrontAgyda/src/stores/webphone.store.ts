@@ -17,6 +17,15 @@ interface WebphoneState {
   // El Sidebar llama esto en el mismo click que navega, ANTES de cambiar de ruta
   // — es el único punto donde aún hay gesto de usuario válido para abrir el PiP.
   onNavigateAway: (() => void) | null
+  // Picture-in-Picture REAL (Document Picture-in-Picture API del navegador) —
+  // opción aparte del modo flotante de arriba (que es un overlay CSS seguro).
+  // Este mueve el iframe a otro documento del sistema operativo: VICIdial
+  // interpreta ese movimiento como una recarga de página y cierra la sesión
+  // SIP activa (cuelga la llamada en curso). Se ofrece como opción explícita
+  // con advertencia, no como reemplazo del modo flotante.
+  realPipSupported: boolean
+  realPipActive: boolean
+  requestRealPip: (() => void) | null
   setVistaId: (id: number | null) => void
   setZoom: (z: number) => void
   bumpReloadKey: () => void
@@ -26,6 +35,9 @@ interface WebphoneState {
   setPipActive: (v: boolean) => void
   setRequestPip: (fn: ((scale?: number) => void) | null) => void
   setOnNavigateAway: (fn: (() => void) | null) => void
+  setRealPipSupported: (v: boolean) => void
+  setRealPipActive: (v: boolean) => void
+  setRequestRealPip: (fn: (() => void) | null) => void
 }
 
 export const useWebphoneStore = create<WebphoneState>()((set) => ({
@@ -38,6 +50,9 @@ export const useWebphoneStore = create<WebphoneState>()((set) => ({
   pipActive: false,
   requestPip: null,
   onNavigateAway: null,
+  realPipSupported: false,
+  realPipActive: false,
+  requestRealPip: null,
   setVistaId: (id) => set({ vistaId: id }),
   setZoom: (z) => set({ zoom: z }),
   bumpReloadKey: () => set((s) => ({ reloadKey: s.reloadKey + 1 })),
@@ -47,4 +62,7 @@ export const useWebphoneStore = create<WebphoneState>()((set) => ({
   setPipActive: (v) => set({ pipActive: v }),
   setRequestPip: (fn) => set({ requestPip: fn }),
   setOnNavigateAway: (fn) => set({ onNavigateAway: fn }),
+  setRealPipSupported: (v) => set({ realPipSupported: v }),
+  setRealPipActive: (v) => set({ realPipActive: v }),
+  setRequestRealPip: (fn) => set({ requestRealPip: fn }),
 }))

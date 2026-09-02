@@ -4,7 +4,15 @@ import { useQuery } from '@tanstack/react-query'
 import { Phone, Minus, X } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { useWebphoneStore } from '@/stores/webphone.store'
+import { useUIStore } from '@/stores/ui.store'
 import { configuracionService } from '@/services/configuracion.service'
+
+// Ancho del Sidebar de AppLayout (ver Sidebar.tsx: w-[240px] / w-[76px]
+// colapsado) — se descuenta al centrar la ventana flotante para que quede
+// centrada en el área de contenido visible, no en el ancho total del
+// navegador. VentasLayout no tiene sidebar, así que ahí no se descuenta nada.
+const SIDEBAR_WIDTH_EXPANDED = 240
+const SIDEBAR_WIDTH_COLLAPSED = 76
 
 interface VistaWebphone {
   id: number
@@ -23,11 +31,32 @@ function parseVista(r: Record<string, unknown>): VistaWebphone {
 }
 
 const LOAD_TIMEOUT_MS = 25_000
-const FLOAT_WIDTH = 380
-const FLOAT_HEIGHT = 640
+// Tamaño por defecto de la ventana flotante: 65% del viewport, no un px fijo
+// — así se ve proporcional sin importar la resolución de pantalla. El alto
+// usa un ratio mayor que el ancho porque el contenido de AzulDial/VICIdial
+// es más vertical (login + botones apilados) y con el mismo ratio quedaba
+// cortado, mostrando scroll.
+const FLOAT_WIDTH_RATIO = 0.65
+const FLOAT_HEIGHT_RATIO = 0.92
 const FLOAT_MARGIN = 16
 const FLOAT_HEADER_HEIGHT = 32
 const BUBBLE_SIZE = 52
+const defaultFloatSize = () => ({
+  width: window.innerWidth * FLOAT_WIDTH_RATIO,
+  height: window.innerHeight * FLOAT_HEIGHT_RATIO,
+})
+
+// PiP real: tamaño de referencia "natural" del contenido de AzulDial/VICIdial
+// — a 65%×92% del viewport (el mismo ratio que ya usa el modo flotante
+// normal) el contenido entra completo con zoom 1x. Como la ventana PiP se
+// puede redimensionar libremente desde el sistema operativo, el zoom del
+// iframe se recalcula en cada resize para que el contenido siga cabiendo
+// completo sin scroll, sin importar el tamaño final de la ventana.
+const PIP_REAL_MIN_ZOOM = 0.35
+const pipRealNaturalSize = () => ({
+  width: window.innerWidth * FLOAT_WIDTH_RATIO,
+  height: window.innerHeight * FLOAT_HEIGHT_RATIO,
+})
 
 /**
  * El iframe del Webphone vive fuera del <Outlet> y nunca se desmonta al navegar
@@ -52,6 +81,12 @@ const BUBBLE_SIZE = 52
 export function WebphoneFrame() {
   const location = useLocation()
   const activo = location.pathname === '/webphone'
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
+  // VentasLayout (/ventas) no tiene Sidebar — ahí el área de contenido ocupa
+  // todo el ancho del navegador, así que no se descuenta nada.
+  const sidebarOffset = location.pathname === '/ventas'
+    ? 0
+    : (sidebarCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED)
 
   // Solo empezamos a cargar el iframe (y su query de vistas) la primera vez que
   // el usuario visita /webphone — no queremos que VICIdial cargue en segundo
@@ -72,9 +107,26 @@ export function WebphoneFrame() {
   const setPipActive = useWebphoneStore((s) => s.setPipActive)
   const setRequestPip = useWebphoneStore((s) => s.setRequestPip)
   const setOnNavigateAway = useWebphoneStore((s) => s.setOnNavigateAway)
+  const realPipActive = useWebphoneStore((s) => s.realPipActive)
+  const setRealPipSupported = useWebphoneStore((s) => s.setRealPipSupported)
+  const setRealPipActive = useWebphoneStore((s) => s.setRealPipActive)
+  const setRequestRealPip = useWebphoneStore((s) => s.setRequestRealPip)
 
   const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── PiP real (Document Picture-in-Picture) ──────────────────────────────
+  // anchorRef envuelve TODO el contenido (header + iframe) y es el nodo que se
+  // mueve de verdad a la ventana del sistema operativo. homeRef marca dónde
+  // debe volver cuando se cierra. Independiente del modo flotante CSS de
+  // arriba — los dos nunca están activos a la vez (ver JSX más abajo).
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const homeRef = useRef<HTMLDivElement>(null)
+  const pipWindowRef = useRef<Window | null>(null)
+  // Zoom automático del iframe dentro del PiP real — se recalcula cada vez
+  // que el usuario redimensiona la ventana (ver abrirPipReal), para que el
+  // contenido de AzulDial siempre quepa completo sin scroll.
+  const [pipRealZoom, setPipRealZoom] = useState(1)
 
   // "Modo flotante": el mismo contenedor (con el iframe adentro) simplemente
   // cambia de posición/tamaño vía CSS, sin moverse de documento — ver comentario
@@ -84,8 +136,8 @@ export function WebphoneFrame() {
 
   // Posición (esquina superior-izquierda, en px) y tamaño de la ventana
   // flotante — null = todavía no se tocó, usa los valores por defecto (esquina
-  // inferior derecha, FLOAT_WIDTH x FLOAT_HEIGHT). Se arrastra desde el header
-  // (mover) o desde las esquinas (redimensionar).
+  // inferior derecha, 65% del viewport — ver defaultFloatSize). Se arrastra
+  // desde el header (mover) o desde las esquinas (redimensionar).
   const [floatPos, setFloatPos] = useState<{ x: number; y: number } | null>(null)
   const [floatSize, setFloatSize] = useState<{ width: number; height: number } | null>(null)
   // Minimizado: el iframe sigue vivo y montado (misma sesión, mismo audio),
@@ -98,8 +150,15 @@ export function WebphoneFrame() {
   // retraso en vez de seguirlo 1:1, y se siente elástico/lento.
   const [interacting, setInteracting] = useState(false)
 
-  const currentFloatPos = () => floatPos ?? { x: window.innerWidth - FLOAT_WIDTH - FLOAT_MARGIN, y: window.innerHeight - FLOAT_HEIGHT - FLOAT_MARGIN }
-  const currentFloatSize = () => floatSize ?? { width: FLOAT_WIDTH, height: FLOAT_HEIGHT }
+  const currentFloatSize = () => floatSize ?? defaultFloatSize()
+  // Posición por defecto: centrada en el área de contenido visible (descuenta
+  // el Sidebar cuando aplica) — más prolija que anclar a una esquina, sobre
+  // todo con el tamaño grande (65% del viewport).
+  const currentFloatPos = () => {
+    if (floatPos) return floatPos
+    const { width, height } = currentFloatSize()
+    return { x: sidebarOffset + (window.innerWidth - sidebarOffset - width) / 2, y: (window.innerHeight - height) / 2 }
+  }
 
   const clampFloatPos = (x: number, y: number, w: number, h: number) => {
     const maxX = window.innerWidth - w - FLOAT_MARGIN
@@ -281,7 +340,10 @@ export function WebphoneFrame() {
   // Si el usuario vuelve a entrar a /webphone, el widget vuelve a su lugar
   // normal en la página en vez de quedar duplicado (flotante + en su slot).
   useEffect(() => {
-    if (activo) cerrarPip()
+    if (activo) {
+      cerrarPip()
+      cerrarPipReal()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activo])
 
@@ -305,17 +367,99 @@ export function WebphoneFrame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vista?.id, inPip, activo])
 
+  // ── PiP real (Document Picture-in-Picture) ──────────────────────────────
+  // ADVERTENCIA (ver comentario del componente): mover el iframe a otro
+  // documento hace que VICIdial/AzulDial cierre la sesión SIP activa —
+  // corta el audio de una llamada en curso. Se ofrece como opción explícita
+  // separada del modo flotante seguro de arriba, con aviso al usuario antes
+  // de abrir (ver botón en WebphonePage.tsx).
+  const cerrarPipReal = () => {
+    // Orden importa: primero se recupera el nodo (mientras el documento de la
+    // ventana PiP sigue vivo), recién después se cierra esa ventana. Al revés
+    // (cerrar primero) el documento se destruye con el nodo todavía adentro y
+    // el append() de vuelta fallaba silenciosamente — el botón "Cerrar PiP"
+    // no hacía nada visible.
+    if (anchorRef.current && homeRef.current && anchorRef.current.parentElement !== homeRef.current) {
+      homeRef.current.append(anchorRef.current)
+    }
+    const win = pipWindowRef.current
+    pipWindowRef.current = null
+    if (win && !win.closed) win.close()
+    setRealPipActive(false)
+    setPipRealZoom(1)
+  }
+
+  // Recalcula el zoom del iframe según el tamaño real de la ventana PiP en
+  // ese momento, comparado contra el tamaño "natural" donde el contenido
+  // entra completo a zoom 1x (ver pipRealNaturalSize). min() entre ancho y
+  // alto para no desbordar en ninguna de las dos dimensiones.
+  const recalcularPipRealZoom = (pipWindow: Window) => {
+    const natural = pipRealNaturalSize()
+    const availW = pipWindow.innerWidth
+    const availH = pipWindow.innerHeight - FLOAT_HEADER_HEIGHT
+    const scale = Math.min(availW / natural.width, availH / natural.height, 1)
+    setPipRealZoom(Math.max(scale, PIP_REAL_MIN_ZOOM))
+  }
+
+  const abrirPipReal = async () => {
+    if (pipWindowRef.current || !anchorRef.current || !window.documentPictureInPicture) return
+    // Nunca los dos modos a la vez — si el overlay CSS estaba activo, se cierra.
+    if (inPip) cerrarPip()
+    // Mismo tamaño por defecto que el modo flotante (65%×65%) — el usuario
+    // puede redimensionar libremente desde el sistema operativo después; el
+    // zoom del contenido se ajusta solo (ver recalcularPipRealZoom).
+    const width = Math.round(window.innerWidth * FLOAT_WIDTH_RATIO)
+    const height = Math.round(window.innerHeight * FLOAT_WIDTH_RATIO)
+    try {
+      const pipWindow = await window.documentPictureInPicture.requestWindow({ width, height })
+      pipWindowRef.current = pipWindow
+      const style = pipWindow.document.createElement('style')
+      // height: 100vh (no 100%) en html/body — con % puro esta cadena se
+      // rompe seguido en ventanas nuevas del sistema operativo: el navegador
+      // no siempre resuelve el porcentaje contra el viewport real de la
+      // ventana PiP, y el div movido (h-full en cascada) colapsaba a 0 de
+      // alto, dejando el iframe comprimido en una franja arriba.
+      style.textContent = `html, body { margin: 0; padding: 0; overflow: hidden; background: #0B1730; } iframe { border: 0; display: block; }`
+      pipWindow.document.head.append(style)
+      pipWindow.document.body.append(anchorRef.current)
+      pipWindow.addEventListener('pagehide', () => cerrarPipReal(), { once: true })
+      pipWindow.addEventListener('resize', () => recalcularPipRealZoom(pipWindow))
+      recalcularPipRealZoom(pipWindow)
+      setRealPipActive(true)
+    } catch (err) {
+      console.warn('[Webphone] No se pudo abrir el PiP real:', err)
+    }
+  }
+
+  useEffect(() => {
+    setRealPipSupported(Boolean(window.documentPictureInPicture))
+  }, [setRealPipSupported])
+
+  useEffect(() => {
+    if (!vista) { setRequestRealPip(null); return }
+    setRequestRealPip(() => abrirPipReal())
+    return () => { setRequestRealPip(null) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vista?.id])
+
   if (!vista) return null
 
   const visible = inPip || activo
-  const floatW = floatSize?.width ?? FLOAT_WIDTH
-  const floatH = floatSize?.height ?? FLOAT_HEIGHT
+  const floatW = floatSize?.width ?? defaultFloatSize().width
+  const floatH = floatSize?.height ?? defaultFloatSize().height
   const posicion = inPip
-    ? (floatPos
+    ? (() => {
+        // Siempre se calcula con top/left (nunca bottom/right): así se puede
+        // clampear contra el viewport real de este monitor sin importar su
+        // resolución o el zoom del navegador — bottom/right con un ancho
+        // grande (65% del viewport) podía salirse de pantalla en monitores
+        // más chicos o con zoom distinto.
         // floatPos puede venir de arrastrar la burbuja (52px) — se reclampea
         // con el tamaño real del widget grande para que no quede fuera de pantalla.
-        ? (() => { const p = clampFloatPos(floatPos.x, floatPos.y, floatW, floatH); return { top: p.y, left: p.x, width: floatW, height: floatH } })()
-        : { bottom: FLOAT_MARGIN, right: FLOAT_MARGIN, width: floatW, height: floatH })
+        const base = floatPos ?? { x: sidebarOffset + (window.innerWidth - sidebarOffset - floatW) / 2, y: (window.innerHeight - floatH) / 2 }
+        const p = clampFloatPos(base.x, base.y, floatW, floatH)
+        return { top: p.y, left: p.x, width: floatW, height: floatH }
+      })()
     : (rect ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height } : null)
   // La burbuja (52px) es mucho más chica que el widget (hasta 380x640): la
   // misma coordenada top-left no es válida para ambas, así que su posición se
@@ -351,18 +495,35 @@ export function WebphoneFrame() {
           </span>
         </button>
       )}
+      {/* homeRef: "casa" del anchor en el árbol de React. Cuando el PiP real
+          está activo, anchorRef vive físicamente en la otra ventana (movido
+          con appendChild) y este div queda vacío — React sigue reconciliando
+          normalmente porque la referencia del nodo no cambia, solo su padre. */}
+      <div ref={homeRef} style={{ display: 'contents' }}>
       <div
+        ref={anchorRef}
         className={
-          (inPip
-            ? 'fixed z-40 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-card shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35),0_4px_16px_rgba(0,0,0,0.12)] ring-1 ring-black/5'
-            : 'fixed z-40 overflow-hidden rounded-2xl border border-gray-200/60 bg-card shadow-xl') +
-          (interacting ? '' : ' transition-all duration-200 ease-out')
+          realPipActive
+            ? 'flex flex-col overflow-hidden bg-card'
+            : (inPip
+                ? 'fixed z-40 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-card shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35),0_4px_16px_rgba(0,0,0,0.12)] ring-1 ring-black/5'
+                : 'fixed z-40 overflow-hidden rounded-2xl border border-gray-200/60 bg-card shadow-xl') +
+              (interacting ? '' : ' transition-all duration-200 ease-out')
         }
-        style={visible && posicion && !(inPip && minimized)
-          ? { ...posicion, opacity: 1, pointerEvents: 'auto' }
-          : { top: 0, left: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }
+        style={realPipActive
+          // Estilos explícitos en px/vw/vh, no % — la cadena de % en cascada
+          // hasta html/body de la ventana PiP no siempre resuelve bien en la
+          // primera pintura (ver comentario en abrirPipReal).
+          ? { width: '100vw', height: '100vh' }
+          : (visible && posicion && !(inPip && minimized)
+              ? { ...posicion, opacity: 1, pointerEvents: 'auto' }
+              : { top: 0, left: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none' })
         }
       >
+        {/* En PiP real NO se muestra este header: la propia ventana del
+            sistema operativo ya trae su barra de título con el botón de
+            cerrar nativo (arriba, junto a la URL) — duplicarlo acá quedaba
+            encimado, perdía contraste y era redundante. */}
         {inPip && (
           <div
             onMouseDown={onDragStart}
@@ -419,7 +580,12 @@ export function WebphoneFrame() {
           src={iframeSrc}
           title={`Webphone — ${vista.label}`}
           className="border-0"
-          style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})`, transformOrigin: 'top left' }}
+          style={realPipActive
+            // En PiP real el zoom es automático (pipRealZoom, recalculado en
+            // cada resize de la ventana) — ignora el zoom manual del usuario.
+            ? { width: `${100 / pipRealZoom}%`, height: `${100 / pipRealZoom}%`, transform: `scale(${pipRealZoom})`, transformOrigin: 'top left' }
+            : { width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})`, transformOrigin: 'top left' }
+          }
           allow="microphone; autoplay"
           onLoad={() => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
@@ -449,6 +615,7 @@ export function WebphoneFrame() {
           </div>
         </>
       )}
+      </div>
       </div>
     </>
   )
