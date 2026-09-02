@@ -1,5 +1,6 @@
 import { api } from '@/lib/axios'
-import { parseCurso, parseMiCurso, type Curso, type MiCurso, type Material } from '@/types/capacitacion.types'
+import { publicApi } from '@/lib/axios-public'
+import { parseCurso, parseMiCurso, parseCursoAsignado, type Curso, type MiCurso, type Material, type CursoAsignado, type CursoAcceso } from '@/types/capacitacion.types'
 
 export const capacitacionService = {
   async getCursos(includeInactive = false): Promise<Curso[]> {
@@ -18,9 +19,23 @@ export const capacitacionService = {
     return parseCurso((data?.data ?? data) as Record<string, unknown>)
   },
 
-  async update(id: number, payload: { titulo: string; descripcion: string; categoria?: string; duracionMin?: number; duracionMinAgregar?: number; activo?: boolean }): Promise<Curso> {
+  async update(id: number, payload: { titulo: string; descripcion: string; categoria?: string; duracionMin?: number; duracionMinAgregar?: number; activo?: boolean; acceso?: CursoAcceso }): Promise<Curso> {
     const { data } = await api.put(`/capacitacion/cursos/${id}`, payload)
     return parseCurso((data?.data ?? data) as Record<string, unknown>)
+  },
+
+  // ── Asignación de cursos a usuarios (AD/TI) ──
+  async getAsignados(cursoId: number): Promise<CursoAsignado[]> {
+    const { data } = await api.get(`/capacitacion/cursos/${cursoId}/asignados`)
+    const list = Array.isArray(data) ? data : (data?.data ?? [])
+    return (list as Record<string, unknown>[]).map(parseCursoAsignado)
+  },
+  async asignarUsuarios(cursoId: number, usuarioIds: number[]): Promise<{ asignados: number; nuevas: number }> {
+    const { data } = await api.post(`/capacitacion/cursos/${cursoId}/asignar`, { usuarioIds })
+    return data?.data
+  },
+  async desasignarUsuario(cursoId: number, usuarioId: number): Promise<void> {
+    await api.delete(`/capacitacion/cursos/${cursoId}/asignados/${usuarioId}`)
   },
 
   async delete(id: number): Promise<void> {
@@ -79,5 +94,20 @@ export const capacitacionService = {
     a.click()
     a.remove()
     window.URL.revokeObjectURL(url)
+  },
+}
+
+/* ── Curso público — sin sesión (número + nombre) ── */
+export const capacitacionPublicoService = {
+  async getBySlug(slug: string): Promise<Curso> {
+    const { data } = await publicApi.get(`/capacitacion/publico/${slug}`)
+    return parseCurso((data?.data ?? data) as Record<string, unknown>)
+  },
+  async registrar(slug: string, numero: string, nombre: string): Promise<{ inscripcionId: number }> {
+    const { data } = await publicApi.post(`/capacitacion/publico/${slug}/registrar`, { numero, nombre })
+    return data?.data
+  },
+  async completar(slug: string, inscripcionId: number): Promise<void> {
+    await publicApi.post(`/capacitacion/publico/${slug}/completar`, { inscripcionId })
   },
 }

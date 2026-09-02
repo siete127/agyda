@@ -18,6 +18,7 @@ import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
 import { InstitucionalTab } from './InstitucionalTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
+import { EnlacesTopbarTab } from './EnlacesTopbarTab'
 import { DashboardDisenoTab } from './DashboardDisenoTab'
 import { TemaTab } from './TemaTab'
 // ── Secciones de Configuración > Tecnología/TI (módulo de Soporte TI) ──
@@ -54,6 +55,7 @@ const SCREENS: Record<string, ComponentType> = {
   'pers-branding': BrandingTab,
   'pers-institucional': InstitucionalTab,
   'pers-botones': BotonesHeaderTab,
+  'pers-enlaces': EnlacesTopbarTab,
   'pers-dashboard': DashboardDisenoTab,
   tema: TemaTab,
   'webphone-vistas': WebphoneVistasTab,

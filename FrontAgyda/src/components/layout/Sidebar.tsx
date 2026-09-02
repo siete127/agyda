@@ -53,7 +53,7 @@ const GROUPS = [
     keys: ['finanzas', 'gastos'],
   },
   {
-    label: 'Ventas',
+    label: 'CRM',
     keys: ['ventas-area', 'clientes', 'productos-servicios', 'crm', 'email-marketing'],
   },
   {

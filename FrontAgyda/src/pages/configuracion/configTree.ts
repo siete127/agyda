@@ -24,6 +24,7 @@ export const CONFIG_TREE: ConfigNode[] = [
       { key: 'pers-institucional', label: 'Misión, visión y valores', screen: 'pers-institucional' },
       { key: 'tema', label: 'Tema (modo y plantillas)', screen: 'tema' },
       { key: 'pers-botones', label: 'Botones del encabezado', screen: 'pers-botones' },
+      { key: 'pers-enlaces', label: 'Enlaces del encabezado', screen: 'pers-enlaces' },
       { key: 'pers-dashboard', label: 'Diseño del inicio', screen: 'pers-dashboard' },
     ],
   },

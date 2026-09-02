@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
-import { useWebphoneStore } from '@/stores/webphone.store'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { NotificationBell } from './NotificationBell'
 import { MensajeriaBell } from './MensajeriaBell'
@@ -15,6 +14,8 @@ import logoAgyda from '@/assets/Logo_AGYDA.png'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { personalizacionService } from '@/services/personalizacion.service'
 import { useThemeStore } from '@/stores/theme.store'
+import { useEnlaceFrameStore } from '@/stores/enlaceFrame.store'
+import { ENLACE_ICONOS } from '@/lib/enlaceTopbarIconos'
 import { clsx } from 'clsx'
 
 interface SearchResult {
@@ -24,6 +25,20 @@ interface SearchResult {
   path: string
   type: 'page' | 'ticket' | 'noticia'
 }
+
+// Acceso a "Gestión MIS" — lista fija de usuarios autorizados (NEUS_USUARIO),
+// mismo criterio que SUPER_ADMIN_IDS en BackAgyda/middleware/moduleAccess.js
+// pero comparado por el campo `usuario` en vez de `id`.
+const GESTION_MIS_USUARIOS = new Set([
+  'TI_0117', // Abner Diaz
+  'TI_0114', // Alan Gabriel Montoya Garrido
+  'TI_0110', // Ines Jessica Ramos Meneses
+  'TI_0116', // Cristian Luna Santillan
+  'TI_0103', // Eliud Vladimir Mathus Evangelista
+  'ADM_0001', // Edgar Montoya
+  'ADM_0002', // Jazminn Miranda
+])
+const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
 
 
 export function Topbar() {
@@ -37,21 +52,14 @@ export function Topbar() {
   const pageTitle = getRouteLabel(location.pathname)
 
   // El botón "Editar diseño" es fijo mientras estás en el Inicio.
-  const enInicio = location.pathname === '/dashboard'
+  // Oculto para Edomex y Santillana: piden dejar el dashboard fijo, sin
+  // que sus usuarios puedan reacomodar las tarjetas de la portada.
+  const EMPRESAS_SIN_EDITAR_DISENO = new Set(['edomex', 'santillana'])
+  const puedeEditarDiseno = !EMPRESAS_SIN_EDITAR_DISENO.has((user?.empresa ?? '').toLowerCase())
+  const enInicio = location.pathname === '/dashboard' && puedeEditarDiseno
 
-  const onNavigateAwayWebphone = useWebphoneStore((s) => s.onNavigateAway)
-
-  const handleSwitchSystem = () => {
-    // Mismo mecanismo que SidebarItem.tsx: si hay un Webphone activo y nos
-    // vamos a otro módulo, se abre la ventana flotante en el mismo click
-    // (único momento con gesto de usuario válido) antes de cambiar de ruta —
-    // sin esto, este botón (a diferencia de la navegación del Sidebar) dejaba
-    // el Webphone "atrás" en su slot de /webphone y desaparecía de la vista.
-    if (location.pathname !== '/ventas') onNavigateAwayWebphone?.()
-    navigate('/ventas')
-  }
-
-  const { branding, headerButtons } = usePersonalizacion()
+  const { branding, headerButtons, enlacesTopbar } = usePersonalizacion()
+  const abrirEnlaceFlotante = useEnlaceFrameStore((s) => s.abrir)
   const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
 
   const theme = useThemeStore((s) => s.theme)
@@ -74,31 +82,20 @@ export function Topbar() {
     window.open('https://azul1.ardabytec.vip', '_blank', 'noopener,noreferrer')
   }
 
-  // Acceso a "Gestión MIS" — lista fija de usuarios autorizados (NEUS_USUARIO),
-  // mismo criterio que SUPER_ADMIN_IDS en BackAgyda/middleware/moduleAccess.js
-  // pero comparado por el campo `usuario` en vez de `id`.
-  const GESTION_MIS_USUARIOS = new Set([
-    'TI_0117', // Abner Diaz
-    'TI_0114', // Alan Gabriel Montoya Garrido
-    'TI_0110', // Ines Jessica Ramos Meneses
-    'TI_0116', // Cristian Luna Santillan
-    'TI_0103', // Eliud Vladimir Mathus Evangelista
-    'ADM_0001', // Edgar Montoya
-    'ADM_0002', // Jazminn Miranda
-  ])
   const canUseGestionMis = GESTION_MIS_USUARIOS.has(user?.usuario ?? '')
 
-  const openGestionMis = () => {
-    window.open('https://mis.ardabytec.vip', '_blank', 'noopener,noreferrer')
-  }
+  // Enlaces personalizados visibles. "Gestión MIS" conserva su lista fija de
+  // usuarios autorizados aunque ahora viva como enlace configurable: sin esto,
+  // cualquiera con el topbar lo vería solo por estar "visible" en la config.
+  const enlacesVisibles = enlacesTopbar
+    .filter((e) => e.visible)
+    .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
 
   // Acción por defecto (URL interna) de cada botón, por key. Si la config trae
   // una `url`, se abre esa en pestaña nueva en lugar de la acción interna.
   const accionInterna: Record<string, () => void> = {
     marcador: openMarcador,
     contingencia: openMarcadorContingencia,
-    sistemas: handleSwitchSystem,
-    'gestion-mis': openGestionMis,
   }
 
   // Estilo + gate por rol de cada botón. `gate` decide si el usuario puede verlo
@@ -112,14 +109,6 @@ export function Topbar() {
     marcador: {
       className: 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
       icon: Headset, gate: canUseMarcador,
-    },
-    sistemas: {
-      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
-      icon: BarChart3, gate: true,
-    },
-    'gestion-mis': {
-      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
-      icon: MonitorCog, gate: canUseGestionMis,
     },
   }
 
@@ -313,6 +302,27 @@ export function Topbar() {
               onClick={onClick}
               title={b.label}
               className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors ${style.className}`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          )
+        })}
+
+        {/* Enlaces personalizados del encabezado — configurables por empresa
+            (Configuración → Apariencia → Enlaces del encabezado). Cada uno abre
+            en pestaña nueva o en el panel flotante persistente según su modo. */}
+        {enlacesVisibles.map((e) => {
+          const Icon = ENLACE_ICONOS[e.icono] ?? ENLACE_ICONOS.link
+          const onClick = e.modo === 'flotante'
+            ? () => abrirEnlaceFlotante({ id: e.id, label: e.label, url: e.url, color: e.color })
+            : () => window.open(e.url, '_blank', 'noopener,noreferrer')
+          return (
+            <button
+              key={e.id}
+              onClick={onClick}
+              title={`${e.label}${e.modo === 'flotante' ? ' (panel flotante)' : ''}`}
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95"
+              style={{ backgroundColor: e.color }}
             >
               <Icon className="h-3.5 w-3.5" />
             </button>

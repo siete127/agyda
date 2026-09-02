@@ -8,6 +8,7 @@ import { ActaRetardosModal } from '@/components/ui/ActaRetardosModal'
 import { ActivoTerminosModal } from '@/components/ui/ActivoTerminosModal'
 import { QuejasAlertBubble } from '@/components/ui/QuejasAlertBubble'
 import { MensajeriaFloatingBubble } from '@/components/ui/MensajeriaFloatingBubble'
+import { EnlaceFrame } from '@/components/ui/EnlaceFrame'
 import { useUIStore } from '@/stores/ui.store'
 import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { useAuthStore } from '@/stores/auth.store'
@@ -74,6 +75,11 @@ function Layout({ location, showMusic, showMensajeria }: {
       <ActivoTerminosModal />
       <QuejasAlertBubble />
       {showMensajeria && <MensajeriaFloatingBubble />}
+      {/* WebphoneFrame NO vive acá — ver ProtectedRoute.tsx. Si viviera en
+          AppLayout, entrar a /ventas (que usa VentasLayout, rama hermana en
+          el router) desmontaría todo este árbol junto con el Webphone
+          flotante, cortando el tono de una llamada activa. */}
+      <EnlaceFrame />
     </div>
   )
 }

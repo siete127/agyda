@@ -37,10 +37,17 @@ const capacitacionStorage = multer.diskStorage({
 // audio y video — nunca ejecutables ni scripts, aunque el usuario controle
 // el nombre del archivo.
 const EXTENSIONES_PERMITIDAS = new Set([
-  '.pdf', '.ppt', '.pptx', '.jpg', '.jpeg', '.png', '.gif', '.webp',
-  '.mp3', '.wav', '.ogg', '.m4a',
+  '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png', '.gif', '.webp',
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma', '.opus',
   '.mp4', '.webm', '.mov',
 ]);
+
+class TipoArchivoNoPermitidoError extends Error {
+  constructor() {
+    super('Tipo de archivo no permitido. Solo PDF, Word, PowerPoint, imágenes, audio o video.');
+    this.status = 400;
+  }
+}
 
 const uploadMaterial = multer({
   storage: capacitacionStorage,
@@ -48,7 +55,7 @@ const uploadMaterial = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname || '').toLowerCase();
     if (!EXTENSIONES_PERMITIDAS.has(ext)) {
-      return cb(new Error('Tipo de archivo no permitido. Solo PDF, PowerPoint (.ppt/.pptx) o imágenes.'));
+      return cb(new TipoArchivoNoPermitidoError());
     }
     cb(null, true);
   },

@@ -10,7 +10,7 @@ let socketService;
 try { socketService = require('../services/socketService'); } catch (_) { socketService = null; }
 
 const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login'];
-const HEADER_BUTTON_KEYS = ['marcador', 'contingencia', 'sistemas', 'gestion-mis'];
+const HEADER_BUTTON_KEYS = ['marcador', 'contingencia'];
 // Catálogo de cards del dashboard — el frontend sabe renderizarlas; aquí solo
 // validamos que las keys sean conocidas. Debe reflejar CARD_IDS de
 // FrontAgyda/src/pages/dashboard/cardCatalog.ts.
@@ -44,10 +44,13 @@ const DEFAULT_CONFIG = {
     fondoOscuro: '#0F131B',
   },
   headerButtons: [
-    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: true },
-    { key: 'marcador', label: 'Marcador', url: '', visible: true },
-    { key: 'sistemas', label: 'Ventas', url: '', visible: true },
-    { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
+    // Marcador / contingencia arrancan OCULTOS: son propios del Contact Center y
+    // no todas las empresas los usan. Un admin los activa desde
+    // Configuración → Apariencia → Botones del encabezado cuando aplique.
+    // "Ventas" y "Gestión MIS" se movieron a enlacesTopbar (son propios de
+    // Ardaby Tec, no botones genéricos para cualquier empresa).
+    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: false },
+    { key: 'marcador', label: 'Marcador', url: '', visible: false },
   ],
   dashboard: { cards: [] },
   // Identidad institucional — misión, visión y valores por empresa. Los textos
@@ -57,7 +60,29 @@ const DEFAULT_CONFIG = {
     vision: 'Liderar la automatización con IA en soluciones empresariales.',
     valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
   },
+  // Enlaces personalizados del encabezado — botones que un admin agrega junto a
+  // Marcador/Contingencia. Cada uno abre su URL en pestaña nueva o en un panel
+  // flotante tipo Spotify que sigue visible al navegar.
+  enlacesTopbar: [],
 };
+
+const ENLACE_ICONOS = ['link', 'phone', 'headset', 'monitor', 'chart', 'ticket', 'mail', 'globe', 'rocket', 'grid', 'bell', 'calendar', 'folder', 'shield', 'zap'];
+const ENLACE_MODOS = ['pestana', 'flotante'];
+
+function limpiarEnlace(raw, i) {
+  const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const url = s(raw?.url, 500);
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  return {
+    id: s(raw?.id, 40) || `enlace-${Date.now()}-${i}`,
+    label: s(raw?.label, 40) || 'Enlace',
+    url,
+    icono: ENLACE_ICONOS.includes(raw?.icono) ? raw.icono : 'link',
+    color: /^#[0-9a-fA-F]{6}$/.test(raw?.color) ? raw.color : '#2F6FED',
+    modo: ENLACE_MODOS.includes(raw?.modo) ? raw.modo : 'pestana',
+    visible: raw?.visible !== false,
+  };
+}
 
 function mergeConfig(stored) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
@@ -65,13 +90,18 @@ function mergeConfig(stored) {
   const inst = stored.institucional && typeof stored.institucional === 'object' ? stored.institucional : {};
   return {
     branding: { ...base.branding, ...(stored.branding || {}) },
-    headerButtons: Array.isArray(stored.headerButtons) ? stored.headerButtons : base.headerButtons,
+    headerButtons: Array.isArray(stored.headerButtons)
+      ? stored.headerButtons.filter((b) => HEADER_BUTTON_KEYS.includes(b?.key))
+      : base.headerButtons,
     dashboard: { ...base.dashboard, ...(stored.dashboard || {}) },
     institucional: {
       mision: typeof inst.mision === 'string' ? inst.mision : base.institucional.mision,
       vision: typeof inst.vision === 'string' ? inst.vision : base.institucional.vision,
       valores: Array.isArray(inst.valores) ? inst.valores : base.institucional.valores,
     },
+    enlacesTopbar: Array.isArray(stored.enlacesTopbar)
+      ? stored.enlacesTopbar.map(limpiarEnlace).filter(Boolean)
+      : base.enlacesTopbar,
   };
 }
 
@@ -243,6 +273,32 @@ exports.updateInstitucional = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateInstitucional', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la identidad institucional' });
+  }
+};
+
+// PUT /api/personalizacion/enlaces-topbar
+// Body: array de { id?, label, url, icono, color, modo, visible }
+exports.updateEnlacesTopbar = async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body) ? req.body : req.body?.enlacesTopbar;
+    if (!Array.isArray(incoming)) {
+      return res.status(400).json({ success: false, message: 'Se espera un array de enlaces' });
+    }
+    const enlaces = incoming.map(limpiarEnlace).filter(Boolean).slice(0, 12);
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.enlacesTopbar = enlaces;
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-enlaces-topbar', detalle: `${enlaces.length} enlaces`, ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'enlacesTopbar');
+    return res.json({ success: true, data: config.enlacesTopbar });
+  } catch (e) {
+    logger.error('personalizacionController.updateEnlacesTopbar', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar los enlaces del encabezado' });
   }
 };
 

@@ -39,7 +39,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/webphone',         label: 'Marcador',        icon: 'Phone',                moduleKey: 'webphone',         roles: [],                   showInSidebar: true  },
   { path: '/clientes',         label: 'Clientes',        icon: 'TrendingUp',           moduleKey: 'clientes',         roles: NO_CC,                showInSidebar: true  },
   { path: '/productos-servicios', label: 'Productos y Servicios', icon: 'Package',     moduleKey: 'productos-servicios', roles: NO_CC,             showInSidebar: true  },
-  { path: '/crm-interno',      label: 'CRM',             icon: 'LineChart',            moduleKey: 'crm',              roles: ['AD','TI'],          showInSidebar: true  },
+  { path: '/crm-interno',      label: 'Oportunidades',   icon: 'LineChart',            moduleKey: 'crm',              roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/email-marketing',  label: 'Email Marketing', icon: 'Mail',                 moduleKey: 'email-marketing',  roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/encuestas',        label: 'Encuestas',       icon: 'ClipboardList',        moduleKey: 'encuestas',        roles: ['AD','TI'],          showInSidebar: true  },
 
