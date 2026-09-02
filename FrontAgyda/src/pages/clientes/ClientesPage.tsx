@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText, Package, LayoutGrid, List, Eye, MoreVertical, Power } from 'lucide-react'
+import {
+  Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText,
+  Package, LayoutGrid, List, Eye, MoreVertical, Power, X, User, Route, MapPinned, Hash,
+  ShoppingBag, PackagePlus, Save, ChevronDown,
+} from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -93,85 +97,87 @@ function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
   const totalAnual = asignados.filter((a) => a.recurrencia === 'ANUAL').reduce((s, a) => s + a.precio, 0)
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Productos y servicios contratados</label>
-        {(totalMensual > 0 || totalAnual > 0) && (
-          <span className="text-[0.7rem] text-gray-400">
-            {totalMensual > 0 && <>{money(totalMensual)}/mes</>}
-            {totalMensual > 0 && totalAnual > 0 && ' · '}
-            {totalAnual > 0 && <>{money(totalAnual)}/año</>}
-          </span>
-        )}
-      </div>
-
+    <div className="space-y-4">
       {isLoading ? (
         <p className="text-xs text-gray-400">Cargando…</p>
       ) : asignados.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-200 py-4 text-center text-xs text-gray-400">
-          Sin productos ni servicios asignados
-        </p>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-100">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/60 text-left">
-                <th className="px-3 py-2 text-[0.6rem] font-semibold uppercase tracking-wider text-gray-400">Producto / servicio</th>
-                <th className="px-3 py-2 text-[0.6rem] font-semibold uppercase tracking-wider text-gray-400">Periodicidad</th>
-                <th className="px-3 py-2 text-right text-[0.6rem] font-semibold uppercase tracking-wider text-gray-400">Precio</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {asignados.map((a) => (
-                <tr key={a.productoServicioId} className="hover:bg-gray-50/60">
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <Package className={clsx('h-3.5 w-3.5 flex-shrink-0', a.tipo === 'SERVICIO' ? 'text-violet-500' : 'text-brand')} />
-                      <div className="min-w-0">
-                        <p className="truncate text-[0.8rem] font-medium text-gray-800">{a.nombre}</p>
-                        <p className="text-[0.62rem] uppercase tracking-wide text-gray-400">{a.tipo === 'SERVICIO' ? 'Servicio' : 'Producto'}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={clsx('chip text-[0.62rem]', RECURRENCIA_CHIP[a.recurrencia])}>
-                      {RECURRENCIA_LABEL[a.recurrencia]}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right text-[0.78rem] font-semibold tabular-nums text-gray-700">
-                    {a.precio > 0 ? money(a.precio) : '—'}
-                    {a.recurrencia === 'MENSUAL' && a.precio > 0 && <span className="text-[0.6rem] font-normal text-gray-400"> /mes</span>}
-                    {a.recurrencia === 'ANUAL' && a.precio > 0 && <span className="text-[0.6rem] font-normal text-gray-400"> /año</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button onClick={() => quitar.mutate(a.productoServicioId)} className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500">
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex items-center gap-3.5 rounded-2xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-4">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-500">
+            <Package className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-[0.85rem] font-semibold text-violet-700">Sin productos ni servicios asignados</p>
+            <p className="text-[0.75rem] text-gray-400">Agrega productos o servicios para este cliente.</p>
+          </div>
         </div>
+      ) : (
+        <>
+          {(totalMensual > 0 || totalAnual > 0) && (
+            <div className="flex justify-end text-[0.72rem] text-gray-400">
+              {totalMensual > 0 && <span>{money(totalMensual)}/mes</span>}
+              {totalMensual > 0 && totalAnual > 0 && <span className="mx-1">·</span>}
+              {totalAnual > 0 && <span>{money(totalAnual)}/año</span>}
+            </div>
+          )}
+          <div className="space-y-2">
+            {asignados.map((a) => (
+              <div key={a.productoServicioId} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-card px-3.5 py-3">
+                <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg',
+                  a.tipo === 'SERVICIO' ? 'bg-violet-100 text-violet-600' : 'bg-brand/10 text-brand')}>
+                  <Package className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[0.85rem] font-semibold text-gray-800">{a.nombre}</p>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <span className="text-[0.62rem] uppercase tracking-wide text-gray-400">{a.tipo === 'SERVICIO' ? 'Servicio' : 'Producto'}</span>
+                    <span className={clsx('chip text-[0.6rem]', RECURRENCIA_CHIP[a.recurrencia])}>{RECURRENCIA_LABEL[a.recurrencia]}</span>
+                  </div>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  {a.precio > 0 && (
+                    <p className="text-[0.82rem] font-bold tabular-nums text-gray-700">
+                      {money(a.precio)}
+                      {a.recurrencia === 'MENSUAL' && <span className="text-[0.58rem] font-normal text-gray-400"> /mes</span>}
+                      {a.recurrencia === 'ANUAL' && <span className="text-[0.58rem] font-normal text-gray-400"> /año</span>}
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => quitar.mutate(a.productoServicioId)} className="flex-shrink-0 rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
-      <div className="flex gap-2">
-        <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className="field flex-1 text-sm">
-          <option value="">Agregar producto/servicio…</option>
-          {disponibles.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre} — {RECURRENCIA_LABEL[c.recurrencia]}{c.precio > 0 ? ` (${money(c.precio)})` : ''}
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="ghost"
-          disabled={!seleccion || asignar.isPending}
-          onClick={() => seleccion && asignar.mutate(Number(seleccion))}
-        >
-          Agregar
-        </Button>
+      <div className="border-t border-gray-100 pt-4">
+        <label className="mb-1.5 block text-[0.78rem] font-semibold text-gray-600">Agregar producto/servicio</label>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <ShoppingBag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+            <select
+              value={seleccion}
+              onChange={(e) => setSeleccion(e.target.value)}
+              className="w-full appearance-none rounded-xl border border-gray-200 bg-card py-2.5 pl-10 pr-9 text-[0.82rem] text-gray-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
+            >
+              <option value="">Selecciona un producto o servicio…</option>
+              {disponibles.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre} — {RECURRENCIA_LABEL[c.recurrencia]}{c.precio > 0 ? ` (${money(c.precio)})` : ''}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+          <button
+            disabled={!seleccion || asignar.isPending}
+            onClick={() => seleccion && asignar.mutate(Number(seleccion))}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white transition-all hover:bg-violet-700 disabled:opacity-40"
+          >
+            <PackagePlus className="h-4 w-4" /> Agregar
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -197,51 +203,98 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
   })
 
   const campos = [
-    { key: 'empresa',  label: 'Empresa',       span: 2 },
-    { key: 'nombre',   label: 'Contacto',       span: 1 },
-    { key: 'rfc',      label: 'RFC',            span: 1 },
-    { key: 'telefono', label: 'Teléfono',       span: 1 },
-    { key: 'correo',   label: 'Correo',         span: 1 },
-    { key: 'ciudad',   label: 'Ciudad',         span: 1 },
-    { key: 'calle',    label: 'Calle',          span: 1 },
-    { key: 'colonia',  label: 'Colonia',        span: 1 },
-    { key: 'cp',       label: 'Código Postal',  span: 1 },
+    { key: 'empresa',  label: 'Empresa',       span: 2, icon: Building2,  ph: 'Nombre de la empresa' },
+    { key: 'nombre',   label: 'Contacto',      span: 1, icon: User,       ph: 'Persona de contacto' },
+    { key: 'rfc',      label: 'RFC',           span: 1, icon: FileText,   ph: 'RFC' },
+    { key: 'telefono', label: 'Teléfono',      span: 1, icon: Phone,      ph: 'Teléfono' },
+    { key: 'correo',   label: 'Correo',        span: 1, icon: Mail,       ph: 'Ingresa el correo' },
+    { key: 'ciudad',   label: 'Ciudad',        span: 1, icon: MapPin,     ph: 'Ciudad' },
+    { key: 'calle',    label: 'Calle',         span: 1, icon: Route,      ph: 'Calle y número' },
+    { key: 'colonia',  label: 'Colonia',       span: 1, icon: MapPinned,  ph: 'Colonia' },
+    { key: 'cp',       label: 'Código postal', span: 1, icon: Hash,       ph: 'Código postal' },
   ] as const
 
   return (
-    <Modal isOpen onClose={onClose} title={cliente ? 'Editar cliente' : 'Nuevo cliente'} size={cliente ? 'full' : 'md'}>
+    <Modal isOpen onClose={onClose} size={cliente ? 'full' : 'md'}>
       <div className="flex h-full flex-col">
-        <div className={clsx('flex-1 overflow-y-auto', cliente && 'grid gap-6 lg:grid-cols-2')}>
-          {/* Datos del cliente */}
-          <div>
-            {cliente && <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Datos del cliente</p>}
-            <div className="grid grid-cols-2 gap-3">
-              {campos.map(({ key, label, span }) => (
+        {/* Cabecera propia */}
+        <div className="-m-5 mb-5 flex items-start justify-between border-b border-gray-100 px-6 py-5">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
+              {cliente ? <Edit2 className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
+            </div>
+            <div>
+              <h2 className="text-[1.15rem] font-bold text-gray-900">{cliente ? 'Editar cliente' : 'Nuevo cliente'}</h2>
+              <p className="text-[0.8rem] text-gray-400">
+                {cliente ? 'Actualiza la información general y los productos o servicios contratados.' : 'Registra un nuevo cliente.'}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className={clsx('flex-1 overflow-y-auto pr-0.5', cliente && 'grid gap-5 lg:grid-cols-2')}>
+          {/* ── Datos del cliente ── */}
+          <div className={clsx(cliente && 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card')}>
+            {cliente && (
+              <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                  <User className="h-4 w-4" />
+                </div>
+                <p className="text-[0.9rem] font-bold text-gray-800">Datos del cliente</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+              {campos.map(({ key, label, span, icon: Icon, ph }) => (
                 <div key={key} className={span === 2 ? 'col-span-2' : ''}>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">{label}</label>
-                  <input
-                    value={(form as Record<string, string>)[key]}
-                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                    className="field"
-                  />
+                  <label className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-gray-500">
+                    <Icon className="h-3 w-3 text-violet-400" /> {label}
+                  </label>
+                  <div className="relative">
+                    <Icon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
+                    <input
+                      value={(form as Record<string, string>)[key]}
+                      onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                      placeholder={ph}
+                      className="w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-9 pr-3 text-[0.85rem] text-gray-900 placeholder-gray-400 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Productos y servicios — solo al editar */}
+          {/* ── Productos y servicios — solo al editar ── */}
           {cliente && (
-            <div className="rounded-2xl border border-gray-100 bg-gray-50/40 p-4">
+            <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+              <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                  <ShoppingBag className="h-4 w-4" />
+                </div>
+                <p className="text-[0.9rem] font-bold text-gray-800">Productos y servicios contratados</p>
+              </div>
               <ProductosServiciosCliente clienteId={cliente.id} />
             </div>
           )}
         </div>
 
-        <div className="mt-4 flex flex-shrink-0 justify-end gap-2 border-t border-gray-100 pt-4">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button isLoading={guardar.isPending} disabled={!form.empresa.trim()} onClick={() => guardar.mutate()}>
+        {/* Footer */}
+        <div className="-mx-5 -mb-5 mt-5 flex flex-shrink-0 justify-end gap-2 border-t border-gray-100 bg-gray-50/40 px-6 py-4">
+          <button onClick={onClose} className="rounded-xl border border-gray-200 bg-card px-5 py-2.5 text-[0.85rem] font-semibold text-gray-600 transition-colors hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={() => guardar.mutate()}
+            disabled={guardar.isPending || !form.empresa.trim()}
+            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-[0.85rem] font-semibold text-white shadow-sm shadow-violet-600/20 transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-50"
+          >
+            {guardar.isPending
+              ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              : <Save className="h-4 w-4" />}
             {cliente ? 'Guardar cambios' : 'Crear cliente'}
-          </Button>
+          </button>
         </div>
       </div>
     </Modal>
