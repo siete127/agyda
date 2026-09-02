@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, BarChart3, MonitorCog, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
@@ -40,13 +40,13 @@ export function Topbar() {
   // El botón "Editar diseño" es fijo mientras estás en el Inicio.
   const enInicio = location.pathname === '/dashboard'
 
-  const handleSwitchSystem = () => {
-    navigate('/ventas')
-  }
-
   const { branding, headerButtons, enlacesTopbar } = usePersonalizacion()
   const abrirEnlaceFlotante = useEnlaceFrameStore((s) => s.abrir)
   const enlacesVisibles = enlacesTopbar.filter((e) => e.visible)
+    // Gestión MIS conserva su lista fija de usuarios autorizados aunque ahora
+    // viva como enlace configurable: sin esto, cualquiera con el topbar vería
+    // el botón solo por estar "visible" en la config de la empresa.
+    .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
   const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
 
   const theme = useThemeStore((s) => s.theme)
@@ -82,18 +82,13 @@ export function Topbar() {
     'ADM_0002', // Jazminn Miranda
   ])
   const canUseGestionMis = GESTION_MIS_USUARIOS.has(user?.usuario ?? '')
-
-  const openGestionMis = () => {
-    window.open('https://mis.ardabytec.vip', '_blank', 'noopener,noreferrer')
-  }
+  const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
 
   // Acción por defecto (URL interna) de cada botón, por key. Si la config trae
   // una `url`, se abre esa en pestaña nueva en lugar de la acción interna.
   const accionInterna: Record<string, () => void> = {
     marcador: openMarcador,
     contingencia: openMarcadorContingencia,
-    sistemas: handleSwitchSystem,
-    'gestion-mis': openGestionMis,
   }
 
   // Estilo + gate por rol de cada botón. `gate` decide si el usuario puede verlo
@@ -107,14 +102,6 @@ export function Topbar() {
     marcador: {
       className: 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
       icon: Headset, gate: canUseMarcador,
-    },
-    sistemas: {
-      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
-      icon: BarChart3, gate: true,
-    },
-    'gestion-mis': {
-      className: 'border border-surface-border bg-surface text-ink-secondary hover:bg-brand-light hover:text-brand',
-      icon: MonitorCog, gate: canUseGestionMis,
     },
   }
 

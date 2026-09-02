@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MousePointerClick, Headset, BarChart3, MonitorCog, Check, Loader2, Link2 } from 'lucide-react'
+import { MousePointerClick, Headset, Check, Loader2, Link2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { personalizacionService, type HeaderButton } from '@/services/personalizacion.service'
@@ -10,11 +10,9 @@ type Key = HeaderButton['key']
 const META: Record<Key, { icon: React.ElementType; nota: string }> = {
   contingencia: { icon: Headset, nota: 'Marcador de contingencia (por defecto abre Azul1)' },
   marcador: { icon: Headset, nota: 'Marcador principal (por defecto abre el servidor VICIdial)' },
-  sistemas: { icon: BarChart3, nota: 'Cambiar de sistema (por defecto abre CRM Ventas)' },
-  'gestion-mis': { icon: MonitorCog, nota: 'Gestión MIS — solo visible para usuarios autorizados' },
 }
 
-const ORDEN: Key[] = ['contingencia', 'marcador', 'sistemas', 'gestion-mis']
+const ORDEN: Key[] = ['contingencia', 'marcador']
 
 export function BotonesHeaderTab() {
   const qc = useQueryClient()

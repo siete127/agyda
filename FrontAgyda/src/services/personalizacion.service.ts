@@ -21,7 +21,7 @@ export interface Branding {
 }
 
 export interface HeaderButton {
-  key: 'marcador' | 'contingencia' | 'sistemas' | 'gestion-mis'
+  key: 'marcador' | 'contingencia'
   label: string
   url: string
   visible: boolean
