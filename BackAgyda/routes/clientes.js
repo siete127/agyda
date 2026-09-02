@@ -13,6 +13,7 @@ router.post('/', requireActionAccess('clientes', 'crear'), clienteController.cre
 router.put('/:id', requireActionAccess('clientes', 'editar'), clienteController.updateCliente);
 router.delete('/:id', requireActionAccess('clientes', 'eliminar'), clienteController.deleteCliente);
 
+router.get('/:id/finanzas', requireActionAccess('clientes', 'ver'), clienteController.getFinanzasCliente);
 router.get('/:id/productos-servicios', requireActionAccess('clientes', 'ver'), clienteController.getProductosServiciosCliente);
 router.post('/:id/productos-servicios', requireActionAccess('clientes', 'editar'), clienteController.asignarProductoServicio);
 router.delete('/:id/productos-servicios/:psId', requireActionAccess('clientes', 'editar'), clienteController.quitarProductoServicio);
