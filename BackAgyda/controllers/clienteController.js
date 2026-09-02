@@ -96,6 +96,26 @@ exports.getFinanzasCliente = async (req, res) => {
         WHERE @p <> '%%' AND FCC_CLIENTE LIKE @p
       `).catch(() => ({ recordset: [{ cobrado: 0, pendiente: 0, n: 0 }] }));
 
+    // Histórico por mes de los últimos 12 meses (ingresos + CxC cobradas).
+    const historicoRs = await pool.request()
+      .input('p', sql.NVarChar, patron)
+      .query(`
+        SELECT FORMAT(fecha, 'yyyy-MM') as mes, SUM(monto) as total
+        FROM (
+          SELECT FI_FECHA as fecha, FI_MONTO as monto
+          FROM FINANZAS_INGRESOS
+          WHERE @p <> '%%' AND FI_CONCEPTO LIKE @p AND FI_FECHA >= DATEADD(month, -12, CAST(GETDATE() AS date))
+          UNION ALL
+          SELECT FCC_FECHA_VENCIMIENTO as fecha, FCC_MONTO as monto
+          FROM FINANZAS_CXC
+          WHERE @p <> '%%' AND FCC_CLIENTE LIKE @p
+            AND FCC_ESTATUS IN ('pagada','pagado','cobrada','cobrado')
+            AND FCC_FECHA_VENCIMIENTO >= DATEADD(month, -12, CAST(GETDATE() AS date))
+        ) x
+        GROUP BY FORMAT(fecha, 'yyyy-MM')
+        ORDER BY mes
+      `).catch(() => ({ recordset: [] }));
+
     const i = ingresos.recordset[0];
     const c = cxc.recordset[0];
     return res.json({
@@ -106,11 +126,12 @@ exports.getFinanzasCliente = async (req, res) => {
         pendienteCobro: Number(c.pendiente || 0),
         registros: Number(i.n || 0) + Number(c.n || 0),
         ultimaFecha: i.ultima || null,
+        historico: historicoRs.recordset.map((r) => ({ mes: r.mes, total: Number(r.total || 0) })),
       },
     });
   } catch (e) {
     console.error('Error resumen de finanzas del cliente:', e);
-    return res.json({ success: true, data: { totalIngresado: 0, pendienteCobro: 0, registros: 0, ultimaFecha: null } });
+    return res.json({ success: true, data: { totalIngresado: 0, pendienteCobro: 0, registros: 0, ultimaFecha: null, historico: [] } });
   }
 };
 

@@ -29,6 +29,47 @@ interface FinanzasCliente {
   pendienteCobro: number
   registros: number
   ultimaFecha: string | null
+  historico: { mes: string; total: number }[]
+}
+
+const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/* Mini gráfico de barras del ingreso mensual — últimos 12 meses. */
+function HistoricoMensual({ datos }: { datos: { mes: string; total: number }[] }) {
+  if (!datos.length) return null
+  // Rellenar los 12 meses hasta el actual aunque algunos vengan en 0.
+  const hoy = new Date()
+  const meses: { key: string; label: string; total: number }[] = []
+  for (let k = 11; k >= 0; k--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - k, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    meses.push({ key, label: MES_CORTO[d.getMonth()], total: datos.find((x) => x.mes === key)?.total ?? 0 })
+  }
+  const max = Math.max(...meses.map((m) => m.total), 1)
+
+  return (
+    <div className="mt-3 border-t border-emerald-100 pt-3">
+      <p className="mb-2 text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">Histórico mensual</p>
+      <div className="flex items-end gap-1">
+        {meses.map((m) => (
+          <div key={m.key} className="group relative flex flex-1 flex-col items-center gap-1">
+            <div className="flex h-16 w-full items-end">
+              <div
+                className="w-full rounded-t bg-emerald-400 transition-all group-hover:bg-emerald-500"
+                style={{ height: `${Math.max((m.total / max) * 100, m.total > 0 ? 6 : 2)}%` }}
+              />
+            </div>
+            <span className="text-[0.55rem] text-gray-400">{m.label}</span>
+            {m.total > 0 && (
+              <span className="pointer-events-none absolute -top-6 hidden whitespace-nowrap rounded bg-gray-900 px-1.5 py-0.5 text-[0.6rem] text-white group-hover:block">
+                {money(m.total)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /* ── Resumen informativo de lo facturado/cobrado (módulo de Finanzas) ── */
@@ -72,6 +113,9 @@ function FinanzasClienteBloque({ clienteId }: { clienteId: number }) {
           {data.ultimaFecha && <span>Último: {new Date(data.ultimaFecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
         </div>
       )}
+
+      {!isLoading && data && <HistoricoMensual datos={data.historico} />}
+
       <p className="mt-2 text-[0.66rem] text-gray-400">
         Solo informativo. El registro y la gestión de ingresos se hace en el módulo de Finanzas.
       </p>
