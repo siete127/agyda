@@ -78,7 +78,20 @@ exports.detectarHogar = async (req, res) => {
       }
     }));
 
-    const coincidencias = resultados.filter(Boolean);
+    let coincidencias = resultados.filter(Boolean);
+
+    // Usernames con bypass cross-empresa (ver intentarLoginCrossEmpresaComoAgyda
+    // y utils/superAdmin.js): si sus credenciales son válidas en la BD maestra
+    // 'agyda', pueden entrar a CUALQUIER empresa sin tener fila propia ahí — así
+    // que aquí se les ofrecen todas, no solo aquellas donde ya hicieron match.
+    const tieneBypass = SUPER_ADMIN_CROSS_EMPRESA_USERNAMES.has(String(usuario).toUpperCase());
+    const coincideEnAgyda = coincidencias.some((c) => c.key === DEFAULT_TENANT);
+    if (tieneBypass && coincideEnAgyda) {
+      const keysYaListados = new Set(coincidencias.map((c) => c.key));
+      for (const t of tenants) {
+        if (!keysYaListados.has(t.key)) coincidencias.push({ key: t.key, nombre: t.nombre });
+      }
+    }
 
     if (coincidencias.length === 0) {
       return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
