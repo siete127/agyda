@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText,
   Package, LayoutGrid, List, Eye, MoreVertical, Power, X, User, Route, MapPinned, Hash,
-  ShoppingBag, PackagePlus, Save, ChevronDown,
+  ShoppingBag, PackagePlus, Save, ChevronDown, Wallet, ArrowUpRight,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +23,61 @@ const RECURRENCIA_CHIP: Record<ProductoServicioRecurrencia, string> = {
   UNICO: 'bg-gray-100 text-gray-600',
 }
 const money = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 })
+
+interface FinanzasCliente {
+  totalIngresado: number
+  pendienteCobro: number
+  registros: number
+  ultimaFecha: string | null
+}
+
+/* ── Resumen informativo de lo facturado/cobrado (módulo de Finanzas) ── */
+function FinanzasClienteBloque({ clienteId }: { clienteId: number }) {
+  const navigate = useNavigate()
+  const { data, isLoading } = useQuery({
+    queryKey: ['cliente-finanzas', clienteId],
+    queryFn: async () => {
+      const { data } = await api.get(`/clientes/${clienteId}/finanzas`)
+      return data.data as FinanzasCliente
+    },
+  })
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-gradient-to-br from-emerald-50/60 to-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+            <Wallet className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">Ingresado por factura</p>
+            <p className="text-[1.35rem] font-black leading-none tabular-nums text-emerald-700">
+              {isLoading ? '—' : money(data?.totalIngresado ?? 0)}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate('/finanzas/ingresos')}
+          className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-card px-3 py-1.5 text-[0.72rem] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+        >
+          Gestión de finanzas <ArrowUpRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {!isLoading && data && (
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[0.7rem] text-gray-500">
+          {data.pendienteCobro > 0 && (
+            <span>Pendiente de cobro: <b className="text-amber-600">{money(data.pendienteCobro)}</b></span>
+          )}
+          <span>{data.registros} {data.registros === 1 ? 'registro' : 'registros'} en Finanzas</span>
+          {data.ultimaFecha && <span>Último: {new Date(data.ultimaFecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+        </div>
+      )}
+      <p className="mt-2 text-[0.66rem] text-gray-400">
+        Solo informativo. El registro y la gestión de ingresos se hace en el módulo de Finanzas.
+      </p>
+    </div>
+  )
+}
 
 interface Cliente {
   id: number
@@ -266,16 +322,20 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
             </div>
           </div>
 
-          {/* ── Productos y servicios — solo al editar ── */}
+          {/* ── Finanzas + Productos y servicios — solo al editar ── */}
           {cliente && (
-            <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
-              <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-                  <ShoppingBag className="h-4 w-4" />
+            <div className="space-y-5">
+              <FinanzasClienteBloque clienteId={cliente.id} />
+
+              <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+                <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                    <ShoppingBag className="h-4 w-4" />
+                  </div>
+                  <p className="text-[0.9rem] font-bold text-gray-800">Productos y servicios contratados</p>
                 </div>
-                <p className="text-[0.9rem] font-bold text-gray-800">Productos y servicios contratados</p>
+                <ProductosServiciosCliente clienteId={cliente.id} />
               </div>
-              <ProductosServiciosCliente clienteId={cliente.id} />
             </div>
           )}
         </div>

@@ -57,6 +57,63 @@ exports.getProductosServiciosCliente = async (req, res) => {
   }
 };
 
+// GET /clientes/:id/finanzas — resumen informativo de lo facturado/cobrado a un
+// cliente, tomado del módulo de Finanzas. FINANZAS_INGRESOS no tiene columna de
+// cliente, así que se cruza por el nombre de la empresa en el concepto; las
+// cuentas por cobrar (FINANZAS_CXC) sí guardan el nombre del cliente. Es solo
+// lectura — la gestión real se hace en el módulo de Finanzas.
+exports.getFinanzasCliente = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ success: false, message: 'ID de cliente inválido' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const cli = await pool.request().input('id', sql.Int, id)
+      .query(`SELECT CL_EMPRESA as empresa, CL_NOMBRE as nombre FROM CLIENTES WHERE CL_ID = @id`);
+    if (!cli.recordset.length) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+    const { empresa, nombre } = cli.recordset[0];
+    const patron = `%${(empresa || nombre || '').trim()}%`;
+
+    const ingresos = await pool.request()
+      .input('p', sql.NVarChar, patron)
+      .query(`
+        SELECT ISNULL(SUM(FI_MONTO), 0) as total, COUNT(*) as n,
+               MAX(FI_FECHA) as ultima
+        FROM FINANZAS_INGRESOS
+        WHERE @p <> '%%' AND FI_CONCEPTO LIKE @p
+      `).catch(() => ({ recordset: [{ total: 0, n: 0, ultima: null }] }));
+
+    const cxc = await pool.request()
+      .input('p', sql.NVarChar, patron)
+      .query(`
+        SELECT
+          ISNULL(SUM(CASE WHEN FCC_ESTATUS IN ('pagada','pagado','cobrada','cobrado') THEN FCC_MONTO ELSE 0 END), 0) as cobrado,
+          ISNULL(SUM(CASE WHEN FCC_ESTATUS NOT IN ('pagada','pagado','cobrada','cobrado','cancelada','cancelado') THEN FCC_MONTO ELSE 0 END), 0) as pendiente,
+          COUNT(*) as n
+        FROM FINANZAS_CXC
+        WHERE @p <> '%%' AND FCC_CLIENTE LIKE @p
+      `).catch(() => ({ recordset: [{ cobrado: 0, pendiente: 0, n: 0 }] }));
+
+    const i = ingresos.recordset[0];
+    const c = cxc.recordset[0];
+    return res.json({
+      success: true,
+      data: {
+        // "ingresado por factura": ingresos registrados + CxC ya cobradas
+        totalIngresado: Number(i.total || 0) + Number(c.cobrado || 0),
+        pendienteCobro: Number(c.pendiente || 0),
+        registros: Number(i.n || 0) + Number(c.n || 0),
+        ultimaFecha: i.ultima || null,
+      },
+    });
+  } catch (e) {
+    console.error('Error resumen de finanzas del cliente:', e);
+    return res.json({ success: true, data: { totalIngresado: 0, pendienteCobro: 0, registros: 0, ultimaFecha: null } });
+  }
+};
+
 exports.asignarProductoServicio = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
