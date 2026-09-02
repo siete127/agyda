@@ -14,9 +14,10 @@ import { ENLACE_ICONOS, ENLACE_ICONO_KEYS } from '@/lib/enlaceTopbarIconos'
 
 const COLORES = ['#2F6FED', '#DC2626', '#059669', '#7C3AED', '#D97706', '#0891B2', '#DB2777', '#475569']
 
+let _seq = 0
 function nuevoEnlace(): EnlaceTopbar {
   return {
-    id: `enlace-${Date.now()}`,
+    id: `enlace-${Date.now()}-${_seq++}`,
     label: '',
     url: '',
     icono: 'link',
@@ -37,12 +38,16 @@ export function EnlacesTopbarTab() {
     queryFn: () => personalizacionService.get(),
   })
 
+  // El form solo se siembra una vez desde el servidor (o cuando se pide de forma
+  // explícita, p. ej. tras guardar / descartar) — un refetch de react-query NO
+  // debe pisar las ediciones locales del usuario.
   const [form, setForm] = useState<EnlaceTopbar[] | null>(null)
-  const [seededFrom, setSeededFrom] = useState<EnlaceTopbar[] | null>(null)
-  if (data && data.enlacesTopbar !== seededFrom) {
-    setSeededFrom(data.enlacesTopbar)
+  const [sembrado, setSembrado] = useState(false)
+  if (data && !sembrado) {
+    setSembrado(true)
     setForm(data.enlacesTopbar)
   }
+  const resembrar = () => data && setForm(data.enlacesTopbar)
 
   const patch = (id: string, p: Partial<EnlaceTopbar>) =>
     setForm((f) => (f ? f.map((e) => (e.id === id ? { ...e, ...p } : e)) : f))
@@ -60,10 +65,13 @@ export function EnlacesTopbarTab() {
 
   const guardar = useMutation({
     mutationFn: async () => {
-      if (!form) return
-      await personalizacionService.updateEnlacesTopbar(form)
+      if (!form) return [] as EnlaceTopbar[]
+      return personalizacionService.updateEnlacesTopbar(form)
     },
-    onSuccess: () => {
+    onSuccess: (guardados) => {
+      // El backend devuelve la lista ya normalizada (sin enlaces sin URL) — se
+      // adopta como nuevo estado del form.
+      setForm(guardados)
       qc.invalidateQueries({ queryKey: ['personalizacion'] })
       toast.success('Enlaces actualizados')
     },
@@ -151,8 +159,13 @@ export function EnlacesTopbarTab() {
                   <span className="text-[0.75rem] font-semibold text-gray-500">Visible</span>
                 </label>
 
-                <button onClick={() => quitar(e.id)} className="rounded-lg p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500">
-                  <Trash2 className="h-4 w-4" />
+                <button
+                  type="button"
+                  onClick={() => quitar(e.id)}
+                  title="Eliminar enlace"
+                  className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[0.72rem] font-semibold text-red-600 transition-colors hover:bg-red-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Eliminar
                 </button>
               </div>
 
@@ -245,7 +258,7 @@ export function EnlacesTopbarTab() {
       {/* Footer */}
       <div className="flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-gray-100 bg-card px-5 py-4 shadow-card">
         <button
-          onClick={() => data && setForm(data.enlacesTopbar)}
+          onClick={resembrar}
           className="rounded-xl px-4 py-2.5 text-[0.8rem] font-semibold text-gray-500 hover:bg-gray-100"
         >
           Descartar cambios
