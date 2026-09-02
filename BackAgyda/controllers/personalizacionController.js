@@ -60,7 +60,29 @@ const DEFAULT_CONFIG = {
     vision: 'Liderar la automatización con IA en soluciones empresariales.',
     valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
   },
+  // Enlaces personalizados del encabezado — botones que un admin agrega junto a
+  // Marcador/Contingencia. Cada uno abre su URL en pestaña nueva o en un panel
+  // flotante tipo Spotify que sigue visible al navegar.
+  enlacesTopbar: [],
 };
+
+const ENLACE_ICONOS = ['link', 'phone', 'headset', 'monitor', 'chart', 'ticket', 'mail', 'globe', 'rocket', 'grid', 'bell', 'calendar', 'folder', 'shield', 'zap'];
+const ENLACE_MODOS = ['pestana', 'flotante'];
+
+function limpiarEnlace(raw, i) {
+  const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const url = s(raw?.url, 500);
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  return {
+    id: s(raw?.id, 40) || `enlace-${Date.now()}-${i}`,
+    label: s(raw?.label, 40) || 'Enlace',
+    url,
+    icono: ENLACE_ICONOS.includes(raw?.icono) ? raw.icono : 'link',
+    color: /^#[0-9a-fA-F]{6}$/.test(raw?.color) ? raw.color : '#2F6FED',
+    modo: ENLACE_MODOS.includes(raw?.modo) ? raw.modo : 'pestana',
+    visible: raw?.visible !== false,
+  };
+}
 
 function mergeConfig(stored) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
@@ -75,6 +97,9 @@ function mergeConfig(stored) {
       vision: typeof inst.vision === 'string' ? inst.vision : base.institucional.vision,
       valores: Array.isArray(inst.valores) ? inst.valores : base.institucional.valores,
     },
+    enlacesTopbar: Array.isArray(stored.enlacesTopbar)
+      ? stored.enlacesTopbar.map(limpiarEnlace).filter(Boolean)
+      : base.enlacesTopbar,
   };
 }
 
@@ -246,6 +271,32 @@ exports.updateInstitucional = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateInstitucional', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la identidad institucional' });
+  }
+};
+
+// PUT /api/personalizacion/enlaces-topbar
+// Body: array de { id?, label, url, icono, color, modo, visible }
+exports.updateEnlacesTopbar = async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body) ? req.body : req.body?.enlacesTopbar;
+    if (!Array.isArray(incoming)) {
+      return res.status(400).json({ success: false, message: 'Se espera un array de enlaces' });
+    }
+    const enlaces = incoming.map(limpiarEnlace).filter(Boolean).slice(0, 12);
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.enlacesTopbar = enlaces;
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-enlaces-topbar', detalle: `${enlaces.length} enlaces`, ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'enlacesTopbar');
+    return res.json({ success: true, data: config.enlacesTopbar });
+  } catch (e) {
+    logger.error('personalizacionController.updateEnlacesTopbar', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar los enlaces del encabezado' });
   }
 };
 

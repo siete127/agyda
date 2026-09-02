@@ -42,11 +42,28 @@ export interface Institucional {
   valores: string[]
 }
 
+export type EnlaceTopbarIcono =
+  | 'link' | 'phone' | 'headset' | 'monitor' | 'chart' | 'ticket' | 'mail'
+  | 'globe' | 'rocket' | 'grid' | 'bell' | 'calendar' | 'folder' | 'shield' | 'zap'
+
+export type EnlaceTopbarModo = 'pestana' | 'flotante'
+
+export interface EnlaceTopbar {
+  id: string
+  label: string
+  url: string
+  icono: EnlaceTopbarIcono
+  color: string
+  modo: EnlaceTopbarModo
+  visible: boolean
+}
+
 export interface PersonalizacionConfig {
   branding: Branding
   headerButtons: HeaderButton[]
   dashboard: { cards: DashboardCard[] }
   institucional: Institucional
+  enlacesTopbar: EnlaceTopbar[]
 }
 
 export const personalizacionService = {
@@ -68,6 +85,11 @@ export const personalizacionService = {
   async updateInstitucional(inst: Institucional): Promise<Institucional> {
     const { data } = await api.put('/personalizacion/institucional', inst)
     return data.data as Institucional
+  },
+
+  async updateEnlacesTopbar(enlaces: EnlaceTopbar[]): Promise<EnlaceTopbar[]> {
+    const { data } = await api.put('/personalizacion/enlaces-topbar', enlaces)
+    return data.data as EnlaceTopbar[]
   },
 
   async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {

@@ -14,6 +14,8 @@ import logoAgyda from '@/assets/Logo_AGYDA.png'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { personalizacionService } from '@/services/personalizacion.service'
 import { useThemeStore } from '@/stores/theme.store'
+import { useEnlaceFrameStore } from '@/stores/enlaceFrame.store'
+import { ENLACE_ICONOS } from '@/lib/enlaceTopbarIconos'
 import { clsx } from 'clsx'
 
 interface SearchResult {
@@ -42,7 +44,9 @@ export function Topbar() {
     navigate('/ventas')
   }
 
-  const { branding, headerButtons } = usePersonalizacion()
+  const { branding, headerButtons, enlacesTopbar } = usePersonalizacion()
+  const abrirEnlaceFlotante = useEnlaceFrameStore((s) => s.abrir)
+  const enlacesVisibles = enlacesTopbar.filter((e) => e.visible)
   const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
 
   const theme = useThemeStore((s) => s.theme)
@@ -304,6 +308,27 @@ export function Topbar() {
               onClick={onClick}
               title={b.label}
               className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors ${style.className}`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          )
+        })}
+
+        {/* Enlaces personalizados del encabezado — configurables por empresa
+            (Configuración → Apariencia → Enlaces del encabezado). Cada uno abre
+            en pestaña nueva o en el panel flotante persistente según su modo. */}
+        {enlacesVisibles.map((e) => {
+          const Icon = ENLACE_ICONOS[e.icono] ?? ENLACE_ICONOS.link
+          const onClick = e.modo === 'flotante'
+            ? () => abrirEnlaceFlotante({ id: e.id, label: e.label, url: e.url, color: e.color })
+            : () => window.open(e.url, '_blank', 'noopener,noreferrer')
+          return (
+            <button
+              key={e.id}
+              onClick={onClick}
+              title={`${e.label}${e.modo === 'flotante' ? ' (panel flotante)' : ''}`}
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95"
+              style={{ backgroundColor: e.color }}
             >
               <Icon className="h-3.5 w-3.5" />
             </button>

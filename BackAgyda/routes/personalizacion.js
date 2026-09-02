@@ -16,6 +16,7 @@ const soloAdminConfig = [authenticateToken, verificarRol(['AD']), requireActionA
 router.put('/branding', ...soloAdminConfig, ctrl.updateBranding);
 router.put('/header-buttons', ...soloAdminConfig, ctrl.updateHeaderButtons);
 router.put('/institucional', ...soloAdminConfig, ctrl.updateInstitucional);
+router.put('/enlaces-topbar', ...soloAdminConfig, ctrl.updateEnlacesTopbar);
 router.put('/dashboard', ...soloAdminConfig, ctrl.updateDashboard);
 router.post('/assets', ...soloAdminConfig, uploadPersonalizacion.single('archivo'), ctrl.subirAsset);
 

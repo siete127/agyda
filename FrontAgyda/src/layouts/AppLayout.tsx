@@ -9,6 +9,7 @@ import { ActivoTerminosModal } from '@/components/ui/ActivoTerminosModal'
 import { QuejasAlertBubble } from '@/components/ui/QuejasAlertBubble'
 import { MensajeriaFloatingBubble } from '@/components/ui/MensajeriaFloatingBubble'
 import { WebphoneFrame } from '@/components/ui/WebphoneFrame'
+import { EnlaceFrame } from '@/components/ui/EnlaceFrame'
 import { useUIStore } from '@/stores/ui.store'
 import { useInactivityTimer } from '@/hooks/useInactivityTimer'
 import { useAuthStore } from '@/stores/auth.store'
@@ -76,6 +77,7 @@ function Layout({ location, showMusic, showMensajeria }: {
       <QuejasAlertBubble />
       {showMensajeria && <MensajeriaFloatingBubble />}
       <WebphoneFrame />
+      <EnlaceFrame />
     </div>
   )
 }

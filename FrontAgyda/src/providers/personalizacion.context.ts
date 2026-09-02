@@ -34,6 +34,7 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
     vision: 'Liderar la automatización con IA en soluciones empresariales.',
     valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
   },
+  enlacesTopbar: [],
 }
 
 // Layout por defecto del inicio — el orden/tamaño que ya tenía la portada,
