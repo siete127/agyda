@@ -38,15 +38,14 @@ export function Topbar() {
   const pageTitle = getRouteLabel(location.pathname)
 
   // El botón "Editar diseño" es fijo mientras estás en el Inicio.
-  const enInicio = location.pathname === '/dashboard'
+  // Oculto para Edomex y Santillana: piden dejar el dashboard fijo, sin
+  // que sus usuarios puedan reacomodar las tarjetas de la portada.
+  const EMPRESAS_SIN_EDITAR_DISENO = new Set(['edomex', 'santillana'])
+  const puedeEditarDiseno = !EMPRESAS_SIN_EDITAR_DISENO.has((user?.empresa ?? '').toLowerCase())
+  const enInicio = location.pathname === '/dashboard' && puedeEditarDiseno
 
   const { branding, headerButtons, enlacesTopbar } = usePersonalizacion()
   const abrirEnlaceFlotante = useEnlaceFrameStore((s) => s.abrir)
-  const enlacesVisibles = enlacesTopbar.filter((e) => e.visible)
-    // Gestión MIS conserva su lista fija de usuarios autorizados aunque ahora
-    // viva como enlace configurable: sin esto, cualquiera con el topbar vería
-    // el botón solo por estar "visible" en la config de la empresa.
-    .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
   const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
 
   const theme = useThemeStore((s) => s.theme)
@@ -83,6 +82,12 @@ export function Topbar() {
   ])
   const canUseGestionMis = GESTION_MIS_USUARIOS.has(user?.usuario ?? '')
   const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
+
+  const enlacesVisibles = enlacesTopbar.filter((e) => e.visible)
+    // Gestión MIS conserva su lista fija de usuarios autorizados aunque ahora
+    // viva como enlace configurable: sin esto, cualquiera con el topbar vería
+    // el botón solo por estar "visible" en la config de la empresa.
+    .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
 
   // Acción por defecto (URL interna) de cada botón, por key. Si la config trae
   // una `url`, se abre esa en pestaña nueva en lugar de la acción interna.

@@ -317,7 +317,10 @@ export function DashboardPage() {
   const proyectosActivos = proyectos.filter((p) => p.estado === 'Activo').length
 
   const cumpleHoy = cumpleanos.filter((c) => c.dia_cumpleanos === now.getDate())
-  const cumpleMes = cumpleanos.filter((c) => c.dia_cumpleanos > now.getDate()).slice(0, 3)
+  const cumpleMes = cumpleanos
+    .filter((c) => c.dia_cumpleanos > now.getDate())
+    .sort((a, b) => a.dia_cumpleanos - b.dia_cumpleanos)
+    .slice(0, 5)
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
   const RESUMEN = [
@@ -511,27 +514,29 @@ export function DashboardPage() {
           </div>
           {cumpleHoy.length === 0 && cumpleMes.length === 0 ? (
             <p className="px-4 py-6 text-center text-[0.72rem] text-ink-tertiary">Sin cumpleaños próximos este mes.</p>
-          ) : (<>
-            {cumpleHoy.map((c, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
-                <div>
-                  <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
-                  <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+          ) : (
+            <div className="divide-y divide-surface-border">
+              {cumpleHoy.map((c, i) => (
+                <div key={`hoy-${i}`} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
+                  <div>
+                    <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
+                    <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+                  </div>
+                  <span className="ml-auto text-lg">🎉</span>
                 </div>
-                <span className="ml-auto text-lg">🎉</span>
-              </div>
-            ))}
-            {cumpleHoy.length === 0 && cumpleMes.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
-                <div>
-                  <p className="text-[0.8rem] font-bold text-ink">{cumpleMes[0].nombre}</p>
-                  <p className="text-[0.65rem] text-ink-tertiary">{cumpleMes[0].dia_cumpleanos} de {MESES[mes - 1]}</p>
+              ))}
+              {cumpleMes.map((c, i) => (
+                <div key={`mes-${i}`} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
+                  <div>
+                    <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
+                    <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </>)}
+              ))}
+            </div>
+          )}
         </div>
       ),
     },

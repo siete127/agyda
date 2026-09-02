@@ -42,4 +42,21 @@ router.post('/cursos/:cursoId/examenes', authenticateToken, verificarRol(['AD', 
 router.delete('/examenes/:id', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'editar'), capacitacionExamenController.delete);
 router.get('/examenes/:id/intentos', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess('capacitacion', 'editar'), capacitacionExamenController.listIntentos);
 
+// Manejo de errores de Multer (archivo demasiado grande o tipo no permitido) —
+// sin esto, el error del fileFilter de uploadMaterial (routes arriba) se va
+// al handler por defecto de Express y sale como 500 sin mensaje.
+router.use((err, req, res, next) => {
+  const multer = require('multer');
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ success: false, message: 'Archivo demasiado grande (máximo 100MB)' });
+    }
+    return res.status(400).json({ success: false, message: err.message || 'Error de carga de archivo' });
+  }
+  if (err) {
+    return res.status(err.status || 400).json({ success: false, message: err.message || 'Error de carga de archivo' });
+  }
+  next();
+});
+
 module.exports = router;
