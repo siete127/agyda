@@ -1,5 +1,5 @@
 const sql = require('mssql');
-const dbConfig = require('../config/database');
+const databaseService = require('../services/databaseService');
 const notificationService = require('../services/notificationService');
 
 // =============================================
@@ -54,7 +54,7 @@ const getEventosProximos = async (req, res) => {
   try {
     const { dias = 30, limite = 10 } = req.query;
     
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     let eventos = [];
     try {
       const sp = await pool.request()
@@ -117,7 +117,7 @@ const getEventos = async (req, res) => {
       anio 
     } = req.query;
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     let query = `
       SELECT 
         e.*,
@@ -173,7 +173,7 @@ const getEventoPorId = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     const result = await pool.request()
       .input('id_evento', sql.Int, id)
       .query(`
@@ -279,7 +279,7 @@ const crearEvento = async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     
     // Insertar evento
     const result = await pool.request()
@@ -393,7 +393,7 @@ const actualizarEvento = async (req, res) => {
 
     const id_usuario_modificador = req.session.userId;
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     
     // Verificar que el evento existe
     const eventoExistente = await pool.request()
@@ -467,7 +467,7 @@ const eliminarEvento = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     
     const result = await pool.request()
       .input('id_evento', sql.Int, id)
@@ -503,7 +503,7 @@ const eliminarEvento = async (req, res) => {
  */
 const sincronizarCumpleanos = async (req, res) => {
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request().execute('sp_sincronizar_cumpleanos');
 
     return res.status(200).json({
@@ -535,7 +535,7 @@ const agregarParticipantes = async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
 
     // Verificar que el evento existe
     const eventoExistente = await pool.request()
@@ -588,7 +588,7 @@ const eliminarParticipante = async (req, res) => {
   try {
     const { id, id_usuario } = req.params;
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     
     const result = await pool.request()
       .input('id_evento', sql.Int, id)
@@ -634,7 +634,7 @@ const actualizarEstadoAsistencia = async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     
     const result = await pool.request()
       .input('id_evento', sql.Int, id)
@@ -677,7 +677,7 @@ const getCumpleanosMes = async (req, res) => {
     const mesActual = mes ? parseInt(mes) : new Date().getMonth() + 1;
     const anioActual = anio ? parseInt(anio) : new Date().getFullYear();
 
-    const pool = await sql.connect(dbConfig);
+    const pool = await databaseService.getPool(req.user?.empresa);
     const result = await pool.request()
       .input('mes', sql.Int, mesActual)
       .input('anio', sql.Int, anioActual)

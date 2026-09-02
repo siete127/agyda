@@ -8,7 +8,12 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 // RUTAS DE CALENDARIO
 // =============================================
 
-// Rutas públicas (SIN autenticación)
+// Todas las rutas requieren autenticación: cada empresa (tenant) tiene su
+// propia BD, y el pool a usar se resuelve por req.user.empresa (ver
+// calendarioController.js) — sin esto, las consultas caían siempre en la
+// BD por defecto y mezclaban cumpleaños/eventos entre empresas.
+router.use(verificarAutenticacion);
+
 /**
  * GET /api/calendario/proximos
  * Obtener eventos próximos para la portada
@@ -35,9 +40,6 @@ router.get('/', calendarioController.getEventos);
  * Obtener un evento específico por ID
  */
 router.get('/:id', calendarioController.getEventoPorId);
-
-// A partir de aquí, rutas protegidas (requieren autenticación)
-router.use(verificarAutenticacion);
 
 /**
  * POST /api/calendario
