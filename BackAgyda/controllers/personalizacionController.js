@@ -10,7 +10,7 @@ let socketService;
 try { socketService = require('../services/socketService'); } catch (_) { socketService = null; }
 
 const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login'];
-const HEADER_BUTTON_KEYS = ['marcador', 'contingencia', 'sistemas', 'gestion-mis'];
+const HEADER_BUTTON_KEYS = ['marcador', 'contingencia'];
 // Catálogo de cards del dashboard — el frontend sabe renderizarlas; aquí solo
 // validamos que las keys sean conocidas. Debe reflejar CARD_IDS de
 // FrontAgyda/src/pages/dashboard/cardCatalog.ts.
@@ -47,10 +47,10 @@ const DEFAULT_CONFIG = {
     // Marcador / contingencia arrancan OCULTOS: son propios del Contact Center y
     // no todas las empresas los usan. Un admin los activa desde
     // Configuración → Apariencia → Botones del encabezado cuando aplique.
+    // "Ventas" y "Gestión MIS" se movieron a enlacesTopbar (son propios de
+    // Ardaby Tec, no botones genéricos para cualquier empresa).
     { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: false },
     { key: 'marcador', label: 'Marcador', url: '', visible: false },
-    { key: 'sistemas', label: 'Ventas', url: '', visible: true },
-    { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
   ],
   dashboard: { cards: [] },
   // Identidad institucional — misión, visión y valores por empresa. Los textos
@@ -90,7 +90,9 @@ function mergeConfig(stored) {
   const inst = stored.institucional && typeof stored.institucional === 'object' ? stored.institucional : {};
   return {
     branding: { ...base.branding, ...(stored.branding || {}) },
-    headerButtons: Array.isArray(stored.headerButtons) ? stored.headerButtons : base.headerButtons,
+    headerButtons: Array.isArray(stored.headerButtons)
+      ? stored.headerButtons.filter((b) => HEADER_BUTTON_KEYS.includes(b?.key))
+      : base.headerButtons,
     dashboard: { ...base.dashboard, ...(stored.dashboard || {}) },
     institucional: {
       mision: typeof inst.mision === 'string' ? inst.mision : base.institucional.mision,
