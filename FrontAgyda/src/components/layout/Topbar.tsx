@@ -26,6 +26,20 @@ interface SearchResult {
   type: 'page' | 'ticket' | 'noticia'
 }
 
+// Acceso a "Gestión MIS" — lista fija de usuarios autorizados (NEUS_USUARIO),
+// mismo criterio que SUPER_ADMIN_IDS en BackAgyda/middleware/moduleAccess.js
+// pero comparado por el campo `usuario` en vez de `id`.
+const GESTION_MIS_USUARIOS = new Set([
+  'TI_0117', // Abner Diaz
+  'TI_0114', // Alan Gabriel Montoya Garrido
+  'TI_0110', // Ines Jessica Ramos Meneses
+  'TI_0116', // Cristian Luna Santillan
+  'TI_0103', // Eliud Vladimir Mathus Evangelista
+  'ADM_0001', // Edgar Montoya
+  'ADM_0002', // Jazminn Miranda
+])
+const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
+
 
 export function Topbar() {
   const { sidebarCollapsed, toggleSidebar, setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
@@ -42,11 +56,6 @@ export function Topbar() {
 
   const { branding, headerButtons, enlacesTopbar } = usePersonalizacion()
   const abrirEnlaceFlotante = useEnlaceFrameStore((s) => s.abrir)
-  const enlacesVisibles = enlacesTopbar.filter((e) => e.visible)
-    // Gestión MIS conserva su lista fija de usuarios autorizados aunque ahora
-    // viva como enlace configurable: sin esto, cualquiera con el topbar vería
-    // el botón solo por estar "visible" en la config de la empresa.
-    .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
   const logoSrc = personalizacionService.assetUrl(branding.logoPrincipalId) ?? logoAgyda
 
   const theme = useThemeStore((s) => s.theme)
@@ -69,20 +78,14 @@ export function Topbar() {
     window.open('https://azul1.ardabytec.vip', '_blank', 'noopener,noreferrer')
   }
 
-  // Acceso a "Gestión MIS" — lista fija de usuarios autorizados (NEUS_USUARIO),
-  // mismo criterio que SUPER_ADMIN_IDS en BackAgyda/middleware/moduleAccess.js
-  // pero comparado por el campo `usuario` en vez de `id`.
-  const GESTION_MIS_USUARIOS = new Set([
-    'TI_0117', // Abner Diaz
-    'TI_0114', // Alan Gabriel Montoya Garrido
-    'TI_0110', // Ines Jessica Ramos Meneses
-    'TI_0116', // Cristian Luna Santillan
-    'TI_0103', // Eliud Vladimir Mathus Evangelista
-    'ADM_0001', // Edgar Montoya
-    'ADM_0002', // Jazminn Miranda
-  ])
   const canUseGestionMis = GESTION_MIS_USUARIOS.has(user?.usuario ?? '')
-  const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
+
+  // Enlaces personalizados visibles. "Gestión MIS" conserva su lista fija de
+  // usuarios autorizados aunque ahora viva como enlace configurable: sin esto,
+  // cualquiera con el topbar lo vería solo por estar "visible" en la config.
+  const enlacesVisibles = enlacesTopbar
+    .filter((e) => e.visible)
+    .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
 
   // Acción por defecto (URL interna) de cada botón, por key. Si la config trae
   // una `url`, se abre esa en pestaña nueva en lugar de la acción interna.
