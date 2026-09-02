@@ -7,6 +7,16 @@
     <title>ArdaBy Tec - AGYDA</title>
     <meta name="copyright" content="Copyright (c) 2026 ArdaBytec. Todos los derechos reservados." />
     <meta name="application-version" content="20.11.0" />
+    <!-- index.html no tiene hash en el nombre (a diferencia de assets/*.js|css,
+         que sí lo tienen y pueden cachearse para siempre) — sin esto, algunos
+         navegadores lo sirven desde su caché local sin revalidar, dejando al
+         usuario atascado en un build viejo (JS/CSS incluidos, porque index.html
+         es el que referencia sus hashes) hasta un hard-refresh manual. IIS no
+         permite forzar Cache-Control por archivo vía <location> a este nivel de
+         permisos, así que se fuerza aquí con meta tags. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet" />
