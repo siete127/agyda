@@ -468,7 +468,11 @@ export function NoticiaDetalle({ noticia, onClose }: { noticia: Noticia; onClose
 /* ────────────────────────────────────────────────
    MODAL CREAR / EDITAR NOTICIA
 ──────────────────────────────────────────────── */
-const CATEGORIAS = ['Comunicado', 'Evento', 'Noticia', 'Urgente', 'PLATA']
+const CATEGORIAS_BASE = ['Comunicado', 'Evento', 'Noticia', 'Urgente']
+// 'PLATA' es una campaña propia de ArdaByTec — solo se ofrece como categoría en
+// esa empresa (tenant 'agyda').
+const categoriasPara = (empresa?: string) =>
+  (empresa ?? '').toLowerCase() === 'agyda' ? [...CATEGORIAS_BASE, 'PLATA'] : CATEGORIAS_BASE
 
 async function uploadImageBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -707,6 +711,7 @@ function NoticiaFormModal({ noticia, onClose }: { noticia?: Noticia; onClose: ()
     comentariosHabilitados: noticia?.comentariosHabilitados ?? true,
   })
   const [imagenes, setImagenes] = useState<string[]>(noticia?.imagenes?.filter(Boolean) ?? [])
+  const CATEGORIAS = categoriasPara(user?.empresa)
   const [uploadingPortada, setUploadingPortada] = useState(false)
 
   const invalidate = () => {
@@ -1035,8 +1040,11 @@ export function NoticiasPage() {
   const isAdmin = useAuthStore((s) => s.isAdmin())
   const qc      = useQueryClient()
 
-  // PLATA visible para AD, CC, ST (igual que Flutter)
-  const canSeePlata = ['AD', 'CC', 'ST'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
+  // PLATA es una campaña propia de ArdaByTec: solo se muestra en esa empresa
+  // (tenant 'agyda') y para AD, CC o ST — en el resto de empresas la pestaña
+  // ni el filtro de categoría aparecen.
+  const esArdaByTec = (user?.empresa ?? '').toLowerCase() === 'agyda'
+  const canSeePlata = esArdaByTec && ['AD', 'CC', 'ST'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
 
   const { data: noticias = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['noticias'],
