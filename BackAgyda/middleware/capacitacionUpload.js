@@ -38,7 +38,7 @@ const capacitacionStorage = multer.diskStorage({
 // el nombre del archivo.
 const EXTENSIONES_PERMITIDAS = new Set([
   '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png', '.gif', '.webp',
-  '.mp3', '.wav', '.ogg', '.m4a',
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma', '.opus',
   '.mp4', '.webm', '.mov',
 ]);
 
