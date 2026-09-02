@@ -88,7 +88,9 @@ export const personalizacionService = {
   },
 
   async updateEnlacesTopbar(enlaces: EnlaceTopbar[]): Promise<EnlaceTopbar[]> {
-    const { data } = await api.put('/personalizacion/enlaces-topbar', enlaces)
+    // Se envía como objeto (no array crudo) para que una lista vacía viaje bien
+    // — el backend acepta tanto `[...]` como `{ enlacesTopbar: [...] }`.
+    const { data } = await api.put('/personalizacion/enlaces-topbar', { enlacesTopbar: enlaces })
     return data.data as EnlaceTopbar[]
   },
 
