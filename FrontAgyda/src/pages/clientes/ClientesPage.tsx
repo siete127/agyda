@@ -1,13 +1,23 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, ToggleLeft, ToggleRight, Package } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, ToggleLeft, ToggleRight, Package, LayoutGrid, List } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { productoServicioService } from '@/services/productoServicio.service'
+import { productoServicioService, type ProductoServicioRecurrencia } from '@/services/productoServicio.service'
+
+const RECURRENCIA_LABEL: Record<ProductoServicioRecurrencia, string> = {
+  MENSUAL: 'Mensual', ANUAL: 'Anual', UNICO: 'Pago único',
+}
+const RECURRENCIA_CHIP: Record<ProductoServicioRecurrencia, string> = {
+  MENSUAL: 'bg-blue-100 text-blue-700',
+  ANUAL: 'bg-violet-100 text-violet-700',
+  UNICO: 'bg-gray-100 text-gray-600',
+}
+const money = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 })
 
 interface Cliente {
   id: number
@@ -79,33 +89,80 @@ function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
 
   const disponibles = catalogo.filter((c) => c.activo && !asignados.some((a) => a.productoServicioId === c.id))
 
+  const totalMensual = asignados.filter((a) => a.recurrencia === 'MENSUAL').reduce((s, a) => s + a.precio, 0)
+  const totalAnual = asignados.filter((a) => a.recurrencia === 'ANUAL').reduce((s, a) => s + a.precio, 0)
+
   return (
-    <div className="space-y-2 border-t border-gray-100 pt-3">
-      <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Productos y servicios contratados</label>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Productos y servicios contratados</label>
+        {(totalMensual > 0 || totalAnual > 0) && (
+          <span className="text-[0.7rem] text-gray-400">
+            {totalMensual > 0 && <>{money(totalMensual)}/mes</>}
+            {totalMensual > 0 && totalAnual > 0 && ' · '}
+            {totalAnual > 0 && <>{money(totalAnual)}/año</>}
+          </span>
+        )}
+      </div>
+
       {isLoading ? (
-        <p className="text-xs text-gray-400">Cargando...</p>
+        <p className="text-xs text-gray-400">Cargando…</p>
       ) : asignados.length === 0 ? (
-        <p className="text-xs text-gray-400">Sin productos ni servicios asignados</p>
+        <p className="rounded-xl border border-dashed border-gray-200 py-4 text-center text-xs text-gray-400">
+          Sin productos ni servicios asignados
+        </p>
       ) : (
-        <div className="space-y-1.5">
-          {asignados.map((a) => (
-            <div key={a.productoServicioId} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <Package className="h-3.5 w-3.5 text-brand flex-shrink-0" />
-                <span className="text-xs font-medium text-gray-700 truncate">{a.nombre}</span>
-              </div>
-              <button onClick={() => quitar.mutate(a.productoServicioId)} className="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0">
-                <Trash2 className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
+        <div className="overflow-hidden rounded-xl border border-gray-100">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/60 text-left">
+                <th className="px-3 py-2 text-[0.6rem] font-semibold uppercase tracking-wider text-gray-400">Producto / servicio</th>
+                <th className="px-3 py-2 text-[0.6rem] font-semibold uppercase tracking-wider text-gray-400">Periodicidad</th>
+                <th className="px-3 py-2 text-right text-[0.6rem] font-semibold uppercase tracking-wider text-gray-400">Precio</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {asignados.map((a) => (
+                <tr key={a.productoServicioId} className="hover:bg-gray-50/60">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Package className={clsx('h-3.5 w-3.5 flex-shrink-0', a.tipo === 'SERVICIO' ? 'text-violet-500' : 'text-brand')} />
+                      <div className="min-w-0">
+                        <p className="truncate text-[0.8rem] font-medium text-gray-800">{a.nombre}</p>
+                        <p className="text-[0.62rem] uppercase tracking-wide text-gray-400">{a.tipo === 'SERVICIO' ? 'Servicio' : 'Producto'}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={clsx('chip text-[0.62rem]', RECURRENCIA_CHIP[a.recurrencia])}>
+                      {RECURRENCIA_LABEL[a.recurrencia]}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right text-[0.78rem] font-semibold tabular-nums text-gray-700">
+                    {a.precio > 0 ? money(a.precio) : '—'}
+                    {a.recurrencia === 'MENSUAL' && a.precio > 0 && <span className="text-[0.6rem] font-normal text-gray-400"> /mes</span>}
+                    {a.recurrencia === 'ANUAL' && a.precio > 0 && <span className="text-[0.6rem] font-normal text-gray-400"> /año</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => quitar.mutate(a.productoServicioId)} className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
+
       <div className="flex gap-2">
-        <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className="field text-sm flex-1">
-          <option value="">Agregar producto/servicio...</option>
+        <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className="field flex-1 text-sm">
+          <option value="">Agregar producto/servicio…</option>
           {disponibles.map((c) => (
-            <option key={c.id} value={c.id}>{c.nombre}</option>
+            <option key={c.id} value={c.id}>
+              {c.nombre} — {RECURRENCIA_LABEL[c.recurrencia]}{c.precio > 0 ? ` (${money(c.precio)})` : ''}
+            </option>
           ))}
         </select>
         <Button
@@ -152,24 +209,35 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
   ] as const
 
   return (
-    <Modal isOpen onClose={onClose} title={cliente ? 'Editar cliente' : 'Nuevo cliente'} size="md">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          {campos.map(({ key, label, span }) => (
-            <div key={key} className={span === 2 ? 'col-span-2' : ''}>
-              <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">{label}</label>
-              <input
-                value={(form as Record<string, string>)[key]}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                className="field"
-              />
+    <Modal isOpen onClose={onClose} title={cliente ? 'Editar cliente' : 'Nuevo cliente'} size={cliente ? 'full' : 'md'}>
+      <div className="flex h-full flex-col">
+        <div className={clsx('flex-1 overflow-y-auto', cliente && 'grid gap-6 lg:grid-cols-2')}>
+          {/* Datos del cliente */}
+          <div>
+            {cliente && <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Datos del cliente</p>}
+            <div className="grid grid-cols-2 gap-3">
+              {campos.map(({ key, label, span }) => (
+                <div key={key} className={span === 2 ? 'col-span-2' : ''}>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">{label}</label>
+                  <input
+                    value={(form as Record<string, string>)[key]}
+                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                    className="field"
+                  />
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Productos y servicios — solo al editar */}
+          {cliente && (
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/40 p-4">
+              <ProductosServiciosCliente clienteId={cliente.id} />
+            </div>
+          )}
         </div>
 
-        {cliente && <ProductosServiciosCliente clienteId={cliente.id} />}
-
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="mt-4 flex flex-shrink-0 justify-end gap-2 border-t border-gray-100 pt-4">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button isLoading={guardar.isPending} disabled={!form.empresa.trim()} onClick={() => guardar.mutate()}>
             {cliente ? 'Guardar cambios' : 'Crear cliente'}
@@ -248,6 +316,54 @@ function ClienteCard({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente
   )
 }
 
+/* ── Fila de tabla ── */
+function ClienteRow({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
+  return (
+    <tr className={clsx('transition-colors hover:bg-gray-50', !cliente.activo && 'opacity-60')}>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand/8">
+            <Building2 className="h-3.5 w-3.5 text-brand" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[0.82rem] font-semibold text-gray-900">{cliente.empresa}</p>
+            {cliente.nombre && <p className="truncate text-[0.68rem] text-gray-400">{cliente.nombre}</p>}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-[0.76rem] text-gray-600">
+        {cliente.telefono ? <span className="flex items-center gap-1.5"><Phone className="h-3 w-3 text-gray-300" />{cliente.telefono}</span> : <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-4 py-3 text-[0.76rem] text-gray-600">
+        {cliente.correo ? <span className="flex items-center gap-1.5"><Mail className="h-3 w-3 text-gray-300" />{cliente.correo}</span> : <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-4 py-3 text-[0.72rem] text-gray-500">
+        {[cliente.colonia, cliente.ciudad].filter(Boolean).join(', ') || <span className="text-gray-300">—</span>}
+        {cliente.cp && <span className="text-gray-400"> · CP {cliente.cp}</span>}
+      </td>
+      <td className="px-4 py-3 font-mono text-[0.72rem] text-gray-500">{cliente.rfc || <span className="font-sans text-gray-300">—</span>}</td>
+      <td className="px-4 py-3">
+        <span className={clsx('chip text-[0.62rem]', cliente.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
+          {cliente.activo ? 'Activo' : 'Inactivo'}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center justify-end gap-0.5">
+          <button onClick={onToggle} title={cliente.activo ? 'Desactivar' : 'Activar'} className={clsx('rounded-lg p-1.5 transition-colors', cliente.activo ? 'text-emerald-500 hover:bg-gray-100' : 'text-gray-300 hover:text-emerald-500 hover:bg-emerald-50')}>
+            {cliente.activo ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+          </button>
+          <button onClick={onEdit} className="rounded-lg p-1.5 text-gray-400 hover:text-brand hover:bg-brand/8 transition-colors">
+            <Edit2 className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={onDelete} className="rounded-lg p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 /* ── Skeleton card ── */
 function SkeletonCard() {
   return (
@@ -272,6 +388,13 @@ export function ClientesPage() {
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [confirmEliminar, setConfirmEliminar] = useState<Cliente | null>(null)
   const [soloActivos, setSoloActivos] = useState(true)
+  const [vista, setVista] = useState<'grid' | 'tabla'>(() => {
+    try { return (localStorage.getItem('clientes-vista') as 'grid' | 'tabla') || 'grid' } catch { return 'grid' }
+  })
+  const cambiarVista = (v: 'grid' | 'tabla') => {
+    setVista(v)
+    try { localStorage.setItem('clientes-vista', v) } catch { /* ignore */ }
+  }
   const qc = useQueryClient()
 
   const { data: clientes = [], isLoading, refetch, isRefetching } = useQuery({
@@ -357,6 +480,24 @@ export function ClientesPage() {
           >
             {soloActivos ? 'Solo activos' : 'Todos'}
           </button>
+
+          {/* Toggle vista grid / tabla */}
+          <div className="flex rounded-xl border border-gray-200 p-0.5">
+            <button
+              onClick={() => cambiarVista('grid')}
+              title="Ver en tarjetas"
+              className={clsx('flex h-8 w-8 items-center justify-center rounded-lg transition-colors', vista === 'grid' ? 'bg-brand/10 text-brand' : 'text-gray-400 hover:text-gray-600')}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => cambiarVista('tabla')}
+              title="Ver en lista"
+              className={clsx('flex h-8 w-8 items-center justify-center rounded-lg transition-colors', vista === 'tabla' ? 'bg-brand/10 text-brand' : 'text-gray-400 hover:text-gray-600')}
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -379,7 +520,7 @@ export function ClientesPage() {
             </button>
           )}
         </div>
-      ) : (
+      ) : vista === 'grid' ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((c) => (
             <ClienteCard
@@ -390,6 +531,38 @@ export function ClientesPage() {
               onToggle={() => toggleActivo.mutate({ id: c.id, activo: !c.activo })}
             />
           ))}
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50 text-left">
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Cliente</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Teléfono</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Correo</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Ubicación</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">RFC</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Estado</th>
+                  <th className="px-4 py-2.5 text-right text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map((c) => (
+                  <ClienteRow
+                    key={c.id}
+                    cliente={c}
+                    onEdit={() => { setEditando(c); setShowModal(true) }}
+                    onDelete={() => setConfirmEliminar(c)}
+                    onToggle={() => toggleActivo.mutate({ id: c.id, activo: !c.activo })}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-gray-100 px-4 py-2.5 text-[0.68rem] text-gray-400">
+            {filtered.length} {filtered.length === 1 ? 'cliente' : 'clientes'}
+          </div>
         </div>
       )}
 
