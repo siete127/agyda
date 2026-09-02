@@ -1,13 +1,27 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, ToggleLeft, ToggleRight, Package } from 'lucide-react'
+import {
+  Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText,
+  Package, LayoutGrid, List, Eye, MoreVertical, Power, X, User, Route, MapPinned, Hash,
+  ShoppingBag, PackagePlus, Save, ChevronDown,
+} from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { productoServicioService } from '@/services/productoServicio.service'
+import { productoServicioService, type ProductoServicioRecurrencia } from '@/services/productoServicio.service'
+
+const RECURRENCIA_LABEL: Record<ProductoServicioRecurrencia, string> = {
+  MENSUAL: 'Mensual', ANUAL: 'Anual', UNICO: 'Pago único',
+}
+const RECURRENCIA_CHIP: Record<ProductoServicioRecurrencia, string> = {
+  MENSUAL: 'bg-blue-100 text-blue-700',
+  ANUAL: 'bg-violet-100 text-violet-700',
+  UNICO: 'bg-gray-100 text-gray-600',
+}
+const money = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 })
 
 interface Cliente {
   id: number
@@ -79,42 +93,91 @@ function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
 
   const disponibles = catalogo.filter((c) => c.activo && !asignados.some((a) => a.productoServicioId === c.id))
 
+  const totalMensual = asignados.filter((a) => a.recurrencia === 'MENSUAL').reduce((s, a) => s + a.precio, 0)
+  const totalAnual = asignados.filter((a) => a.recurrencia === 'ANUAL').reduce((s, a) => s + a.precio, 0)
+
   return (
-    <div className="space-y-2 border-t border-gray-100 pt-3">
-      <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Productos y servicios contratados</label>
+    <div className="space-y-4">
       {isLoading ? (
-        <p className="text-xs text-gray-400">Cargando...</p>
+        <p className="text-xs text-gray-400">Cargando…</p>
       ) : asignados.length === 0 ? (
-        <p className="text-xs text-gray-400">Sin productos ni servicios asignados</p>
-      ) : (
-        <div className="space-y-1.5">
-          {asignados.map((a) => (
-            <div key={a.productoServicioId} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <Package className="h-3.5 w-3.5 text-brand flex-shrink-0" />
-                <span className="text-xs font-medium text-gray-700 truncate">{a.nombre}</span>
-              </div>
-              <button onClick={() => quitar.mutate(a.productoServicioId)} className="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0">
-                <Trash2 className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
+        <div className="flex items-center gap-3.5 rounded-2xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-4">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-500">
+            <Package className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-[0.85rem] font-semibold text-violet-700">Sin productos ni servicios asignados</p>
+            <p className="text-[0.75rem] text-gray-400">Agrega productos o servicios para este cliente.</p>
+          </div>
         </div>
+      ) : (
+        <>
+          {(totalMensual > 0 || totalAnual > 0) && (
+            <div className="flex justify-end text-[0.72rem] text-gray-400">
+              {totalMensual > 0 && <span>{money(totalMensual)}/mes</span>}
+              {totalMensual > 0 && totalAnual > 0 && <span className="mx-1">·</span>}
+              {totalAnual > 0 && <span>{money(totalAnual)}/año</span>}
+            </div>
+          )}
+          <div className="space-y-2">
+            {asignados.map((a) => (
+              <div key={a.productoServicioId} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-card px-3.5 py-3">
+                <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg',
+                  a.tipo === 'SERVICIO' ? 'bg-violet-100 text-violet-600' : 'bg-brand/10 text-brand')}>
+                  <Package className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[0.85rem] font-semibold text-gray-800">{a.nombre}</p>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <span className="text-[0.62rem] uppercase tracking-wide text-gray-400">{a.tipo === 'SERVICIO' ? 'Servicio' : 'Producto'}</span>
+                    <span className={clsx('chip text-[0.6rem]', RECURRENCIA_CHIP[a.recurrencia])}>{RECURRENCIA_LABEL[a.recurrencia]}</span>
+                  </div>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  {a.precio > 0 && (
+                    <p className="text-[0.82rem] font-bold tabular-nums text-gray-700">
+                      {money(a.precio)}
+                      {a.recurrencia === 'MENSUAL' && <span className="text-[0.58rem] font-normal text-gray-400"> /mes</span>}
+                      {a.recurrencia === 'ANUAL' && <span className="text-[0.58rem] font-normal text-gray-400"> /año</span>}
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => quitar.mutate(a.productoServicioId)} className="flex-shrink-0 rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
-      <div className="flex gap-2">
-        <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className="field text-sm flex-1">
-          <option value="">Agregar producto/servicio...</option>
-          {disponibles.map((c) => (
-            <option key={c.id} value={c.id}>{c.nombre}</option>
-          ))}
-        </select>
-        <Button
-          variant="ghost"
-          disabled={!seleccion || asignar.isPending}
-          onClick={() => seleccion && asignar.mutate(Number(seleccion))}
-        >
-          Agregar
-        </Button>
+
+      <div className="border-t border-gray-100 pt-4">
+        <label className="mb-1.5 block text-[0.78rem] font-semibold text-gray-600">Agregar producto/servicio</label>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <ShoppingBag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+            <select
+              value={seleccion}
+              onChange={(e) => setSeleccion(e.target.value)}
+              className="w-full appearance-none rounded-xl border border-gray-200 bg-card py-2.5 pl-10 pr-9 text-[0.82rem] text-gray-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
+            >
+              <option value="">Selecciona un producto o servicio…</option>
+              {disponibles.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre} — {RECURRENCIA_LABEL[c.recurrencia]}{c.precio > 0 ? ` (${money(c.precio)})` : ''}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+          <button
+            disabled={!seleccion || asignar.isPending}
+            onClick={() => seleccion && asignar.mutate(Number(seleccion))}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white transition-all hover:bg-violet-700 disabled:opacity-40"
+          >
+            <PackagePlus className="h-4 w-4" /> Agregar
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -140,111 +203,248 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
   })
 
   const campos = [
-    { key: 'empresa',  label: 'Empresa',       span: 2 },
-    { key: 'nombre',   label: 'Contacto',       span: 1 },
-    { key: 'rfc',      label: 'RFC',            span: 1 },
-    { key: 'telefono', label: 'Teléfono',       span: 1 },
-    { key: 'correo',   label: 'Correo',         span: 1 },
-    { key: 'ciudad',   label: 'Ciudad',         span: 1 },
-    { key: 'calle',    label: 'Calle',          span: 1 },
-    { key: 'colonia',  label: 'Colonia',        span: 1 },
-    { key: 'cp',       label: 'Código Postal',  span: 1 },
+    { key: 'empresa',  label: 'Empresa',       span: 2, icon: Building2,  ph: 'Nombre de la empresa' },
+    { key: 'nombre',   label: 'Contacto',      span: 1, icon: User,       ph: 'Persona de contacto' },
+    { key: 'rfc',      label: 'RFC',           span: 1, icon: FileText,   ph: 'RFC' },
+    { key: 'telefono', label: 'Teléfono',      span: 1, icon: Phone,      ph: 'Teléfono' },
+    { key: 'correo',   label: 'Correo',        span: 1, icon: Mail,       ph: 'Ingresa el correo' },
+    { key: 'ciudad',   label: 'Ciudad',        span: 1, icon: MapPin,     ph: 'Ciudad' },
+    { key: 'calle',    label: 'Calle',         span: 1, icon: Route,      ph: 'Calle y número' },
+    { key: 'colonia',  label: 'Colonia',       span: 1, icon: MapPinned,  ph: 'Colonia' },
+    { key: 'cp',       label: 'Código postal', span: 1, icon: Hash,       ph: 'Código postal' },
   ] as const
 
   return (
-    <Modal isOpen onClose={onClose} title={cliente ? 'Editar cliente' : 'Nuevo cliente'} size="md">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          {campos.map(({ key, label, span }) => (
-            <div key={key} className={span === 2 ? 'col-span-2' : ''}>
-              <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">{label}</label>
-              <input
-                value={(form as Record<string, string>)[key]}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                className="field"
-              />
+    <Modal isOpen onClose={onClose} size={cliente ? 'full' : 'md'}>
+      <div className="flex h-full flex-col">
+        {/* Cabecera propia */}
+        <div className="-m-5 mb-5 flex items-start justify-between border-b border-gray-100 px-6 py-5">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
+              {cliente ? <Edit2 className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
             </div>
-          ))}
+            <div>
+              <h2 className="text-[1.15rem] font-bold text-gray-900">{cliente ? 'Editar cliente' : 'Nuevo cliente'}</h2>
+              <p className="text-[0.8rem] text-gray-400">
+                {cliente ? 'Actualiza la información general y los productos o servicios contratados.' : 'Registra un nuevo cliente.'}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {cliente && <ProductosServiciosCliente clienteId={cliente.id} />}
+        <div className={clsx('flex-1 overflow-y-auto pr-0.5', cliente && 'grid gap-5 lg:grid-cols-2')}>
+          {/* ── Datos del cliente ── */}
+          <div className={clsx(cliente && 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card')}>
+            {cliente && (
+              <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                  <User className="h-4 w-4" />
+                </div>
+                <p className="text-[0.9rem] font-bold text-gray-800">Datos del cliente</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+              {campos.map(({ key, label, span, icon: Icon, ph }) => (
+                <div key={key} className={span === 2 ? 'col-span-2' : ''}>
+                  <label className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-gray-500">
+                    <Icon className="h-3 w-3 text-violet-400" /> {label}
+                  </label>
+                  <div className="relative">
+                    <Icon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
+                    <input
+                      value={(form as Record<string, string>)[key]}
+                      onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                      placeholder={ph}
+                      className="w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-9 pr-3 text-[0.85rem] text-gray-900 placeholder-gray-400 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button isLoading={guardar.isPending} disabled={!form.empresa.trim()} onClick={() => guardar.mutate()}>
+          {/* ── Productos y servicios — solo al editar ── */}
+          {cliente && (
+            <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+              <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                  <ShoppingBag className="h-4 w-4" />
+                </div>
+                <p className="text-[0.9rem] font-bold text-gray-800">Productos y servicios contratados</p>
+              </div>
+              <ProductosServiciosCliente clienteId={cliente.id} />
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="-mx-5 -mb-5 mt-5 flex flex-shrink-0 justify-end gap-2 border-t border-gray-100 bg-gray-50/40 px-6 py-4">
+          <button onClick={onClose} className="rounded-xl border border-gray-200 bg-card px-5 py-2.5 text-[0.85rem] font-semibold text-gray-600 transition-colors hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={() => guardar.mutate()}
+            disabled={guardar.isPending || !form.empresa.trim()}
+            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-[0.85rem] font-semibold text-white shadow-sm shadow-violet-600/20 transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-50"
+          >
+            {guardar.isPending
+              ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              : <Save className="h-4 w-4" />}
             {cliente ? 'Guardar cambios' : 'Crear cliente'}
-          </Button>
+          </button>
         </div>
       </div>
     </Modal>
   )
 }
 
+/* ── Un dato con icono en pill + label arriba + valor debajo ── */
+function DatoCard({ icon: Icon, label, children }: { icon: typeof Phone; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-500">
+        <Icon className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+        <p className="truncate text-[0.82rem] text-gray-700">{children}</p>
+      </div>
+    </div>
+  )
+}
+
 /* ── Card cliente ── */
 function ClienteCard({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
-  const [hovered, setHovered] = useState(false)
+  const [menuAbierto, setMenuAbierto] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuAbierto) return
+    const cerrar = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuAbierto(false)
+    }
+    document.addEventListener('mousedown', cerrar)
+    return () => document.removeEventListener('mousedown', cerrar)
+  }, [menuAbierto])
+
+  const ubicacion = [cliente.colonia, cliente.ciudad].filter(Boolean).join(', ')
 
   return (
-    <div
-      className={clsx(
-        'card p-4 space-y-2.5 transition-all duration-150',
-        hovered ? 'shadow-card-md -translate-y-0.5' : '',
-        !cliente.activo && 'opacity-60',
-      )}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand/8">
-            <Building2 className="h-4 w-4 text-brand" />
+    <div className={clsx('card flex flex-col p-5 transition-all duration-150 hover:shadow-card-md', !cliente.activo && 'opacity-60')}>
+      {/* Cabecera */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+            <Building2 className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className={clsx('text-[0.85rem] font-bold truncate transition-colors', hovered ? 'text-brand' : 'text-gray-900')}>
-              {cliente.empresa}
-            </p>
-            {cliente.nombre && <p className="text-[0.7rem] text-gray-500">{cliente.nombre}</p>}
+            <p className="truncate text-[0.95rem] font-bold text-gray-900">{cliente.empresa}</p>
+            {cliente.nombre && <p className="truncate text-[0.75rem] text-gray-400">{cliente.nombre}</p>}
           </div>
         </div>
-        <div className="flex gap-0.5 flex-shrink-0">
-          <button onClick={onToggle} title={cliente.activo ? 'Desactivar' : 'Activar'} className={clsx('rounded-xl p-1.5 transition-colors', cliente.activo ? 'text-emerald-500 hover:text-gray-400 hover:bg-gray-50' : 'text-gray-300 hover:text-emerald-500 hover:bg-emerald-50')}>
-            {cliente.activo ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <span className={clsx('rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold', cliente.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
+            {cliente.activo ? 'Activo' : 'Inactivo'}
+          </span>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuAbierto((v) => !v)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            {menuAbierto && (
+              <div className="absolute right-0 top-10 z-10 w-44 overflow-hidden rounded-xl border border-gray-200 bg-card py-1 shadow-lg">
+                <button
+                  onClick={() => { setMenuAbierto(false); onToggle() }}
+                  className={clsx('flex w-full items-center gap-2 px-3.5 py-2 text-[0.8rem] font-semibold transition-colors',
+                    cliente.activo ? 'text-gray-600 hover:bg-gray-50' : 'text-emerald-600 hover:bg-emerald-50')}
+                >
+                  <Power className="h-3.5 w-3.5" /> {cliente.activo ? 'Desactivar' : 'Activar'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Datos */}
+      <div className="mt-4 flex-1 space-y-3.5">
+        <DatoCard icon={Phone} label="Teléfono">{cliente.telefono || <span className="text-gray-300">—</span>}</DatoCard>
+        <DatoCard icon={Mail} label="Correo">{cliente.correo || <span className="text-gray-300">—</span>}</DatoCard>
+        <DatoCard icon={MapPin} label="Ubicación">
+          {ubicacion || <span className="text-gray-300">—</span>}
+          {ubicacion && cliente.cp && <span className="text-gray-400"> CP {cliente.cp}</span>}
+        </DatoCard>
+        <DatoCard icon={FileText} label="RFC">
+          <span className="font-mono">{cliente.rfc || <span className="font-sans text-gray-300">—</span>}</span>
+        </DatoCard>
+      </div>
+
+      {/* Acciones */}
+      <div className="mt-4 flex justify-end gap-2 border-t border-gray-100 pt-3">
+        <button onClick={onEdit} title="Ver detalle" className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100">
+          <Eye className="h-4 w-4" />
+        </button>
+        <button onClick={onEdit} title="Editar" className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand/20 bg-brand/5 text-brand transition-colors hover:bg-brand/10">
+          <Edit2 className="h-4 w-4" />
+        </button>
+        <button onClick={onDelete} title="Eliminar" className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── Fila de tabla ── */
+function ClienteRow({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
+  return (
+    <tr className={clsx('transition-colors hover:bg-gray-50', !cliente.activo && 'opacity-60')}>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand/8">
+            <Building2 className="h-3.5 w-3.5 text-brand" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[0.82rem] font-semibold text-gray-900">{cliente.empresa}</p>
+            {cliente.nombre && <p className="truncate text-[0.68rem] text-gray-400">{cliente.nombre}</p>}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-[0.76rem] text-gray-600">
+        {cliente.telefono ? <span className="flex items-center gap-1.5"><Phone className="h-3 w-3 text-gray-300" />{cliente.telefono}</span> : <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-4 py-3 text-[0.76rem] text-gray-600">
+        {cliente.correo ? <span className="flex items-center gap-1.5"><Mail className="h-3 w-3 text-gray-300" />{cliente.correo}</span> : <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-4 py-3 text-[0.72rem] text-gray-500">
+        {[cliente.colonia, cliente.ciudad].filter(Boolean).join(', ') || <span className="text-gray-300">—</span>}
+        {cliente.cp && <span className="text-gray-400"> · CP {cliente.cp}</span>}
+      </td>
+      <td className="px-4 py-3 font-mono text-[0.72rem] text-gray-500">{cliente.rfc || <span className="font-sans text-gray-300">—</span>}</td>
+      <td className="px-4 py-3">
+        <span className={clsx('chip text-[0.62rem]', cliente.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
+          {cliente.activo ? 'Activo' : 'Inactivo'}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center justify-end gap-0.5">
+          <button onClick={onToggle} title={cliente.activo ? 'Desactivar' : 'Activar'} className={clsx('rounded-lg p-1.5 transition-colors', cliente.activo ? 'text-emerald-500 hover:bg-gray-100' : 'text-gray-300 hover:text-emerald-500 hover:bg-emerald-50')}>
+            <Power className="h-4 w-4" />
           </button>
-          <button onClick={onEdit} className="rounded-xl p-1.5 text-gray-400 hover:text-brand hover:bg-brand/8 transition-colors">
+          <button onClick={onEdit} className="rounded-lg p-1.5 text-gray-400 hover:text-brand hover:bg-brand/8 transition-colors">
             <Edit2 className="h-3.5 w-3.5" />
           </button>
-          <button onClick={onDelete} className="rounded-xl p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+          <button onClick={onDelete} className="rounded-lg p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
-      </div>
-
-      <div className="space-y-1">
-        {cliente.telefono && (
-          <div className="flex items-center gap-2 text-[0.72rem] text-gray-500">
-            <Phone className="h-3 w-3 text-gray-300 flex-shrink-0" />
-            {cliente.telefono}
-          </div>
-        )}
-        {cliente.correo && (
-          <div className="flex items-center gap-2 text-[0.72rem] text-gray-500">
-            <Mail className="h-3 w-3 text-gray-300 flex-shrink-0" />
-            {cliente.correo}
-          </div>
-        )}
-        {(cliente.ciudad || cliente.colonia) && (
-          <p className="text-[0.68rem] text-gray-400">
-            {[cliente.colonia, cliente.ciudad].filter(Boolean).join(', ')}
-            {cliente.cp && ` CP ${cliente.cp}`}
-          </p>
-        )}
-        {cliente.rfc && <p className="text-[0.68rem] text-gray-400 font-mono">RFC: {cliente.rfc}</p>}
-      </div>
-
-      {!cliente.activo && (
-        <span className="chip bg-gray-100 text-gray-400 text-[0.65rem]">Inactivo</span>
-      )}
-    </div>
+      </td>
+    </tr>
   )
 }
 
@@ -272,6 +472,13 @@ export function ClientesPage() {
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [confirmEliminar, setConfirmEliminar] = useState<Cliente | null>(null)
   const [soloActivos, setSoloActivos] = useState(true)
+  const [vista, setVista] = useState<'grid' | 'tabla'>(() => {
+    try { return (localStorage.getItem('clientes-vista') as 'grid' | 'tabla') || 'grid' } catch { return 'grid' }
+  })
+  const cambiarVista = (v: 'grid' | 'tabla') => {
+    setVista(v)
+    try { localStorage.setItem('clientes-vista', v) } catch { /* ignore */ }
+  }
   const qc = useQueryClient()
 
   const { data: clientes = [], isLoading, refetch, isRefetching } = useQuery({
@@ -357,6 +564,24 @@ export function ClientesPage() {
           >
             {soloActivos ? 'Solo activos' : 'Todos'}
           </button>
+
+          {/* Toggle vista grid / tabla */}
+          <div className="flex rounded-xl border border-gray-200 p-0.5">
+            <button
+              onClick={() => cambiarVista('grid')}
+              title="Ver en tarjetas"
+              className={clsx('flex h-8 w-8 items-center justify-center rounded-lg transition-colors', vista === 'grid' ? 'bg-brand/10 text-brand' : 'text-gray-400 hover:text-gray-600')}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => cambiarVista('tabla')}
+              title="Ver en lista"
+              className={clsx('flex h-8 w-8 items-center justify-center rounded-lg transition-colors', vista === 'tabla' ? 'bg-brand/10 text-brand' : 'text-gray-400 hover:text-gray-600')}
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -379,7 +604,7 @@ export function ClientesPage() {
             </button>
           )}
         </div>
-      ) : (
+      ) : vista === 'grid' ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((c) => (
             <ClienteCard
@@ -390,6 +615,38 @@ export function ClientesPage() {
               onToggle={() => toggleActivo.mutate({ id: c.id, activo: !c.activo })}
             />
           ))}
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50 text-left">
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Cliente</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Teléfono</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Correo</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Ubicación</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">RFC</th>
+                  <th className="px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Estado</th>
+                  <th className="px-4 py-2.5 text-right text-[0.62rem] font-semibold uppercase tracking-wider text-gray-400">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map((c) => (
+                  <ClienteRow
+                    key={c.id}
+                    cliente={c}
+                    onEdit={() => { setEditando(c); setShowModal(true) }}
+                    onDelete={() => setConfirmEliminar(c)}
+                    onToggle={() => toggleActivo.mutate({ id: c.id, activo: !c.activo })}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-gray-100 px-4 py-2.5 text-[0.68rem] text-gray-400">
+            {filtered.length} {filtered.length === 1 ? 'cliente' : 'clientes'}
+          </div>
         </div>
       )}
 
