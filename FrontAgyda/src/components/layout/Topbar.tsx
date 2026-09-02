@@ -91,12 +91,6 @@ export function Topbar() {
     .filter((e) => e.visible)
     .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
 
-  const enlacesVisibles = enlacesTopbar.filter((e) => e.visible)
-    // Gestión MIS conserva su lista fija de usuarios autorizados aunque ahora
-    // viva como enlace configurable: sin esto, cualquiera con el topbar vería
-    // el botón solo por estar "visible" en la config de la empresa.
-    .filter((e) => !e.url.toLowerCase().startsWith(GESTION_MIS_URL) || canUseGestionMis)
-
   // Acción por defecto (URL interna) de cada botón, por key. Si la config trae
   // una `url`, se abre esa en pestaña nueva en lugar de la acción interna.
   const accionInterna: Record<string, () => void> = {
