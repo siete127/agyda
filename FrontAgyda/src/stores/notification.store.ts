@@ -34,10 +34,31 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
     set({ notifications: items, unreadCount: items.filter((n) => !n.leida).length }),
 
   addNotification: (item) =>
-    set((s) => ({
-      notifications: [item, ...s.notifications],
-      unreadCount: !item.leida ? s.unreadCount + 1 : s.unreadCount,
-    })),
+    set((s) => {
+      const key = (item.dataExtra as { dedupeKey?: string } | null)?.dedupeKey
+      // Si llega una actualización de una notificación agrupada (mismo id, o
+      // mismo dedupeKey de una conversación aún sin leer), se reemplaza en su
+      // lugar en vez de apilar otra — una notificación por conversación.
+      const idx = s.notifications.findIndex((n) =>
+        n.id === item.id ||
+        (!!key && !n.leida && (n.dataExtra as { dedupeKey?: string } | null)?.dedupeKey === key),
+      )
+      if (idx !== -1) {
+        const anterior = s.notifications[idx]
+        const notifications = [...s.notifications]
+        notifications.splice(idx, 1)
+        // La conversación actualizada sube al principio de la lista.
+        return {
+          notifications: [{ ...item, id: anterior.id }, ...notifications],
+          // el contador no cambia: seguía sin leer y sigue sin leer
+          unreadCount: !anterior.leida ? s.unreadCount : (!item.leida ? s.unreadCount + 1 : s.unreadCount),
+        }
+      }
+      return {
+        notifications: [item, ...s.notifications],
+        unreadCount: !item.leida ? s.unreadCount + 1 : s.unreadCount,
+      }
+    }),
 
   markAsRead: (id) =>
     set((s) => ({
