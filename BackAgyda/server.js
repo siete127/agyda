@@ -268,6 +268,12 @@ socketService.initialize(server);
     logger.warn('⚠️ No se pudo leer config de servidor de correo desde BD, usando .env:', err.message);
     emailService.initialize();
   }
+
+  // Notificaciones por Telegram — long-polling contra la Bot API para
+  // detectar cuándo alguien manda su código de vinculación (ver
+  // telegramService.js). No hace nada si TELEGRAM_BOT_TOKEN no está
+  // configurado en .env.
+  require('./services/telegramService').iniciarPolling();
 })();
 
 /* =====================================================

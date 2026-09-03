@@ -62,6 +62,88 @@ async function getAzureAccessToken() {
   return cachedToken;
 }
 
+// Token separado para Microsoft Graph (scope graph.microsoft.com, distinto
+// del de SMTP AUTH arriba) — cache propio porque son dos recursos de Azure
+// AD diferentes, cada uno con su propio token.
+let cachedGraphToken = null;
+let cachedGraphTokenExpiresAt = 0;
+
+async function getAzureGraphAccessToken() {
+  const now = Date.now();
+  if (cachedGraphToken && now < cachedGraphTokenExpiresAt - 60_000) return cachedGraphToken;
+
+  const url = `https://login.microsoftonline.com/${oauth2Config.tenantId}/oauth2/v2.0/token`;
+  const body = new URLSearchParams({
+    client_id: oauth2Config.clientId,
+    client_secret: oauth2Config.clientSecret,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials',
+  });
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Azure AD token error: ${data.error} — ${data.error_description || ''}`);
+  }
+
+  cachedGraphToken = data.access_token;
+  cachedGraphTokenExpiresAt = now + (Number(data.expires_in) || 3600) * 1000;
+  return cachedGraphToken;
+}
+
+// Adaptador con la misma interfaz que el resto del archivo
+// (mailer.sendMail({from,to,subject,text,html}) → {messageId}). Envía por la
+// API REST de Microsoft Graph (POST /users/{id}/sendMail) en vez de SMTP AUTH
+// — evita por completo el bloqueo de "Security Defaults" que afecta a SMTP
+// AUTH, porque Graph API no es SMTP y no depende de ese ajuste; solo necesita
+// el permiso de aplicación Mail.Send (ya concedido). `to` puede ser un
+// string o un array; `from`/`sender` se ignoran porque Graph siempre envía
+// como el buzón autenticado (senderEmail) — no se puede suplantar remitente.
+function createGraphTransport(senderEmail) {
+  return {
+    async sendMail({ to, subject, text, html, replyTo }) {
+      const token = await getAzureGraphAccessToken();
+      const destinatarios = (Array.isArray(to) ? to : [to]).map((addr) => ({
+        emailAddress: { address: addr },
+      }));
+
+      const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/sendMail`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: {
+            subject,
+            body: { contentType: html ? 'HTML' : 'Text', content: html || text || '' },
+            toRecipients: destinatarios,
+            replyTo: replyTo ? [{ emailAddress: { address: replyTo } }] : undefined,
+          },
+          saveToSentItems: true,
+        }),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(`Graph API error (${res.status}): ${errBody.error?.message || res.statusText}`);
+      }
+      // sendMail de Graph responde 202 Accepted sin body — no hay messageId real que devolver.
+      return { messageId: null };
+    },
+    async verify() {
+      // No hay un "probar conexión" real en Graph; validamos pidiendo el
+      // token de aplicación, que es lo único que puede fallar de antemano.
+      await getAzureGraphAccessToken();
+      return true;
+    },
+  };
+}
+
 // Adaptador con la misma interfaz que usa el resto del archivo
 // (mailer.sendMail({from,to,subject,text,html}) → {messageId}) para que
 // ninguna de las funciones de envío de abajo tenga que enterarse de que el
@@ -154,25 +236,15 @@ function initialize(dbConfigRow) {
     logger.info(`ℹ️ Transporte configurado: Resend (${EMAIL_FROM})`);
   }
 
-  // Microsoft 365 / Exchange Online vía OAuth2 — solo si Resend no está
-  // configurado (ver config/email.js).
+  // Microsoft 365 vía Graph API (HTTP, no SMTP) — solo si Resend no está
+  // configurado. No usa SMTP AUTH en absoluto, así que no depende de que
+  // "Security Defaults" lo permita (ver nota en createGraphTransport).
   if (!mailer && USE_OAUTH2) {
     try {
-      mailer = nodemailer.createTransport({
-        host: 'smtp.office365.com',
-        port: 587,
-        secure: false, // STARTTLS en el puerto 587, no TLS directo
-        auth: {
-          type: 'OAuth2',
-          user: oauth2Config.senderEmail,
-          accessToken: getAzureAccessToken, // nodemailer acepta una función async y la re-invoca por envío
-        },
-        logger: SMTP_DEBUG,
-        debug: SMTP_DEBUG,
-      });
-      logger.info(`ℹ️ Transporte configurado: Microsoft 365 OAuth2 (${oauth2Config.senderEmail})`);
+      mailer = createGraphTransport(oauth2Config.senderEmail);
+      logger.info(`ℹ️ Transporte configurado: Microsoft 365 Graph API (${oauth2Config.senderEmail})`);
     } catch (err) {
-      console.warn('⚠️ Error configurando transporte OAuth2 de Microsoft 365:', err.message);
+      console.warn('⚠️ Error configurando transporte de Microsoft Graph:', err.message);
     }
   }
 
@@ -210,7 +282,7 @@ function initialize(dbConfigRow) {
     try {
         if (mailer) {
         await mailer.verify();
-        logger.info(`✅ ${USE_RESEND ? 'Resend' : USE_OAUTH2 ? 'Microsoft 365 (OAuth2)' : 'SMTP'} verificado correctamente`);
+        logger.info(`✅ ${USE_RESEND ? 'Resend' : USE_OAUTH2 ? 'Microsoft 365 (Graph API)' : 'SMTP'} verificado correctamente`);
       } else {
         logger.warn('⚠️ SMTP no configurado (mailer nulo)');
       }
@@ -357,7 +429,7 @@ async function sendPermisoEmail({ permisoId, usuarioId, motivo, fechaInicio, fec
     // Correo (tabla NOTIFICACIONES_CORREO_DESTINATARIOS) — require diferido
     // para evitar el ciclo de módulos con notificacionesCorreoController,
     // que a su vez importa este archivo.
-    const { getDestinatariosCorreo } = require('../controllers/notificacionesCorreoController');
+    const { getDestinatariosCorreo, getDestinatariosTelegram } = require('../controllers/notificacionesCorreoController');
     const destinatarios = await getDestinatariosCorreo('permisos', tenantKey);
 
     logger.info('📧 [sendPermisoEmail] Iniciando envío a', destinatarios.length, 'destinatarios');
@@ -365,7 +437,7 @@ async function sendPermisoEmail({ permisoId, usuarioId, motivo, fechaInicio, fec
     for (const rcpt of destinatarios) {
       try {
         logger.debug(`📧 [sendPermisoEmail] Enviando a: ${rcpt}`);
-        
+
         const info = await mailer.sendMail({
           from: fromWithName,
           sender: EMAIL_FROM,
@@ -380,7 +452,17 @@ async function sendPermisoEmail({ permisoId, usuarioId, motivo, fechaInicio, fec
         console.error(`❌ [sendPermisoEmail] Error enviando a ${rcpt}:`, err?.message);
       }
     }
-    
+
+    // Telegram — mismo aviso, en texto plano (Telegram no soporta el HTML
+    // con botones que usa el correo); los links de aprobar/rechazar quedan
+    // como URLs normales, tocables desde el chat.
+    const chatIds = await getDestinatariosTelegram('permisos', tenantKey);
+    if (chatIds.length) {
+      const telegramService = require('./telegramService');
+      const texto = `🔔 <b>Nueva solicitud de permiso</b>\n\n👤 Solicitante: ${usuarioNombre}\n📋 Motivo: ${motivo}\n📅 Desde: ${fechaInicio}\n📅 Hasta: ${fechaFin}\n\n✅ Aprobar: ${approveUrl}\n❌ Rechazar: ${rejectUrl}`;
+      await telegramService.sendToMany(chatIds, texto);
+    }
+
   } catch (err) {
     console.error('❌ [sendPermisoEmail] Error general enviando correo de permiso:', err);
   }
@@ -426,6 +508,24 @@ async function sendVacacionSolicitudEmail({
 
     const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
 
+    // Formatear fechas como dd/mm/aaaa — fuera del for porque no dependen del
+    // destinatario y las usan tanto el bloque de correo como el de Telegram.
+    const formatFecha = (value) => {
+      if (!value) return '-';
+      try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      } catch (_) {
+        return String(value);
+      }
+    };
+    const fechaInicioFmt = formatFecha(fechaInicio);
+    const fechaFinFmt = formatFecha(fechaFin);
+
     // Destinatarios administrables desde Configuración (ver nota en
     // sendPermisoEmail sobre el require diferido).
     const { getDestinatariosCorreo } = require('../controllers/notificacionesCorreoController');
@@ -462,23 +562,6 @@ async function sendVacacionSolicitudEmail({
       const rejectUrl = `${apiBase}/vacaciones/solicitudes/${solicitudId}/action?token=${encodeURIComponent(
         tokenReject
       )}`;
-
-      // Formatear fechas como dd/mm/aaaa
-      const formatFecha = (value) => {
-        if (!value) return '-';
-        try {
-          const d = new Date(value);
-          if (Number.isNaN(d.getTime())) return String(value);
-          const dd = String(d.getDate()).padStart(2, '0');
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const yyyy = d.getFullYear();
-          return `${dd}/${mm}/${yyyy}`;
-        } catch (_) {
-          return String(value);
-        }
-      };
-      const fechaInicioFmt = formatFecha(fechaInicio);
-      const fechaFinFmt = formatFecha(fechaFin);
 
 const html = `<!DOCTYPE html>
 <html lang="es">
@@ -586,6 +669,29 @@ const html = `<!DOCTYPE html>
       });
 
       logger.debug(`✅ [sendVacacionSolicitudEmail] Enviado a ${rcpt}`);
+    }
+
+    // Telegram — mismo aviso a quienes tengan el canal activo y ya
+    // vincularon su cuenta. Token de aprobar/rechazar independiente por
+    // destinatario, igual que en el correo (ver bucle de arriba).
+    const { getDestinatariosTelegramConNombre } = require('../controllers/notificacionesCorreoController');
+    const telegramDestVacaciones = await getDestinatariosTelegramConNombre('vacaciones', tenantKey);
+    if (telegramDestVacaciones.length) {
+      const telegramService = require('./telegramService');
+      for (const dest of telegramDestVacaciones) {
+        const tokenApproveTg = jwt.sign(
+          { type: 'vacation_action', solicitudId, action: 'APROBAR', adminNombre: dest.nombre },
+          secret, { expiresIn: '7d' },
+        );
+        const tokenRejectTg = jwt.sign(
+          { type: 'vacation_action', solicitudId, action: 'RECHAZAR', adminNombre: dest.nombre },
+          secret, { expiresIn: '7d' },
+        );
+        const approveUrlTg = `${apiBase}/vacaciones/solicitudes/${solicitudId}/action?token=${encodeURIComponent(tokenApproveTg)}`;
+        const rejectUrlTg = `${apiBase}/vacaciones/solicitudes/${solicitudId}/action?token=${encodeURIComponent(tokenRejectTg)}`;
+        const textoTg = `🔔 <b>Nueva solicitud de ${tipoLegible}</b>\n\n👤 Empleado: ${empleadoNombre || ''} (#${numeroPersonal})\n🏢 Departamento: ${departamento || '-'}\n📅 Desde: ${fechaInicioFmt}\n📅 Hasta: ${fechaFinFmt}\n📌 Días: ${diasSolicitados || 0}\n\n✅ Aprobar: ${approveUrlTg}\n❌ Rechazar: ${rejectUrlTg}`;
+        await telegramService.sendMessage(dest.chatId, textoTg);
+      }
     }
 
     // Confirmación al solicitante (si tiene correo registrado en su perfil).

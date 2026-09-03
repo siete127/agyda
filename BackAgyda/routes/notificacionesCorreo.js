@@ -11,4 +11,9 @@ router.get('/servidor', auth.authenticateToken, controller.getServidorConfig);
 router.put('/servidor', auth.authenticateToken, controller.saveServidorConfig);
 router.post('/servidor/prueba', auth.authenticateToken, controller.enviarPrueba);
 
+// Vinculación de Telegram — cualquier usuario autenticado gestiona la suya propia.
+router.get('/telegram/estado', auth.authenticateToken, controller.getEstadoTelegram);
+router.post('/telegram/codigo', auth.authenticateToken, controller.generarCodigoTelegram);
+router.post('/telegram/desvincular', auth.authenticateToken, controller.desvincularTelegram);
+
 module.exports = router;

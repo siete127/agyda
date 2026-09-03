@@ -1314,6 +1314,16 @@ async function evaluarPosibleBaja(pool, neusId, fecha, tenantKey) {
         umbral: cfg.DIAS_FALTA_UMBRAL,
       });
     }
+
+    // Telegram — mismo aviso a quienes tengan el canal activo para este
+    // módulo y ya vincularon su cuenta.
+    const { getDestinatariosTelegram } = require('./notificacionesCorreoController');
+    const chatIds = await getDestinatariosTelegram('posible_baja', tenantKey);
+    if (chatIds.length > 0) {
+      const telegramService = require('../services/telegramService');
+      const textoTg = `⚠️ <b>Posible baja</b>\n\n${usuario.NEUS_NOMBRES} (${usuario.NEUS_TIPOUSUARIO}) lleva <b>${racha} días de falta consecutivos</b> sin marcar entrada.\n\nUmbral configurado: ${cfg.DIAS_FALTA_UMBRAL} día(s).`;
+      await telegramService.sendToMany(chatIds, textoTg);
+    }
   } catch (e) {
     console.error('Error evaluando posible baja:', e?.message);
   }
