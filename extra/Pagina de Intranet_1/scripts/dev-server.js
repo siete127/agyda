@@ -31,6 +31,10 @@ app.use('/api/contacto', createProxyMiddleware({
 
 app.use('/api', createProxyMiddleware({ target: BACKEND_TARGET, changeOrigin: true }));
 app.use('/uploads', createProxyMiddleware({ target: BACKEND_TARGET, changeOrigin: true }));
+// Imágenes de ArdaWiki, evidencias, fotos de perfil y portadas: en producción
+// IIS las sirve directo bajo /intranet/*; en dev el propio BackAgyda las
+// sirve (ver server.js) así que se proxea igual que /api y /uploads.
+app.use('/intranet', createProxyMiddleware({ target: BACKEND_TARGET, changeOrigin: true }));
 // Chat en vivo (Socket.IO real-time del backend) — necesita upgrade a WebSocket (ver server.on('upgrade') abajo).
 const socketIoProxy = createProxyMiddleware({ target: BACKEND_TARGET, changeOrigin: true, ws: true });
 app.use('/socket.io', socketIoProxy);

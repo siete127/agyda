@@ -906,6 +906,7 @@
                     </div>
                     <div class="modal-section-block">
                         <p id="kbModalContenido" style="white-space:pre-wrap;"></p>
+                        <img id="kbModalEvidencia" alt="Evidencia" style="display:none;max-width:100%;border-radius:8px;margin-top:16px;">
                     </div>
                 </div>
             </div>
@@ -2456,6 +2457,22 @@
                 return div.innerHTML;
             }
 
+            // El contenido de un artículo ArdaWiki es texto plano; las imágenes
+            // adjuntas se guardan como una línea con solo la URL (ver botón
+            // "Adjuntar imagen" del editor). Al renderizar, esas líneas se
+            // muestran como <img> en vez de texto — el resto se escapa igual.
+            const KB_IMG_LINE_REGEX = /^(\/intranet\/ArdaWiki\/\S+|https?:\/\/\S+\.(?:png|jpe?g|gif|webp|svg))$/i;
+            function kbRenderContenidoConImagenes(texto) {
+                const lineas = (texto == null ? '' : String(texto)).split('\n');
+                return lineas.map((linea) => {
+                    if (KB_IMG_LINE_REGEX.test(linea.trim())) {
+                        const src = kbEscapeHtml(linea.trim());
+                        return `<img src="${src}" alt="Imagen del artículo" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
+                    }
+                    return kbEscapeHtml(linea);
+                }).join('<br>');
+            }
+
             async function cargarKb(q) {
                 const grid = document.getElementById('kbGrid');
                 const empty = document.getElementById('kbEmpty');
@@ -2476,7 +2493,14 @@
                     if (empty) empty.style.display = 'none';
 
                     grid.innerHTML = articulos.map(a => {
-                        const resumen = (a.contenido || '').slice(0, 130);
+                        // El resumen de la tarjeta no debe mostrar links de imagen
+                        // crudos — se corta el texto antes de la primera línea que
+                        // sea solo una URL de imagen (ver kbRenderContenidoConImagenes).
+                        const contenidoSinImagenes = (a.contenido || '')
+                            .split('\n')
+                            .filter((linea) => !KB_IMG_LINE_REGEX.test(linea.trim()))
+                            .join('\n');
+                        const resumen = contenidoSinImagenes.slice(0, 130);
                         return `
                             <div class="vacante-card">
                                 <div class="vacante-card-banner"><span class="vacante-card-banner-icon">📖</span></div>
@@ -2485,7 +2509,7 @@
                                     <div class="vacante-meta">
                                         ${a.categoria ? `<span class="vacante-badge">🏷️ ${kbEscapeHtml(a.categoria)}</span>` : ''}
                                     </div>
-                                    <p class="vacante-short-desc">${kbEscapeHtml(resumen)}${(a.contenido || '').length > 130 ? '…' : ''}</p>
+                                    <p class="vacante-short-desc">${kbEscapeHtml(resumen)}${contenidoSinImagenes.length > 130 ? '…' : ''}</p>
                                     <button type="button" class="btn-quick-view" onclick="openKbModal(${a.id})">${currentLang === 'en' ? 'Read solution' : 'Ver solución'}</button>
                                 </div>
                             </div>
@@ -2505,7 +2529,19 @@
 
                 const modal = document.getElementById('kbModal');
                 document.getElementById('kbModalTitulo').innerText = articulo.titulo || '';
-                document.getElementById('kbModalContenido').innerText = articulo.contenido || '';
+                // articulo.evidenciaUrl es el campo dedicado (ver ART_EVIDENCIA_URL);
+                // kbRenderContenidoConImagenes queda solo como compatibilidad con
+                // artículos viejos que aún tienen el link mezclado en el texto.
+                document.getElementById('kbModalContenido').innerHTML = kbRenderContenidoConImagenes(articulo.contenido || '');
+
+                const evidenciaEl = document.getElementById('kbModalEvidencia');
+                if (articulo.evidenciaUrl) {
+                    evidenciaEl.src = articulo.evidenciaUrl;
+                    evidenciaEl.style.display = '';
+                } else {
+                    evidenciaEl.style.display = 'none';
+                    evidenciaEl.removeAttribute('src');
+                }
 
                 const categoriaEl = document.getElementById('kbModalCategoria');
                 if (articulo.categoria) {

@@ -2056,6 +2056,7 @@ html[data-theme="dark"] .vacantes-circle-2 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 26px;
+  align-items: stretch;
 }
 
 .vacantes-grid {
@@ -2156,6 +2157,10 @@ html[data-theme="dark"] .vacantes-circle-2 {
 .vacante-card .btn-quick-view {
   position: relative;
   overflow: hidden;
+  margin-top: auto;
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .vacante-card .btn-quick-view::after {

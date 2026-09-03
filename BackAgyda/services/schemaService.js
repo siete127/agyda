@@ -1440,6 +1440,11 @@ async function ensureKbSchema(pool) {
       -- artículos ya existentes en el sitio público al agregar la columna.
       IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_PUBLICO')
         ALTER TABLE dbo.KB_ARTICULOS ADD ART_PUBLICO BIT NOT NULL DEFAULT 1;
+      -- Imagen de evidencia del artículo (una sola, se reemplaza al subir
+      -- otra) — separada del texto de ART_CONTENIDO para que el link no se
+      -- mezcle con la Solución. NULL = sin evidencia adjunta.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_EVIDENCIA_URL')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_EVIDENCIA_URL NVARCHAR(500) NULL;
     `);
     logger.info('✅ Esquema de ArdaWiki asegurado');
   } catch (err) {

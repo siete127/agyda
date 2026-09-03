@@ -17,6 +17,7 @@ export interface KbArticulo {
   fechaCreacion: string
   fechaActualizacion: string | null
   publico: boolean
+  evidenciaUrl: string | null
 }
 
 // El contenido se guarda como un solo texto en la base de datos (KB_ARTICULOS
@@ -52,6 +53,7 @@ function parseArticulo(raw: Record<string, unknown>): KbArticulo {
     fechaCreacion: String(raw['fechaCreacion'] ?? ''),
     fechaActualizacion: (raw['fechaActualizacion'] as string | null) ?? null,
     publico: raw['publico'] === undefined ? true : Boolean(raw['publico']),
+    evidenciaUrl: (raw['evidenciaUrl'] as string | null) ?? null,
   }
 }
 
@@ -67,12 +69,12 @@ export const kbService = {
     return parseArticulo(data?.data ?? {})
   },
 
-  async create(payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo }): Promise<KbArticulo> {
+  async create(payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo; evidenciaUrl?: string | null }): Promise<KbArticulo> {
     const { data } = await api.post('/kb/articulos', payload)
     return parseArticulo(data?.data ?? {})
   },
 
-  async update(id: number, payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo }): Promise<void> {
+  async update(id: number, payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo; evidenciaUrl?: string | null }): Promise<void> {
     await api.put(`/kb/articulos/${id}`, payload)
   },
 
