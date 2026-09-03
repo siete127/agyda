@@ -1,6 +1,10 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Sparkles, Upload, Check, Loader2, Image as ImageIcon, Film, Info, LayoutGrid, PictureInPicture2, Layers } from 'lucide-react'
+import {
+  Sparkles, UploadCloud, Check, Loader2, Image as ImageIcon, Film, Info,
+  LayoutGrid, PictureInPicture2, Layers, Trash2, Home, MoveVertical, Hand, Heart, RefreshCw, Ban,
+  Snail, Waves, Zap,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
@@ -9,15 +13,17 @@ import {
 } from '@/services/personalizacion.service'
 import { MascotaTablero } from '@/components/ui/MascotaTablero'
 
-const MOVIMIENTOS: { key: MascotaMovimiento; label: string; sub: string }[] = [
-  { key: 'ninguno', label: 'Sin movimiento', sub: 'La imagen queda fija.' },
-  { key: 'flotar', label: 'Flotar', sub: 'Sube y baja suavemente.' },
-  { key: 'saludar', label: 'Saludar', sub: 'Se inclina como si saludara, cada tanto.' },
-  { key: 'latir', label: 'Latir', sub: 'Crece y encoge apenas, como respirando.' },
-  { key: 'balanceo', label: 'Balanceo', sub: 'Se mece de lado a lado.' },
+const MOVIMIENTOS: { key: MascotaMovimiento; label: string; sub: string; icon: typeof Home }[] = [
+  { key: 'ninguno', label: 'Sin movimiento', sub: 'La imagen queda fija.', icon: Ban },
+  { key: 'flotar', label: 'Flotar', sub: 'Sube y baja suavemente.', icon: MoveVertical },
+  { key: 'saludar', label: 'Saludar', sub: 'Se inclina como si saludara, cada tanto.', icon: Hand },
+  { key: 'latir', label: 'Latir', sub: 'Crece y encoge apenas, como respirando.', icon: Heart },
+  { key: 'balanceo', label: 'Balanceo', sub: 'Se mece de lado a lado.', icon: RefreshCw },
 ]
-const VELOCIDADES: { key: MascotaVelocidad; label: string }[] = [
-  { key: 'lenta', label: 'Lenta' }, { key: 'normal', label: 'Normal' }, { key: 'rapida', label: 'Rápida' },
+const VELOCIDADES: { key: MascotaVelocidad; label: string; icon: typeof Snail }[] = [
+  { key: 'lenta', label: 'Lenta', icon: Snail },
+  { key: 'normal', label: 'Normal', icon: Waves },
+  { key: 'rapida', label: 'Rápida', icon: Zap },
 ]
 const MODOS: { key: MascotaModo; label: string; sub: string; icon: typeof LayoutGrid }[] = [
   { key: 'card', label: 'En la card del inicio', sub: 'Como está hoy, dentro del tablero.', icon: LayoutGrid },
@@ -25,10 +31,51 @@ const MODOS: { key: MascotaModo; label: string; sub: string; icon: typeof Layout
   { key: 'ambas', label: 'Ambas', sub: 'En la card del inicio y como widget flotante.', icon: Layers },
 ]
 
+/* ── Cabecera de sección: icono en pill + título ── */
+function SeccionHead({ icon: Icon, titulo, sub }: { icon: typeof Home; titulo: string; sub?: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-2.5">
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div>
+        <p className="text-[0.95rem] font-bold text-gray-800">{titulo}</p>
+        {sub && <p className="text-[0.72rem] text-gray-400">{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
+/* ── Tarjeta de opción seleccionable (icono + label + sub) ── */
+function OpcionCard({ icon: Icon, label, sub, activo, onClick, disabled }: {
+  icon: typeof Home; label: string; sub: string; activo: boolean; onClick: () => void; disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={clsx(
+        'flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors',
+        activo ? 'border-violet-500 bg-violet-50/70' : 'border-gray-200 hover:bg-gray-50',
+        disabled && 'opacity-50',
+      )}
+    >
+      <Icon className={clsx('mt-0.5 h-4 w-4 flex-shrink-0', activo ? 'text-violet-600' : 'text-gray-400')} />
+      <span className="min-w-0">
+        <span className={clsx('block text-[0.82rem] font-semibold', activo ? 'text-violet-700' : 'text-gray-700')}>{label}</span>
+        <span className="mt-0.5 block text-[0.68rem] leading-snug text-gray-400">{sub}</span>
+      </span>
+    </button>
+  )
+}
+
 export function MascotaTab() {
   const qc = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
   const [subiendo, setSubiendo] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [previewModo, setPreviewModo] = useState<'inicio' | 'flotante'>('inicio')
 
   const { data, isLoading } = useQuery({
     queryKey: ['personalizacion'],
@@ -46,7 +93,7 @@ export function MascotaTab() {
     mutationFn: async () => { if (form) await personalizacionService.updateMascota(form) },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['personalizacion'] })
-      toast.success('Mascota actualizada — se aplicó en el tablero')
+      toast.success('Mascota actualizada')
     },
     onError: () => toast.error('No se pudo guardar la mascota'),
   })
@@ -90,36 +137,35 @@ export function MascotaTab() {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
         <div className="space-y-5">
-          {/* Archivo */}
+          {/* ── Archivo ── */}
           <section className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
-            <div className="mb-3 flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-                <ImageIcon className="h-4 w-4" />
-              </div>
-              <p className="text-[0.9rem] font-bold text-gray-800">Imagen o video</p>
-            </div>
-            <p className="mb-3 text-[0.75rem] text-gray-400">PNG, JPG, WEBP, GIF, MP4 o WEBM · máximo 25 MB</p>
+            <SeccionHead icon={ImageIcon} titulo="Imagen o video" />
+            <p className="-mt-2 mb-3 text-[0.75rem] text-gray-400">
+              Formatos permitidos: PNG, JPG, WEBP, GIF, MP4 o WEBM · Tamaño máximo: 25 MB
+            </p>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => inputRef.current?.click()}
-                disabled={subiendo}
-                className="flex items-center gap-2 rounded-xl border border-gray-200 bg-card px-4 py-2.5 text-[0.82rem] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-60"
-              >
-                {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {form.mediaId ? 'Reemplazar' : 'Subir archivo'}
-              </button>
-              {form.mediaId && (
-                <>
-                  <span className="flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1 text-[0.72rem] font-semibold text-violet-700">
-                    {esVideo ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                    {esVideo ? 'Video' : 'Imagen'}
-                  </span>
-                  <button onClick={quitar} className="text-[0.72rem] font-semibold text-gray-400 hover:text-red-500">
-                    Quitar (usar la del sistema)
-                  </button>
-                </>
+            <div
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault(); setDragOver(false)
+                elegirArchivo(e.dataTransfer.files?.[0])
+              }}
+              className={clsx(
+                'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition-colors',
+                dragOver ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-violet-400 hover:bg-gray-50/60',
               )}
+            >
+              {subiendo ? (
+                <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+              ) : (
+                <UploadCloud className="h-6 w-6 text-gray-400" />
+              )}
+              <p className="text-[0.85rem] font-semibold text-gray-700">
+                {form.mediaId ? 'Reemplazar archivo' : 'Subir archivo'}
+              </p>
+              <p className="text-[0.72rem] text-gray-400">Arrastra o selecciona un archivo</p>
               <input
                 ref={inputRef}
                 type="file"
@@ -129,103 +175,128 @@ export function MascotaTab() {
               />
             </div>
 
+            {form.mediaId && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className="flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1 text-[0.72rem] font-semibold text-violet-700">
+                  {esVideo ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                  {esVideo ? 'Video' : 'Imagen'} cargado
+                </span>
+                <button onClick={quitar} className="text-[0.72rem] font-semibold text-gray-400 hover:text-red-500">
+                  Quitar (usar la del sistema)
+                </button>
+              </div>
+            )}
+
             <div className="mt-3 flex items-start gap-2 rounded-xl bg-violet-50/60 px-3 py-2.5">
               <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500" />
-              <p className="text-[0.72rem] text-gray-500">
-                Si no subes nada, el tablero usa la mascota del sistema. El movimiento solo aplica a imágenes —
-                un video ya trae su propia animación.
+              <p className="text-[0.72rem] leading-relaxed text-gray-500">
+                Sin nada subido, el tablero usa la mascota del sistema.<br />
+                El movimiento solo aplica a imágenes — un video ya trae su propia animación.
               </p>
             </div>
           </section>
 
-          {/* Modo de presentación */}
+          {/* ── Dónde se muestra ── */}
           <section className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
-            <div className="mb-3 flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-                <PictureInPicture2 className="h-4 w-4" />
-              </div>
-              <p className="text-[0.9rem] font-bold text-gray-800">Dónde se muestra</p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <SeccionHead icon={PictureInPicture2} titulo="Dónde se muestra" />
+            <div className="grid gap-2.5 sm:grid-cols-3">
               {MODOS.map((m) => (
-                <button
+                <OpcionCard
                   key={m.key}
+                  icon={m.icon}
+                  label={m.label}
+                  sub={m.sub}
+                  activo={form.modo === m.key}
                   onClick={() => set('modo', m.key)}
-                  className={clsx('rounded-xl border p-3 text-left transition-colors',
-                    form.modo === m.key ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:bg-gray-50')}
-                >
-                  <m.icon className={clsx('h-4 w-4', form.modo === m.key ? 'text-violet-600' : 'text-gray-400')} />
-                  <p className={clsx('mt-1.5 text-[0.8rem] font-semibold', form.modo === m.key ? 'text-violet-700' : 'text-gray-700')}>{m.label}</p>
-                  <p className="mt-0.5 text-[0.66rem] text-gray-400">{m.sub}</p>
-                </button>
+                />
               ))}
             </div>
           </section>
 
-          {/* Movimiento — solo relevante para imagen */}
-          <section className={clsx('rounded-2xl border border-gray-100 bg-card p-5 shadow-card', esVideo && 'opacity-50')}>
-            <div className="mb-3 flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-[0.9rem] font-bold text-gray-800">Movimiento</p>
-                <p className="text-[0.72rem] text-gray-400">Solo aplica a imágenes.</p>
-              </div>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-3">
+          {/* ── Movimiento ── */}
+          <section className={clsx('rounded-2xl border border-gray-100 bg-card p-5 shadow-card', esVideo && 'opacity-60')}>
+            <SeccionHead icon={Sparkles} titulo="Movimiento" sub="Solo aplica a imágenes." />
+            <div className="grid gap-2.5 sm:grid-cols-3">
               {MOVIMIENTOS.map((m) => (
-                <button
+                <OpcionCard
                   key={m.key}
+                  icon={m.icon}
+                  label={m.label}
+                  sub={m.sub}
+                  activo={form.movimiento === m.key}
                   disabled={esVideo}
                   onClick={() => set('movimiento', m.key)}
-                  className={clsx('rounded-xl border p-3 text-left transition-colors',
-                    form.movimiento === m.key ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:bg-gray-50')}
-                >
-                  <p className={clsx('text-[0.8rem] font-semibold', form.movimiento === m.key ? 'text-violet-700' : 'text-gray-700')}>{m.label}</p>
-                  <p className="mt-0.5 text-[0.66rem] text-gray-400">{m.sub}</p>
-                </button>
+                />
               ))}
             </div>
 
-            <p className="mb-2 mt-4 text-[0.72rem] font-semibold uppercase tracking-wide text-gray-500">Velocidad</p>
+            <p className="mb-2 mt-4 text-[0.72rem] font-semibold text-gray-500">Velocidad</p>
             <div className="flex gap-2 rounded-xl border border-gray-200 bg-gray-50/60 p-1">
               {VELOCIDADES.map((v) => (
                 <button
                   key={v.key}
                   disabled={esVideo || form.movimiento === 'ninguno'}
                   onClick={() => set('velocidad', v.key)}
-                  className={clsx('flex-1 rounded-lg py-2 text-[0.8rem] font-semibold transition-all',
-                    form.velocidad === v.key ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700')}
+                  className={clsx(
+                    'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[0.8rem] font-semibold transition-all',
+                    form.velocidad === v.key ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                  )}
                 >
-                  {v.label}
+                  <v.icon className="h-3.5 w-3.5" /> {v.label}
                 </button>
               ))}
             </div>
           </section>
         </div>
 
-        {/* Vista previa */}
+        {/* ── Vista previa ── */}
         <div className="lg:sticky lg:top-4 self-start">
           <div className="rounded-2xl border border-gray-100 bg-card p-4 shadow-card">
-            <p className="mb-1 text-[0.8rem] font-bold text-gray-800">Vista previa</p>
-            <p className="mb-3 text-[0.68rem] text-gray-400">Igual a como se verá en el tablero.</p>
-            <div className="relative overflow-hidden rounded-xl"
-              style={{ height: 340, background: 'linear-gradient(160deg, #10203F 0%, #0B1730 100%)' }}>
-              <MascotaTablero mascota={form} className="p-4" />
+            <p className="text-[0.85rem] font-bold text-gray-800">Vista previa</p>
+            <p className="mb-3 text-[0.68rem] text-gray-400">Así se verá en el tablero y como widget flotante.</p>
+
+            {previewModo === 'inicio' ? (
+              <div className="relative overflow-hidden rounded-xl"
+                style={{ height: 300, background: 'linear-gradient(160deg, #10203F 0%, #0B1730 100%)' }}>
+                <MascotaTablero mascota={form} className="p-4" />
+              </div>
+            ) : (
+              <div className="relative overflow-hidden rounded-xl border border-gray-100 bg-surface" style={{ height: 300 }}>
+                {/* Simula el rincón de la pantalla */}
+                <div className="absolute inset-0 opacity-40 [background:repeating-linear-gradient(0deg,transparent,transparent_18px,rgba(0,0,0,0.04)_18px,rgba(0,0,0,0.04)_19px)]" />
+                <div className="absolute bottom-2 right-2 h-40 w-32">
+                  <MascotaTablero mascota={form} className="drop-shadow-xl" />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3 flex gap-2 rounded-xl border border-gray-200 bg-gray-50/60 p-1">
+              <button
+                onClick={() => setPreviewModo('inicio')}
+                className={clsx('flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[0.75rem] font-semibold transition-all',
+                  previewModo === 'inicio' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700')}
+              >
+                <Home className="h-3.5 w-3.5" /> Inicio
+              </button>
+              <button
+                onClick={() => setPreviewModo('flotante')}
+                className={clsx('flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[0.75rem] font-semibold transition-all',
+                  previewModo === 'flotante' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700')}
+              >
+                <PictureInPicture2 className="h-3.5 w-3.5" /> Widget flotante
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-gray-100 bg-card px-5 py-4 shadow-card">
+      {/* ── Footer ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-100 bg-card px-5 py-4 shadow-card">
         <button
           onClick={() => data && setForm(data.mascota)}
-          className="rounded-xl px-4 py-2.5 text-[0.8rem] font-semibold text-gray-500 hover:bg-gray-100"
+          className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-4 py-2.5 text-[0.8rem] font-semibold text-gray-500 transition-colors hover:bg-gray-50"
         >
-          Descartar cambios
+          <Trash2 className="h-3.5 w-3.5" /> Descartar cambios
         </button>
         <button
           onClick={() => guardar.mutate()}
