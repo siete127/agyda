@@ -26,6 +26,8 @@ function mapFactura(r) {
     metodoPago: r.FAC_METODO_PAGO,
     estatus: r.FAC_ESTATUS,
     error: r.FAC_ERROR,
+    saldo: r.FAC_SALDO != null ? Number(r.FAC_SALDO) : null,
+    pagada: !!r.FAC_PAGADA,
     fechaTimbrado: r.FAC_FECHA_TIMBRADO,
     fechaCancelacion: r.FAC_FECHA_CANCELACION,
     fecha: r.FAC_FECHA,
@@ -169,10 +171,12 @@ exports.desdeCotizacion = async (req, res) => {
       .query(`INSERT INTO dbo.FACTURAS
         (FAC_COT_ID,FAC_OPO_ID,FAC_CLIENTE_ID,FAC_UUID,FAC_PAC_ID,FAC_SERIE,FAC_FOLIO,
          FAC_EMISOR_RFC,FAC_RECEPTOR_RFC,FAC_RECEPTOR_NOMBRE,FAC_SUBTOTAL,FAC_IVA,FAC_TOTAL,
-         FAC_USO_CFDI,FAC_FORMA_PAGO,FAC_METODO_PAGO,FAC_ESTATUS,FAC_XML,FAC_FECHA_TIMBRADO,FAC_CREADO_POR)
+         FAC_USO_CFDI,FAC_FORMA_PAGO,FAC_METODO_PAGO,FAC_ESTATUS,FAC_XML,FAC_FECHA_TIMBRADO,FAC_CREADO_POR,
+         FAC_SALDO)
         OUTPUT INSERTED.FAC_ID id
         VALUES (@cot,@opo,@cli,@uuid,@pac,@serie,@folio,@erfc,@rrfc,@rnom,@sub,@iva,@tot,
-                @uso,@fp,@mp,@est,@xml,@ft,@by)`);
+                @uso,@fp,@mp,@est,@xml,@ft,@by,
+                @tot)`);
     const facId = ins.recordset[0].id;
 
     await pool.request().input('fac', sql.Int, facId).input('cot', sql.Int, cotId)
@@ -246,5 +250,87 @@ exports.descargar = async (req, res) => {
   } catch (e) {
     console.error('facturas.descargar:', e.message);
     res.status(502).send('No se pudo descargar el documento');
+  }
+};
+
+// ── Pagos ────────────────────────────────────────────────────────────────
+exports.listPagos = async (req, res) => {
+  try {
+    const data = await facturacionService.listPagos(req.user?.empresa, Number(req.params.id));
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error al listar pagos' });
+  }
+};
+
+exports.registrarPago = async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.fechaPago || !b.formaPago || b.monto == null) {
+      return res.status(400).json({ success: false, message: 'Faltan fecha, forma de pago o monto' });
+    }
+    const r = await facturacionService.registrarPago(req.user?.empresa, Number(req.params.id), {
+      fechaPago: b.fechaPago, formaPago: b.formaPago, monto: Number(b.monto), moneda: b.moneda || 'MXN',
+      usuarioId: req.headers['usuarioid'] ? Number(req.headers['usuarioid']) : null,
+    });
+    res.json({ success: true, data: r });
+  } catch (e) {
+    console.error('facturas.registrarPago:', e.message);
+    res.status(400).json({ success: false, message: e.message });
+  }
+};
+
+exports.cancelarPago = async (req, res) => {
+  try {
+    await facturacionService.cancelarPago(req.user?.empresa, Number(req.params.pagoId), req.body?.motivo);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(400).json({ success: false, message: e.message });
+  }
+};
+
+// ── Notas de crédito ─────────────────────────────────────────────────────
+exports.listNotasCredito = async (req, res) => {
+  try {
+    const data = await facturacionService.listNotasCredito(req.user?.empresa, Number(req.params.id));
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error al listar notas de crédito' });
+  }
+};
+
+exports.emitirNotaCredito = async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await facturacionService.emitirNotaCredito(req.user?.empresa, Number(req.params.id), {
+      motivo: b.motivo, tipoRelacion: b.tipoRelacion, items: b.items,
+      usuarioId: req.headers['usuarioid'] ? Number(req.headers['usuarioid']) : null,
+    });
+    res.json({ success: true, data: r });
+  } catch (e) {
+    console.error('facturas.emitirNotaCredito:', e.message);
+    res.status(400).json({ success: false, message: e.message });
+  }
+};
+
+exports.cancelarNotaCredito = async (req, res) => {
+  try {
+    await facturacionService.cancelarNotaCredito(req.user?.empresa, Number(req.params.ncId), req.body?.motivo);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(400).json({ success: false, message: e.message });
+  }
+};
+
+exports.descargarSecundario = async (req, res) => {
+  try {
+    const tipo = req.params.tipo === 'pago' ? 'pago' : 'nota-credito';
+    const formato = req.params.formato === 'xml' ? 'xml' : 'pdf';
+    const buf = await facturacionService.descargarSecundario(req.user?.empresa, tipo, Number(req.params.docId), formato);
+    res.setHeader('Content-Type', formato === 'xml' ? 'application/xml' : 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${tipo}-${req.params.docId}.${formato}"`);
+    res.send(buf);
+  } catch (e) {
+    res.status(502).send(e.message || 'No se pudo descargar');
   }
 };

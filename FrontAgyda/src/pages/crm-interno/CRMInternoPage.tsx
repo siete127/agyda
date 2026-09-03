@@ -16,8 +16,9 @@ import { useCurrentUser } from '@/hooks/useAuth'
 import { useAuthStore } from '@/stores/auth.store'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { crmService } from '@/services/crm.service'
-import { facturacionService, type ReceptorFiscal } from '@/services/facturacion.service'
+import { facturacionService, type ReceptorFiscal, type Factura, type NotaCreditoItemInput } from '@/services/facturacion.service'
 import { satService } from '@/services/sat.service'
+import { SatClaveInput } from '@/components/ui/SatClaveInput'
 import { api } from '@/lib/axios'
 import {
   CRM_ETAPAS, CRM_ACTIVIDAD_TIPOS,
@@ -966,23 +967,7 @@ function OportunidadDrawer({
                     </span>
                   )}
                 </div>
-                {fac && (
-                  <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-[0.68rem]">
-                    <span className={clsx('font-semibold',
-                      fac.estatus === 'timbrada' ? 'text-emerald-700' : fac.estatus === 'cancelada' ? 'text-red-600' : 'text-amber-700')}>
-                      {fac.estatus === 'timbrada' ? 'Factura timbrada' : fac.estatus === 'cancelada' ? 'Factura cancelada' : 'Pre-factura'}
-                    </span>
-                    {' '}· {fac.serie}{fac.folio}{fac.uuid ? ` · ${fac.uuid.slice(0, 8)}…` : ''}
-                    {fac.estatus === 'timbrada' && (
-                      <>
-                        {' '}
-                        <a href={facturacionService.documentoUrl(fac.id, 'pdf')} target="_blank" rel="noreferrer" className="text-blue-600 underline">PDF</a>
-                        {' '}
-                        <a href={facturacionService.documentoUrl(fac.id, 'xml')} target="_blank" rel="noreferrer" className="text-blue-600 underline">XML</a>
-                      </>
-                    )}
-                  </div>
-                )}
+                {fac && <FacturaBloque factura={fac} contacto={contactoActual} />}
                 <div className="flex gap-1.5 flex-wrap items-center">
                   <button onClick={() => window.open(`/api/crm/cotizaciones/${c.id}/pdf`, '_blank')} className="text-xs text-gray-500 hover:text-blue-600 underline">PDF</button>
                   {c.estatus === 'borrador' && <button onClick={() => { setEditCot(c); setShowCotModal(true) }} className="text-xs text-gray-500 hover:text-blue-600 underline">Editar</button>}
@@ -1938,6 +1923,263 @@ function FacturarModal({ cotId, contacto, onClose, onDone }: {
           <button onClick={() => facturar.mutate()} disabled={!valido || facturar.isPending}
             className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50">
             {facturar.isPending ? 'Generando…' : 'Facturar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Bloque de factura de una cotización: estado, saldo, pagos, notas de crédito ── */
+function FacturaBloque({ factura, contacto }: { factura: Factura; contacto: CRMContacto | null }) {
+  const qc = useQueryClient()
+  const { can } = useActionAccess()
+  const [showPago, setShowPago] = useState(false)
+  const [showNC, setShowNC] = useState(false)
+  const timbrada = factura.estatus === 'timbrada'
+  const esPPD = factura.metodoPago === 'PPD'
+
+  const { data: pagos = [] } = useQuery({
+    queryKey: ['factura-pagos', factura.id],
+    queryFn: () => facturacionService.listPagos(factura.id),
+    enabled: timbrada || esPPD,
+  })
+  const { data: notas = [] } = useQuery({
+    queryKey: ['factura-nc', factura.id],
+    queryFn: () => facturacionService.listNotasCredito(factura.id),
+    enabled: timbrada,
+  })
+
+  const saldo = factura.saldo ?? factura.total ?? 0
+  const total = factura.total ?? 0
+  const pagadoPct = total > 0 ? Math.min(100, ((total - saldo) / total) * 100) : 0
+
+  const invalidar = () => {
+    qc.invalidateQueries({ queryKey: ['crm-facturas'] })
+    qc.invalidateQueries({ queryKey: ['factura-pagos', factura.id] })
+    qc.invalidateQueries({ queryKey: ['factura-nc', factura.id] })
+  }
+
+  return (
+    <div className="rounded-lg bg-gray-50 px-2.5 py-2 text-[0.68rem] space-y-1.5">
+      <div>
+        <span className={clsx('font-semibold',
+          factura.estatus === 'timbrada' ? 'text-emerald-700' : factura.estatus === 'cancelada' ? 'text-red-600' : factura.estatus === 'error' ? 'text-red-600' : 'text-amber-700')}>
+          {factura.estatus === 'timbrada' ? 'Factura timbrada' : factura.estatus === 'cancelada' ? 'Factura cancelada' : factura.estatus === 'error' ? 'Error de timbrado' : 'Pre-factura'}
+        </span>
+        {' '}· {factura.serie}{factura.folio}{factura.uuid ? ` · ${factura.uuid.slice(0, 8)}…` : ''}
+        {timbrada && (
+          <>
+            {' '}
+            <a href={facturacionService.documentoUrl(factura.id, 'pdf')} target="_blank" rel="noreferrer" className="text-blue-600 underline">PDF</a>
+            {' '}
+            <a href={facturacionService.documentoUrl(factura.id, 'xml')} target="_blank" rel="noreferrer" className="text-blue-600 underline">XML</a>
+          </>
+        )}
+        {factura.error && <p className="text-red-600 mt-0.5">{factura.error}</p>}
+      </div>
+
+      {(timbrada || esPPD) && factura.estatus !== 'cancelada' && (
+        <>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 flex-1 rounded-full bg-gray-200 overflow-hidden">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pagadoPct}%` }} />
+            </div>
+            <span className="text-gray-500">
+              Saldo ${saldo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          {pagos.filter((p) => p.estatus !== 'cancelado').map((p) => (
+            <div key={p.id} className="flex items-center justify-between text-gray-500">
+              <span>Pago {p.parcialidad}: ${p.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} · {p.estatus}</span>
+              {p.estatus === 'timbrado' && (
+                <span>
+                  <a href={facturacionService.pagoDocumentoUrl(p.id, 'pdf')} target="_blank" rel="noreferrer" className="text-blue-600 underline">PDF</a>
+                  {' '}
+                  <a href={facturacionService.pagoDocumentoUrl(p.id, 'xml')} target="_blank" rel="noreferrer" className="text-blue-600 underline">XML</a>
+                </span>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
+      {notas.map((nc) => (
+        <div key={nc.id} className="flex items-center justify-between text-gray-500">
+          <span>NC {nc.serie}{nc.folio}: ${nc.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })} · {nc.estatus}</span>
+          {nc.estatus === 'timbrada' && (
+            <span>
+              <a href={facturacionService.notaCreditoDocumentoUrl(nc.id, 'pdf')} target="_blank" rel="noreferrer" className="text-blue-600 underline">PDF</a>
+              {' '}
+              <a href={facturacionService.notaCreditoDocumentoUrl(nc.id, 'xml')} target="_blank" rel="noreferrer" className="text-blue-600 underline">XML</a>
+            </span>
+          )}
+        </div>
+      ))}
+
+      {factura.estatus !== 'cancelada' && (
+        <div className="flex gap-2 flex-wrap pt-0.5">
+          {can('crm', 'facturar') && saldo > 0.01 && (
+            <button onClick={() => setShowPago(true)} className="font-semibold text-emerald-700 hover:text-emerald-800 underline">Registrar pago</button>
+          )}
+          {can('crm', 'nota-credito') && timbrada && (
+            <button onClick={() => setShowNC(true)} className="font-semibold text-violet-700 hover:text-violet-800 underline">Nota de crédito</button>
+          )}
+        </div>
+      )}
+
+      {showPago && (
+        <RegistrarPagoModal
+          facturaId={factura.id}
+          saldo={saldo}
+          onClose={() => setShowPago(false)}
+          onDone={() => { setShowPago(false); invalidar() }}
+        />
+      )}
+      {showNC && (
+        <NotaCreditoModal
+          factura={factura}
+          contacto={contacto}
+          onClose={() => setShowNC(false)}
+          onDone={() => { setShowNC(false); invalidar() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function RegistrarPagoModal({ facturaId, saldo, onClose, onDone }: {
+  facturaId: number; saldo: number; onClose: () => void; onDone: () => void
+}) {
+  const { data: formas = [] } = useQuery({ queryKey: ['sat', 'forma'], queryFn: () => satService.formaPago(), staleTime: Infinity })
+  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [formaPago, setFormaPago] = useState('03')
+  const [monto, setMonto] = useState(String(saldo))
+
+  const registrar = useMutation({
+    mutationFn: () => facturacionService.registrarPago(facturaId, {
+      fechaPago: new Date(fecha).toISOString(), formaPago, monto: Number(monto),
+    }),
+    onSuccess: (r: { data?: { cfdi?: string; error?: string } }) => {
+      if (r?.data?.error) toast.error(`Pago registrado, pero el CFDI falló: ${r.data.error}`)
+      else toast.success(r?.data?.cfdi === 'timbrado' ? 'Pago timbrado (complemento)' : 'Pago registrado')
+      onDone()
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message ?? 'No se pudo registrar el pago'),
+  })
+
+  const field = 'w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-violet-500'
+  const valido = Number(monto) > 0 && Number(monto) <= saldo + 0.01
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3">
+        <h3 className="font-bold text-gray-900">Registrar pago</h3>
+        <p className="text-xs text-gray-500">Saldo pendiente: ${saldo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+        <label className="block">
+          <span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Fecha del pago</span>
+          <input type="date" className={field} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Forma de pago</span>
+          <select className={field} value={formaPago} onChange={(e) => setFormaPago(e.target.value)}>
+            {formas.map((f) => <option key={f.c} value={f.c}>{f.c} — {f.d}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Monto</span>
+          <input type="number" min="0" step="0.01" className={field} value={monto} onChange={(e) => setMonto(e.target.value)} />
+        </label>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={() => registrar.mutate()} disabled={!valido || registrar.isPending}
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+            {registrar.isPending ? 'Guardando…' : 'Registrar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NotaCreditoModal({ factura, contacto, onClose, onDone }: {
+  factura: Factura; contacto: CRMContacto | null; onClose: () => void; onDone: () => void
+}) {
+  const [modo, setModo] = useState<'total' | 'parcial'>('total')
+  const [motivo, setMotivo] = useState('')
+  const [items, setItems] = useState<NotaCreditoItemInput[]>([
+    { descripcion: contacto?.empresa ? `Devolución — ${contacto.empresa}` : 'Devolución', cantidad: 1, precioUnit: 0, ivaTasa: 0.16 },
+  ])
+
+  const emitir = useMutation({
+    mutationFn: () => facturacionService.emitirNotaCredito(factura.id, {
+      motivo: motivo || undefined,
+      items: modo === 'parcial' ? items : undefined,
+    }),
+    onSuccess: (r: { data?: { estatus?: string } }) => {
+      toast.success(r?.data?.estatus === 'timbrada' ? 'Nota de crédito timbrada' : 'Pre-nota de crédito generada')
+      onDone()
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message ?? 'No se pudo emitir la nota de crédito'),
+  })
+
+  const field = 'w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-violet-500'
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-3 max-h-[85vh] overflow-y-auto">
+        <h3 className="font-bold text-gray-900">Nota de crédito</h3>
+        <p className="text-xs text-gray-500">Factura {factura.serie}{factura.folio} · total ${Number(factura.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          {(['total', 'parcial'] as const).map((m) => (
+            <button key={m} onClick={() => setModo(m)}
+              className={clsx('rounded-xl border-2 py-2 text-xs font-semibold', modo === m ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-gray-200 text-gray-400')}>
+              {m === 'total' ? 'NC total' : 'NC parcial'}
+            </button>
+          ))}
+        </div>
+        {modo === 'total' && (
+          <p className="text-xs text-gray-500">Se emite por el importe completo de la factura.</p>
+        )}
+        {modo === 'parcial' && (
+          <div className="space-y-2">
+            {items.map((it, i) => (
+              <div key={i} className="rounded-xl border border-gray-100 p-2 space-y-1.5">
+                <input className={field} placeholder="Descripción" value={it.descripcion}
+                  onChange={(e) => setItems(items.map((x, idx) => idx === i ? { ...x, descripcion: e.target.value } : x))} />
+                <div className="grid grid-cols-3 gap-1.5">
+                  <input type="number" min="0" step="0.001" className={field} placeholder="Cant." value={it.cantidad}
+                    onChange={(e) => setItems(items.map((x, idx) => idx === i ? { ...x, cantidad: Number(e.target.value) } : x))} />
+                  <input type="number" min="0" step="0.01" className={field} placeholder="P. unit" value={it.precioUnit}
+                    onChange={(e) => setItems(items.map((x, idx) => idx === i ? { ...x, precioUnit: Number(e.target.value) } : x))} />
+                  <input type="number" min="0" max="1" step="0.01" className={field} placeholder="IVA (0.16)" value={it.ivaTasa}
+                    onChange={(e) => setItems(items.map((x, idx) => idx === i ? { ...x, ivaTasa: Number(e.target.value) } : x))} />
+                </div>
+                <div className="flex justify-between">
+                  <SatClaveInput tipo="prod-serv" value={it.claveProdServ ?? null} label={null}
+                    onChange={(cl: string | null) => setItems(items.map((x, idx) => idx === i ? { ...x, claveProdServ: cl } : x))}
+                    className="flex-1" />
+                  {items.length > 1 && (
+                    <button onClick={() => setItems(items.filter((_, idx) => idx !== i))} className="ml-2 text-red-500 text-xs">Quitar</button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precioUnit: 0, ivaTasa: 0.16 }])}
+              className="text-xs text-blue-600 underline">+ Agregar renglón</button>
+          </div>
+        )}
+        <label className="block">
+          <span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Motivo</span>
+          <input className={field} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Descuento, devolución, corrección…" />
+        </label>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={() => emitir.mutate()} disabled={emitir.isPending}
+            className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50">
+            {emitir.isPending ? 'Generando…' : 'Emitir'}
           </button>
         </div>
       </div>

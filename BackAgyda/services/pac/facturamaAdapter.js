@@ -77,34 +77,61 @@ async function listarCSDs(cfg) {
   return req(cfg, 'GET', '/api-lite/csds');
 }
 
-function buildPayload(cfdi) {
-  const items = (cfdi.conceptos || []).map((c) => {
-    const base = Number(c.importe != null ? c.importe : (Number(c.cantidad) || 0) * (Number(c.valorUnitario) || 0));
-    const ivaTasa = c.ivaTasa != null ? Number(c.ivaTasa) : 0.16;
-    const tieneIva = ivaTasa > 0;
-    const item = {
-      ProductCode: c.claveProdServ || '01010101',
-      UnitCode: c.claveUnidad || 'H87',
-      Description: c.descripcion || '',
-      Quantity: Number(c.cantidad) || 1,
-      UnitPrice: Number(c.valorUnitario) || 0,
-      Subtotal: base,
-      TaxObject: tieneIva ? '02' : '01',
-      Total: tieneIva ? base * (1 + ivaTasa) : base,
-    };
-    if (tieneIva) {
-      item.Taxes = [{
-        Total: base * ivaTasa,
-        Name: 'IVA',
-        Base: base,
-        Rate: ivaTasa,
-        IsRetention: false,
-        Type: 'Federal',
-      }];
-    }
-    return item;
-  });
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
+function buildIssuer(emisor) {
+  return {
+    Rfc: emisor.rfc,
+    Name: emisor.nombre,
+    FiscalRegime: String(emisor.regimenFiscal || '').trim(),
+  };
+}
+
+function buildReceiver(receptor, usoDefault) {
+  return {
+    Rfc: receptor.rfc,
+    Name: receptor.nombre,
+    CfdiUse: receptor.usoCfdi || usoDefault,
+    FiscalRegime: String(receptor.regimenFiscal || '616').trim(),
+    TaxZipCode: receptor.cp,
+  };
+}
+
+function mapItem(c) {
+  const base = round2(c.importe != null ? c.importe : (Number(c.cantidad) || 0) * (Number(c.valorUnitario) || 0));
+  const ivaTasa = c.ivaTasa != null ? Number(c.ivaTasa) : 0.16;
+  const tieneIva = ivaTasa > 0;
+  const item = {
+    ProductCode: c.claveProdServ || '01010101',
+    UnitCode: c.claveUnidad || 'H87',
+    Description: c.descripcion || '',
+    Quantity: Number(c.cantidad) || 1,
+    UnitPrice: Number(c.valorUnitario) || 0,
+    Subtotal: base,
+    TaxObject: tieneIva ? '02' : '01',
+    Total: tieneIva ? round2(base * (1 + ivaTasa)) : base,
+  };
+  if (tieneIva) {
+    item.Taxes = [{
+      Total: round2(base * ivaTasa),
+      Name: 'IVA',
+      Base: base,
+      Rate: ivaTasa,
+      IsRetention: false,
+      Type: 'Federal',
+    }];
+  }
+  return item;
+}
+
+// Fecha ISO en hora México sin "Z" — Facturama rechaza fechas futuras en UTC.
+function fechaMexicoIso(fecha) {
+  const d = new Date(new Date(fecha).toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function buildPayload(cfdi) {
   return {
     Serie: cfdi.serie || 'A',
     Folio: cfdi.folio != null ? String(cfdi.folio) : undefined,
@@ -113,27 +140,13 @@ function buildPayload(cfdi) {
     PaymentForm: cfdi.formaPago || '99',
     PaymentMethod: cfdi.metodoPago || 'PUE',
     CfdiType: 'I',
-    Issuer: {
-      Rfc: cfdi.emisor.rfc,
-      Name: cfdi.emisor.nombre,
-      FiscalRegime: String(cfdi.emisor.regimenFiscal || '').trim(),
-    },
-    Receiver: {
-      Rfc: cfdi.receptor.rfc,
-      Name: cfdi.receptor.nombre,
-      CfdiUse: cfdi.receptor.usoCfdi || 'G03',
-      FiscalRegime: String(cfdi.receptor.regimenFiscal || '616').trim(),
-      TaxZipCode: cfdi.receptor.cp,
-    },
-    Items: items,
+    Issuer: buildIssuer(cfdi.emisor),
+    Receiver: buildReceiver(cfdi.receptor, 'G03'),
+    Items: (cfdi.conceptos || []).map(mapItem),
   };
 }
 
-async function timbrar(cfg, cfdi) {
-  const g = validarModoUrl(cfg.modo, cfg.baseUrl);
-  if (!g.ok) throw new Error(g.message);
-  const payload = buildPayload(cfdi);
-  const r = await req(cfg, 'POST', '/api-lite/3/cfdis', payload);
+function resultadoTimbre(r, payload) {
   const uuid = r?.Complement?.TaxStamp?.Uuid || r?.Uuid || null;
   return {
     uuid,
@@ -143,9 +156,86 @@ async function timbrar(cfg, cfdi) {
     subtotal: r?.Subtotal ?? null,
     iva: r?.Taxes?.reduce?.((s, t) => s + Number(t.Total || 0), 0) ?? null,
     total: r?.Total ?? null,
-    xml: null, // se descarga aparte
+    xml: null,
     raw: r,
   };
+}
+
+async function timbrar(cfg, cfdi) {
+  const g = validarModoUrl(cfg.modo, cfg.baseUrl);
+  if (!g.ok) throw new Error(g.message);
+  const payload = buildPayload(cfdi);
+  const r = await req(cfg, 'POST', '/api-lite/3/cfdis', payload);
+  return resultadoTimbre(r, payload);
+}
+
+// CFDI tipo P — recepción de pago para una factura PPD.
+// { emisor, receptor, pago: { fecha, formaPago, monto, moneda }, relacionado: { uuid, serie, folio, parcialidad, saldoAnterior, saldoInsoluto } }
+async function timbrarComplementoPago(cfg, { emisor, receptor, pago, relacionado }) {
+  const g = validarModoUrl(cfg.modo, cfg.baseUrl);
+  if (!g.ok) throw new Error(g.message);
+
+  const monto = round2(pago.monto);
+  const moneda = pago.moneda || 'MXN';
+  const RATE = 0.16;
+  const base = round2(monto / (1 + RATE));
+  const iva = round2(base * RATE);
+
+  const relatedDoc = {
+    Uuid: relacionado.uuid,
+    ...(relacionado.serie ? { Serie: relacionado.serie } : {}),
+    ...(relacionado.folio != null && relacionado.folio !== '' ? { Folio: String(relacionado.folio) } : {}),
+    Currency: moneda,
+    PaymentMethod: 'PPD',
+    PartialityNumber: Number(relacionado.parcialidad) || 1,
+    PreviousBalanceAmount: round2(relacionado.saldoAnterior),
+    AmountPaid: monto,
+    ImpSaldoInsoluto: round2(relacionado.saldoInsoluto),
+    TaxObject: '02',
+    Taxes: [{ Total: iva, Name: 'IVA', Base: base, Rate: RATE, IsRetention: false }],
+  };
+
+  const payload = {
+    CfdiType: 'P',
+    NameId: '14',
+    Folio: String(Date.now()).slice(-6),
+    ExpeditionPlace: emisor.cp,
+    Issuer: buildIssuer(emisor),
+    Receiver: { ...buildReceiver(receptor, 'CP01'), CfdiUse: 'CP01' },
+    Complemento: {
+      Payments: [{
+        Date: fechaMexicoIso(pago.fecha),
+        PaymentForm: pago.formaPago,
+        Currency: moneda,
+        Amount: monto,
+        RelatedDocuments: [relatedDoc],
+      }],
+    },
+  };
+  const r = await req(cfg, 'POST', '/api-lite/3/cfdis', payload);
+  return resultadoTimbre(r, payload);
+}
+
+// CFDI tipo E — egreso / nota de crédito relacionada a una factura.
+// { emisor, receptor, items: [...], relacionUuid, tipoRelacion, formaPago, metodoPago, serie, folio }
+async function timbrarEgreso(cfg, { emisor, receptor, items, relacionUuid, tipoRelacion, formaPago, metodoPago, serie, folio }) {
+  const g = validarModoUrl(cfg.modo, cfg.baseUrl);
+  if (!g.ok) throw new Error(g.message);
+  const payload = {
+    Serie: serie || 'NC',
+    Folio: folio != null ? String(folio) : undefined,
+    CfdiType: 'E',
+    Currency: 'MXN',
+    ExpeditionPlace: emisor.cp,
+    PaymentForm: formaPago || '01',
+    PaymentMethod: metodoPago || 'PUE',
+    Issuer: buildIssuer(emisor),
+    Receiver: buildReceiver(receptor, 'G02'),
+    Items: (items || []).map(mapItem),
+    Relations: { Type: tipoRelacion || '01', Cfdis: [{ Uuid: relacionUuid }] },
+  };
+  const r = await req(cfg, 'POST', '/api-lite/3/cfdis', payload);
+  return resultadoTimbre(r, payload);
 }
 
 async function cancelar(cfg, pacId, motivo = '02') {
@@ -192,6 +282,8 @@ module.exports = {
   subirCSD,
   listarCSDs,
   timbrar,
+  timbrarComplementoPago,
+  timbrarEgreso,
   cancelar,
   descargar,
   probarConexion,

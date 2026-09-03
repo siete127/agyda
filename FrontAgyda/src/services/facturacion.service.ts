@@ -45,6 +45,8 @@ export interface Factura {
   metodoPago: string | null
   estatus: 'pre-factura' | 'timbrada' | 'cancelada' | 'error'
   error: string | null
+  saldo: number | null
+  pagada: boolean
   fechaTimbrado: string | null
   fechaCancelacion: string | null
   fecha: string
@@ -56,6 +58,42 @@ export interface ReceptorFiscal {
   regimenFiscal: string
   cp: string
   usoCfdi: string
+}
+
+export interface FacturaPago {
+  id: number
+  fechaPago: string
+  formaPago: string
+  monto: number
+  moneda: string
+  parcialidad: number
+  saldoInsoluto: number
+  uuid: string | null
+  estatus: 'registrado' | 'timbrado' | 'cancelado' | 'error'
+  error: string | null
+}
+
+export interface NotaCredito {
+  id: number
+  motivo: string | null
+  subtotal: number
+  iva: number
+  total: number
+  uuid: string | null
+  serie: string | null
+  folio: string | null
+  estatus: 'pre-nota' | 'timbrada' | 'cancelada' | 'error'
+  error: string | null
+  fecha: string
+}
+
+export interface NotaCreditoItemInput {
+  descripcion: string
+  claveProdServ?: string | null
+  claveUnidad?: string | null
+  cantidad: number
+  precioUnit: number
+  ivaTasa: number
 }
 
 export const facturacionService = {
@@ -90,4 +128,24 @@ export const facturacionService = {
   cancelar: (id: number, motivo = '02') =>
     api.post(`/facturas/${id}/cancelar`, { motivo }).then((r) => r.data),
   documentoUrl: (id: number, formato: 'pdf' | 'xml') => `/api/facturas/${id}/documento/${formato}`,
+
+  listPagos: async (facturaId: number): Promise<FacturaPago[]> => {
+    const { data } = await api.get(`/facturas/${facturaId}/pagos`)
+    return data.data ?? []
+  },
+  registrarPago: (facturaId: number, body: { fechaPago: string; formaPago: string; monto: number; moneda?: string }) =>
+    api.post(`/facturas/${facturaId}/pagos`, body).then((r) => r.data),
+  cancelarPago: (pagoId: number, motivo = '02') =>
+    api.post(`/facturas/pagos/${pagoId}/cancelar`, { motivo }).then((r) => r.data),
+  pagoDocumentoUrl: (pagoId: number, formato: 'pdf' | 'xml') => `/api/facturas/pagos/${pagoId}/documento/${formato}`,
+
+  listNotasCredito: async (facturaId: number): Promise<NotaCredito[]> => {
+    const { data } = await api.get(`/facturas/${facturaId}/notas-credito`)
+    return data.data ?? []
+  },
+  emitirNotaCredito: (facturaId: number, body: { motivo?: string; tipoRelacion?: string; items?: NotaCreditoItemInput[] }) =>
+    api.post(`/facturas/${facturaId}/notas-credito`, body).then((r) => r.data),
+  cancelarNotaCredito: (ncId: number, motivo = '02') =>
+    api.post(`/facturas/notas-credito/${ncId}/cancelar`, { motivo }).then((r) => r.data),
+  notaCreditoDocumentoUrl: (ncId: number, formato: 'pdf' | 'xml') => `/api/facturas/notas-credito/${ncId}/documento/${formato}`,
 }
