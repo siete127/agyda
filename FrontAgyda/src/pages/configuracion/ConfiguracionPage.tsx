@@ -19,6 +19,7 @@ import { BrandingTab } from './BrandingTab'
 import { InstitucionalTab } from './InstitucionalTab'
 import { VentasTab } from './VentasTab'
 import { FacturacionTab } from './FacturacionTab'
+import { CCCanalesTab, CCSkillsTab, CCAgentesTab, CCTipificacionesTab, CCConfigTab, CCSimuladorTab } from './ContactCenterTabs'
 import { MascotaTab } from './MascotaTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
 import { EnlacesTopbarTab } from './EnlacesTopbarTab'
@@ -59,6 +60,12 @@ const SCREENS: Record<string, ComponentType> = {
   'pers-institucional': InstitucionalTab,
   ventas: VentasTab,
   facturacion: FacturacionTab,
+  'cc-canales': CCCanalesTab,
+  'cc-skills': CCSkillsTab,
+  'cc-agentes': CCAgentesTab,
+  'cc-tipificaciones': CCTipificacionesTab,
+  'cc-config': CCConfigTab,
+  'cc-simulador': CCSimuladorTab,
   'pers-mascota': MascotaTab,
   'pers-botones': BotonesHeaderTab,
   'pers-enlaces': EnlacesTopbarTab,

@@ -14,7 +14,7 @@ function notifyAccesosUpdated(usuarioId, tenantKey) {
 }
 
 // Módulos por defecto según rol (para inicialización automática)
-const ALL_MODULES = ['noticias','tickets','proyectos','vacaciones','asistencia-personal','calendario','quejas','reglamento','drive','organigrama','musica','webphone','clientes','crm','encuestas','reports','usuarios','vacaciones-admin','staff-ti','activos','vacantes','chatbot','livechat','mensajeria','asistencia','nomina','accesos','auditoria','expedientes','gastos','mi-area','evaluacion','configuracion','direccion-general','calidad','marketing','legal','finanzas','ventas-area','operaciones','tecnologia','atencion-cliente','rh-area','capacitacion','incapacidades','evaluacion-desempeno'];
+const ALL_MODULES = ['noticias','tickets','proyectos','vacaciones','asistencia-personal','calendario','quejas','reglamento','drive','organigrama','musica','webphone','clientes','crm','encuestas','reports','usuarios','vacaciones-admin','staff-ti','activos','vacantes','chatbot','livechat','contact-center','mensajeria','asistencia','nomina','accesos','auditoria','expedientes','gastos','mi-area','evaluacion','configuracion','direccion-general','calidad','marketing','legal','finanzas','ventas-area','operaciones','tecnologia','atencion-cliente','rh-area','capacitacion','incapacidades','evaluacion-desempeno'];
 const DEFAULT_MODULES_BY_ROLE = {
   ad:  ALL_MODULES,  // AD normal: todos los módulos (pero respeta restricciones del admin)
   cc:  ['noticias','tickets','vacaciones','calendario','quejas','reglamento','musica','evaluacion','asistencia-personal','webphone','mensajeria'],
@@ -51,6 +51,7 @@ const MODULOS_DISPONIBLES = [
   { key: 'vacantes',    nombre: 'Vacantes',            descripcion: 'Publicación y gestión de vacantes' },
   { key: 'chatbot',     nombre: 'Chatbot',             descripcion: 'Diccionario de respuestas del chatbot de la página web' },
   { key: 'livechat',    nombre: 'Chat en Vivo',        descripcion: 'Atención en vivo a visitantes de la página web' },
+  { key: 'contact-center', nombre: 'Contact Center',   descripcion: 'Atención omnicanal (WhatsApp, Messenger, Instagram) — bandeja de interacciones, skills y campañas' },
   { key: 'email-marketing', nombre: 'Email Marketing', descripcion: 'Campañas de correo masivo sobre los contactos del CRM' },
   { key: 'mensajeria',  nombre: 'Mensajería',          descripcion: 'Chat interno entre usuarios, grupos y canales' },
   { key: 'asistencia',  nombre: 'Mi Asistencia',       descripcion: 'Registro y consulta de asistencia' },
@@ -122,6 +123,15 @@ const ACCIONES_POR_MODULO = {
     { key: 'atender',             nombre: 'Atender chats',           descripcion: 'Tomar, cerrar y transferir conversaciones de visitantes' },
     { key: 'configurar',          nombre: 'Configurar módulo',       descripcion: 'Editar horario de atención y mensajes automáticos' },
     { key: 'gestionar-campanas',  nombre: 'Gestionar campañas',      descripcion: 'Crear y administrar campañas, grupos, agentes y motivos de cierre' },
+  ],
+  'contact-center': [
+    { key: 'ver',                 nombre: 'Ver bandeja',            descripcion: 'Ver la bandeja de interacciones propias y en cola, e historial' },
+    { key: 'atender',             nombre: 'Atender interacciones',  descripcion: 'Tomar, responder, transferir y cerrar interacciones de clientes' },
+    { key: 'configurar-canales',  nombre: 'Configurar canales',     descripcion: 'Conectar WhatsApp / Messenger / Instagram y editar SLA, ACW y horario' },
+    { key: 'gestionar-skills',    nombre: 'Gestionar skills',       descripcion: 'Crear y administrar campañas, skills (grupos), plantillas, tipificaciones y motivos de cierre' },
+    { key: 'asignar-agentes',     nombre: 'Asignar agentes',        descripcion: 'Asignar campañas y skills a los agentes' },
+    { key: 'supervision',         nombre: 'Supervisión',            descripcion: 'Ver interacciones de todos los agentes, métricas e historial completo' },
+    { key: 'notificar-correo',    nombre: 'Notificar por correo',   descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   'email-marketing': [
     { key: 'ver',            nombre: 'Ver plantillas y campañas', descripcion: 'Consultar plantillas, campañas y sus reportes de envío' },

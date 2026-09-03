@@ -645,6 +645,17 @@ export const CONFIG_TREE: ConfigNode[] = [
     description: 'Campañas, agentes, telefonía y enrutamiento de llamadas',
     children: [
       {
+        key: 'omnicanal', label: 'Omnicanal (WhatsApp / Messenger / Instagram)',
+        children: [
+          { key: 'cc-canales', label: 'Canales', screen: 'cc-canales' },
+          { key: 'cc-skills', label: 'Campañas y skills', screen: 'cc-skills' },
+          { key: 'cc-agentes', label: 'Asignación de agentes', screen: 'cc-agentes' },
+          { key: 'cc-tipificaciones', label: 'Tipificaciones', screen: 'cc-tipificaciones' },
+          { key: 'cc-config', label: 'SLA, ACW y horario', screen: 'cc-config' },
+          { key: 'cc-simulador', label: 'Simulador de prueba', screen: 'cc-simulador' },
+        ],
+      },
+      {
         key: 'campanas-cc', label: 'Campañas',
         children: [
           { key: 'inbound', label: 'Inbound' },

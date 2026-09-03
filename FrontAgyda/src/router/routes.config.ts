@@ -52,6 +52,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/vacantes',         label: 'Vacantes',        icon: 'UserPlus',             moduleKey: 'vacantes',         roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/chatbot',          label: 'Chatbot',         icon: 'MessageSquare',        moduleKey: 'chatbot',          roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/livechat',         label: 'Chat en Vivo',    icon: 'MessageCircle',        moduleKey: 'livechat',         roles: ['AD','TI','CC'],     showInSidebar: true  },
+  { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: true  },
 
   // ── Administración ─────────────────────────────────────────────────────
   { path: '/asistencia',       label: 'Asistencia',      icon: 'Clock',                moduleKey: 'asistencia',       roles: ['AD'],               showInSidebar: true  },
