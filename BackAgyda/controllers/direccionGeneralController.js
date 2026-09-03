@@ -487,6 +487,16 @@ async function enviarReporteIndicadoresMensual(pool, tenantKey) {
 
     const buffer = await generarIndicadoresPdfBuffer(pool, periodo);
     await emailService.sendReporteIndicadoresEmail({ to: correos, periodo, pdfBuffer: buffer });
+
+    for (const usuarioId of usuariosCorreo) {
+      await notificationService.createNotification({
+        usuarioId,
+        mensaje: `Reporte de indicadores de ${periodo} disponible`,
+        tipo: 'reporte_indicadores_mensual',
+        dataExtra: { periodo },
+        tenantKey,
+      });
+    }
   } catch (err) {
     logger.error('direccionGeneralController.enviarReporteIndicadoresMensual', err);
   }

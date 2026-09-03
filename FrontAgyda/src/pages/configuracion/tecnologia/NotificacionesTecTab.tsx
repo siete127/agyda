@@ -10,6 +10,16 @@ const EVENTOS = [
   { evento: 'SLA en riesgo / incumplido', descripcion: 'El cron de SLA marca el ticket; se refleja como badge en el listado.' },
   { evento: 'Nuevo chat en vivo', descripcion: 'Se notifica al agente asignado por el motor de reglas o ruteo de campaña.' },
   { evento: 'Chat de Soporte TI sin atender', descripcion: 'Si un chat interno espera demasiado sin técnico, se notifica al asignado (si lo hay).' },
+  { evento: 'Permiso solicitado / resuelto', descripcion: 'Se notifica a los admins configurados y al solicitante cuando su permiso es aprobado o rechazado.' },
+  { evento: 'Vacaciones solicitadas / resueltas', descripcion: 'Se notifica a los admins configurados y al solicitante cuando su solicitud es aprobada o rechazada.' },
+  { evento: 'Nueva postulación a vacante', descripcion: 'Se notifica a los destinatarios configurados que tengan cuenta en AGYDA.' },
+  { evento: 'Posible baja (faltas consecutivas)', descripcion: 'Se notifica a RH cuando un empleado acumula el umbral de faltas configurado.' },
+  { evento: 'Pago de cliente por vencer / recordatorio enviado', descripcion: 'Se notifica al responsable interno del contacto en CRM.' },
+  { evento: 'Fecha importante de cliente próxima', descripcion: 'Se notifica al responsable interno del contacto en CRM.' },
+  { evento: 'Revisión de RAT pendiente', descripcion: 'Se notifica al responsable de revisión de la actividad de tratamiento.' },
+  { evento: 'Vencimiento de cumplimiento normativo', descripcion: 'Se notifica al responsable de la obligación próxima a vencer.' },
+  { evento: 'Vencimiento de acción de mejora continua', descripcion: 'Se notifica al responsable de la acción/hallazgo.' },
+  { evento: 'Área sin reportar KPIs / KPI en riesgo / reporte mensual', descripcion: 'Se notifica a los destinatarios configurados para Dirección General.' },
 ]
 
 function PushNotificacionesPanel() {
@@ -54,7 +64,7 @@ function PushNotificacionesPanel() {
       </div>
       <p className="mb-3 text-xs text-ink-tertiary">
         Recibe una notificación del sistema operativo (aunque tengas la pestaña de AGYDA cerrada) para
-        alertas de SLA, escalamientos y chats de Soporte TI sin atender.
+        tickets, permisos, vacaciones, CRM, cumplimiento y los demás eventos listados abajo.
       </p>
 
       {!soportado ? (

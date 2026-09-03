@@ -429,7 +429,7 @@ async function sendPermisoEmail({ permisoId, usuarioId, motivo, fechaInicio, fec
     // Correo (tabla NOTIFICACIONES_CORREO_DESTINATARIOS) — require diferido
     // para evitar el ciclo de módulos con notificacionesCorreoController,
     // que a su vez importa este archivo.
-    const { getDestinatariosCorreo, getDestinatariosTelegram } = require('../controllers/notificacionesCorreoController');
+    const { getDestinatariosCorreo, getDestinatariosTelegram, getDestinatariosUsuarios } = require('../controllers/notificacionesCorreoController');
     const destinatarios = await getDestinatariosCorreo('permisos', tenantKey);
 
     logger.info('📧 [sendPermisoEmail] Iniciando envío a', destinatarios.length, 'destinatarios');
@@ -461,6 +461,19 @@ async function sendPermisoEmail({ permisoId, usuarioId, motivo, fechaInicio, fec
       const telegramService = require('./telegramService');
       const texto = `🔔 <b>Nueva solicitud de permiso</b>\n\n👤 Solicitante: ${usuarioNombre}\n📋 Motivo: ${motivo}\n📅 Desde: ${fechaInicio}\n📅 Hasta: ${fechaFin}\n\n✅ Aprobar: ${approveUrl}\n❌ Rechazar: ${rejectUrl}`;
       await telegramService.sendToMany(chatIds, texto);
+    }
+
+    // Push del navegador — mismos destinatarios configurados para el
+    // módulo (no depende de que tengan Telegram vinculado).
+    const pushService = require('./pushService');
+    const destinatariosPush = await getDestinatariosUsuarios('permisos', tenantKey);
+    if (destinatariosPush.length) {
+      await pushService.enviarAVariosPorTenant(tenantKey, destinatariosPush.map((d) => d.id), {
+        titulo: 'Nueva solicitud de permiso',
+        cuerpo: `${usuarioNombre} solicitó permiso: ${motivo}`,
+        url: '/permisos',
+        tag: `permiso-${permisoId}`,
+      });
     }
 
   } catch (err) {
@@ -694,6 +707,21 @@ const html = `<!DOCTYPE html>
       }
     }
 
+    // Push del navegador — a los admins configurados para 'vacaciones'
+    // (el solicitante, interno, no recibe push aquí porque el suyo es solo
+    // informativo/de confirmación, no requiere acción).
+    const pushService = require('./pushService');
+    const { getDestinatariosUsuarios } = require('../controllers/notificacionesCorreoController');
+    const destinatariosPushVacaciones = await getDestinatariosUsuarios('vacaciones', tenantKey);
+    if (destinatariosPushVacaciones.length) {
+      await pushService.enviarAVariosPorTenant(tenantKey, destinatariosPushVacaciones.map((d) => d.id), {
+        titulo: `Nueva solicitud de ${tipoLegible}`,
+        cuerpo: `${empleadoNombre || ''} (#${numeroPersonal}) — ${fechaInicioFmt} a ${fechaFinFmt}`,
+        url: '/vacaciones',
+        tag: `vacacion-${solicitudId}`,
+      });
+    }
+
     // Confirmación al solicitante (si tiene correo registrado en su perfil).
     // Sin botones de aprobar/rechazar — es solo informativo.
     if (correoSolicitante) {
@@ -850,6 +878,14 @@ async function sendPermisoResultadoEmail({ permisoId, usuarioId, estatus, motivo
       html,
     });
     logger.debug(`📬 [sendPermisoResultadoEmail] Notificado solicitante ${toEmail} sobre permiso #${permisoId} (${prettyStatus})`);
+
+    const pushService = require('./pushService');
+    await pushService.enviarATodasLasSuscripciones(pool, usuarioId, {
+      titulo: prettyStatus === 'APROBADO' ? 'Permiso aprobado' : 'Permiso rechazado',
+      cuerpo: `Tu permiso #${permisoId} fue ${prettyStatus.toLowerCase()}`,
+      url: '/permisos',
+      tag: `permiso-resultado-${permisoId}`,
+    });
   } catch (err) {
     console.error('❌ [sendPermisoResultadoEmail] Error:', err?.message || err);
   }

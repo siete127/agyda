@@ -9,10 +9,25 @@ const logger = global.logger || require('../utils/logger');
 // Tipos de notificación que valen la pena empujar como push del navegador
 // (fuera de la pestaña activa). El resto de tipos (ej. "noticia") se quedan
 // solo como notificación interna — un push por cada noticia sería ruido.
-const TIPOS_CON_PUSH = new Set([
-  'ticket_sla_riesgo', 'ticket_sla_vencido', 'ticket_reabierto',
-  'livechat_espera_escalada', 'ticket_estado',
-]);
+// titulo/url son el default de esa área cuando el tipo no trae ticketId;
+// si tiene ticketId siempre se prioriza /tickets?id=... (ver más abajo).
+const PUSH_CONFIG_POR_TIPO = {
+  ticket_sla_riesgo:          { titulo: 'AGYDA — Soporte TI', url: '/tickets' },
+  ticket_sla_vencido:         { titulo: 'AGYDA — Soporte TI', url: '/tickets' },
+  ticket_reabierto:           { titulo: 'AGYDA — Soporte TI', url: '/tickets' },
+  livechat_espera_escalada:   { titulo: 'AGYDA — Soporte TI', url: '/tickets' },
+  ticket_estado:              { titulo: 'AGYDA — Soporte TI', url: '/tickets' },
+  posible_baja:               { titulo: 'AGYDA — Recursos Humanos', url: '/asistencia' },
+  'cliente-pago-por-vencer':  { titulo: 'AGYDA — CRM', url: '/crm-interno' },
+  'crm-recordatorio-pago':    { titulo: 'AGYDA — CRM', url: '/crm-interno' },
+  'cliente-fecha-importante': { titulo: 'AGYDA — CRM', url: '/crm-interno' },
+  rat_revision_pendiente:     { titulo: 'AGYDA — Protección de Datos', url: '/legal/proteccion-datos' },
+  cumplimiento_vencimiento:   { titulo: 'AGYDA — Cumplimiento Normativo', url: '/legal/cumplimiento-normativo' },
+  mc_accion_vencimiento:      { titulo: 'AGYDA — Mejora Continua', url: '/direccion-general/mejora-continua' },
+  area_sin_reportar:          { titulo: 'AGYDA — Dirección General', url: '/direccion-general' },
+  reporte_indicadores_mensual:{ titulo: 'AGYDA — Dirección General', url: '/direccion-general' },
+  kpi_riesgo:                 { titulo: 'AGYDA — Dirección General', url: '/direccion-general' },
+};
 
 // Tipos que además ameritan correo electrónico al técnico — solo el
 // evento más importante (asignación) y los dos de SLA (riesgo/vencido).
@@ -91,14 +106,15 @@ const notificationService = {
     // Push del navegador: solo para los tipos que realmente ameritan sacar
     // al usuario de lo que esté haciendo. No bloquea ni afecta el resultado
     // de createNotification si falla.
-    if (TIPOS_CON_PUSH.has(tipo)) {
+    const pushCfg = PUSH_CONFIG_POR_TIPO[tipo];
+    if (pushCfg) {
       try {
         const ticketId = dataExtra && dataExtra.ticketId ? Number(dataExtra.ticketId) : null;
         await pushService.enviarATodasLasSuscripciones(pool, usuarioId, {
-          titulo: 'AGYDA — Soporte TI',
+          titulo: pushCfg.titulo,
           cuerpo: mensaje,
-          url: ticketId ? `/tickets?id=${ticketId}` : '/tickets',
-          tag: ticketId ? `ticket-${ticketId}` : 'agyda',
+          url: ticketId ? `/tickets?id=${ticketId}` : pushCfg.url,
+          tag: ticketId ? `ticket-${ticketId}` : `${tipo}-${usuarioId}`,
         });
       } catch (e) {
         logger.warn('⚠️ Error enviando push para notificación:', e?.message || e);
