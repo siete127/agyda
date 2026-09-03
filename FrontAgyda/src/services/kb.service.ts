@@ -19,6 +19,28 @@ export interface KbArticulo {
   publico: boolean
 }
 
+// El contenido se guarda como un solo texto en la base de datos (KB_ARTICULOS
+// no tiene columnas separadas para problema/solución), con este formato fijo
+// para poder separarlo de nuevo al editar un artículo ya guardado.
+const PROBLEMA_PREFIJO = 'Problema:\n'
+const SOLUCION_PREFIJO = '\n\nSolución:\n'
+
+export function separarContenidoKb(contenido: string): { problema: string; solucion: string } {
+  const idx = contenido.indexOf(SOLUCION_PREFIJO)
+  if (contenido.startsWith(PROBLEMA_PREFIJO) && idx !== -1) {
+    return {
+      problema: contenido.slice(PROBLEMA_PREFIJO.length, idx),
+      solucion: contenido.slice(idx + SOLUCION_PREFIJO.length),
+    }
+  }
+  // Artículo previo al cambio (un solo bloque de texto libre): se trata todo como solución.
+  return { problema: '', solucion: contenido }
+}
+
+export function combinarContenidoKb(problema: string, solucion: string): string {
+  return `${PROBLEMA_PREFIJO}${problema.trim()}${SOLUCION_PREFIJO}${solucion.trim()}`
+}
+
 function parseArticulo(raw: Record<string, unknown>): KbArticulo {
   return {
     id: Number(raw['id'] ?? 0),

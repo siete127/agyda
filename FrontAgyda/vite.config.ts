@@ -29,6 +29,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/intranet': {
+        target: 'http://localhost:8447',
+        changeOrigin: true,
+        secure: false,
+      },
       '/ventas-api': {
         target: 'https://ventas.ardabytec.vip:8443',
         changeOrigin: true,

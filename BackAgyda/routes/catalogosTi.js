@@ -40,6 +40,32 @@ router.post('/codigos-cierre', requireActionAccess('configuracion', 'configurar'
 router.put('/codigos-cierre/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateCodigoCierre);
 router.patch('/codigos-cierre/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleCodigoCierreActiva);
 
+// Clasificaciones — lectura abierta a Tickets (se usa al crear un ticket).
+router.get('/clasificaciones', requireActionAccess('tickets', 'ver'), catalogosTiController.getClasificaciones);
+router.post('/clasificaciones', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createClasificacion);
+router.put('/clasificaciones/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateClasificacion);
+router.patch('/clasificaciones/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleClasificacionActiva);
+
+// Motivos de espera — lectura abierta a Tickets (se usa al poner un ticket en espera).
+router.get('/motivos-espera', requireActionAccess('tickets', 'ver'), catalogosTiController.getMotivosEspera);
+router.post('/motivos-espera', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createMotivoEspera);
+router.put('/motivos-espera/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateMotivoEspera);
+router.patch('/motivos-espera/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleMotivoEsperaActiva);
+
+// Impactos/Urgencias/Matriz de prioridad — lectura abierta a Tickets (se usan al crear un ticket).
+router.get('/impactos', requireActionAccess('tickets', 'ver'), catalogosTiController.getImpactos);
+router.post('/impactos', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createImpacto);
+router.put('/impactos/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateImpacto);
+router.patch('/impactos/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleImpactoActiva);
+
+router.get('/urgencias', requireActionAccess('tickets', 'ver'), catalogosTiController.getUrgencias);
+router.post('/urgencias', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createUrgencia);
+router.put('/urgencias/:id', requireActionAccess('configuracion', 'configurar'), catalogosTiController.updateUrgencia);
+router.patch('/urgencias/:id/activa', requireActionAccess('configuracion', 'configurar'), catalogosTiController.toggleUrgenciaActiva);
+
+router.get('/matriz-prioridad', requireActionAccess('tickets', 'ver'), catalogosTiController.getMatrizPrioridad);
+router.put('/matriz-prioridad', requireActionAccess('configuracion', 'configurar'), catalogosTiController.setCeldaMatrizPrioridad);
+
 // Proveedores — lectura abierta a Tickets (se usa al escalar un ticket a Nivel 3).
 router.get('/proveedores', requireActionAccess('tickets', 'ver'), catalogosTiController.getProveedores);
 router.post('/proveedores', requireActionAccess('configuracion', 'configurar'), catalogosTiController.createProveedor);

@@ -41,6 +41,44 @@ export interface CodigoCierre {
   activa: boolean
 }
 
+export interface Clasificacion {
+  id: number
+  clave: string
+  nombre: string
+  orden: number
+  activa: boolean
+}
+
+export interface MotivoEspera {
+  id: number
+  clave: string
+  nombre: string
+  orden: number
+  activa: boolean
+}
+
+export interface Impacto {
+  id: number
+  clave: string
+  nombre: string
+  orden: number
+  activa: boolean
+}
+
+export interface Urgencia {
+  id: number
+  clave: string
+  nombre: string
+  orden: number
+  activa: boolean
+}
+
+export interface CeldaMatrizPrioridad {
+  impacto: string
+  urgencia: string
+  prioridad: string
+}
+
 export interface IntegracionConfig {
   id: number
   clave: string

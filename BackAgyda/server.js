@@ -63,6 +63,13 @@ app.use(loggingMiddleware);
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 app.use('/audio', express.static(process.env.AUDIO_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Musica'));
 app.use('/capacitacion-materiales', express.static(process.env.CAPACITACION_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Capacitacion'));
+// En producción, IIS sirve estas carpetas directo bajo /intranet/*; en
+// desarrollo local no hay IIS, así que Express las sirve también para que
+// los links guardados en BD (evidencias de tickets, fotos de perfil,
+// portadas) abran igual sin depender del dominio de producción.
+app.use('/intranet/Evidencia', express.static(process.env.EVIDENCIA_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Evidencia'));
+app.use('/intranet/Perfil', express.static(process.env.PROFILE_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Perfil'));
+app.use('/intranet/Portadas', express.static(process.env.PORTADA_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Portadas'));
 // Instalador y script del agente de monitoreo de red (descarga sin auth — el
 // script no contiene secretos; la API key la pega el instalador en la PC).
 app.use('/agente-red', express.static(path.join(__dirname, 'tools', 'agente-red')));
