@@ -9,6 +9,8 @@ export interface Material {
   fecha: string
 }
 
+export type CursoAcceso = 'privado' | 'publico'
+
 export interface Curso {
   id: number
   titulo: string
@@ -24,6 +26,20 @@ export interface Curso {
   miEstado: CursoEstado | null
   timerCorriendo: boolean
   timerSegundos: number
+  acceso: CursoAcceso
+  slugPublico: string | null
+}
+
+export interface CursoAsignado {
+  inscripcionId: number
+  usuarioId: number
+  nombre: string
+  usuario: string
+  rol: string
+  estado: CursoEstado
+  fechaInscripcion: string
+  fechaCompletado: string | null
+  asignado: boolean
 }
 
 export interface MiCurso {
@@ -75,6 +91,22 @@ export function parseCurso(raw: Record<string, unknown>): Curso {
     miEstado,
     timerCorriendo: Boolean(pick(raw, 'timerCorriendo')),
     timerSegundos: Number(pick(raw, 'timerSegundos') ?? 0),
+    acceso: pick(raw, 'acceso') === 'publico' ? 'publico' : 'privado',
+    slugPublico: pick(raw, 'slugPublico') ? String(pick(raw, 'slugPublico')) : null,
+  }
+}
+
+export function parseCursoAsignado(raw: Record<string, unknown>): CursoAsignado {
+  return {
+    inscripcionId: Number(pick(raw, 'inscripcionId') ?? 0),
+    usuarioId: Number(pick(raw, 'usuarioId') ?? 0),
+    nombre: String(pick(raw, 'nombre') ?? ''),
+    usuario: String(pick(raw, 'usuario') ?? ''),
+    rol: String(pick(raw, 'rol') ?? ''),
+    estado: (pick(raw, 'estado') === 'completado' ? 'completado' : 'inscrito') as CursoEstado,
+    fechaInscripcion: String(pick(raw, 'fechaInscripcion') ?? ''),
+    fechaCompletado: pick(raw, 'fechaCompletado') ? String(pick(raw, 'fechaCompletado')) : null,
+    asignado: Boolean(pick(raw, 'asignado')),
   }
 }
 

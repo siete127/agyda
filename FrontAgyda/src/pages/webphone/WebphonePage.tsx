@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Phone, RefreshCw, Settings, ShieldAlert, ExternalLink, X,
-  Plus, Trash2, Pencil, CheckCircle2, XCircle, Loader2, PictureInPicture2,
+  Plus, Trash2, Pencil, CheckCircle2, XCircle, Loader2, PictureInPicture2, MonitorX,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
@@ -68,9 +68,14 @@ export function WebphonePage() {
   const isAdmin = ['AD', 'TI'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
   const qc = useQueryClient()
 
-  const { vistaId, zoom, loadError, setVistaId, setZoom, bumpReloadKey, pipSupported, pipActive, requestPip } = useWebphoneStore()
+  const {
+    vistaId, zoom, loadError, setVistaId, setZoom, bumpReloadKey,
+    pipSupported, pipActive, requestPip,
+    realPipSupported, realPipActive, requestRealPip,
+  } = useWebphoneStore()
   const [showConfig, setShowConfig] = useState(false)
   const [showVpnWarning, setShowVpnWarning] = useState(false)
+  const [showRealPipWarning, setShowRealPipWarning] = useState(false)
   const [editando, setEditando] = useState<VistaWebphone | 'nueva' | null>(null)
   const [confirmEliminar, setConfirmEliminar] = useState<VistaWebphone | null>(null)
   const [vpnCheck, setVpnCheck] = useState<VpnCheckState>('idle')
@@ -231,6 +236,19 @@ export function WebphonePage() {
                   title="Abrir en ventana flotante — se mantiene visible aunque cambies de pestaña"
                 >
                   <PictureInPicture2 className="h-3.5 w-3.5" /> {pipActive ? 'Flotando' : 'Modo flotante'}
+                </button>
+              )}
+              {realPipSupported && vista && (
+                <button
+                  onClick={() => setShowRealPipWarning(true)}
+                  disabled={realPipActive}
+                  className={clsx(
+                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.78rem] font-semibold transition-colors',
+                    realPipActive ? 'bg-white/5 text-white/40 cursor-default' : 'bg-white/10 text-white hover:bg-white/20',
+                  )}
+                  title="Ventana flotante REAL fuera del navegador — corta cualquier llamada activa"
+                >
+                  <MonitorX className="h-3.5 w-3.5" /> {realPipActive ? 'PiP activo' : 'Modo PiP (real)'}
                 </button>
               )}
               {vista && (
@@ -413,6 +431,19 @@ export function WebphonePage() {
         message={`¿Eliminar la vista "${confirmEliminar?.label}"? Esta acción no se puede deshacer.`}
         confirmLabel="Eliminar"
         isPending={eliminar.isPending}
+      />
+
+      {/* El click en "Confirmar" de este diálogo es el que dispara requestRealPip()
+          — tiene que ser síncrono y directo desde el gesto de usuario, o Chrome
+          rechaza requestWindow() por no venir de una interacción válida. */}
+      <ConfirmDialog
+        isOpen={showRealPipWarning}
+        onClose={() => setShowRealPipWarning(false)}
+        onConfirm={() => requestRealPip?.()}
+        title="Modo PiP real"
+        message="Esta ventana flotante es del sistema operativo, fuera del navegador. Si hay una llamada activa, se cortará: el marcador interpreta este movimiento como una recarga de página y cierra la sesión. Solo úsalo sin llamadas en curso."
+        confirmLabel="Abrir de todas formas"
+        variant="warning"
       />
     </div>
   )

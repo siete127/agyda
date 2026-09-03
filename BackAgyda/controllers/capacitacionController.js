@@ -20,9 +20,18 @@ const SELECT_CURSO = `
     CUR_ACTIVO as activo,
     CUR_TIMER_CORRIENDO as timerCorriendo,
     CUR_TIMER_INICIO as timerInicio,
-    CUR_TIMER_SEGUNDOS_ACUM as timerSegundosAcum
+    CUR_TIMER_SEGUNDOS_ACUM as timerSegundosAcum,
+    CUR_ACCESO as acceso,
+    CUR_SLUG_PUBLICO as slugPublico
   FROM dbo.CAP_CURSOS
 `;
+
+function slugify(str) {
+  return String(str || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'curso';
+}
 
 // Segundos reales transcurridos ahora mismo: lo acumulado + lo corrido desde
 // que se le dio play la última vez (si sigue corriendo). Se calcula siempre
@@ -139,11 +148,30 @@ exports.createCurso = async (req, res) => {
 exports.updateCurso = async (req, res) => {
   try {
     const { id } = req.params;
-    const { titulo, descripcion, categoria, duracionMin, duracionMinAgregar, activo } = req.body;
+    const { titulo, descripcion, categoria, duracionMin, duracionMinAgregar, activo, acceso } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
 
-    const existing = await pool.request().input('id', sql.Int, id).query('SELECT CUR_ID, CUR_ACTIVO FROM dbo.CAP_CURSOS WHERE CUR_ID = @id');
+    const existing = await pool.request().input('id', sql.Int, id).query('SELECT CUR_ID, CUR_ACTIVO, CUR_TITULO, CUR_SLUG_PUBLICO FROM dbo.CAP_CURSOS WHERE CUR_ID = @id');
     if (existing.recordset.length === 0) return res.status(404).json({ success: false, message: 'Curso no encontrado' });
+
+    // Acceso público / privado. Al hacerlo público se genera un slug único si aún
+    // no tiene; al hacerlo privado se conserva el slug (para no romper links ya
+    // repartidos si se vuelve a activar), pero deja de ser accesible.
+    let slugNuevo;
+    if (acceso === 'publico') {
+      slugNuevo = existing.recordset[0].CUR_SLUG_PUBLICO;
+      if (!slugNuevo) {
+        const base = slugify(titulo || existing.recordset[0].CUR_TITULO);
+        let candidato = base, n = 1;
+        while (true) {
+          const dup = await pool.request().input('s', sql.NVarChar, candidato)
+            .query('SELECT 1 FROM dbo.CAP_CURSOS WHERE CUR_SLUG_PUBLICO = @s');
+          if (!dup.recordset.length) break;
+          candidato = `${base}-${++n}`;
+        }
+        slugNuevo = candidato;
+      }
+    }
 
     // Un curso ya activo acumula la duración en vez de reemplazarla — evita que
     // editar el título/descripción de un curso en marcha borre accidentalmente
@@ -151,6 +179,8 @@ exports.updateCurso = async (req, res) => {
     // relevante mientras el curso todavía no está activo) fija el valor total.
     const eraActivo = !!existing.recordset[0].CUR_ACTIVO;
     const sumarDuracion = eraActivo && Number.isFinite(Number(duracionMinAgregar)) && Number(duracionMinAgregar) > 0;
+
+    const accesoNorm = acceso === 'publico' ? 'publico' : (acceso === 'privado' ? 'privado' : null);
 
     await pool.request()
       .input('id', sql.Int, id)
@@ -160,12 +190,16 @@ exports.updateCurso = async (req, res) => {
       .input('duracionMin', sql.Int, duracionMin || null)
       .input('duracionMinAgregar', sql.Int, sumarDuracion ? Number(duracionMinAgregar) : 0)
       .input('activo', sql.Bit, activo !== false)
+      .input('acceso', sql.NVarChar, accesoNorm)
+      .input('slug', sql.NVarChar, slugNuevo || null)
       .query(`
         UPDATE dbo.CAP_CURSOS
         SET CUR_TITULO=@titulo, CUR_DESCRIPCION=@descripcion, CUR_CATEGORIA=@categoria,
             CUR_DURACION_MIN = CASE WHEN ${sumarDuracion ? '1=1' : '1=0'}
               THEN ISNULL(CUR_DURACION_MIN,0) + @duracionMinAgregar
               ELSE @duracionMin END,
+            CUR_ACCESO = ISNULL(@acceso, CUR_ACCESO),
+            CUR_SLUG_PUBLICO = CASE WHEN @acceso = 'publico' THEN @slug ELSE CUR_SLUG_PUBLICO END,
             CUR_ACTIVO=@activo, CUR_FECHA_ACTUALIZACION=GETDATE()
         WHERE CUR_ID=@id
       `);
@@ -344,6 +378,174 @@ exports.getMisCursos = async (req, res) => {
     res.json({ success: true, data: result.recordset });
   } catch (error) {
     console.error('Error obteniendo mis cursos:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ═══════════════ Asignación de cursos a usuarios (AD/TI) ═══════════════ */
+
+// GET /api/capacitacion/cursos/:id/asignados — lista de usuarios inscritos a un
+// curso (asignados por un admin o inscritos por su cuenta), con su estado.
+exports.getAsignados = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().input('cursoId', sql.Int, id).query(`
+      SELECT
+        i.INSC_ID as inscripcionId, i.INSC_USUARIO_ID as usuarioId,
+        u.NEUS_NOMBRES as nombre, u.NEUS_USUARIO as usuario, u.NEUS_TIPOUSUARIO as rol,
+        i.INSC_ESTADO as estado, i.INSC_FECHA_INSCRIPCION as fechaInscripcion,
+        i.INSC_FECHA_COMPLETADO as fechaCompletado,
+        CASE WHEN i.INSC_ASIGNADO_POR IS NOT NULL THEN 1 ELSE 0 END as asignado
+      FROM dbo.CAP_INSCRIPCIONES i
+      INNER JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = i.INSC_USUARIO_ID
+      WHERE i.INSC_CURSO_ID = @cursoId AND i.INSC_USUARIO_ID IS NOT NULL
+      ORDER BY u.NEUS_NOMBRES
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (error) {
+    console.error('Error listando asignados:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /api/capacitacion/cursos/:id/asignar  Body: { usuarioIds: number[] }
+// Inscribe (MERGE) a varios usuarios al curso; los ya inscritos se dejan como
+// están. AD/TI.
+exports.asignarUsuarios = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ids = Array.isArray(req.body?.usuarioIds)
+      ? [...new Set(req.body.usuarioIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+      : [];
+    if (!ids.length) return res.status(400).json({ success: false, message: 'usuarioIds requerido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const curso = await pool.request().input('id', sql.Int, id).query('SELECT CUR_ID FROM dbo.CAP_CURSOS WHERE CUR_ID=@id');
+    if (!curso.recordset.length) return res.status(404).json({ success: false, message: 'Curso no encontrado' });
+
+    let nuevas = 0;
+    for (const uid of ids) {
+      const r = await pool.request()
+        .input('cursoId', sql.Int, id)
+        .input('uid', sql.Int, uid)
+        .input('por', sql.Int, req.user?.id || null)
+        .query(`
+          MERGE dbo.CAP_INSCRIPCIONES AS t
+          USING (SELECT @cursoId AS c, @uid AS u) AS s
+            ON t.INSC_CURSO_ID = s.c AND t.INSC_USUARIO_ID = s.u
+          WHEN NOT MATCHED THEN
+            INSERT (INSC_CURSO_ID, INSC_USUARIO_ID, INSC_ESTADO, INSC_ASIGNADO_POR)
+            VALUES (@cursoId, @uid, 'inscrito', @por);
+          SELECT $action AS accion;
+        `);
+      if (r.recordset[0]?.accion === 'INSERT') nuevas++;
+    }
+
+    await logAudit(pool, { userId: req.user?.id || null, userName: req.user?.nombre || null, modulo: 'capacitacion', accion: 'asignar-curso', entidadId: id, detalle: { usuarios: ids.length, nuevas }, ip: req.ip });
+    try { socketService.getIO(req.user?.empresa).emit('capacitacion:asignacion', { cursoId: Number(id) }); } catch (_) {}
+    res.json({ success: true, data: { asignados: ids.length, nuevas } });
+  } catch (error) {
+    console.error('Error asignando usuarios:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// DELETE /api/capacitacion/cursos/:id/asignados/:usuarioId — quita la inscripción
+// de un usuario (solo si NO la ha completado). AD/TI.
+exports.desasignarUsuario = async (req, res) => {
+  try {
+    const { id, usuarioId } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const r = await pool.request()
+      .input('cursoId', sql.Int, id)
+      .input('uid', sql.Int, usuarioId)
+      .query(`DELETE FROM dbo.CAP_INSCRIPCIONES WHERE INSC_CURSO_ID=@cursoId AND INSC_USUARIO_ID=@uid AND INSC_ESTADO <> 'completado'`);
+    if (!r.rowsAffected[0]) return res.status(400).json({ success: false, message: 'No se pudo quitar (no existe o ya la completó)' });
+    try { socketService.getIO(req.user?.empresa).emit('capacitacion:asignacion', { cursoId: Number(id) }); } catch (_) {}
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error desasignando usuario:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ═══════════════ Curso público (sin sesión: número + nombre) ═══════════════ */
+
+// GET /api/capacitacion/publico/:slug — datos del curso + materiales, sin auth.
+exports.getCursoPublicoBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const empresa = req.query.empresa || undefined;
+    const pool = await databaseService.getPool(empresa);
+    const rs = await pool.request().input('slug', sql.NVarChar, String(slug || '').toLowerCase())
+      .query(`${SELECT_CURSO} WHERE CUR_SLUG_PUBLICO = @slug AND CUR_ACCESO = 'publico' AND CUR_ACTIVO = 1`);
+    if (!rs.recordset.length) return res.status(404).json({ success: false, message: 'Este curso no está disponible' });
+    const [data] = await attachMateriales(pool, rs.recordset);
+    // No exponer info interna del cronómetro en la vista pública.
+    delete data.timerCorriendo; delete data.timerInicio; delete data.timerSegundosAcum; delete data.timerSegundos;
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error curso público:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /api/capacitacion/publico/:slug/registrar  Body: { numero, nombre }
+// Registra al participante (sin sesión) y devuelve el id de inscripción para
+// poder marcarla como completada al final.
+exports.registrarTomaPublica = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const empresa = req.query.empresa || undefined;
+    const numero = String(req.body?.numero || '').trim().slice(0, 40);
+    const nombre = String(req.body?.nombre || '').trim().slice(0, 150);
+    if (!numero || !nombre) return res.status(400).json({ success: false, message: 'Número y nombre son obligatorios' });
+
+    const pool = await databaseService.getPool(empresa);
+    const curso = await pool.request().input('slug', sql.NVarChar, String(slug || '').toLowerCase())
+      .query(`SELECT CUR_ID FROM dbo.CAP_CURSOS WHERE CUR_SLUG_PUBLICO = @slug AND CUR_ACCESO = 'publico' AND CUR_ACTIVO = 1`);
+    if (!curso.recordset.length) return res.status(404).json({ success: false, message: 'Este curso no está disponible' });
+    const cursoId = curso.recordset[0].CUR_ID;
+
+    const rs = await pool.request()
+      .input('cursoId', sql.Int, cursoId)
+      .input('numero', sql.NVarChar, numero)
+      .input('nombre', sql.NVarChar, nombre)
+      .query(`
+        INSERT INTO dbo.CAP_INSCRIPCIONES (INSC_CURSO_ID, INSC_USUARIO_ID, INSC_ESTADO, INSC_PARTICIPANTE_NUMERO, INSC_PARTICIPANTE_NOMBRE)
+        VALUES (@cursoId, NULL, 'inscrito', @numero, @nombre);
+        SELECT SCOPE_IDENTITY() as id;
+      `);
+    res.status(201).json({ success: true, data: { inscripcionId: rs.recordset[0].id } });
+  } catch (error) {
+    console.error('Error registrando toma pública:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /api/capacitacion/publico/:slug/completar  Body: { inscripcionId }
+exports.completarTomaPublica = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const empresa = req.query.empresa || undefined;
+    const inscId = Number(req.body?.inscripcionId);
+    if (!inscId) return res.status(400).json({ success: false, message: 'inscripcionId requerido' });
+
+    const pool = await databaseService.getPool(empresa);
+    const r = await pool.request()
+      .input('id', sql.Int, inscId)
+      .input('slug', sql.NVarChar, String(slug || '').toLowerCase())
+      .query(`
+        UPDATE i SET i.INSC_ESTADO='completado', i.INSC_FECHA_COMPLETADO=GETDATE()
+        FROM dbo.CAP_INSCRIPCIONES i
+        INNER JOIN dbo.CAP_CURSOS c ON c.CUR_ID = i.INSC_CURSO_ID
+        WHERE i.INSC_ID = @id AND c.CUR_SLUG_PUBLICO = @slug AND i.INSC_USUARIO_ID IS NULL
+      `);
+    if (!r.rowsAffected[0]) return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error completando toma pública:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
