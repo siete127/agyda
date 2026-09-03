@@ -559,7 +559,7 @@ function CursoDetalleModal({ curso, isAdmin, onClose }: { curso: Curso; isAdmin:
           ) : (
             <div className="space-y-2.5">
               {curso.materiales.map((m) => {
-                const esAudio = ['mp3', 'wav', 'ogg', 'm4a'].includes(m.tipo ?? '')
+                const esAudio = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'wma', 'opus', 'mpeg', 'mpg'].includes(m.tipo ?? '')
                 const esVideo = ['mp4', 'webm', 'mov'].includes(m.tipo ?? '')
                 const esImagen = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(m.tipo ?? '')
                 // PDF e imágenes se presentan inline en el navegador. Audio y video se
@@ -572,6 +572,7 @@ function CursoDetalleModal({ curso, isAdmin, onClose }: { curso: Curso; isAdmin:
                       <div className="flex items-center gap-2">
                         <Paperclip className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                         <p className="flex-1 min-w-0 truncate text-xs font-medium text-gray-700">{m.nombre}</p>
+                        <a href={m.url} download={m.nombre} className="flex-shrink-0 text-[0.65rem] font-semibold text-brand hover:underline">Descargar</a>
                         {isAdmin && (
                           <button onClick={() => eliminarMaterial.mutate(m.id)} className="flex-shrink-0 text-gray-300 hover:text-red-500">
                             <Trash2 className="h-3.5 w-3.5" />
