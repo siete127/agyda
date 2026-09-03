@@ -104,6 +104,11 @@ const ACCIONES_POR_MODULO = {
     { key: 'seguimiento-recordatorios',  nombre: 'Gestionar recordatorios', descripcion: 'Crear, cancelar y eliminar recordatorios de pago' },
     { key: 'seguimiento-documentos',     nombre: 'Gestionar documentos',    descripcion: 'Subir, descargar y eliminar documentos de clientes' },
     { key: 'seguimiento-encuestas',      nombre: 'Enviar encuestas',        descripcion: 'Enviar encuestas públicas existentes a un contacto y ver sus respuestas' },
+    { key: 'cotizacion-aprobar',         nombre: 'Aprobar cotizaciones',   descripcion: 'Aprobar o rechazar internamente las cotizaciones de una oportunidad' },
+    { key: 'cotizacion-override-margen', nombre: 'Autorizar margen bajo',  descripcion: 'Guardar o aprobar cotizaciones cuyo margen queda por debajo del mínimo (semáforo rojo)' },
+    { key: 'facturar',                   nombre: 'Emitir facturas',        descripcion: 'Generar la factura (CFDI) de una cotización aprobada' },
+    { key: 'facturacion-cancelar',       nombre: 'Cancelar facturas',      descripcion: 'Cancelar ante el SAT una factura ya timbrada' },
+    { key: 'facturacion-configurar',     nombre: 'Configurar facturación', descripcion: 'Editar datos fiscales del emisor, el CSD y las credenciales del PAC' },
     { key: 'notificar-correo',           nombre: 'Notificar por correo',    descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   mensajeria: [

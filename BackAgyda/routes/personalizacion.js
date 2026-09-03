@@ -19,6 +19,7 @@ router.put('/branding', ...soloAdminConfig, ctrl.updateBranding);
 router.put('/header-buttons', ...soloAdminConfig, ctrl.updateHeaderButtons);
 router.put('/institucional', ...soloAdminConfig, ctrl.updateInstitucional);
 router.put('/enlaces-topbar', ...soloAdminConfig, ctrl.updateEnlacesTopbar);
+router.put('/ventas', ...soloAdminConfig, ctrl.updateVentas);
 router.put('/dashboard', ...soloAdminConfig, ctrl.updateDashboard);
 router.put('/mascota', ...soloAdminConfig, ctrl.updateMascota);
 router.post('/assets', ...soloAdminConfig, uploadPersonalizacion.single('archivo'), ctrl.subirAsset);

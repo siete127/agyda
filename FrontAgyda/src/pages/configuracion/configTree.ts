@@ -591,6 +591,13 @@ export const CONFIG_TREE: ConfigNode[] = [
       { key: 'fuentes-lead', label: 'Fuentes de lead' },
       { key: 'campanas-comerciales', label: 'Campañas comerciales' },
       {
+        key: 'cotizaciones-facturacion', label: 'Cotizaciones y facturación',
+        children: [
+          { key: 'ventas', label: 'Margen e IVA', screen: 'ventas' },
+          { key: 'facturacion', label: 'Facturación (emisor, CSD, PAC)', screen: 'facturacion' },
+        ],
+      },
+      {
         key: 'pipeline', label: 'Pipeline',
         children: [
           { key: 'pipelines', label: 'Pipelines' },

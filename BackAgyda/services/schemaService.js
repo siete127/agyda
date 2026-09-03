@@ -2024,6 +2024,147 @@ END`,
   logger.info('✅ Esquema CRM asegurado/actualizado');
 }
 
+// Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
+// tenant; aquí se aseguran + se añaden las columnas de costeo/margen/IVA para el
+// semáforo de rentabilidad y la aprobación interna.
+async function ensureCrmCotizacionesSchema(pool) {
+  const creates = [
+    `IF OBJECT_ID('dbo.CRM_COTIZACIONES', 'U') IS NULL
+CREATE TABLE dbo.CRM_COTIZACIONES (
+  COT_ID             INT IDENTITY(1,1) PRIMARY KEY,
+  COT_OPO_ID         INT NOT NULL,
+  COT_FOLIO          NVARCHAR(20) NOT NULL DEFAULT '',
+  COT_TITULO         NVARCHAR(200) NULL,
+  COT_FECHA          DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+  COT_FECHA_VTO      DATE NULL,
+  COT_ESTATUS        NVARCHAR(20) NOT NULL DEFAULT 'borrador',
+  COT_NOTAS          NVARCHAR(MAX) NULL,
+  COT_TOTAL          DECIMAL(18,2) NOT NULL DEFAULT 0,
+  COT_CREADO_POR     INT NULL,
+  COT_ACTIVO         BIT NOT NULL DEFAULT 1,
+  COT_FECHA_REGISTRO DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CRM_COTIZACION_ITEMS', 'U') IS NULL
+CREATE TABLE dbo.CRM_COTIZACION_ITEMS (
+  COTI_ID          INT IDENTITY(1,1) PRIMARY KEY,
+  COTI_COT_ID      INT NOT NULL,
+  COTI_ORDEN       SMALLINT NOT NULL DEFAULT 0,
+  COTI_ES_SECCION  BIT NOT NULL DEFAULT 0,
+  COTI_DESCRIPCION NVARCHAR(400) NULL,
+  COTI_CANTIDAD    DECIMAL(10,3) NOT NULL DEFAULT 1,
+  COTI_PRECIO_UNIT DECIMAL(18,2) NOT NULL DEFAULT 0,
+  COTI_DESCUENTO   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  COTI_SUBTOTAL    DECIMAL(18,2) NULL
+);`,
+  ];
+  // ALTER ... ADD idempotente — cada uno su propio query (no mezclar en batch).
+  const alters = [
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_COSTO_UNIT') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_COSTO_UNIT DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_PS_ID') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_PS_ID INT NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_IVA_TASA') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_IVA_TASA DECIMAL(5,4) NOT NULL CONSTRAINT DF_COTI_IVA_TASA DEFAULT 0.16;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_CLAVE_PROD_SERV') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_CLAVE_PROD_SERV NVARCHAR(12) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_CLAVE_UNIDAD') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_CLAVE_UNIDAD NVARCHAR(6) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_SUBTOTAL') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_SUBTOTAL DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_IVA') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_IVA DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_COSTO_TOTAL') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_COSTO_TOTAL DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_UTILIDAD') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_UTILIDAD DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_MARGEN_PCT') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_MARGEN_PCT DECIMAL(6,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_SEMAFORO') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_SEMAFORO NVARCHAR(12) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_APROB_OVERRIDE') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_APROB_OVERRIDE BIT NOT NULL CONSTRAINT DF_COT_APROB_OVR DEFAULT 0;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_APROB_POR') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_APROB_POR INT NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_APROB_FECHA') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_APROB_FECHA DATETIME NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_FACTURA_ID') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_FACTURA_ID INT NULL;`,
+  ];
+  for (const q of [...creates, ...alters]) {
+    try {
+      await pool.request().query(q);
+    } catch (err) {
+      console.warn('⚠️ CRM cotizaciones schema:', err.message);
+    }
+  }
+  logger.info('✅ Esquema CRM cotizaciones asegurado/actualizado');
+}
+
+// Facturación electrónica (CFDI 4.0): datos fiscales del emisor + CSD,
+// credenciales del PAC (parametrizable) y las facturas emitidas. Todo por
+// tenant, editable desde Configuración → Comercial → Facturación.
+async function ensureFacturacionSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.EMPRESA_FISCAL', 'U') IS NULL
+CREATE TABLE dbo.EMPRESA_FISCAL (
+  EF_ID INT IDENTITY(1,1) PRIMARY KEY,
+  EF_RFC NVARCHAR(13) NULL,
+  EF_RAZON_SOCIAL NVARCHAR(255) NULL,
+  EF_REGIMEN_FISCAL NVARCHAR(3) NULL,
+  EF_CP NVARCHAR(5) NULL,
+  EF_CSD_CARGADO BIT NOT NULL DEFAULT 0,
+  EF_CSD_CER VARBINARY(MAX) NULL,
+  EF_CSD_KEY VARBINARY(MAX) NULL,
+  EF_CSD_PASSWORD NVARCHAR(200) NULL,
+  EF_CSD_NUM_CERT NVARCHAR(30) NULL,
+  EF_CSD_VIGENCIA_HASTA DATETIME NULL,
+  EF_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.FACTURACION_CONFIG', 'U') IS NULL
+CREATE TABLE dbo.FACTURACION_CONFIG (
+  FC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FC_HABILITADO BIT NOT NULL DEFAULT 0,
+  FC_PROVEEDOR NVARCHAR(30) NOT NULL DEFAULT 'facturama',
+  FC_MODO NVARCHAR(10) NOT NULL DEFAULT 'sandbox',
+  FC_BASE_URL NVARCHAR(200) NULL,
+  FC_USUARIO NVARCHAR(200) NULL,
+  FC_PASSWORD NVARCHAR(400) NULL,
+  FC_API_KEY NVARCHAR(400) NULL,
+  FC_SERIE NVARCHAR(10) NULL DEFAULT 'A',
+  FC_FOLIO_ACTUAL INT NOT NULL DEFAULT 0,
+  FC_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.FACTURAS', 'U') IS NULL
+CREATE TABLE dbo.FACTURAS (
+  FAC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FAC_COT_ID INT NULL,
+  FAC_OPO_ID INT NULL,
+  FAC_CLIENTE_ID INT NULL,
+  FAC_UUID NVARCHAR(40) NULL,
+  FAC_PAC_ID NVARCHAR(60) NULL,
+  FAC_SERIE NVARCHAR(10) NULL,
+  FAC_FOLIO NVARCHAR(20) NULL,
+  FAC_EMISOR_RFC NVARCHAR(13) NULL,
+  FAC_RECEPTOR_RFC NVARCHAR(13) NULL,
+  FAC_RECEPTOR_NOMBRE NVARCHAR(255) NULL,
+  FAC_SUBTOTAL DECIMAL(18,2) NULL,
+  FAC_IVA DECIMAL(18,2) NULL,
+  FAC_TOTAL DECIMAL(18,2) NULL,
+  FAC_MONEDA NVARCHAR(3) NOT NULL DEFAULT 'MXN',
+  FAC_USO_CFDI NVARCHAR(4) NULL,
+  FAC_FORMA_PAGO NVARCHAR(3) NULL,
+  FAC_METODO_PAGO NVARCHAR(4) NULL,
+  FAC_ESTATUS NVARCHAR(20) NOT NULL DEFAULT 'pre-factura',
+  FAC_XML NVARCHAR(MAX) NULL,
+  FAC_ERROR NVARCHAR(1000) NULL,
+  FAC_FECHA_TIMBRADO DATETIME NULL,
+  FAC_FECHA_CANCELACION DATETIME NULL,
+  FAC_CREADO_POR INT NULL,
+  FAC_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.FACTURAS', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FACTURAS_COT' AND object_id = OBJECT_ID('dbo.FACTURAS'))
+CREATE INDEX IX_FACTURAS_COT ON dbo.FACTURAS(FAC_COT_ID);`,
+  ];
+  // Datos fiscales del receptor sobre CRM_CONTACTOS (clientes/prospectos).
+  const contactoCols = [
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_RFC') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_RFC NVARCHAR(13) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_RAZON_SOCIAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_RAZON_SOCIAL NVARCHAR(255) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_REGIMEN_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_REGIMEN_FISCAL NVARCHAR(3) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CP_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CP_FISCAL NVARCHAR(5) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_USO_CFDI') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_USO_CFDI NVARCHAR(4) NULL;`,
+  ];
+  for (const q of [...stmts, ...contactoCols]) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Facturacion schema:', err.message); }
+  }
+  logger.info('✅ Esquema de facturación asegurado/actualizado');
+}
+
 async function ensureCrmSeguimientoSchema(pool) {
   const batches = [
     `IF OBJECT_ID('dbo.CRM_RECORDATORIOS_PAGO', 'U') IS NULL
@@ -4775,6 +4916,7 @@ async function ensureAllSchemas(pool) {
   await ensureEncuestasSchema(pool);
   await ensureEncuestaSatisfaccionClienteSeed(pool);
   await ensureCrmSchema(pool);
+  await ensureCrmCotizacionesSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
@@ -4808,6 +4950,8 @@ async function ensureAllSchemas(pool) {
   await ensureCumplimientoNormativoSchema(pool);
   await ensureControlDocumentalSchema(pool);
   await ensureProductosServiciosSchema(pool);
+  await ensureSatCatalogosSchema(pool);
+  await ensureFacturacionSchema(pool);
   await ensureActivosSchema(pool);
   await ensureUsuarioTiemposSchema(pool);
 }
@@ -6418,6 +6562,109 @@ END
 `);
   } catch (err) {
     console.warn('⚠️ ClienteProductosServiciosSchema:', err.message);
+  }
+
+  // Columnas fiscales (costo + claves SAT) para poder cotizar y facturar.
+  const psCols = [
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_COSTO') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_COSTO DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_CLAVE_PROD_SERV') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_CLAVE_PROD_SERV NVARCHAR(12) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_CLAVE_UNIDAD') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_CLAVE_UNIDAD NVARCHAR(6) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_UNIDAD_NOMBRE') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_UNIDAD_NOMBRE NVARCHAR(100) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_IVA_TASA') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_IVA_TASA DECIMAL(5,4) NOT NULL CONSTRAINT DF_PS_IVA_TASA DEFAULT 0.16;`,
+  ];
+  for (const q of psCols) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ PRODUCTOS_SERVICIOS cols:', err.message); }
+  }
+}
+
+// Catálogos SAT (CFDI 4.0) — claves de producto/servicio y de unidad. Son
+// archivos públicos del SAT; se siembran una sola vez por tenant desde el JSON
+// versionado en BackAgyda/data/sat/. Un marcador de versión evita re-sembrar
+// en cada arranque.
+const SAT_CATALOGO_VERSION = '2026-01';
+
+async function ensureSatCatalogosSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.SAT_CLAVE_PROD_SERV', 'U') IS NULL
+  CREATE TABLE dbo.SAT_CLAVE_PROD_SERV (
+    SPS_CLAVE       NVARCHAR(12)   NOT NULL PRIMARY KEY,
+    SPS_DESCRIPCION NVARCHAR(400)  NOT NULL
+  );
+IF OBJECT_ID('dbo.SAT_CLAVE_UNIDAD', 'U') IS NULL
+  CREATE TABLE dbo.SAT_CLAVE_UNIDAD (
+    SCU_CLAVE  NVARCHAR(6)   NOT NULL PRIMARY KEY,
+    SCU_NOMBRE NVARCHAR(200) NOT NULL
+  );
+IF OBJECT_ID('dbo.SAT_CATALOGO_META', 'U') IS NULL
+  CREATE TABLE dbo.SAT_CATALOGO_META (
+    SCM_CLAVE   NVARCHAR(40) NOT NULL PRIMARY KEY,
+    SCM_VERSION NVARCHAR(20) NOT NULL,
+    SCM_FECHA   DATETIME NOT NULL DEFAULT GETDATE()
+  );
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SPS_DESC' AND object_id = OBJECT_ID('dbo.SAT_CLAVE_PROD_SERV'))
+  CREATE INDEX IX_SPS_DESC ON dbo.SAT_CLAVE_PROD_SERV(SPS_DESCRIPCION);
+`);
+  } catch (err) {
+    console.warn('⚠️ SatCatalogosSchema:', err.message);
+    return;
+  }
+
+  // ¿Ya sembrado a esta versión?
+  try {
+    const meta = await pool.request()
+      .input('v', require('mssql').NVarChar(20), SAT_CATALOGO_VERSION)
+      .query(`SELECT 1 ok FROM dbo.SAT_CATALOGO_META WHERE SCM_CLAVE='cfdi40' AND SCM_VERSION=@v`);
+    if (meta.recordset.length) return;
+  } catch (err) {
+    console.warn('⚠️ SatCatalogos meta check:', err.message);
+    return;
+  }
+
+  const path = require('path');
+  const fs = require('fs');
+  const sql = require('mssql');
+  const dir = path.join(__dirname, '..', 'data', 'sat');
+
+  const seedTabla = async (jsonFile, tabla, colClave, colVal) => {
+    let rows;
+    try {
+      rows = JSON.parse(fs.readFileSync(path.join(dir, jsonFile), 'utf8'));
+    } catch (err) {
+      console.warn(`⚠️ SatCatalogos: no se pudo leer ${jsonFile}:`, err.message);
+      return false;
+    }
+    await pool.request().query(`TRUNCATE TABLE dbo.${tabla}`);
+    // Inserta por lotes con TVP para que 52k filas entren en segundos.
+    const tvp = new sql.Table(tabla);
+    tvp.columns.add(colClave, sql.NVarChar(colClave === 'SPS_CLAVE' ? 12 : 6), { primary: true, nullable: false });
+    tvp.columns.add(colVal, sql.NVarChar(colVal === 'SPS_DESCRIPCION' ? 400 : 200), { nullable: false });
+    const seen = new Set();
+    for (const r of rows) {
+      const c = String(r.c || '').trim();
+      if (!c || seen.has(c)) continue;
+      seen.add(c);
+      tvp.rows.add(c, String(r.d || '').slice(0, colVal === 'SPS_DESCRIPCION' ? 400 : 200));
+    }
+    await pool.request().bulk(tvp);
+    return true;
+  };
+
+  try {
+    const a = await seedTabla('c_ClaveProdServ.min.json', 'SAT_CLAVE_PROD_SERV', 'SPS_CLAVE', 'SPS_DESCRIPCION');
+    const b = await seedTabla('c_ClaveUnidad.min.json', 'SAT_CLAVE_UNIDAD', 'SCU_CLAVE', 'SCU_NOMBRE');
+    if (a && b) {
+      await pool.request()
+        .input('v', sql.NVarChar(20), SAT_CATALOGO_VERSION)
+        .query(`MERGE dbo.SAT_CATALOGO_META AS t
+                USING (SELECT 'cfdi40' k) s ON t.SCM_CLAVE = s.k
+                WHEN MATCHED THEN UPDATE SET SCM_VERSION=@v, SCM_FECHA=GETDATE()
+                WHEN NOT MATCHED THEN INSERT (SCM_CLAVE, SCM_VERSION) VALUES ('cfdi40', @v);`);
+      logger.info('✅ Catálogos SAT sembrados (' + SAT_CATALOGO_VERSION + ')');
+    }
+  } catch (err) {
+    console.warn('⚠️ SatCatalogos seed:', err.message);
   }
 }
 

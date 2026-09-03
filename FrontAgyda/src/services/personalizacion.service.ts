@@ -75,6 +75,11 @@ export interface Mascota {
   flotante: MascotaParte & { habilitado: boolean }
 }
 
+export interface VentasConfig {
+  margen: { verdeMin: number; amarilloMin: number; rojoMax: number; requiereOverride: boolean }
+  iva: { tasaDefault: number }
+}
+
 export interface PersonalizacionConfig {
   branding: Branding
   headerButtons: HeaderButton[]
@@ -82,6 +87,7 @@ export interface PersonalizacionConfig {
   institucional: Institucional
   enlacesTopbar: EnlaceTopbar[]
   mascota: Mascota
+  ventas: VentasConfig
 }
 
 export const personalizacionService = {
@@ -110,6 +116,11 @@ export const personalizacionService = {
     // — el backend acepta tanto `[...]` como `{ enlacesTopbar: [...] }`.
     const { data } = await api.put('/personalizacion/enlaces-topbar', { enlacesTopbar: enlaces })
     return data.data as EnlaceTopbar[]
+  },
+
+  async updateVentas(v: VentasConfig): Promise<VentasConfig> {
+    const { data } = await api.put('/personalizacion/ventas', v)
+    return data.data as VentasConfig
   },
 
   async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {

@@ -72,6 +72,48 @@ const DEFAULT_CONFIG = {
     inicio:   { mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
     flotante: { habilitado: false, mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
   },
+  // Comercial — reglas de margen para las cotizaciones del CRM y tasa de IVA por
+  // defecto. El semáforo compara el margen global de la cotización contra estos
+  // umbrales; si cae en ROJO y `requiereOverride` está activo, guardar/aprobar
+  // exige el permiso crm:cotizacion-override-margen.
+  ventas: {
+    margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
+    iva: { tasaDefault: 0.16 },
+  },
+};
+
+function clamp(n, min, max, fallback) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(Math.max(v, min), max);
+}
+
+// Normaliza la rama `ventas` con clamps coherentes (verde >= amarillo >= rojo).
+function limpiarVentas(raw) {
+  const D = DEFAULT_CONFIG.ventas;
+  const m = raw && typeof raw === 'object' ? raw : {};
+  const mg = m.margen && typeof m.margen === 'object' ? m.margen : {};
+  const iva = m.iva && typeof m.iva === 'object' ? m.iva : {};
+  let rojoMax = clamp(mg.rojoMax, 0, 100, D.margen.rojoMax);
+  let amarilloMin = clamp(mg.amarilloMin, 0, 100, D.margen.amarilloMin);
+  let verdeMin = clamp(mg.verdeMin, 0, 100, D.margen.verdeMin);
+  if (amarilloMin < rojoMax) amarilloMin = rojoMax;
+  if (verdeMin < amarilloMin) verdeMin = amarilloMin;
+  return {
+    margen: {
+      verdeMin,
+      amarilloMin,
+      rojoMax,
+      requiereOverride: mg.requiereOverride !== false,
+    },
+    iva: { tasaDefault: clamp(iva.tasaDefault, 0, 1, D.iva.tasaDefault) },
+  };
+}
+
+// Config de margen que consume crmCotizacionesController (evita duplicar defaults).
+exports.calcMargenConfig = function calcMargenConfig(config) {
+  const v = limpiarVentas(config?.ventas);
+  return { ...v.margen, tasaIvaDefault: v.iva.tasaDefault };
 };
 
 const MASCOTA_MOVIMIENTOS = ['ninguno', 'flotar', 'saludar', 'latir', 'balanceo'];
@@ -123,6 +165,7 @@ function mergeConfig(stored) {
     enlacesTopbar: Array.isArray(stored.enlacesTopbar)
       ? stored.enlacesTopbar.map(limpiarEnlace).filter(Boolean)
       : base.enlacesTopbar,
+    ventas: limpiarVentas(stored.ventas),
     mascota: (() => {
       const m = stored.mascota && typeof stored.mascota === 'object' ? stored.mascota : {};
       // Migración desde el formato viejo (una sola mascota con `modo`).
@@ -151,6 +194,13 @@ async function readConfig(pool) {
     return mergeConfig(null);
   }
 }
+
+// Config completa de un tenant, para que otros controllers la consuman
+// (ej. crmCotizacionesController lee la rama `ventas`). Acepta la key del tenant.
+exports.getConfigForTenant = async function getConfigForTenant(tenantKey) {
+  const pool = await databaseService.getPool(tenantKey);
+  return readConfig(pool);
+};
 
 async function writeConfig(pool, config, userId) {
   await pool.request()
@@ -308,6 +358,26 @@ exports.updateInstitucional = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateInstitucional', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la identidad institucional' });
+  }
+};
+
+// PUT /api/personalizacion/ventas
+// Body: { margen: { verdeMin, amarilloMin, rojoMax, requiereOverride }, iva: { tasaDefault } }
+exports.updateVentas = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.ventas = limpiarVentas(req.body);
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-ventas', detalle: JSON.stringify(config.ventas), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'ventas');
+    return res.json({ success: true, data: config.ventas });
+  } catch (e) {
+    logger.error('personalizacionController.updateVentas', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la configuración comercial' });
   }
 };
 

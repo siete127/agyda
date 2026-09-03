@@ -128,6 +128,8 @@ router.post('/cotizaciones/:id/enviar', authenticateToken, crmCotizaciones.envia
 // (ahora obligatorio en el controller, ver crmCotizacionesController.js).
 router.post('/cotizaciones/:id/aprobar', crmCotizaciones.aprobar);
 router.post('/cotizaciones/:id/rechazar', crmCotizaciones.rechazar);
+// aprobación interna (por un gerente en el CRM) — con sesión + permiso.
+router.post('/cotizaciones/:id/aprobar-interna', authenticateToken, requireActionAccess('crm', 'cotizacion-aprobar'), crmCotizaciones.aprobarInterna);
 // pdf: solo se usa desde el CRM interno (no desde el portal público) —
 // requiere sesión.
 router.get('/cotizaciones/:id/pdf', authenticateToken, crmCotizaciones.getPdf);
