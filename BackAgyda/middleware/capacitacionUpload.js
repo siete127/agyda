@@ -39,7 +39,7 @@ const capacitacionStorage = multer.diskStorage({
 const EXTENSIONES_PERMITIDAS = new Set([
   '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png', '.gif', '.webp',
   '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma', '.opus',
-  '.mp4', '.webm', '.mov',
+  '.mp4', '.webm', '.mov', '.mpeg', '.mpg',
 ]);
 
 class TipoArchivoNoPermitidoError extends Error {
