@@ -384,7 +384,7 @@ export function DashboardPage() {
         <div className="dash-card relative flex h-full items-center justify-center overflow-hidden rounded-2xl border border-surface-border bg-card p-3">
           <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl"
             style={{ background: 'linear-gradient(160deg, #10203F 0%, #0B1730 100%)' }}>
-            <MascotaTablero mascota={mascota} />
+            <MascotaTablero mascota={mascota.inicio} />
           </div>
         </div>
       ),

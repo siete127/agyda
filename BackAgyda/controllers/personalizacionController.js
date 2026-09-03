@@ -65,20 +65,27 @@ const DEFAULT_CONFIG = {
   // Marcador/Contingencia. Cada uno abre su URL en pestaña nueva o en un panel
   // flotante tipo Spotify que sigue visible al navegar.
   enlacesTopbar: [],
-  // Mascota del tablero — imagen o video por empresa. mediaId apunta a la
-  // tabla MEDIA_EMPRESA (multimedia propia de cada empresa).
+  // Mascota — DOS independientes: la de la card del inicio y el widget flotante.
+  // Cada una tiene su propio archivo (mediaId → MEDIA_EMPRESA), movimiento y
+  // velocidad. Si el widget está habilitado sin archivo propio, usa la del sistema.
   mascota: {
-    mediaId: null,          // id en MEDIA_EMPRESA, o null = usa la del sistema
-    tipo: null,             // 'imagen' | 'video' (derivado del archivo)
-    movimiento: 'flotar',   // ninguno | flotar | saludar | latir | balanceo
-    velocidad: 'normal',    // lenta | normal | rapida
-    modo: 'card',           // card | flotante | ambas — dónde se presenta
+    inicio:   { mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
+    flotante: { habilitado: false, mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
   },
 };
 
 const MASCOTA_MOVIMIENTOS = ['ninguno', 'flotar', 'saludar', 'latir', 'balanceo'];
 const MASCOTA_VELOCIDADES = ['lenta', 'normal', 'rapida'];
-const MASCOTA_MODOS = ['card', 'flotante', 'ambas'];
+
+function limpiarMascotaParte(raw, base) {
+  const m = raw && typeof raw === 'object' ? raw : {};
+  return {
+    mediaId: m.mediaId != null && Number(m.mediaId) ? Number(m.mediaId) : null,
+    tipo: m.tipo === 'imagen' || m.tipo === 'video' ? m.tipo : null,
+    movimiento: MASCOTA_MOVIMIENTOS.includes(m.movimiento) ? m.movimiento : base.movimiento,
+    velocidad: MASCOTA_VELOCIDADES.includes(m.velocidad) ? m.velocidad : base.velocidad,
+  };
+}
 
 const ENLACE_ICONOS = ['link', 'phone', 'headset', 'monitor', 'chart', 'ticket', 'mail', 'globe', 'rocket', 'grid', 'bell', 'calendar', 'folder', 'shield', 'zap'];
 const ENLACE_MODOS = ['pestana', 'flotante'];
@@ -118,12 +125,16 @@ function mergeConfig(stored) {
       : base.enlacesTopbar,
     mascota: (() => {
       const m = stored.mascota && typeof stored.mascota === 'object' ? stored.mascota : {};
+      // Migración desde el formato viejo (una sola mascota con `modo`).
+      const legacy = m.modo != null || m.mediaId != null;
+      const inicioRaw = m.inicio ?? (legacy ? m : {});
+      const flotanteRaw = m.flotante ?? (legacy && (m.modo === 'flotante' || m.modo === 'ambas') ? { ...m, habilitado: true } : {});
       return {
-        mediaId: m.mediaId != null && Number(m.mediaId) ? Number(m.mediaId) : null,
-        tipo: m.tipo === 'imagen' || m.tipo === 'video' ? m.tipo : null,
-        movimiento: MASCOTA_MOVIMIENTOS.includes(m.movimiento) ? m.movimiento : base.mascota.movimiento,
-        velocidad: MASCOTA_VELOCIDADES.includes(m.velocidad) ? m.velocidad : base.mascota.velocidad,
-        modo: MASCOTA_MODOS.includes(m.modo) ? m.modo : base.mascota.modo,
+        inicio: limpiarMascotaParte(inicioRaw, base.mascota.inicio),
+        flotante: {
+          habilitado: !!flotanteRaw.habilitado,
+          ...limpiarMascotaParte(flotanteRaw, base.mascota.flotante),
+        },
       };
     })(),
   };
@@ -356,8 +367,9 @@ exports.subirMascotaMedia = async (req, res) => {
     const pool = await databaseService.getPool(req.user?.empresa);
     await ensureMediaEmpresa(pool);
     const esVideo = /^video\//.test(req.file.mimetype);
+    const uso = req.body?.uso === 'flotante' ? 'mascota-flotante' : 'mascota-inicio';
     const rs = await pool.request()
-      .input('uso', sql.NVarChar, 'mascota')
+      .input('uso', sql.NVarChar, uso)
       .input('archivo', sql.NVarChar, req.file.filename)
       .input('original', sql.NVarChar, req.file.originalname)
       .input('mime', sql.NVarChar, req.file.mimetype)
@@ -424,12 +436,13 @@ exports.updateMascota = async (req, res) => {
     const b = req.body || {};
     const pool = await databaseService.getPool(req.user?.empresa);
     const config = await readConfig(pool);
+    const D = DEFAULT_CONFIG.mascota;
     config.mascota = {
-      mediaId: b.mediaId != null && Number(b.mediaId) ? Number(b.mediaId) : null,
-      tipo: b.tipo === 'imagen' || b.tipo === 'video' ? b.tipo : null,
-      movimiento: MASCOTA_MOVIMIENTOS.includes(b.movimiento) ? b.movimiento : 'flotar',
-      velocidad: MASCOTA_VELOCIDADES.includes(b.velocidad) ? b.velocidad : 'normal',
-      modo: MASCOTA_MODOS.includes(b.modo) ? b.modo : 'card',
+      inicio: limpiarMascotaParte(b.inicio, D.inicio),
+      flotante: {
+        habilitado: !!(b.flotante && b.flotante.habilitado),
+        ...limpiarMascotaParte(b.flotante, D.flotante),
+      },
     };
     await writeConfig(pool, config, req.user?.id);
     await logAudit(pool, {

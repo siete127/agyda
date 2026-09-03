@@ -24,7 +24,7 @@ export function MascotaFlotante() {
   const [interacting, setInteracting] = useState(false)
   const dragRef = useRef<{ dx: number; dy: number } | null>(null)
 
-  const activo = (mascota.modo === 'flotante' || mascota.modo === 'ambas') && visiblePorUsuario
+  const activo = mascota.flotante.habilitado && visiblePorUsuario
   if (!activo) return null
 
   const w = minimizado ? BUBBLE : W
@@ -99,7 +99,7 @@ export function MascotaFlotante() {
       </div>
 
       <div onMouseDown={onDown} className="h-full w-full cursor-grab active:cursor-grabbing">
-        <MascotaTablero mascota={mascota} className="drop-shadow-xl" />
+        <MascotaTablero mascota={mascota.flotante} className="drop-shadow-xl" />
       </div>
     </div>
   )

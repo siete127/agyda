@@ -80,7 +80,7 @@ export function PerfilMenu() {
   const bubbleVisible = useMusicStore((s) => s.bubbleVisible)
   const setBubbleVisible = useMusicStore((s) => s.setBubbleVisible)
   const { mascota } = usePersonalizacion()
-  const mascotaFlotanteHabilitada = mascota.modo === 'flotante' || mascota.modo === 'ambas'
+  const mascotaFlotanteHabilitada = mascota.flotante.habilitado
   const mascotaVisible = useMascotaStore((s) => s.flotanteVisible)
   const setMascotaVisible = useMascotaStore((s) => s.setFlotanteVisible)
   const puedeMusica = rol !== 'CC' && rol !== 'CL' && isAllowed('musica')

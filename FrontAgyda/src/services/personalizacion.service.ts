@@ -60,14 +60,19 @@ export interface EnlaceTopbar {
 
 export type MascotaMovimiento = 'ninguno' | 'flotar' | 'saludar' | 'latir' | 'balanceo'
 export type MascotaVelocidad = 'lenta' | 'normal' | 'rapida'
-export type MascotaModo = 'card' | 'flotante' | 'ambas'
 
-export interface Mascota {
+/** Una mascota individual: imagen/video + movimiento. */
+export interface MascotaParte {
   mediaId: number | null
   tipo: 'imagen' | 'video' | null
   movimiento: MascotaMovimiento
   velocidad: MascotaVelocidad
-  modo: MascotaModo
+}
+
+/** Dos mascotas independientes: la de la card del inicio y el widget flotante. */
+export interface Mascota {
+  inicio: MascotaParte
+  flotante: MascotaParte & { habilitado: boolean }
 }
 
 export interface PersonalizacionConfig {
@@ -130,9 +135,10 @@ export const personalizacionService = {
   },
 
   // ── Mascota ──
-  async subirMascotaMedia(file: File): Promise<{ id: number; tipo: 'imagen' | 'video' }> {
+  async subirMascotaMedia(file: File, uso: 'inicio' | 'flotante'): Promise<{ id: number; tipo: 'imagen' | 'video' }> {
     const form = new FormData()
     form.append('archivo', file)
+    form.append('uso', uso)
     const { data } = await api.post('/personalizacion/mascota/media', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
