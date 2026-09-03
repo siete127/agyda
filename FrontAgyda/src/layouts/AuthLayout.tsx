@@ -13,16 +13,14 @@ export function AuthLayout() {
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0D1B3E]">
-      {/* Video de fondo — se ve completo (sin recortar) y el resto de la
-          pantalla comparte el mismo azul de fondo, así no se nota el corte.
-          Solo se muestra a partir de 1024x855px; por debajo de eso (pantallas
-          chicas o poco altas) queda oculto y solo se ve el fondo con partículas. */}
       <video
         src={FONDO_VIDEO_SRC}
         autoPlay
         loop
         muted
         playsInline
+        preload="auto"
+        style={{ willChange: 'transform', transform: 'translateZ(0)' }}
         className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-contain [@media(min-width:1024px)_and_(min-height:855px)]:block"
         onError={(e) => {
           e.currentTarget.style.display = 'none'
@@ -43,8 +41,7 @@ export function AuthLayout() {
         />
       </div>
 
-      {/* Estela luminosa que sigue al cursor — capa puramente visual, sin
-          contenido propio, para no interferir con el layout del resto. */}
+      {/* Estela luminosa que sigue al cursor*/}
       <div className="pointer-events-none absolute inset-0 z-20">
         <GlowCursor
           color="#67E8F9"
@@ -79,8 +76,6 @@ export function AuthLayout() {
         </div>
       </div>
 
-      {/* Contenido — el card se recarga al lado derecho para no tapar el
-          video de fondo, footer anclado abajo */}
       <div className="relative z-30 flex flex-1 flex-col items-center justify-center px-6 py-10 lg:items-end lg:pr-[8%]">
         <div className="w-full max-w-[400px] animate-slide-up">
           <Outlet />

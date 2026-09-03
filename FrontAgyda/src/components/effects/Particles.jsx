@@ -1,6 +1,5 @@
 // @ts-nocheck
 // Componente copiado de React Bits (gratuito) — variante JavaScript + CSS.
-// @ts-nocheck porque viene sin tipos y el proyecto es TS estricto.
 import { useEffect, useRef } from 'react'
 import { Renderer, Camera, Geometry, Program, Mesh } from 'ogl'
 
