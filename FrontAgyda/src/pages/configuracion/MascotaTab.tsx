@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Sparkles, Upload, Check, Loader2, Image as ImageIcon, Film, Info } from 'lucide-react'
+import { Sparkles, Upload, Check, Loader2, Image as ImageIcon, Film, Info, LayoutGrid, PictureInPicture2, Layers } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   personalizacionService,
-  type Mascota, type MascotaMovimiento, type MascotaVelocidad,
+  type Mascota, type MascotaMovimiento, type MascotaVelocidad, type MascotaModo,
 } from '@/services/personalizacion.service'
 import { MascotaTablero } from '@/components/ui/MascotaTablero'
 
@@ -18,6 +18,11 @@ const MOVIMIENTOS: { key: MascotaMovimiento; label: string; sub: string }[] = [
 ]
 const VELOCIDADES: { key: MascotaVelocidad; label: string }[] = [
   { key: 'lenta', label: 'Lenta' }, { key: 'normal', label: 'Normal' }, { key: 'rapida', label: 'Rápida' },
+]
+const MODOS: { key: MascotaModo; label: string; sub: string; icon: typeof LayoutGrid }[] = [
+  { key: 'card', label: 'En la card del inicio', sub: 'Como está hoy, dentro del tablero.', icon: LayoutGrid },
+  { key: 'flotante', label: 'Widget flotante', sub: 'Flota en la esquina en todas las páginas. Cada usuario la puede ocultar.', icon: PictureInPicture2 },
+  { key: 'ambas', label: 'Ambas', sub: 'En la card del inicio y como widget flotante.', icon: Layers },
 ]
 
 export function MascotaTab() {
@@ -51,7 +56,7 @@ export function MascotaTab() {
     setSubiendo(true)
     try {
       const { id, tipo } = await personalizacionService.subirMascotaMedia(file)
-      setForm((f) => (f ? { ...f, mediaId: id, tipo } : { mediaId: id, tipo, movimiento: 'flotar', velocidad: 'normal' }))
+      setForm((f) => (f ? { ...f, mediaId: id, tipo } : { mediaId: id, tipo, movimiento: 'flotar', velocidad: 'normal', modo: 'card' }))
       toast.success('Archivo subido — pulsa Guardar para aplicarlo')
     } catch (e) {
       toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudo subir')
@@ -77,7 +82,7 @@ export function MascotaTab() {
           <div>
             <h2 className="text-[1.35rem] font-bold text-gray-900">Mascota</h2>
             <p className="text-[0.82rem] text-gray-400">
-              Imagen o video del tablero. Solo afecta a esta empresa — cada una tiene la suya.
+              Imagen o video en la card del inicio y/o como widget flotante. Solo afecta a esta empresa.
             </p>
           </div>
         </div>
@@ -130,6 +135,30 @@ export function MascotaTab() {
                 Si no subes nada, el tablero usa la mascota del sistema. El movimiento solo aplica a imágenes —
                 un video ya trae su propia animación.
               </p>
+            </div>
+          </section>
+
+          {/* Modo de presentación */}
+          <section className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+            <div className="mb-3 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                <PictureInPicture2 className="h-4 w-4" />
+              </div>
+              <p className="text-[0.9rem] font-bold text-gray-800">Dónde se muestra</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {MODOS.map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => set('modo', m.key)}
+                  className={clsx('rounded-xl border p-3 text-left transition-colors',
+                    form.modo === m.key ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:bg-gray-50')}
+                >
+                  <m.icon className={clsx('h-4 w-4', form.modo === m.key ? 'text-violet-600' : 'text-gray-400')} />
+                  <p className={clsx('mt-1.5 text-[0.8rem] font-semibold', form.modo === m.key ? 'text-violet-700' : 'text-gray-700')}>{m.label}</p>
+                  <p className="mt-0.5 text-[0.66rem] text-gray-400">{m.sub}</p>
+                </button>
+              ))}
             </div>
           </section>
 

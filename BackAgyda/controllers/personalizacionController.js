@@ -72,11 +72,13 @@ const DEFAULT_CONFIG = {
     tipo: null,             // 'imagen' | 'video' (derivado del archivo)
     movimiento: 'flotar',   // ninguno | flotar | saludar | latir | balanceo
     velocidad: 'normal',    // lenta | normal | rapida
+    modo: 'card',           // card | flotante | ambas — dónde se presenta
   },
 };
 
 const MASCOTA_MOVIMIENTOS = ['ninguno', 'flotar', 'saludar', 'latir', 'balanceo'];
 const MASCOTA_VELOCIDADES = ['lenta', 'normal', 'rapida'];
+const MASCOTA_MODOS = ['card', 'flotante', 'ambas'];
 
 const ENLACE_ICONOS = ['link', 'phone', 'headset', 'monitor', 'chart', 'ticket', 'mail', 'globe', 'rocket', 'grid', 'bell', 'calendar', 'folder', 'shield', 'zap'];
 const ENLACE_MODOS = ['pestana', 'flotante'];
@@ -121,6 +123,7 @@ function mergeConfig(stored) {
         tipo: m.tipo === 'imagen' || m.tipo === 'video' ? m.tipo : null,
         movimiento: MASCOTA_MOVIMIENTOS.includes(m.movimiento) ? m.movimiento : base.mascota.movimiento,
         velocidad: MASCOTA_VELOCIDADES.includes(m.velocidad) ? m.velocidad : base.mascota.velocidad,
+        modo: MASCOTA_MODOS.includes(m.modo) ? m.modo : base.mascota.modo,
       };
     })(),
   };
@@ -426,6 +429,7 @@ exports.updateMascota = async (req, res) => {
       tipo: b.tipo === 'imagen' || b.tipo === 'video' ? b.tipo : null,
       movimiento: MASCOTA_MOVIMIENTOS.includes(b.movimiento) ? b.movimiento : 'flotar',
       velocidad: MASCOTA_VELOCIDADES.includes(b.velocidad) ? b.velocidad : 'normal',
+      modo: MASCOTA_MODOS.includes(b.modo) ? b.modo : 'card',
     };
     await writeConfig(pool, config, req.user?.id);
     await logAudit(pool, {

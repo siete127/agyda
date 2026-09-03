@@ -60,12 +60,14 @@ export interface EnlaceTopbar {
 
 export type MascotaMovimiento = 'ninguno' | 'flotar' | 'saludar' | 'latir' | 'balanceo'
 export type MascotaVelocidad = 'lenta' | 'normal' | 'rapida'
+export type MascotaModo = 'card' | 'flotante' | 'ambas'
 
 export interface Mascota {
   mediaId: number | null
   tipo: 'imagen' | 'video' | null
   movimiento: MascotaMovimiento
   velocidad: MascotaVelocidad
+  modo: MascotaModo
 }
 
 export interface PersonalizacionConfig {

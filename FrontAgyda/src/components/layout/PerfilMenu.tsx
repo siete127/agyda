@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { User, LogOut, Music2, Headset, Loader2, Coffee, GraduationCap, Hand, Play, Square } from 'lucide-react'
+import { User, LogOut, Music2, Headset, Loader2, Coffee, GraduationCap, Hand, Play, Square, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/auth.store'
 import { useMusicStore } from '@/stores/music.store'
+import { useMascotaStore } from '@/stores/mascota.store'
+import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { disconnectSocket, getSocket } from '@/lib/socket'
 import { api } from '@/lib/axios'
@@ -77,6 +79,10 @@ export function PerfilMenu() {
   /* ── Música ── */
   const bubbleVisible = useMusicStore((s) => s.bubbleVisible)
   const setBubbleVisible = useMusicStore((s) => s.setBubbleVisible)
+  const { mascota } = usePersonalizacion()
+  const mascotaFlotanteHabilitada = mascota.modo === 'flotante' || mascota.modo === 'ambas'
+  const mascotaVisible = useMascotaStore((s) => s.flotanteVisible)
+  const setMascotaVisible = useMascotaStore((s) => s.setFlotanteVisible)
   const puedeMusica = rol !== 'CC' && rol !== 'CL' && isAllowed('musica')
 
   /* ── Pausa activa (REST) ── */
@@ -345,6 +351,25 @@ export function PerfilMenu() {
               </div>
               <span className={clsx('relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors', bubbleVisible ? 'bg-brand' : 'bg-gray-200')}>
                 <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', bubbleVisible ? 'translate-x-4' : 'translate-x-0')} />
+              </span>
+            </button>
+          )}
+
+          {/* Mascota flotante — solo si la empresa la habilitó */}
+          {mascotaFlotanteHabilitada && (
+            <button
+              onClick={() => setMascotaVisible(!mascotaVisible)}
+              className="flex w-full items-center gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50"
+            >
+              <div className={clsx('flex h-8 w-8 items-center justify-center rounded-lg', mascotaVisible ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400')}>
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[0.8rem] font-semibold text-gray-800">Mascota flotante</p>
+                <p className="text-[0.66rem] text-gray-400">{mascotaVisible ? 'Visible en pantalla' : 'Oculta'}</p>
+              </div>
+              <span className={clsx('relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors', mascotaVisible ? 'bg-violet-600' : 'bg-gray-200')}>
+                <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', mascotaVisible ? 'translate-x-4' : 'translate-x-0')} />
               </span>
             </button>
           )}
