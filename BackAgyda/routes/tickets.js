@@ -6,13 +6,9 @@ const ticketRecordatoriosCron = require('../controllers/ticketRecordatoriosCronC
 const { uploadEvidence } = require('../middleware/evidenceUpload');
 const { authenticateToken, verificarRol } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
-const apiKeyAuth = require('../middleware/apiKeyAuth');
 
 // Sin sesión: se llama desde un link de calificación que no depende de estar logueado
 router.post('/:id/satisfaccion', ticketController.registrarSatisfaccion);
-
-// Sin sesión JWT: autenticado por API-key para creación de tickets desde sistemas externos
-router.post('/api/crear', apiKeyAuth, ticketController.createTicketFromApi);
 
 router.use(authenticateToken);
 
@@ -21,11 +17,6 @@ router.use(authenticateToken);
 router.get('/ti/staff', requireActionAccess('staff-ti', 'ver'), ticketController.getStaffTI);
 // Reasignar área/nivel es una decisión administrativa: solo AD, no cualquiera con acceso a staff-ti
 router.post('/ti/staff', verificarRol(['AD']), ticketController.actualizarStaffTI);
-
-// API keys para la creación pública de tickets (solo AD)
-router.get('/api-keys', verificarRol(['AD']), ticketController.listApiKeys);
-router.post('/api-keys', verificarRol(['AD']), ticketController.createApiKey);
-router.delete('/api-keys/:id', verificarRol(['AD']), ticketController.revokeApiKey);
 
 // Grupos de soporte (nombre descriptivo para AREA+NIVEL)
 router.get('/grupos-soporte', requireActionAccess('tickets', 'ver'), ticketController.getGruposSoporte);
@@ -40,6 +31,7 @@ router.post('/notificaciones/:id/leer', ticketController.marcarNotificacionLeida
 // Reportes
 router.get('/reportes/tickets-satisfaccion', requireActionAccess('tickets', 'ver'), ticketController.getReporteSatisfaccion);
 router.get('/reportes/tickets-satisfaccion.csv', requireActionAccess('tickets', 'ver'), ticketController.getReporteSatisfaccionCSV);
+router.get('/reportes/kpis', requireActionAccess('tickets', 'ver'), ticketController.getKpisTickets);
 
 // SLA (reglas configurables + reporte de cumplimiento)
 router.get('/sla/reglas', requireActionAccess('tickets', 'ver'), ticketController.listReglasSla);
@@ -57,6 +49,10 @@ router.post('/recordatorios/run-cron', verificarRol(['AD']), ticketRecordatorios
 // Configuración de escalamiento automático (fila única global)
 router.get('/escalamiento-config', requireActionAccess('configuracion', 'ver'), ticketController.getEscalamientoConfig);
 router.put('/escalamiento-config', requireActionAccess('configuracion', 'configurar'), ticketController.actualizarEscalamientoConfig);
+
+// Umbrales del panel de KPIs de Tickets (fila única global)
+router.get('/kpis-config', requireActionAccess('configuracion', 'ver'), ticketController.getKpisConfig);
+router.put('/kpis-config', requireActionAccess('configuracion', 'configurar'), ticketController.actualizarKpisConfig);
 
 // Configuración de envío de encuesta de satisfacción (prioridad mínima por área)
 router.get('/encuesta-config', requireActionAccess('configuracion', 'ver'), ticketController.getEncuestaConfig);

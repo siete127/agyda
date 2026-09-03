@@ -735,6 +735,7 @@ export const CONFIG_TREE: ConfigNode[] = [
       { key: 'ti-grupos-soporte',   label: 'Grupos de soporte',       screen: 'ti-grupos-soporte' },
       { key: 'ti-reglas',           label: 'Reglas de asignación',    screen: 'ti-reglas' },
       { key: 'ti-sla',              label: 'SLA',                     screen: 'ti-sla' },
+      { key: 'ti-kpis',             label: 'KPIs de Tickets',         screen: 'ti-kpis' },
       { key: 'ti-escalamientos',    label: 'Escalamientos',           screen: 'ti-escalamientos' },
       { key: 'ti-automatizaciones', label: 'Automatizaciones',        screen: 'ti-automatizaciones' },
       { key: 'ti-campania-soporte', label: 'Campaña de chat Soporte TI', screen: 'ti-campania-soporte' },

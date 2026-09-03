@@ -158,6 +158,22 @@ export function calcularPrioridad(impacto: TicketImpacto | '', urgencia: TicketU
   return IMPACTO_URGENCIA_MATRIZ[impacto][urgencia]
 }
 
+export interface KpisTickets {
+  totalAbiertos: number
+  porEstado: { key: string; total: number }[]
+  totalCerrados: number
+  promedioResolucionMin: number | null
+  pctReabiertos: number | null
+  pctCumplimientoSla: number | null
+  satisfaccionPromedio: number | null
+  satisfaccionTotal: number
+  volumenPorArea: { key: string; total: number }[]
+  volumenPorPrioridad: { key: string; total: number }[]
+  umbralSlaBueno: number
+  umbralReabiertosMalo: number
+  umbralSatisfaccionBueno: number
+}
+
 export function parseTicket(raw: Record<string, unknown>): Ticket {
   const p = (a: string, b: string) => raw[a] ?? raw[b]
   const parseDate = (v: unknown): string | null => {

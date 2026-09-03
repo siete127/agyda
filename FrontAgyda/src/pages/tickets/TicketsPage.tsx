@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, RefreshCw, MessageCircle,
   Send, LifeBuoy, Clock, CheckCircle2, CircleDot, UserCheck, Star,
-  LayoutList, Table2, BarChart2, Timer, Paperclip, Trash2, Users, KeyRound, Download, Columns3,
+  LayoutList, Table2, BarChart2, Timer, Paperclip, Trash2, Users, Download, Columns3, Gauge,
 } from 'lucide-react'
 import { ticketsService } from '@/services/tickets.service'
 import { FichaUsuarioModal } from './FichaUsuarioModal'
@@ -22,6 +22,7 @@ import { catalogosTiService } from '@/services/catalogosTi.service'
 import { activosGeneralesService } from '@/services/activosGenerales.service'
 import { camposPersonalizadosService } from '@/services/camposPersonalizados.service'
 import { SlaTab } from '@/pages/configuracion/tecnologia/SlaTab'
+import { KpisTab } from '@/pages/tickets/KpisTab'
 import { TecnicosTab } from '@/pages/configuracion/tecnologia/TecnicosTab'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -1898,80 +1899,13 @@ function TablaTickets({ tickets }: { tickets: Ticket[] }) {
 }
 
 /* ── Página principal ── */
-/* ── Administración de API keys para creación pública de tickets (solo AD) ── */
-function PanelApiKeys({ onClose }: { onClose: () => void }) {
-  const qc = useQueryClient()
-  const [nombre, setNombre] = useState('')
-  const [nuevaKey, setNuevaKey] = useState<string | null>(null)
-
-  const { data: keys = [], isLoading } = useQuery({
-    queryKey: ['tickets-api-keys'],
-    queryFn: () => ticketsService.getApiKeys(),
-  })
-
-  const crear = useMutation({
-    mutationFn: () => ticketsService.createApiKey(nombre),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['tickets-api-keys'] })
-      setNuevaKey(data.key)
-      setNombre('')
-      toast.success('API key creada')
-    },
-    onError: () => toast.error('Error al crear la API key'),
-  })
-
-  const revocar = useMutation({
-    mutationFn: (id: number) => ticketsService.revokeApiKey(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tickets-api-keys'] })
-      toast.success('API key revocada')
-    },
-  })
-
-  return (
-    <Modal isOpen onClose={onClose} title="API keys — creación pública de tickets" size="md">
-      <div className="space-y-4">
-        {nuevaKey && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
-            <p className="text-[0.72rem] font-semibold text-amber-800">Guarda esta key ahora — no se puede volver a mostrar</p>
-            <code className="block break-all rounded-lg bg-card px-2 py-1.5 text-[0.75rem] text-ink">{nuevaKey}</code>
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="field" placeholder="Nombre del sistema/integración" />
-          <Button isLoading={crear.isPending} disabled={!nombre.trim()} onClick={() => crear.mutate()}>Crear</Button>
-        </div>
-        {isLoading ? (
-          <p className="text-sm text-ink-tertiary">Cargando...</p>
-        ) : (
-          <div className="space-y-1.5">
-            {keys.map((k) => (
-              <div key={k.id} className="flex items-center justify-between rounded-lg border border-surface-border px-3 py-2 text-[0.78rem]">
-                <div>
-                  <p className="font-medium text-ink">{k.nombre}</p>
-                  <p className="text-[0.65rem] text-ink-tertiary">
-                    {k.activa ? 'Activa' : 'Revocada'} · último uso: {k.ultimoUso ? new Date(k.ultimoUso).toLocaleDateString('es-MX') : 'nunca'}
-                  </p>
-                </div>
-                {k.activa && (
-                  <Button size="sm" variant="ghost" onClick={() => revocar.mutate(k.id)}>Revocar</Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </Modal>
-  )
-}
-
 export function TicketsPage() {
   const [searchParams] = useSearchParams()
   const autoOpenId = searchParams.get('id') ? Number(searchParams.get('id')) : null
   const [search, setSearch] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<TicketEstado | 'todos'>('todos')
   const [showNuevo, setShowNuevo] = useState(false)
-  const [showApiKeys, setShowApiKeys] = useState(false)
+  const [showKpis, setShowKpis] = useState(false)
   const [showSla, setShowSla] = useState(false)
   const [showTecnicos, setShowTecnicos] = useState(false)
   const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
@@ -2111,6 +2045,13 @@ export function TicketsPage() {
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               <button
+                onClick={() => setShowKpis(true)}
+                title="KPIs de Tickets"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+              >
+                <Gauge className="h-3.5 w-3.5" />
+              </button>
+              <button
                 onClick={() => setShowSla(true)}
                 title="Configurar SLA"
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
@@ -2124,15 +2065,6 @@ export function TicketsPage() {
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
                 >
                   <Users className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {esAD && (
-                <button
-                  onClick={() => setShowApiKeys(true)}
-                  title="API keys de creación pública"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
                 </button>
               )}
               <Button
@@ -2304,7 +2236,10 @@ export function TicketsPage() {
       )}
 
       {showNuevo && <NuevoTicketModal onClose={() => setShowNuevo(false)} />}
-      {showApiKeys && <PanelApiKeys onClose={() => setShowApiKeys(false)} />}
+
+      <Modal isOpen={showKpis} onClose={() => setShowKpis(false)} title="KPIs de Tickets" size="xl">
+        <KpisTab />
+      </Modal>
 
       <Modal isOpen={showSla} onClose={() => setShowSla(false)} title="SLA de Tickets" size="xl">
         <SlaTab />

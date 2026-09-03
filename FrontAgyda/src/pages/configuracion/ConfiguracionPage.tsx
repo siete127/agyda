@@ -29,6 +29,7 @@ import { CatalogosTab } from './tecnologia/CatalogosTab'
 import { NotificacionesTecTab } from './tecnologia/NotificacionesTecTab'
 import { GruposSoporteTab } from './tecnologia/GruposSoporteTab'
 import { SlaTab } from './tecnologia/SlaTab'
+import { KpisConfigTab } from './tecnologia/KpisConfigTab'
 import { CampaniaSoporteTITab } from './tecnologia/CampaniaSoporteTITab'
 import { ChatEnVivoTab } from './tecnologia/ChatEnVivoTab'
 import { ChatbotConfigTab } from './tecnologia/ChatbotConfigTab'
@@ -70,6 +71,7 @@ const SCREENS: Record<string, ComponentType> = {
   'ti-notificaciones': NotificacionesTecTab,
   'ti-grupos-soporte': GruposSoporteTab,
   'ti-sla': SlaTab,
+  'ti-kpis': KpisConfigTab,
   'ti-campania-soporte': CampaniaSoporteTITab,
   'ti-chat-vivo': ChatEnVivoTab,
   'ti-chatbot': ChatbotConfigTab,

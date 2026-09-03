@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import { parseTicket, parseTicketComment, type Ticket, type TicketComment, type TicketEstado, type TicketPrioridad } from '@/types/ticket.types'
+import { parseTicket, parseTicketComment, type Ticket, type TicketComment, type TicketEstado, type TicketPrioridad, type KpisTickets } from '@/types/ticket.types'
 import type { FichaUsuario } from '@/types/fichaUsuario.types'
 
 export const ticketsService = {
@@ -164,6 +164,15 @@ export const ticketsService = {
     await api.put('/tickets/escalamiento-config', payload)
   },
 
+  async getKpisConfig(): Promise<{ umbralSlaBueno: number; umbralReabiertosMalo: number; umbralSatisfaccionBueno: number }> {
+    const { data } = await api.get('/tickets/kpis-config')
+    return data?.data ?? { umbralSlaBueno: 80, umbralReabiertosMalo: 10, umbralSatisfaccionBueno: 4 }
+  },
+
+  async actualizarKpisConfig(payload: { umbralSlaBueno: number; umbralReabiertosMalo: number; umbralSatisfaccionBueno: number }): Promise<void> {
+    await api.put('/tickets/kpis-config', payload)
+  },
+
   async getEncuestaConfig(): Promise<{ id: number; area: string; prioridadMinima: TicketPrioridad }[]> {
     const { data } = await api.get('/tickets/encuesta-config')
     return data?.data ?? []
@@ -226,18 +235,8 @@ export const ticketsService = {
     await api.delete(`/tickets/${id}/evidencias/${histId}`)
   },
 
-  // API keys (administración, solo AD)
-  async getApiKeys(): Promise<{ id: number; nombre: string; activa: boolean; fechaCreacion: string; ultimoUso: string | null }[]> {
-    const { data } = await api.get('/tickets/api-keys')
-    return (data?.data ?? []) as { id: number; nombre: string; activa: boolean; fechaCreacion: string; ultimoUso: string | null }[]
-  },
-
-  async createApiKey(nombre: string): Promise<{ id: number; nombre: string; key: string }> {
-    const { data } = await api.post('/tickets/api-keys', { nombre })
-    return data.data
-  },
-
-  async revokeApiKey(id: number): Promise<void> {
-    await api.delete(`/tickets/api-keys/${id}`)
+  async getKpis(): Promise<KpisTickets> {
+    const { data } = await api.get('/tickets/reportes/kpis')
+    return data?.data as KpisTickets
   },
 }

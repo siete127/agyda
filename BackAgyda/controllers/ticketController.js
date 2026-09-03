@@ -368,6 +368,109 @@ exports.getReporteSla = async (req, res) => {
   }
 };
 
+// Panel de KPIs de Tickets (mismo alcance que SLA: informativo dentro del
+// módulo, no se conecta a AREA_KPIS/Supervisión General de Dirección
+// General). Todo se calcula sobre TICKETS + TICKET_SATISFACCION, sin
+// depender de que haya reglas de SLA configuradas.
+exports.getKpisTickets = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const abiertosRs = await pool.request().query(`
+      SELECT ESTADO as estado, COUNT(*) as total FROM TICKETS
+      WHERE ESTADO NOT IN ('resuelto', 'cerrado')
+      GROUP BY ESTADO
+    `);
+    const totalAbiertos = abiertosRs.recordset.reduce((sum, r) => sum + r.total, 0);
+
+    const cerradosRs = await pool.request().query(`
+      SELECT TICKET_ID as id, AREA as area, PRIORIDAD as prioridad, ESTADO as estado,
+             FECHA_CREACION as fechaCreacion, FECHA_CIERRE as fechaCierre, REABIERTO_VECES as reabiertoVeces
+      FROM TICKETS WHERE FECHA_CIERRE IS NOT NULL
+    `);
+    const cerrados = cerradosRs.recordset;
+    const totalCerrados = cerrados.length;
+
+    const minutosResolucion = cerrados
+      .map((t) => Math.round((new Date(t.fechaCierre).getTime() - new Date(t.fechaCreacion).getTime()) / 60000))
+      .filter((m) => Number.isFinite(m) && m >= 0);
+    const promedioResolucionMin = minutosResolucion.length
+      ? Math.round(minutosResolucion.reduce((a, b) => a + b, 0) / minutosResolucion.length)
+      : null;
+
+    const reabiertos = cerrados.filter((t) => (t.reabiertoVeces || 0) > 0).length;
+    const pctReabiertos = totalCerrados > 0 ? Math.round((reabiertos / totalCerrados) * 1000) / 10 : null;
+
+    let pctCumplimientoSla = null;
+    try {
+      const reglas = await cargarReglasSlaActivas(pool);
+      if (reglas.length > 0) {
+        const feriados = await cargarFeriadosActivos(pool, req.user?.empresa);
+        const enriquecidos = enriquecerConSla(cerrados, reglas, feriados).filter((t) => t.slaResolucion !== null);
+        if (enriquecidos.length > 0) {
+          const cumplidos = enriquecidos.filter((t) => t.slaResolucion === 'cumplido').length;
+          pctCumplimientoSla = Math.round((cumplidos / enriquecidos.length) * 1000) / 10;
+        }
+      }
+    } catch (e) {
+      console.warn('KPIs tickets: no se pudo calcular % cumplimiento SLA:', e.message);
+    }
+
+    const satisfaccionRs = await pool.request().query(`
+      SELECT AVG(CAST(RATING as FLOAT)) as promedio, COUNT(*) as total
+      FROM TICKET_SATISFACCION WHERE RATING IS NOT NULL
+    `);
+    const satisfaccionPromedio = satisfaccionRs.recordset[0]?.promedio != null
+      ? Math.round(satisfaccionRs.recordset[0].promedio * 10) / 10
+      : null;
+    const satisfaccionTotal = satisfaccionRs.recordset[0]?.total || 0;
+
+    const porArea = (campo) => {
+      const mapa = new Map();
+      for (const t of cerrados) {
+        const key = t[campo];
+        mapa.set(key, (mapa.get(key) || 0) + 1);
+      }
+      return [...mapa.entries()].map(([key, total]) => ({ key, total }));
+    };
+
+    // Umbrales configurables desde Configuración > Tecnología/TI (ver
+    // getKpisConfig/actualizarKpisConfig) — con fallback a los valores por
+    // defecto si la tabla falla o está vacía.
+    let umbrales = { umbralSlaBueno: 80, umbralReabiertosMalo: 10, umbralSatisfaccionBueno: 4 };
+    try {
+      const cfgRs = await pool.request().query(`
+        SELECT TOP 1 TKC_UMBRAL_SLA_BUENO as umbralSlaBueno,
+          TKC_UMBRAL_REABIERTOS_MALO as umbralReabiertosMalo,
+          TKC_UMBRAL_SATISFACCION_BUENO as umbralSatisfaccionBueno
+        FROM TICKETS_KPIS_CONFIG ORDER BY TKC_ID`);
+      if (cfgRs.recordset[0]) umbrales = cfgRs.recordset[0];
+    } catch (e) {
+      console.warn('KPIs tickets: no se pudo leer configuración de umbrales, usando default:', e.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        totalAbiertos,
+        porEstado: abiertosRs.recordset.map((r) => ({ key: r.estado, total: r.total })),
+        totalCerrados,
+        promedioResolucionMin,
+        pctReabiertos,
+        pctCumplimientoSla,
+        satisfaccionPromedio,
+        satisfaccionTotal,
+        volumenPorArea: porArea('area'),
+        volumenPorPrioridad: porArea('prioridad'),
+        ...umbrales,
+      },
+    });
+  } catch (e) {
+    console.error('Error generando KPIs de tickets:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // Valida que un usuario sea un agente activo del pool de soporte de un área
 // (opcionalmente restringido a un nivel). Reemplaza whitelists hardcodeadas.
 async function validarAgentePool(pool, area, userId, nivel = null) {
@@ -601,8 +704,10 @@ exports.getTicketById = async (req, res) => {
 };
 
 // Lógica de negocio de creación de ticket, separada del handler HTTP para que
-// tanto el portal (createTicket) como la API pública (createTicketFromApi)
+// los distintos puntos de entrada (portal, chatbot, chat en vivo, técnico)
 // la reusen sin duplicar código, siguiendo el mismo patrón que escalarTicketInterno.
+// 'api' se conserva en la lista solo por compatibilidad con tickets históricos
+// creados por la API pública ya retirada.
 const CANALES_ORIGEN_VALIDOS = ['portal', 'chatbot', 'chat_en_vivo', 'tecnico', 'api'];
 
 async function crearTicketInterno(pool, {
@@ -895,45 +1000,6 @@ exports.createTicket = async (req, res) => {
     return res.status(result.status).json({ success: true, data: result.data });
   } catch (e) {
     console.error('Error creando ticket:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-};
-
-// POST público (autenticado por API-key, ver middleware/apiKeyAuth.js) para que
-// sistemas externos creen tickets sin sesión JWT. El solicitante se resuelve por
-// email en vez de por usuarioId de header, ya que no hay usuario humano logueado.
-exports.createTicketFromApi = async (req, res) => {
-  try {
-    const {
-      email, area, titulo, descripcion, categoria, clasificacion,
-      subcategoria, sede, departamento, activoAfectado, servicioAfectado,
-      activoAfectadoId, servicioAfectadoId, impacto, urgencia,
-    } = req.body;
-
-    if (!email) return res.status(400).json({ success: false, message: 'email requerido' });
-
-    const pool = req.dbPool || await databaseService.getPool(req.query.empresa);
-    const rsUser = await pool.request().input('email', sql.NVarChar, email)
-      .query(`SELECT NEUS_ID FROM NEUS_USUARIOS WHERE NEUS_CORREO=@email AND NEUS_ACTIVO=1`);
-    if (!rsUser.recordset.length) {
-      return res.status(400).json({ success: false, message: `No existe un usuario activo con email ${email}` });
-    }
-    const solicitanteId = rsUser.recordset[0].NEUS_ID;
-
-    const result = await crearTicketInterno(pool, {
-      solicitanteId, area, titulo, descripcion, categoria,
-      clasificacion, subcategoria, sede, departamento, activoAfectado, servicioAfectado,
-      activoAfectadoId, servicioAfectadoId,
-      impacto, urgencia, prioridadManual: false, esAD: false,
-      tenantKey: req.query.empresa, canalOrigen: 'api',
-    });
-
-    if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
-
-    await logAudit(pool, { userId: null, userName: `API:${req.apiClient?.nombre || ''}`, modulo:'tickets', accion:'crear-api', entidadId: String(result.data?.id||''), detalle:{ titulo, area, apiKeyId: req.apiClient?.keyId }, ip:req.ip });
-    return res.status(result.status).json({ success: true, data: result.data });
-  } catch (e) {
-    console.error('Error creando ticket vía API:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };
@@ -2055,59 +2121,6 @@ exports.getCodigosCierre = async (req, res) => {
   }
 };
 
-// ── API keys para creación pública de tickets (solo AD) ──────────────────
-exports.listApiKeys = async (req, res) => {
-  try {
-    const pool = await databaseService.getPool(req.user?.empresa);
-    const rs = await pool.request().query(`
-      SELECT KEY_ID as id, NOMBRE as nombre, ACTIVA as activa, FECHA_CREACION as fechaCreacion, ULTIMO_USO as ultimoUso
-      FROM TICKETS_API_KEYS ORDER BY KEY_ID DESC`);
-    res.json({ success: true, data: rs.recordset });
-  } catch (e) {
-    console.error('Error listando API keys:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-};
-
-exports.createApiKey = async (req, res) => {
-  try {
-    const { nombre } = req.body;
-    if (!nombre) return res.status(400).json({ success: false, message: 'nombre requerido' });
-
-    const crypto = require('crypto');
-    const rawKey = crypto.randomBytes(24).toString('hex');
-    const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
-
-    const pool = await databaseService.getPool(req.user?.empresa);
-    const ins = await pool.request()
-      .input('hash', sql.NVarChar, hash)
-      .input('nombre', sql.NVarChar, nombre)
-      .input('creadoPor', sql.Int, req.user?.id || null)
-      .query(`INSERT INTO TICKETS_API_KEYS (KEY_HASH, NOMBRE, CREADO_POR) VALUES (@hash, @nombre, @creadoPor);
-              SELECT SCOPE_IDENTITY() as id;`);
-
-    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'crear-api-key', entidadId: String(ins.recordset[0].id), detalle:{ nombre }, ip:req.ip });
-    // La key en texto plano solo se muestra esta vez — no se puede recuperar después
-    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), nombre, key: rawKey } });
-  } catch (e) {
-    console.error('Error creando API key:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-};
-
-exports.revokeApiKey = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const pool = await databaseService.getPool(req.user?.empresa);
-    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKETS_API_KEYS SET ACTIVA=0 WHERE KEY_ID=@id`);
-    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'revocar-api-key', entidadId: String(id), detalle:{}, ip:req.ip });
-    res.json({ success: true });
-  } catch (e) {
-    console.error('Error revocando API key:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-};
-
 // ── Grupos de soporte (nombre descriptivo para AREA+NIVEL) ───────────────
 exports.getGruposSoporte = async (req, res) => {
   try {
@@ -2460,6 +2473,53 @@ exports.actualizarEscalamientoConfig = async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('Error actualizando configuración de escalamiento:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ── Umbrales del panel de KPIs de Tickets (config global de una sola fila) ──
+exports.getKpisConfig = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT TOP 1 TKC_ID as id, TKC_UMBRAL_SLA_BUENO as umbralSlaBueno,
+        TKC_UMBRAL_REABIERTOS_MALO as umbralReabiertosMalo,
+        TKC_UMBRAL_SATISFACCION_BUENO as umbralSatisfaccionBueno
+      FROM TICKETS_KPIS_CONFIG ORDER BY TKC_ID`);
+    res.json({ success: true, data: rs.recordset[0] || { umbralSlaBueno: 80, umbralReabiertosMalo: 10, umbralSatisfaccionBueno: 4 } });
+  } catch (e) {
+    console.error('Error obteniendo configuración de KPIs:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.actualizarKpisConfig = async (req, res) => {
+  try {
+    const { umbralSlaBueno, umbralReabiertosMalo, umbralSatisfaccionBueno } = req.body;
+    if (umbralSlaBueno !== undefined && (umbralSlaBueno < 0 || umbralSlaBueno > 100)) {
+      return res.status(400).json({ success: false, message: 'umbralSlaBueno debe estar entre 0 y 100' });
+    }
+    if (umbralReabiertosMalo !== undefined && (umbralReabiertosMalo < 0 || umbralReabiertosMalo > 100)) {
+      return res.status(400).json({ success: false, message: 'umbralReabiertosMalo debe estar entre 0 y 100' });
+    }
+    if (umbralSatisfaccionBueno !== undefined && (umbralSatisfaccionBueno < 0 || umbralSatisfaccionBueno > 5)) {
+      return res.status(400).json({ success: false, message: 'umbralSatisfaccionBueno debe estar entre 0 y 5' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const existente = await pool.request().query(`SELECT TOP 1 TKC_ID as id FROM TICKETS_KPIS_CONFIG ORDER BY TKC_ID`);
+    if (!existente.recordset[0]) {
+      return res.status(404).json({ success: false, message: 'Configuración no inicializada' });
+    }
+    await pool.request()
+      .input('id', sql.Int, existente.recordset[0].id)
+      .input('sla', sql.Decimal(5, 2), umbralSlaBueno !== undefined ? umbralSlaBueno : 80)
+      .input('reabiertos', sql.Decimal(5, 2), umbralReabiertosMalo !== undefined ? umbralReabiertosMalo : 10)
+      .input('satisfaccion', sql.Decimal(3, 2), umbralSatisfaccionBueno !== undefined ? umbralSatisfaccionBueno : 4)
+      .query(`UPDATE TICKETS_KPIS_CONFIG SET TKC_UMBRAL_SLA_BUENO=@sla, TKC_UMBRAL_REABIERTOS_MALO=@reabiertos, TKC_UMBRAL_SATISFACCION_BUENO=@satisfaccion, TKC_FECHA_ACTUALIZACION=GETDATE() WHERE TKC_ID=@id`);
+    await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo:'tickets', accion:'actualizar-kpis-config', entidadId: String(existente.recordset[0].id), detalle:{ umbralSlaBueno, umbralReabiertosMalo, umbralSatisfaccionBueno }, ip:req.ip });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando configuración de KPIs:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };
