@@ -83,4 +83,13 @@ export const kbService = {
   async togglePublico(id: number): Promise<void> {
     await api.post(`/kb/articulos/${id}/toggle-publico`)
   },
+
+  async uploadImagen(file: File): Promise<{ url: string; filename: string }> {
+    const fd = new FormData()
+    fd.append('imagen', file)
+    const { data } = await api.post('/kb/imagenes', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data.data
+  },
 }

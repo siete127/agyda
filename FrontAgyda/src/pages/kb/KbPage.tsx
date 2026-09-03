@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Search, Plus, Pencil, Archive, HelpCircle, FileText, Globe, Lock } from 'lucide-react'
+import { BookOpen, Search, Plus, Pencil, Archive, HelpCircle, FileText, Globe, Lock, Paperclip } from 'lucide-react'
 import { kbService, KB_TIPO_LABELS, separarContenidoKb, combinarContenidoKb, type KbArticulo, type KbTipo } from '@/services/kb.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/Button'
@@ -20,6 +20,21 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
   const [solucion, setSolucion] = useState(inicial.solucion)
   const [categoria, setCategoria] = useState(articulo?.categoria ?? '')
   const [tipo, setTipo] = useState<KbTipo>(articulo?.tipo ?? 'articulo')
+
+  const subirImagen = useMutation({
+    mutationFn: (file: File) => kbService.uploadImagen(file),
+    onSuccess: ({ url }) => {
+      setSolucion((prev) => `${prev}${prev.trim() ? '\n' : ''}${url}`)
+      toast.success('Imagen subida')
+    },
+    onError: () => toast.error('Error al subir la imagen'),
+  })
+
+  const handleImagen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) subirImagen.mutate(file)
+    e.target.value = ''
+  }
 
   const guardar = useMutation({
     mutationFn: async () => {
@@ -80,6 +95,10 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
             {tipo === 'faq' ? 'Respuesta' : 'Solución'}
           </label>
           <textarea value={solucion} onChange={(e) => setSolucion(e.target.value)} rows={6} className="field resize-none" placeholder="Pasos para resolverlo..." />
+          <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-[0.68rem] font-semibold text-teal-700 hover:border-teal-400">
+            <Paperclip className="h-3 w-3" /> {subirImagen.isPending ? 'Subiendo...' : 'Adjuntar imagen'}
+            <input type="file" accept="image/*" className="hidden" onChange={handleImagen} disabled={subirImagen.isPending} />
+          </label>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>

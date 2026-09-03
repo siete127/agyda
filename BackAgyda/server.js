@@ -70,6 +70,7 @@ app.use('/capacitacion-materiales', express.static(process.env.CAPACITACION_UPLO
 app.use('/intranet/Evidencia', express.static(process.env.EVIDENCIA_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Evidencia'));
 app.use('/intranet/Perfil', express.static(process.env.PROFILE_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Perfil'));
 app.use('/intranet/Portadas', express.static(process.env.PORTADA_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Portadas'));
+app.use('/intranet/ArdaWiki', express.static(process.env.KB_IMAGEN_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/ArdaWiki'));
 // Instalador y script del agente de monitoreo de red (descarga sin auth — el
 // script no contiene secretos; la API key la pega el instalador en la PC).
 app.use('/agente-red', express.static(path.join(__dirname, 'tools', 'agente-red')));

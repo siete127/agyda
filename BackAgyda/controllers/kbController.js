@@ -260,6 +260,30 @@ exports.updateArticulo = async (req, res) => {
   }
 };
 
+// Sube una imagen para insertar su link dentro del contenido de un artículo
+// (el contenido es texto plano, no hay editor rich-text: el frontend agrega
+// la URL devuelta al final del campo Solución antes de guardar).
+exports.uploadImagen = async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ success: false, message: 'Imagen requerida (campo: imagen)' });
+
+    const KB_IMAGEN_PUBLIC_BASE = process.env.KB_IMAGEN_PUBLIC_BASE_URL || '/intranet/ArdaWiki';
+    const publicUrl = `${KB_IMAGEN_PUBLIC_BASE}/${encodeURIComponent(file.filename)}`;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await logAudit(pool, {
+      userId: req.user?.id || null, userName: req.user?.nombre || null, modulo: 'kb', accion: 'subir-imagen',
+      entidadId: null, detalle: { filename: file.filename }, ip: req.ip,
+    });
+
+    res.json({ success: true, data: { url: publicUrl, filename: file.filename } });
+  } catch (e) {
+    console.error('Error subiendo imagen KB:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.toggleActivo = async (req, res) => {
   try {
     const { id } = req.params;
