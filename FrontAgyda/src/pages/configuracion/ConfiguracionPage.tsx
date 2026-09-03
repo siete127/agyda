@@ -17,6 +17,7 @@ import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
 import { InstitucionalTab } from './InstitucionalTab'
+import { MascotaTab } from './MascotaTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
 import { EnlacesTopbarTab } from './EnlacesTopbarTab'
 import { DashboardDisenoTab } from './DashboardDisenoTab'
@@ -54,6 +55,7 @@ const SCREENS: Record<string, ComponentType> = {
   perfiles: PerfilesTab,
   'pers-branding': BrandingTab,
   'pers-institucional': InstitucionalTab,
+  'pers-mascota': MascotaTab,
   'pers-botones': BotonesHeaderTab,
   'pers-enlaces': EnlacesTopbarTab,
   'pers-dashboard': DashboardDisenoTab,

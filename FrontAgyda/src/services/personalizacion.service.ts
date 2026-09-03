@@ -58,12 +58,23 @@ export interface EnlaceTopbar {
   visible: boolean
 }
 
+export type MascotaMovimiento = 'ninguno' | 'flotar' | 'saludar' | 'latir' | 'balanceo'
+export type MascotaVelocidad = 'lenta' | 'normal' | 'rapida'
+
+export interface Mascota {
+  mediaId: number | null
+  tipo: 'imagen' | 'video' | null
+  movimiento: MascotaMovimiento
+  velocidad: MascotaVelocidad
+}
+
 export interface PersonalizacionConfig {
   branding: Branding
   headerButtons: HeaderButton[]
   dashboard: { cards: DashboardCard[] }
   institucional: Institucional
   enlacesTopbar: EnlaceTopbar[]
+  mascota: Mascota
 }
 
 export const personalizacionService = {
@@ -114,5 +125,27 @@ export const personalizacionService = {
     if (!id) return null
     const token = useAuthStore.getState().token
     return `/api/personalizacion/assets/${id}/ver${token ? `?token=${encodeURIComponent(token)}` : ''}`
+  },
+
+  // ── Mascota ──
+  async subirMascotaMedia(file: File): Promise<{ id: number; tipo: 'imagen' | 'video' }> {
+    const form = new FormData()
+    form.append('archivo', file)
+    const { data } = await api.post('/personalizacion/mascota/media', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data.data
+  },
+
+  async updateMascota(m: Mascota): Promise<Mascota> {
+    const { data } = await api.put('/personalizacion/mascota', m)
+    return data.data as Mascota
+  },
+
+  // URL para <img>/<video> de un archivo de MEDIA_EMPRESA.
+  mediaUrl(id: number | null | undefined): string | null {
+    if (!id) return null
+    const token = useAuthStore.getState().token
+    return `/api/personalizacion/media/${id}${token ? `?token=${encodeURIComponent(token)}` : ''}`
   },
 }
