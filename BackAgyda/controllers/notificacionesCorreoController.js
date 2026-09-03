@@ -2,6 +2,7 @@ const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { PERMISOS_MAIL_TO } = require('../config/email');
 const emailService = require('../services/emailService');
+const telegramService = require('../services/telegramService');
 
 // Módulos que notifican a un grupo configurable de usuarios por correo.
 const MODULOS = [
@@ -19,8 +20,19 @@ async function ensureTabla(pool) {
       NCD_ID       INT IDENTITY PRIMARY KEY,
       NCD_MODULO   NVARCHAR(30) NOT NULL,
       NCD_USUARIO_ID INT NOT NULL,
+      NCD_MAIL     BIT NOT NULL DEFAULT 1,
+      NCD_TELEGRAM BIT NOT NULL DEFAULT 0,
       CONSTRAINT UQ_NOTIF_CORREO_MOD_USR UNIQUE (NCD_MODULO, NCD_USUARIO_ID)
     )
+  `);
+  // Filas creadas antes de que existieran los canales (tabla ya en uso desde
+  // sesiones previas) — por defecto quedan como "solo mail", que es el
+  // comportamiento que ya tenían.
+  await pool.request().query(`
+    IF COL_LENGTH('NOTIFICACIONES_CORREO_DESTINATARIOS', 'NCD_MAIL') IS NULL
+      ALTER TABLE NOTIFICACIONES_CORREO_DESTINATARIOS ADD NCD_MAIL BIT NOT NULL DEFAULT 1;
+    IF COL_LENGTH('NOTIFICACIONES_CORREO_DESTINATARIOS', 'NCD_TELEGRAM') IS NULL
+      ALTER TABLE NOTIFICACIONES_CORREO_DESTINATARIOS ADD NCD_TELEGRAM BIT NOT NULL DEFAULT 0;
   `);
 }
 
@@ -271,25 +283,27 @@ exports.getConfiguracion = async (req, res) => {
     await seedInicial(pool);
 
     const usuariosR = await pool.request().query(`
-      SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_TIPOUSUARIO as tipoUsuario, NEUS_CORREO as correo
+      SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_TIPOUSUARIO as tipoUsuario, NEUS_CORREO as correo,
+        CASE WHEN NEUS_TELEGRAM_CHAT_ID IS NOT NULL THEN 1 ELSE 0 END as telegramVinculado
       FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1 ORDER BY NEUS_NOMBRES
     `);
-    const destR = await pool.request().query('SELECT NCD_MODULO as modulo, NCD_USUARIO_ID as usuarioId FROM NOTIFICACIONES_CORREO_DESTINATARIOS');
+    const destR = await pool.request().query('SELECT NCD_MODULO as modulo, NCD_USUARIO_ID as usuarioId, NCD_MAIL as mail, NCD_TELEGRAM as telegram FROM NOTIFICACIONES_CORREO_DESTINATARIOS');
 
+    // Por módulo: mapa usuarioId -> {mail, telegram} (en vez del Set plano de
+    // antes, ahora cada destinatario trae sus dos canales independientes).
     const porModulo = {};
-    for (const m of MODULOS) porModulo[m.key] = new Set();
+    for (const m of MODULOS) porModulo[m.key] = {};
     for (const d of destR.recordset) {
-      if (porModulo[d.modulo]) porModulo[d.modulo].add(d.usuarioId);
+      if (porModulo[d.modulo]) porModulo[d.modulo][d.usuarioId] = { mail: !!d.mail, telegram: !!d.telegram };
     }
 
     return res.json({
       success: true,
       data: {
         modulos: MODULOS,
-        usuarios: usuariosR.recordset,
-        destinatarios: Object.fromEntries(
-          Object.entries(porModulo).map(([k, set]) => [k, [...set]])
-        ),
+        usuarios: usuariosR.recordset.map(u => ({ ...u, telegramVinculado: !!u.telegramVinculado })),
+        destinatarios: porModulo,
+        telegramConfigurado: telegramService.isConfigured(),
       },
     });
   } catch (e) {
@@ -297,30 +311,57 @@ exports.getConfiguracion = async (req, res) => {
   }
 };
 
-// Marca/desmarca un usuario como destinatario de un módulo.
+// Marca/desmarca un canal (mail o telegram) para un usuario en un módulo.
+// Si el usuario no tenía fila para ese módulo, la crea con el otro canal en
+// 0 (ej. activar solo Telegram sin mail, o viceversa).
 exports.setDestinatario = async (req, res) => {
   try {
     if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const { modulo, usuarioId } = req.params;
-    const { activo } = req.body || {};
+    const { activo, canal } = req.body || {};
     if (!MODULOS.some((m) => m.key === modulo)) return res.status(400).json({ success: false, message: 'Módulo inválido' });
+    const canalCol = canal === 'telegram' ? 'NCD_TELEGRAM' : 'NCD_MAIL';
 
     const pool = await databaseService.getPool(req.user?.empresa);
     await ensureTabla(pool);
 
-    if (activo) {
+    const existeR = await pool.request()
+      .input('mod', sql.NVarChar, modulo)
+      .input('uid', sql.Int, Number(usuarioId))
+      .query('SELECT NCD_ID FROM NOTIFICACIONES_CORREO_DESTINATARIOS WHERE NCD_MODULO=@mod AND NCD_USUARIO_ID=@uid');
+
+    if (existeR.recordset.length) {
+      const activoAny = activo || false;
+      // Si se desactivan ambos canales, se borra la fila (comportamiento
+      // idéntico al de antes, cuando solo existía un checkbox).
+      const otroCanalCol = canalCol === 'NCD_MAIL' ? 'NCD_TELEGRAM' : 'NCD_MAIL';
+      const otroR = await pool.request()
+        .input('mod', sql.NVarChar, modulo)
+        .input('uid', sql.Int, Number(usuarioId))
+        .query(`SELECT ${otroCanalCol} as v FROM NOTIFICACIONES_CORREO_DESTINATARIOS WHERE NCD_MODULO=@mod AND NCD_USUARIO_ID=@uid`);
+      const otroActivo = !!otroR.recordset[0]?.v;
+
+      if (!activoAny && !otroActivo) {
+        await pool.request()
+          .input('mod', sql.NVarChar, modulo)
+          .input('uid', sql.Int, Number(usuarioId))
+          .query('DELETE FROM NOTIFICACIONES_CORREO_DESTINATARIOS WHERE NCD_MODULO=@mod AND NCD_USUARIO_ID=@uid');
+      } else {
+        await pool.request()
+          .input('mod', sql.NVarChar, modulo)
+          .input('uid', sql.Int, Number(usuarioId))
+          .input('val', sql.Bit, activoAny)
+          .query(`UPDATE NOTIFICACIONES_CORREO_DESTINATARIOS SET ${canalCol}=@val WHERE NCD_MODULO=@mod AND NCD_USUARIO_ID=@uid`);
+      }
+    } else if (activo) {
+      const otroCanalCol = canalCol === 'NCD_MAIL' ? 'NCD_TELEGRAM' : 'NCD_MAIL';
       await pool.request()
         .input('mod', sql.NVarChar, modulo)
         .input('uid', sql.Int, Number(usuarioId))
         .query(`
-          IF NOT EXISTS (SELECT 1 FROM NOTIFICACIONES_CORREO_DESTINATARIOS WHERE NCD_MODULO=@mod AND NCD_USUARIO_ID=@uid)
-          INSERT INTO NOTIFICACIONES_CORREO_DESTINATARIOS (NCD_MODULO, NCD_USUARIO_ID) VALUES (@mod, @uid)
+          INSERT INTO NOTIFICACIONES_CORREO_DESTINATARIOS (NCD_MODULO, NCD_USUARIO_ID, ${canalCol}, ${otroCanalCol})
+          VALUES (@mod, @uid, 1, 0)
         `);
-    } else {
-      await pool.request()
-        .input('mod', sql.NVarChar, modulo)
-        .input('uid', sql.Int, Number(usuarioId))
-        .query('DELETE FROM NOTIFICACIONES_CORREO_DESTINATARIOS WHERE NCD_MODULO=@mod AND NCD_USUARIO_ID=@uid');
     }
     return res.json({ success: true });
   } catch (e) {
@@ -349,7 +390,8 @@ exports.setCorreoUsuario = async (req, res) => {
 };
 
 // Resuelve destinatarios (correo) de un módulo — usado por emailService al
-// disparar cada notificación. Solo incluye usuarios con correo capturado.
+// disparar cada notificación. Solo incluye usuarios con canal mail activo y
+// correo capturado.
 async function getDestinatariosCorreo(modulo, tenantKey) {
   const pool = await databaseService.getPool(tenantKey);
   await ensureTabla(pool);
@@ -360,14 +402,15 @@ async function getDestinatariosCorreo(modulo, tenantKey) {
       SELECT nu.NEUS_CORREO as correo
       FROM NOTIFICACIONES_CORREO_DESTINATARIOS d
       INNER JOIN NEUS_USUARIOS nu ON nu.NEUS_ID = d.NCD_USUARIO_ID
-      WHERE d.NCD_MODULO = @mod AND nu.NEUS_ACTIVO = 1 AND nu.NEUS_CORREO IS NOT NULL AND nu.NEUS_CORREO <> ''
+      WHERE d.NCD_MODULO = @mod AND d.NCD_MAIL = 1 AND nu.NEUS_ACTIVO = 1 AND nu.NEUS_CORREO IS NOT NULL AND nu.NEUS_CORREO <> ''
     `);
   return r.recordset.map((row) => row.correo);
 }
 
 // Igual que getDestinatariosCorreo, pero devuelve también el usuarioId — para
 // módulos que además crean una notificación in-app por cada destinatario
-// (p. ej. posible_baja), sin filtrar por si tienen correo o no.
+// (p. ej. posible_baja), sin filtrar por si tienen correo o no. Se mantiene
+// sin filtrar por canal a propósito (la notificación in-app no es "mail").
 async function getDestinatariosUsuarios(modulo, tenantKey) {
   const pool = await databaseService.getPool(tenantKey);
   await ensureTabla(pool);
@@ -383,6 +426,88 @@ async function getDestinatariosUsuarios(modulo, tenantKey) {
   return r.recordset;
 }
 
+// Chat IDs de Telegram de quienes tienen el canal telegram activo para un
+// módulo y ya vincularon su cuenta — usado por emailService/asistenciaController
+// para disparar el mensaje de Telegram junto (o en vez de) el correo.
+async function getDestinatariosTelegram(modulo, tenantKey) {
+  const pool = await databaseService.getPool(tenantKey);
+  await ensureTabla(pool);
+  await seedInicial(pool);
+  const r = await pool.request()
+    .input('mod', sql.NVarChar, modulo)
+    .query(`
+      SELECT nu.NEUS_TELEGRAM_CHAT_ID as chatId
+      FROM NOTIFICACIONES_CORREO_DESTINATARIOS d
+      INNER JOIN NEUS_USUARIOS nu ON nu.NEUS_ID = d.NCD_USUARIO_ID
+      WHERE d.NCD_MODULO = @mod AND d.NCD_TELEGRAM = 1 AND nu.NEUS_ACTIVO = 1 AND nu.NEUS_TELEGRAM_CHAT_ID IS NOT NULL
+    `);
+  return r.recordset.map((row) => String(row.chatId));
+}
+
+// Igual que getDestinatariosTelegram, pero trae también el nombre — para
+// módulos (vacaciones) donde el mensaje/token de aprobar-rechazar necesita
+// identificar a quién lo aprobó.
+async function getDestinatariosTelegramConNombre(modulo, tenantKey) {
+  const pool = await databaseService.getPool(tenantKey);
+  await ensureTabla(pool);
+  await seedInicial(pool);
+  const r = await pool.request()
+    .input('mod', sql.NVarChar, modulo)
+    .query(`
+      SELECT nu.NEUS_TELEGRAM_CHAT_ID as chatId, nu.NEUS_NOMBRES as nombre
+      FROM NOTIFICACIONES_CORREO_DESTINATARIOS d
+      INNER JOIN NEUS_USUARIOS nu ON nu.NEUS_ID = d.NCD_USUARIO_ID
+      WHERE d.NCD_MODULO = @mod AND d.NCD_TELEGRAM = 1 AND nu.NEUS_ACTIVO = 1 AND nu.NEUS_TELEGRAM_CHAT_ID IS NOT NULL
+    `);
+  return r.recordset.map((row) => ({ chatId: String(row.chatId), nombre: row.nombre }));
+}
+
+// ── Vinculación de Telegram (Mi Perfil) ───────────────────────────────────
+exports.generarCodigoTelegram = async (req, res) => {
+  try {
+    const usuarioId = req.user?.id;
+    if (!usuarioId) return res.status(401).json({ success: false, message: 'No autenticado' });
+    if (!telegramService.isConfigured()) return res.status(503).json({ success: false, message: 'Telegram no está configurado en el servidor' });
+
+    const codigo = await telegramService.generarCodigoVinculo(usuarioId, req.user?.empresa);
+    return res.json({ success: true, data: { codigo, botUsername: 'ArdabytecAgydaBot', expiraEnMinutos: 15 } });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.getEstadoTelegram = async (req, res) => {
+  try {
+    const usuarioId = req.user?.id;
+    if (!usuarioId) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const r = await pool.request().input('uid', sql.Int, usuarioId)
+      .query('SELECT NEUS_TELEGRAM_CHAT_ID as chatId FROM NEUS_USUARIOS WHERE NEUS_ID=@uid');
+    return res.json({
+      success: true,
+      data: {
+        vinculado: Boolean(r.recordset[0]?.chatId),
+        telegramConfigurado: telegramService.isConfigured(),
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.desvincularTelegram = async (req, res) => {
+  try {
+    const usuarioId = req.user?.id;
+    if (!usuarioId) return res.status(401).json({ success: false, message: 'No autenticado' });
+    await telegramService.desvincular(usuarioId, req.user?.empresa);
+    return res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 module.exports.getDestinatariosCorreo = getDestinatariosCorreo;
 module.exports.getDestinatariosUsuarios = getDestinatariosUsuarios;
+module.exports.getDestinatariosTelegram = getDestinatariosTelegram;
+module.exports.getDestinatariosTelegramConNombre = getDestinatariosTelegramConNombre;
 module.exports.getConfigServidorCorreo = getConfigServidorCorreo;

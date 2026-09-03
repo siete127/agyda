@@ -621,6 +621,76 @@ BEGIN
     CONSTRAINT UQ_TICKET_CODIGOS_CIERRE_NOMBRE UNIQUE (COD_NOMBRE)
   );
 END
+
+-- Reemplaza el array fijo CLASIFICACIONES de constants/ticketPrioridad.js.
+-- CLA_CLAVE es fija (es lo que se guarda en TICKETS.CLASIFICACION y valida
+-- el backend al crear un ticket) y NUNCA se edita desde el panel — solo
+-- CLA_NOMBRE (el texto visible) es editable, así renombrar una opción no
+-- rompe tickets históricos que ya guardaron esa clave.
+IF OBJECT_ID('dbo.TICKET_CLASIFICACIONES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_CLASIFICACIONES (
+    CLA_ID INT IDENTITY(1,1) PRIMARY KEY,
+    CLA_CLAVE NVARCHAR(30) NOT NULL,
+    CLA_NOMBRE NVARCHAR(100) NOT NULL,
+    CLA_ORDEN INT NOT NULL DEFAULT 0,
+    CLA_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_CLASIFICACIONES_CLAVE UNIQUE (CLA_CLAVE)
+  );
+END
+
+-- Reemplaza el array fijo BackAgyda/constants/ticketMotivosEspera.js —
+-- mismo patrón clave fija + nombre editable que TICKET_CLASIFICACIONES.
+IF OBJECT_ID('dbo.TICKET_MOTIVOS_ESPERA', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_MOTIVOS_ESPERA (
+    MOT_ID INT IDENTITY(1,1) PRIMARY KEY,
+    MOT_CLAVE NVARCHAR(30) NOT NULL,
+    MOT_NOMBRE NVARCHAR(100) NOT NULL,
+    MOT_ORDEN INT NOT NULL DEFAULT 0,
+    MOT_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_MOTIVOS_ESPERA_CLAVE UNIQUE (MOT_CLAVE)
+  );
+END
+
+-- Reemplaza los arrays fijos IMPACTOS/URGENCIAS de constants/ticketPrioridad.js.
+-- CLAVE es fija (es lo que se guarda en TICKETS.IMPACTO/URGENCIA y lo que usa
+-- TICKET_MATRIZ_PRIORIDAD para calcular la prioridad) — solo NOMBRE es editable.
+IF OBJECT_ID('dbo.TICKET_IMPACTOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_IMPACTOS (
+    IMP_ID INT IDENTITY(1,1) PRIMARY KEY,
+    IMP_CLAVE NVARCHAR(30) NOT NULL,
+    IMP_NOMBRE NVARCHAR(100) NOT NULL,
+    IMP_ORDEN INT NOT NULL DEFAULT 0,
+    IMP_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_IMPACTOS_CLAVE UNIQUE (IMP_CLAVE)
+  );
+END
+IF OBJECT_ID('dbo.TICKET_URGENCIAS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_URGENCIAS (
+    URG_ID INT IDENTITY(1,1) PRIMARY KEY,
+    URG_CLAVE NVARCHAR(30) NOT NULL,
+    URG_NOMBRE NVARCHAR(100) NOT NULL,
+    URG_ORDEN INT NOT NULL DEFAULT 0,
+    URG_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_URGENCIAS_CLAVE UNIQUE (URG_CLAVE)
+  );
+END
+
+-- Reemplaza la MATRIZ fija de constants/ticketPrioridad.js. Cruce
+-- IMP_CLAVE x URG_CLAVE -> PRIORIDAD (P1..P4), editable desde Configuración.
+IF OBJECT_ID('dbo.TICKET_MATRIZ_PRIORIDAD', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_MATRIZ_PRIORIDAD (
+    MAT_ID INT IDENTITY(1,1) PRIMARY KEY,
+    MAT_IMPACTO NVARCHAR(30) NOT NULL,
+    MAT_URGENCIA NVARCHAR(30) NOT NULL,
+    MAT_PRIORIDAD NVARCHAR(10) NOT NULL,
+    CONSTRAINT UQ_TICKET_MATRIZ_PRIORIDAD UNIQUE (MAT_IMPACTO, MAT_URGENCIA)
+  );
+END
 `;
     await pool.request().batch(batchSql);
 
@@ -660,7 +730,53 @@ END
       `);
     }
 
-    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades, Códigos de Cierre)');
+    const seedClasificaciones = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_CLASIFICACIONES');
+    if (seedClasificaciones.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_CLASIFICACIONES (CLA_CLAVE, CLA_NOMBRE, CLA_ORDEN) VALUES
+          ('incidente','Incidente',1),('solicitud','Solicitud de servicio',2),('acceso','Acceso / Permisos',3),
+          ('problema','Problema',4),('cambio','Cambio',5),('consulta','Consulta',6),
+          ('alerta_automatica','Alerta automática',7)
+      `);
+    }
+
+    const seedMotivosEspera = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_MOTIVOS_ESPERA');
+    if (seedMotivosEspera.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_MOTIVOS_ESPERA (MOT_CLAVE, MOT_NOMBRE, MOT_ORDEN) VALUES
+          ('usuario','Esperando al usuario',1),('proveedor','Esperando a proveedor',2),
+          ('autorizacion','Esperando autorización',3),('refaccion','Esperando refacción',4),
+          ('ventana','Esperando ventana de mantenimiento',5)
+      `);
+    }
+
+    const seedImpactos = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_IMPACTOS');
+    if (seedImpactos.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_IMPACTOS (IMP_CLAVE, IMP_NOMBRE, IMP_ORDEN) VALUES
+          ('BAJO','Bajo',1),('MEDIO','Medio',2),('ALTO','Alto',3)
+      `);
+    }
+
+    const seedUrgencias = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_URGENCIAS');
+    if (seedUrgencias.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_URGENCIAS (URG_CLAVE, URG_NOMBRE, URG_ORDEN) VALUES
+          ('BAJA','Baja',1),('MEDIA','Media',2),('ALTA','Alta',3)
+      `);
+    }
+
+    const seedMatriz = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_MATRIZ_PRIORIDAD');
+    if (seedMatriz.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_MATRIZ_PRIORIDAD (MAT_IMPACTO, MAT_URGENCIA, MAT_PRIORIDAD) VALUES
+          ('ALTO','ALTA','P1'),('ALTO','MEDIA','P2'),('ALTO','BAJA','P3'),
+          ('MEDIO','ALTA','P2'),('MEDIO','MEDIA','P3'),('MEDIO','BAJA','P4'),
+          ('BAJO','ALTA','P3'),('BAJO','MEDIA','P4'),('BAJO','BAJA','P4')
+      `);
+    }
+
+    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades, Códigos de Cierre, Clasificaciones, Motivos de espera, Impacto/Urgencia/Matriz de prioridad)');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar catálogos de Tecnología/TI:', err.message);
   }
@@ -1282,7 +1398,7 @@ END
   }
 }
 
-// Base de conocimiento (artículos vinculables a la resolución de tickets)
+// ArdaWiki (artículos vinculables a la resolución de tickets)
 async function ensureKbSchema(pool) {
   try {
     await pool.request().batch(`
@@ -1304,10 +1420,30 @@ async function ensureKbSchema(pool) {
       END
       IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TIPO')
         ALTER TABLE dbo.KB_ARTICULOS ADD ART_TIPO NVARCHAR(10) NOT NULL DEFAULT 'articulo';
+      -- Caché de traducción al inglés para ArdaWiki (KB pública): se
+      -- llena la primera vez que alguien pide el artículo en inglés (traducción
+      -- automática con Google, gratuita pero con rate-limit) y de ahí en
+      -- adelante se sirve directo de aquí sin volver a llamar al traductor.
+      -- NULL = aún no traducido.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TITULO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TITULO_EN NVARCHAR(200) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_CONTENIDO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_CONTENIDO_EN NVARCHAR(MAX) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_CATEGORIA_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_CATEGORIA_EN NVARCHAR(50) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TRADUCIDO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TRADUCIDO_EN DATETIME NULL;
+      -- Visibilidad del artículo: público (aparece también en el sitio web
+      -- institucional, además de ArdaWiki interno) o privado (solo dentro de
+      -- AGYDA). Independiente de ART_ACTIVO — un artículo puede estar activo
+      -- pero marcado privado. Default 1 para no ocultar de golpe los
+      -- artículos ya existentes en el sitio público al agregar la columna.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_PUBLICO')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_PUBLICO BIT NOT NULL DEFAULT 1;
     `);
-    logger.info('✅ Esquema de base de conocimiento asegurado');
+    logger.info('✅ Esquema de ArdaWiki asegurado');
   } catch (err) {
-    console.warn('⚠️ No se pudo asegurar esquema de base de conocimiento:', err.message);
+    console.warn('⚠️ No se pudo asegurar esquema de ArdaWiki:', err.message);
   }
 }
 
@@ -1332,6 +1468,26 @@ END
 IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_FECHA_INGRESO') IS NULL
 BEGIN
   ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_FECHA_INGRESO DATE NULL;
+END
+
+-- Vinculación con Telegram para notificaciones (ver telegramService.js).
+-- NEUS_TELEGRAM_CHAT_ID: id numérico del chat de Telegram del usuario, NULL
+-- si no ha vinculado. Se llena cuando el usuario le manda al bot el código
+-- de un solo uso generado desde Mi Perfil (NEUS_TELEGRAM_CODIGO_VINCULO +
+-- expiración) — el código se borra en cuanto se usa.
+IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_TELEGRAM_CHAT_ID') IS NULL
+BEGIN
+  ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_TELEGRAM_CHAT_ID BIGINT NULL;
+END
+
+IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_TELEGRAM_CODIGO_VINCULO') IS NULL
+BEGIN
+  ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_TELEGRAM_CODIGO_VINCULO NVARCHAR(10) NULL;
+END
+
+IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_TELEGRAM_CODIGO_EXPIRA') IS NULL
+BEGIN
+  ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_TELEGRAM_CODIGO_EXPIRA DATETIME NULL;
 END
 
 IF OBJECT_ID('dbo.INTRANET_PERFIL_DETALLE','U') IS NULL
@@ -4905,6 +5061,18 @@ BEGIN
   );
   CREATE INDEX IX_VACANTES_ACTIVO_FECHA ON dbo.INTRANET_VACANTES(VAC_ACTIVO, VAC_FECHA_CREACION DESC);
 END
+-- Caché de traducción al inglés para la página pública de Careers — mismo
+-- patrón que KB_ARTICULOS.ART_*_EN (ver ensureKbSchema). NULL = sin traducir.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_TITULO_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_TITULO_EN NVARCHAR(150) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_DESCRIPCION_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_DESCRIPCION_EN NVARCHAR(MAX) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_REQUISITOS_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_REQUISITOS_EN NVARCHAR(MAX) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_UBICACION_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_UBICACION_EN NVARCHAR(150) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_TRADUCIDO_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_TRADUCIDO_EN DATETIME NULL;
 
 IF OBJECT_ID('dbo.INTRANET_VACANTES_POSTULANTES', 'U') IS NULL
 BEGIN

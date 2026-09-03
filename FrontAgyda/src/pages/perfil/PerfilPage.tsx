@@ -16,6 +16,7 @@ import { AdicionalesTab } from '@/pages/expediente/AdicionalesTab'
 import { FamiliaresTab } from '@/pages/expediente/FamiliaresTab'
 import { FormacionTab } from '@/pages/expediente/FormacionTab'
 import { TalentoTab } from '@/pages/expediente/TalentoTab'
+import { TelegramVinculoSection } from './TelegramVinculoSection'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -485,6 +486,7 @@ export function PerfilPage() {
                         <input value={form.telefono ?? ''} onChange={(e) => setForm({ ...form, telefono: e.target.value })} className="field pl-10" placeholder="+52 000 000 0000" />
                       </div>
                     </div>
+                    <TelegramVinculoSection />
                   </div>
                 </div>
 

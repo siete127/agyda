@@ -346,6 +346,289 @@ exports.toggleCodigoCierreActiva = async (req, res) => {
   }
 };
 
+/* ── Clasificaciones de ticket ── */
+// CLA_CLAVE nunca se edita después de crearla — es lo que valida el backend
+// al crear un ticket y lo que ya está guardado en TICKETS.CLASIFICACION de
+// tickets históricos. Solo CLA_NOMBRE (el texto visible) es editable.
+exports.getClasificaciones = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const rs = await pool.request().query(`
+      SELECT CLA_ID as id, CLA_CLAVE as clave, CLA_NOMBRE as nombre, CLA_ORDEN as orden, CLA_ACTIVA as activa
+      FROM TICKET_CLASIFICACIONES ${incluirInactivas ? '' : 'WHERE CLA_ACTIVA = 1'}
+      ORDER BY CLA_ORDEN, CLA_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando clasificaciones:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createClasificacion = async (req, res) => {
+  try {
+    const { clave, nombre, orden } = req.body;
+    if (!clave || !nombre) return res.status(400).json({ success: false, message: 'clave y nombre son requeridos' });
+    const claveNorm = String(clave).trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!claveNorm) return res.status(400).json({ success: false, message: 'clave inválida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request().input('clave', sql.NVarChar, claveNorm).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_CLASIFICACIONES (CLA_CLAVE, CLA_NOMBRE, CLA_ORDEN) VALUES (@clave, @nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), clave: claveNorm, nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando clasificación:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateClasificacion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_CLASIFICACIONES SET CLA_NOMBRE=@nombre, CLA_ORDEN=@orden WHERE CLA_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando clasificación:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleClasificacionActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_CLASIFICACIONES SET CLA_ACTIVA = 1 - CLA_ACTIVA WHERE CLA_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de clasificación:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Motivos de espera de ticket ── */
+// Mismo patrón que Clasificaciones: MOT_CLAVE fija (usada al poner un ticket
+// en espera), MOT_NOMBRE editable.
+exports.getMotivosEspera = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const rs = await pool.request().query(`
+      SELECT MOT_ID as id, MOT_CLAVE as clave, MOT_NOMBRE as nombre, MOT_ORDEN as orden, MOT_ACTIVA as activa
+      FROM TICKET_MOTIVOS_ESPERA ${incluirInactivas ? '' : 'WHERE MOT_ACTIVA = 1'}
+      ORDER BY MOT_ORDEN, MOT_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando motivos de espera:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createMotivoEspera = async (req, res) => {
+  try {
+    const { clave, nombre, orden } = req.body;
+    if (!clave || !nombre) return res.status(400).json({ success: false, message: 'clave y nombre son requeridos' });
+    const claveNorm = String(clave).trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!claveNorm) return res.status(400).json({ success: false, message: 'clave inválida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request().input('clave', sql.NVarChar, claveNorm).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_MOTIVOS_ESPERA (MOT_CLAVE, MOT_NOMBRE, MOT_ORDEN) VALUES (@clave, @nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), clave: claveNorm, nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando motivo de espera:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateMotivoEspera = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_MOTIVOS_ESPERA SET MOT_NOMBRE=@nombre, MOT_ORDEN=@orden WHERE MOT_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando motivo de espera:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleMotivoEsperaActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_MOTIVOS_ESPERA SET MOT_ACTIVA = 1 - MOT_ACTIVA WHERE MOT_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de motivo de espera:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Impactos de ticket ── */
+// Mismo patrón que Clasificaciones/Motivos: IMP_CLAVE fija (usada en
+// TICKETS.IMPACTO y en TICKET_MATRIZ_PRIORIDAD), IMP_NOMBRE editable.
+exports.getImpactos = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const rs = await pool.request().query(`
+      SELECT IMP_ID as id, IMP_CLAVE as clave, IMP_NOMBRE as nombre, IMP_ORDEN as orden, IMP_ACTIVA as activa
+      FROM TICKET_IMPACTOS ${incluirInactivas ? '' : 'WHERE IMP_ACTIVA = 1'}
+      ORDER BY IMP_ORDEN, IMP_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando impactos:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createImpacto = async (req, res) => {
+  try {
+    const { clave, nombre, orden } = req.body;
+    if (!clave || !nombre) return res.status(400).json({ success: false, message: 'clave y nombre son requeridos' });
+    const claveNorm = String(clave).trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    if (!claveNorm) return res.status(400).json({ success: false, message: 'clave inválida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request().input('clave', sql.NVarChar, claveNorm).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_IMPACTOS (IMP_CLAVE, IMP_NOMBRE, IMP_ORDEN) VALUES (@clave, @nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), clave: claveNorm, nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando impacto:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateImpacto = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_IMPACTOS SET IMP_NOMBRE=@nombre, IMP_ORDEN=@orden WHERE IMP_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando impacto:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleImpactoActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_IMPACTOS SET IMP_ACTIVA = 1 - IMP_ACTIVA WHERE IMP_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de impacto:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Urgencias de ticket ── */
+exports.getUrgencias = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const incluirInactivas = req.query.incluirInactivas === '1';
+    const rs = await pool.request().query(`
+      SELECT URG_ID as id, URG_CLAVE as clave, URG_NOMBRE as nombre, URG_ORDEN as orden, URG_ACTIVA as activa
+      FROM TICKET_URGENCIAS ${incluirInactivas ? '' : 'WHERE URG_ACTIVA = 1'}
+      ORDER BY URG_ORDEN, URG_NOMBRE`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando urgencias:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.createUrgencia = async (req, res) => {
+  try {
+    const { clave, nombre, orden } = req.body;
+    if (!clave || !nombre) return res.status(400).json({ success: false, message: 'clave y nombre son requeridos' });
+    const claveNorm = String(clave).trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    if (!claveNorm) return res.status(400).json({ success: false, message: 'clave inválida' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ins = await pool.request().input('clave', sql.NVarChar, claveNorm).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`INSERT INTO TICKET_URGENCIAS (URG_CLAVE, URG_NOMBRE, URG_ORDEN) VALUES (@clave, @nombre, @orden); SELECT SCOPE_IDENTITY() as id;`);
+    res.status(201).json({ success: true, data: { id: Number(ins.recordset[0].id), clave: claveNorm, nombre, orden: orden || 0, activa: true } });
+  } catch (e) {
+    console.error('Error creando urgencia:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.updateUrgencia = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, orden } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).input('nombre', sql.NVarChar, nombre).input('orden', sql.Int, orden || 0)
+      .query(`UPDATE TICKET_URGENCIAS SET URG_NOMBRE=@nombre, URG_ORDEN=@orden WHERE URG_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando urgencia:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.toggleUrgenciaActiva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query(`UPDATE TICKET_URGENCIAS SET URG_ACTIVA = 1 - URG_ACTIVA WHERE URG_ID=@id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error cambiando estado de urgencia:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/* ── Matriz de prioridad (Impacto x Urgencia -> Prioridad) ── */
+const PRIORIDADES_VALIDAS = ['P1', 'P2', 'P3', 'P4'];
+
+exports.getMatrizPrioridad = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT MAT_IMPACTO as impacto, MAT_URGENCIA as urgencia, MAT_PRIORIDAD as prioridad
+      FROM TICKET_MATRIZ_PRIORIDAD`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listando matriz de prioridad:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.setCeldaMatrizPrioridad = async (req, res) => {
+  try {
+    const { impacto, urgencia, prioridad } = req.body;
+    const impactoNorm = String(impacto || '').trim().toUpperCase();
+    const urgenciaNorm = String(urgencia || '').trim().toUpperCase();
+    const prioridadNorm = String(prioridad || '').trim().toUpperCase();
+    if (!impactoNorm || !urgenciaNorm || !PRIORIDADES_VALIDAS.includes(prioridadNorm)) {
+      return res.status(400).json({ success: false, message: `prioridad debe ser una de: ${PRIORIDADES_VALIDAS.join(', ')}` });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('imp', sql.NVarChar, impactoNorm)
+      .input('urg', sql.NVarChar, urgenciaNorm)
+      .input('prio', sql.NVarChar, prioridadNorm)
+      .query(`
+        MERGE TICKET_MATRIZ_PRIORIDAD AS target
+        USING (SELECT @imp AS impacto, @urg AS urgencia) AS src
+        ON target.MAT_IMPACTO = src.impacto AND target.MAT_URGENCIA = src.urgencia
+        WHEN MATCHED THEN UPDATE SET MAT_PRIORIDAD = @prio
+        WHEN NOT MATCHED THEN INSERT (MAT_IMPACTO, MAT_URGENCIA, MAT_PRIORIDAD) VALUES (@imp, @urg, @prio);
+      `);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error actualizando celda de matriz de prioridad:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 /* ── Proveedores ── */
 exports.getProveedores = async (req, res) => {
   try {
