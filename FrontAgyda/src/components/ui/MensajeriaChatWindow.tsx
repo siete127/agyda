@@ -86,7 +86,7 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
   const [miembrosOpen, setMiembrosOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const mensajesContainerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stopTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -216,6 +216,9 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
       setMensajes((prev) => [...prev, optimista])
       setTexto('')
       setArchivo(null)
+      // El alto del textarea se ajusta imperativamente (fuera del control de
+      // React) al escribir varias líneas — hay que resetearlo a una línea acá.
+      if (inputRef.current) inputRef.current.style.height = 'auto'
     },
     onSuccess: (msg, { tempId }) => {
       // El socket puede llegar antes que esta respuesta y ya haber insertado el
@@ -279,7 +282,7 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
 
   // Pegar una imagen copiada (captura de pantalla, "Copiar imagen" desde el
   // navegador, etc.) directamente en el campo de texto con Ctrl+V.
-  const handlePegarArchivo = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePegarArchivo = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const archivoPegado = Array.from(e.clipboardData.items)
       .find((item) => item.kind === 'file')
       ?.getAsFile()
@@ -587,7 +590,7 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
                   ) : (
                     <div
                       className={clsx(
-                        'inline-flex min-w-[56px] max-w-[75%] flex-col overflow-hidden rounded-2xl px-3 py-1.5 text-[0.8rem] transition-opacity',
+                        'inline-block min-w-[56px] max-w-[75%] overflow-hidden rounded-2xl px-3 py-1.5 text-[0.8rem] transition-opacity',
                         esMio ? 'rounded-br-sm bg-brand text-white' : 'rounded-bl-sm border border-gray-200 bg-card text-gray-800',
                         m.estadoEnvio === 'enviando' && 'opacity-60',
                       )}
@@ -595,7 +598,7 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
                       {!esMio && canal.tipo === 'grupo' && (
                         <div className="text-[0.62rem] font-semibold text-brand mb-0.5">{m.emisorNombre}</div>
                       )}
-                      {m.contenido && <p className="whitespace-pre-wrap break-words">{m.contenido.trim()}</p>}
+                      {m.contenido && <p className="whitespace-pre-wrap break-words text-left">{m.contenido.trim()}</p>}
                       {m.archivoUrl && (
                         esImagen(m.archivoUrl) ? (
                           <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="block mt-1">
@@ -716,15 +719,27 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
               </div>
             )}
           </div>
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={texto}
-            onChange={(e) => handleChangeTexto(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleEnviar()}
+            onChange={(e) => {
+              handleChangeTexto(e.target.value)
+              const el = e.target
+              el.style.height = 'auto'
+              el.style.height = `${Math.min(el.scrollHeight, 96)}px`
+            }}
+            onKeyDown={(e) => {
+              // Enter envía; Shift+Enter (o Ctrl/Cmd+Enter) inserta salto de línea.
+              if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault()
+                handleEnviar()
+              }
+            }}
             onPaste={handlePegarArchivo}
             placeholder="Escribe un mensaje..."
-            className="flex-1 rounded-full border border-gray-200 px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-brand/20"
+            className="flex-1 resize-none rounded-3xl border border-gray-200 px-3 py-1.5 text-xs leading-5 outline-none focus:ring-2 focus:ring-brand/20"
+            style={{ maxHeight: 96 }}
           />
           <button
             onClick={handleEnviar}
