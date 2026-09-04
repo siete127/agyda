@@ -21,6 +21,7 @@ export const CONFIG_TREE: ConfigNode[] = [
     description: 'Identidad visual: marca, tema, encabezado y página de inicio',
     children: [
       { key: 'pers-branding', label: 'Marca (logo, colores, nombre)', screen: 'pers-branding' },
+      { key: 'pers-mascota', label: 'Mascota', screen: 'pers-mascota' },
       { key: 'pers-institucional', label: 'Misión, visión y valores', screen: 'pers-institucional' },
       { key: 'tema', label: 'Tema (modo y plantillas)', screen: 'tema' },
       { key: 'pers-botones', label: 'Botones del encabezado', screen: 'pers-botones' },
@@ -590,6 +591,13 @@ export const CONFIG_TREE: ConfigNode[] = [
       { key: 'fuentes-lead', label: 'Fuentes de lead' },
       { key: 'campanas-comerciales', label: 'Campañas comerciales' },
       {
+        key: 'cotizaciones-facturacion', label: 'Cotizaciones y facturación',
+        children: [
+          { key: 'ventas', label: 'Margen e IVA', screen: 'ventas' },
+          { key: 'facturacion', label: 'Facturación (emisor, CSD, PAC)', screen: 'facturacion' },
+        ],
+      },
+      {
         key: 'pipeline', label: 'Pipeline',
         children: [
           { key: 'pipelines', label: 'Pipelines' },
@@ -636,6 +644,17 @@ export const CONFIG_TREE: ConfigNode[] = [
     key: 'contact-center', label: 'Contact Center',
     description: 'Campañas, agentes, telefonía y enrutamiento de llamadas',
     children: [
+      {
+        key: 'omnicanal', label: 'Omnicanal (WhatsApp / Messenger / Instagram)',
+        children: [
+          { key: 'cc-canales', label: 'Canales', screen: 'cc-canales' },
+          { key: 'cc-skills', label: 'Campañas y skills', screen: 'cc-skills' },
+          { key: 'cc-agentes', label: 'Asignación de agentes', screen: 'cc-agentes' },
+          { key: 'cc-tipificaciones', label: 'Tipificaciones', screen: 'cc-tipificaciones' },
+          { key: 'cc-config', label: 'SLA, ACW y horario', screen: 'cc-config' },
+          { key: 'cc-simulador', label: 'Simulador de prueba', screen: 'cc-simulador' },
+        ],
+      },
       {
         key: 'campanas-cc', label: 'Campañas',
         children: [

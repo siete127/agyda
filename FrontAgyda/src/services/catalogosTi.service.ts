@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import type { Sede, CategoriaConSubcategorias, Especialidad, CodigoCierre, IntegracionConfig, Proveedor, Servicio, DiaFestivo, Elemento } from '@/types/catalogosTi.types'
+import type { Sede, CategoriaConSubcategorias, Especialidad, CodigoCierre, Clasificacion, MotivoEspera, Impacto, Urgencia, CeldaMatrizPrioridad, IntegracionConfig, Proveedor, Servicio, DiaFestivo, Elemento } from '@/types/catalogosTi.types'
 
 export const catalogosTiService = {
   // Sedes
@@ -85,6 +85,79 @@ export const catalogosTiService = {
   },
   async toggleCodigoCierreActiva(id: number): Promise<void> {
     await api.patch(`/catalogos-ti/codigos-cierre/${id}/activa`)
+  },
+
+  // Clasificaciones de ticket
+  async getClasificaciones(incluirInactivas = false): Promise<Clasificacion[]> {
+    const { data } = await api.get('/catalogos-ti/clasificaciones', { params: incluirInactivas ? { incluirInactivas: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createClasificacion(payload: { clave: string; nombre: string; orden?: number }): Promise<Clasificacion> {
+    const { data } = await api.post('/catalogos-ti/clasificaciones', payload)
+    return data.data
+  },
+  async updateClasificacion(id: number, payload: { nombre: string; orden?: number }): Promise<void> {
+    await api.put(`/catalogos-ti/clasificaciones/${id}`, payload)
+  },
+  async toggleClasificacionActiva(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/clasificaciones/${id}/activa`)
+  },
+
+  // Motivos de espera de ticket
+  async getMotivosEspera(incluirInactivas = false): Promise<MotivoEspera[]> {
+    const { data } = await api.get('/catalogos-ti/motivos-espera', { params: incluirInactivas ? { incluirInactivas: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createMotivoEspera(payload: { clave: string; nombre: string; orden?: number }): Promise<MotivoEspera> {
+    const { data } = await api.post('/catalogos-ti/motivos-espera', payload)
+    return data.data
+  },
+  async updateMotivoEspera(id: number, payload: { nombre: string; orden?: number }): Promise<void> {
+    await api.put(`/catalogos-ti/motivos-espera/${id}`, payload)
+  },
+  async toggleMotivoEsperaActiva(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/motivos-espera/${id}/activa`)
+  },
+
+  // Impactos de ticket
+  async getImpactos(incluirInactivas = false): Promise<Impacto[]> {
+    const { data } = await api.get('/catalogos-ti/impactos', { params: incluirInactivas ? { incluirInactivas: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createImpacto(payload: { clave: string; nombre: string; orden?: number }): Promise<Impacto> {
+    const { data } = await api.post('/catalogos-ti/impactos', payload)
+    return data.data
+  },
+  async updateImpacto(id: number, payload: { nombre: string; orden?: number }): Promise<void> {
+    await api.put(`/catalogos-ti/impactos/${id}`, payload)
+  },
+  async toggleImpactoActiva(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/impactos/${id}/activa`)
+  },
+
+  // Urgencias de ticket
+  async getUrgencias(incluirInactivas = false): Promise<Urgencia[]> {
+    const { data } = await api.get('/catalogos-ti/urgencias', { params: incluirInactivas ? { incluirInactivas: '1' } : {} })
+    return data?.data ?? []
+  },
+  async createUrgencia(payload: { clave: string; nombre: string; orden?: number }): Promise<Urgencia> {
+    const { data } = await api.post('/catalogos-ti/urgencias', payload)
+    return data.data
+  },
+  async updateUrgencia(id: number, payload: { nombre: string; orden?: number }): Promise<void> {
+    await api.put(`/catalogos-ti/urgencias/${id}`, payload)
+  },
+  async toggleUrgenciaActiva(id: number): Promise<void> {
+    await api.patch(`/catalogos-ti/urgencias/${id}/activa`)
+  },
+
+  // Matriz de prioridad (Impacto x Urgencia -> Prioridad)
+  async getMatrizPrioridad(): Promise<CeldaMatrizPrioridad[]> {
+    const { data } = await api.get('/catalogos-ti/matriz-prioridad')
+    return data?.data ?? []
+  },
+  async setCeldaMatrizPrioridad(payload: { impacto: string; urgencia: string; prioridad: string }): Promise<void> {
+    await api.put('/catalogos-ti/matriz-prioridad', payload)
   },
 
   // Proveedores

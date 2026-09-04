@@ -621,6 +621,76 @@ BEGIN
     CONSTRAINT UQ_TICKET_CODIGOS_CIERRE_NOMBRE UNIQUE (COD_NOMBRE)
   );
 END
+
+-- Reemplaza el array fijo CLASIFICACIONES de constants/ticketPrioridad.js.
+-- CLA_CLAVE es fija (es lo que se guarda en TICKETS.CLASIFICACION y valida
+-- el backend al crear un ticket) y NUNCA se edita desde el panel — solo
+-- CLA_NOMBRE (el texto visible) es editable, así renombrar una opción no
+-- rompe tickets históricos que ya guardaron esa clave.
+IF OBJECT_ID('dbo.TICKET_CLASIFICACIONES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_CLASIFICACIONES (
+    CLA_ID INT IDENTITY(1,1) PRIMARY KEY,
+    CLA_CLAVE NVARCHAR(30) NOT NULL,
+    CLA_NOMBRE NVARCHAR(100) NOT NULL,
+    CLA_ORDEN INT NOT NULL DEFAULT 0,
+    CLA_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_CLASIFICACIONES_CLAVE UNIQUE (CLA_CLAVE)
+  );
+END
+
+-- Reemplaza el array fijo BackAgyda/constants/ticketMotivosEspera.js —
+-- mismo patrón clave fija + nombre editable que TICKET_CLASIFICACIONES.
+IF OBJECT_ID('dbo.TICKET_MOTIVOS_ESPERA', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_MOTIVOS_ESPERA (
+    MOT_ID INT IDENTITY(1,1) PRIMARY KEY,
+    MOT_CLAVE NVARCHAR(30) NOT NULL,
+    MOT_NOMBRE NVARCHAR(100) NOT NULL,
+    MOT_ORDEN INT NOT NULL DEFAULT 0,
+    MOT_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_MOTIVOS_ESPERA_CLAVE UNIQUE (MOT_CLAVE)
+  );
+END
+
+-- Reemplaza los arrays fijos IMPACTOS/URGENCIAS de constants/ticketPrioridad.js.
+-- CLAVE es fija (es lo que se guarda en TICKETS.IMPACTO/URGENCIA y lo que usa
+-- TICKET_MATRIZ_PRIORIDAD para calcular la prioridad) — solo NOMBRE es editable.
+IF OBJECT_ID('dbo.TICKET_IMPACTOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_IMPACTOS (
+    IMP_ID INT IDENTITY(1,1) PRIMARY KEY,
+    IMP_CLAVE NVARCHAR(30) NOT NULL,
+    IMP_NOMBRE NVARCHAR(100) NOT NULL,
+    IMP_ORDEN INT NOT NULL DEFAULT 0,
+    IMP_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_IMPACTOS_CLAVE UNIQUE (IMP_CLAVE)
+  );
+END
+IF OBJECT_ID('dbo.TICKET_URGENCIAS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_URGENCIAS (
+    URG_ID INT IDENTITY(1,1) PRIMARY KEY,
+    URG_CLAVE NVARCHAR(30) NOT NULL,
+    URG_NOMBRE NVARCHAR(100) NOT NULL,
+    URG_ORDEN INT NOT NULL DEFAULT 0,
+    URG_ACTIVA BIT NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_TICKET_URGENCIAS_CLAVE UNIQUE (URG_CLAVE)
+  );
+END
+
+-- Reemplaza la MATRIZ fija de constants/ticketPrioridad.js. Cruce
+-- IMP_CLAVE x URG_CLAVE -> PRIORIDAD (P1..P4), editable desde Configuración.
+IF OBJECT_ID('dbo.TICKET_MATRIZ_PRIORIDAD', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKET_MATRIZ_PRIORIDAD (
+    MAT_ID INT IDENTITY(1,1) PRIMARY KEY,
+    MAT_IMPACTO NVARCHAR(30) NOT NULL,
+    MAT_URGENCIA NVARCHAR(30) NOT NULL,
+    MAT_PRIORIDAD NVARCHAR(10) NOT NULL,
+    CONSTRAINT UQ_TICKET_MATRIZ_PRIORIDAD UNIQUE (MAT_IMPACTO, MAT_URGENCIA)
+  );
+END
 `;
     await pool.request().batch(batchSql);
 
@@ -660,7 +730,53 @@ END
       `);
     }
 
-    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades, Códigos de Cierre)');
+    const seedClasificaciones = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_CLASIFICACIONES');
+    if (seedClasificaciones.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_CLASIFICACIONES (CLA_CLAVE, CLA_NOMBRE, CLA_ORDEN) VALUES
+          ('incidente','Incidente',1),('solicitud','Solicitud de servicio',2),('acceso','Acceso / Permisos',3),
+          ('problema','Problema',4),('cambio','Cambio',5),('consulta','Consulta',6),
+          ('alerta_automatica','Alerta automática',7)
+      `);
+    }
+
+    const seedMotivosEspera = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_MOTIVOS_ESPERA');
+    if (seedMotivosEspera.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_MOTIVOS_ESPERA (MOT_CLAVE, MOT_NOMBRE, MOT_ORDEN) VALUES
+          ('usuario','Esperando al usuario',1),('proveedor','Esperando a proveedor',2),
+          ('autorizacion','Esperando autorización',3),('refaccion','Esperando refacción',4),
+          ('ventana','Esperando ventana de mantenimiento',5)
+      `);
+    }
+
+    const seedImpactos = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_IMPACTOS');
+    if (seedImpactos.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_IMPACTOS (IMP_CLAVE, IMP_NOMBRE, IMP_ORDEN) VALUES
+          ('BAJO','Bajo',1),('MEDIO','Medio',2),('ALTO','Alto',3)
+      `);
+    }
+
+    const seedUrgencias = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_URGENCIAS');
+    if (seedUrgencias.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_URGENCIAS (URG_CLAVE, URG_NOMBRE, URG_ORDEN) VALUES
+          ('BAJA','Baja',1),('MEDIA','Media',2),('ALTA','Alta',3)
+      `);
+    }
+
+    const seedMatriz = await pool.request().query('SELECT COUNT(*) as n FROM dbo.TICKET_MATRIZ_PRIORIDAD');
+    if (seedMatriz.recordset[0].n === 0) {
+      await pool.request().query(`
+        INSERT INTO dbo.TICKET_MATRIZ_PRIORIDAD (MAT_IMPACTO, MAT_URGENCIA, MAT_PRIORIDAD) VALUES
+          ('ALTO','ALTA','P1'),('ALTO','MEDIA','P2'),('ALTO','BAJA','P3'),
+          ('MEDIO','ALTA','P2'),('MEDIO','MEDIA','P3'),('MEDIO','BAJA','P4'),
+          ('BAJO','ALTA','P3'),('BAJO','MEDIA','P4'),('BAJO','BAJA','P4')
+      `);
+    }
+
+    logger.info('✅ Catálogos de Tecnología/TI asegurados (Sedes, Categorías, Especialidades, Códigos de Cierre, Clasificaciones, Motivos de espera, Impacto/Urgencia/Matriz de prioridad)');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar catálogos de Tecnología/TI:', err.message);
   }
@@ -1282,7 +1398,7 @@ END
   }
 }
 
-// Base de conocimiento (artículos vinculables a la resolución de tickets)
+// ArdaWiki (artículos vinculables a la resolución de tickets)
 async function ensureKbSchema(pool) {
   try {
     await pool.request().batch(`
@@ -1304,10 +1420,30 @@ async function ensureKbSchema(pool) {
       END
       IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TIPO')
         ALTER TABLE dbo.KB_ARTICULOS ADD ART_TIPO NVARCHAR(10) NOT NULL DEFAULT 'articulo';
+      -- Caché de traducción al inglés para ArdaWiki (KB pública): se
+      -- llena la primera vez que alguien pide el artículo en inglés (traducción
+      -- automática con Google, gratuita pero con rate-limit) y de ahí en
+      -- adelante se sirve directo de aquí sin volver a llamar al traductor.
+      -- NULL = aún no traducido.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TITULO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TITULO_EN NVARCHAR(200) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_CONTENIDO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_CONTENIDO_EN NVARCHAR(MAX) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_CATEGORIA_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_CATEGORIA_EN NVARCHAR(50) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_TRADUCIDO_EN')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_TRADUCIDO_EN DATETIME NULL;
+      -- Visibilidad del artículo: público (aparece también en el sitio web
+      -- institucional, además de ArdaWiki interno) o privado (solo dentro de
+      -- AGYDA). Independiente de ART_ACTIVO — un artículo puede estar activo
+      -- pero marcado privado. Default 1 para no ocultar de golpe los
+      -- artículos ya existentes en el sitio público al agregar la columna.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_PUBLICO')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_PUBLICO BIT NOT NULL DEFAULT 1;
     `);
-    logger.info('✅ Esquema de base de conocimiento asegurado');
+    logger.info('✅ Esquema de ArdaWiki asegurado');
   } catch (err) {
-    console.warn('⚠️ No se pudo asegurar esquema de base de conocimiento:', err.message);
+    console.warn('⚠️ No se pudo asegurar esquema de ArdaWiki:', err.message);
   }
 }
 
@@ -1332,6 +1468,26 @@ END
 IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_FECHA_INGRESO') IS NULL
 BEGIN
   ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_FECHA_INGRESO DATE NULL;
+END
+
+-- Vinculación con Telegram para notificaciones (ver telegramService.js).
+-- NEUS_TELEGRAM_CHAT_ID: id numérico del chat de Telegram del usuario, NULL
+-- si no ha vinculado. Se llena cuando el usuario le manda al bot el código
+-- de un solo uso generado desde Mi Perfil (NEUS_TELEGRAM_CODIGO_VINCULO +
+-- expiración) — el código se borra en cuanto se usa.
+IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_TELEGRAM_CHAT_ID') IS NULL
+BEGIN
+  ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_TELEGRAM_CHAT_ID BIGINT NULL;
+END
+
+IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_TELEGRAM_CODIGO_VINCULO') IS NULL
+BEGIN
+  ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_TELEGRAM_CODIGO_VINCULO NVARCHAR(10) NULL;
+END
+
+IF COL_LENGTH('dbo.NEUS_USUARIOS', 'NEUS_TELEGRAM_CODIGO_EXPIRA') IS NULL
+BEGIN
+  ALTER TABLE dbo.NEUS_USUARIOS ADD NEUS_TELEGRAM_CODIGO_EXPIRA DATETIME NULL;
 END
 
 IF OBJECT_ID('dbo.INTRANET_PERFIL_DETALLE','U') IS NULL
@@ -1866,6 +2022,208 @@ END`,
     }
   }
   logger.info('✅ Esquema CRM asegurado/actualizado');
+}
+
+// Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
+// tenant; aquí se aseguran + se añaden las columnas de costeo/margen/IVA para el
+// semáforo de rentabilidad y la aprobación interna.
+async function ensureCrmCotizacionesSchema(pool) {
+  const creates = [
+    `IF OBJECT_ID('dbo.CRM_COTIZACIONES', 'U') IS NULL
+CREATE TABLE dbo.CRM_COTIZACIONES (
+  COT_ID             INT IDENTITY(1,1) PRIMARY KEY,
+  COT_OPO_ID         INT NOT NULL,
+  COT_FOLIO          NVARCHAR(20) NOT NULL DEFAULT '',
+  COT_TITULO         NVARCHAR(200) NULL,
+  COT_FECHA          DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+  COT_FECHA_VTO      DATE NULL,
+  COT_ESTATUS        NVARCHAR(20) NOT NULL DEFAULT 'borrador',
+  COT_NOTAS          NVARCHAR(MAX) NULL,
+  COT_TOTAL          DECIMAL(18,2) NOT NULL DEFAULT 0,
+  COT_CREADO_POR     INT NULL,
+  COT_ACTIVO         BIT NOT NULL DEFAULT 1,
+  COT_FECHA_REGISTRO DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CRM_COTIZACION_ITEMS', 'U') IS NULL
+CREATE TABLE dbo.CRM_COTIZACION_ITEMS (
+  COTI_ID          INT IDENTITY(1,1) PRIMARY KEY,
+  COTI_COT_ID      INT NOT NULL,
+  COTI_ORDEN       SMALLINT NOT NULL DEFAULT 0,
+  COTI_ES_SECCION  BIT NOT NULL DEFAULT 0,
+  COTI_DESCRIPCION NVARCHAR(400) NULL,
+  COTI_CANTIDAD    DECIMAL(10,3) NOT NULL DEFAULT 1,
+  COTI_PRECIO_UNIT DECIMAL(18,2) NOT NULL DEFAULT 0,
+  COTI_DESCUENTO   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  COTI_SUBTOTAL    DECIMAL(18,2) NULL
+);`,
+  ];
+  // ALTER ... ADD idempotente — cada uno su propio query (no mezclar en batch).
+  const alters = [
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_COSTO_UNIT') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_COSTO_UNIT DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_PS_ID') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_PS_ID INT NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_IVA_TASA') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_IVA_TASA DECIMAL(5,4) NOT NULL CONSTRAINT DF_COTI_IVA_TASA DEFAULT 0.16;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_CLAVE_PROD_SERV') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_CLAVE_PROD_SERV NVARCHAR(12) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACION_ITEMS','COTI_CLAVE_UNIDAD') IS NULL ALTER TABLE dbo.CRM_COTIZACION_ITEMS ADD COTI_CLAVE_UNIDAD NVARCHAR(6) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_SUBTOTAL') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_SUBTOTAL DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_IVA') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_IVA DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_COSTO_TOTAL') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_COSTO_TOTAL DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_UTILIDAD') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_UTILIDAD DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_MARGEN_PCT') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_MARGEN_PCT DECIMAL(6,2) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_SEMAFORO') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_SEMAFORO NVARCHAR(12) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_APROB_OVERRIDE') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_APROB_OVERRIDE BIT NOT NULL CONSTRAINT DF_COT_APROB_OVR DEFAULT 0;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_APROB_POR') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_APROB_POR INT NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_APROB_FECHA') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_APROB_FECHA DATETIME NULL;`,
+    `IF COL_LENGTH('dbo.CRM_COTIZACIONES','COT_FACTURA_ID') IS NULL ALTER TABLE dbo.CRM_COTIZACIONES ADD COT_FACTURA_ID INT NULL;`,
+  ];
+  for (const q of [...creates, ...alters]) {
+    try {
+      await pool.request().query(q);
+    } catch (err) {
+      console.warn('⚠️ CRM cotizaciones schema:', err.message);
+    }
+  }
+  logger.info('✅ Esquema CRM cotizaciones asegurado/actualizado');
+}
+
+// Facturación electrónica (CFDI 4.0): datos fiscales del emisor + CSD,
+// credenciales del PAC (parametrizable) y las facturas emitidas. Todo por
+// tenant, editable desde Configuración → Comercial → Facturación.
+async function ensureFacturacionSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.EMPRESA_FISCAL', 'U') IS NULL
+CREATE TABLE dbo.EMPRESA_FISCAL (
+  EF_ID INT IDENTITY(1,1) PRIMARY KEY,
+  EF_RFC NVARCHAR(13) NULL,
+  EF_RAZON_SOCIAL NVARCHAR(255) NULL,
+  EF_REGIMEN_FISCAL NVARCHAR(3) NULL,
+  EF_CP NVARCHAR(5) NULL,
+  EF_CSD_CARGADO BIT NOT NULL DEFAULT 0,
+  EF_CSD_CER VARBINARY(MAX) NULL,
+  EF_CSD_KEY VARBINARY(MAX) NULL,
+  EF_CSD_PASSWORD NVARCHAR(200) NULL,
+  EF_CSD_NUM_CERT NVARCHAR(30) NULL,
+  EF_CSD_VIGENCIA_HASTA DATETIME NULL,
+  EF_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.FACTURACION_CONFIG', 'U') IS NULL
+CREATE TABLE dbo.FACTURACION_CONFIG (
+  FC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FC_HABILITADO BIT NOT NULL DEFAULT 0,
+  FC_PROVEEDOR NVARCHAR(30) NOT NULL DEFAULT 'facturama',
+  FC_MODO NVARCHAR(10) NOT NULL DEFAULT 'sandbox',
+  FC_BASE_URL NVARCHAR(200) NULL,
+  FC_USUARIO NVARCHAR(200) NULL,
+  FC_PASSWORD NVARCHAR(400) NULL,
+  FC_API_KEY NVARCHAR(400) NULL,
+  FC_SERIE NVARCHAR(10) NULL DEFAULT 'A',
+  FC_FOLIO_ACTUAL INT NOT NULL DEFAULT 0,
+  FC_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.FACTURAS', 'U') IS NULL
+CREATE TABLE dbo.FACTURAS (
+  FAC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FAC_COT_ID INT NULL,
+  FAC_OPO_ID INT NULL,
+  FAC_CLIENTE_ID INT NULL,
+  FAC_UUID NVARCHAR(40) NULL,
+  FAC_PAC_ID NVARCHAR(60) NULL,
+  FAC_SERIE NVARCHAR(10) NULL,
+  FAC_FOLIO NVARCHAR(20) NULL,
+  FAC_EMISOR_RFC NVARCHAR(13) NULL,
+  FAC_RECEPTOR_RFC NVARCHAR(13) NULL,
+  FAC_RECEPTOR_NOMBRE NVARCHAR(255) NULL,
+  FAC_SUBTOTAL DECIMAL(18,2) NULL,
+  FAC_IVA DECIMAL(18,2) NULL,
+  FAC_TOTAL DECIMAL(18,2) NULL,
+  FAC_MONEDA NVARCHAR(3) NOT NULL DEFAULT 'MXN',
+  FAC_USO_CFDI NVARCHAR(4) NULL,
+  FAC_FORMA_PAGO NVARCHAR(3) NULL,
+  FAC_METODO_PAGO NVARCHAR(4) NULL,
+  FAC_ESTATUS NVARCHAR(20) NOT NULL DEFAULT 'pre-factura',
+  FAC_XML NVARCHAR(MAX) NULL,
+  FAC_ERROR NVARCHAR(1000) NULL,
+  FAC_FECHA_TIMBRADO DATETIME NULL,
+  FAC_FECHA_CANCELACION DATETIME NULL,
+  FAC_CREADO_POR INT NULL,
+  FAC_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.FACTURAS', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FACTURAS_COT' AND object_id = OBJECT_ID('dbo.FACTURAS'))
+CREATE INDEX IX_FACTURAS_COT ON dbo.FACTURAS(FAC_COT_ID);`,
+    // Pagos recibidos de una factura (una fila por parcialidad). Si la factura
+    // es PPD y está timbrada, genera un CFDI tipo P.
+    `IF OBJECT_ID('dbo.FACTURA_PAGOS', 'U') IS NULL
+CREATE TABLE dbo.FACTURA_PAGOS (
+  PAG_ID INT IDENTITY(1,1) PRIMARY KEY,
+  PAG_FACTURA_ID INT NOT NULL,
+  PAG_FECHA_PAGO DATETIME NOT NULL,
+  PAG_FORMA_PAGO NVARCHAR(3) NOT NULL,
+  PAG_MONTO DECIMAL(18,2) NOT NULL,
+  PAG_MONEDA NVARCHAR(3) NOT NULL DEFAULT 'MXN',
+  PAG_PARCIALIDAD INT NOT NULL DEFAULT 1,
+  PAG_SALDO_ANTERIOR DECIMAL(18,2) NULL,
+  PAG_SALDO_INSOLUTO DECIMAL(18,2) NULL,
+  PAG_CFDI_UUID NVARCHAR(40) NULL,
+  PAG_CFDI_PAC_ID NVARCHAR(60) NULL,
+  PAG_CFDI_XML NVARCHAR(MAX) NULL,
+  PAG_ESTATUS NVARCHAR(20) NOT NULL DEFAULT 'registrado',
+  PAG_ERROR NVARCHAR(1000) NULL,
+  PAG_FINANZAS_ID INT NULL,
+  PAG_CREADO_POR INT NULL,
+  PAG_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.FACTURA_PAGOS', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FACTURA_PAGOS_FAC' AND object_id = OBJECT_ID('dbo.FACTURA_PAGOS'))
+CREATE INDEX IX_FACTURA_PAGOS_FAC ON dbo.FACTURA_PAGOS(PAG_FACTURA_ID);`,
+    // Notas de crédito (CFDI tipo E) contra una factura.
+    `IF OBJECT_ID('dbo.NOTAS_CREDITO', 'U') IS NULL
+CREATE TABLE dbo.NOTAS_CREDITO (
+  NC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  NC_FACTURA_ID INT NOT NULL,
+  NC_TIPO_RELACION NVARCHAR(2) NOT NULL DEFAULT '01',
+  NC_MOTIVO NVARCHAR(300) NULL,
+  NC_SUBTOTAL DECIMAL(18,2) NOT NULL,
+  NC_IVA DECIMAL(18,2) NOT NULL,
+  NC_TOTAL DECIMAL(18,2) NOT NULL,
+  NC_UUID NVARCHAR(40) NULL,
+  NC_PAC_ID NVARCHAR(60) NULL,
+  NC_SERIE NVARCHAR(10) NULL,
+  NC_FOLIO NVARCHAR(20) NULL,
+  NC_XML NVARCHAR(MAX) NULL,
+  NC_ESTATUS NVARCHAR(20) NOT NULL DEFAULT 'pre-nota',
+  NC_ERROR NVARCHAR(1000) NULL,
+  NC_CREADO_POR INT NULL,
+  NC_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.NOTAS_CREDITO', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_NOTAS_CREDITO_FAC' AND object_id = OBJECT_ID('dbo.NOTAS_CREDITO'))
+CREATE INDEX IX_NOTAS_CREDITO_FAC ON dbo.NOTAS_CREDITO(NC_FACTURA_ID);`,
+    `IF OBJECT_ID('dbo.NOTA_CREDITO_ITEMS', 'U') IS NULL
+CREATE TABLE dbo.NOTA_CREDITO_ITEMS (
+  NCI_ID INT IDENTITY(1,1) PRIMARY KEY,
+  NCI_NC_ID INT NOT NULL,
+  NCI_DESCRIPCION NVARCHAR(400) NULL,
+  NCI_CLAVE_PROD_SERV NVARCHAR(12) NULL,
+  NCI_CLAVE_UNIDAD NVARCHAR(6) NULL,
+  NCI_CANTIDAD DECIMAL(10,3) NOT NULL DEFAULT 1,
+  NCI_PRECIO_UNIT DECIMAL(18,2) NOT NULL DEFAULT 0,
+  NCI_IVA_TASA DECIMAL(5,4) NOT NULL DEFAULT 0.16
+);`,
+  ];
+  // Datos fiscales del receptor sobre CRM_CONTACTOS (clientes/prospectos).
+  const contactoCols = [
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_RFC') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_RFC NVARCHAR(13) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_RAZON_SOCIAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_RAZON_SOCIAL NVARCHAR(255) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_REGIMEN_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_REGIMEN_FISCAL NVARCHAR(3) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CP_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CP_FISCAL NVARCHAR(5) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_USO_CFDI') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_USO_CFDI NVARCHAR(4) NULL;`,
+  ];
+  const facturaCols = [
+    `IF COL_LENGTH('dbo.FACTURAS','FAC_SALDO') IS NULL ALTER TABLE dbo.FACTURAS ADD FAC_SALDO DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.FACTURAS','FAC_PAGADA') IS NULL ALTER TABLE dbo.FACTURAS ADD FAC_PAGADA BIT NOT NULL CONSTRAINT DF_FAC_PAGADA DEFAULT 0;`,
+  ];
+  for (const q of [...stmts, ...contactoCols, ...facturaCols]) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Facturacion schema:', err.message); }
+  }
+  logger.info('✅ Esquema de facturación asegurado/actualizado');
 }
 
 async function ensureCrmSeguimientoSchema(pool) {
@@ -4614,11 +4972,13 @@ async function ensureAllSchemas(pool) {
   await ensureEvaluacionDesempenoSchema(pool);
   await ensureLivechatSchema(pool);
   await ensureLivechatCampanasSchema(pool);
+  await ensureContactCenterSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
   await ensureEncuestasSchema(pool);
   await ensureEncuestaSatisfaccionClienteSeed(pool);
   await ensureCrmSchema(pool);
+  await ensureCrmCotizacionesSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
@@ -4652,6 +5012,8 @@ async function ensureAllSchemas(pool) {
   await ensureCumplimientoNormativoSchema(pool);
   await ensureControlDocumentalSchema(pool);
   await ensureProductosServiciosSchema(pool);
+  await ensureSatCatalogosSchema(pool);
+  await ensureFacturacionSchema(pool);
   await ensureActivosSchema(pool);
   await ensureUsuarioTiemposSchema(pool);
 }
@@ -4905,6 +5267,18 @@ BEGIN
   );
   CREATE INDEX IX_VACANTES_ACTIVO_FECHA ON dbo.INTRANET_VACANTES(VAC_ACTIVO, VAC_FECHA_CREACION DESC);
 END
+-- Caché de traducción al inglés para la página pública de Careers — mismo
+-- patrón que KB_ARTICULOS.ART_*_EN (ver ensureKbSchema). NULL = sin traducir.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_TITULO_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_TITULO_EN NVARCHAR(150) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_DESCRIPCION_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_DESCRIPCION_EN NVARCHAR(MAX) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_REQUISITOS_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_REQUISITOS_EN NVARCHAR(MAX) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_UBICACION_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_UBICACION_EN NVARCHAR(150) NULL;
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='INTRANET_VACANTES' AND COLUMN_NAME='VAC_TRADUCIDO_EN')
+  ALTER TABLE dbo.INTRANET_VACANTES ADD VAC_TRADUCIDO_EN DATETIME NULL;
 
 IF OBJECT_ID('dbo.INTRANET_VACANTES_POSTULANTES', 'U') IS NULL
 BEGIN
@@ -5821,6 +6195,194 @@ IF COL_LENGTH('dbo.LIVECHAT_CAMPANIAS', 'LCA_AREA') IS NULL
   }
 }
 
+// Contact Center omnicanal (WhatsApp / Messenger / Instagram / canal test).
+// Sistema propio con tablas CC_* — el chat web (LIVECHAT_*) sigue intacto; la
+// bandeja del agente fusiona ambas fuentes en lectura. "Grupo" = skill (sin niveles).
+// Prefijos elegidos para no chocar: CC_METAS ya usa CM_* → campañas del CC usan CM2_.
+async function ensureContactCenterSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CCO_CAMPANIAS', 'U') IS NULL
+CREATE TABLE dbo.CCO_CAMPANIAS (
+  CM2_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CM2_NOMBRE NVARCHAR(200) NOT NULL,
+  CM2_DESCRIPCION NVARCHAR(MAX) NULL,
+  CM2_MAX_CHATS_POR_AGENTE INT NULL,
+  CM2_ACTIVO BIT NOT NULL DEFAULT 1,
+  CM2_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CCO_GRUPOS', 'U') IS NULL
+CREATE TABLE dbo.CCO_GRUPOS (
+  CG_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CG_CAMPANIA_ID INT NOT NULL,
+  CG_NOMBRE NVARCHAR(120) NOT NULL,
+  CG_DESCRIPCION NVARCHAR(MAX) NULL,
+  CG_ICONO NVARCHAR(10) NULL DEFAULT ('💬'),
+  CG_ACTIVO BIT NOT NULL DEFAULT 1,
+  CONSTRAINT FK_CCO_GRUPOS_CAMPANIA FOREIGN KEY (CG_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCO_GRUPO_AGENTES', 'U') IS NULL
+CREATE TABLE dbo.CCO_GRUPO_AGENTES (
+  CGA_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CGA_GRUPO_ID INT NOT NULL,
+  CGA_USUARIO_ID INT NOT NULL,
+  CGA_ACTIVO BIT NOT NULL DEFAULT 1,
+  CGA_FECHA_ASIGNACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCO_GA_GRUPO FOREIGN KEY (CGA_GRUPO_ID) REFERENCES dbo.CCO_GRUPOS(CG_ID),
+  CONSTRAINT UQ_CCO_GA_GRUPO_USUARIO UNIQUE (CGA_GRUPO_ID, CGA_USUARIO_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NULL
+CREATE TABLE dbo.CCO_CANALES (
+  CN_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CN_TIPO NVARCHAR(20) NOT NULL,
+  CN_NOMBRE NVARCHAR(120) NOT NULL,
+  CN_HABILITADO BIT NOT NULL DEFAULT 0,
+  CN_GRUPO_ID INT NULL,
+  CN_CAMPANIA_ID INT NULL,
+  CN_META_PAGE_ID NVARCHAR(60) NULL,
+  CN_META_BUSINESS_ID NVARCHAR(60) NULL,
+  CN_ACCESS_TOKEN NVARCHAR(600) NULL,
+  CN_APP_SECRET NVARCHAR(200) NULL,
+  CN_VERIFY_TOKEN NVARCHAR(100) NULL,
+  CN_WEBHOOK_SUSCRITO BIT NOT NULL DEFAULT 0,
+  CN_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CCO_INTERACCIONES', 'U') IS NULL
+CREATE TABLE dbo.CCO_INTERACCIONES (
+  CI_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CI_CANAL_ID INT NOT NULL,
+  CI_TIPO NVARCHAR(20) NOT NULL,
+  CI_CLIENTE_EXT_ID NVARCHAR(80) NULL,
+  CI_CLIENTE_NOMBRE NVARCHAR(160) NULL,
+  CI_CLIENTE_TELEFONO NVARCHAR(40) NULL,
+  CI_CONTACTO_ID INT NULL,
+  CI_CAMPANIA_ID INT NULL,
+  CI_GRUPO_ID INT NULL,
+  CI_AGENTE_ID INT NULL,
+  CI_AGENTE_NOMBRE NVARCHAR(160) NULL,
+  CI_ESTADO NVARCHAR(24) NOT NULL DEFAULT 'en_cola',
+  CI_MOTIVO_CIERRE_ID INT NULL,
+  CI_COMENTARIO_CIERRE NVARCHAR(MAX) NULL,
+  CI_TIPIFICACION_ID INT NULL,
+  CI_FECHA_INICIO DATETIME NOT NULL DEFAULT GETDATE(),
+  CI_FECHA_PRIMER_RESPUESTA DATETIME NULL,
+  CI_FECHA_ULTIMO_MSJ_CLIENTE DATETIME NULL,
+  CI_FECHA_CIERRE DATETIME NULL,
+  CI_TICKET INT NULL,
+  CONSTRAINT CK_CCO_INT_ESTADO CHECK (CI_ESTADO IN ('en_cola','activa','pendiente_tipificacion','cerrada')),
+  CONSTRAINT FK_CCO_INT_CANAL FOREIGN KEY (CI_CANAL_ID) REFERENCES dbo.CCO_CANALES(CN_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCO_INTERACCIONES', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_INT_ESTADO' AND object_id = OBJECT_ID('dbo.CCO_INTERACCIONES'))
+BEGIN
+  CREATE INDEX IX_CCO_INT_ESTADO ON dbo.CCO_INTERACCIONES(CI_ESTADO);
+  CREATE INDEX IX_CCO_INT_AGENTE ON dbo.CCO_INTERACCIONES(CI_AGENTE_ID);
+  CREATE INDEX IX_CCO_INT_CANAL ON dbo.CCO_INTERACCIONES(CI_CANAL_ID);
+  CREATE INDEX IX_CCO_INT_CLIENTE ON dbo.CCO_INTERACCIONES(CI_CANAL_ID, CI_CLIENTE_EXT_ID);
+END;`,
+    `IF OBJECT_ID('dbo.CCO_MEDIA', 'U') IS NULL
+CREATE TABLE dbo.CCO_MEDIA (
+  MM3_ID INT IDENTITY(1,1) PRIMARY KEY,
+  MM3_INTERACCION_ID INT NULL,
+  MM3_NOMBRE_ARCHIVO NVARCHAR(260) NOT NULL,
+  MM3_NOMBRE_ORIGINAL NVARCHAR(260) NULL,
+  MM3_MIME NVARCHAR(120) NULL,
+  MM3_TAMANIO INT NULL,
+  MM3_META_MEDIA_ID NVARCHAR(120) NULL,
+  MM3_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CCO_MENSAJES', 'U') IS NULL
+CREATE TABLE dbo.CCO_MENSAJES (
+  MG_ID INT IDENTITY(1,1) PRIMARY KEY,
+  MG_INTERACCION_ID INT NOT NULL,
+  MG_EMISOR NVARCHAR(15) NOT NULL,
+  MG_AGENTE_ID INT NULL,
+  MG_CONTENIDO NVARCHAR(MAX) NULL,
+  MG_MEDIA_ID INT NULL,
+  MG_META_MSG_ID NVARCHAR(120) NULL,
+  MG_ESTADO_ENTREGA NVARCHAR(15) NULL,
+  MG_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT CK_CCO_MSG_EMISOR CHECK (MG_EMISOR IN ('cliente','agente','sistema')),
+  CONSTRAINT FK_CCO_MSG_INT FOREIGN KEY (MG_INTERACCION_ID) REFERENCES dbo.CCO_INTERACCIONES(CI_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCO_MENSAJES', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_MSG_INT' AND object_id = OBJECT_ID('dbo.CCO_MENSAJES'))
+CREATE INDEX IX_CCO_MSG_INT ON dbo.CCO_MENSAJES(MG_INTERACCION_ID, MG_FECHA);`,
+    `IF OBJECT_ID('dbo.CCO_MENSAJES', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCO_MSG_META' AND object_id = OBJECT_ID('dbo.CCO_MENSAJES'))
+CREATE UNIQUE INDEX UQ_CCO_MSG_META ON dbo.CCO_MENSAJES(MG_META_MSG_ID) WHERE MG_META_MSG_ID IS NOT NULL;`,
+    `IF OBJECT_ID('dbo.CCO_TIPIFICACIONES', 'U') IS NULL
+CREATE TABLE dbo.CCO_TIPIFICACIONES (
+  CT_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CT_CAMPANIA_ID INT NULL,
+  CT_NOMBRE NVARCHAR(200) NOT NULL,
+  CT_DESCRIPCION NVARCHAR(MAX) NULL,
+  CT_REQUIERE_COMENTARIO BIT NOT NULL DEFAULT 0,
+  CT_ORDEN INT NOT NULL DEFAULT 0,
+  CT_ACTIVO BIT NOT NULL DEFAULT 1
+);`,
+    `IF OBJECT_ID('dbo.CCO_MOTIVOS_CIERRE', 'U') IS NULL
+CREATE TABLE dbo.CCO_MOTIVOS_CIERRE (
+  CMC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CMC_GRUPO_ID INT NOT NULL,
+  CMC_MOTIVO NVARCHAR(200) NOT NULL,
+  CMC_DESCRIPCION NVARCHAR(MAX) NULL,
+  CMC_REQUIERE_COMENTARIO BIT NOT NULL DEFAULT 0,
+  CMC_ORDEN INT NOT NULL DEFAULT 0,
+  CMC_ACTIVO BIT NOT NULL DEFAULT 1,
+  CONSTRAINT FK_CCO_MC_GRUPO FOREIGN KEY (CMC_GRUPO_ID) REFERENCES dbo.CCO_GRUPOS(CG_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCO_PLANTILLAS', 'U') IS NULL
+CREATE TABLE dbo.CCO_PLANTILLAS (
+  CP_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CP_GRUPO_ID INT NOT NULL,
+  CP_NOMBRE NVARCHAR(200) NOT NULL,
+  CP_CONTENIDO NVARCHAR(MAX) NOT NULL,
+  CP_VISIBILIDAD NVARCHAR(20) NOT NULL DEFAULT 'publica',
+  CP_USUARIO_ID INT NULL,
+  CP_ACTIVO BIT NOT NULL DEFAULT 1,
+  CONSTRAINT CK_CCO_PL_VIS CHECK (CP_VISIBILIDAD IN ('publica','privada')),
+  CONSTRAINT FK_CCO_PL_GRUPO FOREIGN KEY (CP_GRUPO_ID) REFERENCES dbo.CCO_GRUPOS(CG_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCO_CONFIG', 'U') IS NULL
+CREATE TABLE dbo.CCO_CONFIG (
+  CF_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CF_SLA_PRIMERA_RESPUESTA_SEG INT NOT NULL DEFAULT 120,
+  CF_SLA_RESPUESTA_SEG INT NOT NULL DEFAULT 300,
+  CF_ACW_SEG INT NOT NULL DEFAULT 60,
+  CF_MAX_INTERACCIONES_POR_AGENTE INT NOT NULL DEFAULT 4,
+  CF_AUTOCIERRE_INACTIVIDAD_MIN INT NOT NULL DEFAULT 60,
+  CF_MSG_BIENVENIDA NVARCHAR(MAX) NULL,
+  CF_MSG_FUERA_HORARIO NVARCHAR(MAX) NULL,
+  CF_HORARIO_INICIO NVARCHAR(5) NULL,
+  CF_HORARIO_FIN NVARCHAR(5) NULL,
+  CF_DIAS_SEMANA NVARCHAR(20) NULL,
+  CF_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CCO_CONFIG', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CCO_CONFIG)
+INSERT INTO dbo.CCO_CONFIG (CF_MSG_BIENVENIDA) VALUES (N'Hola, en un momento te atendemos.');`,
+    `IF OBJECT_ID('dbo.CCO_AGENTE_ESTADO', 'U') IS NULL
+CREATE TABLE dbo.CCO_AGENTE_ESTADO (
+  CAE_USUARIO_ID INT NOT NULL PRIMARY KEY,
+  CAE_ONLINE BIT NOT NULL DEFAULT 0,
+  CAE_DISPONIBLE BIT NOT NULL DEFAULT 0,
+  CAE_INTERACCIONES_ACTIVAS INT NOT NULL DEFAULT 0,
+  CAE_ACW_HASTA DATETIME NULL,
+  CAE_ULTIMA_CONEXION DATETIME NULL
+);`,
+    `IF OBJECT_ID('dbo.CCO_SIM_TOKENS', 'U') IS NULL
+CREATE TABLE dbo.CCO_SIM_TOKENS (
+  ST_ID INT IDENTITY(1,1) PRIMARY KEY,
+  ST_TOKEN NVARCHAR(80) NOT NULL,
+  ST_INTERACCION_ID INT NOT NULL,
+  ST_ACTIVO BIT NOT NULL DEFAULT 1,
+  ST_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT UQ_CCO_SIM_TOKEN UNIQUE (ST_TOKEN)
+);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Contact Center schema:', err.message); }
+  }
+  logger.info('✅ Esquema de Contact Center omnicanal asegurado');
+}
+
 // Email Marketing: campañas de correo masivo sobre los contactos que ya existen
 // en CRM_CONTACTOS — sin lista de contactos aparte. CONT_EMAIL_BAJA se respeta
 // siempre al armar destinatarios, sin importar el filtro de la campaña.
@@ -6250,6 +6812,109 @@ END
 `);
   } catch (err) {
     console.warn('⚠️ ClienteProductosServiciosSchema:', err.message);
+  }
+
+  // Columnas fiscales (costo + claves SAT) para poder cotizar y facturar.
+  const psCols = [
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_COSTO') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_COSTO DECIMAL(18,2) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_CLAVE_PROD_SERV') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_CLAVE_PROD_SERV NVARCHAR(12) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_CLAVE_UNIDAD') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_CLAVE_UNIDAD NVARCHAR(6) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_UNIDAD_NOMBRE') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_UNIDAD_NOMBRE NVARCHAR(100) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_IVA_TASA') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_IVA_TASA DECIMAL(5,4) NOT NULL CONSTRAINT DF_PS_IVA_TASA DEFAULT 0.16;`,
+  ];
+  for (const q of psCols) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ PRODUCTOS_SERVICIOS cols:', err.message); }
+  }
+}
+
+// Catálogos SAT (CFDI 4.0) — claves de producto/servicio y de unidad. Son
+// archivos públicos del SAT; se siembran una sola vez por tenant desde el JSON
+// versionado en BackAgyda/data/sat/. Un marcador de versión evita re-sembrar
+// en cada arranque.
+const SAT_CATALOGO_VERSION = '2026-01';
+
+async function ensureSatCatalogosSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.SAT_CLAVE_PROD_SERV', 'U') IS NULL
+  CREATE TABLE dbo.SAT_CLAVE_PROD_SERV (
+    SPS_CLAVE       NVARCHAR(12)   NOT NULL PRIMARY KEY,
+    SPS_DESCRIPCION NVARCHAR(400)  NOT NULL
+  );
+IF OBJECT_ID('dbo.SAT_CLAVE_UNIDAD', 'U') IS NULL
+  CREATE TABLE dbo.SAT_CLAVE_UNIDAD (
+    SCU_CLAVE  NVARCHAR(6)   NOT NULL PRIMARY KEY,
+    SCU_NOMBRE NVARCHAR(200) NOT NULL
+  );
+IF OBJECT_ID('dbo.SAT_CATALOGO_META', 'U') IS NULL
+  CREATE TABLE dbo.SAT_CATALOGO_META (
+    SCM_CLAVE   NVARCHAR(40) NOT NULL PRIMARY KEY,
+    SCM_VERSION NVARCHAR(20) NOT NULL,
+    SCM_FECHA   DATETIME NOT NULL DEFAULT GETDATE()
+  );
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SPS_DESC' AND object_id = OBJECT_ID('dbo.SAT_CLAVE_PROD_SERV'))
+  CREATE INDEX IX_SPS_DESC ON dbo.SAT_CLAVE_PROD_SERV(SPS_DESCRIPCION);
+`);
+  } catch (err) {
+    console.warn('⚠️ SatCatalogosSchema:', err.message);
+    return;
+  }
+
+  // ¿Ya sembrado a esta versión?
+  try {
+    const meta = await pool.request()
+      .input('v', require('mssql').NVarChar(20), SAT_CATALOGO_VERSION)
+      .query(`SELECT 1 ok FROM dbo.SAT_CATALOGO_META WHERE SCM_CLAVE='cfdi40' AND SCM_VERSION=@v`);
+    if (meta.recordset.length) return;
+  } catch (err) {
+    console.warn('⚠️ SatCatalogos meta check:', err.message);
+    return;
+  }
+
+  const path = require('path');
+  const fs = require('fs');
+  const sql = require('mssql');
+  const dir = path.join(__dirname, '..', 'data', 'sat');
+
+  const seedTabla = async (jsonFile, tabla, colClave, colVal) => {
+    let rows;
+    try {
+      rows = JSON.parse(fs.readFileSync(path.join(dir, jsonFile), 'utf8'));
+    } catch (err) {
+      console.warn(`⚠️ SatCatalogos: no se pudo leer ${jsonFile}:`, err.message);
+      return false;
+    }
+    await pool.request().query(`TRUNCATE TABLE dbo.${tabla}`);
+    // Inserta por lotes con TVP para que 52k filas entren en segundos.
+    const tvp = new sql.Table(tabla);
+    tvp.columns.add(colClave, sql.NVarChar(colClave === 'SPS_CLAVE' ? 12 : 6), { primary: true, nullable: false });
+    tvp.columns.add(colVal, sql.NVarChar(colVal === 'SPS_DESCRIPCION' ? 400 : 200), { nullable: false });
+    const seen = new Set();
+    for (const r of rows) {
+      const c = String(r.c || '').trim();
+      if (!c || seen.has(c)) continue;
+      seen.add(c);
+      tvp.rows.add(c, String(r.d || '').slice(0, colVal === 'SPS_DESCRIPCION' ? 400 : 200));
+    }
+    await pool.request().bulk(tvp);
+    return true;
+  };
+
+  try {
+    const a = await seedTabla('c_ClaveProdServ.min.json', 'SAT_CLAVE_PROD_SERV', 'SPS_CLAVE', 'SPS_DESCRIPCION');
+    const b = await seedTabla('c_ClaveUnidad.min.json', 'SAT_CLAVE_UNIDAD', 'SCU_CLAVE', 'SCU_NOMBRE');
+    if (a && b) {
+      await pool.request()
+        .input('v', sql.NVarChar(20), SAT_CATALOGO_VERSION)
+        .query(`MERGE dbo.SAT_CATALOGO_META AS t
+                USING (SELECT 'cfdi40' k) s ON t.SCM_CLAVE = s.k
+                WHEN MATCHED THEN UPDATE SET SCM_VERSION=@v, SCM_FECHA=GETDATE()
+                WHEN NOT MATCHED THEN INSERT (SCM_CLAVE, SCM_VERSION) VALUES ('cfdi40', @v);`);
+      logger.info('✅ Catálogos SAT sembrados (' + SAT_CATALOGO_VERSION + ')');
+    }
+  } catch (err) {
+    console.warn('⚠️ SatCatalogos seed:', err.message);
   }
 }
 

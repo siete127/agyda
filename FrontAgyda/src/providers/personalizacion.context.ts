@@ -33,6 +33,14 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
     valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
   },
   enlacesTopbar: [],
+  mascota: {
+    inicio:   { mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
+    flotante: { habilitado: false, mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
+  },
+  ventas: {
+    margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
+    iva: { tasaDefault: 0.16 },
+  },
 }
 
 // Layout por defecto del inicio — el orden/tamaño que ya tenía la portada,

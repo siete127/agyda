@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { ticketsService } from '@/services/tickets.service'
 import { FichaUsuarioModal } from './FichaUsuarioModal'
-import { kbService } from '@/services/kb.service'
+import { kbService, combinarContenidoKb } from '@/services/kb.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -16,11 +16,10 @@ import {
   type Ticket, type TicketEstado, type TicketPrioridad,
   type TicketClasificacion, type TicketImpacto, type TicketUrgencia, type TicketMotivoEspera,
   PRIORIDAD_COLORS, PRIORIDAD_LABELS, ESTADO_COLORS, ESTADO_LABELS, SLA_COLORS, SLA_LABELS,
-  CLASIFICACION_LABELS, MOTIVO_ESPERA_LABELS, CANAL_ORIGEN_LABELS, calcularPrioridad,
+  CANAL_ORIGEN_LABELS, calcularPrioridad,
 } from '@/types/ticket.types'
 import { catalogosTiService } from '@/services/catalogosTi.service'
 import { activosGeneralesService } from '@/services/activosGenerales.service'
-import { plantillasRespuestaService } from '@/services/plantillasRespuesta.service'
 import { camposPersonalizadosService } from '@/services/camposPersonalizados.service'
 import { SlaTab } from '@/pages/configuracion/tecnologia/SlaTab'
 import { TecnicosTab } from '@/pages/configuracion/tecnologia/TecnicosTab'
@@ -56,8 +55,6 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
   const [valoresCampos, setValoresCampos] = useState<Record<number, string>>({})
   const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null)
 
-  const prioridadCalculada = calcularPrioridad(form.impacto, form.urgencia)
-
   const { data: staff = [], isLoading: loadingStaff } = useQuery({
     queryKey: ['staff-ti'],
     queryFn: () => ticketsService.getStaffTI(),
@@ -84,6 +81,32 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
     queryFn: () => activosGeneralesService.getActivosGenerales(),
     staleTime: 5 * 60_000,
   })
+  const { data: clasificaciones = [] } = useQuery({
+    queryKey: ['ticket-clasificaciones'],
+    queryFn: () => catalogosTiService.getClasificaciones(),
+    staleTime: 5 * 60_000,
+  })
+  const { data: impactos = [] } = useQuery({
+    queryKey: ['ticket-impactos'],
+    queryFn: () => catalogosTiService.getImpactos(),
+    staleTime: 5 * 60_000,
+  })
+  const { data: urgencias = [] } = useQuery({
+    queryKey: ['ticket-urgencias'],
+    queryFn: () => catalogosTiService.getUrgencias(),
+    staleTime: 5 * 60_000,
+  })
+  const { data: matrizPrioridad = [] } = useQuery({
+    queryKey: ['ticket-matriz-prioridad'],
+    queryFn: () => catalogosTiService.getMatrizPrioridad(),
+    staleTime: 5 * 60_000,
+  })
+  const prioridadCalculada = (
+    (form.impacto &&
+      form.urgencia &&
+      matrizPrioridad.find((c) => c.impacto === form.impacto && c.urgencia === form.urgencia)?.prioridad) ||
+    calcularPrioridad(form.impacto, form.urgencia)
+  ) as TicketPrioridad | null | '' | undefined
   const subcategoriasDisponibles = categorias.find((c) => c.nombre === form.categoria)?.subcategorias ?? []
   const categoriaSeleccionadaId = categorias.find((c) => c.nombre === form.categoria)?.id ?? null
   const elementosDisponibles = subcategoriasDisponibles.find((s) => s.nombre === form.subcategoria)?.elementos ?? []
@@ -195,8 +218,8 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
                 <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Clasificación</label>
                 <select value={form.clasificacion} onChange={(e) => setForm({ ...form, clasificacion: e.target.value as TicketClasificacion })} className="field">
                   <option value="">Seleccionar...</option>
-                  {Object.entries(CLASIFICACION_LABELS).map(([k, label]) => (
-                    <option key={k} value={k}>{label}</option>
+                  {clasificaciones.map((c) => (
+                    <option key={c.id} value={c.clave}>{c.nombre}</option>
                   ))}
                 </select>
               </div>
@@ -323,18 +346,18 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
                 <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Impacto</label>
                 <select value={form.impacto} onChange={(e) => setForm({ ...form, impacto: e.target.value as TicketImpacto })} className="field">
                   <option value="">Seleccionar...</option>
-                  <option value="BAJO">Bajo</option>
-                  <option value="MEDIO">Medio</option>
-                  <option value="ALTO">Alto</option>
+                  {impactos.map((i) => (
+                    <option key={i.id} value={i.clave}>{i.nombre}</option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Urgencia</label>
                 <select value={form.urgencia} onChange={(e) => setForm({ ...form, urgencia: e.target.value as TicketUrgencia })} className="field">
                   <option value="">Seleccionar...</option>
-                  <option value="BAJA">Baja</option>
-                  <option value="MEDIA">Media</option>
-                  <option value="ALTA">Alta</option>
+                  {urgencias.map((u) => (
+                    <option key={u.id} value={u.clave}>{u.nombre}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -570,7 +593,8 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
   const [articuloKbId, setArticuloKbId] = useState<number | null>(null)
   const [modoKb, setModoKb] = useState<'vincular' | 'crear' | null>(null)
   const [nuevoTituloKb, setNuevoTituloKb] = useState('')
-  const [nuevoContenidoKb, setNuevoContenidoKb] = useState('')
+  const [nuevoProblemaKb, setNuevoProblemaKb] = useState('')
+  const [nuevoSolucionKb, setNuevoSolucionKb] = useState('')
   const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null)
 
   const { data: codigos = [] } = useQuery({
@@ -591,8 +615,8 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
       diagnostico, accionesRealizadas, causaRaiz: causaRaiz || undefined,
       codigoCierre: codigoCierre || undefined,
       articuloKbId: modoKb === 'vincular' ? (articuloKbId ?? undefined) : undefined,
-      nuevoArticuloKb: modoKb === 'crear' && nuevoTituloKb.trim() && nuevoContenidoKb.trim()
-        ? { titulo: nuevoTituloKb.trim(), contenido: nuevoContenidoKb.trim(), categoria: ticket.categoria || undefined }
+      nuevoArticuloKb: modoKb === 'crear' && nuevoTituloKb.trim() && nuevoSolucionKb.trim()
+        ? { titulo: nuevoTituloKb.trim(), contenido: combinarContenidoKb(nuevoProblemaKb, nuevoSolucionKb), categoria: ticket.categoria || undefined }
         : undefined,
     }),
     onSuccess: async () => {
@@ -695,11 +719,18 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
               placeholder="Título del artículo"
             />
             <textarea
-              value={nuevoContenidoKb}
-              onChange={(e) => setNuevoContenidoKb(e.target.value)}
+              value={nuevoProblemaKb}
+              onChange={(e) => setNuevoProblemaKb(e.target.value)}
+              rows={2}
+              className="field resize-none text-sm"
+              placeholder="Problema: ¿qué le pasaba al usuario?"
+            />
+            <textarea
+              value={nuevoSolucionKb}
+              onChange={(e) => setNuevoSolucionKb(e.target.value)}
               rows={3}
               className="field resize-none text-sm"
-              placeholder="Contenido / solución documentada..."
+              placeholder="Solución: ¿cómo se resolvió?"
             />
           </div>
         )}
@@ -1015,6 +1046,19 @@ function ResumenCierre({ ticket }: { ticket: Ticket }) {
   const fechaFmt = fecha
     ? new Date(fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
     : null
+  // tiempoAtencionMinutos solo se calcula en el backend hasta el CIERRE real
+  // (se usa también en reportes de tiempo promedio); mientras el ticket está
+  // "resuelto" pero no cerrado, se estima aquí con la fecha de resolución.
+  const tiempoMinutos = ticket.tiempoAtencionMinutos ?? (
+    fecha ? Math.round((new Date(fecha).getTime() - new Date(ticket.fechaCreacion).getTime()) / 60000) : null
+  )
+
+  const { data: articuloVinculado } = useQuery({
+    queryKey: ['kb-articulo', ticket.articuloKbId],
+    queryFn: () => kbService.getById(ticket.articuloKbId!),
+    enabled: ticket.articuloKbId != null,
+    staleTime: 5 * 60_000,
+  })
 
   return (
     <div className="rounded-xl border border-surface-border bg-surface px-4 py-3 space-y-2">
@@ -1023,10 +1067,22 @@ function ResumenCierre({ ticket }: { ticket: Ticket }) {
         <div><span className="text-ink-tertiary">Técnico:</span> <span className="text-ink font-medium">{ticket.asignadoNombre ?? '—'}</span></div>
         <div><span className="text-ink-tertiary">Fecha:</span> <span className="text-ink font-medium">{fechaFmt ?? '—'}</span></div>
         <div><span className="text-ink-tertiary">Código de cierre:</span> <span className="text-ink font-medium">{ticket.codigoCierre ?? '—'}</span></div>
-        <div><span className="text-ink-tertiary">Tiempo total:</span> <span className="text-ink font-medium">{fmtDuracionMinutos(ticket.tiempoAtencionMinutos)}</span></div>
+        <div><span className="text-ink-tertiary">Tiempo total:</span> <span className="text-ink font-medium">{fmtDuracionMinutos(tiempoMinutos)}</span></div>
       </div>
       {ticket.causaRaiz && (
         <div className="text-[0.78rem]"><span className="text-ink-tertiary">Causa raíz:</span> <span className="text-ink">{ticket.causaRaiz}</span></div>
+      )}
+      {articuloVinculado && (
+        <div className="text-[0.78rem]">
+          <span className="text-ink-tertiary">ArdaWiki:</span>{' '}
+          <Link
+            to={`/kb?q=${encodeURIComponent(articuloVinculado.titulo)}`}
+            className="text-brand underline decoration-dotted hover:text-brand/80"
+            title="Ver artículo en ArdaWiki"
+          >
+            {articuloVinculado.titulo}
+          </Link>
+        </div>
       )}
       <div className="flex flex-wrap items-center gap-1.5 pt-1">
         {ticket.slaResolucion && (
@@ -1131,16 +1187,16 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
     queryFn: () => ticketsService.getComentarios(ticket.id),
   })
 
-  const { data: plantillasRespuesta = [] } = useQuery({
-    queryKey: ['plantillas-respuesta'],
-    queryFn: () => plantillasRespuestaService.getPlantillas(true),
-    staleTime: 5 * 60_000,
-  })
-
   const { data: historial = [], isLoading: loadingHist } = useQuery({
     queryKey: ['ticket-historial', ticket.id],
     queryFn: () => ticketsService.getHistorial(ticket.id),
     enabled: tab === 'historial',
+  })
+
+  const { data: motivosEspera = [] } = useQuery({
+    queryKey: ['ticket-motivos-espera'],
+    queryFn: () => catalogosTiService.getMotivosEspera(),
+    staleTime: 5 * 60_000,
   })
 
   const addComentario = useMutation({
@@ -1273,7 +1329,9 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
         {isTI && ticket.estado === 'en_espera' && (
           <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
             <span className="text-[0.78rem] text-amber-800">
-              {ticket.motivoEspera ? MOTIVO_ESPERA_LABELS[ticket.motivoEspera] : 'En espera'}
+              {ticket.motivoEspera
+                ? (motivosEspera.find((m) => m.clave === ticket.motivoEspera)?.nombre ?? ticket.motivoEspera)
+                : 'En espera'}
             </span>
             <Button size="sm" isLoading={salirDeEspera.isPending} onClick={() => salirDeEspera.mutate()}>Retomar</Button>
           </div>
@@ -1374,14 +1432,14 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
             <p className="text-[0.72rem] font-semibold text-amber-800 uppercase tracking-wide">¿Por qué motivo?</p>
             <div className="flex flex-wrap gap-1.5">
-              {(Object.keys(MOTIVO_ESPERA_LABELS) as TicketMotivoEspera[]).map((m) => (
+              {motivosEspera.map((m) => (
                 <button
-                  key={m}
-                  onClick={() => ponerEnEspera.mutate(m)}
+                  key={m.id}
+                  onClick={() => ponerEnEspera.mutate(m.clave as TicketMotivoEspera)}
                   disabled={ponerEnEspera.isPending}
                   className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[0.7rem] font-semibold text-amber-700 hover:border-amber-400 disabled:opacity-50"
                 >
-                  {MOTIVO_ESPERA_LABELS[m]}
+                  {m.nombre}
                 </button>
               ))}
             </div>
@@ -1469,19 +1527,6 @@ function TicketDetalleModal({ ticket, onClose }: { ticket: Ticket; onClose: () =
 
             {ticket.estado !== 'cerrado' && (
               <div className="space-y-1.5">
-                {plantillasRespuesta.length > 0 && (
-                  <select
-                    className="field py-1.5 text-xs"
-                    value=""
-                    onChange={(e) => {
-                      const p = plantillasRespuesta.find((x) => String(x.id) === e.target.value)
-                      if (p) setComentario(p.contenido)
-                    }}
-                  >
-                    <option value="">Usar plantilla...</option>
-                    {plantillasRespuesta.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </select>
-                )}
                 <div className="flex gap-2">
                   <input
                     value={comentario}

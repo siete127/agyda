@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Send, Mail } from 'lucide-react'
+import { Send, Mail, MessageCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { configuracionService, type ServidorCorreoTipo, type GuardarServidorCorreoPayload } from '@/services/configuracion.service'
@@ -274,8 +274,8 @@ function DestinatariosPanel() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: ({ modulo, usuarioId, activo }: { modulo: string; usuarioId: number; activo: boolean }) =>
-      configuracionService.setDestinatario(modulo, usuarioId, activo),
+    mutationFn: ({ modulo, usuarioId, activo, canal }: { modulo: string; usuarioId: number; activo: boolean; canal: 'mail' | 'telegram' }) =>
+      configuracionService.setDestinatario(modulo, usuarioId, activo, canal),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notificaciones-correo-config'] }),
   })
 
@@ -287,7 +287,7 @@ function DestinatariosPanel() {
   }
 
   const modulo = data.modulos.find((m) => m.key === moduloActivo) ?? data.modulos[0]
-  const activos = new Set(data.destinatarios[modulo?.key ?? ''] ?? [])
+  const canales = data.destinatarios[modulo?.key ?? ''] ?? {}
   const usuariosFiltrados = data.usuarios.filter((u) => u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
 
   return (
@@ -297,8 +297,8 @@ function DestinatariosPanel() {
           <Mail className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-ink">Correo</p>
-          <p className="text-xs text-ink-tertiary">A quién le llegan las notificaciones automáticas por correo</p>
+          <p className="text-sm font-semibold text-ink">Correo y Telegram</p>
+          <p className="text-xs text-ink-tertiary">A quién le llegan las notificaciones automáticas, y por qué canal</p>
         </div>
       </div>
 
@@ -326,23 +326,46 @@ function DestinatariosPanel() {
         onChange={(e) => setBusqueda(e.target.value)}
       />
 
+      <div className="mb-1 flex items-center gap-2 px-2 text-[0.6rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+        <span className="flex-1">Usuario</span>
+        <span className="flex w-8 justify-center" title="Correo"><Mail className="h-3 w-3" /></span>
+        <span className="flex w-8 justify-center" title="Telegram"><MessageCircle className="h-3 w-3" /></span>
+      </div>
+
       <div className="max-h-72 space-y-1 overflow-y-auto">
-        {usuariosFiltrados.map((u) => (
-          <div key={u.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-surface">
-            <input
-              type="checkbox"
-              checked={activos.has(u.id)}
-              onChange={(e) => toggleMutation.mutate({ modulo: modulo!.key, usuarioId: u.id, activo: e.target.checked })}
-              disabled={!u.correo}
-            />
-            <span className={u.correo ? 'flex-1 text-ink-secondary' : 'flex-1 text-ink-tertiary'}>
-              {u.nombre} <span className="text-ink-tertiary">({u.tipoUsuario})</span>
-            </span>
-            {!u.correo && (
-              <AgregarCorreoInline usuarioId={u.id} onSaved={() => qc.invalidateQueries({ queryKey: ['notificaciones-correo-config'] })} />
-            )}
-          </div>
-        ))}
+        {usuariosFiltrados.map((u) => {
+          const c = canales[u.id] ?? { mail: false, telegram: false }
+          return (
+            <div key={u.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-surface">
+              <span className={clsx('flex-1', u.correo ? 'text-ink-secondary' : 'text-ink-tertiary')}>
+                {u.nombre} <span className="text-ink-tertiary">({u.tipoUsuario})</span>
+                {!u.correo && (
+                  <span className="ml-2">
+                    <AgregarCorreoInline usuarioId={u.id} onSaved={() => qc.invalidateQueries({ queryKey: ['notificaciones-correo-config'] })} />
+                  </span>
+                )}
+              </span>
+              <span className="flex w-8 justify-center">
+                <input
+                  type="checkbox"
+                  checked={c.mail}
+                  title="Notificar por correo"
+                  onChange={(e) => toggleMutation.mutate({ modulo: modulo!.key, usuarioId: u.id, activo: e.target.checked, canal: 'mail' })}
+                  disabled={!u.correo}
+                />
+              </span>
+              <span className="flex w-8 justify-center">
+                <input
+                  type="checkbox"
+                  checked={c.telegram}
+                  title={u.telegramVinculado ? 'Notificar por Telegram' : 'El usuario no ha vinculado Telegram'}
+                  onChange={(e) => toggleMutation.mutate({ modulo: modulo!.key, usuarioId: u.id, activo: e.target.checked, canal: 'telegram' })}
+                  disabled={!u.telegramVinculado}
+                />
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

@@ -389,11 +389,12 @@ async function validarAgentePool(pool, area, userId, nivel = null) {
 }
 
 const TICKETS_SELECT_COLUMNAS = `
-  t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.ESTADO,
+  t.TICKET_ID as id, t.SOLICITANTE_ID as solicitanteId, t.AREA, t.PRIORIDAD, t.TITULO, t.DESCRIPCION, t.ESTADO,
   t.FECHA_CREACION, t.FECHA_ASIGNACION, t.FECHA_PRIMERA_RESPUESTA, t.FECHA_CIERRE, t.ASIGNADO_A,
   t.CLASIFICACION, t.CATEGORIA, t.SUBCATEGORIA, t.ELEMENTO, t.SERVICIO_AFECTADO, t.IMPACTO, t.URGENCIA, t.NIVEL_ACTUAL,
   t.MOTIVO_ESPERA, t.FECHA_INICIO_ESPERA, t.MINUTOS_TOTAL_ESPERA,
-  t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES,
+  t.CODIGO_CIERRE, t.VALIDADO_USUARIO, t.REABIERTO_VECES, t.ARTICULO_KB_ID,
+  t.CAUSA_RAIZ, t.FECHA_RESOLUCION_PROPUESTA,
   su.NEUS_NOMBRES AS SOLICITANTE_NOMBRE,
   au.NEUS_NOMBRES AS ASIGNADO_NOMBRE,
   s.RATING as rating,
@@ -627,7 +628,21 @@ async function crearTicketInterno(pool, {
     // La prioridad se deriva SIEMPRE de impacto×urgencia cuando ambos vienen.
     // Un AD puede forzarla manualmente enviando prioridad + prioridadManual=true.
     const clasif = (clasificacion || '').toString().toLowerCase();
-    const clasifValida = ticketPrioridad.CLASIFICACIONES.includes(clasif) ? clasif : null;
+    // Clasificaciones administrables desde Configuración (ver
+    // catalogosTiController.js) — se valida contra la tabla en vez del array
+    // fijo legacy de constants/ticketPrioridad.js, que queda solo como
+    // fallback si la tabla está vacía o falla.
+    let clavesClasifValidas;
+    try {
+      const clasifRs = await pool.request().query(
+        `SELECT CLA_CLAVE as clave FROM TICKET_CLASIFICACIONES WHERE CLA_ACTIVA = 1`
+      );
+      clavesClasifValidas = clasifRs.recordset.map(r => r.clave);
+      if (clavesClasifValidas.length === 0) clavesClasifValidas = ticketPrioridad.CLASIFICACIONES;
+    } catch (e) {
+      clavesClasifValidas = ticketPrioridad.CLASIFICACIONES;
+    }
+    const clasifValida = clavesClasifValidas.includes(clasif) ? clasif : null;
     const impactoNorm = (impacto || '').toString().toUpperCase() || null;
     const urgenciaNorm = (urgencia || '').toString().toUpperCase() || null;
 
@@ -636,7 +651,18 @@ async function crearTicketInterno(pool, {
     if (prioridadManual) {
       prio = prioridad.toString().toUpperCase();
     } else if (impactoNorm && urgenciaNorm) {
-      prio = ticketPrioridad.calcularPrioridad(impactoNorm, urgenciaNorm);
+      // Matriz administrable desde Configuración (ver catalogosTiController.js)
+      // — se consulta la tabla en vez de la MATRIZ fija legacy de
+      // constants/ticketPrioridad.js, que queda solo como fallback.
+      try {
+        const matrizRs = await pool.request()
+          .input('imp', sql.NVarChar, impactoNorm)
+          .input('urg', sql.NVarChar, urgenciaNorm)
+          .query(`SELECT MAT_PRIORIDAD as prioridad FROM TICKET_MATRIZ_PRIORIDAD WHERE MAT_IMPACTO=@imp AND MAT_URGENCIA=@urg`);
+        prio = matrizRs.recordset[0]?.prioridad || ticketPrioridad.calcularPrioridad(impactoNorm, urgenciaNorm);
+      } catch (e) {
+        prio = ticketPrioridad.calcularPrioridad(impactoNorm, urgenciaNorm);
+      }
     } else {
       prio = (prioridad || 'P3').toString().toUpperCase();
     }
@@ -1164,8 +1190,11 @@ exports.uploadEvidencia = async (req, res) => {
     const solicitanteId = rsTicket.recordset[0].SOLICITANTE_ID;
     const asignadoA = rsTicket.recordset[0].ASIGNADO_A;
 
-    // Construir URL pública (se sirve desde IIS)
-    const publicUrl = `https://intranet.ardabytec.vip/intranet/Evidencia/${encodeURIComponent(file.filename)}`;
+    // Construir URL pública. En producción IIS sirve /intranet/Evidencia
+    // directo bajo el dominio; en desarrollo el propio Express la sirve
+    // (ver server.js) usando la ruta relativa como fallback.
+    const EVIDENCIA_PUBLIC_BASE = process.env.EVIDENCIA_PUBLIC_BASE_URL || '/intranet/Evidencia';
+    const publicUrl = `${EVIDENCIA_PUBLIC_BASE}/${encodeURIComponent(file.filename)}`;
 
     // Guardar en historial como evidencia
     await pool.request()
@@ -1420,11 +1449,26 @@ exports.ponerEnEspera = async (req, res) => {
     const { motivo } = req.body;
     const actorId = Number(req.headers['usuarioid'] || req.body.actorId || 0) || null;
 
-    if (!TICKET_MOTIVOS_ESPERA.includes(motivo)) {
-      return res.status(400).json({ success: false, message: `Motivo inválido. Valores permitidos: ${TICKET_MOTIVOS_ESPERA.join(', ')}` });
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    // Motivos de espera administrables desde Configuración (ver
+    // catalogosTiController.js) — se valida contra la tabla en vez del array
+    // fijo legacy de constants/ticketMotivosEspera.js, que queda solo como
+    // fallback si la tabla está vacía o falla.
+    let clavesMotivoValidas;
+    try {
+      const motivosRs = await pool.request().query(
+        `SELECT MOT_CLAVE as clave FROM TICKET_MOTIVOS_ESPERA WHERE MOT_ACTIVA = 1`
+      );
+      clavesMotivoValidas = motivosRs.recordset.map(r => r.clave);
+      if (clavesMotivoValidas.length === 0) clavesMotivoValidas = TICKET_MOTIVOS_ESPERA;
+    } catch (e) {
+      clavesMotivoValidas = TICKET_MOTIVOS_ESPERA;
+    }
+    if (!clavesMotivoValidas.includes(motivo)) {
+      return res.status(400).json({ success: false, message: `Motivo inválido. Valores permitidos: ${clavesMotivoValidas.join(', ')}` });
     }
 
-    const pool = await databaseService.getPool(req.user?.empresa);
     const hdr = await pool.request().input('tid', sql.Int, id).query(`SELECT ESTADO FROM TICKETS WHERE TICKET_ID=@tid`);
     if (!hdr.recordset.length) return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     if (['resuelto', 'cerrado', 'en_espera'].includes(hdr.recordset[0].ESTADO)) {

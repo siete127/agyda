@@ -58,7 +58,7 @@ const GROUPS = [
   },
   {
     label: 'Contact Center',
-    keys: ['operaciones', 'webphone', 'livechat', 'checklists'],
+    keys: ['contact-center', 'operaciones', 'webphone', 'livechat', 'checklists'],
   },
   {
     label: 'Calidad',

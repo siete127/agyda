@@ -24,6 +24,7 @@ import { proyectosService } from '@/services/proyectos.service'
 import { NoticiaDetalle } from '@/pages/noticias/NoticiasPage'
 import { type Noticia } from '@/types/noticia.types'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { MascotaTablero } from '@/components/ui/MascotaTablero'
 import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
 import { personalizacionService, type DashboardCard, type Institucional } from '@/services/personalizacion.service'
 import { RESUMEN_CARDS } from './resumenCards'
@@ -268,6 +269,7 @@ export function DashboardPage() {
 
   const [selected,     setSelected]     = useState<Noticia | null>(null)
   const [empresaModal, setEmpresaModal] = useState<EmpresaKey | null>(null)
+  const { mascota } = usePersonalizacion()
 
   const isAdmin    = ['AD', 'ADMIN'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
   const { isAllowed } = useModuleAccess()
@@ -382,8 +384,7 @@ export function DashboardPage() {
         <div className="dash-card relative flex h-full items-center justify-center overflow-hidden rounded-2xl border border-surface-border bg-card p-3">
           <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl"
             style={{ background: 'linear-gradient(160deg, #10203F 0%, #0B1730 100%)' }}>
-            <video src="/dashboard-mascota.mp4" poster="/dashboard-mascota-poster.jpg"
-              autoPlay loop muted playsInline className="w-full h-full object-cover" />
+            <MascotaTablero mascota={mascota.inicio} />
           </div>
         </div>
       ),

@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Search, Plus, Pencil, Archive, HelpCircle, FileText } from 'lucide-react'
-import { kbService, KB_TIPO_LABELS, type KbArticulo, type KbTipo } from '@/services/kb.service'
+import { BookOpen, Search, Plus, Pencil, Archive, HelpCircle, FileText, Globe, Lock } from 'lucide-react'
+import { kbService, KB_TIPO_LABELS, separarContenidoKb, combinarContenidoKb, type KbArticulo, type KbTipo } from '@/services/kb.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -11,32 +12,10 @@ import toast from 'react-hot-toast'
 
 const TIPOS: KbTipo[] = ['articulo', 'faq']
 
-// El contenido se guarda como un solo texto en la base de datos (KB_ARTICULOS
-// no tiene columnas separadas para problema/solución), con este formato fijo
-// para poder separarlo de nuevo al editar un artículo ya guardado.
-const PROBLEMA_PREFIJO = 'Problema:\n'
-const SOLUCION_PREFIJO = '\n\nSolución:\n'
-
-function separarContenido(contenido: string): { problema: string; solucion: string } {
-  const idx = contenido.indexOf(SOLUCION_PREFIJO)
-  if (contenido.startsWith(PROBLEMA_PREFIJO) && idx !== -1) {
-    return {
-      problema: contenido.slice(PROBLEMA_PREFIJO.length, idx),
-      solucion: contenido.slice(idx + SOLUCION_PREFIJO.length),
-    }
-  }
-  // Artículo previo al cambio (un solo bloque de texto libre): se trata todo como solución.
-  return { problema: '', solucion: contenido }
-}
-
-function combinarContenido(problema: string, solucion: string): string {
-  return `${PROBLEMA_PREFIJO}${problema.trim()}${SOLUCION_PREFIJO}${solucion.trim()}`
-}
-
 function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onClose: () => void }) {
   const qc = useQueryClient()
   const [titulo, setTitulo] = useState(articulo?.titulo ?? '')
-  const inicial = separarContenido(articulo?.contenido ?? '')
+  const inicial = separarContenidoKb(articulo?.contenido ?? '')
   const [problema, setProblema] = useState(inicial.problema)
   const [solucion, setSolucion] = useState(inicial.solucion)
   const [categoria, setCategoria] = useState(articulo?.categoria ?? '')
@@ -44,7 +23,7 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
 
   const guardar = useMutation({
     mutationFn: async () => {
-      const contenido = combinarContenido(problema, solucion)
+      const contenido = combinarContenidoKb(problema, solucion)
       if (articulo) await kbService.update(articulo.id, { titulo, contenido, categoria: categoria || undefined, tipo })
       else await kbService.create({ titulo, contenido, categoria: categoria || undefined, tipo })
     },
@@ -114,7 +93,8 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
 }
 
 export function KbPage() {
-  const [q, setQ] = useState('')
+  const [searchParams] = useSearchParams()
+  const [q, setQ] = useState(searchParams.get('q') ?? '')
   const [categoria, setCategoria] = useState('')
   const [tipoFiltro, setTipoFiltro] = useState<KbTipo | ''>('')
   const [editing, setEditing] = useState<KbArticulo | null | 'nuevo'>(null)
@@ -132,6 +112,14 @@ export function KbPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kb-articulos'] })
       toast.success('Estado actualizado')
+    },
+  })
+
+  const togglePublico = useMutation({
+    mutationFn: (a: KbArticulo) => kbService.togglePublico(a.id),
+    onSuccess: (_data, a) => {
+      qc.invalidateQueries({ queryKey: ['kb-articulos'] })
+      toast.success(a.publico ? 'Artículo marcado como privado' : 'Artículo publicado en el sitio web')
     },
   })
 
@@ -193,12 +181,29 @@ export function KbPage() {
                         </span>
                         <h3 className="font-semibold text-ink">{a.titulo}</h3>
                         {a.categoria && <span className="chip bg-surface text-ink-secondary text-[0.62rem]">{a.categoria}</span>}
+                        <span className={clsx(
+                          'flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] font-semibold',
+                          a.publico ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600',
+                        )}>
+                          {a.publico ? <Globe className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                          {a.publico ? 'Público' : 'Privado'}
+                        </span>
                       </div>
                       <p className={clsx('mt-1 text-[0.8rem] text-ink-secondary', 'line-clamp-2')}>{a.contenido}</p>
                       <p className="mt-1 text-[0.65rem] text-ink-tertiary">{a.autorNombre ?? 'Sistema'}</p>
                     </div>
                     {isTI && (
                       <div className="flex flex-shrink-0 gap-1">
+                        <button
+                          onClick={() => togglePublico.mutate(a)}
+                          className={clsx(
+                            'rounded-lg p-1.5 hover:bg-surface',
+                            a.publico ? 'text-green-600 hover:text-green-700' : 'text-ink-tertiary hover:text-ink',
+                          )}
+                          title={a.publico ? 'Público — clic para hacerlo privado' : 'Privado — clic para publicarlo en el sitio web'}
+                        >
+                          {a.publico ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                        </button>
                         <button onClick={() => setEditing(a)} className="rounded-lg p-1.5 text-ink-tertiary hover:bg-surface hover:text-ink" title="Editar">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>

@@ -12,6 +12,7 @@ const logger = global.logger || require('../utils/logger');
 const TIPOS_CON_PUSH = new Set([
   'ticket_sla_riesgo', 'ticket_sla_vencido', 'ticket_reabierto',
   'livechat_espera_escalada', 'ticket_estado',
+  'cc_interaccion_asignada', 'cc_sla_riesgo', 'cc_sla_vencido',
 ]);
 
 // Tipos que además ameritan correo electrónico al técnico — solo el

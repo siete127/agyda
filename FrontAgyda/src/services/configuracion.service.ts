@@ -22,12 +22,19 @@ export interface UsuarioNotificacion {
   nombre: string
   tipoUsuario: string
   correo: string | null
+  telegramVinculado: boolean
+}
+
+export interface CanalesDestinatario {
+  mail: boolean
+  telegram: boolean
 }
 
 export interface ConfiguracionCorreo {
   modulos: ModuloNotificacion[]
   usuarios: UsuarioNotificacion[]
-  destinatarios: Record<string, number[]>
+  destinatarios: Record<string, Record<number, CanalesDestinatario>>
+  telegramConfigurado: boolean
 }
 
 export type ServidorCorreoTipo = 'smtp' | 'graph'
@@ -111,11 +118,23 @@ export const configuracionService = {
     const { data } = await api.get('/notificaciones-correo')
     return data.data
   },
-  async setDestinatario(modulo: string, usuarioId: number, activo: boolean): Promise<void> {
-    await api.put(`/notificaciones-correo/${modulo}/destinatario/${usuarioId}`, { activo })
+  async setDestinatario(modulo: string, usuarioId: number, activo: boolean, canal: 'mail' | 'telegram' = 'mail'): Promise<void> {
+    await api.put(`/notificaciones-correo/${modulo}/destinatario/${usuarioId}`, { activo, canal })
   },
   async setCorreoUsuario(usuarioId: number, correo: string): Promise<void> {
     await api.put(`/notificaciones-correo/usuario/${usuarioId}/correo`, { correo })
+  },
+
+  async getEstadoTelegram(): Promise<{ vinculado: boolean; telegramConfigurado: boolean }> {
+    const { data } = await api.get('/notificaciones-correo/telegram/estado')
+    return data.data
+  },
+  async generarCodigoTelegram(): Promise<{ codigo: string; botUsername: string; expiraEnMinutos: number }> {
+    const { data } = await api.post('/notificaciones-correo/telegram/codigo')
+    return data.data
+  },
+  async desvincularTelegram(): Promise<void> {
+    await api.post('/notificaciones-correo/telegram/desvincular')
   },
 
   async getServidorCorreoConfig(): Promise<ServidorCorreoConfig | null> {

@@ -58,12 +58,36 @@ export interface EnlaceTopbar {
   visible: boolean
 }
 
+export type MascotaMovimiento = 'ninguno' | 'flotar' | 'saludar' | 'latir' | 'balanceo'
+export type MascotaVelocidad = 'lenta' | 'normal' | 'rapida'
+
+/** Una mascota individual: imagen/video + movimiento. */
+export interface MascotaParte {
+  mediaId: number | null
+  tipo: 'imagen' | 'video' | null
+  movimiento: MascotaMovimiento
+  velocidad: MascotaVelocidad
+}
+
+/** Dos mascotas independientes: la de la card del inicio y el widget flotante. */
+export interface Mascota {
+  inicio: MascotaParte
+  flotante: MascotaParte & { habilitado: boolean }
+}
+
+export interface VentasConfig {
+  margen: { verdeMin: number; amarilloMin: number; rojoMax: number; requiereOverride: boolean }
+  iva: { tasaDefault: number }
+}
+
 export interface PersonalizacionConfig {
   branding: Branding
   headerButtons: HeaderButton[]
   dashboard: { cards: DashboardCard[] }
   institucional: Institucional
   enlacesTopbar: EnlaceTopbar[]
+  mascota: Mascota
+  ventas: VentasConfig
 }
 
 export const personalizacionService = {
@@ -94,6 +118,11 @@ export const personalizacionService = {
     return data.data as EnlaceTopbar[]
   },
 
+  async updateVentas(v: VentasConfig): Promise<VentasConfig> {
+    const { data } = await api.put('/personalizacion/ventas', v)
+    return data.data as VentasConfig
+  },
+
   async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {
     const { data } = await api.put('/personalizacion/dashboard', { cards })
     return data.data as { cards: DashboardCard[] }
@@ -114,5 +143,28 @@ export const personalizacionService = {
     if (!id) return null
     const token = useAuthStore.getState().token
     return `/api/personalizacion/assets/${id}/ver${token ? `?token=${encodeURIComponent(token)}` : ''}`
+  },
+
+  // ── Mascota ──
+  async subirMascotaMedia(file: File, uso: 'inicio' | 'flotante'): Promise<{ id: number; tipo: 'imagen' | 'video' }> {
+    const form = new FormData()
+    form.append('archivo', file)
+    form.append('uso', uso)
+    const { data } = await api.post('/personalizacion/mascota/media', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data.data
+  },
+
+  async updateMascota(m: Mascota): Promise<Mascota> {
+    const { data } = await api.put('/personalizacion/mascota', m)
+    return data.data as Mascota
+  },
+
+  // URL para <img>/<video> de un archivo de MEDIA_EMPRESA.
+  mediaUrl(id: number | null | undefined): string | null {
+    if (!id) return null
+    const token = useAuthStore.getState().token
+    return `/api/personalizacion/media/${id}${token ? `?token=${encodeURIComponent(token)}` : ''}`
   },
 }

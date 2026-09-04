@@ -11,7 +11,26 @@ export interface ProductoServicio {
   precio: number
   recurrencia: ProductoServicioRecurrencia
   activo: boolean
+  costo: number | null
+  claveProdServ: string | null
+  claveUnidad: string | null
+  unidadNombre: string | null
+  ivaTasa: number
   fechaRegistro: string
+}
+
+export interface ProductoServicioInput {
+  tipo?: ProductoServicioTipo
+  nombre?: string
+  descripcion?: string
+  precio?: number
+  recurrencia?: ProductoServicioRecurrencia
+  activo?: boolean
+  costo?: number | null
+  claveProdServ?: string | null
+  claveUnidad?: string | null
+  unidadNombre?: string | null
+  ivaTasa?: number
 }
 
 export interface ClienteProductoServicio {
@@ -39,6 +58,11 @@ function parseProductoServicio(r: Record<string, unknown>): ProductoServicio {
     precio: Number(r.precio ?? 0),
     recurrencia: (r.recurrencia as ProductoServicioRecurrencia) ?? 'UNICO',
     activo: Boolean(r.activo ?? true),
+    costo: r.costo == null ? null : Number(r.costo),
+    claveProdServ: r.claveProdServ ? String(r.claveProdServ) : null,
+    claveUnidad: r.claveUnidad ? String(r.claveUnidad) : null,
+    unidadNombre: r.unidadNombre ? String(r.unidadNombre) : null,
+    ivaTasa: r.ivaTasa == null ? 0.16 : Number(r.ivaTasa),
     fechaRegistro: String(r.fechaRegistro ?? ''),
   }
 }
@@ -61,9 +85,9 @@ export const productoServicioService = {
     const { data } = await api.get('/productos-servicios')
     return norm(data, parseProductoServicio)
   },
-  create: (body: { tipo: ProductoServicioTipo; nombre: string; descripcion?: string; precio: number; recurrencia: ProductoServicioRecurrencia; activo?: boolean }) =>
+  create: (body: ProductoServicioInput & { nombre: string }) =>
     api.post('/productos-servicios', body).then((r) => r.data),
-  update: (id: number, body: Partial<{ tipo: ProductoServicioTipo; nombre: string; descripcion: string; precio: number; recurrencia: ProductoServicioRecurrencia; activo: boolean }>) =>
+  update: (id: number, body: ProductoServicioInput) =>
     api.put(`/productos-servicios/${id}`, body).then((r) => r.data),
   delete: (id: number) =>
     api.delete(`/productos-servicios/${id}`).then((r) => r.data),
