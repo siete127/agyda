@@ -271,6 +271,10 @@ async function intentarAsignarSiguienteEnCola(pool, tenantKey = DEFAULT_TENANT) 
       conversacionId: entry.conversacionId,
       agenteNombre: agente.nombre,
     });
+    // Broadcast a todo el tenant (no solo a la room de esa conversación) —
+    // así el panel de Supervisión se refresca al instante cuando alguien
+    // toma un chat, en vez de esperar hasta 8s al próximo poll.
+    socketService.getIO(tenantKey).emit('livechat:conversacion_tomada', { conversacionId: entry.conversacionId });
   } catch (e) {
     console.warn('⚠️ No se pudo emitir asignación desde cola:', e?.message || e);
   }
@@ -605,6 +609,8 @@ async function cerrarConversacionPorVisitante(pool, conversacion, tenantKey) {
 
   try {
     socketService.getIO().to(`livechat:${conversacionId}`).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
+    // Broadcast a todo el tenant para que el panel de Supervisión se refresque.
+    socketService.getIO(tenantKey).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
   } catch (e) {
     console.warn('⚠️ No se pudo emitir livechat:conversacion_cerrada (salida del visitante):', e?.message || e);
   }
@@ -838,6 +844,10 @@ exports.tomarConversacion = async (req, res) => {
         conversacionId: Number(conversacionId),
         agenteNombre: req.user.nombre || req.user.username || 'Agente',
       });
+      // Broadcast a todo el tenant (no solo a la room de esa conversación) —
+      // así el panel de Supervisión se refresca al instante cuando alguien
+      // toma un chat, en vez de esperar hasta 8s al próximo poll.
+      socketService.getIO(tenantKeyDe(req)).emit('livechat:conversacion_tomada', { conversacionId: Number(conversacionId) });
     } catch (e) {
       console.warn('⚠️ No se pudo emitir livechat:conversacion_tomada:', e?.message || e);
     }
@@ -1012,6 +1022,8 @@ exports.calificarConversacion = async (req, res) => {
 
     try {
       socketService.getIO().to(`livechat:${conversacionId}`).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
+      // Broadcast a todo el tenant para que el panel de Supervisión se refresque.
+      socketService.getIO(tenantKeyDe(req)).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
     } catch (e) {
       console.warn('⚠️ No se pudo emitir livechat:conversacion_cerrada:', e?.message || e);
     }
@@ -1438,6 +1450,8 @@ exports.transferirConversacion = async (req, res) => {
         agenteNombre: agenteDestino.nombre,
       });
       socketService.getIO(tenantKeyDe(req)).to(`user:${agenteDestino.usuarioId}`).emit('livechat:nueva_conversacion', { conversacionId: Number(conversacionId) });
+      // Broadcast a todo el tenant para que el panel de Supervisión se refresque.
+      socketService.getIO(tenantKeyDe(req)).emit('livechat:conversacion_transferida', { conversacionId: Number(conversacionId) });
     } catch (e) {
       console.warn('⚠️ No se pudo emitir evento de transferencia:', e?.message || e);
     }

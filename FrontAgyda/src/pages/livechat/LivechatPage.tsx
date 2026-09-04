@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, ArrowRightLeft, History, FileText, Megaphone, UsersRound } from 'lucide-react'
 import { livechatService } from '@/services/livechat.service'
 import { getSocket } from '@/lib/socket'
+import { useSocketEvent } from '@/hooks/useSocket'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { Button } from '@/components/ui/Button'
@@ -167,12 +168,27 @@ function BandejaEsperaModal({ onClose, onTomada }: { onClose: () => void; onToma
 // ya no filtra por dueño en el backend.
 function SupervisionModal({ onClose }: { onClose: () => void }) {
   const [seleccionadaId, setSeleccionadaId] = useState<number | null>(null)
+  const qc = useQueryClient()
 
   const { data: conversaciones = [], isLoading } = useQuery({
     queryKey: ['livechat-supervision-activas'],
     queryFn: () => livechatService.getConversacionesActivasSupervision(),
+    // El polling queda como red de respaldo — el refresh real viene de los
+    // eventos de socket de abajo, que actualizan la lista al instante en vez
+    // de esperar hasta 8s a que alguien tome/cierre/transfiera una conversación.
     refetchInterval: 8_000,
   })
+
+  // Refresca la lista al instante cuando cambia el estado de cualquier
+  // conversación — así un supervisor ve de inmediato quién tomó un chat de
+  // la bandeja de espera, sin esperar el próximo poll.
+  const refrescarLista = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['livechat-supervision-activas'] })
+  }, [qc])
+  useSocketEvent('livechat:conversacion_tomada', refrescarLista)
+  useSocketEvent('livechat:nueva_en_cola', refrescarLista)
+  useSocketEvent('livechat:conversacion_cerrada', refrescarLista)
+  useSocketEvent('livechat:conversacion_transferida', refrescarLista)
 
   const { data: detalle, isLoading: loadingDetalle } = useQuery({
     queryKey: ['livechat-supervision-detalle', seleccionadaId],
@@ -848,10 +864,12 @@ export default function LivechatPage() {
           <h1 className="text-xl font-bold text-gray-800">Chat en Vivo</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => setCampaniasOpen(true)}>
-            <Megaphone size={16} />
-            Campañas
-          </Button>
+          {puedeSupervisar && (
+            <Button variant="ghost" onClick={() => setCampaniasOpen(true)}>
+              <Megaphone size={16} />
+              Campañas
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setBandejaOpen(true)} className="relative">
             <Users size={16} />
             Bandeja de espera
@@ -861,10 +879,12 @@ export default function LivechatPage() {
               </span>
             )}
           </Button>
-          <Button variant="ghost" onClick={() => setUsuariosCampaniasOpen(true)}>
-            <UsersRound size={16} />
-            Grupo de Agentes
-          </Button>
+          {puedeSupervisar && (
+            <Button variant="ghost" onClick={() => setUsuariosCampaniasOpen(true)}>
+              <UsersRound size={16} />
+              Grupo de Agentes
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setAgentesOpen(true)}>
             <UserCheck size={16} />
             Agentes
