@@ -1,17 +1,35 @@
 import { useState } from 'react'
 import { Bell, BellOff, ArrowRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useNotificationStore } from '@/stores/notification.store'
+import { useNotificationStore, type NotificationItem } from '@/stores/notification.store'
 import { notificationService } from '@/services/notification.service'
 import { notificationTarget } from '@/lib/notificationTarget'
 import { Badge } from '@/components/ui/Badge'
 import { clsx } from 'clsx'
 
+// Agrupa notificaciones de la misma conversación de mensajería (mismo canalId,
+// aún sin leer) en una sola fila con el conteo — defensivo, por si llegan varias
+// antes de que el dedup del backend las colapse.
+function agruparConversaciones(items: NotificationItem[]): NotificationItem[] {
+  const vistos = new Set<string>()
+  const out: NotificationItem[] = []
+  for (const n of items) {
+    const canal = (n.dataExtra as { canalId?: number | string } | null)?.canalId
+    const key = n.tipo === 'mensajeria' && canal != null && !n.leida ? `canal-${canal}` : null
+    if (key) {
+      if (vistos.has(key)) continue
+      vistos.add(key)
+    }
+    out.push(n)
+  }
+  return out
+}
+
 export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationStore()
   const navigate = useNavigate()
-  const recent = notifications.slice(0, 6)
+  const recent = agruparConversaciones(notifications).slice(0, 6)
 
   const handleMarkAsRead = async (id: number) => {
     markAsRead(id)

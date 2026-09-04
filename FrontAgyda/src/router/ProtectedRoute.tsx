@@ -10,9 +10,15 @@ import { TicketAlertModal } from '@/components/ui/TicketAlertModal'
 import { ReglamentoAlertModal } from '@/components/ui/ReglamentoAlertModal'
 import { CambiarPasswordObligatorioModal } from '@/components/ui/CambiarPasswordObligatorioModal'
 import { VentaAlertWatcher } from '@/components/ventas/VentaAlertWatcher'
+import { WebphoneFrame } from '@/components/ui/WebphoneFrame'
 
 // Componente separado: los hooks de socket solo corren cuando hay sesión activa.
 // Recibe children para poder renderizar el Outlet desde el padre.
+//
+// WebphoneFrame vive acá (por encima de AppLayout y VentasLayout, que son
+// ramas hermanas del router) y no dentro de AppLayout: si viviera ahí, entrar
+// a /ventas desmonta todo el árbol de AppLayout junto con el Webphone
+// flotante y se pierde el tono de la llamada activa.
 function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   useSocketInit()
   const tipoUsuario = useAuthStore((s) => s.user?.tipoUsuario?.toUpperCase())
@@ -26,6 +32,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
       <TicketAlertModal />
       {!isCL && <ReglamentoAlertModal />}
       {isAllowed('ventas') && <VentaAlertWatcher />}
+      <WebphoneFrame />
     </>
   )
 }

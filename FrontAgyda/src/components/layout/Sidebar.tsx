@@ -53,12 +53,12 @@ const GROUPS = [
     keys: ['finanzas', 'gastos'],
   },
   {
-    label: 'Ventas',
+    label: 'CRM',
     keys: ['ventas-area', 'clientes', 'productos-servicios', 'crm', 'email-marketing'],
   },
   {
     label: 'Contact Center',
-    keys: ['operaciones', 'webphone', 'livechat', 'checklists'],
+    keys: ['contact-center', 'operaciones', 'webphone', 'livechat', 'checklists'],
   },
   {
     label: 'Calidad',

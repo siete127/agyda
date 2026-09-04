@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus, MoreVertical, Pencil, Trash2, Check } from 'lucide-react'
+import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus, MoreVertical, Pencil, Trash2, Check, AlertCircle, RotateCw } from 'lucide-react'
 import { mensajeriaService } from '@/services/mensajeria.service'
 import { useMensajeriaStore } from '@/stores/mensajeria.store'
 import { getSocket } from '@/lib/socket'
@@ -22,6 +22,13 @@ import toast from 'react-hot-toast'
 
 const MAX_ADJUNTO_MB = 15
 const REACCIONES_RAPIDAS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
+// Mismo patrón que MensajeriaChatWindow.tsx (burbuja flotante): el mensaje se
+// muestra al instante al enviarlo (optimista), sin esperar a que llegue por
+// socket — antes solo dependía del evento mensajeria:nuevo_mensaje, y si no
+// llegaba a tiempo el mensaje no aparecía hasta recargar la página.
+type EstadoEnvio = 'enviando' | 'enviado' | 'error'
+type MensajeConEstado = MensajeriaMensaje & { estadoEnvio?: EstadoEnvio; tempId?: number }
 
 // Agrupa las reacciones de un mensaje por emoji, para mostrar "👍 2" en vez de
 // una burbuja repetida por cada persona que reaccionó igual.
@@ -170,7 +177,8 @@ function ConversacionItem({ canal, activa, onClick }: { canal: MensajeriaCanal; 
 function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: MensajeriaCanal; onMinimizar?: () => void; onCerrar?: () => void; compacto?: boolean }) {
   const user = useCurrentUser()
   const clearUnread = useMensajeriaStore((s) => s.clearUnread)
-  const [mensajes, setMensajes] = useState<MensajeriaMensaje[]>([])
+  const [mensajes, setMensajes] = useState<MensajeConEstado[]>([])
+  const tempIdRef = useRef(-1)
   const [texto, setTexto] = useState('')
   const [archivo, setArchivo] = useState<File | null>(null)
   const [arrastrandoArchivo, setArrastrandoArchivo] = useState(false)
@@ -193,7 +201,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   const bottomRef = useRef<HTMLDivElement>(null)
   const mensajesContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stopTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -259,7 +267,17 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   useSocketEvent<Record<string, unknown>>('mensajeria:nuevo_mensaje', (raw) => {
     const msg = parseMensajeriaMensaje(raw)
     if (msg.canalId !== canal.id) return
-    setMensajes((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
+    setMensajes((prev) => {
+      if (prev.some((m) => m.id === msg.id)) return prev
+      // Si es un mensaje propio que ya está optimista en pantalla (enviando),
+      // el socket confirma primero que la respuesta REST: se reemplaza el
+      // optimista en vez de duplicar la burbuja.
+      if (msg.emisorId === user?.id) {
+        const pendiente = prev.find((m) => m.estadoEnvio === 'enviando' && m.contenido === msg.contenido)
+        if (pendiente) return prev.map((m) => (m === pendiente ? { ...msg, estadoEnvio: 'enviado' } : m))
+      }
+      return [...prev, msg]
+    })
     if (msg.emisorId !== user?.id) {
       mensajeriaService.marcarLeido(canal.id).catch(() => {})
       clearUnread(canal.id)
@@ -302,7 +320,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   }, [mensajes])
 
   const enviar = useMutation({
-    mutationFn: async ({ contenido, file }: { contenido: string; file: File | null }) => {
+    mutationFn: async ({ contenido, file }: { contenido: string; file: File | null; tempId: number }) => {
       let archivoUrl: string | undefined
       if (file) {
         const subido = await mensajeriaService.subirArchivo(canal.id, file)
@@ -310,9 +328,52 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
       }
       return mensajeriaService.enviarMensaje(canal.id, contenido, archivoUrl)
     },
-    onSuccess: () => { setTexto(''); setArchivo(null) },
-    onError: () => toast.error('No se pudo enviar el mensaje'),
+    onMutate: ({ contenido, file, tempId }) => {
+      const optimista: MensajeConEstado = {
+        id: tempId,
+        canalId: canal.id,
+        emisorId: user?.id ?? 0,
+        emisorNombre: user?.nombres ?? '',
+        contenido,
+        // Preview local inmediato del adjunto mientras se sube (URL de objeto
+        // en memoria) — se descarta al llegar la URL real del servidor.
+        archivoUrl: file ? URL.createObjectURL(file) : null,
+        fecha: new Date().toISOString(),
+        editado: false,
+        reacciones: [],
+        estadoEnvio: 'enviando',
+        tempId,
+      }
+      setMensajes((prev) => [...prev, optimista])
+      setTexto('')
+      setArchivo(null)
+      // El alto del textarea se ajusta imperativamente (fuera del control de
+      // React) al escribir varias líneas — hay que resetearlo a una línea acá.
+      if (inputRef.current) inputRef.current.style.height = 'auto'
+    },
+    onSuccess: (msg, { tempId }) => {
+      // El socket puede llegar antes que esta respuesta y ya haber insertado el
+      // mensaje real — en ese caso solo se quita el optimista, sin duplicar.
+      setMensajes((prev) => {
+        const yaLlego = prev.some((m) => m.id === msg.id && m.tempId !== tempId)
+        if (yaLlego) return prev.filter((m) => m.tempId !== tempId)
+        return prev.map((m) => (m.tempId === tempId ? { ...msg, estadoEnvio: 'enviado' } : m))
+      })
+    },
+    onError: (_err, { tempId }) => {
+      setMensajes((prev) => prev.map((m) => (m.tempId === tempId ? { ...m, estadoEnvio: 'error' } : m)))
+      toast.error('No se pudo enviar el mensaje')
+    },
   })
+
+  // El reintento con un solo clic solo aplica a mensajes de puro texto — un
+  // adjunto que falló requeriría volver a elegir el archivo, ya no lo tenemos
+  // guardado tras el primer intento (el objeto File no persiste en el mensaje).
+  const reintentarEnvio = (m: MensajeConEstado) => {
+    if (m.tempId == null || m.archivoUrl) return
+    setMensajes((prev) => prev.map((msg) => (msg.tempId === m.tempId ? { ...msg, estadoEnvio: 'enviando' } : msg)))
+    enviar.mutate({ contenido: m.contenido, file: null, tempId: m.tempId })
+  }
 
   const emitTyping = useCallback((isTyping: boolean) => {
     const socket = getSocket()
@@ -346,7 +407,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
 
   // Pegar una imagen copiada (captura de pantalla, "Copiar imagen" desde el
   // navegador, etc.) directamente en el campo de texto con Ctrl+V.
-  const handlePegarArchivo = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePegarArchivo = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const archivoPegado = Array.from(e.clipboardData.items)
       .find((item) => item.kind === 'file')
       ?.getAsFile()
@@ -383,7 +444,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     if (!contenido && !archivo) return
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     emitTyping(false)
-    enviar.mutate({ contenido, file: archivo })
+    enviar.mutate({ contenido, file: archivo, tempId: tempIdRef.current-- })
   }
 
   // Toca la misma reacción propia = la quita (toggle); toca otra = la reemplaza
@@ -733,16 +794,17 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                 ) : (
                   <div
                     className={clsx(
-                      'inline-flex min-w-[64px] max-w-[70%] flex-col overflow-hidden rounded-2xl px-4 py-2 text-sm',
+                      'inline-block min-w-[64px] max-w-[70%] overflow-hidden rounded-2xl px-4 py-2 text-sm transition-opacity',
                       esMio ? 'rounded-br-sm' : 'rounded-bl-sm border',
                       !esMio && (oscuro ? 'border-gray-700' : 'border-gray-200'),
+                      m.estadoEnvio === 'enviando' && 'opacity-60',
                     )}
                     style={{ backgroundColor: bgColor, color: textColor }}
                   >
                     {!esMio && canal.tipo === 'grupo' && (
                       <div className="text-[0.68rem] font-semibold text-brand mb-0.5">{m.emisorNombre}</div>
                     )}
-                    {m.contenido && <p className="whitespace-pre-wrap break-words">{m.contenido.trim()}</p>}
+                    {m.contenido && <p className="whitespace-pre-wrap break-words text-left">{m.contenido.trim()}</p>}
                     {m.archivoUrl && (
                       esImagen(m.archivoUrl) ? (
                         <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="block mt-1">
@@ -769,7 +831,19 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                     )}
                     <div className="flex items-center justify-end gap-1 text-[10px] mt-1 opacity-70 whitespace-nowrap" style={{ color: textColor }}>
                       {m.editado && <span className="italic">editado ·</span>}
-                      <span>{formatHora(m.fecha)}</span>
+                      {m.estadoEnvio === 'enviando' ? (
+                        <RotateCw size={10} className="animate-spin" />
+                      ) : m.estadoEnvio === 'error' ? (
+                        <button
+                          onClick={() => reintentarEnvio(m)}
+                          className="flex items-center gap-0.5 hover:underline"
+                          title="Error al enviar — clic para reintentar"
+                        >
+                          <AlertCircle size={11} /> reintentar
+                        </button>
+                      ) : (
+                        <span>{formatHora(m.fecha)}</span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -866,18 +940,30 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
               </div>
             )}
           </div>
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={texto}
-            onChange={(e) => handleChangeTexto(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleEnviar()}
+            onChange={(e) => {
+              handleChangeTexto(e.target.value)
+              const el = e.target
+              el.style.height = 'auto'
+              el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+            }}
+            onKeyDown={(e) => {
+              // Enter envía; Shift+Enter (o Ctrl/Cmd+Enter) inserta salto de línea.
+              if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault()
+                handleEnviar()
+              }
+            }}
             onPaste={handlePegarArchivo}
             placeholder="Escribe un mensaje..."
             className={clsx(
-              'flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
+              'flex-1 resize-none rounded-3xl border px-4 py-2 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-blue-500',
               oscuro ? 'border-gray-700 bg-gray-800 text-gray-100 placeholder-gray-500' : 'border-gray-300',
             )}
+            style={{ maxHeight: 120 }}
           />
           <Button onClick={handleEnviar} disabled={enviar.isPending || (!texto.trim() && !archivo)}>
             <Send size={16} />

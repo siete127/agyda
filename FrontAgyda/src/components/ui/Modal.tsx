@@ -8,14 +8,17 @@ interface ModalProps {
   onClose: () => void
   title?: string
   children: React.ReactNode
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
   /** Variante de color del header */
   variant?: 'default' | 'corporate'
   /** Eleva el modal sobre otro ya abierto (diálogos anidados) */
   elevated?: boolean
 }
 
-const sizeClasses = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl', xl: 'max-w-4xl' }
+const sizeClasses = {
+  sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl', xl: 'max-w-4xl',
+  full: 'max-w-6xl w-[95vw]',
+}
 
 /* Conteo de modales abiertos: con modales anidados (p. ej. un ConfirmDialog
    dentro de otro Modal), el que se cierra primero no debe liberar el scroll
@@ -63,7 +66,8 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', variant =
 
       {/* Panel */}
       <div className={clsx(
-        'relative w-full rounded-2xl bg-card shadow-2xl border border-gray-100/50 overflow-hidden animate-slide-up flex flex-col max-h-[90vh]',
+        'relative w-full rounded-2xl bg-card shadow-2xl border border-gray-100/50 overflow-hidden animate-slide-up flex flex-col',
+        size === 'full' ? 'max-h-[95vh] h-[95vh]' : 'max-h-[90vh]',
         sizeClasses[size],
       )}>
         {/* Header */}

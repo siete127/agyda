@@ -488,6 +488,9 @@ exports.enviarMensaje = async (req, res) => {
           tipo: 'mensajeria',
           dataExtra: { canalId, mensajeId, remitenteId: userId, remitenteNombre: req.user?.nombre || null },
           tenantKey: req.user?.empresa,
+          // Agrupa todas las notificaciones de un mismo canal en una sola
+          // mientras el usuario no las haya leído — una por conversación.
+          dedupeKey: `msj-canal-${canalId}`,
         });
       } catch (e) {
         console.warn('⚠️ No se pudo crear notificación de mensajería:', e?.message || e);

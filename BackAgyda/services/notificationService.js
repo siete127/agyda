@@ -27,6 +27,9 @@ const PUSH_CONFIG_POR_TIPO = {
   area_sin_reportar:          { titulo: 'AGYDA — Dirección General', url: '/direccion-general' },
   reporte_indicadores_mensual:{ titulo: 'AGYDA — Dirección General', url: '/direccion-general' },
   kpi_riesgo:                 { titulo: 'AGYDA — Dirección General', url: '/direccion-general' },
+  cc_interaccion_asignada:    { titulo: 'AGYDA — Contact Center', url: '/contact-center' },
+  cc_sla_riesgo:              { titulo: 'AGYDA — Contact Center', url: '/contact-center' },
+  cc_sla_vencido:             { titulo: 'AGYDA — Contact Center', url: '/contact-center' },
 };
 
 // Tipos que además ameritan correo electrónico al técnico — solo el
@@ -52,11 +55,74 @@ function relayEmit(room, event, payload) {
 }
 
 const notificationService = {
-  async createNotification({ usuarioId, mensaje, tipo, dataExtra, tenantKey }) {
+  // `dedupeKey` (opcional): agrupa notificaciones de una misma conversación/hilo.
+  // Si ya existe una notificación NO leída de este usuario+tipo con el mismo
+  // dedupeKey, se ACTUALIZA (mensaje = último preview, DATA_EXTRA.count++, fecha
+  // al momento) en vez de crear otra. Se usa para el chat interno: una
+  // notificación por conversación, no una por mensaje.
+  async createNotification({ usuarioId, mensaje, tipo, dataExtra, tenantKey, dedupeKey }) {
     if (!usuarioId || !mensaje) return null;
 
     const pool = await databaseService.getPool(tenantKey);
     const sql = require('mssql');
+
+    // ── Dedup por conversación ─────────────────────────────────────────────
+    let existente = null;
+    if (dedupeKey) {
+      try {
+        const rs = await pool.request()
+          .input('uid', sql.Int, usuarioId)
+          .input('tipo', sql.NVarChar, tipo || null)
+          .input('key', sql.NVarChar, `%"dedupeKey":"${String(dedupeKey).replace(/"/g, '')}"%`)
+          .query(`
+            SELECT TOP 1 NOTI_ID as id, DATA_EXTRA as dataExtra
+            FROM NOTIFICACIONES
+            WHERE USER_ID = @uid AND TIPO = @tipo AND LEIDA = 0 AND DATA_EXTRA LIKE @key
+            ORDER BY NOTI_ID DESC
+          `);
+        existente = rs.recordset[0] || null;
+      } catch (e) {
+        console.warn('⚠️ dedup notificación: no se pudo buscar la existente:', e?.message || e);
+      }
+    }
+
+    const dataExtraFinal = { ...(dataExtra || {}) };
+    if (dedupeKey) dataExtraFinal.dedupeKey = String(dedupeKey);
+
+    if (existente) {
+      let prevCount = 1;
+      try { prevCount = Number(JSON.parse(existente.dataExtra || '{}').count) || 1; } catch (_) { /* noop */ }
+      const nuevoCount = prevCount + 1;
+      dataExtraFinal.count = nuevoCount;
+      const mensajeAgrupado = `${mensaje}  ·  ${nuevoCount} mensajes nuevos`;
+      try {
+        await pool.request()
+          .input('id', sql.Int, existente.id)
+          .input('mensaje', sql.NVarChar, mensajeAgrupado)
+          .input('dataExtra', sql.NVarChar, JSON.stringify(dataExtraFinal))
+          .query(`UPDATE NOTIFICACIONES SET MENSAJE = @mensaje, DATA_EXTRA = @dataExtra, CREATED_AT = GETDATE() WHERE NOTI_ID = @id`);
+      } catch (e) {
+        console.warn('⚠️ dedup notificación: no se pudo actualizar la existente:', e?.message || e);
+      }
+      // Emitir la versión actualizada (misma id) — la campanita la reemplaza.
+      try {
+        if (socketService) {
+          const io = socketService.getIO(tenantKey);
+          const payload = { id: existente.id, usuarioId, mensaje: mensajeAgrupado, tipo, dataExtra: dataExtraFinal, leida: 0, fecha: new Date().toISOString(), actualizada: true };
+          const roomKey = `user:${usuarioId}`;
+          io.to(roomKey).emit('notificacion', payload);
+          relayEmit(roomKey, 'notificacion', payload);
+          relayEmit(roomKey, 'chat:notify', payload);
+          try { io.to(roomKey).emit('chat:notify', payload); } catch (_) {}
+        }
+      } catch (e) {
+        logger.error('⚠️ Error emitiendo notificación agrupada por socket:', e?.message || e);
+      }
+      return existente.id;
+    }
+
+    if (dedupeKey) dataExtraFinal.count = 1;
+    dataExtra = dataExtraFinal;
 
     // Emitir por socket PRIMERO, independiente de si el insert en BD falla
     let newId = null;

@@ -12,6 +12,7 @@ import {
   type ProductoServicioTipo,
   type ProductoServicioRecurrencia,
 } from '@/services/productoServicio.service'
+import { SatClaveInput } from '@/components/ui/SatClaveInput'
 
 const RECURRENCIA_LABEL: Record<ProductoServicioRecurrencia, string> = {
   MENSUAL: 'Mensual',
@@ -26,7 +27,13 @@ const EMPTY_FORM = {
   nombre: '',
   descripcion: '',
   precio: '',
+  costo: '',
   recurrencia: 'MENSUAL' as ProductoServicioRecurrencia,
+  ivaPct: '16',
+  claveProdServ: null as string | null,
+  claveProdServLabel: null as string | null,
+  claveUnidad: null as string | null,
+  claveUnidadLabel: null as string | null,
 }
 
 /* ── Modal ── */
@@ -34,12 +41,27 @@ function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | nul
   const qc = useQueryClient()
   const [form, setForm] = useState(item ? {
     tipo: item.tipo, nombre: item.nombre, descripcion: item.descripcion,
-    precio: String(item.precio), recurrencia: item.recurrencia,
+    precio: String(item.precio), costo: item.costo == null ? '' : String(item.costo),
+    recurrencia: item.recurrencia,
+    ivaPct: String(Math.round((item.ivaTasa ?? 0.16) * 10000) / 100),
+    claveProdServ: item.claveProdServ, claveProdServLabel: null,
+    claveUnidad: item.claveUnidad, claveUnidadLabel: item.unidadNombre,
   } : { ...EMPTY_FORM })
 
   const guardar = useMutation({
     mutationFn: () => {
-      const body = { ...form, precio: Number(form.precio) || 0 }
+      const body = {
+        tipo: form.tipo,
+        nombre: form.nombre,
+        descripcion: form.descripcion,
+        precio: Number(form.precio) || 0,
+        recurrencia: form.recurrencia,
+        costo: form.costo === '' ? null : Number(form.costo),
+        ivaTasa: (Number(form.ivaPct) || 0) / 100,
+        claveProdServ: form.claveProdServ,
+        claveUnidad: form.claveUnidad,
+        unidadNombre: form.claveUnidadLabel,
+      }
       return item ? productoServicioService.update(item.id, body) : productoServicioService.create(body)
     },
     onSuccess: () => {
@@ -76,20 +98,51 @@ function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | nul
           <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Descripción</label>
           <input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} className="field" placeholder="Opcional" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Precio (MXN)</label>
             <input type="number" min="0" step="0.01" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} className="field" placeholder="0.00" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Recurrencia</label>
-            <select value={form.recurrencia} onChange={(e) => setForm({ ...form, recurrencia: e.target.value as ProductoServicioRecurrencia })} className="field">
-              {(Object.keys(RECURRENCIA_LABEL) as ProductoServicioRecurrencia[]).map((r) => (
-                <option key={r} value={r}>{RECURRENCIA_LABEL[r]}</option>
-              ))}
-            </select>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Costo (MXN)</label>
+            <input type="number" min="0" step="0.01" value={form.costo} onChange={(e) => setForm({ ...form, costo: e.target.value })} className="field" placeholder="opcional" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">IVA %</label>
+            <input type="number" min="0" max="100" step="0.5" value={form.ivaPct} onChange={(e) => setForm({ ...form, ivaPct: e.target.value })} className="field" />
           </div>
         </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Recurrencia</label>
+          <select value={form.recurrencia} onChange={(e) => setForm({ ...form, recurrencia: e.target.value as ProductoServicioRecurrencia })} className="field">
+            {(Object.keys(RECURRENCIA_LABEL) as ProductoServicioRecurrencia[]).map((r) => (
+              <option key={r} value={r}>{RECURRENCIA_LABEL[r]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-3 space-y-3">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500">Datos SAT (para facturar)</p>
+          <div>
+            <label className="mb-1 block text-[0.7rem] font-medium text-gray-500">Clave de producto/servicio</label>
+            <SatClaveInput
+              tipo="prod-serv"
+              value={form.claveProdServ}
+              label={form.claveProdServLabel}
+              onChange={(clave, desc) => setForm({ ...form, claveProdServ: clave, claveProdServLabel: desc })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[0.7rem] font-medium text-gray-500">Unidad de medida</label>
+            <SatClaveInput
+              tipo="unidad"
+              value={form.claveUnidad}
+              label={form.claveUnidadLabel}
+              onChange={(clave, desc) => setForm({ ...form, claveUnidad: clave, claveUnidadLabel: desc })}
+            />
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button isLoading={guardar.isPending} disabled={!form.nombre.trim()} onClick={() => guardar.mutate()}>

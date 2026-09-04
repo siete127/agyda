@@ -24,6 +24,7 @@ import { proyectosService } from '@/services/proyectos.service'
 import { NoticiaDetalle } from '@/pages/noticias/NoticiasPage'
 import { type Noticia } from '@/types/noticia.types'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
+import { MascotaTablero } from '@/components/ui/MascotaTablero'
 import { DASHBOARD_DEFAULT } from '@/providers/personalizacion.context'
 import { personalizacionService, type DashboardCard, type Institucional } from '@/services/personalizacion.service'
 import { RESUMEN_CARDS } from './resumenCards'
@@ -268,6 +269,7 @@ export function DashboardPage() {
 
   const [selected,     setSelected]     = useState<Noticia | null>(null)
   const [empresaModal, setEmpresaModal] = useState<EmpresaKey | null>(null)
+  const { mascota } = usePersonalizacion()
 
   const isAdmin    = ['AD', 'ADMIN'].includes(user?.tipoUsuario?.toUpperCase() ?? '')
   const { isAllowed } = useModuleAccess()
@@ -317,7 +319,10 @@ export function DashboardPage() {
   const proyectosActivos = proyectos.filter((p) => p.estado === 'Activo').length
 
   const cumpleHoy = cumpleanos.filter((c) => c.dia_cumpleanos === now.getDate())
-  const cumpleMes = cumpleanos.filter((c) => c.dia_cumpleanos > now.getDate()).slice(0, 3)
+  const cumpleMes = cumpleanos
+    .filter((c) => c.dia_cumpleanos > now.getDate())
+    .sort((a, b) => a.dia_cumpleanos - b.dia_cumpleanos)
+    .slice(0, 5)
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
   const RESUMEN = [
@@ -379,8 +384,7 @@ export function DashboardPage() {
         <div className="dash-card relative flex h-full items-center justify-center overflow-hidden rounded-2xl border border-surface-border bg-card p-3">
           <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl"
             style={{ background: 'linear-gradient(160deg, #10203F 0%, #0B1730 100%)' }}>
-            <video src="/dashboard-mascota.mp4" poster="/dashboard-mascota-poster.jpg"
-              autoPlay loop muted playsInline className="w-full h-full object-cover" />
+            <MascotaTablero mascota={mascota.inicio} />
           </div>
         </div>
       ),
@@ -511,27 +515,29 @@ export function DashboardPage() {
           </div>
           {cumpleHoy.length === 0 && cumpleMes.length === 0 ? (
             <p className="px-4 py-6 text-center text-[0.72rem] text-ink-tertiary">Sin cumpleaños próximos este mes.</p>
-          ) : (<>
-            {cumpleHoy.map((c, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
-                <div>
-                  <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
-                  <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+          ) : (
+            <div className="divide-y divide-surface-border">
+              {cumpleHoy.map((c, i) => (
+                <div key={`hoy-${i}`} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
+                  <div>
+                    <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
+                    <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+                  </div>
+                  <span className="ml-auto text-lg">🎉</span>
                 </div>
-                <span className="ml-auto text-lg">🎉</span>
-              </div>
-            ))}
-            {cumpleHoy.length === 0 && cumpleMes.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
-                <div>
-                  <p className="text-[0.8rem] font-bold text-ink">{cumpleMes[0].nombre}</p>
-                  <p className="text-[0.65rem] text-ink-tertiary">{cumpleMes[0].dia_cumpleanos} de {MESES[mes - 1]}</p>
+              ))}
+              {cumpleMes.map((c, i) => (
+                <div key={`mes-${i}`} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-base">🎂</div>
+                  <div>
+                    <p className="text-[0.8rem] font-bold text-ink">{c.nombre}</p>
+                    <p className="text-[0.65rem] text-ink-tertiary">{c.dia_cumpleanos} de {MESES[mes - 1]}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </>)}
+              ))}
+            </div>
+          )}
         </div>
       ),
     },

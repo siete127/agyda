@@ -41,6 +41,8 @@ const EncuestasPage   = lz(() => import('@/pages/encuestas/EncuestasPage'),    '
 const MisEncuestasPage = lz(() => import('@/pages/encuestas/MisEncuestasPage'), 'MisEncuestasPage')
 const EncuestaPublicaPage = lazy(() => import('@/pages/encuestas/EncuestaPublicaPage').then((m) => ({ default: m.EncuestaPublicaPage })))
 const ExamenPublicoPage = lazy(() => import('@/pages/capacitacion/ExamenPublicoPage').then((m) => ({ default: m.ExamenPublicoPage })))
+const CursoPublicoPage = lazy(() => import('@/pages/capacitacion/CursoPublicoPage').then((m) => ({ default: m.CursoPublicoPage })))
+const CCClientePage = lazy(() => import('@/pages/public/CCClientePage'))
 const ReportesPage    = lz(() => import('@/pages/reportes/ReportesPage'),      'ReportesPage')
 const UsuariosPage    = lz(() => import('@/pages/usuarios/UsuariosPage'),      'UsuariosPage')
 const PermisosPage         = lz(() => import('@/pages/permisos/PermisosPage'),              'PermisosPage')
@@ -148,6 +150,7 @@ const IncapacidadesPage             = lz(() => import('@/pages/incapacidades/Inc
 const EvaluacionDesempenoPage       = lz(() => import('@/pages/evaluacion-desempeno/EvaluacionDesempenoPage'), 'EvaluacionDesempenoPage')
 const ChatbotPage                   = lz(() => import('@/pages/chatbot/ChatbotPage'),            'ChatbotPage')
 const LivechatPage                  = lz(() => import('@/pages/livechat/LivechatPage'),          'default')
+const ContactCenterPage             = lz(() => import('@/pages/contact-center/ContactCenterPage'), 'default')
 
 const Loader = () => (
   <div className="flex h-full items-center justify-center min-h-[40vh]">
@@ -174,8 +177,14 @@ export const router = createBrowserRouter([
   // Examen de capacitación público (sin sesión de intranet)
   { path: '/examen/:slug', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><ExamenPublicoPage /></Suspense> },
 
+  // Curso de capacitación público (sin sesión — número + nombre)
+  { path: '/capacitacion/publico/:slug', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><CursoPublicoPage /></Suspense> },
+
   // Indicadores empresariales — link público de solo lectura (sin sesión de intranet)
   { path: '/indicadores-publico', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><IndicadoresPublicoPage /></Suspense> },
+
+  // Contact Center — página pública de "cliente" para demos (canal de prueba)
+  { path: '/cc-cliente', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><CCClientePage /></Suspense> },
 
   {
     element: <AuthLayout />,
@@ -337,6 +346,7 @@ export const router = createBrowserRouter([
             element: <RoleRoute allowedRoles={['AD', 'CC']} />,
             children: [
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
+              { element: <ModuleRoute moduleKey="contact-center" />, children: [{ path: '/contact-center', element: wrap(<ContactCenterPage />) }] },
             ],
           },
           {

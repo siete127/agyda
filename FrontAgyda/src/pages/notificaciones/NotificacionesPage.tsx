@@ -100,8 +100,21 @@ export function NotificacionesPage() {
     onError: () => toast.error('Error al eliminar'),
   })
 
-  const noLeidas  = notifications.filter((n) => !n.leida)
-  const leidas    = notifications.filter((n) => n.leida)
+  // Una fila por conversación de mensajería sin leer (mismo canalId).
+  const noLeidas = (() => {
+    const vistos = new Set<string>()
+    return notifications.filter((n) => {
+      if (n.leida) return false
+      const canal = (n.dataExtra as { canalId?: number | string } | null)?.canalId
+      if (n.tipo === 'mensajeria' && canal != null) {
+        const k = `canal-${canal}`
+        if (vistos.has(k)) return false
+        vistos.add(k)
+      }
+      return true
+    })
+  })()
+  const leidas = notifications.filter((n) => n.leida)
 
   return (
     <div className="space-y-5 animate-fade-in">

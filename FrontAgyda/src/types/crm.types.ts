@@ -199,6 +199,8 @@ export function parseCRMInteraccion(raw: Record<string, unknown>): CRMInteraccio
   }
 }
 
+export type CRMSemaforo = 'VERDE' | 'AMARILLO' | 'ROJO' | 'SIN_COSTO'
+
 export interface CRMCotizacionItem {
   id?: number
   esSeccion: boolean
@@ -207,6 +209,11 @@ export interface CRMCotizacionItem {
   precioUnit: number
   descuento: number
   subtotal?: number
+  costoUnit?: number | null
+  psId?: number | null
+  ivaTasa?: number | null
+  claveProdServ?: string | null
+  claveUnidad?: string | null
 }
 
 export interface CRMCotizacion {
@@ -216,9 +223,17 @@ export interface CRMCotizacion {
   titulo: string
   fecha: string
   fechaVto: string | null
-  estatus: 'borrador' | 'enviada' | 'aprobada' | 'rechazada'
+  estatus: 'borrador' | 'enviada' | 'aprobada' | 'rechazada' | 'facturada'
   notas: string | null
   total: number
+  subtotal?: number | null
+  iva?: number | null
+  costoTotal?: number | null
+  utilidad?: number | null
+  margenPct?: number | null
+  semaforo?: CRMSemaforo | null
+  aprobOverride?: boolean
+  facturaId?: number | null
   items: CRMCotizacionItem[]
 }
 

@@ -18,17 +18,28 @@ export const DEFAULT_BRANDING: Branding = {
 
 export const DEFAULT_CONFIG: PersonalizacionConfig = {
   branding: DEFAULT_BRANDING,
+  // Este default solo se usa mientras la query real está en curso o si falla
+  // silenciosamente — marcador/contingencia arrancan ocultos aquí para que un
+  // fallo de red nunca los deje expuestos por accidente hasta que se cargue
+  // la configuración real desde el backend.
   headerButtons: [
-    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: true },
-    { key: 'marcador', label: 'Marcador', url: '', visible: true },
-    { key: 'sistemas', label: 'Ventas', url: '', visible: true },
-    { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
+    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: false },
+    { key: 'marcador', label: 'Marcador', url: '', visible: false },
   ],
   dashboard: { cards: [] },
   institucional: {
     mision: 'Soporte TI, marcación y software que hacen crecer tu negocio.',
     vision: 'Liderar la automatización con IA en soluciones empresariales.',
     valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
+  },
+  enlacesTopbar: [],
+  mascota: {
+    inicio:   { mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
+    flotante: { habilitado: false, mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
+  },
+  ventas: {
+    margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
+    iva: { tasaDefault: 0.16 },
   },
 }
 

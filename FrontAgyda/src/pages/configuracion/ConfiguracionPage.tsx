@@ -17,7 +17,12 @@ import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
 import { InstitucionalTab } from './InstitucionalTab'
+import { VentasTab } from './VentasTab'
+import { FacturacionTab } from './FacturacionTab'
+import { CCCanalesTab, CCSkillsTab, CCAgentesTab, CCTipificacionesTab, CCConfigTab, CCSimuladorTab } from './ContactCenterTabs'
+import { MascotaTab } from './MascotaTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
+import { EnlacesTopbarTab } from './EnlacesTopbarTab'
 import { DashboardDisenoTab } from './DashboardDisenoTab'
 import { TemaTab } from './TemaTab'
 // ── Secciones de Configuración > Tecnología/TI (módulo de Soporte TI) ──
@@ -54,7 +59,17 @@ const SCREENS: Record<string, ComponentType> = {
   perfiles: PerfilesTab,
   'pers-branding': BrandingTab,
   'pers-institucional': InstitucionalTab,
+  ventas: VentasTab,
+  facturacion: FacturacionTab,
+  'cc-canales': CCCanalesTab,
+  'cc-skills': CCSkillsTab,
+  'cc-agentes': CCAgentesTab,
+  'cc-tipificaciones': CCTipificacionesTab,
+  'cc-config': CCConfigTab,
+  'cc-simulador': CCSimuladorTab,
+  'pers-mascota': MascotaTab,
   'pers-botones': BotonesHeaderTab,
+  'pers-enlaces': EnlacesTopbarTab,
   'pers-dashboard': DashboardDisenoTab,
   tema: TemaTab,
   'webphone-vistas': WebphoneVistasTab,

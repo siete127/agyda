@@ -5,8 +5,9 @@ import toast from 'react-hot-toast'
 import {
   Plus, GraduationCap, Clock, FileText, Trash2, Pencil, Upload,
   CheckCircle2, Download, LayoutGrid, ListChecks, Paperclip,
-  ClipboardCheck, Globe2, Lock, Copy, Users, XCircle,
+  ClipboardCheck, Globe2, Lock, Copy, Users, XCircle, Search, UserPlus,
 } from 'lucide-react'
+import { api } from '@/lib/axios'
 import { capacitacionService } from '@/services/capacitacion.service'
 import { capacitacionExamenService } from '@/services/capacitacionExamen.service'
 import { useIsADorTI } from '@/hooks/useAuth'
@@ -303,6 +304,174 @@ function PresentarExamenPrivado({ examenId, onCancel }: { examenId: number; onCa
 }
 
 /* ── Detalle de curso: materiales + inscripción/completar ── */
+/* ── Asignación de usuarios + acceso público (solo admin) ── */
+interface UsuarioLite { id: number; nombre: string; usuario: string; rol: string }
+
+function AsignacionSeccion({ curso, onCambioAcceso }: { curso: Curso; onCambioAcceso: () => void }) {
+  const qc = useQueryClient()
+  const [busca, setBusca] = useState('')
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
+  const linkPublico = curso.slugPublico
+    ? `${window.location.origin}/capacitacion/publico/${curso.slugPublico}`
+    : ''
+
+  const { data: asignados = [], isLoading: cargandoAsignados } = useQuery({
+    queryKey: ['capacitacion-asignados', curso.id],
+    queryFn: () => capacitacionService.getAsignados(curso.id),
+  })
+  const { data: usuarios = [] } = useQuery({
+    queryKey: ['usuarios-lite-capacitacion'],
+    queryFn: async () => {
+      const { data } = await api.get('/usuarios')
+      const list = Array.isArray(data) ? data : (data?.data ?? data?.usuarios ?? [])
+      return (list as Record<string, unknown>[]).map((r) => ({
+        id: Number(r.id ?? r.ID ?? 0),
+        nombre: String(r.nombre ?? r.NOMBRES ?? r.nombres ?? '').replace(/\s+/g, ' ').trim(),
+        usuario: String(r.usuario ?? r.USUARIO ?? r.login ?? ''),
+        rol: String(r.tipoUsuario ?? r.rol ?? ''),
+      })) as UsuarioLite[]
+    },
+    staleTime: 60_000,
+  })
+
+  const cambiarAcceso = useMutation({
+    mutationFn: (acceso: 'publico' | 'privado') =>
+      capacitacionService.update(curso.id, { titulo: curso.titulo, descripcion: curso.descripcion, categoria: curso.categoria ?? undefined, activo: curso.activo, acceso }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['capacitacion-cursos'] }); onCambioAcceso(); },
+    onError: () => toast.error('No se pudo cambiar el acceso'),
+  })
+
+  const asignar = useMutation({
+    mutationFn: () => capacitacionService.asignarUsuarios(curso.id, [...seleccion]),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['capacitacion-asignados', curso.id] })
+      setSeleccion(new Set())
+      toast.success(r.nuevas > 0 ? `${r.nuevas} usuario(s) asignado(s)` : 'Sin cambios (ya estaban asignados)')
+    },
+    onError: () => toast.error('No se pudo asignar'),
+  })
+
+  const desasignar = useMutation({
+    mutationFn: (usuarioId: number) => capacitacionService.desasignarUsuario(curso.id, usuarioId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['capacitacion-asignados', curso.id] }),
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudo quitar'),
+  })
+
+  const yaAsignados = new Set(asignados.map((a) => a.usuarioId))
+  const q = busca.trim().toLowerCase()
+  const candidatos = usuarios
+    .filter((u) => !yaAsignados.has(u.id))
+    .filter((u) => !q || `${u.nombre} ${u.usuario} ${u.rol}`.toLowerCase().includes(q))
+    .slice(0, 40)
+
+  const toggle = (id: number) => setSeleccion((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
+
+  return (
+    <div className="space-y-4 rounded-xl border border-gray-100 bg-gray-50/40 p-4">
+      {/* Acceso público */}
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">Acceso</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => cambiarAcceso.mutate(curso.acceso === 'publico' ? 'privado' : 'publico')}
+            disabled={cambiarAcceso.isPending}
+            className={clsx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-colors',
+              curso.acceso === 'publico' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
+          >
+            {curso.acceso === 'publico' ? <Globe2 className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+            {curso.acceso === 'publico' ? 'Público (link)' : 'Privado'}
+          </button>
+          {curso.acceso === 'publico' && linkPublico && (
+            <button
+              onClick={() => { navigator.clipboard.writeText(linkPublico); toast.success('Link copiado') }}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[0.72rem] font-mono text-gray-500 hover:bg-gray-100"
+            >
+              <Copy className="h-3.5 w-3.5" /> {linkPublico.replace(/^https?:\/\//, '')}
+            </button>
+          )}
+        </div>
+        {curso.acceso === 'publico' && (
+          <p className="mt-1.5 text-[0.68rem] text-gray-400">
+            Con el link cualquiera puede tomar el curso sin cuenta: escribe su número de empleado y nombre.
+          </p>
+        )}
+      </div>
+
+      {/* Asignados */}
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+          Asignados {asignados.length > 0 && <span className="text-gray-400">({asignados.length})</span>}
+        </p>
+        {cargandoAsignados ? (
+          <p className="text-xs text-gray-400">Cargando…</p>
+        ) : asignados.length === 0 ? (
+          <p className="text-xs text-gray-400">Nadie asignado todavía.</p>
+        ) : (
+          <div className="max-h-40 space-y-1 overflow-y-auto">
+            {asignados.map((a) => (
+              <div key={a.usuarioId} className="flex items-center justify-between gap-2 rounded-lg bg-card px-2.5 py-1.5">
+                <div className="min-w-0">
+                  <p className="truncate text-[0.78rem] font-medium text-gray-800">{a.nombre}</p>
+                  <p className="text-[0.62rem] text-gray-400">{a.usuario} · {a.rol}</p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-1.5">
+                  <span className={clsx('chip text-[0.58rem]', a.estado === 'completado' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
+                    {a.estado === 'completado' ? 'Completó' : 'Pendiente'}
+                  </span>
+                  {a.estado !== 'completado' && (
+                    <button onClick={() => desasignar.mutate(a.usuarioId)} className="rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500">
+                      <XCircle className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Asignar a nuevos */}
+      <div>
+        <div className="relative mb-2">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar usuario por nombre, usuario o rol…"
+            className="field w-full py-1.5 pl-8 text-xs"
+          />
+        </div>
+        <div className="max-h-44 space-y-0.5 overflow-y-auto rounded-lg border border-gray-100 bg-card p-1">
+          {candidatos.length === 0 ? (
+            <p className="px-2 py-3 text-center text-[0.72rem] text-gray-400">Sin resultados</p>
+          ) : candidatos.map((u) => (
+            <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-gray-50">
+              <input type="checkbox" checked={seleccion.has(u.id)} onChange={() => toggle(u.id)} className="rounded accent-brand" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[0.78rem] text-gray-800">{u.nombre}</span>
+                <span className="block text-[0.6rem] text-gray-400">{u.usuario} · {u.rol}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <Button
+          className="mt-2 w-full"
+          size="sm"
+          disabled={seleccion.size === 0 || asignar.isPending}
+          isLoading={asignar.isPending}
+          onClick={() => asignar.mutate()}
+        >
+          <UserPlus className="h-3.5 w-3.5" /> Asignar {seleccion.size > 0 ? `(${seleccion.size})` : ''}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function CursoDetalleModal({ curso, isAdmin, onClose }: { curso: Curso; isAdmin: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const [subiendo, setSubiendo] = useState(false)
@@ -390,7 +559,7 @@ function CursoDetalleModal({ curso, isAdmin, onClose }: { curso: Curso; isAdmin:
           ) : (
             <div className="space-y-2.5">
               {curso.materiales.map((m) => {
-                const esAudio = ['mp3', 'wav', 'ogg', 'm4a'].includes(m.tipo ?? '')
+                const esAudio = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'wma', 'opus', 'mpeg', 'mpg'].includes(m.tipo ?? '')
                 const esVideo = ['mp4', 'webm', 'mov'].includes(m.tipo ?? '')
                 const esImagen = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(m.tipo ?? '')
                 // PDF e imágenes se presentan inline en el navegador. Audio y video se
@@ -403,6 +572,7 @@ function CursoDetalleModal({ curso, isAdmin, onClose }: { curso: Curso; isAdmin:
                       <div className="flex items-center gap-2">
                         <Paperclip className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                         <p className="flex-1 min-w-0 truncate text-xs font-medium text-gray-700">{m.nombre}</p>
+                        <a href={m.url} download={m.nombre} className="flex-shrink-0 text-[0.65rem] font-semibold text-brand hover:underline">Descargar</a>
                         {isAdmin && (
                           <button onClick={() => eliminarMaterial.mutate(m.id)} className="flex-shrink-0 text-gray-300 hover:text-red-500">
                             <Trash2 className="h-3.5 w-3.5" />
@@ -466,6 +636,16 @@ function CursoDetalleModal({ curso, isAdmin, onClose }: { curso: Curso; isAdmin:
 
         {/* Exámenes */}
         <ExamenesSeccion cursoId={curso.id} isAdmin={isAdmin} onPresentar={setPresentandoExamen} />
+
+        {/* Asignación de usuarios + acceso público — solo admin */}
+        {isAdmin && (
+          <div>
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600">
+              <Users className="h-3.5 w-3.5" /> Asignar a usuarios
+            </h3>
+            <AsignacionSeccion curso={curso} onCambioAcceso={invalidate} />
+          </div>
+        )}
 
         {/* Acción según mi estado */}
         <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">

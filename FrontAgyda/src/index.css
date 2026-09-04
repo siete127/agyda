@@ -322,6 +322,22 @@
 }
 .animate-gradient-x { animation: gradient-x 8s linear infinite; }
 
+/* ── Mascota del tablero — animaciones de movimiento ──────────────
+   La duración base la fija cada clase; la velocidad la ajusta la variable
+   --mascota-speed (0.6 rápida / 1 normal / 1.8 lenta) puesta en el contenedor. */
+@keyframes mascota-flotar   { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9%); } }
+@keyframes mascota-latir    { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes mascota-balanceo { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes mascota-saludar  {
+  0%, 82%, 100% { transform: rotate(0); }
+  86% { transform: rotate(-9deg); } 90% { transform: rotate(6deg); }
+  94% { transform: rotate(-6deg); } 98% { transform: rotate(3deg); }
+}
+.mascota-flotar   { animation: mascota-flotar   calc(3s * var(--mascota-speed, 1)) ease-in-out infinite; }
+.mascota-latir    { animation: mascota-latir    calc(2.4s * var(--mascota-speed, 1)) ease-in-out infinite; }
+.mascota-balanceo { animation: mascota-balanceo calc(3.4s * var(--mascota-speed, 1)) ease-in-out infinite; transform-origin: bottom center; }
+.mascota-saludar  { animation: mascota-saludar  calc(6s * var(--mascota-speed, 1)) ease-in-out infinite; transform-origin: bottom center; }
+
 /* ── Recharts en modo oscuro ──────────────────────────────────
    Los charts de recharts añaden sus clases (.recharts-*) en runtime y no
    traen soporte de tema. Estas reglas van FUERA de @layer (si no, Tailwind

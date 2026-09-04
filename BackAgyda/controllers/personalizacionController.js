@@ -5,12 +5,13 @@ const databaseService = require('../services/databaseService');
 const logger = global.logger || require('../utils/logger');
 const { logAudit } = require('../services/auditService');
 const { PERSONALIZACION_DIR } = require('../middleware/personalizacionUpload');
+const { MEDIA_EMPRESA_DIR } = require('../middleware/mediaEmpresaUpload');
 
 let socketService;
 try { socketService = require('../services/socketService'); } catch (_) { socketService = null; }
 
 const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login'];
-const HEADER_BUTTON_KEYS = ['marcador', 'contingencia', 'sistemas', 'gestion-mis'];
+const HEADER_BUTTON_KEYS = ['marcador', 'contingencia'];
 // Catálogo de cards del dashboard — el frontend sabe renderizarlas; aquí solo
 // validamos que las keys sean conocidas. Debe reflejar CARD_IDS de
 // FrontAgyda/src/pages/dashboard/cardCatalog.ts.
@@ -44,10 +45,13 @@ const DEFAULT_CONFIG = {
     fondoOscuro: '#0F131B',
   },
   headerButtons: [
-    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: true },
-    { key: 'marcador', label: 'Marcador', url: '', visible: true },
-    { key: 'sistemas', label: 'Ventas', url: '', visible: true },
-    { key: 'gestion-mis', label: 'Gestión MIS', url: '', visible: true },
+    // Marcador / contingencia arrancan OCULTOS: son propios del Contact Center y
+    // no todas las empresas los usan. Un admin los activa desde
+    // Configuración → Apariencia → Botones del encabezado cuando aplique.
+    // "Ventas" y "Gestión MIS" se movieron a enlacesTopbar (son propios de
+    // Ardaby Tec, no botones genéricos para cualquier empresa).
+    { key: 'contingencia', label: 'Marcador contingencia', url: '', visible: false },
+    { key: 'marcador', label: 'Marcador', url: '', visible: false },
   ],
   dashboard: { cards: [] },
   // Identidad institucional — misión, visión y valores por empresa. Los textos
@@ -57,7 +61,91 @@ const DEFAULT_CONFIG = {
     vision: 'Liderar la automatización con IA en soluciones empresariales.',
     valores: ['Innovación', 'Enfoque al cliente', 'Aprendizaje', 'Calidad', 'Integridad', 'Trabajo en equipo', 'Confianza'],
   },
+  // Enlaces personalizados del encabezado — botones que un admin agrega junto a
+  // Marcador/Contingencia. Cada uno abre su URL en pestaña nueva o en un panel
+  // flotante tipo Spotify que sigue visible al navegar.
+  enlacesTopbar: [],
+  // Mascota — DOS independientes: la de la card del inicio y el widget flotante.
+  // Cada una tiene su propio archivo (mediaId → MEDIA_EMPRESA), movimiento y
+  // velocidad. Si el widget está habilitado sin archivo propio, usa la del sistema.
+  mascota: {
+    inicio:   { mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
+    flotante: { habilitado: false, mediaId: null, tipo: null, movimiento: 'flotar', velocidad: 'normal' },
+  },
+  // Comercial — reglas de margen para las cotizaciones del CRM y tasa de IVA por
+  // defecto. El semáforo compara el margen global de la cotización contra estos
+  // umbrales; si cae en ROJO y `requiereOverride` está activo, guardar/aprobar
+  // exige el permiso crm:cotizacion-override-margen.
+  ventas: {
+    margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
+    iva: { tasaDefault: 0.16 },
+  },
 };
+
+function clamp(n, min, max, fallback) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(Math.max(v, min), max);
+}
+
+// Normaliza la rama `ventas` con clamps coherentes (verde >= amarillo >= rojo).
+function limpiarVentas(raw) {
+  const D = DEFAULT_CONFIG.ventas;
+  const m = raw && typeof raw === 'object' ? raw : {};
+  const mg = m.margen && typeof m.margen === 'object' ? m.margen : {};
+  const iva = m.iva && typeof m.iva === 'object' ? m.iva : {};
+  let rojoMax = clamp(mg.rojoMax, 0, 100, D.margen.rojoMax);
+  let amarilloMin = clamp(mg.amarilloMin, 0, 100, D.margen.amarilloMin);
+  let verdeMin = clamp(mg.verdeMin, 0, 100, D.margen.verdeMin);
+  if (amarilloMin < rojoMax) amarilloMin = rojoMax;
+  if (verdeMin < amarilloMin) verdeMin = amarilloMin;
+  return {
+    margen: {
+      verdeMin,
+      amarilloMin,
+      rojoMax,
+      requiereOverride: mg.requiereOverride !== false,
+    },
+    iva: { tasaDefault: clamp(iva.tasaDefault, 0, 1, D.iva.tasaDefault) },
+  };
+}
+
+// Config de margen que consume crmCotizacionesController (evita duplicar defaults).
+exports.calcMargenConfig = function calcMargenConfig(config) {
+  const v = limpiarVentas(config?.ventas);
+  return { ...v.margen, tasaIvaDefault: v.iva.tasaDefault };
+};
+
+const MASCOTA_MOVIMIENTOS = ['ninguno', 'flotar', 'saludar', 'latir', 'balanceo'];
+const MASCOTA_VELOCIDADES = ['lenta', 'normal', 'rapida'];
+
+function limpiarMascotaParte(raw, base) {
+  const m = raw && typeof raw === 'object' ? raw : {};
+  return {
+    mediaId: m.mediaId != null && Number(m.mediaId) ? Number(m.mediaId) : null,
+    tipo: m.tipo === 'imagen' || m.tipo === 'video' ? m.tipo : null,
+    movimiento: MASCOTA_MOVIMIENTOS.includes(m.movimiento) ? m.movimiento : base.movimiento,
+    velocidad: MASCOTA_VELOCIDADES.includes(m.velocidad) ? m.velocidad : base.velocidad,
+  };
+}
+
+const ENLACE_ICONOS = ['link', 'phone', 'headset', 'monitor', 'chart', 'ticket', 'mail', 'globe', 'rocket', 'grid', 'bell', 'calendar', 'folder', 'shield', 'zap'];
+const ENLACE_MODOS = ['pestana', 'flotante'];
+
+function limpiarEnlace(raw, i) {
+  const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const url = s(raw?.url, 500);
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  return {
+    id: s(raw?.id, 40) || `enlace-${Date.now()}-${i}`,
+    label: s(raw?.label, 40) || 'Enlace',
+    url,
+    icono: ENLACE_ICONOS.includes(raw?.icono) ? raw.icono : 'link',
+    color: /^#[0-9a-fA-F]{6}$/.test(raw?.color) ? raw.color : '#2F6FED',
+    modo: ENLACE_MODOS.includes(raw?.modo) ? raw.modo : 'pestana',
+    visible: raw?.visible !== false,
+  };
+}
 
 function mergeConfig(stored) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
@@ -65,13 +153,33 @@ function mergeConfig(stored) {
   const inst = stored.institucional && typeof stored.institucional === 'object' ? stored.institucional : {};
   return {
     branding: { ...base.branding, ...(stored.branding || {}) },
-    headerButtons: Array.isArray(stored.headerButtons) ? stored.headerButtons : base.headerButtons,
+    headerButtons: Array.isArray(stored.headerButtons)
+      ? stored.headerButtons.filter((b) => HEADER_BUTTON_KEYS.includes(b?.key))
+      : base.headerButtons,
     dashboard: { ...base.dashboard, ...(stored.dashboard || {}) },
     institucional: {
       mision: typeof inst.mision === 'string' ? inst.mision : base.institucional.mision,
       vision: typeof inst.vision === 'string' ? inst.vision : base.institucional.vision,
       valores: Array.isArray(inst.valores) ? inst.valores : base.institucional.valores,
     },
+    enlacesTopbar: Array.isArray(stored.enlacesTopbar)
+      ? stored.enlacesTopbar.map(limpiarEnlace).filter(Boolean)
+      : base.enlacesTopbar,
+    ventas: limpiarVentas(stored.ventas),
+    mascota: (() => {
+      const m = stored.mascota && typeof stored.mascota === 'object' ? stored.mascota : {};
+      // Migración desde el formato viejo (una sola mascota con `modo`).
+      const legacy = m.modo != null || m.mediaId != null;
+      const inicioRaw = m.inicio ?? (legacy ? m : {});
+      const flotanteRaw = m.flotante ?? (legacy && (m.modo === 'flotante' || m.modo === 'ambas') ? { ...m, habilitado: true } : {});
+      return {
+        inicio: limpiarMascotaParte(inicioRaw, base.mascota.inicio),
+        flotante: {
+          habilitado: !!flotanteRaw.habilitado,
+          ...limpiarMascotaParte(flotanteRaw, base.mascota.flotante),
+        },
+      };
+    })(),
   };
 }
 
@@ -86,6 +194,13 @@ async function readConfig(pool) {
     return mergeConfig(null);
   }
 }
+
+// Config completa de un tenant, para que otros controllers la consuman
+// (ej. crmCotizacionesController lee la rama `ventas`). Acepta la key del tenant.
+exports.getConfigForTenant = async function getConfigForTenant(tenantKey) {
+  const pool = await databaseService.getPool(tenantKey);
+  return readConfig(pool);
+};
 
 async function writeConfig(pool, config, userId) {
   await pool.request()
@@ -243,6 +358,172 @@ exports.updateInstitucional = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateInstitucional', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la identidad institucional' });
+  }
+};
+
+// PUT /api/personalizacion/ventas
+// Body: { margen: { verdeMin, amarilloMin, rojoMax, requiereOverride }, iva: { tasaDefault } }
+exports.updateVentas = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.ventas = limpiarVentas(req.body);
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-ventas', detalle: JSON.stringify(config.ventas), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'ventas');
+    return res.json({ success: true, data: config.ventas });
+  } catch (e) {
+    logger.error('personalizacionController.updateVentas', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la configuración comercial' });
+  }
+};
+
+// PUT /api/personalizacion/enlaces-topbar
+// Body: array de { id?, label, url, icono, color, modo, visible }
+exports.updateEnlacesTopbar = async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body) ? req.body : req.body?.enlacesTopbar;
+    if (!Array.isArray(incoming)) {
+      return res.status(400).json({ success: false, message: 'Se espera un array de enlaces' });
+    }
+    const enlaces = incoming.map(limpiarEnlace).filter(Boolean).slice(0, 12);
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.enlacesTopbar = enlaces;
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-enlaces-topbar', detalle: `${enlaces.length} enlaces`, ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'enlacesTopbar');
+    return res.json({ success: true, data: config.enlacesTopbar });
+  } catch (e) {
+    logger.error('personalizacionController.updateEnlacesTopbar', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar los enlaces del encabezado' });
+  }
+};
+
+// ── Mascota del tablero ──────────────────────────────────────────────────────
+
+// Asegura la tabla MEDIA_EMPRESA (multimedia propia de cada empresa) — se crea
+// on-demand en la BD del tenant, como el resto de esquemas de personalización.
+async function ensureMediaEmpresa(pool) {
+  await pool.request().batch(`
+    IF OBJECT_ID('dbo.MEDIA_EMPRESA', 'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.MEDIA_EMPRESA (
+        ME_ID            INT IDENTITY(1,1) PRIMARY KEY,
+        ME_USO           NVARCHAR(30)   NOT NULL,       -- 'mascota', y lo que venga
+        ME_NOMBRE_ARCHIVO NVARCHAR(260) NOT NULL,
+        ME_NOMBRE_ORIGINAL NVARCHAR(260) NULL,
+        ME_MIME          NVARCHAR(100)  NULL,
+        ME_TAMANIO       INT            NULL,
+        ME_SUBIDO_POR    INT            NULL,
+        ME_FECHA         DATETIME       NOT NULL DEFAULT GETDATE()
+      );
+      CREATE INDEX IX_MEDIA_EMPRESA_USO ON dbo.MEDIA_EMPRESA(ME_USO, ME_FECHA DESC);
+    END
+  `);
+}
+
+// POST /api/personalizacion/mascota/media  (multipart: archivo)
+exports.subirMascotaMedia = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'Ningún archivo recibido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureMediaEmpresa(pool);
+    const esVideo = /^video\//.test(req.file.mimetype);
+    const uso = req.body?.uso === 'flotante' ? 'mascota-flotante' : 'mascota-inicio';
+    const rs = await pool.request()
+      .input('uso', sql.NVarChar, uso)
+      .input('archivo', sql.NVarChar, req.file.filename)
+      .input('original', sql.NVarChar, req.file.originalname)
+      .input('mime', sql.NVarChar, req.file.mimetype)
+      .input('tam', sql.Int, req.file.size)
+      .input('por', sql.Int, req.user?.id || null)
+      .query(`INSERT INTO dbo.MEDIA_EMPRESA (ME_USO, ME_NOMBRE_ARCHIVO, ME_NOMBRE_ORIGINAL, ME_MIME, ME_TAMANIO, ME_SUBIDO_POR)
+              OUTPUT INSERTED.ME_ID as id
+              VALUES (@uso, @archivo, @original, @mime, @tam, @por)`);
+    return res.json({ success: true, data: { id: rs.recordset[0].id, tipo: esVideo ? 'video' : 'imagen' } });
+  } catch (e) {
+    logger.error('personalizacionController.subirMascotaMedia', e);
+    return res.status(500).json({ success: false, message: 'Error al subir la mascota' });
+  }
+};
+
+// GET /api/personalizacion/media/:id — sirve un archivo de MEDIA_EMPRESA.
+const MEDIA_MIME = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+  '.gif': 'image/gif', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+};
+exports.verMediaEmpresa = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureMediaEmpresa(pool).catch(() => {});
+    const rs = await pool.request().input('id', sql.Int, Number(req.params.id))
+      .query('SELECT ME_NOMBRE_ARCHIVO as archivo, ME_NOMBRE_ORIGINAL as original FROM dbo.MEDIA_EMPRESA WHERE ME_ID=@id');
+    const row = rs.recordset[0];
+    if (!row) return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
+
+    const filename = path.basename(row.archivo);
+    const filePath = path.join(MEDIA_EMPRESA_DIR, filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
+    const ext = path.extname(filename).toLowerCase();
+    const mime = MEDIA_MIME[ext];
+    if (!mime) return res.status(403).json({ success: false, message: 'Tipo de archivo no permitido' });
+
+    // Soporte de Range para video (seek en el <video>).
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Accept-Ranges', 'bytes');
+    const range = req.headers.range;
+    if (range && /^bytes=/.test(range)) {
+      const [s, e] = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(s, 10) || 0;
+      const end = e ? parseInt(e, 10) : stat.size - 1;
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+      res.setHeader('Content-Length', end - start + 1);
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+    } else {
+      res.setHeader('Content-Length', stat.size);
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (e) {
+    logger.error('personalizacionController.verMediaEmpresa', e);
+    if (!res.headersSent) res.status(500).json({ success: false, message: 'Error al servir el archivo' });
+  }
+};
+
+// PUT /api/personalizacion/mascota  Body: { mediaId, tipo, movimiento, velocidad }
+exports.updateMascota = async (req, res) => {
+  try {
+    const b = req.body || {};
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    const D = DEFAULT_CONFIG.mascota;
+    config.mascota = {
+      inicio: limpiarMascotaParte(b.inicio, D.inicio),
+      flotante: {
+        habilitado: !!(b.flotante && b.flotante.habilitado),
+        ...limpiarMascotaParte(b.flotante, D.flotante),
+      },
+    };
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-mascota', detalle: JSON.stringify(config.mascota), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'mascota');
+    return res.json({ success: true, data: config.mascota });
+  } catch (e) {
+    logger.error('personalizacionController.updateMascota', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la mascota' });
   }
 };
 
