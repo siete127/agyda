@@ -1,0 +1,13 @@
+{
+  "name": "postulacion-ayudantes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interfaz de postulación de ayudantes generales para Totis (acceso por QR) — Login, Registro y Lista negra. Solo frontend por ahora.",
+  "copyright": "Copyright (c) 2026 ArdaBytec. Todos los derechos reservados.",
+  "scripts": {
+    "dev": "node scripts/dev-server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.2"
+  }
+}
