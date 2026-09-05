@@ -280,7 +280,7 @@ export function SupervisoresPage() {
     <div className="space-y-5 animate-fade-in">
       <div>
         <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-          <Users className="h-5 w-5 text-brand" /> Supervisores
+          <Users className="h-5 w-5 text-brand" /> Supervisor
         </h1>
         <p className="text-xs text-gray-500 mt-0.5">Panel de supervisores de Call Center</p>
       </div>
