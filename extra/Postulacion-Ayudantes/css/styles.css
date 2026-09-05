@@ -595,6 +595,150 @@ textarea.input {
 }
 
 /* ==========================================
+   CONFIGURACIÓN (horario y contacto del CC)
+   ========================================== */
+.dias-semana-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dia-check {
+  display: inline-flex;
+}
+
+.dia-check input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.dia-check span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--borde);
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.dia-check input:checked + span {
+  border-color: var(--verde);
+  background: var(--verde);
+  color: var(--blanco);
+}
+
+.form-row {
+  display: flex;
+  gap: 14px;
+}
+
+.form-row .form-field {
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+/* ==========================================
+   PANTALLA DE CONTACTO (tras el registro)
+   ========================================== */
+.contacto-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.contacto-status.is-abierto {
+  background: #E7F7EE;
+  color: #0F7B45;
+  border: 1px solid rgba(18, 183, 106, 0.25);
+}
+
+.contacto-status.is-cerrado {
+  background: var(--rojo-suave);
+  color: #B3261E;
+  border: 1px solid rgba(229, 72, 77, 0.25);
+}
+
+.contacto-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.contacto-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.contacto-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: var(--bg-superficie);
+  border: 1.5px solid var(--borde);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: left;
+  transition: border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.contacto-btn:hover {
+  border-color: var(--verde);
+  transform: translateY(-1px);
+  box-shadow: var(--sombra);
+}
+
+.contacto-btn-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blanco);
+}
+
+.contacto-btn-icon.icon-llamada { background: var(--verde); }
+.contacto-btn-icon.icon-whatsapp { background: #25D366; }
+.contacto-btn-icon.icon-facebook { background: #1877F2; }
+.contacto-btn-icon.icon-instagram { background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF); }
+
+.contacto-btn-text strong {
+  display: block;
+  font-size: 14.5px;
+  color: var(--texto-principal);
+  margin-bottom: 2px;
+}
+
+.contacto-btn-text span {
+  font-size: 12.5px;
+  color: var(--texto-secundario);
+}
+
+/* ==========================================
    RESPONSIVE
    ========================================== */
 @media (max-width: 480px) {
