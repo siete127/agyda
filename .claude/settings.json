@@ -145,7 +145,11 @@
       "PowerShell(Stop-Process -Id 20176 -Force)",
       "Bash(node _test_oauth_token.js)",
       "PowerShell(Stop-Process -Id 18600 -Force)",
-      "Bash(rm _test_oauth_token.js)"
+      "Bash(rm _test_oauth_token.js)",
+      "Bash(ipconfig)",
+      "Bash(node -c controllers/qrGeneratorController.js)",
+      "Bash(node -c routes/qrGenerator.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8447/api/qr-generator)"
     ]
   }
 }

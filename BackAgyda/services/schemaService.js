@@ -4973,6 +4973,7 @@ async function ensureAllSchemas(pool) {
   await ensureLivechatSchema(pool);
   await ensureLivechatCampanasSchema(pool);
   await ensureContactCenterSchema(pool);
+  await ensureQrCodesSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
   await ensureEncuestasSchema(pool);
@@ -7027,6 +7028,34 @@ END
   }
 }
 
+// Códigos QR generados desde Configuración > Contact Center > Generador de QR.
+// CQR_ENTORNO distingue solo el propósito del QR (público = apunta a una URL
+// de producción; privado = apunta a una URL local/de red interna para
+// pruebas) — es una etiqueta informativa, no controla permisos ni acceso.
+async function ensureQrCodesSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.INTRANET_QR_CODES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_QR_CODES (
+    QR_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    QR_NOMBRE      NVARCHAR(200) NOT NULL,
+    QR_URL         NVARCHAR(1000) NOT NULL,
+    QR_ENTORNO     NVARCHAR(20) NOT NULL DEFAULT ('publico'),
+    QR_IMAGEN_DATAURL NVARCHAR(MAX) NOT NULL,
+    QR_AUTOR_ID    INT NULL,
+    QR_AUTOR_NOMBRE NVARCHAR(200) NULL,
+    QR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+  CREATE INDEX IX_QR_CODES_FECHA ON dbo.INTRANET_QR_CODES(QR_FECHA_CREACION DESC);
+END
+`);
+    logger.info('✅ Esquema de códigos QR asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de códigos QR:', err.message);
+  }
+}
+
 module.exports = {
     ensureNoticiasSchema,
     ensureAllSchemas,
@@ -7037,6 +7066,7 @@ module.exports = {
     ensureReaccionesNoticiasSchema,
     ensureLayoutSchema,
     ensurePersonalizacionSchema,
+    ensureQrCodesSchema,
     ensureReglamentoSchema,
     ensureTicketsSchema,
     ensureProfileSchema,

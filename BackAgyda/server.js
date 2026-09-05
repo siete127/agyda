@@ -174,6 +174,7 @@ app.use('/api/chatbot', require('./routes/chatbot'));
 app.use('/api/livechat', require('./routes/livechat'));
 app.use('/api/contact-center', require('./routes/contactCenter'));
 app.use('/api/cc/sim', require('./routes/ccSim'));
+app.use('/api/qr-generator', require('./routes/qrGenerator'));
 app.use('/api/email-marketing', require('./routes/emailMarketing'));
 app.use('/api/mensajeria', require('./routes/mensajeria'));
 

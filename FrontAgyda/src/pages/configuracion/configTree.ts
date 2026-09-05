@@ -655,6 +655,7 @@ export const CONFIG_TREE: ConfigNode[] = [
           { key: 'cc-simulador', label: 'Simulador de prueba', screen: 'cc-simulador' },
         ],
       },
+      { key: 'qr-generator', label: 'Generador de QR', screen: 'qr-generator' },
       {
         key: 'campanas-cc', label: 'Campañas',
         children: [
