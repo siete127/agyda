@@ -282,7 +282,7 @@ function EditorTecnico({ tecnico, onClose }: { tecnico: Tecnico; onClose: () => 
   )
 }
 
-export function TecnicosTab() {
+export function TecnicosTab({ soloLectura = false }: { soloLectura?: boolean } = {}) {
   const [editando, setEditando] = useState<Tecnico | null>(null)
 
   const { data: tecnicos = [], isLoading, isError, error } = useQuery({
@@ -324,7 +324,7 @@ export function TecnicosTab() {
                   <th className="pb-2 pr-2">Estado</th>
                   <th className="pb-2 pr-2">Carga actual</th>
                   <th className="pb-2 pr-2">Especialidades</th>
-                  <th className="pb-2"></th>
+                  {!soloLectura && <th className="pb-2"></th>}
                 </tr>
               </thead>
               <tbody>
@@ -346,11 +346,13 @@ export function TecnicosTab() {
                     <td className="py-2 pr-2 text-ink-tertiary">
                       {t.especialidades.length ? t.especialidades.map((e) => e.nombre).join(', ') : '—'}
                     </td>
-                    <td className="py-2 text-right">
-                      <button onClick={() => setEditando(t)} className="text-ink-tertiary hover:text-brand" title="Editar perfil">
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    </td>
+                    {!soloLectura && (
+                      <td className="py-2 text-right">
+                        <button onClick={() => setEditando(t)} className="text-ink-tertiary hover:text-brand" title="Editar perfil">
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

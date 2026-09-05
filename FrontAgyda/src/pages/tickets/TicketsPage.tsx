@@ -2242,11 +2242,11 @@ export function TicketsPage() {
       </Modal>
 
       <Modal isOpen={showSla} onClose={() => setShowSla(false)} title="SLA de Tickets" size="xl">
-        <SlaTab />
+        <SlaTab soloLectura />
       </Modal>
 
       <Modal isOpen={showTecnicos} onClose={() => setShowTecnicos(false)} title="Administrar técnicos" size="xl">
-        <TecnicosTab />
+        <TecnicosTab soloLectura />
       </Modal>
       {activeTicket && (
         <TicketDetalleModal
