@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Configuración — Postulación Totis</title>
+    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+    <header class="app-header">
+        <div class="app-header-brand">
+            <img src="assets/logo-totis.png" alt="Totis">
+            <span>Postulación de Ayudantes</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <a href="blacklist.html" class="btn-secondary" style="width:auto; padding:10px 16px;">Lista negra</a>
+            <button type="button" class="btn-danger-outline" id="logoutBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </button>
+        </div>
+    </header>
+
+    <main class="app-main">
+        <h1 class="page-title">Configuración</h1>
+        <p class="page-subtitle">Define el horario de atención del Contact Center y los datos de contacto que verán los candidatos después de registrarse.</p>
+
+        <div class="card">
+            <div id="configSuccess" class="alert alert-success" style="display:none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                <span>Configuración guardada.</span>
+            </div>
+
+            <form id="configForm" novalidate>
+                <div class="form-field">
+                    <label>Días de atención</label>
+                    <div class="dias-semana-grid" id="diasSemanaGrid"></div>
+                    <span class="hint">Estos son los días en los que se considera "dentro de horario".</span>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label for="cfgHorarioInicio">Hora de inicio</label>
+                        <input type="time" id="cfgHorarioInicio" class="input" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="cfgHorarioFin">Hora de fin</label>
+                        <input type="time" id="cfgHorarioFin" class="input" required>
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <label for="cfgTelefono">Teléfono para llamadas (dentro de horario)</label>
+                    <input type="tel" id="cfgTelefono" class="input" placeholder="Ej. 5512345678">
+                </div>
+
+                <div class="form-field">
+                    <label for="cfgWhatsapp">WhatsApp (fuera de horario)</label>
+                    <input type="tel" id="cfgWhatsapp" class="input" placeholder="Ej. 5512345678">
+                    <span class="hint">Solo el número, sin espacios ni signos. Se usará para abrir wa.me.</span>
+                </div>
+
+                <div class="form-field">
+                    <label for="cfgFacebook">Enlace de Facebook</label>
+                    <input type="url" id="cfgFacebook" class="input" placeholder="https://facebook.com/totis">
+                </div>
+
+                <div class="form-field">
+                    <label for="cfgInstagram">Enlace de Instagram</label>
+                    <input type="url" id="cfgInstagram" class="input" placeholder="https://instagram.com/totis">
+                </div>
+
+                <button type="submit" class="btn-primary" style="width:auto; padding-left:24px; padding-right:24px;">
+                    Guardar configuración
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <script src="js/auth.js"></script>
+    <script src="js/cc-config.js"></script>
+    <script>
+        // Pantalla protegida: solo para el equipo interno.
+        PostulacionAuth.requireAuth();
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            PostulacionAuth.logout();
+            window.location.href = 'login.html';
+        });
+
+        const DIAS = [
+            { valor: 1, etiqueta: 'Lun' },
+            { valor: 2, etiqueta: 'Mar' },
+            { valor: 3, etiqueta: 'Mié' },
+            { valor: 4, etiqueta: 'Jue' },
+            { valor: 5, etiqueta: 'Vie' },
+            { valor: 6, etiqueta: 'Sáb' },
+            { valor: 7, etiqueta: 'Dom' },
+        ];
+
+        const diasSemanaGrid = document.getElementById('diasSemanaGrid');
+        DIAS.forEach((dia) => {
+            const label = document.createElement('label');
+            label.className = 'dia-check';
+            label.innerHTML = `<input type="checkbox" value="${dia.valor}"><span>${dia.etiqueta}</span>`;
+            diasSemanaGrid.appendChild(label);
+        });
+
+        function getDiasSeleccionados() {
+            return Array.from(diasSemanaGrid.querySelectorAll('input:checked'))
+                .map((input) => input.value)
+                .join(',');
+        }
+
+        function setDiasSeleccionados(diasSemana) {
+            const activos = String(diasSemana || '').split(',');
+            diasSemanaGrid.querySelectorAll('input').forEach((input) => {
+                input.checked = activos.includes(input.value);
+            });
+        }
+
+        // --- Cargar configuración actual ---
+        const config = CCConfig.getConfig();
+        setDiasSeleccionados(config.diasSemana);
+        document.getElementById('cfgHorarioInicio').value = config.horarioInicio;
+        document.getElementById('cfgHorarioFin').value = config.horarioFin;
+        document.getElementById('cfgTelefono').value = config.telefonoLlamada;
+        document.getElementById('cfgWhatsapp').value = config.whatsapp;
+        document.getElementById('cfgFacebook').value = config.facebook;
+        document.getElementById('cfgInstagram').value = config.instagram;
+
+        // --- Guardar ---
+        const configForm = document.getElementById('configForm');
+        const configSuccess = document.getElementById('configSuccess');
+
+        configForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            CCConfig.saveConfig({
+                diasSemana: getDiasSeleccionados(),
+                horarioInicio: document.getElementById('cfgHorarioInicio').value,
+                horarioFin: document.getElementById('cfgHorarioFin').value,
+                telefonoLlamada: document.getElementById('cfgTelefono').value.trim(),
+                whatsapp: document.getElementById('cfgWhatsapp').value.trim(),
+                facebook: document.getElementById('cfgFacebook').value.trim(),
+                instagram: document.getElementById('cfgInstagram').value.trim(),
+            });
+            configSuccess.style.display = 'flex';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    </script>
+</body>
+
+</html>

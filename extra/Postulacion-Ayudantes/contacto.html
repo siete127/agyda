@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>¡Gracias por postularte! — Totis</title>
+    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+    <main class="auth-screen">
+        <div class="auth-card" style="max-width:460px;">
+
+            <div class="auth-brand">
+                <img src="assets/logo-totis.png" alt="Totis">
+                <h1>¡Registro recibido!</h1>
+                <p>Contáctanos para dar seguimiento a tu postulación</p>
+            </div>
+
+            <div id="contactoStatus" class="contacto-status">
+                <span class="dot"></span>
+                <span id="contactoStatusText">Verificando horario...</span>
+            </div>
+
+            <div class="contacto-panel" id="contactoPanel"></div>
+        </div>
+    </main>
+
+    <script src="js/cc-config.js"></script>
+    <script>
+        const config = CCConfig.getConfig();
+        const dentroDeHorario = CCConfig.isWithinBusinessHours(config);
+
+        const statusEl = document.getElementById('contactoStatus');
+        const statusText = document.getElementById('contactoStatusText');
+        const panel = document.getElementById('contactoPanel');
+
+        statusEl.classList.add(dentroDeHorario ? 'is-abierto' : 'is-cerrado');
+        statusText.textContent = dentroDeHorario
+            ? 'Estamos en horario de atención'
+            : 'Estamos fuera de horario, contáctanos por redes sociales';
+
+        function soloDigitos(str) {
+            return String(str || '').replace(/\D/g, '');
+        }
+
+        function crearBotonContacto({ href, iconClass, iconSvg, titulo, subtitulo }) {
+            const a = document.createElement('a');
+            a.className = 'contacto-btn';
+            a.href = href;
+            a.target = href.startsWith('http') ? '_blank' : '_self';
+            a.rel = 'noopener';
+            a.innerHTML = `
+                <span class="contacto-btn-icon ${iconClass}">${iconSvg}</span>
+                <span class="contacto-btn-text">
+                    <strong>${titulo}</strong>
+                    <span>${subtitulo}</span>
+                </span>
+            `;
+            return a;
+        }
+
+        const ICONOS = {
+            llamada: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>',
+            whatsapp: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.44 9.9-9.9 0-2.64-1.03-5.12-2.9-6.99A9.82 9.82 0 0 0 12.04 2zm0 18.1a8.2 8.2 0 0 1-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 1 1 7 3.86z"></path></svg>',
+            facebook: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.78-3.89 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.45 2.89h-2.33v6.99A10 10 0 0 0 22 12z"></path></svg>',
+            instagram: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>',
+        };
+
+        if (dentroDeHorario) {
+            if (config.telefonoLlamada) {
+                panel.appendChild(crearBotonContacto({
+                    href: `tel:${soloDigitos(config.telefonoLlamada)}`,
+                    iconClass: 'icon-llamada',
+                    iconSvg: ICONOS.llamada,
+                    titulo: 'Llámanos',
+                    subtitulo: config.telefonoLlamada,
+                }));
+            } else {
+                panel.innerHTML = '<p class="hint">Aún no se ha configurado un número de teléfono. Ve a Configuración para agregarlo.</p>';
+            }
+        } else {
+            if (config.whatsapp) {
+                panel.appendChild(crearBotonContacto({
+                    href: `https://wa.me/${soloDigitos(config.whatsapp)}`,
+                    iconClass: 'icon-whatsapp',
+                    iconSvg: ICONOS.whatsapp,
+                    titulo: 'WhatsApp',
+                    subtitulo: 'Escríbenos y te contactaremos pronto',
+                }));
+            }
+            if (config.facebook) {
+                panel.appendChild(crearBotonContacto({
+                    href: config.facebook,
+                    iconClass: 'icon-facebook',
+                    iconSvg: ICONOS.facebook,
+                    titulo: 'Facebook',
+                    subtitulo: 'Mándanos un mensaje por Messenger',
+                }));
+            }
+            if (config.instagram) {
+                panel.appendChild(crearBotonContacto({
+                    href: config.instagram,
+                    iconClass: 'icon-instagram',
+                    iconSvg: ICONOS.instagram,
+                    titulo: 'Instagram',
+                    subtitulo: 'Escríbenos por Instagram',
+                }));
+            }
+            if (!config.whatsapp && !config.facebook && !config.instagram) {
+                panel.innerHTML = '<p class="hint">Aún no se han configurado redes sociales de contacto. Ve a Configuración para agregarlas.</p>';
+            }
+        }
+    </script>
+</body>
+
+</html>
