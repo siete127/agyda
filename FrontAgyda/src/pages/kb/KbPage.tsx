@@ -112,7 +112,7 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
               </button>
             </div>
           )}
-          <label className="flex w-fit cursor-pointer items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-[0.68rem] font-semibold text-teal-700 hover:border-teal-400">
+          <label className="flex w-fit cursor-pointer items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[0.68rem] font-semibold text-brand hover:border-brand/50">
             <Paperclip className="h-3 w-3" /> {subirImagen.isPending ? 'Subiendo...' : evidenciaUrl ? 'Reemplazar imagen' : 'Adjuntar imagen'}
             <input type="file" accept="image/*" className="hidden" onChange={handleImagen} disabled={subirImagen.isPending} />
           </label>

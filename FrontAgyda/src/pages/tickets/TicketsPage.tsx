@@ -378,7 +378,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
                   Cargando...
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-36 overflow-y-auto rounded-xl border border-surface-border bg-white p-2">
+                <div className="space-y-1.5 max-h-36 overflow-y-auto rounded-xl border border-surface-border bg-card p-2">
                   <div
                     onClick={() => setForm((f) => ({ ...f, asignadoA: '' }))}
                     className={clsx(
@@ -415,7 +415,7 @@ function NuevoTicketModal({ onClose }: { onClose: () => void }) {
 
             <div>
               <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Evidencia (opcional)</label>
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:border-teal-400 w-fit">
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:border-brand/50 w-fit">
                 <Paperclip className="h-3.5 w-3.5" />
                 {evidenciaFile ? evidenciaFile.name : 'Adjuntar archivo'}
                 <input
@@ -554,7 +554,7 @@ function PanelValidacion({ ticket }: { ticket: Ticket }) {
     <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 space-y-3">
       <p className="text-[0.75rem] font-semibold text-blue-800">¿El servicio ya funciona correctamente?</p>
       {(ticket.diagnostico || ticket.accionesRealizadas) && (
-        <div className="rounded-lg bg-white/60 px-3 py-2 text-[0.72rem] text-ink-secondary space-y-1">
+        <div className="rounded-lg bg-card/60 px-3 py-2 text-[0.72rem] text-ink-secondary space-y-1">
           {ticket.diagnostico && <p><span className="font-semibold">Diagnóstico:</span> {ticket.diagnostico}</p>}
           {ticket.accionesRealizadas && <p><span className="font-semibold">Acciones:</span> {ticket.accionesRealizadas}</p>}
         </div>
@@ -739,7 +739,7 @@ function PanelResolver({ ticket, onDone }: { ticket: Ticket; onDone: () => void 
 
       <div>
         <label className="mb-1 block text-[0.68rem] font-semibold text-ink-secondary uppercase tracking-wide">Evidencia de la solución (opcional)</label>
-        <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:border-teal-400 w-fit">
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:border-brand/50 w-fit">
           <Paperclip className="h-3.5 w-3.5" />
           {evidenciaFile ? evidenciaFile.name : 'Adjuntar archivo'}
           <input
@@ -1142,7 +1142,7 @@ function PanelEvidencias({ ticket, isTI, userId }: { ticket: Ticket; isTI: boole
       <div className="flex items-center justify-between">
         <p className="text-[0.65rem] font-bold uppercase tracking-widest text-ink-tertiary">Evidencias</p>
         {ticket.estado !== 'cerrado' && (
-          <label className="flex cursor-pointer items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-[0.68rem] font-semibold text-teal-700 hover:border-teal-400">
+          <label className="flex cursor-pointer items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[0.68rem] font-semibold text-brand hover:border-brand/50">
             <Paperclip className="h-3 w-3" /> Adjuntar
             <input type="file" className="hidden" onChange={handleFile} disabled={subir.isPending} />
           </label>
