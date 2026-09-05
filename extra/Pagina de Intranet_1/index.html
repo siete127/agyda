@@ -49,36 +49,32 @@
                 <a href="#contacto" class="nav-link" data-i18n="nav.contacto">Contacto</a>
             </nav>
 
-            <div class="social-media">
-                <a target="_blank" href="https://www.facebook.com/ArdabyTec2021?locale=es_LA" class="social-icon"
-                    aria-label="Facebook">
-                    <img src="assets/redes-sociales/facebook.png" alt="Facebook">
-                </a>
-                <a target="_blank" href="https://www.instagram.com/ardaby_tec?igsh=MTUzMDFzMHRrYjVyZQ=="
-                    class="social-icon" aria-label="Instagram">
-                    <img src="assets/redes-sociales/insta.png" alt="Instagram">
-                </a>
-                <a target="_blank" href="https://www.tiktok.com/@ardaby_tec?_r=1&_t=ZS-985I9TqTWEv" class="social-icon"
-                    aria-label="TikTok">
-                    <img src="assets/redes-sociales/tiktok.png" alt="TikTok">
-                </a>
-            </div>
-
             <div class="header-controls">
                 <div class="lang-toggle">
                     <button type="button" class="lang-btn active" id="langEsBtn" data-lang="es">ES</button>
                     <button type="button" class="lang-btn" id="langEnBtn" data-lang="en">EN</button>
                 </div>
                 <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Cambiar tema">
-                    <span class="icon-sun">☀️</span>
-                    <span class="icon-moon">🌙</span>
+                    <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="4"></circle>
+                        <line x1="12" y1="2" x2="12" y2="4"></line>
+                        <line x1="12" y1="20" x2="12" y2="22"></line>
+                        <line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line>
+                        <line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line>
+                        <line x1="2" y1="12" x2="4" y2="12"></line>
+                        <line x1="20" y1="12" x2="22" y2="12"></line>
+                        <line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line>
+                        <line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line>
+                    </svg>
+                    <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
                 </button>
                 <a href="#" class="nav-link" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
                 <button type="button" class="nav-link logout-btn" id="logoutBtn" style="display:none;">Cerrar sesión</button>
                 <div class="demo-btn-wrap">
                     <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="true" aria-expanded="false">
-                        <span class="demo-btn-dot" aria-hidden="true"></span>
-                        Demo
+                        Probar demo
                         <span class="demo-btn-arrow" aria-hidden="true">&rarr;</span>
                     </button>
                     <div class="demo-popover" id="demoPopover">
@@ -109,77 +105,26 @@
     </header>
 
     <section id="inicio" class="hero-section">
-        <div class="code-bg-mascot" aria-hidden="true"></div>
+        <img id="heroBgImg" src="assets/mascota-empresa/hero-mascota-escena.png"
+            alt="Mascota ArdabyTec en escena futurista con vista a la ciudad"
+            class="hero-bg-img" aria-hidden="true">
+        <div class="hero-bg-overlay" aria-hidden="true"></div>
+        <div class="hero-bg-fade" aria-hidden="true"></div>
+
         <div class="hero-container">
 
             <div class="hero-text-content">
+                <p class="hero-eyebrow" data-i18n="hero.eyebrow">Soluciones que impulsan</p>
                 <h1 class="hero-title" data-i18n-html="hero.title">
-                    Soluciones <br>tecnológicas <br>a la medida de <span class="highlight-blue">tu empresa</span>
+                    Un futuro <br>más <span class="highlight-blue">eficiente</span>
                 </h1>
                 <p class="hero-description" data-i18n="hero.desc">
-                    Impulsamos el crecimiento y la eficiencia de tu negocio con tecnología confiable, innovadora y
-                    escalable.
+                    Integramos tecnología, talento y estrategia para convertir tus procesos en oportunidades.
                 </p>
 
-                <a href="#nosotros" class="btn-primary">
-                    <span data-i18n="hero.cta">Conócenos</span> <span class="arrow">&rarr;</span>
+                <a href="#nosotros" class="btn-primary btn-primary--hero">
+                    <span data-i18n="hero.cta">Conoce más</span> <span class="arrow">&rarr;</span>
                 </a>
-
-                <div class="hero-badges">
-                    <div class="badge-item">
-                        <span class="badge-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                            </svg>
-                        </span>
-                        <div>
-                            <strong data-i18n="hero.badge1.title">Confianza</strong>
-                            <p data-i18n="hero.badge1.desc">y Seguridad</p>
-                        </div>
-                    </div>
-
-                    <div class="badge-item">
-                        <span class="badge-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M4.5 16.5c-1.5 1.26-2 3.5-2 3.5s2.24-.5 3.5-2L17 7l-3.5-3.5L4.5 16.5z" />
-                                <path d="m14 2 4 4 4-4-4 4z" />
-                                <path d="M9 12l-1.5 1.5" />
-                                <path d="M12 9l1.5-1.5" />
-                            </svg>
-                        </span>
-                        <div>
-                            <strong data-i18n="hero.badge2.title">Innovación</strong>
-                            <p data-i18n="hero.badge2.desc">Constante</p>
-                        </div>
-                    </div>
-
-                    <div class="badge-item">
-                        <span class="badge-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <line x1="18" y1="20" x2="18" y2="10" />
-                                <line x1="12" y1="20" x2="12" y2="4" />
-                                <line x1="6" y1="20" x2="6" y2="14" />
-                            </svg>
-                        </span>
-                        <div>
-                            <strong data-i18n="hero.badge3.title">Resultados</strong>
-                            <p data-i18n="hero.badge3.desc">Medibles</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="hero-mascot-container">
-                <div class="tech-marco">
-                    <img src="assets/mascota-empresa/mascotas.png" alt="Zorro Robot Inteligencia Artificial"
-                        class="mascot-img-marco">
-                </div>
             </div>
 
         </div>
@@ -194,21 +139,121 @@
         </div>
     </section>
 
-    <section id="nosotros" class="nosotros-section">
-        <div class="nosotros-circle nosotros-circle-1" aria-hidden="true"></div>
-        <div class="nosotros-circle nosotros-circle-2" aria-hidden="true"></div>
-        <div class="nosotros-circle nosotros-circle-3" aria-hidden="true"></div>
-        <div class="nosotros-circle nosotros-circle-4" aria-hidden="true"></div>
-        <div class="nosotros-container">
+    <section class="pilares-section">
+        <div class="pilares-grid">
+            <div class="pilar-item">
+                <div class="pilar-icon pilar-icon--seguridad">
+                    <svg class="pilar-icon-svg" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <rect x="9" y="11" width="6" height="5" rx="1" />
+                        <path d="M10.5 11V9.5a1.5 1.5 0 0 1 3 0V11" />
+                    </svg>
+                </div>
+                <h3 data-i18n="pilares.item1.title">Operación Segura</h3>
+                <p data-i18n="pilares.item1.desc">Tecnología en la que puedes confiar.</p>
+            </div>
 
-            <div class="nosotros-main-card">
-                <div class="nosotros-badge" data-i18n="nosotros.badge">Sobre Nosotros</div>
-                <h2 data-i18n-html="nosotros.title">¿Quiénes <span class="highlight-blue">somos?</span></h2>
-                <p class="section-desc" data-i18n-html="nosotros.desc">
+            <div class="pilar-item">
+                <div class="pilar-icon pilar-icon--evolucion">
+                    <svg class="pilar-icon-svg" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18h6" />
+                        <path d="M10 21h4" />
+                        <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z" />
+                        <path d="M19 4l1.5-1.5" />
+                        <path d="M21 9h2" />
+                        <path d="M3.5 2.5L5 4" />
+                        <path d="M1 9h2" />
+                    </svg>
+                </div>
+                <h3 data-i18n="pilares.item2.title">Evolución Continua</h3>
+                <p data-i18n="pilares.item2.desc">Soluciones que crecen contigo.</p>
+            </div>
+
+            <div class="pilar-item">
+                <div class="pilar-icon pilar-icon--resultados">
+                    <svg class="pilar-icon-svg" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                    </svg>
+                </div>
+                <h3 data-i18n="pilares.item3.title">Resultados Reales</h3>
+                <p data-i18n="pilares.item3.desc">Tecnología que genera valor.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="impulso-section">
+        <div class="impulso-header">
+            <h2 data-i18n-html="impulso.title">Servicios que <br>impulsan <span class="highlight-blue">tu negocio</span></h2>
+            <p class="impulso-desc" data-i18n="impulso.desc">Integramos tecnología, seguridad y estrategia para resolver hoy los retos de mañana.</p>
+        </div>
+
+        <div class="impulso-grid">
+            <div class="impulso-card impulso-card--infra" data-tilt>
+                <div class="impulso-card-banner">
+                    <span class="impulso-number">01</span>
+                </div>
+                <div class="impulso-card-content">
+                    <h3 data-i18n="impulso.card1.title">Infraestructura TI</h3>
+                    <p data-i18n="impulso.card1.desc">Diseño, implementación y soporte de infraestructura segura y escalable.</p>
+                </div>
+            </div>
+
+            <div class="impulso-card impulso-card--ciber" data-tilt>
+                <div class="impulso-card-banner">
+                    <span class="impulso-number">02</span>
+                </div>
+                <div class="impulso-card-content">
+                    <h3 data-i18n="impulso.card2.title">Ciberseguridad</h3>
+                    <p data-i18n="impulso.card2.desc">Protege lo que impulsa tu negocio.</p>
+                </div>
+            </div>
+
+            <div class="impulso-card impulso-card--digital" data-tilt>
+                <div class="impulso-card-banner">
+                    <span class="impulso-number">03</span>
+                </div>
+                <div class="impulso-card-content">
+                    <h3 data-i18n="impulso.card3.title">Transformación digital</h3>
+                    <p data-i18n="impulso.card3.desc">Convierte tus procesos en oportunidades.</p>
+                </div>
+            </div>
+
+            <div class="impulso-card impulso-card--soporte" data-tilt>
+                <div class="impulso-card-banner">
+                    <span class="impulso-number">04</span>
+                </div>
+                <div class="impulso-card-content">
+                    <h3 data-i18n="impulso.card4.title">Soporte y mantenimiento</h3>
+                    <p data-i18n="impulso.card4.desc">Tu operación siempre en marcha.</p>
+                </div>
+            </div>
+
+            <div class="impulso-card impulso-card--consultoria" data-tilt>
+                <div class="impulso-card-banner">
+                    <span class="impulso-number">05</span>
+                </div>
+                <div class="impulso-card-content">
+                    <h3 data-i18n="impulso.card5.title">Consultoría TI</h3>
+                    <p data-i18n="impulso.card5.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="nosotros" class="nosotros-section">
+        <div class="nosotros-top">
+            <div class="nosotros-intro">
+                <span class="nosotros-eyebrow" data-i18n="nosotros.badge">Quiénes somos</span>
+                <h2 data-i18n-html="nosotros.title">Tecnología con propósito, <br>resultados <span class="highlight-blue">para personas</span></h2>
+                <p class="nosotros-text" data-i18n-html="nosotros.desc">
                     En <strong>ARDABYTEC</strong> Somos una firma de consultoría especializada en Tecnologías
                     de la Información, con amplia experiencia en soluciones de
                     Contact Center, desarrollo web, aplicaciones móviles y
                     soporte técnico integral.
+                </p>
+                <p class="nosotros-text nosotros-text-more" data-i18n-html="nosotros.desc.more">
                     Impulsamos la transformación digital de nuestros clientes
                     mediante soluciones innovadoras, personalizadas y
                     alineadas con sus objetivos estratégicos. Nuestro enfoque se
@@ -216,36 +261,88 @@
                     tecnología de alto valor para optimizar procesos, mejorar la
                     experiencia del usuario y acelerar el crecimiento del negocio.
                 </p>
+                <button type="button" class="nosotros-ver-mas" id="nosotrosVerMasBtn" aria-expanded="false">
+                    <span data-i18n="nosotros.verMas">Ver más</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
             </div>
 
-            <div class="nosotros-grid">
-                <div class="nosotros-item-card">
-                    <div class="card-icon">🎯</div>
-                    <h3 data-i18n="nosotros.mision.title">Misión</h3>
-                    <p data-i18n="nosotros.mision.desc">Soporte TI, marcación y software que hacen crecer tu negocio.</p>
+            <div class="nosotros-mv">
+                <div class="nosotros-mv-item">
+                    <span class="nosotros-mv-num">01</span>
+                    <div class="nosotros-mv-content">
+                        <h3 data-i18n="nosotros.mision.title">Misión</h3>
+                        <p data-i18n="nosotros.mision.desc">Soporte TI, marcación y software que hacen crecer tu negocio.</p>
+                    </div>
                 </div>
-
-                <div class="nosotros-item-card">
-                    <div class="card-icon">👁️‍</div>
-                    <h3 data-i18n="nosotros.vision.title">Visión</h3>
-                    <p data-i18n="nosotros.vision.desc">Liderar la automatización con IA en soluciones empresariales</p>
-                </div>
-
-                <div class="nosotros-item-card">
-                    <div class="card-icon">💎</div>
-                    <h3 data-i18n="nosotros.valores.title">Valores</h3>
-                    <ul class="valores-list">
-                        <li data-i18n="nosotros.valores.v1">Innovación</li>
-                        <li data-i18n="nosotros.valores.v2">Calidad</li>
-                        <li data-i18n="nosotros.valores.v3">Enfoque al cliente</li>
-                        <li data-i18n="nosotros.valores.v4">Integridad</li>
-                        <li data-i18n="nosotros.valores.v5">Trabajo en equipo</li>
-                        <li data-i18n="nosotros.valores.v6">Aprendizaje</li>
-                        <li data-i18n="nosotros.valores.v7">Confianza</li>
-                    </ul>
+                <div class="nosotros-mv-item">
+                    <span class="nosotros-mv-num">02</span>
+                    <div class="nosotros-mv-content">
+                        <h3 data-i18n="nosotros.vision.title">Visión</h3>
+                        <p data-i18n="nosotros.vision.desc">Liderar la automatización con IA en soluciones empresariales</p>
+                    </div>
                 </div>
             </div>
+        </div>
 
+        <div class="nosotros-valores">
+            <span class="nosotros-eyebrow" data-i18n="nosotros.valores.title">Nuestros valores</span>
+            <div class="nosotros-valores-row">
+                <button type="button" class="valores-nav valores-nav--prev" id="valoresPrevBtn" aria-label="Anterior">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+
+                <div class="valores-track-viewport">
+                    <div class="valores-track" id="valoresTrack">
+                        <div class="valor-item">
+                            <span class="valor-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                            </span>
+                            <span data-i18n="nosotros.valores.v7">Confianza</span>
+                        </div>
+                        <div class="valor-item">
+                            <span class="valor-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 0 0-4 12.7c.5.4.8.9.8 1.5v.3a1.5 1.5 0 0 0 1.5 1.5h3.4a1.5 1.5 0 0 0 1.5-1.5v-.3c0-.6.3-1.1.8-1.5A7 7 0 0 0 12 2z" /></svg>
+                            </span>
+                            <span data-i18n="nosotros.valores.v1">Innovación</span>
+                        </div>
+                        <div class="valor-item">
+                            <span class="valor-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                            </span>
+                            <span data-i18n="nosotros.cercania">Cercanía</span>
+                        </div>
+                        <div class="valor-item">
+                            <span class="valor-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 15l2 2 4-4" /></svg>
+                            </span>
+                            <span data-i18n="nosotros.valores.resultados">Resultados</span>
+                        </div>
+                        <div class="valor-item">
+                            <span class="valor-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+                            </span>
+                            <span data-i18n="nosotros.valores.v2">Calidad</span>
+                        </div>
+                        <div class="valor-item">
+                            <span class="valor-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                            </span>
+                            <span data-i18n="nosotros.valores.v5">Trabajo en equipo</span>
+                        </div>
+                        <div class="valor-item">
+                            <span class="valor-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+                            </span>
+                            <span data-i18n="nosotros.valores.v6">Aprendizaje</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" class="valores-nav valores-nav--next" id="valoresNextBtn" aria-label="Siguiente">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+            </div>
         </div>
     </section>
 
@@ -578,39 +675,15 @@
     </div>
 
     <section id="aliados" class="aliados-section">
-        <div class="aliados-circle aliados-circle-1" aria-hidden="true"></div>
-        <div class="aliados-circle aliados-circle-2" aria-hidden="true"></div>
-        <div class="aliados-circle aliados-circle-3" aria-hidden="true"></div>
-        <div class="aliados-circle aliados-circle-4" aria-hidden="true"></div>
-        <div class="aliados-container">
-
-            <div class="aliados-info">
-                <h2 class="section-title" data-i18n-html="aliados.title">Nuestros <span class="highlight-blue">aliados</span></h2>
-                <p class="section-desc" data-i18n="aliados.desc">
-                    Trabajamos con las mejores marcas para ofrecerte soluciones tecnológicas confiables, innovadoras y
-                    de alto rendimiento.
-                </p>
-                <a href="#contacto" class="btn-primary">
-                    <span data-i18n="hero.cta">Conócenos</span> <span class="arrow">&rarr;</span>
-                </a>
-            </div>
-
-            <div class="aliados-grid-tech">
-                <div class="logo-card-tech" data-index="0"><img src="assets/aliados-comerciales/AT_T_logo_2016.png"
-                        alt="at&t"></div>
-                <div class="logo-card-tech" data-index="1"><img src="assets/aliados-comerciales/BANAMEX.png"
-                        alt="banamex"></div>
-                <div class="logo-card-tech" data-index="2"><img src="assets/aliados-comerciales/CENTRANEG.png"
-                        alt="centraneg"></div>
-                <div class="logo-card-tech" data-index="3"><img src="assets/aliados-comerciales/empaque rema.png"
-                        alt="empaque rema"></div>
-                <div class="logo-card-tech" data-index="4"><img src="assets/aliados-comerciales/GENNEX-Photoroom.png"
-                        alt="gennex-photoroom"></div>
-                <div class="logo-card-tech" data-index="5"><img src="assets/aliados-comerciales/MegaDirect.png"
-                        alt="megadirect"></div>
-            </div>
-
+        <div class="aliados-header">
+            <h2 class="section-title-center" data-i18n-html="aliados.title">Aliados <span class="highlight-blue">Estratégicos</span></h2>
+            <p class="section-desc-center" data-i18n="aliados.desc">
+                Trabajamos con las mejores marcas para ofrecerte soluciones tecnológicas confiables, innovadoras y
+                de alto rendimiento.
+            </p>
         </div>
+
+        <div class="aliados-loop" id="aliadosLoop" aria-hidden="false"></div>
     </section>
 
     <section id="servicios" class="servicios-section">
@@ -632,7 +705,7 @@
                     <img src="assets/iconos-de-servicio/soporte tecnico-Photoroom.png" alt="Soporte">
                 </div>
                 <h3 data-i18n="servicios.soporte.title">Soporte Técnico</h3>
-                <p data-i18n="servicios.soporte.desc">Atención inmediata y eficiente para mantener tu operation siempre activa.</p>
+                <p data-i18n="servicios.soporte.desc">Atención inmediata y eficiente para mantener tu operación siempre activa.</p>
             </div>
 
             <div class="servicio-card">
@@ -1085,50 +1158,6 @@
                 document.getElementById('soluciones').scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
         });
-
-        // --- SISTEMA DE ROTACIÓN DE LOGOS ALIADOS ---
-        const todosLosAliados = [
-            { src: "assets/aliados-comerciales/AT_T_logo_2016.png", alt: "at&t" },
-            { src: "assets/aliados-comerciales/BANAMEX.png", alt: "banamex" },
-            { src: "assets/aliados-comerciales/CENTRANEG.png", alt: "centraneg" },
-            { src: "assets/aliados-comerciales/empaque rema.png", alt: "empaque rema" },
-            { src: "assets/aliados-comerciales/GENNEX-Photoroom.png", alt: "gennex-photoroom" },
-            { src: "assets/aliados-comerciales/MegaDirect.png", alt: "megadirect" },
-            { src: "assets/aliados-comerciales/PLATA.png", alt: "plata" },
-            { src: "assets/aliados-comerciales/ptc.png", alt: "ptc" }
-        ];
-
-        let indicesVisibles = [0, 1, 2, 3, 4, 5];
-
-        function rotarUnAliado() {
-            const tarjetaIndexColor = Math.floor(Math.random() * 6);
-            const tarjetaElemento = document.querySelector(`.logo-card-tech[data-index="${tarjetaIndexColor}"]`);
-
-            if (!tarjetaElemento) return;
-
-            const aliadosNoVisibles = todosLosAliados.filter((_, index) => !indicesVisibles.includes(index));
-
-            if (aliadosNoVisibles.length === 0) return;
-
-            const nuevoAliado = aliadosNoVisibles[Math.floor(Math.random() * aliadosNoVisibles.length)];
-            const nuevoIndiceGlobal = todosLosAliados.indexOf(nuevoAliado);
-
-            const imgElemento = tarjetaElemento.querySelector('img');
-
-            imgElemento.classList.add('fade-out');
-
-            setTimeout(() => {
-                imgElemento.src = nuevoAliado.src;
-                imgElemento.alt = nuevoAliado.alt;
-
-                indicesVisibles[tarjetaIndexColor] = nuevoIndiceGlobal;
-
-                imgElemento.classList.remove('fade-out');
-            }, 350);
-        }
-
-        setInterval(rotarUnAliado, 4000);
-
 
         // --- BASE DE DATOS DE INFORMACIÓN DETALLADA PARA MODALES (ES/EN) ---
         const servicesData = {
@@ -1622,25 +1651,51 @@
                 "nav.portafolio": "Portafolio", "nav.vacantes": "Vacantes", "nav.login": "Iniciar sesión",
                 "nav.baseConocimiento": "ArdaWiki",
 
-                "hero.title": 'Soluciones <br>tecnológicas <br>a la medida de <span class="highlight-blue">tu empresa</span>',
-                "hero.desc": "Impulsamos el crecimiento y la eficiencia de tu negocio con tecnología confiable, innovadora y escalable.",
-                "hero.cta": "Conócenos",
+                "hero.eyebrow": "Soluciones que impulsan",
+                "hero.title": 'Un futuro <br>más <span class="highlight-blue">eficiente</span>',
+                "hero.desc": "Integramos tecnología, talento y estrategia para convertir tus procesos en oportunidades.",
+                "hero.cta": "Conoce más",
                 "hero.badge1.title": "Confianza", "hero.badge1.desc": "y Seguridad",
                 "hero.badge2.title": "Innovación", "hero.badge2.desc": "Constante",
                 "hero.badge3.title": "Resultados", "hero.badge3.desc": "Medibles",
 
-                "nosotros.badge": "Sobre Nosotros",
-                "nosotros.title": '¿Quiénes <span class="highlight-blue">somos?</span>',
-                "nosotros.desc": "En <strong>ARDABYTEC</strong> Somos una firma de consultoría especializada en Tecnologías de la Información, con amplia experiencia en soluciones de Contact Center, desarrollo web, aplicaciones móviles y soporte técnico integral. Impulsamos la transformación digital de nuestros clientes mediante soluciones innovadoras, personalizadas y alineadas con sus objetivos estratégicos. Nuestro enfoque se centra en brindar atención cercana, excelencia operativa y tecnología de alto valor para optimizar procesos, mejorar la experiencia del usuario y acelerar el crecimiento del negocio.",
+                "pilares.item1.title": "Operación Segura",
+                "pilares.item1.desc": "Tecnología en la que puedes confiar.",
+                "pilares.item2.title": "Evolución Continua",
+                "pilares.item2.desc": "Soluciones que crecen contigo.",
+                "pilares.item3.title": "Resultados Reales",
+                "pilares.item3.desc": "Tecnología que genera valor.",
+
+                "impulso.title": 'Servicios que <br>impulsan <span class="highlight-blue">tu negocio</span>',
+                "impulso.desc": "Integramos tecnología, seguridad y estrategia para resolver hoy los retos de mañana.",
+                "impulso.card1.title": "Infraestructura TI",
+                "impulso.card1.desc": "Diseño, implementación y soporte de infraestructura segura y escalable.",
+                "impulso.card2.title": "Ciberseguridad",
+                "impulso.card2.desc": "Protege lo que impulsa tu negocio.",
+                "impulso.card3.title": "Transformación digital",
+                "impulso.card3.desc": "Convierte tus procesos en oportunidades.",
+                "impulso.card4.title": "Soporte y mantenimiento",
+                "impulso.card4.desc": "Tu operación siempre en marcha.",
+                "impulso.card5.title": "Consultoría TI",
+                "impulso.card5.desc": "Te asesoramos para tomar decisiones tecnológicas inteligentes.",
+
+                "nosotros.badge": "Quiénes somos",
+                "nosotros.title": 'Tecnología con propósito, <br>resultados <span class="highlight-blue">para personas</span>',
+                "nosotros.desc": "En <strong>ARDABYTEC</strong> Somos una firma de consultoría especializada en Tecnologías de la Información, con amplia experiencia en soluciones de Contact Center, desarrollo web, aplicaciones móviles y soporte técnico integral.",
+                "nosotros.desc.more": "Impulsamos la transformación digital de nuestros clientes mediante soluciones innovadoras, personalizadas y alineadas con sus objetivos estratégicos. Nuestro enfoque se centra en brindar atención cercana, excelencia operativa y tecnología de alto valor para optimizar procesos, mejorar la experiencia del usuario y acelerar el crecimiento del negocio.",
+                "nosotros.verMas": "Ver más",
+                "nosotros.verMenos": "Ver menos",
                 "nosotros.mision.title": "Misión",
                 "nosotros.mision.desc": "Soporte TI, marcación y software que hacen crecer tu negocio.",
                 "nosotros.vision.title": "Visión",
                 "nosotros.vision.desc": "Liderar la automatización con IA en soluciones empresariales",
-                "nosotros.valores.title": "Valores",
+                "nosotros.valores.title": "Nuestros valores",
                 "nosotros.valores.v1": "Innovación", "nosotros.valores.v2": "Calidad",
                 "nosotros.valores.v3": "Enfoque al cliente", "nosotros.valores.v4": "Integridad",
                 "nosotros.valores.v5": "Trabajo en equipo", "nosotros.valores.v6": "Aprendizaje",
                 "nosotros.valores.v7": "Confianza",
+                "nosotros.valores.resultados": "Resultados",
+                "nosotros.cercania": "Cercanía",
 
                 "soluciones.badge": "Ecosistema Tecnológico",
                 "soluciones.title": 'Nuestras <span class="highlight-blue">Soluciones</span>',
@@ -1704,7 +1759,7 @@
                 "modal.benefits": "Beneficios para tu Negocio", "modal.glossary": "Glosario Técnico de Fácil Comprensión",
                 "modal.pdfLink": "Ver Ficha Técnica PDF", "modal.cotizar": "Cotizar Servicio",
 
-                "aliados.title": 'Nuestros <span class="highlight-blue">aliados</span>',
+                "aliados.title": 'Aliados <span class="highlight-blue">Estratégicos</span>',
                 "aliados.desc": "Trabajamos con las mejores marcas para ofrecerte soluciones tecnológicas confiables, innovadoras y de alto rendimiento.",
 
                 "servicios.title": 'Nuestros <span class="highlight-blue">servicios</span>',
@@ -1764,25 +1819,51 @@
                 "nav.portafolio": "Portfolio", "nav.vacantes": "Careers", "nav.login": "Login",
                 "nav.baseConocimiento": "ArdaWiki",
 
-                "hero.title": 'Technology <br>solutions <br>built for <span class="highlight-blue">your business</span>',
-                "hero.desc": "We drive your business growth and efficiency with reliable, innovative and scalable technology.",
+                "hero.eyebrow": "Solutions that drive you forward",
+                "hero.title": 'A more <br>efficient <span class="highlight-blue">future</span>',
+                "hero.desc": "We integrate technology, talent and strategy to turn your processes into opportunities.",
                 "hero.cta": "Learn more",
                 "hero.badge1.title": "Trust", "hero.badge1.desc": "& Security",
                 "hero.badge2.title": "Constant", "hero.badge2.desc": "Innovation",
                 "hero.badge3.title": "Measurable", "hero.badge3.desc": "Results",
 
-                "nosotros.badge": "About Us",
-                "nosotros.title": 'Who <span class="highlight-blue">we are</span>',
-                "nosotros.desc": "At <strong>ARDABYTEC</strong> we are a consulting firm specialized in Information Technology, with extensive experience in Contact Center solutions, web development, mobile applications and comprehensive technical support. We drive our clients' digital transformation through innovative, personalized solutions aligned with their strategic goals. Our approach focuses on close attention, operational excellence and high-value technology to optimize processes, improve user experience and accelerate business growth.",
+                "pilares.item1.title": "Secure Operation",
+                "pilares.item1.desc": "Technology you can trust.",
+                "pilares.item2.title": "Continuous Evolution",
+                "pilares.item2.desc": "Solutions that grow with you.",
+                "pilares.item3.title": "Real Results",
+                "pilares.item3.desc": "Technology that creates value.",
+
+                "impulso.title": 'Services that <br>drive <span class="highlight-blue">your business</span>',
+                "impulso.desc": "We combine technology, security and strategy to solve today's challenges for tomorrow.",
+                "impulso.card1.title": "IT Infrastructure",
+                "impulso.card1.desc": "Design, implementation and support for secure, scalable infrastructure.",
+                "impulso.card2.title": "Cybersecurity",
+                "impulso.card2.desc": "Protecting what drives your business.",
+                "impulso.card3.title": "Digital Transformation",
+                "impulso.card3.desc": "Turning your processes into opportunities.",
+                "impulso.card4.title": "Support & Maintenance",
+                "impulso.card4.desc": "Your operation always up and running.",
+                "impulso.card5.title": "IT Consulting",
+                "impulso.card5.desc": "We advise you in making smart technology decisions.",
+
+                "nosotros.badge": "Who we are",
+                "nosotros.title": 'Technology with purpose, <br>results <span class="highlight-blue">for people</span>',
+                "nosotros.desc": "At <strong>ARDABYTEC</strong> we are a consulting firm specialized in Information Technology, with extensive experience in Contact Center solutions, web development, mobile applications and comprehensive technical support.",
+                "nosotros.desc.more": "We drive our clients' digital transformation through innovative, personalized solutions aligned with their strategic goals. Our approach focuses on close attention, operational excellence and high-value technology to optimize processes, improve user experience and accelerate business growth.",
+                "nosotros.verMas": "Show more",
+                "nosotros.verMenos": "Show less",
                 "nosotros.mision.title": "Mission",
                 "nosotros.mision.desc": "IT support, dialing and software that grow your business.",
                 "nosotros.vision.title": "Vision",
                 "nosotros.vision.desc": "Leading AI-driven automation in enterprise solutions",
-                "nosotros.valores.title": "Values",
+                "nosotros.valores.title": "Our values",
                 "nosotros.valores.v1": "Innovation", "nosotros.valores.v2": "Quality",
                 "nosotros.valores.v3": "Customer focus", "nosotros.valores.v4": "Integrity",
                 "nosotros.valores.v5": "Teamwork", "nosotros.valores.v6": "Learning",
                 "nosotros.valores.v7": "Trust",
+                "nosotros.valores.resultados": "Results",
+                "nosotros.cercania": "Closeness",
 
                 "soluciones.badge": "Technology Ecosystem",
                 "soluciones.title": 'Our <span class="highlight-blue">Solutions</span>',
@@ -1846,7 +1927,7 @@
                 "modal.benefits": "Benefits for Your Business", "modal.glossary": "Easy-to-Understand Technical Glossary",
                 "modal.pdfLink": "View PDF Data Sheet", "modal.cotizar": "Request a Quote",
 
-                "aliados.title": 'Our <span class="highlight-blue">partners</span>',
+                "aliados.title": 'Strategic <span class="highlight-blue">Partners</span>',
                 "aliados.desc": "We work with the best brands to offer you reliable, innovative and high-performance technology solutions.",
 
                 "servicios.title": 'Our <span class="highlight-blue">services</span>',
@@ -1954,24 +2035,68 @@
         const LOGO_DARK_SRC = 'assets/logos-empresa/logo1-modo-oscuro.png';
 
         function updateLogo(theme) {
-            const logoSrc = theme === 'dark' ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
+            // Sobre el hero (header flotando sin scroll) el logo siempre va en blanco,
+            // sin importar el tema, porque el fondo detrás es la escena oscura.
+            const mainHeaderEl = document.querySelector('.main-header');
+            const floatingOverHero = mainHeaderEl && !mainHeaderEl.classList.contains('is-scrolled');
+            const logoSrc = (theme === 'dark' || floatingOverHero) ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
             const headerLogo = document.getElementById('headerLogoImg');
             if (headerLogo) {
                 headerLogo.src = logoSrc;
             }
             const footerLogo = document.getElementById('footerLogoImg');
             if (footerLogo) {
-                footerLogo.src = logoSrc;
+                footerLogo.src = theme === 'dark' ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
             }
+        }
+
+        const HERO_BG_LIGHT_SRC = 'assets/mascota-empresa/hero-mascota-escena-claro.png';
+        const HERO_BG_DARK_SRC = 'assets/mascota-empresa/hero-mascota-escena.png';
+
+        function updateHeroImage(theme) {
+            const src = theme === 'dark' ? HERO_BG_DARK_SRC : HERO_BG_LIGHT_SRC;
+            const heroImg = document.getElementById('heroBgImg');
+            if (heroImg) heroImg.src = src;
         }
 
         function setTheme(theme) {
             document.documentElement.setAttribute('data-theme', theme);
             localStorage.setItem(STORAGE_THEME_KEY, theme);
             updateLogo(theme);
+            updateHeroImage(theme);
         }
 
-        updateLogo(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+        function getCurrentTheme() {
+            return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        }
+
+        updateLogo(getCurrentTheme());
+        updateHeroImage(getCurrentTheme());
+
+        // --- HEADER TRANSPARENTE SOBRE EL HERO, SÓLIDO AL HACER SCROLL ---
+        (function () {
+            const mainHeaderEl = document.querySelector('.main-header');
+            const heroSectionEl = document.getElementById('inicio');
+            if (!mainHeaderEl || !heroSectionEl) return;
+
+            const applyScrollState = () => {
+                const heroBottom = heroSectionEl.getBoundingClientRect().bottom;
+                const shouldBeScrolled = heroBottom <= mainHeaderEl.offsetHeight;
+                const isScrolled = mainHeaderEl.classList.contains('is-scrolled');
+                if (shouldBeScrolled !== isScrolled) {
+                    mainHeaderEl.classList.toggle('is-scrolled', shouldBeScrolled);
+                    // El header pasa de absolute (sin ocupar espacio, flotando sobre
+                    // el hero) a fixed (tampoco ocupa espacio, pero ahora tapa el
+                    // contenido debajo) — compensamos con padding-top en el body.
+                    document.body.style.paddingTop = shouldBeScrolled ? mainHeaderEl.offsetHeight + 'px' : '';
+                    updateLogo(getCurrentTheme());
+                }
+            };
+
+            applyScrollState();
+            window.addEventListener('scroll', applyScrollState, { passive: true });
+            window.addEventListener('resize', applyScrollState);
+        })();
 
         document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2568,14 +2693,14 @@
             function markRevealTargets() {
                 const sectionTitles = document.querySelectorAll(
                     '.section-title, .section-title-center, .section-desc, .section-desc-center, ' +
-                    '.nosotros-main-card, .nosotros-badge, .soluciones-badge, .aliados-info, .qr-form-info, .vacantes-container > p'
+                    '.nosotros-intro, .soluciones-badge, .aliados-header, .qr-form-info, .vacantes-container > p, .impulso-header'
                 );
                 sectionTitles.forEach(el => {
                     if (!el.hasAttribute('data-reveal')) el.setAttribute('data-reveal', '');
                 });
 
                 const cardGrids = document.querySelectorAll(
-                    '.nosotros-grid, .soluciones-grid, .servicios-grid, .portafolio-grid, .vacantes-grid, .aliados-grid-tech'
+                    '.nosotros-mv, .soluciones-grid, .servicios-grid, .portafolio-grid, .vacantes-grid, .impulso-grid'
                 );
                 cardGrids.forEach(grid => {
                     grid.setAttribute('data-reveal-group', '');
@@ -2596,12 +2721,13 @@
             const SPLIT_TARGETS = [
                 { selector: '.hero-title', mode: 'cascade', unit: 'word', stagger: 60 },
                 { selector: '.hero-description', mode: 'blur-focus', unit: 'word', stagger: 35 },
+                { selector: '.impulso-header h2', mode: 'cascade', unit: 'word', stagger: 55 },
                 { selector: '#nosotros h2', mode: 'typewriter', unit: 'letter', stagger: 28 },
                 { selector: '#soluciones h2', mode: 'flip', unit: 'word', stagger: 90 },
                 { selector: '#aliados h2, #servicios h2', mode: 'scale-pop', unit: 'word', stagger: 70 },
                 { selector: '#portafolio h2, #contacto h2', mode: 'slide-side', unit: 'word', stagger: 65 },
                 { selector: '#vacantes h2', mode: 'cascade', unit: 'word', stagger: 60 },
-                { selector: '.section-desc, .section-desc-center', mode: 'blur-focus', unit: 'word', stagger: 20 },
+                { selector: '.section-desc, .section-desc-center, .impulso-desc', mode: 'blur-focus', unit: 'word', stagger: 20 },
             ];
 
             function splitTextInto(el, unit) {
@@ -3769,6 +3895,197 @@
             window.refreshChatLang();
         })();
     </script>
+
+    <script>
+        // TiltedCard (React Bits) portado a JS vanilla + CSS, sin la librería
+        // 'motion' — la inclinación se resuelve con un spring simple
+        // (interpolación exponencial por frame) sobre requestAnimationFrame.
+        (function () {
+            const cards = document.querySelectorAll('[data-tilt]');
+            if (!cards.length) return;
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            if (window.matchMedia('(hover: none)').matches) return; // sin tilt en touch
+
+            const ROTATE_AMPLITUDE = 10;
+            const SCALE_ON_HOVER = 1.03;
+            const SPRING = 0.15; // qué tan rápido converge hacia el valor objetivo
+
+            cards.forEach((card) => {
+                let targetRX = 0, targetRY = 0, targetScale = 1;
+                let curRX = 0, curRY = 0, curScale = 1;
+                let raf = null;
+
+                function tick() {
+                    curRX += (targetRX - curRX) * SPRING;
+                    curRY += (targetRY - curRY) * SPRING;
+                    curScale += (targetScale - curScale) * SPRING;
+                    card.style.transform = `rotateX(${curRX}deg) rotateY(${curRY}deg) scale(${curScale})`;
+
+                    const settled = Math.abs(targetRX - curRX) < 0.01 && Math.abs(targetRY - curRY) < 0.01 && Math.abs(targetScale - curScale) < 0.001;
+                    if (!settled) {
+                        raf = requestAnimationFrame(tick);
+                    } else {
+                        raf = null;
+                    }
+                }
+
+                function startLoop() {
+                    if (!raf) raf = requestAnimationFrame(tick);
+                }
+
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const offsetX = e.clientX - rect.left - rect.width / 2;
+                    const offsetY = e.clientY - rect.top - rect.height / 2;
+                    targetRX = (offsetY / (rect.height / 2)) * -ROTATE_AMPLITUDE;
+                    targetRY = (offsetX / (rect.width / 2)) * ROTATE_AMPLITUDE;
+                    startLoop();
+                });
+
+                card.addEventListener('mouseenter', () => {
+                    targetScale = SCALE_ON_HOVER;
+                    startLoop();
+                });
+
+                card.addEventListener('mouseleave', () => {
+                    targetRX = 0;
+                    targetRY = 0;
+                    targetScale = 1;
+                    startLoop();
+                });
+            });
+        })();
+    </script>
+
+    <script>
+        // --- SECCIÓN "QUIÉNES SOMOS": acordeón "Ver más" ---
+        (function () {
+            const btn = document.getElementById('nosotrosVerMasBtn');
+            const more = document.querySelector('.nosotros-text-more');
+            if (!btn || !more) return;
+            const label = btn.querySelector('span');
+
+            btn.addEventListener('click', () => {
+                const expanded = more.classList.toggle('is-expanded');
+                btn.setAttribute('aria-expanded', String(expanded));
+                btn.classList.toggle('is-expanded', expanded);
+                label.setAttribute('data-i18n', expanded ? 'nosotros.verMenos' : 'nosotros.verMas');
+                const lang = (typeof currentLang !== 'undefined') ? currentLang : (document.documentElement.getAttribute('lang') || 'es');
+                const dict = (typeof translations !== 'undefined') ? translations[lang] : null;
+                const key = expanded ? 'nosotros.verMenos' : 'nosotros.verMas';
+                label.textContent = (dict && dict[key]) ? dict[key] : (expanded ? 'Ver menos' : 'Ver más');
+            });
+        })();
+
+        // --- SECCIÓN "QUIÉNES SOMOS": carrusel de valores, cíclico + autoplay ---
+        (function () {
+            const track = document.getElementById('valoresTrack');
+            const prevBtn = document.getElementById('valoresPrevBtn');
+            const nextBtn = document.getElementById('valoresNextBtn');
+            const viewport = document.querySelector('.valores-track-viewport');
+            if (!track || !prevBtn || !nextBtn || !viewport) return;
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+            const originalCount = track.children.length;
+            // Clona los primeros N items al final (N = visibles a la vez) para
+            // poder deslizar "hacia adelante" sin fin — al llegar a los clones,
+            // salta sin transición de vuelta al set real equivalente.
+            const VISIBLE = () => (window.innerWidth <= 700 ? 2 : 4);
+            Array.from(track.children).slice(0, VISIBLE()).forEach((el) => {
+                track.appendChild(el.cloneNode(true));
+            });
+
+            let index = 0;
+            let autoplayTimer = null;
+
+            function itemWidth() {
+                return viewport.clientWidth / VISIBLE();
+            }
+
+            function render(smooth) {
+                track.style.transition = smooth ? '' : 'none';
+                track.style.transform = `translateX(-${index * itemWidth()}px)`;
+                if (!smooth) {
+                    // Fuerza reflow para que el próximo cambio sí anime.
+                    void track.offsetHeight;
+                    track.style.transition = '';
+                }
+            }
+
+            function goNext() {
+                index += 1;
+                render(true);
+                if (index >= originalCount) {
+                    // Tras la transición hacia el clon, salta sin animar de
+                    // vuelta al índice real equivalente (0).
+                    setTimeout(() => {
+                        index = 0;
+                        render(false);
+                    }, 400);
+                }
+            }
+
+            function goPrev() {
+                if (index <= 0) {
+                    index = originalCount;
+                    render(false);
+                }
+                index -= 1;
+                render(true);
+            }
+
+            function stopAutoplay() {
+                if (autoplayTimer) clearInterval(autoplayTimer);
+                autoplayTimer = null;
+            }
+
+            function startAutoplay() {
+                stopAutoplay();
+                autoplayTimer = setInterval(goNext, 3000);
+            }
+
+            prevBtn.addEventListener('click', () => { goPrev(); startAutoplay(); });
+            nextBtn.addEventListener('click', () => { goNext(); startAutoplay(); });
+            viewport.addEventListener('mouseenter', stopAutoplay);
+            viewport.addEventListener('mouseleave', startAutoplay);
+
+            window.addEventListener('resize', () => render(false));
+
+            render(false);
+            startAutoplay();
+        })();
+    </script>
+
+    <script type="module">
+        import { mountLogoLoop } from './assets/effects/logo-loop.js';
+
+        const aliadosLoopEl = document.getElementById('aliadosLoop');
+        if (aliadosLoopEl) {
+            // Placeholder con los logos actuales (a color) mientras llegan las
+            // versiones ya monocromáticas (blanca para oscuro, azul para claro).
+            mountLogoLoop(aliadosLoopEl, {
+                logos: [
+                    { src: 'assets/aliados-comerciales/AT_T_logo_2016.png', alt: 'AT&T' },
+                    { src: 'assets/aliados-comerciales/BANAMEX.png', alt: 'Banamex' },
+                    { src: 'assets/aliados-comerciales/PLATA.png', alt: 'Plata' },
+                    { src: 'assets/aliados-comerciales/MegaDirect.png', alt: 'MegaDirect' },
+                    { src: 'assets/aliados-comerciales/GENNEX-Photoroom.png', alt: 'Gennex' },
+                    { src: 'assets/aliados-comerciales/hsbc.png', alt: 'HSBC' },
+                    { src: 'assets/aliados-comerciales/inconcert.png', alt: 'InConcert' },
+                    { src: 'assets/aliados-comerciales/Nacional Monte de Piedad.png', alt: 'Nacional Monte de Piedad' },
+                    { src: 'assets/aliados-comerciales/powerbi.png', alt: 'Power BI' },
+                    { src: 'assets/aliados-comerciales/nexo.png', alt: 'Nexo' },
+                    { src: 'assets/aliados-comerciales/ptc.png', alt: 'PTC' },
+                ],
+                speed: 70,
+                logoHeight: 52,
+                gap: 64,
+                fadeOut: true,
+                pauseOnHover: true,
+            });
+        }
+    </script>
+
 </body>
 
 </html>
