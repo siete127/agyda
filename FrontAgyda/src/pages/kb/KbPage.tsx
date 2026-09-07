@@ -21,6 +21,7 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
   const [categoria, setCategoria] = useState(articulo?.categoria ?? '')
   const [tipo, setTipo] = useState<KbTipo>(articulo?.tipo ?? 'articulo')
   const [evidenciaUrl, setEvidenciaUrl] = useState<string | null>(articulo?.evidenciaUrl ?? null)
+  const [publico, setPublico] = useState(articulo?.publico ?? true)
 
   const subirImagen = useMutation({
     mutationFn: (file: File) => kbService.uploadImagen(file),
@@ -40,8 +41,8 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
   const guardar = useMutation({
     mutationFn: async () => {
       const contenido = combinarContenidoKb(problema, solucion)
-      if (articulo) await kbService.update(articulo.id, { titulo, contenido, categoria: categoria || undefined, tipo, evidenciaUrl })
-      else await kbService.create({ titulo, contenido, categoria: categoria || undefined, tipo, evidenciaUrl })
+      if (articulo) await kbService.update(articulo.id, { titulo, contenido, categoria: categoria || undefined, tipo, evidenciaUrl, publico })
+      else await kbService.create({ titulo, contenido, categoria: categoria || undefined, tipo, evidenciaUrl, publico })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kb-articulos'] })
@@ -84,6 +85,34 @@ function ArticuloModal({ articulo, onClose }: { articulo: KbArticulo | null; onC
             <option value="">Sin categoría</option>
             {TICKET_CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">Visibilidad</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPublico(true)}
+              className={clsx(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors',
+                publico ? 'border-brand bg-brand/10 text-brand' : 'border-gray-200 text-gray-500 hover:bg-gray-50',
+              )}
+            >
+              <Globe className="h-3.5 w-3.5" /> Público
+            </button>
+            <button
+              type="button"
+              onClick={() => setPublico(false)}
+              className={clsx(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors',
+                !publico ? 'border-brand bg-brand/10 text-brand' : 'border-gray-200 text-gray-500 hover:bg-gray-50',
+              )}
+            >
+              <Lock className="h-3.5 w-3.5" /> Privado
+            </button>
+          </div>
+          <p className="mt-1 text-[0.68rem] text-ink-tertiary">
+            {publico ? 'Visible en ArdaWiki interno y en el sitio web público.' : 'Solo visible dentro de AGYDA (ArdaWiki interno).'}
+          </p>
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-ink-secondary uppercase tracking-wide">
@@ -148,14 +177,6 @@ export function KbPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kb-articulos'] })
       toast.success('Estado actualizado')
-    },
-  })
-
-  const togglePublico = useMutation({
-    mutationFn: (a: KbArticulo) => kbService.togglePublico(a.id),
-    onSuccess: (_data, a) => {
-      qc.invalidateQueries({ queryKey: ['kb-articulos'] })
-      toast.success(a.publico ? 'Artículo marcado como privado' : 'Artículo publicado en el sitio web')
     },
   })
 
@@ -230,16 +251,6 @@ export function KbPage() {
                     </div>
                     {isTI && (
                       <div className="flex flex-shrink-0 gap-1">
-                        <button
-                          onClick={() => togglePublico.mutate(a)}
-                          className={clsx(
-                            'rounded-lg p-1.5 hover:bg-surface',
-                            a.publico ? 'text-green-600 hover:text-green-700' : 'text-ink-tertiary hover:text-ink',
-                          )}
-                          title={a.publico ? 'Público — clic para hacerlo privado' : 'Privado — clic para publicarlo en el sitio web'}
-                        >
-                          {a.publico ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                        </button>
                         <button onClick={() => setEditing(a)} className="rounded-lg p-1.5 text-ink-tertiary hover:bg-surface hover:text-ink" title="Editar">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
