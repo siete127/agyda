@@ -221,22 +221,25 @@ async function getMiPanel(req, res) {
     `);
     const pausaPorAgente = new Map(pausasRs.recordset.map((p) => [p.agenteId, p]));
 
-    // CCO_AGENTE_ESTADO es la fuente real de si un agente puede recibir
-    // conversaciones nuevas (mismo botón "Disponible/No disponible" de Chat
-    // en Vivo / Contact Center) — antes esto se inferí­a solo de USUARIO_TIEMPOS
+    // LIVECHAT_AGENTE_ESTADO es la fuente real de si un agente puede recibir
+    // conversaciones nuevas — la actualiza el switch "Chat en vivo" del menú
+    // de perfil (livechatController.setDisponible), que es lo que el agente
+    // usa de verdad. CCO_AGENTE_ESTADO es un sistema paralelo del Contact
+    // Center omnicanal que no se toca desde ese switch, así que no sirve
+    // como fuente aquí. Antes esto se inferí­a solo de USUARIO_TIEMPOS
     // (ausencia de pausa abierta), lo que marcaba "Disponible" a cualquiera
     // que ni siquiera hubiera iniciado sesión hoy.
     const estadoRs = await pool.request().query(`
-      SELECT CAE_USUARIO_ID as agenteId, CAE_ONLINE as online, CAE_DISPONIBLE as disponible, CAE_ULTIMA_CONEXION as ultimaConexion
-      FROM CCO_AGENTE_ESTADO WHERE CAE_USUARIO_ID IN (${agenteIds.join(',')})
+      SELECT LAE_USUARIO_ID as agenteId, LAE_ONLINE as online, LAE_DISPONIBLE as disponible, LAE_ULTIMA_CONEXION as ultimaConexion
+      FROM LIVECHAT_AGENTE_ESTADO WHERE LAE_USUARIO_ID IN (${agenteIds.join(',')})
     `);
     const estadoPorAgente = new Map(estadoRs.recordset.map((e) => [e.agenteId, e]));
 
     const agentes = agentesRs.recordset.map((a) => {
       const pausa = pausaPorAgente.get(a.agenteId);
       const est = estadoPorAgente.get(a.agenteId);
-      // Sin fila en CCO_AGENTE_ESTADO, o CAE_ONLINE=0: nunca se conectó hoy
-      // o cerró sesión — "desconectado", no "disponible".
+      // Sin fila en LIVECHAT_AGENTE_ESTADO, o LAE_ONLINE=0: nunca se conectó
+      // hoy o cerró sesión — "desconectado", no "disponible".
       let estado;
       if (!est || !est.online) estado = 'desconectado';
       else if (pausa) estado = 'pausa';
@@ -321,8 +324,8 @@ async function getProductividadDia(req, res) {
     const nombrePorId = new Map(usuariosRs.recordset.map((u) => [u.id, u.nombre]));
 
     const estadoRs = await pool.request().query(`
-      SELECT CAE_USUARIO_ID as agenteId, CAE_ONLINE as online, CAE_DISPONIBLE as disponible, CAE_ULTIMA_CONEXION as ultimaConexion
-      FROM CCO_AGENTE_ESTADO WHERE CAE_USUARIO_ID IN (${agenteIds.join(',')})
+      SELECT LAE_USUARIO_ID as agenteId, LAE_ONLINE as online, LAE_DISPONIBLE as disponible, LAE_ULTIMA_CONEXION as ultimaConexion
+      FROM LIVECHAT_AGENTE_ESTADO WHERE LAE_USUARIO_ID IN (${agenteIds.join(',')})
     `);
     const estadoPorAgente = new Map(estadoRs.recordset.map((e) => [e.agenteId, e]));
 
