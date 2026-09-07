@@ -108,8 +108,10 @@ async function getDashboard(req, res) {
 
 /* ── Supervisores: asignación a campañas + panel de agentes con estado en vivo ── */
 
-// Estados de pausa según USUARIO_TIEMPOS.status_id (mismo mapeo que reportController.js)
-const PAUSA_LABELS = { 2: 'baño', 3: 'comida', 5: 'capacitación', 6: 'permiso' };
+// Estados de pausa según USUARIO_TIEMPOS.status_id — mismo mapeo que el botón
+// real que usa el agente (PerfilMenu.tsx: statusId 3 = Baño, 2 = Comida) y
+// que socketService.js al cerrar la pausa de baño (status_id = 3).
+const PAUSA_LABELS = { 3: 'baño', 2: 'comida', 5: 'capacitación', 6: 'permiso' };
 
 async function listSupervisores(req, res) {
   try {
@@ -350,7 +352,7 @@ async function getProductividadDia(req, res) {
     for (const p of pausasRs.recordset) {
       const row = porAgente.get(p.agenteId);
       if (!row) continue;
-      const key = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' }[p.statusId];
+      const key = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' }[p.statusId];
       if (key) row[key] = p.minutos;
       row.totalPausaMin += p.minutos;
     }
@@ -468,7 +470,7 @@ async function getMiResumenAsesor(req, res) {
     const primeraEntrada = sesiones.length > 0 ? sesiones[0].fechaInicio : null;
     const pausaActiva = sesiones.find((s) => [2, 3, 5, 6].includes(s.statusId) && !s.fechaFin);
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
-    const TIPO_KEYS = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' };
+    const TIPO_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
     for (const s of sesiones) {
       const key = TIPO_KEYS[s.statusId];
       if (key) minutosPorTipo[key] += s.minutos;
@@ -643,7 +645,7 @@ async function getReporteDiario(req, res) {
         WHERE CAST(fecha_inicio AS date) = @fecha AND status_id IN (2,3,5,6)
         GROUP BY status_id
       `);
-    const PAUSA_KEYS = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' };
+    const PAUSA_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
     for (const p of pausasPorTipoRs.recordset) {
       const key = PAUSA_KEYS[p.statusId];
