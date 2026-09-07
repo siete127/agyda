@@ -6330,6 +6330,12 @@ CREATE TABLE dbo.CCO_CAMPANIAS (
   ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_CONTACTO_FACEBOOK_URL NVARCHAR(300) NULL;`,
     `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_CONTACTO_INSTAGRAM_URL') IS NULL
   ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_CONTACTO_INSTAGRAM_URL NVARCHAR(300) NULL;`,
+    // Teléfono para llamadas EN horario (distinto de CN_BAILEYS_NUMERO del
+    // canal WhatsApp, que es para chats fuera de horario) — mismo espíritu
+    // que las URLs de arriba: texto libre capturado a mano, no derivado de
+    // ningún canal. Antes vivía solo en localStorage de contacto.html.
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_CONTACTO_TELEFONO') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_CONTACTO_TELEFONO NVARCHAR(40) NULL;`,
     // Slug estable para identificar la campaña en URLs públicas (ej. el
     // endpoint de solo-lectura que consume contacto.html) sin exponer el
     // CM2_ID interno. Se autogenera a partir del nombre en el seed de abajo;

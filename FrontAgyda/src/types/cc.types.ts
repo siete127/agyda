@@ -106,6 +106,16 @@ export interface CCCampania {
   canalesCount: number
   skillsCount: number
   agentesCount: number
+  // Identificador público de la campaña para páginas externas (ej.
+  // contacto.html de Totis) — GET /api/contact-center/publico/campanias/:slug/contacto.
+  slug: string | null
+  // Contacto "de respaldo" mostrado en esas páginas externas: teléfono para
+  // llamadas en horario, y URLs de Facebook/Instagram capturadas a mano
+  // (Messenger/Instagram no oficiales son cuentas personales sin perfil
+  // público al que enlazar, así que esto no sale de ningún canal).
+  contactoTelefono: string | null
+  contactoFacebookUrl: string | null
+  contactoInstagramUrl: string | null
 }
 
 // Registrado desde la página pública de postulación (ej. registro.html de
