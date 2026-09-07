@@ -238,50 +238,54 @@ function PanelEnVivoTab() {
 
                   {skillExpandido && (
                     <div className="border-t border-gray-100 p-3 space-y-3 animate-fade-in">
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div className="flex flex-col gap-1.5">
                         <button
                           onClick={() => toggleFiltro('todos')}
                           title="Ver todos los agentes"
                           className={clsx(
-                            'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
-                            filtroEstado === 'todos' ? 'bg-brand/10 ring-1 ring-brand/30 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                            'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
+                            filtroEstado === 'todos' ? 'bg-brand/10 ring-1 ring-brand/30 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
                           )}
                         >
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/10 text-brand transition-transform group-hover:scale-105"><Users className="h-3.5 w-3.5" /></div>
-                          <div><p className="text-base font-bold text-gray-900 leading-tight">{agentesDelSkill.length}</p><p className="text-[0.65rem] text-gray-500">Agentes</p></div>
+                          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-transform group-hover:scale-105"><Users className="h-3.5 w-3.5" /></div>
+                          <p className="flex-1 text-sm text-gray-600">Agentes</p>
+                          <p className="text-base font-bold text-gray-900 leading-tight">{agentesDelSkill.length}</p>
                         </button>
                         <button
                           onClick={() => toggleFiltro('disponible')}
                           title="Filtrar por agentes disponibles"
                           className={clsx(
-                            'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
-                            filtroEstado === 'disponible' ? 'bg-emerald-100 ring-1 ring-emerald-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                            'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
+                            filtroEstado === 'disponible' ? 'bg-emerald-100 ring-1 ring-emerald-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
                           )}
                         >
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition-transform group-hover:scale-105"><UserCheck className="h-3.5 w-3.5" /></div>
-                          <div><p className="text-base font-bold text-gray-900 leading-tight">{disponibles}</p><p className="text-[0.65rem] text-gray-500">Disponibles</p></div>
+                          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition-transform group-hover:scale-105"><UserCheck className="h-3.5 w-3.5" /></div>
+                          <p className="flex-1 text-sm text-gray-600">Disponibles</p>
+                          <p className="text-base font-bold text-gray-900 leading-tight">{disponibles}</p>
                         </button>
                         <button
                           onClick={() => toggleFiltro('pausa')}
                           title="Filtrar por agentes en pausa"
                           className={clsx(
-                            'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
-                            filtroEstado === 'pausa' ? 'bg-amber-100 ring-1 ring-amber-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                            'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
+                            filtroEstado === 'pausa' ? 'bg-amber-100 ring-1 ring-amber-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
                           )}
                         >
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition-transform group-hover:scale-105"><Coffee className="h-3.5 w-3.5" /></div>
-                          <div><p className="text-base font-bold text-gray-900 leading-tight">{enPausa}</p><p className="text-[0.65rem] text-gray-500">En pausa</p></div>
+                          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition-transform group-hover:scale-105"><Coffee className="h-3.5 w-3.5" /></div>
+                          <p className="flex-1 text-sm text-gray-600">En pausa</p>
+                          <p className="text-base font-bold text-gray-900 leading-tight">{enPausa}</p>
                         </button>
                         <button
                           onClick={() => toggleFiltro('desconectado')}
                           title="Filtrar por agentes desconectados"
                           className={clsx(
-                            'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
-                            filtroEstado === 'desconectado' ? 'bg-gray-200 ring-1 ring-gray-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                            'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
+                            filtroEstado === 'desconectado' ? 'bg-gray-200 ring-1 ring-gray-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
                           )}
                         >
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-400 transition-transform group-hover:scale-105"><PowerOff className="h-3.5 w-3.5" /></div>
-                          <div><p className="text-base font-bold text-gray-900 leading-tight">{desconectados}</p><p className="text-[0.65rem] text-gray-500">Desconectados</p></div>
+                          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400 transition-transform group-hover:scale-105"><PowerOff className="h-3.5 w-3.5" /></div>
+                          <p className="flex-1 text-sm text-gray-600">Desconectados</p>
+                          <p className="text-base font-bold text-gray-900 leading-tight">{desconectados}</p>
                         </button>
                       </div>
 
