@@ -172,85 +172,117 @@ function PanelEnVivoTab() {
 
   return (
     <div className="flex gap-4 min-h-[32rem] items-start">
-      {/* ── Columna 1: lista fija de campañas ── */}
-      <div className="w-60 flex-shrink-0 card p-0 overflow-hidden">
+      {/* ── Columna 1: campañas, con sus skills anidados debajo de la activa ── */}
+      <div className="w-64 flex-shrink-0 card p-0 overflow-hidden">
         <div className="border-b border-gray-100 px-3.5 py-2.5">
           <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Campañas</p>
         </div>
         <div className="divide-y divide-gray-50">
           {campanias.map((c) => {
             const cantidadAgentes = agentes.filter((a) => a.campaniaId === c.id).length
-            const cantidadSkills = grupos.filter((g) => g.campaniaId === c.id).length
+            const skillsDeEsta = grupos.filter((g) => g.campaniaId === c.id)
             const activa = campaniaId === c.id
             return (
-              <button
-                key={c.id}
-                onClick={() => seleccionarCampania(c.id)}
-                className={clsx(
-                  'w-full flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors',
-                  activa ? 'bg-brand/10 border-l-2 border-brand' : 'border-l-2 border-transparent hover:bg-gray-50',
+              <div key={c.id}>
+                <button
+                  onClick={() => seleccionarCampania(c.id)}
+                  className={clsx(
+                    'w-full flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors',
+                    activa ? 'bg-brand/10 border-l-2 border-brand' : 'border-l-2 border-transparent hover:bg-gray-50',
+                  )}
+                >
+                  <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full', activa ? 'bg-brand text-white' : 'bg-brand/10 text-brand')}>
+                    <Circle className="h-3.5 w-3.5 fill-current" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={clsx('text-sm truncate', activa ? 'font-semibold text-gray-900' : 'font-medium text-gray-700')}>{c.nombre}</p>
+                    <p className="text-[0.68rem] text-gray-500">{skillsDeEsta.length} skill{skillsDeEsta.length !== 1 ? 's' : ''} · {cantidadAgentes} agente{cantidadAgentes !== 1 ? 's' : ''}</p>
+                  </div>
+                </button>
+
+                {activa && skillsDeEsta.length > 0 && (
+                  <div className="bg-gray-50/60 py-1 animate-fade-in">
+                    {skillsDeEsta.map((s) => {
+                      const cantidad = agentes.filter((a) => a.grupoId === s.id).length
+                      const activo = skillId === s.id
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => seleccionarSkill(s.id)}
+                          className={clsx(
+                            'w-full flex items-center gap-2 pl-8 pr-3.5 py-2 text-left transition-colors',
+                            activo ? 'bg-brand/10' : 'hover:bg-gray-100',
+                          )}
+                        >
+                          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600 text-xs">
+                            {s.icono || <Layers className="h-3 w-3" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={clsx('text-xs truncate', activo ? 'font-semibold text-gray-900' : 'font-medium text-gray-600')}>{s.nombre}</p>
+                          </div>
+                          <span className="flex-shrink-0 text-[0.65rem] text-gray-400">{cantidad}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
-              >
-                <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full', activa ? 'bg-brand text-white' : 'bg-brand/10 text-brand')}>
-                  <Circle className="h-3.5 w-3.5 fill-current" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className={clsx('text-sm truncate', activa ? 'font-semibold text-gray-900' : 'font-medium text-gray-700')}>{c.nombre}</p>
-                  <p className="text-[0.68rem] text-gray-500">{cantidadSkills} skill{cantidadSkills !== 1 ? 's' : ''} · {cantidadAgentes} agente{cantidadAgentes !== 1 ? 's' : ''}</p>
-                </div>
-              </button>
+              </div>
             )
           })}
         </div>
       </div>
 
-      {/* ── Columna 2: skills de la campaña + resumen del skill seleccionado ── */}
-      <div className="w-72 flex-shrink-0 space-y-3">
+      {/* ── Columna 2: detalle — chips de estado + lista de agentes filtrados, o los chats del agente seleccionado ── */}
+      <div className="flex-1 min-w-0 card overflow-hidden">
         {!campaniaActiva ? (
-          <div className="card flex flex-col items-center justify-center gap-2 py-16 text-gray-400">
+          <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-gray-400">
             <Circle className="h-8 w-8" />
-            <p className="text-sm text-center px-4">Selecciona una campaña</p>
+            <p className="text-sm">Selecciona una campaña para ver sus skills y agentes</p>
           </div>
         ) : skillsDeCampania.length === 0 ? (
-          <div className="card flex flex-col items-center justify-center gap-2 py-16 text-gray-400">
+          <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-gray-400">
             <Layers className="h-8 w-8" />
-            <p className="text-sm text-center px-4">Esta campaña no tiene skills configurados</p>
+            <p className="text-sm">Esta campaña no tiene skills configurados</p>
           </div>
-        ) : (
-          <>
-            <div className="card p-0 overflow-hidden animate-fade-in">
-              <div className="border-b border-gray-100 px-3.5 py-2.5">
-                <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Skills</p>
+        ) : !skillActivo ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-gray-400">
+            <Layers className="h-8 w-8" />
+            <p className="text-sm">Selecciona un skill para ver sus agentes</p>
+          </div>
+        ) : agenteSeleccionado ? (
+          <div className="animate-fade-in">
+            <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-3.5">
+              <button
+                onClick={() => setAgenteSeleccionado(null)}
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                title="Volver a la lista de agentes"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full', ESTADO_ESTILOS[agenteSeleccionado.estado].iconBg)}>
+                {ESTADO_ESTILOS[agenteSeleccionado.estado].icon({ className: 'h-3.5 w-3.5' })}
               </div>
-              <div className="divide-y divide-gray-50">
-                {skillsDeCampania.map((s) => {
-                  const cantidad = agentes.filter((a) => a.grupoId === s.id).length
-                  const activo = skillId === s.id
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => seleccionarSkill(s.id)}
-                      className={clsx(
-                        'w-full flex items-center gap-2.5 px-3.5 py-3 text-left transition-colors',
-                        activo ? 'bg-brand/10 border-l-2 border-brand' : 'border-l-2 border-transparent hover:bg-gray-50',
-                      )}
-                    >
-                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600 text-sm">
-                        {s.icono || <Layers className="h-3.5 w-3.5" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className={clsx('text-sm truncate', activo ? 'font-semibold text-gray-900' : 'font-medium text-gray-700')}>{s.nombre}</p>
-                        <p className="text-[0.68rem] text-gray-500">{cantidad} agente{cantidad !== 1 ? 's' : ''}</p>
-                      </div>
-                      <ChevronRight className={clsx('h-4 w-4 flex-shrink-0 text-gray-300 transition-transform', activo && 'rotate-90')} />
-                    </button>
-                  )
-                })}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900 truncate">{agenteSeleccionado.nombre}</p>
+                <p className="text-xs text-gray-500">{estadoTexto(agenteSeleccionado)}</p>
               </div>
             </div>
-
-            {skillActivo && (
-              <div className="card p-2.5 flex flex-wrap gap-1.5 animate-fade-in">
+            <div className="p-3 space-y-1.5">
+              {chatsDelAgente.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-10 text-gray-400">
+                  <MessageCircle className="h-6 w-6" />
+                  <p className="text-xs">{agenteSeleccionado.nombre} no tiene chats asignados ahora mismo</p>
+                </div>
+              ) : (
+                chatsDelAgente.map((c) => <ChatRow key={c.id} chat={c} />)
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="animate-fade-in">
+            <div className="border-b border-gray-100 px-4 py-3 space-y-2.5">
+              <p className="text-sm font-semibold text-gray-900">{skillActivo.nombre}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={() => toggleFiltro('todos')}
                   title={`Ver todos los agentes (${agentesDelSkill.length})`}
@@ -295,65 +327,15 @@ function PanelEnVivoTab() {
                   <span className="h-2 w-2 flex-shrink-0 rounded-full bg-gray-400" />
                   Desconectados
                 </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* ── Columna 3: detalle — lista de agentes filtrados, o los chats del agente seleccionado ── */}
-      <div className="flex-1 min-w-0 card overflow-hidden">
-        {!skillActivo ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-gray-400">
-            <Layers className="h-8 w-8" />
-            <p className="text-sm">Selecciona un skill para ver sus agentes</p>
-          </div>
-        ) : agenteSeleccionado ? (
-          <div className="animate-fade-in">
-            <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-3.5">
-              <button
-                onClick={() => setAgenteSeleccionado(null)}
-                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                title="Volver a la lista de agentes"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full', ESTADO_ESTILOS[agenteSeleccionado.estado].iconBg)}>
-                {ESTADO_ESTILOS[agenteSeleccionado.estado].icon({ className: 'h-3.5 w-3.5' })}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 truncate">{agenteSeleccionado.nombre}</p>
-                <p className="text-xs text-gray-500">{estadoTexto(agenteSeleccionado)}</p>
-              </div>
-            </div>
-            <div className="p-3 space-y-1.5">
-              {chatsDelAgente.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-10 text-gray-400">
-                  <MessageCircle className="h-6 w-6" />
-                  <p className="text-xs">{agenteSeleccionado.nombre} no tiene chats asignados ahora mismo</p>
-                </div>
-              ) : (
-                chatsDelAgente.map((c) => <ChatRow key={c.id} chat={c} />)
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="animate-fade-in">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-              <p className="text-sm font-semibold text-gray-900">{skillActivo.nombre}</p>
-              {filtroEstado !== 'todos' && (
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-semibold text-brand">
-                    {ESTADO_AGENTE_LABELS[filtroEstado]}
-                  </span>
+                {filtroEstado !== 'todos' && (
                   <button
                     onClick={() => setFiltroEstado('todos')}
                     className="text-[0.68rem] font-medium text-gray-400 hover:text-brand hover:underline"
                   >
                     Quitar filtro
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
             <div className="p-3">
               {agentesDelSkill.length === 0 ? (
