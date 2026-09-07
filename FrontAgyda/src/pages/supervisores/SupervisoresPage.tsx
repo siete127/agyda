@@ -5,7 +5,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   Users, UserCheck, Clock, BarChart3, Plus, Trash2, Coffee, History,
-  ChevronRight, ChevronLeft, Layers, MessageCircle, Circle, PowerOff, MinusCircle,
+  ChevronRight, Layers, MessageCircle, Circle, PowerOff, MinusCircle,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { supervisoresService } from '@/services/supervisores.service'
@@ -44,32 +44,6 @@ function estadoTexto(agente: AgenteEstado) {
   return ESTADO_AGENTE_LABELS[agente.estado]
 }
 
-/* ── Tarjeta de agente (nivel 3: agentes de un skill) ── */
-function AgenteCard({ agente, chatsActivos, onClick }: { agente: AgenteEstado; chatsActivos: number; onClick: () => void }) {
-  const estilo = ESTADO_ESTILOS[agente.estado]
-  return (
-    <button
-      onClick={onClick}
-      className={clsx('card p-4 flex items-center gap-3 text-left transition-colors hover:border-brand/30 hover:bg-brand/[0.02]', estilo.card)}
-    >
-      <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full', estilo.iconBg)}>
-        {estilo.icon({ className: 'h-4 w-4' })}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-900 truncate">{agente.nombre}</p>
-        <p className="text-xs text-gray-500">{estadoTexto(agente)}</p>
-      </div>
-      {chatsActivos > 0 && (
-        <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-semibold text-brand">
-          <MessageCircle className="h-3 w-3" /> {chatsActivos}
-        </span>
-      )}
-      <span className={clsx('flex-shrink-0 h-2 w-2 rounded-full', estilo.dot)} />
-      <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-300" />
-    </button>
-  )
-}
-
 /* ── Fila de chat asignado (nivel 4: chats de un agente) ── */
 function ChatRow({ chat }: { chat: CCInteraccion }) {
   const ESTADO_LABEL: Record<string, string> = { activa: 'Activa', en_cola: 'En cola', pendiente_tipificacion: 'Pendiente tipificación' }
@@ -94,11 +68,37 @@ function ChatRow({ chat }: { chat: CCInteraccion }) {
   )
 }
 
-/* ── Tab: Panel en vivo — navegación Campaña > Skill > Agente > sus chats ── */
+/* ── Fila de agente dentro de un skill expandido (nivel 3, en línea) ── */
+function AgenteRow({ agente, chatsActivos, expandido, onClick }: { agente: AgenteEstado; chatsActivos: number; expandido: boolean; onClick: () => void }) {
+  const estilo = ESTADO_ESTILOS[agente.estado]
+  return (
+    <button
+      onClick={onClick}
+      className={clsx('w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-gray-50', expandido && 'bg-brand/5')}
+    >
+      <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full', estilo.iconBg)}>
+        {estilo.icon({ className: 'h-3.5 w-3.5' })}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-gray-900 truncate">{agente.nombre}</p>
+        <p className="text-xs text-gray-500">{estadoTexto(agente)}</p>
+      </div>
+      {chatsActivos > 0 && (
+        <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-semibold text-brand">
+          <MessageCircle className="h-3 w-3" /> {chatsActivos}
+        </span>
+      )}
+      <span className={clsx('flex-shrink-0 h-2 w-2 rounded-full', estilo.dot)} />
+      <ChevronRight className={clsx('h-4 w-4 flex-shrink-0 text-gray-300 transition-transform', expandido && 'rotate-90')} />
+    </button>
+  )
+}
+
+/* ── Tab: Panel en vivo — acordeón Campaña > Skill > Agente > sus chats, todo expandido en línea ── */
 function PanelEnVivoTab() {
-  const [campaniaId, setCampaniaId] = useState<number | null>(null)
-  const [skillId, setSkillId] = useState<number | null>(null)
-  const [agenteSeleccionado, setAgenteSeleccionado] = useState<AgenteEstado | null>(null)
+  const [campaniaAbierta, setCampaniaAbierta] = useState<number | null>(null)
+  const [skillAbierto, setSkillAbierto] = useState<number | null>(null)
+  const [agenteAbierto, setAgenteAbierto] = useState<number | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['supervisores-mi-panel'],
@@ -106,13 +106,12 @@ function PanelEnVivoTab() {
     refetchInterval: 15_000,
   })
 
-  // Solo se pide cuando hace falta contar/listar chats (niveles 3 y 4) — evita
-  // pedir todas las interacciones activas de la empresa mientras se navegan
-  // campañas y skills, donde todavía no hace falta.
+  // Se piden en cuanto hay un skill expandido en cualquier campaña — es la
+  // única señal de que el supervisor está mirando el detalle de agentes/chats.
   const { data: interacciones = [] } = useQuery({
     queryKey: ['cc-supervision-activas'],
     queryFn: () => ccService.supervisionActivas(),
-    enabled: campaniaId != null && skillId != null,
+    enabled: skillAbierto != null,
     refetchInterval: 15_000,
   })
 
@@ -141,182 +140,138 @@ function PanelEnVivoTab() {
     )
   }
 
-  // ── Breadcrumb ──
-  const campaniaActiva = campanias.find((c) => c.id === campaniaId)
-  const skillActivo = grupos.find((g) => g.id === skillId)
-  const Breadcrumb = () => (
-    <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-      <button
-        onClick={() => { setCampaniaId(null); setSkillId(null); setAgenteSeleccionado(null) }}
-        className={clsx('font-medium hover:text-brand', campaniaId == null && 'text-brand')}
-      >
-        Campañas
-      </button>
-      {campaniaActiva && (
-        <>
-          <ChevronRight className="h-3 w-3" />
-          <button
-            onClick={() => { setSkillId(null); setAgenteSeleccionado(null) }}
-            className={clsx('font-medium hover:text-brand', skillId == null && 'text-brand')}
-          >
-            {campaniaActiva.nombre}
-          </button>
-        </>
-      )}
-      {skillActivo && (
-        <>
-          <ChevronRight className="h-3 w-3" />
-          <button
-            onClick={() => setAgenteSeleccionado(null)}
-            className={clsx('font-medium hover:text-brand', agenteSeleccionado == null && 'text-brand')}
-          >
-            {skillActivo.nombre}
-          </button>
-        </>
-      )}
-      {agenteSeleccionado && (
-        <>
-          <ChevronRight className="h-3 w-3" />
-          <span className="font-medium text-brand">{agenteSeleccionado.nombre}</span>
-        </>
-      )}
-    </div>
-  )
-
-  // ── Nivel 4: chats del agente seleccionado ──
-  if (agenteSeleccionado) {
-    const chats = chatsPorAgente.get(agenteSeleccionado.agenteId) ?? []
-    return (
-      <div className="space-y-4">
-        <Breadcrumb />
-        <button onClick={() => setAgenteSeleccionado(null)} className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-brand">
-          <ChevronLeft className="h-3.5 w-3.5" /> Volver a agentes
-        </button>
-        {chats.length === 0 ? (
-          <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
-            <MessageCircle className="h-8 w-8" />
-            <p className="text-sm">{agenteSeleccionado.nombre} no tiene chats asignados ahora mismo</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {chats.map((c) => <ChatRow key={c.id} chat={c} />)}
-          </div>
-        )}
-      </div>
-    )
+  const toggleCampania = (id: number) => {
+    setCampaniaAbierta((v) => (v === id ? null : id))
+    setSkillAbierto(null)
+    setAgenteAbierto(null)
+  }
+  const toggleSkill = (id: number) => {
+    setSkillAbierto((v) => (v === id ? null : id))
+    setAgenteAbierto(null)
+  }
+  const toggleAgente = (id: number) => {
+    setAgenteAbierto((v) => (v === id ? null : id))
   }
 
-  // ── Nivel 3: agentes del skill seleccionado ──
-  if (skillId != null) {
-    const agentesDelSkill = agentes.filter((a) => a.grupoId === skillId)
-    const disponibles = agentesDelSkill.filter((a) => a.estado === 'disponible').length
-    const enPausa = agentesDelSkill.filter((a) => a.estado === 'pausa').length
-    const desconectados = agentesDelSkill.filter((a) => a.estado === 'desconectado').length
-    return (
-      <div className="space-y-4">
-        <Breadcrumb />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="card p-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/10 text-brand"><Users className="h-4 w-4" /></div>
-            <div><p className="text-lg font-bold text-gray-900 leading-tight">{agentesDelSkill.length}</p><p className="text-[0.68rem] text-gray-500">Agentes</p></div>
-          </div>
-          <div className="card p-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><UserCheck className="h-4 w-4" /></div>
-            <div><p className="text-lg font-bold text-gray-900 leading-tight">{disponibles}</p><p className="text-[0.68rem] text-gray-500">Disponibles</p></div>
-          </div>
-          <div className="card p-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Coffee className="h-4 w-4" /></div>
-            <div><p className="text-lg font-bold text-gray-900 leading-tight">{enPausa}</p><p className="text-[0.68rem] text-gray-500">En pausa</p></div>
-          </div>
-          <div className="card p-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-400"><PowerOff className="h-4 w-4" /></div>
-            <div><p className="text-lg font-bold text-gray-900 leading-tight">{desconectados}</p><p className="text-[0.68rem] text-gray-500">Desconectados</p></div>
-          </div>
-        </div>
-        {agentesDelSkill.length === 0 ? (
-          <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
-            <Users className="h-8 w-8" />
-            <p className="text-sm">Este skill no tiene agentes asignados</p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {agentesDelSkill.map((a) => (
-              <AgenteCard
-                key={a.agenteId}
-                agente={a}
-                chatsActivos={(chatsPorAgente.get(a.agenteId) ?? []).length}
-                onClick={() => setAgenteSeleccionado(a)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Nivel 2: skills de la campaña seleccionada ──
-  if (campaniaId != null) {
-    const skillsDeCampania = grupos.filter((g) => g.campaniaId === campaniaId)
-    return (
-      <div className="space-y-4">
-        <Breadcrumb />
-        {skillsDeCampania.length === 0 ? (
-          <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
-            <Layers className="h-8 w-8" />
-            <p className="text-sm">Esta campaña no tiene skills configurados</p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {skillsDeCampania.map((s) => {
-              const cantidadAgentes = agentes.filter((a) => a.grupoId === s.id).length
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setSkillId(s.id)}
-                  className="card p-4 flex items-center gap-3 text-left transition-colors hover:border-brand/30 hover:bg-brand/[0.02]"
-                >
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600 text-base">
-                    {s.icono || <Layers className="h-4 w-4" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{s.nombre}</p>
-                    <p className="text-xs text-gray-500">{cantidadAgentes} agente{cantidadAgentes !== 1 ? 's' : ''}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-300" />
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Nivel 1: campañas ──
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {campanias.map((c) => {
-          const cantidadAgentes = agentes.filter((a) => a.campaniaId === c.id).length
-          const cantidadSkills = grupos.filter((g) => g.campaniaId === c.id).length
-          return (
+    <div className="space-y-3">
+      {campanias.map((c) => {
+        const skillsDeCampania = grupos.filter((g) => g.campaniaId === c.id)
+        const cantidadAgentes = agentes.filter((a) => a.campaniaId === c.id).length
+        const campaniaExpandida = campaniaAbierta === c.id
+        return (
+          <div key={c.id} className="card overflow-hidden p-0">
             <button
-              key={c.id}
-              onClick={() => setCampaniaId(c.id)}
-              className="card p-4 flex items-center gap-3 text-left transition-colors hover:border-brand/30 hover:bg-brand/[0.02]"
+              onClick={() => toggleCampania(c.id)}
+              className={clsx('w-full flex items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-gray-50', campaniaExpandida && 'bg-brand/5')}
             >
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
                 <Circle className="h-4 w-4 fill-current" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900 truncate">{c.nombre}</p>
-                <p className="text-xs text-gray-500">{cantidadSkills} skill{cantidadSkills !== 1 ? 's' : ''} · {cantidadAgentes} agente{cantidadAgentes !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-gray-500">{skillsDeCampania.length} skill{skillsDeCampania.length !== 1 ? 's' : ''} · {cantidadAgentes} agente{cantidadAgentes !== 1 ? 's' : ''}</p>
               </div>
-              <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-300" />
+              <ChevronRight className={clsx('h-4 w-4 flex-shrink-0 text-gray-300 transition-transform', campaniaExpandida && 'rotate-90')} />
             </button>
-          )
-        })}
-      </div>
+
+            {campaniaExpandida && (
+              <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-3 space-y-2">
+                {skillsDeCampania.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-8 text-gray-400">
+                    <Layers className="h-6 w-6" />
+                    <p className="text-xs">Esta campaña no tiene skills configurados</p>
+                  </div>
+                ) : (
+                  skillsDeCampania.map((s) => {
+                    const agentesDelSkill = agentes.filter((a) => a.grupoId === s.id)
+                    const disponibles = agentesDelSkill.filter((a) => a.estado === 'disponible').length
+                    const enPausa = agentesDelSkill.filter((a) => a.estado === 'pausa').length
+                    const desconectados = agentesDelSkill.filter((a) => a.estado === 'desconectado').length
+                    const skillExpandido = skillAbierto === s.id
+                    return (
+                      <div key={s.id} className="rounded-xl border border-gray-200 bg-card overflow-hidden">
+                        <button
+                          onClick={() => toggleSkill(s.id)}
+                          className={clsx('w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-gray-50', skillExpandido && 'bg-brand/5')}
+                        >
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600 text-sm">
+                            {s.icono || <Layers className="h-3.5 w-3.5" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{s.nombre}</p>
+                            <p className="text-xs text-gray-500">{agentesDelSkill.length} agente{agentesDelSkill.length !== 1 ? 's' : ''}</p>
+                          </div>
+                          <ChevronRight className={clsx('h-4 w-4 flex-shrink-0 text-gray-300 transition-transform', skillExpandido && 'rotate-90')} />
+                        </button>
+
+                        {skillExpandido && (
+                          <div className="border-t border-gray-100 p-3 space-y-3">
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/10 text-brand"><Users className="h-3.5 w-3.5" /></div>
+                                <div><p className="text-base font-bold text-gray-900 leading-tight">{agentesDelSkill.length}</p><p className="text-[0.65rem] text-gray-500">Agentes</p></div>
+                              </div>
+                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><UserCheck className="h-3.5 w-3.5" /></div>
+                                <div><p className="text-base font-bold text-gray-900 leading-tight">{disponibles}</p><p className="text-[0.65rem] text-gray-500">Disponibles</p></div>
+                              </div>
+                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Coffee className="h-3.5 w-3.5" /></div>
+                                <div><p className="text-base font-bold text-gray-900 leading-tight">{enPausa}</p><p className="text-[0.65rem] text-gray-500">En pausa</p></div>
+                              </div>
+                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-400"><PowerOff className="h-3.5 w-3.5" /></div>
+                                <div><p className="text-base font-bold text-gray-900 leading-tight">{desconectados}</p><p className="text-[0.65rem] text-gray-500">Desconectados</p></div>
+                              </div>
+                            </div>
+
+                            {agentesDelSkill.length === 0 ? (
+                              <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
+                                <Users className="h-6 w-6" />
+                                <p className="text-xs">Este skill no tiene agentes asignados</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {agentesDelSkill.map((a) => {
+                                  const agenteExpandido = agenteAbierto === a.agenteId
+                                  const chats = chatsPorAgente.get(a.agenteId) ?? []
+                                  return (
+                                    <div key={a.agenteId} className="rounded-lg border border-gray-100 overflow-hidden">
+                                      <AgenteRow
+                                        agente={a}
+                                        chatsActivos={chats.length}
+                                        expandido={agenteExpandido}
+                                        onClick={() => toggleAgente(a.agenteId)}
+                                      />
+                                      {agenteExpandido && (
+                                        <div className="border-t border-gray-100 bg-gray-50/60 p-2.5 space-y-1.5">
+                                          {chats.length === 0 ? (
+                                            <div className="flex flex-col items-center gap-1.5 py-5 text-gray-400">
+                                              <MessageCircle className="h-5 w-5" />
+                                              <p className="text-xs">{a.nombre} no tiene chats asignados ahora mismo</p>
+                                            </div>
+                                          ) : (
+                                            chats.map((c) => <ChatRow key={c.id} chat={c} />)
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
