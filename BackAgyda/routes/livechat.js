@@ -3,30 +3,39 @@ const router = express.Router();
 const livechatController = require('../controllers/livechatController');
 const livechatCampanasController = require('../controllers/livechatCampanasController');
 const livechatInternoController = require('../controllers/livechatInternoController');
+const ccWebPublicaController = require('../controllers/ccWebPublicaController');
 const { authenticateToken, authenticateTokenOptional } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
 
 // Autenticado — cualquier empleado logueado inicia un chat de Soporte TI con
-// su identidad real (a diferencia del widget público, anónimo).
+// su identidad real (a diferencia del widget público, anónimo). Sigue sobre
+// el motor LIVECHAT_* — este es el único flujo que se queda ahí.
 router.post('/interno/conversaciones', authenticateToken, livechatInternoController.iniciarConversacionInterna);
 
 // Público — lo usa el chatbot de la página web al escalar a un agente humano.
-router.post('/conversaciones', livechatController.iniciarConversacion);
-router.get('/conversaciones/:conversacionId', livechatController.getConversacion);
-router.get('/conversaciones/:conversacionId/cola', livechatController.getPosicionCola);
-router.delete('/conversaciones/:conversacionId/cola', livechatController.abandonarCola);
+// El HTML del widget no cambió: sigue llamando exactamente estas rutas; lo
+// que cambió es que ahora corren sobre CCO_* (Omnicanal) en vez de
+// LIVECHAT_*, para que el agente atienda web/WhatsApp/Messenger/Instagram
+// desde una sola bandeja (ver controllers/ccWebPublicaController.js).
+router.post('/conversaciones', ccWebPublicaController.iniciarConversacion);
+router.get('/conversaciones/:conversacionId', ccWebPublicaController.getConversacion);
+router.get('/conversaciones/:conversacionId/cola', ccWebPublicaController.getPosicionCola);
+router.delete('/conversaciones/:conversacionId/cola', ccWebPublicaController.abandonarCola);
 // Público — el visitante sale de su conversación en curso (esperando o ya con agente).
-router.post('/conversaciones/:conversacionId/salir', livechatController.salirConversacion);
-// authenticateTokenOptional: el visitante manda sin token; el agente manda su token para que
-// el mensaje quede registrado como 'agente' con su identidad.
-router.post('/conversaciones/:conversacionId/mensajes', authenticateTokenOptional, livechatController.enviarMensaje);
+router.post('/conversaciones/:conversacionId/salir', ccWebPublicaController.salirConversacion);
+// authenticateTokenOptional: el visitante manda sin token; el agente en la práctica
+// ya no usa esta ruta (usa ccInteraccionesController.enviarMensaje desde la bandeja
+// de Omnicanal) pero se deja el middleware por si un token llega de todas formas.
+router.post('/conversaciones/:conversacionId/mensajes', authenticateTokenOptional, ccWebPublicaController.enviarMensaje);
 
 // Agente — requiere sesión + permiso de acción sobre el módulo 'livechat'.
 router.get('/mis-conversaciones', authenticateToken, requireActionAccess('livechat', 'ver'), livechatController.getMisConversaciones);
 router.post('/conversaciones/:conversacionId/tomar', authenticateToken, requireActionAccess('livechat', 'atender'), livechatController.tomarConversacion);
 router.post('/conversaciones/:conversacionId/cerrar', authenticateToken, requireActionAccess('livechat', 'atender'), livechatController.cerrarConversacion);
-// Público — el visitante califica la atención tras el cierre del agente (ver flujo de dos pasos en el controller).
-router.post('/conversaciones/:conversacionId/calificar', livechatController.calificarConversacion);
+// Público — el visitante califica la atención tras el cierre del agente. A diferencia
+// del motor viejo, no bloquea el cierre (ya quedó 'cerrada' de una vez); solo guarda
+// CI_RATING/CI_COMENTARIO_RATING sobre la interacción ya cerrada.
+router.post('/conversaciones/:conversacionId/calificar', ccWebPublicaController.calificarConversacion);
 router.get('/conversaciones/:conversacionId/agentes-transferibles', authenticateToken, requireActionAccess('livechat', 'atender'), livechatController.getAgentesTransferibles);
 router.post('/conversaciones/:conversacionId/transferir', authenticateToken, requireActionAccess('livechat', 'atender'), livechatController.transferirConversacion);
 // setDisponible exige 'atender' (no solo 'ver'): quien no puede tomar/atender

@@ -1,6 +1,17 @@
 export type CCEstado = 'en_cola' | 'activa' | 'pendiente_tipificacion' | 'cerrada'
 export type CCEmisor = 'cliente' | 'agente' | 'sistema'
-export type CCCanalTipo = 'whatsapp' | 'messenger' | 'instagram' | 'test'
+export type CCCanalTipo = 'whatsapp' | 'messenger' | 'instagram' | 'whatsapp_baileys' | 'messenger_fca' | 'instagram_privado' | 'web_publica' | 'test'
+
+// Estado de la sesión Baileys (solo aplica a canales tipo whatsapp_baileys).
+export type CCBaileysEstado = 'desconectado' | 'esperando_qr' | 'conectado'
+
+// Estado de la sesión FCA (solo aplica a canales tipo messenger_fca). Sin
+// 'esperando_qr': aquí se conecta en cuanto se guarda un appstate.json válido.
+export type CCFcaEstado = 'desconectado' | 'conectado' | 'error'
+
+// Estado de la sesión de Instagram vía API privada (solo aplica a canales
+// tipo instagram_privado). Igual que FCA: sin QR, se conecta con usuario+password.
+export type CCIgpEstado = 'desconectado' | 'conectado' | 'error'
 
 export interface CCInteraccion {
   id: number
@@ -54,6 +65,16 @@ export interface CCCanal {
   accessTokenConfigurado: boolean
   appSecretConfigurado: boolean
   webhookUrl: string
+  // Solo presentes/relevantes cuando tipo === 'whatsapp_baileys'.
+  baileysEstado?: CCBaileysEstado
+  baileysNumero?: string | null
+  // Solo presentes/relevantes cuando tipo === 'messenger_fca'.
+  fcaEstado?: CCFcaEstado
+  fcaUsuario?: string | null
+  fcaAppStateConfigurado?: boolean
+  // Solo presentes/relevantes cuando tipo === 'instagram_privado'.
+  igpEstado?: CCIgpEstado
+  igpUsuario?: string | null
 }
 
 export interface CCCampania {
@@ -61,6 +82,11 @@ export interface CCCampania {
   nombre: string
   descripcion: string | null
   maxChatsPorAgente: number | null
+  // Siempre true hoy: listCampanias solo devuelve activas (eliminar = ocultar).
+  activo: boolean
+  canalesCount: number
+  skillsCount: number
+  agentesCount: number
 }
 
 export interface CCGrupo {
@@ -69,6 +95,11 @@ export interface CCGrupo {
   nombre: string
   descripcion: string | null
   icono: string | null
+  // Siempre true hoy: listGrupos solo devuelve activos (eliminar = ocultar).
+  activo: boolean
+  agentesCount: number
+  // El skill con menor CG_ID entre los activos de su campaña (el primero creado).
+  esPrincipal: boolean
 }
 
 export interface CCTipificacion {
@@ -138,8 +169,11 @@ export interface CCMetricas {
 }
 
 export const CANAL_ICONO: Record<CCCanalTipo, string> = {
-  whatsapp: '🟢', messenger: '💬', instagram: '📷', test: '🧪',
+  whatsapp: '🟢', messenger: '💬', instagram: '📷',
+  whatsapp_baileys: '🟢', messenger_fca: '💬', instagram_privado: '📷', web_publica: '🌐', test: '🧪',
 }
 export const CANAL_LABEL: Record<CCCanalTipo, string> = {
-  whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram', test: 'Prueba',
+  whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram',
+  whatsapp_baileys: 'WhatsApp (QR, no oficial)', messenger_fca: 'Messenger (appstate, no oficial)',
+  instagram_privado: 'Instagram (usuario/password, no oficial)', web_publica: 'Web (widget público)', test: 'Prueba',
 }

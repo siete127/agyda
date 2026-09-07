@@ -459,6 +459,76 @@ function initialize(server) {
     // PENDIENTE multi-empresa: el widget público (C:\inetpub\wwwroot\chat) es un
     // build sin código fuente disponible en este servidor y no declara empresa
     // al conectar — se deja sin namespacing por tenant hasta poder editarlo.
+    // Panel de Configuración > Contact Center > Canales: el admin se une a esta
+    // sala mientras tiene abierta la vinculación por QR de un canal
+    // 'whatsapp_baileys', para recibir 'cc:baileys_estado' (QR nuevo, conectado,
+    // desconectado) sin tener que hacer polling — ver baileysManager.emitirEstado.
+    socket.on('join_cc_baileys', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.join(`cc:baileys:${canalId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en join_cc_baileys:', e?.message || e);
+      }
+    });
+
+    socket.on('leave_cc_baileys', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.leave(`cc:baileys:${canalId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en leave_cc_baileys:', e?.message || e);
+      }
+    });
+
+    // Mismo propósito que join_cc_baileys, para el canal 'messenger_fca'
+    // (recibe 'cc:fca_estado' mientras el admin tiene abierto el panel de
+    // vinculación por appstate.json — ver fcaManager.emitirEstado).
+    socket.on('join_cc_fca', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.join(`cc:fca:${canalId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en join_cc_fca:', e?.message || e);
+      }
+    });
+
+    socket.on('leave_cc_fca', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.leave(`cc:fca:${canalId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en leave_cc_fca:', e?.message || e);
+      }
+    });
+
+    // Mismo propósito, para el canal 'instagram_privado' — recibe
+    // 'cc:igp_estado' mientras el admin tiene abierto el panel de vinculación
+    // por usuario/password (ver igPrivateManager.emitirEstado).
+    socket.on('join_cc_igp', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.join(`cc:igp:${canalId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en join_cc_igp:', e?.message || e);
+      }
+    });
+
+    socket.on('leave_cc_igp', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.leave(`cc:igp:${canalId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en leave_cc_igp:', e?.message || e);
+      }
+    });
+
     socket.on('join_livechat_conversation', (payload) => {
       try {
         const conversacionId = Number(payload?.conversacionId);

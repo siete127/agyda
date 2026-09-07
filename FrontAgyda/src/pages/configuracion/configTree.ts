@@ -645,12 +645,14 @@ export const CONFIG_TREE: ConfigNode[] = [
     description: 'Campañas, agentes, telefonía y enrutamiento de llamadas',
     children: [
       {
-        key: 'omnicanal', label: 'Omnicanal (WhatsApp / Messenger / Instagram)',
+        // Canales, Asignación de agentes y Tipificaciones ya NO son entradas
+        // sueltas: viven dentro del detalle de cada campaña (CampaniaDetalle,
+        // en cc-skills) porque en la BD dependen de una campaña
+        // (CN_CAMPANIA_ID / CGA_.../CG_CAMPANIA_ID / CT_CAMPANIA_ID) — antes
+        // eran 3 pantallas hermanas sin relación visual con la campaña.
+        key: 'omnicanal', label: 'Configuraciones del módulo de Asesor',
         children: [
-          { key: 'cc-canales', label: 'Canales', screen: 'cc-canales' },
           { key: 'cc-skills', label: 'Campañas y skills', screen: 'cc-skills' },
-          { key: 'cc-agentes', label: 'Asignación de agentes', screen: 'cc-agentes' },
-          { key: 'cc-tipificaciones', label: 'Tipificaciones', screen: 'cc-tipificaciones' },
           { key: 'cc-config', label: 'SLA, ACW y horario', screen: 'cc-config' },
           { key: 'cc-simulador', label: 'Simulador de prueba', screen: 'cc-simulador' },
         ],

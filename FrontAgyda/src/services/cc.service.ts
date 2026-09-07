@@ -54,6 +54,27 @@ export const ccService = {
   probarCanal: (id: number) => api.post(`/contact-center/canales/${id}/probar`).then((r) => r.data),
   suscribirCanal: (id: number) => api.post(`/contact-center/canales/${id}/suscribir`).then((r) => r.data),
 
+  // ── WhatsApp vía Baileys (no oficial, vinculación por QR) ──
+  iniciarBaileys: (id: number) =>
+    api.post(`/contact-center/canales/${id}/baileys/iniciar`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
+  estadoBaileys: (id: number) =>
+    api.get(`/contact-center/canales/${id}/baileys/estado`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
+  cerrarBaileys: (id: number) => api.post(`/contact-center/canales/${id}/baileys/cerrar`).then((r) => r.data),
+
+  // ── Messenger vía FCA (no oficial, vinculación pegando appstate.json) ──
+  vincularFca: (id: number, appState: string) =>
+    api.post(`/contact-center/canales/${id}/fca/vincular`, { appState }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  estadoFca: (id: number) =>
+    api.get(`/contact-center/canales/${id}/fca/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  cerrarFca: (id: number) => api.post(`/contact-center/canales/${id}/fca/cerrar`).then((r) => r.data),
+
+  // ── Instagram DM vía API privada (no oficial, vinculación usuario/password) ──
+  vincularIgPrivate: (id: number, usuario: string, password: string) =>
+    api.post(`/contact-center/canales/${id}/igp/vincular`, { usuario, password }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  estadoIgPrivate: (id: number) =>
+    api.get(`/contact-center/canales/${id}/igp/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  cerrarIgPrivate: (id: number) => api.post(`/contact-center/canales/${id}/igp/cerrar`).then((r) => r.data),
+
   // ── Config global ──
   getConfig: () => d<CCConfig>(api.get('/contact-center/config')),
   updateConfig: (body: Partial<CCConfig>) => api.put('/contact-center/config', body).then((r) => r.data),

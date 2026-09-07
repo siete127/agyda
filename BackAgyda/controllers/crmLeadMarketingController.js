@@ -140,11 +140,12 @@ exports.recibirLeadChatbot = async (req, res) => {
       .input('nombre',   sql.NVarChar(200), nombreOpo.slice(0, 200))
       .input('contId',   sql.Int, contId)
       .input('notasOpo', sql.NVarChar(sql.MAX), resumen || '')
+      .input('tags',     sql.NVarChar(500), 'chatbot-web')
       .query(`
         INSERT INTO CRM_OPORTUNIDADES
-          (OPO_NOMBRE, OPO_CONTACTO_ID, OPO_ETAPA, OPO_NOTAS)
+          (OPO_NOMBRE, OPO_CONTACTO_ID, OPO_ETAPA, OPO_NOTAS, OPO_TAGS)
         OUTPUT INSERTED.OPO_ID
-        VALUES (@nombre, @contId, 'prospecto', @notasOpo)
+        VALUES (@nombre, @contId, 'prospecto', @notasOpo, @tags)
       `);
     const opoId = rOpo.recordset[0].OPO_ID;
 
@@ -155,6 +156,16 @@ exports.recibirLeadChatbot = async (req, res) => {
         INSERT INTO CRM_INTERACCIONES (INT_OPO_ID, INT_TIPO, INT_CONTENIDO)
         VALUES (@opoId, 'creacion', @contenido)
       `);
+
+    if (resumen) {
+      await pool.request()
+        .input('opoId',     sql.Int, opoId)
+        .input('contenido', sql.NVarChar(sql.MAX), `Transcripción del Chatbot:\n${resumen}`)
+        .query(`
+          INSERT INTO CRM_INTERACCIONES (INT_OPO_ID, INT_TIPO, INT_CONTENIDO)
+          VALUES (@opoId, 'chatbot', @contenido)
+        `);
+    }
 
     res.json({ ok: true, contId, opoId });
   } catch (e) {

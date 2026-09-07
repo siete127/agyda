@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, ArrowRightLeft, History, FileText, Megaphone, UsersRound } from 'lucide-react'
+import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, ArrowRightLeft, History, FileText, Megaphone, UsersRound, Headset } from 'lucide-react'
 import { livechatService } from '@/services/livechat.service'
 import { getSocket } from '@/lib/socket'
 import { useCurrentUser } from '@/hooks/useAuth'
@@ -15,6 +15,20 @@ import toast from 'react-hot-toast'
 import { CampaniasModal } from './CampaniasModal'
 import { UsuariosCampaniasModal } from './UsuariosCampaniasModal'
 import { HistorialConversacionesPanel } from './HistorialConversacionesPanel'
+import { AsesoresPanel } from '@/pages/asesores/AsesoresPanel'
+
+// "Mi día — estado y tiempos personales" en modal, para no salir de Chat en
+// Vivo a revisar el propio estado/pausas — reusa el mismo panel que la ruta
+// /operaciones/asesores, con el Modal genérico de ui/ (aquí sí es apropiado:
+// AsesoresPanel es contenido de cards normal, no una bandeja con su propio
+// scroll interno como LivechatPage).
+function AsesoresModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal isOpen onClose={onClose} title="Asesores" size="lg">
+      <AsesoresPanel />
+    </Modal>
+  )
+}
 
 function formatFecha(iso: string | null) {
   if (!iso) return '—'
@@ -757,6 +771,7 @@ export default function LivechatPage() {
   const [campaniasOpen, setCampaniasOpen] = useState(false)
   const [agentesOpen, setAgentesOpen] = useState(false)
   const [supervisionOpen, setSupervisionOpen] = useState(false)
+  const [asesoresOpen, setAsesoresOpen] = useState(false)
 
   // Sin esto, 'livechat:nueva_conversacion' y 'livechat:actividad_conversacion'
   // (dirigidos a la sala user:{agenteId}) nunca le llegan a este agente — la
@@ -848,6 +863,10 @@ export default function LivechatPage() {
           <h1 className="text-xl font-bold text-gray-800">Chat en Vivo</h1>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => setAsesoresOpen(true)}>
+            <Headset size={16} />
+            Asesores
+          </Button>
           <Button variant="ghost" onClick={() => setCampaniasOpen(true)}>
             <Megaphone size={16} />
             Campañas
@@ -921,6 +940,7 @@ export default function LivechatPage() {
       {campaniasOpen && <CampaniasModal onClose={() => setCampaniasOpen(false)} />}
       {agentesOpen && <AgentesEstadoModal onClose={() => setAgentesOpen(false)} />}
       {supervisionOpen && <SupervisionModal onClose={() => setSupervisionOpen(false)} />}
+      {asesoresOpen && <AsesoresModal onClose={() => setAsesoresOpen(false)} />}
 
       <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
         <div className="w-72 border-r border-gray-100 overflow-y-auto shrink-0">

@@ -42,9 +42,11 @@ exports.getFlujo = async (req, res) => {
       SELECT OPC_ID as id, OPC_NODO_ID as nodoId, OPC_TEXTO_BOTON as texto, OPC_NODO_DESTINO_ID as nodoDestinoId
       FROM dbo.CHATBOT_NODO_OPCIONES
     `);
+    // Campañas de Omnicanal (CCO_*) — destino terminal de "escalar_campania"
+    // desde que el widget web pasó a atenderse ahí (ver ccWebPublicaController).
     const campanias = await pool.request().query(`
-      SELECT LCA_ID as id, LCA_NOMBRE as texto, LCA_ACTIVO as activa
-      FROM dbo.LIVECHAT_CAMPANIAS WHERE LCA_ACTIVO = 1 ORDER BY LCA_NOMBRE
+      SELECT CM2_ID as id, CM2_NOMBRE as texto, CM2_ACTIVO as activa
+      FROM dbo.CCO_CAMPANIAS WHERE CM2_ACTIVO = 1 ORDER BY CM2_NOMBRE
     `);
     const conexiones = await pool.request().query(`
       SELECT FCX_ID as id, FCX_ORIGEN_TIPO as origenTipo, FCX_ORIGEN_ID as origenId,
@@ -116,7 +118,7 @@ exports.updatePosicion = async (req, res) => {
 
 async function existeNodo(pool, tipo, id) {
   if (tipo === 'campania') {
-    const r = await pool.request().input('id', sql.Int, id).query('SELECT 1 FROM dbo.LIVECHAT_CAMPANIAS WHERE LCA_ID = @id');
+    const r = await pool.request().input('id', sql.Int, id).query('SELECT 1 FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @id');
     return r.recordset.length > 0;
   }
   const info = TABLA_POR_TIPO[tipo];

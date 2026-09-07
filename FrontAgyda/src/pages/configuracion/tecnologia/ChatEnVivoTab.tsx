@@ -79,6 +79,13 @@ export function ChatEnVivoTab() {
               Si un chat interno de Soporte TI espera más de este tiempo sin técnico, su ticket vinculado sube a prioridad P1 y se notifica al técnico asignado.
             </p>
           </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Minutos sin calificar antes de cerrar el chat</label>
+            <input type="number" min={1} className="field mt-1 text-sm" value={form.timeoutRatingMinutos} onChange={(e) => setForm({ ...form, timeoutRatingMinutos: Number(e.target.value) })} />
+            <p className="mt-1 text-[0.7rem] text-ink-tertiary">
+              Si el visitante no califica la atención tras este tiempo (cerró la pestaña, por ejemplo), el chat se cierra automáticamente y su transcripción se guarda igual en el CRM.
+            </p>
+          </div>
         </div>
 
         <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">

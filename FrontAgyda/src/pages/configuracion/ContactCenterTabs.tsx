@@ -1,26 +1,70 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy } from 'lucide-react'
+import {
+  Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
+  MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
+  ChevronRight, ArrowLeft as ArrowLeftIcon,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { ccService } from '@/services/cc.service'
-import { CANAL_LABEL, type CCCanalTipo } from '@/types/cc.types'
+import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, type CCIgpEstado } from '@/types/cc.types'
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
+import { getSocket } from '@/lib/socket'
+import { useSocketEvent } from '@/hooks/useSocket'
 
-const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2 text-sm outline-none focus:border-violet-500'
+const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
+const label = 'mb-1.5 block text-[0.72rem] font-semibold text-ink-secondary'
 const card = 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card'
+// Variante sin padding para tarjetas con secciones propias (header/body/footer
+// cada una con su padding) — CanalCard es el único caso hoy.
+const cardBare = 'rounded-2xl border border-gray-100 bg-card shadow-card'
 
 function Header({ icon: Icon, titulo, subtitulo }: { icon: React.ElementType; titulo: string; subtitulo: string }) {
   return (
     <div className={card}>
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100 text-violet-600"><Icon className="h-5 w-5" /></div>
+      <div className="flex items-center gap-3.5">
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Icon className="h-5 w-5" /></div>
         <div>
-          <h2 className="text-lg font-bold text-gray-900">{titulo}</h2>
-          <p className="text-[0.8rem] text-gray-400">{subtitulo}</p>
+          <h2 className="text-base font-bold text-ink">{titulo}</h2>
+          <p className="mt-0.5 text-[0.8rem] text-ink-tertiary">{subtitulo}</p>
         </div>
       </div>
     </div>
+  )
+}
+
+// Icono + color por tipo de canal — mismo lenguaje visual en la card y en el
+// selector "Tipo de canal" del formulario de alta.
+const CANAL_ICONOS: Record<CCCanalTipo, { icon: React.ElementType; bg: string; fg: string }> = {
+  whatsapp: { icon: MessageCircle, bg: 'bg-emerald-100', fg: 'text-emerald-600' },
+  whatsapp_baileys: { icon: MessageCircle, bg: 'bg-emerald-100', fg: 'text-emerald-600' },
+  messenger: { icon: MessageCircle, bg: 'bg-blue-100', fg: 'text-blue-600' },
+  messenger_fca: { icon: MessageCircle, bg: 'bg-blue-100', fg: 'text-blue-600' },
+  instagram: { icon: Camera, bg: 'bg-pink-100', fg: 'text-pink-600' },
+  instagram_privado: { icon: Camera, bg: 'bg-pink-100', fg: 'text-pink-600' },
+  web_publica: { icon: Globe, bg: 'bg-cyan-100', fg: 'text-cyan-600' },
+  test: { icon: FlaskConical, bg: 'bg-violet-100', fg: 'text-violet-600' },
+}
+
+// Toggle tipo switch reutilizable — reemplaza el checkbox plano de "Habilitado".
+function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        'relative h-6 w-11 flex-shrink-0 rounded-full transition-colors',
+        checked ? 'bg-violet-600' : 'bg-gray-200',
+      )}
+    >
+      <span className={clsx(
+        'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+        checked ? 'translate-x-[22px]' : 'translate-x-0.5',
+      )} />
+    </button>
   )
 }
 
@@ -39,28 +83,43 @@ export function CCCanalesTab() {
     onSuccess: () => { setNuevoNombre(''); inval(); toast.success('Canal creado') },
   })
 
+  const NuevoIcono = CANAL_ICONOS[nuevoTipo].icon
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <Header icon={Plug} titulo="Canales" subtitulo="Conecta WhatsApp, Messenger o Instagram por tenant. El canal 'prueba' funciona sin Meta." />
-      <div className={clsx(card, 'flex flex-wrap items-end gap-2')}>
-        <label className="block">
-          <span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Tipo</span>
-          <select className={field} value={nuevoTipo} onChange={(e) => setNuevoTipo(e.target.value as CCCanalTipo)}>
-            <option value="test">Prueba</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="messenger">Messenger</option>
-            <option value="instagram">Instagram</option>
-          </select>
-        </label>
-        <label className="block flex-1">
-          <span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Nombre</span>
-          <input className={field} value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} placeholder="WhatsApp Ventas" />
-        </label>
-        <button onClick={() => crear.mutate()} disabled={!nuevoNombre.trim() || crear.isPending}
-          className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
-          <Plus className="h-4 w-4" /> Agregar
-        </button>
+
+      <div className={card}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+          <label className="block">
+            <span className={label}>Tipo de canal</span>
+            <div className="relative">
+              <span className={clsx('pointer-events-none absolute left-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md', CANAL_ICONOS[nuevoTipo].bg, CANAL_ICONOS[nuevoTipo].fg)}>
+                <NuevoIcono className="h-3.5 w-3.5" />
+              </span>
+              <select className={clsx(field, 'pl-10')} value={nuevoTipo} onChange={(e) => setNuevoTipo(e.target.value as CCCanalTipo)}>
+                <option value="test">Prueba</option>
+                <option value="whatsapp">WhatsApp (API oficial de Meta)</option>
+                <option value="messenger">Messenger</option>
+                <option value="instagram">Instagram</option>
+                <option value="whatsapp_baileys">WhatsApp por QR (no oficial)</option>
+                <option value="messenger_fca">Messenger por appstate (no oficial)</option>
+                <option value="instagram_privado">Instagram por usuario/password (no oficial)</option>
+                <option value="web_publica">Web pública (widget del sitio)</option>
+              </select>
+            </div>
+          </label>
+          <label className="block">
+            <span className={label}>Nombre del canal</span>
+            <input className={field} value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} placeholder="Ej. WhatsApp Ventas" />
+          </label>
+          <button onClick={() => crear.mutate()} disabled={!nuevoNombre.trim() || crear.isPending}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+            {crear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Agregar canal
+          </button>
+        </div>
       </div>
+
       {canales.map((c) => (
         <CanalCard key={c.id} canal={c} grupos={grupos} campanias={campanias} onChanged={inval} />
       ))}
@@ -74,6 +133,18 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
+  const dirty =
+    form.nombre !== canal.nombre || form.habilitado !== canal.habilitado ||
+    form.grupoId !== (canal.grupoId ?? '') || form.campaniaId !== (canal.campaniaId ?? '') ||
+    form.metaPageId !== (canal.metaPageId ?? '') || form.metaBusinessId !== (canal.metaBusinessId ?? '') ||
+    form.verifyToken !== (canal.verifyToken ?? '') || !!form.accessToken || !!form.appSecret
+
+  const resetForm = () => setForm({
+    nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
+    metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
+    accessToken: '', appSecret: '',
+  })
+
   const guardar = useMutation({
     mutationFn: () => ccService.updateCanal(canal.id, {
       nombre: form.nombre, habilitado: form.habilitado,
@@ -89,108 +160,796 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
   const suscribir = useMutation({ mutationFn: () => ccService.suscribirCanal(canal.id), onSuccess: (r: any) => { toast.success(r?.message ?? 'OK'); onChanged() }, onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Falló') })
   const eliminar = useMutation({ mutationFn: () => ccService.deleteCanal(canal.id), onSuccess: () => { toast.success('Eliminado'); onChanged() } })
   const esTest = canal.tipo === 'test'
+  const esBaileys = canal.tipo === 'whatsapp_baileys'
+  const esFca = canal.tipo === 'messenger_fca'
+  const esIgp = canal.tipo === 'instagram_privado'
+  const esWeb = canal.tipo === 'web_publica'
+  const esMeta = !esTest && !esBaileys && !esFca && !esIgp && !esWeb
+  const { icon: TipoIcono, bg: tipoBg, fg: tipoFg } = CANAL_ICONOS[canal.tipo as CCCanalTipo]
 
   return (
-    <div className={card}>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="font-bold text-gray-800">{CANAL_LABEL[canal.tipo as CCCanalTipo]} — {canal.nombre}</p>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs text-gray-500">
-            <input type="checkbox" className="h-3.5 w-3.5 accent-violet-600" checked={form.habilitado} onChange={(e) => setForm({ ...form, habilitado: e.target.checked })} /> Habilitado
-          </label>
-          <button onClick={() => eliminar.mutate()} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Nombre</span>
-          <input className={field} value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></label>
-        <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Skill destino</span>
-          <select className={field} value={form.grupoId} onChange={(e) => setForm({ ...form, grupoId: e.target.value })}>
-            <option value="">—</option>{grupos.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-          </select></label>
-        <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Campaña</span>
-          <select className={field} value={form.campaniaId} onChange={(e) => setForm({ ...form, campaniaId: e.target.value })}>
-            <option value="">—</option>{campanias.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select></label>
-        {!esTest && <>
-          <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Page ID / Phone Number ID</span>
-            <input className={field} value={form.metaPageId} onChange={(e) => setForm({ ...form, metaPageId: e.target.value })} /></label>
-          <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Business ID / WABA ID</span>
-            <input className={field} value={form.metaBusinessId} onChange={(e) => setForm({ ...form, metaBusinessId: e.target.value })} /></label>
-          <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Verify token</span>
-            <input className={field} value={form.verifyToken} onChange={(e) => setForm({ ...form, verifyToken: e.target.value })} /></label>
-          <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Access token {canal.accessTokenConfigurado && <span className="text-emerald-600">· configurado</span>}</span>
-            <input type="password" className={field} value={form.accessToken} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} placeholder={canal.accessTokenConfigurado ? '•••••• (vacío = no cambiar)' : ''} /></label>
-          <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">App secret {canal.appSecretConfigurado && <span className="text-emerald-600">· configurado</span>}</span>
-            <input type="password" className={field} value={form.appSecret} onChange={(e) => setForm({ ...form, appSecret: e.target.value })} /></label>
-        </>}
-      </div>
-      {!esTest && (
-        <div className="mt-3 rounded-xl bg-gray-50 p-3 text-[0.72rem] text-gray-600">
-          <p className="font-semibold">URL del webhook (pégala en el panel de Meta):</p>
-          <div className="mt-1 flex items-center gap-2">
-            <code className="flex-1 break-all rounded bg-white px-2 py-1 ring-1 ring-gray-200">{canal.webhookUrl}</code>
-            <button onClick={() => { navigator.clipboard.writeText(canal.webhookUrl); toast.success('Copiado') }} className="text-gray-400 hover:text-violet-600"><Copy className="h-3.5 w-3.5" /></button>
+    <div className={cardBare}>
+      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg', tipoBg, tipoFg)}>
+            <TipoIcono className="h-4.5 w-4.5" />
           </div>
+          <p className="truncate font-bold text-ink">{CANAL_LABEL[canal.tipo as CCCanalTipo]} — {canal.nombre}</p>
         </div>
-      )}
-      <div className="mt-3 flex justify-end gap-2">
-        {!esTest && <button onClick={() => probar.mutate()} disabled={probar.isPending} className="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">Probar conexión</button>}
-        {!esTest && <button onClick={() => suscribir.mutate()} disabled={suscribir.isPending} className="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">Suscribir webhook</button>}
-        <button onClick={() => guardar.mutate()} disabled={guardar.isPending} className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
-          {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
+        <div className="flex flex-shrink-0 items-center gap-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-ink-tertiary">
+            <Switch checked={form.habilitado} onChange={(v) => setForm({ ...form, habilitado: v })} /> Habilitado
+          </label>
+          <button onClick={() => eliminar.mutate()} title="Eliminar canal"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-ink-tertiary transition hover:border-red-200 hover:bg-red-50 hover:text-red-500">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block"><span className={label}>Nombre del canal</span>
+            <input className={field} value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></label>
+          <label className="block"><span className={label}>Skill destino</span>
+            <select className={field} value={form.grupoId} onChange={(e) => setForm({ ...form, grupoId: e.target.value })}>
+              <option value="">—</option>{grupos.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+            </select></label>
+          <label className="block"><span className={label}>Campaña</span>
+            <select className={field} value={form.campaniaId} onChange={(e) => setForm({ ...form, campaniaId: e.target.value })}>
+              <option value="">—</option>{campanias.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select></label>
+          {esMeta && <>
+            <label className="block"><span className={label}>Page ID / Phone Number ID</span>
+              <input className={field} value={form.metaPageId} onChange={(e) => setForm({ ...form, metaPageId: e.target.value })} /></label>
+            <label className="block"><span className={label}>Business ID / WABA ID</span>
+              <input className={field} value={form.metaBusinessId} onChange={(e) => setForm({ ...form, metaBusinessId: e.target.value })} /></label>
+            <label className="block"><span className={label}>Verify token</span>
+              <input className={field} value={form.verifyToken} onChange={(e) => setForm({ ...form, verifyToken: e.target.value })} /></label>
+            <label className="block"><span className={label}>Access token {canal.accessTokenConfigurado && <span className="text-emerald-600">· configurado</span>}</span>
+              <input type="password" className={field} value={form.accessToken} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} placeholder={canal.accessTokenConfigurado ? '•••••• (vacío = no cambiar)' : ''} /></label>
+            <label className="block"><span className={label}>App secret {canal.appSecretConfigurado && <span className="text-emerald-600">· configurado</span>}</span>
+              <input type="password" className={field} value={form.appSecret} onChange={(e) => setForm({ ...form, appSecret: e.target.value })} /></label>
+          </>}
+        </div>
+
+        {esMeta && (
+          <div className="mt-4 rounded-xl bg-gray-50 p-3.5 text-[0.72rem] text-ink-secondary">
+            <p className="font-semibold text-ink-secondary">URL del webhook (pégala en el panel de Meta):</p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <code className="flex-1 break-all rounded-lg bg-card px-2.5 py-1.5 ring-1 ring-gray-200">{canal.webhookUrl}</code>
+              <button onClick={() => { navigator.clipboard.writeText(canal.webhookUrl); toast.success('Copiado') }} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-card hover:text-violet-600"><Copy className="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
+        )}
+        {esBaileys && <BaileysQRPanel canal={canal} onChanged={onChanged} />}
+        {esFca && <FcaAppStatePanel canal={canal} onChanged={onChanged} />}
+        {esIgp && <IgPrivateLoginPanel canal={canal} onChanged={onChanged} />}
+        {esWeb && <WebPublicaTokenPanel canal={canal} />}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 px-5 py-4">
+        {esMeta && <button onClick={() => probar.mutate()} disabled={probar.isPending} className="rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-semibold text-ink-secondary transition hover:bg-gray-50">Probar conexión</button>}
+        {esMeta && <button onClick={() => suscribir.mutate()} disabled={suscribir.isPending} className="rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-semibold text-ink-secondary transition hover:bg-gray-50">Suscribir webhook</button>}
+        {dirty && (
+          <button onClick={resetForm} className="flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-semibold text-ink-secondary transition hover:bg-gray-50">
+            <X className="h-3.5 w-3.5" /> Cancelar
+          </button>
+        )}
+        <button onClick={() => guardar.mutate()} disabled={guardar.isPending || !dirty}
+          className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+          {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Guardar cambios
         </button>
       </div>
     </div>
   )
 }
 
-/* ═══ Campañas y skills ═══ */
-export function CCSkillsTab() {
-  const qc = useQueryClient()
-  const { data: campanias = [] } = useQuery({ queryKey: ['cc-campanias'], queryFn: () => ccService.getCampanias() })
-  const [nueva, setNueva] = useState('')
-  const inval = () => { qc.invalidateQueries({ queryKey: ['cc-campanias'] }); qc.invalidateQueries({ queryKey: ['cc-grupos-all'] }) }
-  const crear = useMutation({ mutationFn: () => ccService.createCampania({ nombre: nueva }), onSuccess: () => { setNueva(''); inval() } })
+/* ═══ WhatsApp vía Baileys — vinculación por QR (no oficial) ═══ */
+function BaileysQRPanel({ canal, onChanged }: any) {
+  const [estado, setEstado] = useState<CCBaileysEstado>(canal.baileysEstado ?? 'desconectado')
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [numero, setNumero] = useState<string | null>(canal.baileysNumero ?? null)
+
+  // Se une a la sala del canal mientras este panel está montado, para recibir
+  // el QR y los cambios de estado en vivo sin tener que refrescar la página.
+  useEffect(() => {
+    const socket = getSocket()
+    socket.emit('join_cc_baileys', { canalId: canal.id })
+    return () => { socket.emit('leave_cc_baileys', { canalId: canal.id }) }
+  }, [canal.id])
+
+  useSocketEvent<{ canalId: number; estado: CCBaileysEstado; qrDataUrl: string | null; numero: string | null }>(
+    'cc:baileys_estado',
+    (payload) => {
+      if (payload.canalId !== canal.id) return
+      setEstado(payload.estado)
+      setQrDataUrl(payload.qrDataUrl)
+      setNumero(payload.numero)
+      if (payload.estado === 'conectado') onChanged()
+    },
+  )
+
+  const iniciar = useMutation({
+    mutationFn: () => ccService.iniciarBaileys(canal.id),
+    onSuccess: (r) => { setEstado(r.data.estado as CCBaileysEstado); setQrDataUrl(r.data.qrDataUrl); setNumero(r.data.numero) },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo iniciar la sesión'),
+  })
+  const cerrar = useMutation({
+    mutationFn: () => ccService.cerrarBaileys(canal.id),
+    onSuccess: () => { setEstado('desconectado'); setQrDataUrl(null); setNumero(null); toast.success('Sesión cerrada'); onChanged() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
 
   return (
-    <div className="space-y-4">
-      <Header icon={Layers} titulo="Campañas y skills" subtitulo="Un skill = un grupo de agentes. Los canales y el enrutador apuntan a un skill." />
-      <div className={clsx(card, 'flex gap-2')}>
-        <input className={field} value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="Nueva campaña" />
-        <button onClick={() => crear.mutate()} disabled={!nueva.trim()} className="rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50">Crear</button>
+    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm">
+        <span className={clsx('h-2 w-2 rounded-full', estado === 'conectado' ? 'bg-emerald-500' : estado === 'esperando_qr' ? 'bg-amber-400' : 'bg-gray-300')} />
+        <span className="font-semibold text-ink-secondary">
+          {estado === 'conectado' ? `Conectado${numero ? ` — ${numero}` : ''}` : estado === 'esperando_qr' ? 'Esperando que escanees el QR' : 'Desconectado'}
+        </span>
       </div>
-      {campanias.map((c) => <CampaniaCard key={c.id} campania={c} onChanged={inval} />)}
+
+      {estado === 'esperando_qr' && qrDataUrl && (
+        <div className="mb-3 flex flex-col items-center gap-2">
+          {/* El QR se mantiene siempre en blanco puro (no bg-card): necesita
+              máximo contraste para que el celular lo escanee bien. */}
+          <img src={qrDataUrl} alt="Código QR de WhatsApp" className="h-52 w-52 rounded-xl border border-gray-200 bg-white p-2" />
+          <p className="text-[0.7rem] text-ink-tertiary">WhatsApp → Dispositivos vinculados → Vincular un dispositivo</p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+        <p className="text-[0.72rem] text-amber-800">
+          ⚠️ Esta vía usa WhatsApp Web, no la API oficial de Meta — no requiere aprobación ni tokens, pero
+          va por fuera de los Términos de Servicio de WhatsApp y conlleva riesgo real de que el número sea baneado.
+        </p>
+
+        {estado !== 'conectado' && (
+          <button onClick={() => iniciar.mutate()} disabled={iniciar.isPending}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-sm hover:bg-gray-50 disabled:opacity-50">
+            {iniciar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />} Generar QR
+          </button>
+        )}
+        {estado === 'conectado' && (
+          <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
+            <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
-function CampaniaCard({ campania, onChanged }: any) {
+/* ═══ Messenger vía FCA — vinculación pegando appstate.json (no oficial) ═══ */
+function FcaAppStatePanel({ canal, onChanged }: any) {
+  const [estado, setEstado] = useState<CCFcaEstado>(canal.fcaEstado ?? 'desconectado')
+  const [usuario, setUsuario] = useState<string | null>(canal.fcaUsuario ?? null)
+  const [appStateTexto, setAppStateTexto] = useState('')
+
+  useEffect(() => {
+    const socket = getSocket()
+    socket.emit('join_cc_fca', { canalId: canal.id })
+    return () => { socket.emit('leave_cc_fca', { canalId: canal.id }) }
+  }, [canal.id])
+
+  useSocketEvent<{ canalId: number; estado: CCFcaEstado; usuario: string | null; mensaje: string | null }>(
+    'cc:fca_estado',
+    (payload) => {
+      if (payload.canalId !== canal.id) return
+      setEstado(payload.estado)
+      setUsuario(payload.usuario)
+      if (payload.estado === 'error' && payload.mensaje) toast.error(payload.mensaje)
+      if (payload.estado === 'conectado') onChanged()
+    },
+  )
+
+  const vincular = useMutation({
+    mutationFn: () => ccService.vincularFca(canal.id, appStateTexto),
+    onSuccess: (r) => { setEstado(r.data.estado as CCFcaEstado); setUsuario(r.data.usuario); setAppStateTexto(''); toast.success('Messenger vinculado'); onChanged() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo vincular — revisa el appstate.json'),
+  })
+  const cerrar = useMutation({
+    mutationFn: () => ccService.cerrarFca(canal.id),
+    onSuccess: () => { setEstado('desconectado'); setUsuario(null); toast.success('Sesión cerrada'); onChanged() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm">
+        <span className={clsx('h-2 w-2 rounded-full', estado === 'conectado' ? 'bg-emerald-500' : estado === 'error' ? 'bg-red-400' : 'bg-gray-300')} />
+        <span className="font-semibold text-ink-secondary">
+          {estado === 'conectado' ? `Conectado${usuario ? ` — ID ${usuario}` : ''}` : estado === 'error' ? 'Error al conectar (revisa el appstate)' : 'Desconectado'}
+        </span>
+      </div>
+
+      {estado !== 'conectado' && (
+        <label className="mb-3 block">
+          <span className={label}>
+            appstate.json (cookies de sesión — obtenlas con una extensión como "C3C FbState")
+          </span>
+          <textarea
+            className={clsx(field, 'h-28 font-mono text-[0.7rem]')}
+            value={appStateTexto}
+            onChange={(e) => setAppStateTexto(e.target.value)}
+            placeholder='[{"key":"c_user","value":"..."}, ...]'
+          />
+        </label>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+        <p className="text-[0.72rem] text-amber-800">
+          ⚠️ Esta vía usa la cuenta PERSONAL de Facebook del agente (no una Página de negocio), no la API oficial de
+          Meta — va por fuera de sus Términos de Servicio y conlleva riesgo real de checkpoint o baneo de esa cuenta.
+          Las cookies de sesión (appstate) también expiran y hay que volver a extraerlas cuando eso pase.
+        </p>
+
+        {estado !== 'conectado' && (
+          <button onClick={() => vincular.mutate()} disabled={!appStateTexto.trim() || vincular.isPending}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-sm hover:bg-gray-50 disabled:opacity-50">
+            {vincular.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />} Vincular
+          </button>
+        )}
+        {estado === 'conectado' && (
+          <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
+            <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ═══ Instagram DM vía API privada — usuario/password (no oficial) ═══ */
+function IgPrivateLoginPanel({ canal, onChanged }: any) {
+  const [estado, setEstado] = useState<CCIgpEstado>(canal.igpEstado ?? 'desconectado')
+  const [usuario, setUsuario] = useState<string | null>(canal.igpUsuario ?? null)
+  const [form, setForm] = useState({ usuario: '', password: '' })
+
+  useEffect(() => {
+    const socket = getSocket()
+    socket.emit('join_cc_igp', { canalId: canal.id })
+    return () => { socket.emit('leave_cc_igp', { canalId: canal.id }) }
+  }, [canal.id])
+
+  useSocketEvent<{ canalId: number; estado: CCIgpEstado; usuario: string | null; mensaje: string | null }>(
+    'cc:igp_estado',
+    (payload) => {
+      if (payload.canalId !== canal.id) return
+      setEstado(payload.estado)
+      setUsuario(payload.usuario)
+      if (payload.estado === 'error' && payload.mensaje) toast.error(payload.mensaje)
+      if (payload.estado === 'conectado') onChanged()
+    },
+  )
+
+  const vincular = useMutation({
+    mutationFn: () => ccService.vincularIgPrivate(canal.id, form.usuario, form.password),
+    onSuccess: (r) => { setEstado(r.data.estado as CCIgpEstado); setUsuario(r.data.usuario); setForm({ usuario: '', password: '' }); toast.success('Instagram vinculado'); onChanged() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo vincular — revisa usuario y contraseña'),
+  })
+  const cerrar = useMutation({
+    mutationFn: () => ccService.cerrarIgPrivate(canal.id),
+    onSuccess: () => { setEstado('desconectado'); setUsuario(null); toast.success('Sesión cerrada'); onChanged() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm">
+        <span className={clsx('h-2 w-2 rounded-full', estado === 'conectado' ? 'bg-emerald-500' : estado === 'error' ? 'bg-red-400' : 'bg-gray-300')} />
+        <span className="font-semibold text-ink-secondary">
+          {estado === 'conectado' ? `Conectado${usuario ? ` — @${usuario}` : ''}` : estado === 'error' ? 'Error al conectar (revisa usuario/password)' : 'Desconectado'}
+        </span>
+      </div>
+
+      {estado !== 'conectado' && (
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block"><span className={label}>Usuario de Instagram</span>
+            <input className={field} value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value })} placeholder="usuario_ig" /></label>
+          <label className="block"><span className={label}>Contraseña</span>
+            <input type="password" className={field} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+        <p className="text-[0.72rem] text-amber-800">
+          ⚠️ Esta vía automatiza la cuenta PERSONAL de Instagram del agente (no hay concepto de "Página" como en
+          Facebook), no la API oficial de Meta — riesgo real de checkpoint de seguridad o baneo de esa cuenta. La
+          librería que la sostiene ya no recibe desarrollo activo, solo corrección de errores.
+        </p>
+
+        {estado !== 'conectado' && (
+          <button onClick={() => vincular.mutate()} disabled={!form.usuario.trim() || !form.password.trim() || vincular.isPending}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-sm hover:bg-gray-50 disabled:opacity-50">
+            {vincular.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />} Vincular
+          </button>
+        )}
+        {estado === 'conectado' && (
+          <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
+            <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ═══ Widget web pública — token de campaña ═══
+   No necesita QR ni token de Meta: cualquiera con este token puede iniciar
+   el widget de chat apuntando a esta campaña/skill (ccWebPublicaController.
+   getCanalWebPublica busca por CN_VERIFY_TOKEN). Sin token en la llamada del
+   widget, el backend cae al primer canal 'web_publica' habilitado — por eso
+   este panel deja claro cuál es "el default" cuando hay más de uno. */
+function WebPublicaTokenPanel({ canal }: any) {
+  const token = canal.verifyToken as string | null
+  const copiar = (texto: string) => { navigator.clipboard.writeText(texto); toast.success('Copiado') }
+  return (
+    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <p className="mb-3 text-[0.72rem] text-ink-secondary">
+        Este canal no requiere vinculación: recibe los mensajes del widget de chat público del sitio web. Si el
+        widget manda <code className="rounded bg-card px-1 py-0.5 ring-1 ring-gray-200">campaignToken</code>, se
+        usa este canal solo cuando coincide con el token de abajo; si no manda ninguno, se usa el primer canal
+        "Web pública" habilitado que exista (revisa que solo haya uno sin token asignado si quieres evitar ambigüedad).
+      </p>
+      {token ? (
+        <div className="rounded-lg bg-card p-3 ring-1 ring-gray-200">
+          <p className={label}>Token de campaña</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 break-all rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs ring-1 ring-gray-200">{token}</code>
+            <button onClick={() => copiar(token)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50 hover:text-violet-600"><Copy className="h-3.5 w-3.5" /></button>
+          </div>
+          <p className="mt-2 text-[0.7rem] text-ink-tertiary">
+            Envíalo desde el widget como <code className="rounded bg-gray-50 px-1 py-0.5 ring-1 ring-gray-200">{'{ campaignToken: "'}{token}{'" }'}</code> al llamar a <code className="rounded bg-gray-50 px-1 py-0.5 ring-1 ring-gray-200">/api/livechat/conversaciones</code>.
+          </p>
+        </div>
+      ) : (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-[0.72rem] text-amber-700 ring-1 ring-amber-200">
+          Este canal no tiene token propio: actúa como el canal "Web pública" por defecto (el que recibe al widget
+          cuando este no manda campaignToken).
+        </p>
+      )}
+    </div>
+  )
+}
+
+// Iconos de skill disponibles — el backend solo guarda un emoji libre
+// (CG_ICONO), así que este selector es la forma real de elegir "tipo" de
+// skill sin inventar una columna que no existe.
+const SKILL_ICONOS = ['💬', '🎯', '🎧', '📞', '💼', '🛠️', '📦', '💳']
+
+/* ═══ Campañas y skills ═══
+   Punto de entrada del módulo: lista de campañas como tarjetas. Al abrir una
+   se navega (estado local, sin depender del árbol de Configuración — ese
+   árbol no soporta "detalle de un id" hoy) a CampaniaDetalle, que agrupa
+   Canales + Skills/Agentes + Tipificaciones de ESA campaña — antes eran 3
+   pantallas hermanas sin relación visual entre sí. */
+export function CCSkillsTab() {
   const qc = useQueryClient()
-  const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
-  const [nuevoGrupo, setNuevoGrupo] = useState('')
-  const inval = () => { qc.invalidateQueries({ queryKey: ['cc-grupos', campania.id] }); onChanged() }
-  const crearG = useMutation({ mutationFn: () => ccService.createGrupo({ campaniaId: campania.id, nombre: nuevoGrupo }), onSuccess: () => { setNuevoGrupo(''); inval() } })
-  const delG = useMutation({ mutationFn: (id: number) => ccService.deleteGrupo(id), onSuccess: inval, onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error') })
+  const { data: campanias = [] } = useQuery({ queryKey: ['cc-campanias'], queryFn: () => ccService.getCampanias() })
+  const [nueva, setNueva] = useState('')
+  const [vista, setVista] = useState<'grid' | 'lista'>('lista')
+  const [campaniaAbierta, setCampaniaAbierta] = useState<any | null>(null)
+  const inval = () => { qc.invalidateQueries({ queryKey: ['cc-campanias'] }); qc.invalidateQueries({ queryKey: ['cc-grupos-all'] }) }
+  const crear = useMutation({
+    mutationFn: () => ccService.createCampania({ nombre: nueva }),
+    onSuccess: () => { setNueva(''); inval(); toast.success('Campaña creada') },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
+
+  if (campaniaAbierta) {
+    // Siempre se usa la copia más fresca de la lista (los contadores cambian
+    // al agregar/quitar canales, skills o agentes desde el propio detalle).
+    const actual = campanias.find((c) => c.id === campaniaAbierta.id) ?? campaniaAbierta
+    return <CampaniaDetalle campania={actual} onVolver={() => setCampaniaAbierta(null)} onChanged={inval} />
+  }
+
+  return (
+    <div className="space-y-4 pb-20">
+      {/* Header con ilustración decorativa: 3 iconos representativos del CC
+          flotando sobre el degradado violeta, mismo espíritu que la imagen 2. */}
+      <div className={clsx(card, 'relative overflow-hidden')}>
+        <div className="pointer-events-none absolute -right-4 top-1/2 hidden -translate-y-1/2 items-center gap-3 opacity-90 sm:flex">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100 text-violet-500 shadow-sm"><MessageCircle className="h-5 w-5" /></div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-md"><Target className="h-6 w-6" /></div>
+          <div className="mr-6 flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100 text-violet-500 shadow-sm"><Headphones className="h-5 w-5" /></div>
+        </div>
+        <div className="relative flex items-center gap-3.5 sm:max-w-[70%]">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Layers className="h-5 w-5" /></div>
+          <div>
+            <h2 className="text-base font-bold text-ink">Campañas y skills</h2>
+            <p className="mt-0.5 text-[0.8rem] text-ink-tertiary">Administra tus campañas y skills para una mejor asignación y rendimiento de tus agentes.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className={card}>
+        <div className="mb-3 flex items-center gap-2.5">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600"><Megaphone className="h-4 w-4" /></div>
+          <div>
+            <p className="text-sm font-bold text-ink">Nueva campaña</p>
+            <p className="text-[0.72rem] text-ink-tertiary">Crea una campaña para agrupar agentes, canales y enrutadores que apunten a un mismo objetivo.</p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input className={clsx(field, 'flex-1')} value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="Ingresa el nombre de la nueva campaña" />
+          <button onClick={() => crear.mutate()} disabled={!nueva.trim() || crear.isPending}
+            className="flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+            {crear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Crear campaña
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between px-1">
+        <p className="text-sm font-bold text-ink">Campañas y skills existentes</p>
+        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-card p-0.5">
+          <button onClick={() => setVista('grid')} title="Vista de cuadrícula"
+            className={clsx('flex h-7 w-7 items-center justify-center rounded-md transition', vista === 'grid' ? 'bg-violet-100 text-violet-600' : 'text-ink-tertiary hover:bg-gray-50')}>
+            <LayoutGrid className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => setVista('lista')} title="Vista de lista"
+            className={clsx('flex h-7 w-7 items-center justify-center rounded-md transition', vista === 'lista' ? 'bg-violet-100 text-violet-600' : 'text-ink-tertiary hover:bg-gray-50')}>
+            <ListIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className={clsx(vista === 'grid' && 'grid grid-cols-1 gap-4 lg:grid-cols-2', vista === 'lista' && 'space-y-3')}>
+        {campanias.map((c) => <CampaniaCard key={c.id} campania={c} onChanged={inval} onAbrir={() => setCampaniaAbierta(c)} />)}
+      </div>
+    </div>
+  )
+}
+
+// Tarjeta resumen — solo identidad + contadores + acciones rápidas. El
+// detalle real (canales, skills, tipificaciones) vive en CampaniaDetalle,
+// para no repetir dos veces la misma información en dos pantallas.
+function CampaniaCard({ campania, onChanged, onAbrir }: any) {
+  const [menuAbierto, setMenuAbierto] = useState(false)
   const delC = useMutation({ mutationFn: () => ccService.deleteCampania(campania.id), onSuccess: onChanged })
 
   return (
-    <div className={card}>
-      <div className="mb-2 flex items-center justify-between">
-        <p className="font-bold text-gray-800">{campania.nombre}</p>
-        <button onClick={() => delC.mutate()} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+    <button type="button" onClick={onAbrir} className={clsx(cardBare, 'block w-full text-left transition hover:border-violet-200')}>
+      <div className="flex items-center justify-between gap-3 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <p className="truncate text-sm font-bold uppercase tracking-wide text-ink">{campania.nombre}</p>
+          <span className="flex-shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[0.65rem] font-semibold text-emerald-700">Activa</span>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-4 text-[0.72rem] text-ink-tertiary">
+          <span className="hidden items-center gap-1.5 sm:flex"><Users className="h-3.5 w-3.5" /> {campania.agentesCount} Agentes</span>
+          <span className="hidden items-center gap-1.5 sm:flex"><Plug className="h-3.5 w-3.5" /> {campania.canalesCount} Canales</span>
+          <span className="hidden items-center gap-1.5 sm:flex"><Layers className="h-3.5 w-3.5" /> {campania.skillsCount} Skills</span>
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setMenuAbierto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50">
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            {menuAbierto && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
+                <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-card py-1 shadow-lg">
+                  <button
+                    onClick={() => { setMenuAbierto(false); delC.mutate() }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Eliminar campaña
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <ChevronRight className="h-4 w-4 flex-shrink-0" />
+        </div>
       </div>
-      <div className="space-y-1.5">
-        {grupos.map((g) => (
-          <div key={g.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5 text-sm">
-            <span>{g.icono} {g.nombre}</span>
-            <button onClick={() => delG.mutate(g.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
+    </button>
+  )
+}
+
+/* ═══ Detalle de campaña: Canales + Skills/Agentes + Tipificaciones ═══
+   Antes eran 3 pantallas hermanas en el árbol de Configuración sin relación
+   visual entre sí ("todo separado y revoltoso") — aquí quedan agrupadas bajo
+   la campaña de la que realmente dependen en la BD (CN_CAMPANIA_ID /
+   CG_CAMPANIA_ID / CT_CAMPANIA_ID apuntan los 3 al mismo CM2_ID). */
+function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onVolver: () => void; onChanged: () => void }) {
+  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'tipificaciones'>('canales')
+  const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales() })
+  const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
+  const canalesDeCampania = canalesTodos.filter((c) => c.campaniaId === campania.id)
+
+  const SECCIONES = [
+    { key: 'canales' as const, label: 'Canales', icon: Plug, count: canalesDeCampania.length },
+    { key: 'skills' as const, label: 'Skills y agentes', icon: Layers, count: grupos.length },
+    { key: 'tipificaciones' as const, label: 'Tipificaciones', icon: Tags, count: null },
+  ]
+
+  return (
+    <div className="space-y-4 pb-20">
+      <div className={card}>
+        <div className="flex items-center gap-3.5">
+          <button onClick={onVolver} title="Volver a Campañas"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 text-ink-tertiary transition hover:bg-gray-50">
+            <ArrowLeftIcon className="h-4 w-4" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">Campañas y skills</p>
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-base font-bold text-ink">{campania.nombre}</h2>
+              <span className="flex-shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[0.65rem] font-semibold text-emerald-700">Activa</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto">
+        {SECCIONES.map((s) => (
+          <button key={s.key} onClick={() => setSeccion(s.key)}
+            className={clsx(
+              'flex flex-shrink-0 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition',
+              seccion === s.key ? 'border-violet-200 bg-violet-100 text-violet-700' : 'border-gray-200 bg-card text-ink-secondary hover:bg-gray-50',
+            )}>
+            <s.icon className="h-4 w-4" /> {s.label}
+            {s.count !== null && <span className="rounded-full bg-black/5 px-1.5 text-[0.68rem]">{s.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {seccion === 'canales' && <CanalesDeCampaniaPanel campania={campania} canales={canalesDeCampania} onChanged={onChanged} />}
+      {seccion === 'skills' && <SkillsDeCampaniaPanel campania={campania} onChanged={onChanged} />}
+      {seccion === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
+    </div>
+  )
+}
+
+// Reutiliza CanalCard tal cual (misma edición de Meta/Baileys/FCA/IG que ya
+// existe en la pestaña "Canales" general) — aquí solo se filtra a los de esta
+// campaña y se ofrece crear uno nuevo ya preasignado a ella.
+function CanalesDeCampaniaPanel({ campania, canales, onChanged }: any) {
+  const qc = useQueryClient()
+  const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
+  const [nuevoTipo, setNuevoTipo] = useState<CCCanalTipo>('test')
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const inval = () => { qc.invalidateQueries({ queryKey: ['cc-canales'] }); onChanged() }
+  const crear = useMutation({
+    mutationFn: async () => {
+      const r: any = await ccService.createCanal({ tipo: nuevoTipo, nombre: nuevoNombre })
+      // Preasigna la campaña de una vez — evita el paso extra de editar el
+      // canal para "adoptarlo" en esta campaña justo después de crearlo.
+      if (r?.data?.id) await ccService.updateCanal(r.data.id, { campaniaId: campania.id })
+    },
+    onSuccess: () => { setNuevoNombre(''); inval(); toast.success('Canal creado') },
+  })
+  const NuevoIcono = CANAL_ICONOS[nuevoTipo].icon
+
+  return (
+    <div className="space-y-4">
+      <div className={card}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+          <label className="block">
+            <span className={label}>Tipo de canal</span>
+            <div className="relative">
+              <span className={clsx('pointer-events-none absolute left-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md', CANAL_ICONOS[nuevoTipo].bg, CANAL_ICONOS[nuevoTipo].fg)}>
+                <NuevoIcono className="h-3.5 w-3.5" />
+              </span>
+              <select className={clsx(field, 'pl-10')} value={nuevoTipo} onChange={(e) => setNuevoTipo(e.target.value as CCCanalTipo)}>
+                <option value="test">Prueba</option>
+                <option value="whatsapp">WhatsApp (API oficial de Meta)</option>
+                <option value="messenger">Messenger</option>
+                <option value="instagram">Instagram</option>
+                <option value="whatsapp_baileys">WhatsApp por QR (no oficial)</option>
+                <option value="messenger_fca">Messenger por appstate (no oficial)</option>
+                <option value="instagram_privado">Instagram por usuario/password (no oficial)</option>
+                <option value="web_publica">Web pública (widget del sitio)</option>
+              </select>
+            </div>
+          </label>
+          <label className="block">
+            <span className={label}>Nombre del canal</span>
+            <input className={field} value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} placeholder="Ej. WhatsApp Ventas" />
+          </label>
+          <button onClick={() => crear.mutate()} disabled={!nuevoNombre.trim() || crear.isPending}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+            {crear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Agregar canal a "{campania.nombre}"
+          </button>
+        </div>
+      </div>
+
+      {canales.length === 0 && (
+        <div className={clsx(card, 'text-center text-sm text-ink-tertiary')}>Esta campaña todavía no tiene canales asignados.</div>
+      )}
+      {canales.map((c: any) => (
+        <CanalCard key={c.id} canal={c} grupos={grupos} campanias={[{ id: campania.id, nombre: campania.nombre }]} onChanged={inval} />
+      ))}
+    </div>
+  )
+}
+
+// Skills de la campaña + asignación de agentes integrada en el flujo (antes
+// "Asignación de agentes" era una pantalla hermana suelta, sin ligar
+// visualmente con la campaña ni el skill al que pertenece cada asignación).
+function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
+  const qc = useQueryClient()
+  const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
+  const [nuevoGrupo, setNuevoGrupo] = useState('')
+  const [nuevoIcono, setNuevoIcono] = useState(SKILL_ICONOS[0])
+  const [skillAbierto, setSkillAbierto] = useState<number | null>(null)
+  const inval = () => { qc.invalidateQueries({ queryKey: ['cc-grupos', campania.id] }); onChanged() }
+  const crearG = useMutation({
+    mutationFn: () => ccService.createGrupo({ campaniaId: campania.id, nombre: nuevoGrupo, icono: nuevoIcono }),
+    onSuccess: () => { setNuevoGrupo(''); inval(); toast.success('Skill agregado') },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
+  const delG = useMutation({ mutationFn: (id: number) => ccService.deleteGrupo(id), onSuccess: inval, onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error') })
+
+  return (
+    <div className={card}>
+      <div className="space-y-2">
+        {grupos.map((g, i) => (
+          <div key={g.id} className="rounded-xl bg-gray-50">
+            <div className="flex flex-wrap items-center gap-3 px-3.5 py-2.5">
+              <button onClick={() => setSkillAbierto((v) => (v === g.id ? null : g.id))} className="flex items-center gap-1.5 text-sm font-semibold text-ink hover:text-violet-600">
+                <ChevronRight className={clsx('h-3.5 w-3.5 transition-transform', skillAbierto === g.id && 'rotate-90')} />
+                <span>{g.icono || '💬'}</span> {g.nombre}
+              </button>
+              {(g.esPrincipal ?? i === 0) && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[0.62rem] font-semibold text-violet-600">Skill principal</span>
+              )}
+              <span className="flex items-center gap-1.5 text-[0.72rem] text-ink-tertiary">
+                <Users className="h-3.5 w-3.5" /> {g.agentesCount} Agentes asignados
+              </span>
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[0.62rem] font-semibold text-emerald-700">Activo</span>
+              <div className="ml-auto flex items-center gap-1">
+                <button onClick={() => delG.mutate(g.id)} title="Eliminar skill" className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-red-50 hover:text-red-500">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            {skillAbierto === g.id && (
+              <div className="border-t border-gray-200/60 px-3.5 py-3">
+                <AsignacionAgentesSkill grupoId={g.id} onChanged={inval} />
+              </div>
+            )}
           </div>
         ))}
       </div>
-      <div className="mt-2 flex gap-2">
-        <input className={field} value={nuevoGrupo} onChange={(e) => setNuevoGrupo(e.target.value)} placeholder="Nuevo skill" />
-        <button onClick={() => crearG.mutate()} disabled={!nuevoGrupo.trim()} className="rounded-xl border border-gray-200 px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">+ Skill</button>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <input className={clsx(field, 'flex-1')} value={nuevoGrupo} onChange={(e) => setNuevoGrupo(e.target.value)} placeholder="Nombre del nuevo skill" />
+        <select className={clsx(field, 'sm:w-40')} value={nuevoIcono} onChange={(e) => setNuevoIcono(e.target.value)}>
+          {SKILL_ICONOS.map((ic) => <option key={ic} value={ic}>{ic} Skill</option>)}
+        </select>
+        <button onClick={() => crearG.mutate()} disabled={!nuevoGrupo.trim() || crearG.isPending}
+          className="flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+          {crearG.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Agregar skill
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Lista de agentes con checkbox de asignación a ESTE skill — mismo par de
+// endpoints que ya usaba la pantalla "Asignación de agentes" general
+// (asignarAgente/quitarAgente), solo que aquí acotado a un solo grupoId en
+// vez de la matriz completa de todos los skills a la vez.
+function AsignacionAgentesSkill({ grupoId, onChanged }: { grupoId: number; onChanged: () => void }) {
+  const qc = useQueryClient()
+  const { data: asignados = [] } = useQuery({ queryKey: ['cc-agentes-grupo', grupoId], queryFn: () => ccService.getAgentesDeGrupo(grupoId) })
+  const { data: usuarios = [] } = useUsuariosSimple()
+  const [busqueda, setBusqueda] = useState('')
+  const toggle = useMutation({
+    mutationFn: ({ usuarioId, on }: { usuarioId: number; on: boolean }) =>
+      on ? ccService.asignarAgente(grupoId, usuarioId) : ccService.quitarAgente(grupoId, usuarioId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-agentes-grupo', grupoId] }); onChanged() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
+  const idsAsignados = new Set(asignados.map((a) => a.usuarioId))
+  // Separados en dos listas: los ya asignados quedan siempre visibles arriba
+  // (antes se perdían mezclados con el resto de usuarios del sistema, sin
+  // forma de verlos sin buscarlos uno por uno) y abajo solo los candidatos
+  // a agregar, filtrados por la búsqueda.
+  const disponibles = (usuarios as any[]).filter((u) => !idsAsignados.has(u.id) && u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+          Agentes asignados ({asignados.length})
+        </p>
+        {asignados.length === 0 ? (
+          <p className="rounded-lg bg-black/5 px-2.5 py-2 text-xs text-ink-tertiary">Todavía no hay agentes asignados a este skill.</p>
+        ) : (
+          <div className="max-h-40 space-y-1 overflow-y-auto">
+            {asignados.map((a) => (
+              <div key={a.usuarioId} className="flex items-center justify-between rounded-lg bg-violet-100/60 px-2.5 py-1.5 text-sm text-ink">
+                <span className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.6rem] font-bold text-white">
+                    {a.nombre.charAt(0).toUpperCase()}
+                  </span>
+                  {a.nombre}
+                </span>
+                <button onClick={() => toggle.mutate({ usuarioId: a.usuarioId, on: false })} title="Quitar del skill"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-ink-tertiary transition hover:bg-red-50 hover:text-red-500">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Agregar más agentes</p>
+        <input className={clsx(field, 'mb-2')} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar agente..." />
+        <div className="max-h-40 space-y-1 overflow-y-auto">
+          {disponibles.map((u) => (
+            <label key={u.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-black/5">
+              <input type="checkbox" className="h-3.5 w-3.5 accent-violet-600"
+                checked={false}
+                onChange={(e) => toggle.mutate({ usuarioId: u.id, on: e.target.checked })} />
+              {u.nombre}
+            </label>
+          ))}
+          {disponibles.length === 0 && <p className="px-2 py-2 text-xs text-ink-tertiary">{busqueda ? 'Sin resultados' : 'Todos los usuarios ya están asignados'}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Tipificaciones globales + las propias de esta campaña — mismo contrato que
+// ya usa CCTipificacionesTab (getTipificacionesCatalogo/create/delete), solo
+// filtrado y con la campaña preseleccionada al crear una nueva.
+function TipificacionesDeCampaniaPanel({ campania }: any) {
+  const qc = useQueryClient()
+  const { data: tips = [] } = useQuery({ queryKey: ['cc-tip-cat'], queryFn: () => ccService.getTipificacionesCatalogo() })
+  const [nueva, setNueva] = useState({ nombre: '', requiereComentario: false })
+  const inval = () => qc.invalidateQueries({ queryKey: ['cc-tip-cat'] })
+  const crear = useMutation({
+    mutationFn: () => ccService.createTipificacion({ nombre: nueva.nombre, campaniaId: campania.id, requiereComentario: nueva.requiereComentario }),
+    onSuccess: () => { setNueva({ nombre: '', requiereComentario: false }); inval(); toast.success('Tipificación agregada') },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
+  const del = useMutation({ mutationFn: (id: number) => ccService.deleteTipificacion(id), onSuccess: inval })
+
+  const propias = tips.filter((t) => t.campaniaId === campania.id)
+  const globales = tips.filter((t) => t.campaniaId == null)
+
+  return (
+    <div className="space-y-4">
+      <div className={card}>
+        <p className={label}>Nueva tipificación de "{campania.nombre}"</p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input className={clsx(field, 'flex-1')} value={nueva.nombre} onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })} placeholder="Ej. Cliente satisfecho" />
+          <label className="flex flex-shrink-0 items-center gap-2 text-xs font-medium text-ink-secondary">
+            <input type="checkbox" className="h-3.5 w-3.5 accent-violet-600" checked={nueva.requiereComentario} onChange={(e) => setNueva({ ...nueva, requiereComentario: e.target.checked })} /> Requiere comentario
+          </label>
+          <button onClick={() => crear.mutate()} disabled={!nueva.nombre.trim()}
+            className="flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+            <Plus className="h-3.5 w-3.5" /> Agregar
+          </button>
+        </div>
+      </div>
+
+      <div className={card}>
+        <p className="mb-2 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Propias de esta campaña</p>
+        {propias.length === 0 && <p className="pb-2 text-sm text-ink-tertiary">Ninguna todavía — solo aplican las globales de abajo.</p>}
+        {propias.map((t) => (
+          <div key={t.id} className="flex items-center justify-between border-b border-gray-100 py-2 text-sm last:border-0">
+            <span className="text-ink">{t.nombre} {t.requiereComentario && <span className="text-[0.68rem] text-amber-600">· requiere comentario</span>}</span>
+            <button onClick={() => del.mutate(t.id)} className="text-ink-tertiary hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+          </div>
+        ))}
+      </div>
+
+      <div className={card}>
+        <p className="mb-2 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Globales (aplican a todas las campañas)</p>
+        {globales.map((t) => (
+          <div key={t.id} className="flex items-center justify-between border-b border-gray-100 py-2 text-sm last:border-0">
+            <span className="text-ink-secondary">{t.nombre} {t.requiereComentario && <span className="text-[0.68rem] text-amber-600">· requiere comentario</span>}</span>
+          </div>
+        ))}
       </div>
     </div>
   )

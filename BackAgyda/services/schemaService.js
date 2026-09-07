@@ -5858,8 +5858,8 @@ END
           ETQ_TEXTO_ES         NVARCHAR(150)   NOT NULL,
           ETQ_TEXTO_EN         NVARCHAR(150)   NULL,
           ETQ_TIPO             NVARCHAR(30)    NOT NULL DEFAULT ('respuesta'),
-          ETQ_CAMPANIA_ID      INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_CAMPANIAS(LCA_ID),
-          ETQ_GRUPO_ID         INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_GRUPOS(LG_ID),
+          ETQ_CAMPANIA_ID      INT             NULL FOREIGN KEY REFERENCES dbo.CCO_CAMPANIAS(CM2_ID),
+          ETQ_GRUPO_ID         INT             NULL FOREIGN KEY REFERENCES dbo.CCO_GRUPOS(CG_ID),
           ETQ_ORDEN            INT             NOT NULL DEFAULT (0),
           ETQ_ACTIVA           BIT             NOT NULL DEFAULT (1),
           ETQ_FECHA_CREACION   DATETIME        NOT NULL DEFAULT GETDATE(),
@@ -5878,6 +5878,42 @@ END
         ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO;
         ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO
           CHECK (ETQ_TIPO IN ('respuesta','escalar_campania','escalar_generico','arbol_diagnostico'));
+      END
+    `);
+
+    // ETQ_CAMPANIA_ID/ETQ_GRUPO_ID nacieron con FK hacia el motor viejo de
+    // Livechat (LIVECHAT_CAMPANIAS/LIVECHAT_GRUPOS) — desde que "escalar a
+    // Chat en Vivo" pasó a atenderse en Omnicanal (CCO_*), 'escalar_campania'
+    // debe poder apuntar a una CCO_CAMPANIAS/CCO_GRUPOS real. Se reapuntan las
+    // FK en vez de solo dejarlas sueltas, para conservar la integridad
+    // referencial (nunca se llegó a usar 'escalar_campania' en producción —
+    // sys.foreign_keys confirmado sin filas huérfanas antes de este cambio).
+    await pool.request().query(`
+      IF EXISTS (SELECT 1 FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_CAMPANIA_ID'
+                   AND OBJECT_NAME(fk.referenced_object_id) = 'LIVECHAT_CAMPANIAS')
+      BEGIN
+        DECLARE @fkCamp NVARCHAR(200) = (SELECT fk.name FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_CAMPANIA_ID');
+        EXEC('ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT ' + @fkCamp);
+        UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ETQ_CAMPANIA_ID = NULL, ETQ_TIPO = 'escalar_generico' WHERE ETQ_CAMPANIA_ID IS NOT NULL;
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT FK_CHATBOT_ETQ_CAMPANIA_CCO FOREIGN KEY (ETQ_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID);
+      END
+    `);
+    await pool.request().query(`
+      IF EXISTS (SELECT 1 FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_GRUPO_ID'
+                   AND OBJECT_NAME(fk.referenced_object_id) = 'LIVECHAT_GRUPOS')
+      BEGIN
+        DECLARE @fkGrupo NVARCHAR(200) = (SELECT fk.name FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_GRUPO_ID');
+        EXEC('ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT ' + @fkGrupo);
+        UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ETQ_GRUPO_ID = NULL WHERE ETQ_GRUPO_ID IS NOT NULL;
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT FK_CHATBOT_ETQ_GRUPO_CCO FOREIGN KEY (ETQ_GRUPO_ID) REFERENCES dbo.CCO_GRUPOS(CG_ID);
       END
     `);
 
@@ -6045,11 +6081,24 @@ IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_SABADO_HORARIO_FIN') IS NULL
 IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_TIMEOUT_COLA_MINUTOS') IS NULL
   ALTER TABLE dbo.LIVECHAT_CONFIG ADD LCF_TIMEOUT_COLA_MINUTOS INT NOT NULL DEFAULT (15);
 
+-- Minutos que se espera la calificación del visitante tras el cierre del agente
+-- (estado 'pendiente_rating') antes de cerrarla automáticamente sin rating y
+-- guardar igualmente su transcripción en el CRM — ver cerrarChatsSinCalificarCron.
+IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_TIMEOUT_RATING_MINUTOS') IS NULL
+  ALTER TABLE dbo.LIVECHAT_CONFIG ADD LCF_TIMEOUT_RATING_MINUTOS INT NOT NULL DEFAULT (30);
+
 IF COL_LENGTH('dbo.LIVECHAT_AGENTE_ESTADO', 'LAE_MODO_AUTOMATICO') IS NULL
   ALTER TABLE dbo.LIVECHAT_AGENTE_ESTADO ADD LAE_MODO_AUTOMATICO BIT NOT NULL DEFAULT (1);
 
 IF COL_LENGTH('dbo.LIVECHAT_CONVERSACIONES', 'LC_OPO_ID') IS NULL
   ALTER TABLE dbo.LIVECHAT_CONVERSACIONES ADD LC_OPO_ID INT NULL;
+
+-- Fecha en que la conversación pasó a 'pendiente_rating' (cierre del agente).
+-- LC_FECHA_CIERRE solo se llena hasta que el visitante califica (o el cron de
+-- abajo cierra por timeout), así que sin esta columna no hay forma de saber
+-- cuánto lleva esperando calificación.
+IF COL_LENGTH('dbo.LIVECHAT_CONVERSACIONES', 'LC_FECHA_PENDIENTE_RATING') IS NULL
+  ALTER TABLE dbo.LIVECHAT_CONVERSACIONES ADD LC_FECHA_PENDIENTE_RATING DATETIME NULL;
 `);
     logger.info('✅ Esquema de livechat asegurado');
   } catch (err) {
@@ -6246,6 +6295,58 @@ CREATE TABLE dbo.CCO_CANALES (
   CN_WEBHOOK_SUSCRITO BIT NOT NULL DEFAULT 0,
   CN_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
 );`,
+    // Canal 'whatsapp_baileys': conexión no oficial (WhatsApp Web multi-device,
+    // sin Graph API ni webhook de Meta) — no requiere tokens, pero sí una
+    // sesión persistente por canal que se vincula escaneando un QR y se guarda
+    // en disco (ver services/canalesBaileys/baileysManager.js). Estas columnas
+    // solo trackean el estado; las credenciales de sesión de Baileys viven en
+    // archivos, no en la BD.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_BAILEYS_ESTADO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_BAILEYS_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado');`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_BAILEYS_NUMERO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_BAILEYS_NUMERO NVARCHAR(40) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_BAILEYS_ESTADO')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_BAILEYS_ESTADO
+    CHECK (CN_BAILEYS_ESTADO IN ('desconectado','esperando_qr','conectado'));
+END`,
+    // Canal 'messenger_fca': Messenger vía ws3-fca (no oficial, login con
+    // cookies de una cuenta PERSONAL de Facebook — appstate.json — en vez de
+    // tokens de una Página). Reutiliza el mismo par estado/identificador que
+    // whatsapp_baileys en concepto (una única sesión no oficial activa por
+    // canal), pero con su propio par de columnas porque el estado de FCA no
+    // pasa por 'esperando_qr' (aquí se "conecta" en cuanto se guarda un
+    // appstate.json válido, o falla de una vez si las cookies ya expiraron).
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_FCA_ESTADO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_FCA_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado');`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_FCA_USUARIO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_FCA_USUARIO NVARCHAR(120) NULL;`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_FCA_APPSTATE') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_FCA_APPSTATE NVARCHAR(MAX) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_FCA_ESTADO')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_FCA_ESTADO
+    CHECK (CN_FCA_ESTADO IN ('desconectado','conectado','error'));
+END`,
+    // Canal 'instagram_privado': Instagram DM vía instagram-private-api +
+    // instagram_mqtt (API privada no oficial, cuenta PERSONAL de Instagram —
+    // no requiere cuenta Business/Creator ni tokens de Meta). Vinculación con
+    // usuario+password la primera vez; CN_IGP_SESION guarda el estado
+    // serializado (cookies) para reconectar después sin pedirlo de nuevo.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_IGP_ESTADO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_IGP_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado');`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_IGP_USUARIO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_IGP_USUARIO NVARCHAR(120) NULL;`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_IGP_SESION') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_IGP_SESION NVARCHAR(MAX) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_IGP_ESTADO')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_IGP_ESTADO
+    CHECK (CN_IGP_ESTADO IN ('desconectado','conectado','error'));
+END`,
     `IF OBJECT_ID('dbo.CCO_INTERACCIONES', 'U') IS NULL
 CREATE TABLE dbo.CCO_INTERACCIONES (
   CI_ID INT IDENTITY(1,1) PRIMARY KEY,
@@ -6271,6 +6372,22 @@ CREATE TABLE dbo.CCO_INTERACCIONES (
   CONSTRAINT CK_CCO_INT_ESTADO CHECK (CI_ESTADO IN ('en_cola','activa','pendiente_tipificacion','cerrada')),
   CONSTRAINT FK_CCO_INT_CANAL FOREIGN KEY (CI_CANAL_ID) REFERENCES dbo.CCO_CANALES(CN_ID)
 );`,
+    // Calificación del cliente (1-5) tras el cierre — hoy solo la usa el canal
+    // 'web_publica' (el widget de la página web la pide siempre; los demás
+    // canales de Omnicanal no tienen ese paso). A diferencia del motor viejo
+    // de LIVECHAT_*, el cierre NO espera a que califiquen — el chat ya queda
+    // 'cerrada' de una vez (como el resto de Omnicanal) y el rating, si llega,
+    // se guarda encima sin bloquear nada ni requerir un estado intermedio.
+    `IF COL_LENGTH('dbo.CCO_INTERACCIONES', 'CI_RATING') IS NULL
+  ALTER TABLE dbo.CCO_INTERACCIONES ADD CI_RATING TINYINT NULL;`,
+    `IF COL_LENGTH('dbo.CCO_INTERACCIONES', 'CI_COMENTARIO_RATING') IS NULL
+  ALTER TABLE dbo.CCO_INTERACCIONES ADD CI_COMENTARIO_RATING NVARCHAR(MAX) NULL;`,
+    // Oportunidad de CRM ligada (hoy solo la usa 'web_publica', portado de
+    // LIVECHAT_CONVERSACIONES.LC_OPO_ID): si el visitante deja email o
+    // teléfono, se busca/crea un CRM_CONTACTOS + CRM_OPORTUNIDADES y al
+    // cerrar se le adjunta la transcripción completa del chat.
+    `IF COL_LENGTH('dbo.CCO_INTERACCIONES', 'CI_OPO_ID') IS NULL
+  ALTER TABLE dbo.CCO_INTERACCIONES ADD CI_OPO_ID INT NULL;`,
     `IF OBJECT_ID('dbo.CCO_INTERACCIONES', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_INT_ESTADO' AND object_id = OBJECT_ID('dbo.CCO_INTERACCIONES'))
 BEGIN
   CREATE INDEX IX_CCO_INT_ESTADO ON dbo.CCO_INTERACCIONES(CI_ESTADO);

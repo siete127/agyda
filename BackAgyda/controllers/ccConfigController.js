@@ -1,6 +1,10 @@
 const sql = require('mssql');
+const crypto = require('crypto');
 const databaseService = require('../services/databaseService');
 const metaClient = require('../services/canalesMeta/metaClient');
+const baileysManager = require('../services/canalesBaileys/baileysManager');
+const fcaManager = require('../services/canalesFca/fcaManager');
+const igPrivateManager = require('../services/canalesIgPrivate/igPrivateManager');
 
 function esAdmin(req) {
   return ['AD', 'TI'].includes(String(req.user?.tipoUsuario || '').toUpperCase());
@@ -70,7 +74,10 @@ exports.updateConfig = async (req, res) => {
 };
 
 // ── Canales ─────────────────────────────────────────────────────────────
-const TIPOS_CANAL = ['whatsapp', 'messenger', 'instagram', 'test'];
+// 'web_publica': widget de chat de la página web pública (ardabytec.com) —
+// antes vivía en un motor aparte (LIVECHAT_*); ver services/webPublicaManager.js
+// y controllers/ccWebPublicaController.js para el flujo completo.
+const TIPOS_CANAL = ['whatsapp', 'messenger', 'instagram', 'whatsapp_baileys', 'messenger_fca', 'instagram_privado', 'web_publica', 'test'];
 
 exports.listCanales = async (req, res) => {
   try {
@@ -82,7 +89,11 @@ exports.listCanales = async (req, res) => {
              CN_META_PAGE_ID metaPageId, CN_META_BUSINESS_ID metaBusinessId,
              CN_VERIFY_TOKEN verifyToken, CN_WEBHOOK_SUSCRITO webhookSuscrito,
              CASE WHEN CN_ACCESS_TOKEN IS NOT NULL AND LEN(CN_ACCESS_TOKEN) > 0 THEN 1 ELSE 0 END accessTokenConfigurado,
-             CASE WHEN CN_APP_SECRET IS NOT NULL AND LEN(CN_APP_SECRET) > 0 THEN 1 ELSE 0 END appSecretConfigurado
+             CASE WHEN CN_APP_SECRET IS NOT NULL AND LEN(CN_APP_SECRET) > 0 THEN 1 ELSE 0 END appSecretConfigurado,
+             CN_BAILEYS_ESTADO baileysEstado, CN_BAILEYS_NUMERO baileysNumero,
+             CN_FCA_ESTADO fcaEstado, CN_FCA_USUARIO fcaUsuario,
+             CASE WHEN CN_FCA_APPSTATE IS NOT NULL AND LEN(CN_FCA_APPSTATE) > 0 THEN 1 ELSE 0 END fcaAppStateConfigurado,
+             CN_IGP_ESTADO igpEstado, CN_IGP_USUARIO igpUsuario
       FROM dbo.CCO_CANALES ORDER BY CN_ID`);
     const base = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || '';
     const tk = tenantKeyDe(req);
@@ -105,9 +116,14 @@ exports.createCanal = async (req, res) => {
     if (!TIPOS_CANAL.includes(b.tipo)) return res.status(400).json({ success: false, message: 'Tipo de canal inválido' });
     if (!b.nombre) return res.status(400).json({ success: false, message: 'Falta el nombre' });
     const p = await pool(req);
+    // 'web_publica' se identifica por token en vez de por credenciales de un
+    // proveedor externo (no hay OAuth ni QR que hacer) — se genera de una vez
+    // para que el canal quede utilizable apenas se crea, sin un paso aparte.
+    const verifyToken = b.tipo === 'web_publica' ? crypto.randomUUID() : null;
     const r = await p.request()
       .input('tipo', sql.NVarChar(20), b.tipo).input('nombre', sql.NVarChar(120), b.nombre)
-      .query(`INSERT INTO dbo.CCO_CANALES (CN_TIPO, CN_NOMBRE) OUTPUT INSERTED.CN_ID id VALUES (@tipo, @nombre)`);
+      .input('vt', sql.NVarChar(100), verifyToken)
+      .query(`INSERT INTO dbo.CCO_CANALES (CN_TIPO, CN_NOMBRE, CN_VERIFY_TOKEN) OUTPUT INSERTED.CN_ID id VALUES (@tipo, @nombre, @vt)`);
     res.status(201).json({ success: true, data: { id: r.recordset[0].id } });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Error al crear canal' });
@@ -195,6 +211,139 @@ exports.suscribirCanal = async (req, res) => {
   }
 };
 
+// ── WhatsApp vía Baileys (no oficial) ──────────────────────────────────
+// Inicia (o reutiliza) la sesión del canal y devuelve su estado actual. El QR
+// real llega por socket ('cc:baileys_estado' en la sala 'cc:baileys:{canalId}')
+// en cuanto Baileys lo genera — este endpoint solo dispara la conexión.
+exports.iniciarBaileys = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    const r = await p.request().input('id', sql.Int, req.params.id).query('SELECT * FROM dbo.CCO_CANALES WHERE CN_ID = @id');
+    const canal = r.recordset[0];
+    if (!canal) return res.status(404).json({ success: false, message: 'No encontrado' });
+    if ((canal.CN_TIPO || '').toLowerCase() !== 'whatsapp_baileys') {
+      return res.status(400).json({ success: false, message: 'Este canal no es de tipo whatsapp_baileys' });
+    }
+    await baileysManager.iniciarSesion(req.params.id, tenantKeyDe(req));
+    res.json({ success: true, data: baileysManager.getEstado(req.params.id) });
+  } catch (e) {
+    console.error('ccConfig.iniciarBaileys:', e.message);
+    res.status(500).json({ success: false, message: `No se pudo iniciar la sesión: ${e.message}` });
+  }
+};
+
+exports.estadoBaileys = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    res.json({ success: true, data: baileysManager.getEstado(req.params.id) });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Cierra sesión y borra las credenciales guardadas en disco — para volver a
+// vincular el canal (otro número, o el mismo tras un logout desde el celular)
+// hay que escanear el QR de nuevo desde cero.
+exports.cerrarBaileys = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    await baileysManager.cerrarSesion(req.params.id);
+    res.json({ success: true, message: 'Sesión cerrada' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ── Messenger vía FCA (no oficial) ─────────────────────────────────────
+// A diferencia de Baileys, aquí la vinculación es pegar un appstate.json
+// (cookies de sesión de una cuenta personal de Facebook, extraídas fuera de
+// este sistema) en vez de escanear un QR — ver fcaManager.js.
+exports.vincularFca = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const { appState } = req.body || {};
+    if (!appState) return res.status(400).json({ success: false, message: 'Falta el appstate.json' });
+    const p = await pool(req);
+    const r = await p.request().input('id', sql.Int, req.params.id).query('SELECT * FROM dbo.CCO_CANALES WHERE CN_ID = @id');
+    const canal = r.recordset[0];
+    if (!canal) return res.status(404).json({ success: false, message: 'No encontrado' });
+    if ((canal.CN_TIPO || '').toLowerCase() !== 'messenger_fca') {
+      return res.status(400).json({ success: false, message: 'Este canal no es de tipo messenger_fca' });
+    }
+    // Guardamos el appstate para poder reconectar tras un reinicio del backend
+    // sin que el admin tenga que volver a pegarlo (a menos que ya haya expirado).
+    await p.request().input('id', sql.Int, req.params.id).input('as', sql.NVarChar(sql.MAX), typeof appState === 'string' ? appState : JSON.stringify(appState))
+      .query(`UPDATE dbo.CCO_CANALES SET CN_FCA_APPSTATE = @as WHERE CN_ID = @id`);
+    await fcaManager.iniciarSesion(req.params.id, tenantKeyDe(req), appState);
+    res.json({ success: true, data: fcaManager.getEstado(req.params.id) });
+  } catch (e) {
+    console.error('ccConfig.vincularFca:', e.message);
+    res.status(400).json({ success: false, message: e.message });
+  }
+};
+
+exports.estadoFca = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    res.json({ success: true, data: fcaManager.getEstado(req.params.id) });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.cerrarFca = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    await fcaManager.cerrarSesion(req.params.id, tenantKeyDe(req));
+    res.json({ success: true, message: 'Sesión cerrada' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ── Instagram DM vía API privada (no oficial) ──────────────────────────
+// Vinculación con usuario+password de una cuenta PERSONAL de Instagram (no
+// hay QR ni cookies pre-extraídas como en Baileys/FCA) — ver igPrivateManager.js.
+exports.vincularIgPrivate = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const { usuario, password } = req.body || {};
+    if (!usuario || !password) return res.status(400).json({ success: false, message: 'Falta usuario o password' });
+    const p = await pool(req);
+    const r = await p.request().input('id', sql.Int, req.params.id).query('SELECT * FROM dbo.CCO_CANALES WHERE CN_ID = @id');
+    const canal = r.recordset[0];
+    if (!canal) return res.status(404).json({ success: false, message: 'No encontrado' });
+    if ((canal.CN_TIPO || '').toLowerCase() !== 'instagram_privado') {
+      return res.status(400).json({ success: false, message: 'Este canal no es de tipo instagram_privado' });
+    }
+    await igPrivateManager.iniciarSesion(req.params.id, tenantKeyDe(req), { usuario, password });
+    res.json({ success: true, data: igPrivateManager.getEstado(req.params.id) });
+  } catch (e) {
+    console.error('ccConfig.vincularIgPrivate:', e.message);
+    res.status(400).json({ success: false, message: e.message });
+  }
+};
+
+exports.estadoIgPrivate = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    res.json({ success: true, data: igPrivateManager.getEstado(req.params.id) });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.cerrarIgPrivate = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    await igPrivateManager.cerrarSesion(req.params.id, tenantKeyDe(req));
+    res.json({ success: true, message: 'Sesión cerrada' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // ── Campañas / skills(grupos) / plantillas / motivos / tipificaciones ────
 function esGestor(req) {
   return esAdmin(req);
@@ -203,9 +352,22 @@ function esGestor(req) {
 exports.listCampanias = async (req, res) => {
   try {
     const p = await pool(req);
-    const r = await p.request().query(`SELECT CM2_ID id, CM2_NOMBRE nombre, CM2_DESCRIPCION descripcion,
-      CM2_MAX_CHATS_POR_AGENTE maxChatsPorAgente FROM dbo.CCO_CAMPANIAS WHERE CM2_ACTIVO = 1 ORDER BY CM2_NOMBRE`);
-    res.json({ success: true, data: r.recordset });
+    // Conteos reales (no placeholders): canales = CN_CAMPANIA_ID de la
+    // campaña; skills = grupos activos de la campaña; agentes = distinct de
+    // CCO_GRUPO_AGENTES sobre esos mismos grupos (un agente en 2 skills de la
+    // misma campaña cuenta una sola vez).
+    const r = await p.request().query(`
+      SELECT c.CM2_ID id, c.CM2_NOMBRE nombre, c.CM2_DESCRIPCION descripcion,
+        c.CM2_MAX_CHATS_POR_AGENTE maxChatsPorAgente, c.CM2_ACTIVO activo,
+        (SELECT COUNT(*) FROM dbo.CCO_CANALES cn WHERE cn.CN_CAMPANIA_ID = c.CM2_ID) canalesCount,
+        (SELECT COUNT(*) FROM dbo.CCO_GRUPOS g WHERE g.CG_CAMPANIA_ID = c.CM2_ID AND g.CG_ACTIVO = 1) skillsCount,
+        (SELECT COUNT(DISTINCT ga.CGA_USUARIO_ID) FROM dbo.CCO_GRUPO_AGENTES ga
+          JOIN dbo.CCO_GRUPOS g2 ON g2.CG_ID = ga.CGA_GRUPO_ID
+          WHERE g2.CG_CAMPANIA_ID = c.CM2_ID AND g2.CG_ACTIVO = 1 AND ga.CGA_ACTIVO = 1) agentesCount
+      FROM dbo.CCO_CAMPANIAS c
+      WHERE c.CM2_ACTIVO = 1
+      ORDER BY c.CM2_NOMBRE`);
+    res.json({ success: true, data: r.recordset.map((c) => ({ ...c, activo: !!c.activo })) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 exports.createCampania = async (req, res) => {
@@ -245,10 +407,22 @@ exports.listGrupos = async (req, res) => {
   try {
     const p = await pool(req);
     const rq = p.request();
-    let where = 'CG_ACTIVO = 1';
-    if (req.query.campaniaId) { rq.input('c', sql.Int, req.query.campaniaId); where += ' AND CG_CAMPANIA_ID = @c'; }
-    const r = await rq.query(`SELECT CG_ID id, CG_CAMPANIA_ID campaniaId, CG_NOMBRE nombre, CG_DESCRIPCION descripcion, CG_ICONO icono FROM dbo.CCO_GRUPOS WHERE ${where} ORDER BY CG_NOMBRE`);
-    res.json({ success: true, data: r.recordset });
+    let where = 'g.CG_ACTIVO = 1';
+    if (req.query.campaniaId) { rq.input('c', sql.Int, req.query.campaniaId); where += ' AND g.CG_CAMPANIA_ID = @c'; }
+    // "Skill principal" = el primero creado de la campaña (menor CG_ID entre
+    // los activos) — no hay un flag propio en el esquema, así que se deriva
+    // por orden de creación en vez de inventar una columna nueva para esto.
+    const r = await rq.query(`
+      SELECT g.CG_ID id, g.CG_CAMPANIA_ID campaniaId, g.CG_NOMBRE nombre, g.CG_DESCRIPCION descripcion,
+        g.CG_ICONO icono, g.CG_ACTIVO activo,
+        (SELECT COUNT(*) FROM dbo.CCO_GRUPO_AGENTES ga WHERE ga.CGA_GRUPO_ID = g.CG_ID AND ga.CGA_ACTIVO = 1) agentesCount,
+        CASE WHEN g.CG_ID = (
+          SELECT MIN(g2.CG_ID) FROM dbo.CCO_GRUPOS g2 WHERE g2.CG_CAMPANIA_ID = g.CG_CAMPANIA_ID AND g2.CG_ACTIVO = 1
+        ) THEN 1 ELSE 0 END esPrincipal
+      FROM dbo.CCO_GRUPOS g
+      WHERE ${where}
+      ORDER BY g.CG_NOMBRE`);
+    res.json({ success: true, data: r.recordset.map((g) => ({ ...g, activo: !!g.activo, esPrincipal: !!g.esPrincipal })) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 exports.createGrupo = async (req, res) => {

@@ -59,8 +59,12 @@ async function getConexionesSalientesDeRespuestas(pool) {
 
   const [respuestas, etiquetas, campanias, nodosArbol] = await Promise.all([
     idsRespuesta.length ? pool.request().query(`SELECT RESP_PK as id, RESP_TEXTO_ES as textoBoton FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_PK IN (${idsRespuesta.join(',')}) AND RESP_ACTIVA = 1`) : { recordset: [] },
-    idsEtiqueta.length ? pool.request().query(`SELECT ETQ_ID as id, ETQ_TEXTO_ES as textoEs, ETQ_TEXTO_EN as textoEn, ETQ_TIPO as tipo, ETQ_CAMPANIA_ID as campaniaId, ETQ_GRUPO_ID as grupoId, c.LCA_TOKEN as campaniaToken FROM dbo.CHATBOT_ETIQUETAS_MENU e LEFT JOIN dbo.LIVECHAT_CAMPANIAS c ON c.LCA_ID = e.ETQ_CAMPANIA_ID WHERE ETQ_ID IN (${idsEtiqueta.join(',')}) AND ETQ_ACTIVA = 1`) : { recordset: [] },
-    idsCampania.length ? pool.request().query(`SELECT LCA_ID as id, LCA_NOMBRE as textoBoton, LCA_TOKEN as token FROM dbo.LIVECHAT_CAMPANIAS WHERE LCA_ID IN (${idsCampania.join(',')}) AND LCA_ACTIVO = 1`) : { recordset: [] },
+    // El token ya no vive en la campaña (LIVECHAT_CAMPANIAS.LCA_TOKEN): en
+    // Omnicanal el token es del CANAL 'web_publica' que apunta a esa campaña
+    // (CCO_CANALES.CN_VERIFY_TOKEN) — una campaña puede no tener canal web
+    // asignado todavía, de ahí el LEFT JOIN doble.
+    idsEtiqueta.length ? pool.request().query(`SELECT e.ETQ_ID as id, e.ETQ_TEXTO_ES as textoEs, e.ETQ_TEXTO_EN as textoEn, e.ETQ_TIPO as tipo, e.ETQ_CAMPANIA_ID as campaniaId, e.ETQ_GRUPO_ID as grupoId, cn.CN_VERIFY_TOKEN as campaniaToken FROM dbo.CHATBOT_ETIQUETAS_MENU e LEFT JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = e.ETQ_CAMPANIA_ID LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_CAMPANIA_ID = c.CM2_ID AND cn.CN_TIPO = 'web_publica' AND cn.CN_HABILITADO = 1 WHERE e.ETQ_ID IN (${idsEtiqueta.join(',')}) AND e.ETQ_ACTIVA = 1`) : { recordset: [] },
+    idsCampania.length ? pool.request().query(`SELECT c.CM2_ID as id, c.CM2_NOMBRE as textoBoton, cn.CN_VERIFY_TOKEN as token FROM dbo.CCO_CAMPANIAS c LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_CAMPANIA_ID = c.CM2_ID AND cn.CN_TIPO = 'web_publica' AND cn.CN_HABILITADO = 1 WHERE c.CM2_ID IN (${idsCampania.join(',')}) AND c.CM2_ACTIVO = 1`) : { recordset: [] },
     idsNodoArbol.length ? pool.request().query(`SELECT NODO_ID as id, NODO_TEXTO as textoBoton FROM dbo.CHATBOT_NODOS WHERE NODO_ID IN (${idsNodoArbol.join(',')}) AND NODO_ACTIVO = 1`) : { recordset: [] },
   ]);
 
@@ -325,6 +329,12 @@ exports.deleteRespuesta = async (req, res) => {
    es un botón del menú, editable/reordenable desde el panel.
 ════════════════════════════════════════════════════════ */
 
+// campaniaId apunta a CCO_CAMPANIAS (Omnicanal) — el token que el widget
+// necesita para escalar directo a esa campaña vive en su canal 'web_publica'
+// (CCO_CANALES.CN_VERIFY_TOKEN), no en la campaña misma, así que se resuelve
+// con un segundo LEFT JOIN. Si la campaña no tiene canal web habilitado
+// todavía, campaniaToken sale NULL y el widget cae al comportamiento
+// genérico (ver ejecutarAccionBoton en el HTML público).
 const SELECT_ETIQUETA = `
   SELECT
     e.ETQ_ID as id,
@@ -332,13 +342,14 @@ const SELECT_ETIQUETA = `
     e.ETQ_TEXTO_EN as textoEn,
     e.ETQ_TIPO as tipo,
     e.ETQ_CAMPANIA_ID as campaniaId,
-    c.LCA_NOMBRE as campaniaNombre,
-    c.LCA_TOKEN as campaniaToken,
+    c.CM2_NOMBRE as campaniaNombre,
+    cn.CN_VERIFY_TOKEN as campaniaToken,
     e.ETQ_GRUPO_ID as grupoId,
     e.ETQ_ORDEN as orden,
     e.ETQ_ACTIVA as activa
   FROM dbo.CHATBOT_ETIQUETAS_MENU e
-  LEFT JOIN dbo.LIVECHAT_CAMPANIAS c ON c.LCA_ID = e.ETQ_CAMPANIA_ID
+  LEFT JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = e.ETQ_CAMPANIA_ID
+  LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_CAMPANIA_ID = c.CM2_ID AND cn.CN_TIPO = 'web_publica' AND cn.CN_HABILITADO = 1
 `;
 
 const TIPOS_ETIQUETA = ['respuesta', 'escalar_campania', 'escalar_generico', 'arbol_diagnostico'];

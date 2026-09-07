@@ -47,6 +47,21 @@ router.delete('/canales/:id', authenticateToken, requireActionAccess(M, 'configu
 router.post('/canales/:id/probar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.probarCanal);
 router.post('/canales/:id/suscribir', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.suscribirCanal);
 
+// WhatsApp vía Baileys (no oficial) — vinculación por QR en vez de tokens de Meta.
+router.post('/canales/:id/baileys/iniciar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.iniciarBaileys);
+router.get('/canales/:id/baileys/estado', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.estadoBaileys);
+router.post('/canales/:id/baileys/cerrar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.cerrarBaileys);
+
+// Messenger vía FCA (no oficial) — vinculación pegando un appstate.json en vez de tokens de Meta.
+router.post('/canales/:id/fca/vincular', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.vincularFca);
+router.get('/canales/:id/fca/estado', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.estadoFca);
+router.post('/canales/:id/fca/cerrar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.cerrarFca);
+
+// Instagram DM vía API privada (no oficial) — vinculación con usuario+password.
+router.post('/canales/:id/igp/vincular', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.vincularIgPrivate);
+router.get('/canales/:id/igp/estado', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.estadoIgPrivate);
+router.post('/canales/:id/igp/cerrar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.cerrarIgPrivate);
+
 // ── Config global ─────────────────────────────────────────────────────
 router.get('/config', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.getConfig);
 router.put('/config', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.updateConfig);

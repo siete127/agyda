@@ -3,8 +3,43 @@ const fs = require('fs');
 const path = require('path');
 const databaseService = require('../services/databaseService');
 const ccRouting = require('../services/ccRoutingService');
+const socketService = require('../services/socketService');
 const metaClient = require('../services/canalesMeta/metaClient');
+const baileysManager = require('../services/canalesBaileys/baileysManager');
+const fcaManager = require('../services/canalesFca/fcaManager');
+const igPrivateManager = require('../services/canalesIgPrivate/igPrivateManager');
+const webPublicaManager = require('../services/webPublicaManager');
+const ccWebPublica = require('./ccWebPublicaController');
 const { CC_MEDIA_DIR } = require('../middleware/ccMediaUpload');
+
+// Dispatcher por tipo de canal: 'whatsapp_baileys', 'messenger_fca' e
+// 'instagram_privado' van por sus respectivas sesiones no oficiales;
+// 'web_publica' no llama a ninguna API externa — solo empuja el mensaje al
+// visitante por socket (ver webPublicaManager); el resto (whatsapp/messenger/
+// instagram, todos Cloud API de Meta) sigue yendo por metaClient, sin
+// cambios. `it` trae el canal ya unido (cn.* en el SELECT de cada endpoint)
+// — mismo objeto en todos los casos.
+function tipoCanalDe(it) {
+  return (it.CN_TIPO || it.tipo || '').toLowerCase();
+}
+async function enviarTextoCanal(it, destinatarioExtId, texto) {
+  const tipo = tipoCanalDe(it);
+  const canalId = it.CN_ID || it.canalId;
+  if (tipo === 'whatsapp_baileys') return baileysManager.enviarTexto(canalId, destinatarioExtId, texto);
+  if (tipo === 'messenger_fca') return fcaManager.enviarTexto(canalId, destinatarioExtId, texto);
+  if (tipo === 'instagram_privado') return igPrivateManager.enviarTexto(canalId, destinatarioExtId, texto);
+  if (tipo === 'web_publica') return webPublicaManager.enviarTexto(it.id || it.interaccionId || destinatarioExtId, texto);
+  return metaClient.enviarTexto(it, destinatarioExtId, texto);
+}
+async function enviarMediaCanal(it, destinatarioExtId, mediaUrl, tipoMedia) {
+  const tipo = tipoCanalDe(it);
+  const canalId = it.CN_ID || it.canalId;
+  if (tipo === 'whatsapp_baileys') return baileysManager.enviarMedia(canalId, destinatarioExtId, mediaUrl, tipoMedia);
+  if (tipo === 'messenger_fca') return fcaManager.enviarMedia(canalId, destinatarioExtId, mediaUrl);
+  if (tipo === 'instagram_privado') return igPrivateManager.enviarMedia(canalId, destinatarioExtId, mediaUrl, tipoMedia);
+  if (tipo === 'web_publica') return webPublicaManager.enviarMedia(it.id || it.interaccionId || destinatarioExtId, mediaUrl, tipoMedia);
+  return metaClient.enviarMedia(it, destinatarioExtId, mediaUrl, tipoMedia);
+}
 
 function tenantKeyDe(req) {
   return (req?.user?.empresa || 'agyda').toLowerCase();
@@ -139,7 +174,7 @@ exports.enviarMensaje = async (req, res) => {
     const tipoCanal = (it.tipo || '').toLowerCase();
     if (tipoCanal !== 'test') {
       try {
-        const resp = await metaClient.enviarTexto(it, it.clienteExtId, String(contenido));
+        const resp = await enviarTextoCanal(it, it.clienteExtId, String(contenido));
         metaMsgId = resp?.messages?.[0]?.id || resp?.message_id || null;
       } catch (e) {
         errorEnvio = e.message;
@@ -158,6 +193,19 @@ exports.enviarMensaje = async (req, res) => {
     if (tipoCanal === 'test') {
       ccRouting.emitir(tenantKeyDe(req), `cc:sim:${req.params.id}`, 'cc:sim_mensaje', { interaccionId: Number(req.params.id) });
     }
+    // El widget público (index.html) no está unido a `cc:interaccion:{id}` —
+    // escucha `receive_livechat_message` en la sala `livechat:{id}`, mismo
+    // contrato que usaba el motor viejo de LIVECHAT_*. Sin este emit
+    // adicional, el visitante nunca vería los mensajes del agente.
+    if (tipoCanal === 'web_publica') {
+      try {
+        socketService.getIO().to(`livechat:${req.params.id}`).emit('receive_livechat_message', {
+          conversacionId: Number(req.params.id), emisor: 'agente', contenido: String(contenido),
+        });
+      } catch (e) {
+        console.warn('[cc.enviarMensaje] emit a widget público falló:', e?.message || e);
+      }
+    }
 
     if (errorEnvio) return res.status(502).json({ success: false, message: `El canal rechazó el mensaje: ${errorEnvio}`, data: { id: ins.recordset[0].id } });
     res.json({ success: true, data: { id: ins.recordset[0].id, metaMsgId } });
@@ -173,7 +221,7 @@ exports.cerrar = async (req, res) => {
     const uid = usuarioIdDe(req);
     const { motivoCierreId, tipificacionId, comentario } = req.body || {};
     const r = await p.request().input('id', sql.Int, req.params.id)
-      .query('SELECT CI_ESTADO estado, CI_AGENTE_ID agenteId, CI_GRUPO_ID grupoId, CI_CAMPANIA_ID campaniaId FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
+      .query('SELECT CI_ESTADO estado, CI_AGENTE_ID agenteId, CI_GRUPO_ID grupoId, CI_CAMPANIA_ID campaniaId, CI_TIPO tipo, CI_OPO_ID opoId FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
     const it = r.recordset[0];
     if (!it) return res.status(404).json({ success: false, message: 'No encontrada' });
     if (it.estado === 'cerrada') return res.status(400).json({ success: false, message: 'Ya está cerrada' });
@@ -222,6 +270,25 @@ exports.cerrar = async (req, res) => {
                 WHERE CAE_USUARIO_ID = @u`);
     }
     ccRouting.emitir(tenantKeyDe(req), `cc:interaccion:${req.params.id}`, 'cc:interaccion_cerrada', { interaccionId: Number(req.params.id) });
+    if (it.tipo === 'web_publica') {
+      // El widget público no escucha 'cc:interaccion_cerrada' (esa sala es
+      // interna de la bandeja del agente) — necesita su propio evento en la
+      // sala 'livechat:{id}' para saber que ya puede mostrar el modal de
+      // calificación (mismo contrato que el motor viejo emitía al pasar por
+      // 'pendiente_rating'; aquí el cierre ya es definitivo, pero la señal
+      // al visitante es la misma).
+      try {
+        socketService.getIO().to(`livechat:${req.params.id}`).emit('livechat:pendiente_calificacion', {
+          conversacionId: Number(req.params.id),
+        });
+      } catch (e) {
+        console.warn('[cc.cerrar] emit pendiente_calificacion al widget falló:', e?.message || e);
+      }
+      // Portado de livechatController: si el visitante quedó ligado a una
+      // Oportunidad de CRM (dejó email/teléfono al iniciar), se le adjunta
+      // la transcripción completa del chat al cerrar.
+      await ccWebPublica.guardarTranscripcionEnCrm(p, req.params.id, it.opoId).catch(() => {});
+    }
     await ccRouting.intentarAsignarSiguienteEnCola(p, tenantKeyDe(req)).catch(() => {});
     res.json({ success: true });
   } catch (e) {
@@ -447,7 +514,7 @@ exports.subirMedia = async (req, res) => {
     const p = await pool(req);
     const uid = usuarioIdDe(req);
     const ir = await p.request().input('id', sql.Int, req.params.id).query(`
-      SELECT i.CI_TIPO tipo, i.CI_CLIENTE_EXT_ID clienteExtId, i.CI_ESTADO estado, cn.*
+      SELECT i.CI_ID id, i.CI_TIPO tipo, i.CI_CLIENTE_EXT_ID clienteExtId, i.CI_ESTADO estado, cn.*
       FROM dbo.CCO_INTERACCIONES i LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID WHERE i.CI_ID = @id`);
     const it = ir.recordset[0];
     if (!it) return res.status(404).json({ success: false, message: 'No encontrada' });
@@ -466,7 +533,7 @@ exports.subirMedia = async (req, res) => {
         const base = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || '';
         const url = `${base}/uploads/cc-media/${req.file.filename}`;
         const kind = req.file.mimetype.startsWith('image/') ? 'image' : req.file.mimetype.startsWith('audio/') ? 'audio' : req.file.mimetype.startsWith('video/') ? 'video' : 'document';
-        const resp = await metaClient.enviarMedia(it, it.clienteExtId, url, kind);
+        const resp = await enviarMediaCanal(it, it.clienteExtId, url, kind);
         metaMsgId = resp?.messages?.[0]?.id || null;
       } catch (e) { errorEnvio = e.message; }
     }
@@ -475,6 +542,18 @@ exports.subirMedia = async (req, res) => {
       .query(`INSERT INTO dbo.CCO_MENSAJES (MG_INTERACCION_ID, MG_EMISOR, MG_AGENTE_ID, MG_MEDIA_ID, MG_META_MSG_ID, MG_ESTADO_ENTREGA)
               VALUES (@int, 'agente', @uid, @media, @meta, @est)`);
     ccRouting.emitir(tenantKeyDe(req), `cc:interaccion:${req.params.id}`, 'cc:mensaje', { interaccionId: Number(req.params.id) });
+    if (tipoCanal === 'web_publica' && !errorEnvio) {
+      // Mismo espejo hacia el widget que enviarMensaje: el visitante no está
+      // en la sala 'cc:interaccion:{id}' (esa es la bandeja del agente), solo
+      // en 'livechat:{id}'.
+      try {
+        socketService.getIO().to(`livechat:${req.params.id}`).emit('receive_livechat_message', {
+          conversacionId: Number(req.params.id), emisor: 'agente', contenido: '[archivo adjunto]',
+        });
+      } catch (e) {
+        console.warn('[cc.subirMedia] emit a widget público falló:', e?.message || e);
+      }
+    }
     if (errorEnvio) return res.status(502).json({ success: false, message: `El canal rechazó el archivo: ${errorEnvio}` });
     res.json({ success: true, data: { mediaId } });
   } catch (e) {
