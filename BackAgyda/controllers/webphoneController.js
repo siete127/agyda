@@ -73,6 +73,48 @@ function _toUsuarioKey(v) {
   return s;
 }
 
+// Normaliza a los últimos 10 dígitos (mismo criterio que CRMPublicPage /
+// ventasController.getCRMCliente: quita prefijo de país 52/521 y cualquier
+// caracter no numérico) para poder comparar teléfonos capturados con distinto
+// formato (con/sin lada, con/sin +52).
+function _normalizarTelefono10(v) {
+  if (v === null || v === undefined) return null;
+  const digits = String(v).replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+// Busca al postulante de "Postulación Totis" (CCO_CAMPANIA_POSTULANTES) cuyo
+// teléfono coincide con el de la llamada entrante, para el screen-pop del
+// agente. Compara por los últimos 10 dígitos vía RIGHT(..., 10) en SQL, ya que
+// el teléfono se guarda tal cual lo capturó el formulario (puede o no traer
+// lada/país). Devuelve null si no hay match o si no se pudo consultar.
+async function _buscarPostulanteTotisPorTelefono(pool, telefono10) {
+  if (!telefono10) return null;
+  try {
+    const rs = await pool
+      .request()
+      .input('t', sql.NVarChar(10), telefono10)
+      .query(`
+        SELECT TOP 1
+          cp.CP_ID id, cp.CP_NOMBRE nombre, cp.CP_TELEFONO telefono,
+          cp.CP_CORREO correo, cp.CP_FECHA_REGISTRO fechaRegistro,
+          c.CM2_NOMBRE campania
+        FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+        LEFT JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+        WHERE RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = @t
+        ORDER BY cp.CP_FECHA_REGISTRO DESC
+      `);
+    return rs?.recordset?.[0] || null;
+  } catch (e) {
+    logger.warn(
+      '[webphoneController._buscarPostulanteTotisPorTelefono] error:',
+      e?.message || e,
+    );
+    return null;
+  }
+}
+
 // Endpoint to be called by an external telephony integration (VICIdial/Asterisk/AMI)
 // when an incoming call is assigned to an agent.
 async function incomingCall(req, res) {
@@ -155,12 +197,31 @@ async function incomingCall(req, res) {
       });
     }
 
+    const phone = body.phone ?? body.telefono ?? null;
+    const telefono10 = _normalizarTelefono10(phone);
+
+    // Screen-pop: si el número que llama coincide con un postulante de
+    // "Postulación Totis" (formulario público de campaña), adjuntamos sus
+    // datos (nombre, teléfono, campaña) para que el frontend muestre la
+    // ventana emergente sin que el agente tenga que buscar nada.
+    let postulanteTotis = null;
+    if (telefono10) {
+      try {
+        const pool = await databaseService.getPool(req.user?.empresa);
+        postulanteTotis = await _buscarPostulanteTotisPorTelefono(pool, telefono10);
+      } catch (e) {
+        logger.warn('[webphoneController.incomingCall] lookup postulante Totis falló:',
+          e?.message || e);
+      }
+    }
+
     const payload = {
       userId,
       extension,
       neusUsuario,
       leadId: body.leadId ?? body.lead_id ?? null,
-      phone: body.phone ?? body.telefono ?? null,
+      phone,
+      postulanteTotis,
       timestamp: new Date().toISOString(),
     };
 
