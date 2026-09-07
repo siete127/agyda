@@ -79,9 +79,9 @@ function AgenteRow({ agente, chatsActivos, expandido, onClick }: { agente: Agent
       <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full', estilo.iconBg)}>
         {estilo.icon({ className: 'h-3.5 w-3.5' })}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex items-baseline gap-2">
         <p className="text-sm font-semibold text-gray-900 truncate">{agente.nombre}</p>
-        <p className="text-xs text-gray-500">{estadoTexto(agente)}</p>
+        <p className="text-xs text-gray-500 truncate">{estadoTexto(agente)}</p>
       </div>
       {chatsActivos > 0 && (
         <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-semibold text-brand">
