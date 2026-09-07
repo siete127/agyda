@@ -1,6 +1,8 @@
 const sql = require('mssql');
 const crypto = require('crypto');
+const XLSX = require('xlsx');
 const databaseService = require('../services/databaseService');
+const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
 const metaClient = require('../services/canalesMeta/metaClient');
 const baileysManager = require('../services/canalesBaileys/baileysManager');
 const fcaManager = require('../services/canalesFca/fcaManager');
@@ -927,5 +929,54 @@ exports.listPostulantesCampania = async (req, res) => {
   } catch (e) {
     console.error('ccConfig.listPostulantesCampania:', e.message);
     res.status(500).json({ success: false, message: 'Error' });
+  }
+};
+
+// Excel con una fila por tipificación de llamada registrada desde el Web
+// Form de VICIdial (pantalla-llamada) — se une con el postulante por
+// WLT_POSTULANTE_ID cuando hubo match exacto, y si no por los últimos 10
+// dígitos del teléfono (mismo criterio que _buscarPostulanteTotisPorTelefono
+// en webphoneController), para no perder llamadas de números que llegaron
+// con formato distinto al capturado en el formulario.
+exports.exportarTipificacionesCampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    const r = await p.request().input('c', sql.Int, req.params.id).query(`
+      SELECT
+        ISNULL(cp.CP_NOMBRE, '(sin coincidencia)') postulante,
+        wlt.WLT_TELEFONO telefono,
+        wlt.WLT_TIPIFICACION tipificacion,
+        wlt.WLT_OBSERVACIONES observaciones,
+        wlt.WLT_EXTENSION extension,
+        wlt.WLT_FECHA fecha
+      FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+      LEFT JOIN dbo.CCO_CAMPANIA_POSTULANTES cp
+        ON cp.CP_ID = wlt.WLT_POSTULANTE_ID
+        OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+      WHERE cp.CP_CAMPANIA_ID = @c OR (cp.CP_ID IS NULL AND wlt.WLT_POSTULANTE_ID IS NULL)
+      ORDER BY wlt.WLT_FECHA DESC`);
+
+    const filas = r.recordset.map((row) => ({
+      Postulante: row.postulante,
+      Teléfono: row.telefono,
+      Tipificación: TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion,
+      Observaciones: row.observaciones || '',
+      Extensión: row.extension || '',
+      Fecha: row.fecha ? new Date(row.fecha).toLocaleString('es-MX') : '',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filas.length ? filas : [{ Postulante: '', Teléfono: '', Tipificación: '', Observaciones: '', Extensión: '', Fecha: '' }]);
+    ws['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 26 }, { wch: 50 }, { wch: 10 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tipificaciones');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="tipificaciones_campania_${req.params.id}.xlsx"`);
+    res.send(buffer);
+  } catch (e) {
+    console.error('ccConfig.exportarTipificacionesCampania:', e.message);
+    res.status(500).json({ success: false, message: 'Error al generar el Excel' });
   }
 };

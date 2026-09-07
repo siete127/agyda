@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
-  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog,
+  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -820,21 +820,36 @@ function PostulantesDeCampaniaPanel({ campania }: any) {
     queryFn: () => ccService.getPostulantes(campania.id),
   })
 
+  const descargarExcel = (
+    <a
+      href={ccService.tipificacionesExcelUrl(campania.id)}
+      className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-ink-secondary transition hover:bg-gray-50"
+    >
+      <Download className="h-3.5 w-3.5" /> Descargar tipificaciones (Excel)
+    </a>
+  )
+
   if (isLoading) {
     return <div className={clsx(card, 'flex items-center justify-center py-10 text-ink-tertiary')}><Loader2 className="h-5 w-5 animate-spin" /></div>
   }
 
   if (postulantes.length === 0) {
     return (
-      <div className={clsx(card, 'py-10 text-center text-sm text-ink-tertiary')}>
-        Todavía no hay postulaciones registradas para "{campania.nombre}".
+      <div className="space-y-3">
+        <div className="flex justify-end">{descargarExcel}</div>
+        <div className={clsx(card, 'py-10 text-center text-sm text-ink-tertiary')}>
+          Todavía no hay postulaciones registradas para "{campania.nombre}".
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-[0.75rem] font-semibold text-ink-tertiary">{postulantes.length} postulante{postulantes.length === 1 ? '' : 's'} registrado{postulantes.length === 1 ? '' : 's'}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[0.75rem] font-semibold text-ink-tertiary">{postulantes.length} postulante{postulantes.length === 1 ? '' : 's'} registrado{postulantes.length === 1 ? '' : 's'}</p>
+        {descargarExcel}
+      </div>
       {postulantes.map((p) => (
         <div key={p.id} className={clsx(card, 'space-y-2')}>
           <div className="flex items-start justify-between gap-3">

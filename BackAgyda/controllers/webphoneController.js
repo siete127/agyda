@@ -2,6 +2,7 @@ const logger = global.logger || require('../utils/logger');
 const socketService = require('../services/socketService');
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
+const { TIPIFICACIONES_LLAMADA } = require('../utils/tipificacionesLlamada');
 
 function _parseJsonEnv(name) {
   try {
@@ -258,22 +259,6 @@ function _escapeHtml(v) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-
-// Catálogo fijo de disposiciones de llamada, pedido tal cual para esta
-// pantalla — código corto (lo que se guarda) + etiqueta larga (lo que ve
-// el agente en el select).
-const TIPIFICACIONES_LLAMADA = [
-  { codigo: 'APPT', etiqueta: 'Cita Agendada' },
-  { codigo: 'CONF', etiqueta: 'Cita Confirmada' },
-  { codigo: 'CONTACT', etiqueta: 'Contactado' },
-  { codigo: 'INFO', etiqueta: 'Información Proporcionada' },
-  { codigo: 'INTERE', etiqueta: 'Interesado' },
-  { codigo: 'LOC', etiqueta: 'No Interesado por Ubicación' },
-  { codigo: 'NOINT', etiqueta: 'No Interesado' },
-  { codigo: 'NOSHOW', etiqueta: 'No asistió' },
-  { codigo: 'RESCH', etiqueta: 'Reagendar Cita' },
-  { codigo: 'SCHED', etiqueta: 'No Interesado por Horario' },
-];
 
 function _paginaLlamada({ error, phone, postulante, secret, extension }) {
   const style = `

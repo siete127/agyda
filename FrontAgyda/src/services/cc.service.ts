@@ -92,6 +92,12 @@ export const ccService = {
   updateCampania: (id: number, body: Record<string, unknown>) => api.put(`/contact-center/campanias/${id}`, body).then((r) => r.data),
   deleteCampania: (id: number) => api.delete(`/contact-center/campanias/${id}`).then((r) => r.data),
   getPostulantes: (campaniaId: number) => d<CCPostulante[]>(api.get(`/contact-center/campanias/${campaniaId}/postulantes`)),
+  // Descarga directa (no JSON) — mismo patrón que mediaUrl: el token va por
+  // querystring porque es un <a href> de navegador, no una llamada de axios.
+  tipificacionesExcelUrl: (campaniaId: number) => {
+    const token = useAuthStore.getState().token
+    return `/api/contact-center/campanias/${campaniaId}/tipificaciones-excel${token ? `?token=${encodeURIComponent(token)}` : ''}`
+  },
 
   getGrupos: (campaniaId?: number) => d<CCGrupo[]>(api.get('/contact-center/grupos', { params: campaniaId ? { campaniaId } : {} })),
   createGrupo: (body: { campaniaId: number; nombre: string; descripcion?: string; icono?: string }) => api.post('/contact-center/grupos', body).then((r) => r.data),
