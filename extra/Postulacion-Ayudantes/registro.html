@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Regístrate — Postulación Totis</title>
+    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+    <main class="auth-screen">
+        <div class="auth-card">
+
+            <div class="auth-brand">
+                <img src="assets/logo-totis.png" alt="Totis">
+                <h1>Postúlate como Ayudante General</h1>
+                <p>Completa tus datos para registrarte</p>
+            </div>
+
+            <div id="registroAlert" class="alert alert-error" style="display:none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span id="registroAlertText">Completa los campos obligatorios.</span>
+            </div>
+
+            <div id="registroSuccess" class="alert alert-success" style="display:none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                <span>¡Registro recibido! Nos pondremos en contacto contigo pronto.</span>
+            </div>
+
+            <form id="registroForm" novalidate>
+                <div class="form-field">
+                    <label for="regNombre">Nombre completo <span class="required">*</span></label>
+                    <input type="text" id="regNombre" class="input" placeholder="Ej. Juan Pérez López" autocomplete="name" required>
+                </div>
+
+                <div class="form-field">
+                    <label for="regTelefono">Teléfono <span class="required">*</span></label>
+                    <input type="tel" id="regTelefono" class="input" placeholder="Ej. 55 1234 5678" autocomplete="tel" required>
+                </div>
+
+                <div class="form-field">
+                    <label for="regCorreo">Correo electrónico</label>
+                    <input type="email" id="regCorreo" class="input" placeholder="tucorreo@ejemplo.com" autocomplete="email">
+                </div>
+
+                <div class="form-field">
+                    <label>Redes sociales</label>
+                    <div id="redesList"></div>
+                    <button type="button" class="btn-add-red" id="addRedBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        Agregar red social
+                    </button>
+                    <span class="hint">Comparte tu Facebook, Instagram o la que uses para contactarte más fácil.</span>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    Enviar postulación
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        // --- REDES SOCIALES: filas dinámicas (red + usuario/perfil) ---
+        const REDES_OPCIONES = ['Facebook', 'Instagram', 'WhatsApp', 'TikTok'];
+        const redesList = document.getElementById('redesList');
+        const addRedBtn = document.getElementById('addRedBtn');
+        let redFilaIndex = 0;
+
+        function crearFilaRed() {
+            const id = `red-${redFilaIndex++}`;
+            const row = document.createElement('div');
+            row.className = 'red-row';
+            row.dataset.rowId = id;
+
+            const select = document.createElement('select');
+            select.className = 'input red-select';
+            REDES_OPCIONES.forEach((red) => {
+                const opt = document.createElement('option');
+                opt.value = red;
+                opt.textContent = red;
+                select.appendChild(opt);
+            });
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'input red-usuario';
+            input.placeholder = 'Usuario o enlace de tu perfil';
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'red-remove-btn';
+            removeBtn.setAttribute('aria-label', 'Quitar red social');
+            removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+            removeBtn.addEventListener('click', () => row.remove());
+
+            row.appendChild(select);
+            row.appendChild(input);
+            row.appendChild(removeBtn);
+            redesList.appendChild(row);
+        }
+
+        addRedBtn.addEventListener('click', crearFilaRed);
+
+        // Arranca con una fila lista para no obligar a dar clic en "+" la primera vez.
+        crearFilaRed();
+
+        function getRedesSociales() {
+            return Array.from(redesList.querySelectorAll('.red-row'))
+                .map((row) => ({
+                    red: row.querySelector('.red-select').value,
+                    usuario: row.querySelector('.red-usuario').value.trim(),
+                }))
+                .filter((r) => r.usuario !== '');
+        }
+
+        // --- REGISTRO (solo frontend, sin backend todavía) ---
+        // Valida los campos obligatorios y muestra éxito; no persiste datos
+        // en ningún lado hasta que exista el backend real.
+        const registroForm = document.getElementById('registroForm');
+        const registroAlert = document.getElementById('registroAlert');
+        const registroAlertText = document.getElementById('registroAlertText');
+        const registroSuccess = document.getElementById('registroSuccess');
+
+        registroForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const nombre = document.getElementById('regNombre').value.trim();
+            const telefono = document.getElementById('regTelefono').value.trim();
+            const redesSociales = getRedesSociales();
+
+            registroAlert.style.display = 'none';
+            registroSuccess.style.display = 'none';
+
+            if (!nombre || !telefono) {
+                registroAlertText.textContent = 'Nombre y teléfono son obligatorios.';
+                registroAlert.style.display = 'flex';
+                return;
+            }
+
+            const telefonoDigitos = telefono.replace(/\D/g, '');
+            if (telefonoDigitos.length < 10) {
+                registroAlertText.textContent = 'Ingresa un teléfono válido (al menos 10 dígitos).';
+                registroAlert.style.display = 'flex';
+                return;
+            }
+
+            // Placeholder: aquí se enviarán nombre, telefono, correo y
+            // redesSociales al backend cuando exista.
+            console.log('Redes sociales capturadas:', redesSociales);
+
+            registroSuccess.style.display = 'flex';
+            window.location.href = 'contacto.html';
+        });
+    </script>
+</body>
+
+</html>
