@@ -69,12 +69,12 @@ export const kbService = {
     return parseArticulo(data?.data ?? {})
   },
 
-  async create(payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo; evidenciaUrl?: string | null }): Promise<KbArticulo> {
+  async create(payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo; evidenciaUrl?: string | null; publico?: boolean }): Promise<KbArticulo> {
     const { data } = await api.post('/kb/articulos', payload)
     return parseArticulo(data?.data ?? {})
   },
 
-  async update(id: number, payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo; evidenciaUrl?: string | null }): Promise<void> {
+  async update(id: number, payload: { titulo: string; contenido: string; categoria?: string; tipo?: KbTipo; evidenciaUrl?: string | null; publico?: boolean }): Promise<void> {
     await api.put(`/kb/articulos/${id}`, payload)
   },
 

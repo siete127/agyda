@@ -9,6 +9,7 @@ const MODULOS = [
   { key: 'permisos',      nombre: 'Nueva solicitud de permiso',    descripcion: 'Se notifica cuando un usuario solicita un permiso' },
   { key: 'vacaciones',    nombre: 'Nueva solicitud de vacaciones', descripcion: 'Se notifica cuando un usuario solicita vacaciones o permiso con goce' },
   { key: 'posible_baja',  nombre: 'Alerta de posible baja',        descripcion: 'Se notifica cuando un empleado acumula faltas consecutivas' },
+  { key: 'tickets',       nombre: 'Nuevo ticket',                  descripcion: 'Se notifica cuando se crea un ticket de soporte (independiente del aviso al técnico asignado)' },
 ];
 
 let seeded = false;

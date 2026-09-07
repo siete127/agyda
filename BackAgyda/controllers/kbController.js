@@ -198,11 +198,12 @@ exports.getArticuloById = async (req, res) => {
 // Lógica de negocio separada del handler HTTP para que ticketController pueda
 // reusarla al crear un artículo directamente desde el flujo de cierre de
 // ticket (mismo patrón que crearTicketInterno en ticketController.js).
-async function crearArticuloInterno(pool, { titulo, contenido, categoria, tipo, evidenciaUrl, autorId, autorNombre, ip }) {
+async function crearArticuloInterno(pool, { titulo, contenido, categoria, tipo, evidenciaUrl, publico, autorId, autorNombre, ip }) {
   const tipoVal = TIPOS_VALIDOS.includes(tipo) ? tipo : 'articulo';
   if (!titulo || !contenido) {
     return { ok: false, status: 400, message: 'titulo y contenido son requeridos' };
   }
+  const publicoVal = publico === undefined ? true : !!publico;
 
   const ins = await pool.request()
     .input('tit', sql.NVarChar, titulo)
@@ -210,26 +211,27 @@ async function crearArticuloInterno(pool, { titulo, contenido, categoria, tipo, 
     .input('cat', sql.NVarChar, categoria || null)
     .input('tipo', sql.NVarChar, tipoVal)
     .input('evid', sql.NVarChar, evidenciaUrl || null)
+    .input('pub', sql.Bit, publicoVal)
     .input('autorId', sql.Int, autorId || null)
     .input('autorNombre', sql.NVarChar, autorNombre || null)
-    .query(`INSERT INTO KB_ARTICULOS (ART_TITULO, ART_CONTENIDO, ART_CATEGORIA, ART_TIPO, ART_EVIDENCIA_URL, ART_AUTOR_ID, ART_AUTOR_NOMBRE)
-            VALUES (@tit, @cont, @cat, @tipo, @evid, @autorId, @autorNombre);
+    .query(`INSERT INTO KB_ARTICULOS (ART_TITULO, ART_CONTENIDO, ART_CATEGORIA, ART_TIPO, ART_EVIDENCIA_URL, ART_PUBLICO, ART_AUTOR_ID, ART_AUTOR_NOMBRE)
+            VALUES (@tit, @cont, @cat, @tipo, @evid, @pub, @autorId, @autorNombre);
             SELECT SCOPE_IDENTITY() as id;`);
 
   const articuloId = Number(ins.recordset[0].id);
   await logAudit(pool, { userId: autorId || null, userName: autorNombre || null, modulo: 'kb', accion: 'crear', entidadId: String(articuloId), detalle: { titulo, tipo: tipoVal }, ip: ip || null });
 
-  return { ok: true, status: 201, data: { id: articuloId, titulo, contenido, categoria: categoria || null, tipo: tipoVal, evidenciaUrl: evidenciaUrl || null, autorNombre: autorNombre || null } };
+  return { ok: true, status: 201, data: { id: articuloId, titulo, contenido, categoria: categoria || null, tipo: tipoVal, evidenciaUrl: evidenciaUrl || null, publico: publicoVal, autorNombre: autorNombre || null } };
 }
 
 exports.createArticulo = async (req, res) => {
   try {
-    const { titulo, contenido, categoria, tipo, evidenciaUrl } = req.body;
+    const { titulo, contenido, categoria, tipo, evidenciaUrl, publico } = req.body;
     const autorId = req.user?.id || Number(req.headers['usuarioid']) || null;
     const autorNombre = req.user?.nombre || null;
 
     const pool = await databaseService.getPool(req.user?.empresa);
-    const result = await crearArticuloInterno(pool, { titulo, contenido, categoria, tipo, evidenciaUrl, autorId, autorNombre, ip: req.ip });
+    const result = await crearArticuloInterno(pool, { titulo, contenido, categoria, tipo, evidenciaUrl, publico, autorId, autorNombre, ip: req.ip });
     if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
     res.status(result.status).json({ success: true, data: result.data });
   } catch (e) {
@@ -243,7 +245,7 @@ exports.crearArticuloInterno = crearArticuloInterno;
 exports.updateArticulo = async (req, res) => {
   try {
     const { id } = req.params;
-    const { titulo, contenido, categoria, tipo, evidenciaUrl } = req.body;
+    const { titulo, contenido, categoria, tipo, evidenciaUrl, publico } = req.body;
     const tipoVal = TIPOS_VALIDOS.includes(tipo) ? tipo : 'articulo';
 
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -254,7 +256,8 @@ exports.updateArticulo = async (req, res) => {
       .input('cat', sql.NVarChar, categoria || null)
       .input('tipo', sql.NVarChar, tipoVal)
       .input('evid', sql.NVarChar, evidenciaUrl || null)
-      .query(`UPDATE KB_ARTICULOS SET ART_TITULO=@tit, ART_CONTENIDO=@cont, ART_CATEGORIA=@cat, ART_TIPO=@tipo, ART_EVIDENCIA_URL=@evid, ART_FECHA_ACTUALIZACION=GETDATE()
+      .input('pub', sql.Bit, publico === undefined ? true : !!publico)
+      .query(`UPDATE KB_ARTICULOS SET ART_TITULO=@tit, ART_CONTENIDO=@cont, ART_CATEGORIA=@cat, ART_TIPO=@tipo, ART_EVIDENCIA_URL=@evid, ART_PUBLICO=@pub, ART_FECHA_ACTUALIZACION=GETDATE()
               WHERE ART_ID=@id`);
 
     await logAudit(pool, { userId: req.user?.id||null, userName: req.user?.nombre||null, modulo: 'kb', accion: 'editar', entidadId: String(id), detalle: { titulo, tipo: tipoVal }, ip: req.ip });

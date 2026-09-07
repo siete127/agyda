@@ -2,6 +2,7 @@ const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const socketService = require('../services/socketService');
 const notificationService = require('../services/notificationService');
+const emailService = require('../services/emailService');
 const { normalizeArea } = require('../utils/helpers');
 const fs = require('fs');
 const path = require('path');
@@ -922,6 +923,16 @@ async function crearTicketInterno(pool, {
           tenantKey,
         });
       }
+
+      // 🔔 Correo + Telegram al grupo configurado en Configuración >
+      // Notificaciones > Correo (módulo 'tickets') — no bloqueante, no
+      // reemplaza el aviso al técnico asignado ni al líder hardcodeado de
+      // arriba, es un canal adicional a quien el admin decida suscribir.
+      emailService.sendTicketNuevoGrupoEmail({
+        ticketId, titulo: tituloTrim, area: a, prioridad: prio,
+        solicitanteNombre: nombreSolicitante, categoria: categoria || null,
+        tenantKey,
+      }).catch((e) => console.warn('⚠️ Error enviando aviso de ticket nuevo al grupo configurado:', e?.message || e));
     } catch (e) {
       console.warn('⚠️ Error enviando notificación al líder de área:', e?.message || e);
     }
