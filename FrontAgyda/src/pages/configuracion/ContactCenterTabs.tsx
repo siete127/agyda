@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
-  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone,
+  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
+import { api } from '@/lib/axios'
 import { ccService } from '@/services/cc.service'
 import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, type CCIgpEstado } from '@/types/cc.types'
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
@@ -747,7 +748,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
    la campaña de la que realmente dependen en la BD (CN_CAMPANIA_ID /
    CG_CAMPANIA_ID / CT_CAMPANIA_ID apuntan los 3 al mismo CM2_ID). */
 function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onVolver: () => void; onChanged: () => void }) {
-  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'tipificaciones' | 'postulantes'>('canales')
+  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'supervisores' | 'tipificaciones' | 'postulantes'>('canales')
   const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales() })
   const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
   const canalesDeCampania = canalesTodos.filter((c) => c.campaniaId === campania.id)
@@ -755,6 +756,7 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
   const SECCIONES = [
     { key: 'canales' as const, label: 'Canales', icon: Plug, count: canalesDeCampania.length },
     { key: 'skills' as const, label: 'Skills y agentes', icon: Layers, count: grupos.length },
+    { key: 'supervisores' as const, label: 'Supervisores', icon: UserCog, count: null },
     { key: 'tipificaciones' as const, label: 'Tipificaciones', icon: Tags, count: null },
     { key: 'postulantes' as const, label: 'Postulantes', icon: ClipboardList, count: null },
   ]
@@ -792,6 +794,15 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
 
       {seccion === 'canales' && <CanalesDeCampaniaPanel campania={campania} canales={canalesDeCampania} onChanged={onChanged} />}
       {seccion === 'skills' && <SkillsDeCampaniaPanel campania={campania} onChanged={onChanged} />}
+      {seccion === 'supervisores' && (
+        <div className={card}>
+          <p className="mb-3 text-xs text-ink-tertiary">
+            Supervisores de toda la campaña "{campania.nombre}" — ven todos sus skills. Para un supervisor acotado a un solo
+            skill, asignalo desde "Skills y agentes" en vez de acá.
+          </p>
+          <AsignacionSupervisores nivel="campania" id={campania.id} onChanged={onChanged} />
+        </div>
+      )}
       {seccion === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
       {seccion === 'postulantes' && <PostulantesDeCampaniaPanel campania={campania} />}
     </div>
@@ -915,6 +926,7 @@ function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
   const [nuevoGrupo, setNuevoGrupo] = useState('')
   const [nuevoIcono, setNuevoIcono] = useState(SKILL_ICONOS[0])
   const [skillAbierto, setSkillAbierto] = useState<number | null>(null)
+  const [subTab, setSubTab] = useState<'agentes' | 'supervisores'>('agentes')
   const inval = () => { qc.invalidateQueries({ queryKey: ['cc-grupos', campania.id] }); onChanged() }
   const crearG = useMutation({
     mutationFn: () => ccService.createGrupo({ campaniaId: campania.id, nombre: nuevoGrupo, icono: nuevoIcono }),
@@ -948,7 +960,19 @@ function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
             </div>
             {skillAbierto === g.id && (
               <div className="border-t border-gray-200/60 px-3.5 py-3">
-                <AsignacionAgentesSkill grupoId={g.id} onChanged={inval} />
+                <div className="mb-3 flex gap-1 rounded-lg bg-black/5 p-0.5">
+                  <button onClick={() => setSubTab('agentes')}
+                    className={clsx('flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition', subTab === 'agentes' ? 'bg-card text-violet-700 shadow-sm' : 'text-ink-tertiary hover:text-ink')}>
+                    Agentes
+                  </button>
+                  <button onClick={() => setSubTab('supervisores')}
+                    className={clsx('flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition', subTab === 'supervisores' ? 'bg-card text-violet-700 shadow-sm' : 'text-ink-tertiary hover:text-ink')}>
+                    Supervisores
+                  </button>
+                </div>
+                {subTab === 'agentes'
+                  ? <AsignacionAgentesSkill grupoId={g.id} onChanged={inval} />
+                  : <AsignacionSupervisores nivel="skill" id={g.id} onChanged={inval} />}
               </div>
             )}
           </div>
@@ -1032,6 +1056,85 @@ function AsignacionAgentesSkill({ grupoId, onChanged }: { grupoId: number; onCha
             </label>
           ))}
           {disponibles.length === 0 && <p className="px-2 py-2 text-xs text-ink-tertiary">{busqueda ? 'Sin resultados' : 'Todos los usuarios ya están asignados'}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Asignación de supervisores — mismo patrón visual que AsignacionAgentesSkill,
+// pero acotado a usuarios AD/TI (mismo filtro que ya usaba el módulo
+// Supervisor > Administrar) y parametrizado por nivel: "campania" (toda la
+// campaña, CC_CAMPANIAS_SUPERVISORES) o "skill" (un solo grupo, más granular,
+// CCO_GRUPO_SUPERVISORES) — ambas tablas comparten la misma forma de fila
+// { usuarioId, nombre }, así que la UI y el hook de mutación son idénticos.
+function AsignacionSupervisores({ nivel, id, onChanged }: { nivel: 'campania' | 'skill'; id: number; onChanged?: () => void }) {
+  const qc = useQueryClient()
+  const queryKey = [nivel === 'campania' ? 'cc-supervisores-campania' : 'cc-supervisores-grupo', id]
+  const { data: asignados = [] } = useQuery({
+    queryKey,
+    queryFn: () => (nivel === 'campania' ? ccService.getSupervisoresDeCampania(id) : ccService.getSupervisoresDeGrupo(id)),
+  })
+  const { data: usuarios = [] } = useQuery({
+    queryKey: ['usuarios-todas-areas'],
+    queryFn: async () => {
+      const { data } = await api.get('/usuarios/todas-areas')
+      return ((data?.data ?? []) as { id: number; nombre: string; tipoUsuario: string }[]).filter((u) => ['AD', 'TI'].includes(u.tipoUsuario))
+    },
+  })
+  const [busqueda, setBusqueda] = useState('')
+  const toggle = useMutation({
+    mutationFn: ({ usuarioId, on }: { usuarioId: number; on: boolean }) => {
+      if (nivel === 'campania') return on ? ccService.asignarSupervisorACampania(id, usuarioId) : ccService.quitarSupervisorDeCampania(id, usuarioId)
+      return on ? ccService.asignarSupervisorAGrupo(id, usuarioId) : ccService.quitarSupervisorDeGrupo(id, usuarioId)
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey }); onChanged?.() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+  })
+  const idsAsignados = new Set(asignados.map((a) => a.usuarioId))
+  const disponibles = (usuarios as { id: number; nombre: string }[]).filter((u) => !idsAsignados.has(u.id) && u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+          Supervisores asignados ({asignados.length})
+        </p>
+        {asignados.length === 0 ? (
+          <p className="rounded-lg bg-black/5 px-2.5 py-2 text-xs text-ink-tertiary">Todavía no hay supervisores asignados.</p>
+        ) : (
+          <div className="max-h-40 space-y-1 overflow-y-auto">
+            {asignados.map((a) => (
+              <div key={a.usuarioId} className="flex items-center justify-between rounded-lg bg-violet-100/60 px-2.5 py-1.5 text-sm text-ink">
+                <span className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.6rem] font-bold text-white">
+                    {a.nombre.charAt(0).toUpperCase()}
+                  </span>
+                  {a.nombre}
+                </span>
+                <button onClick={() => toggle.mutate({ usuarioId: a.usuarioId, on: false })} title="Quitar supervisor"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-ink-tertiary transition hover:bg-red-50 hover:text-red-500">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Agregar supervisor (AD/TI)</p>
+        <input className={clsx(field, 'mb-2')} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar usuario..." />
+        <div className="max-h-40 space-y-1 overflow-y-auto">
+          {disponibles.map((u) => (
+            <label key={u.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-black/5">
+              <input type="checkbox" className="h-3.5 w-3.5 accent-violet-600"
+                checked={false}
+                onChange={(e) => toggle.mutate({ usuarioId: u.id, on: e.target.checked })} />
+              {u.nombre}
+            </label>
+          ))}
+          {disponibles.length === 0 && <p className="px-2 py-2 text-xs text-ink-tertiary">{busqueda ? 'Sin resultados' : 'Todos los usuarios AD/TI ya están asignados'}</p>}
         </div>
       </div>
     </div>

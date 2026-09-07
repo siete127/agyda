@@ -115,12 +115,12 @@ async function listSupervisores(req, res) {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
-      SELECT cs.CS_ID as id, cs.CS_CAMPANIA_ID as campaniaId, c.CC_NOMBRE as campaniaNombre,
+      SELECT cs.CS_ID as id, cs.CS_CAMPANIA_ID as campaniaId, c.CM2_NOMBRE as campaniaNombre,
              cs.CS_SUPERVISOR_ID as supervisorId, u.NEUS_NOMBRES as supervisorNombre
       FROM CC_CAMPANIAS_SUPERVISORES cs
-      INNER JOIN CC_CAMPANIAS c ON c.CC_ID = cs.CS_CAMPANIA_ID
+      INNER JOIN CCO_CAMPANIAS c ON c.CM2_ID = cs.CS_CAMPANIA_ID
       INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
-      ORDER BY c.CC_NOMBRE ASC
+      ORDER BY c.CM2_NOMBRE ASC
     `);
     res.json({ success: true, data: rs.recordset });
   } catch (err) {
@@ -176,29 +176,41 @@ async function getMiPanel(req, res) {
     const pool = await databaseService.getPool(req.user?.empresa);
 
     // Campañas visibles: todas si es AD/TI, o solo las asignadas si es supervisor específico.
+    // CCO_CAMPANIAS/CCO_GRUPOS/CCO_GRUPO_AGENTES son el catálogo real (el mismo
+    // que Configuración > Contact Center > Campañas y skills / Asignación de
+    // agentes) — CC_CAMPANIAS/CC_ASIGNACION_BASE es un sistema viejo sin datos.
     const campaniasReq = pool.request();
     let campaniasWhere = '';
     if (!esAdmin) {
-      campaniasWhere = `WHERE c.CC_ID IN (SELECT CS_CAMPANIA_ID FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_SUPERVISOR_ID = @uid)`;
+      campaniasWhere = `WHERE c.CM2_ID IN (SELECT CS_CAMPANIA_ID FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_SUPERVISOR_ID = @uid)`;
       campaniasReq.input('uid', sql.Int, uid);
     }
-    const campaniasRs = await campaniasReq.query(`SELECT c.CC_ID as id, c.CC_NOMBRE as nombre FROM CC_CAMPANIAS c ${campaniasWhere}`);
+    const campaniasRs = await campaniasReq.query(`SELECT c.CM2_ID as id, c.CM2_NOMBRE as nombre FROM CCO_CAMPANIAS c ${campaniasWhere}`);
     const campaniaIds = campaniasRs.recordset.map((c) => c.id);
 
     if (campaniaIds.length === 0) {
-      return res.json({ success: true, data: { campanias: [], agentes: [] } });
+      return res.json({ success: true, data: { campanias: [], grupos: [], agentes: [] } });
     }
 
-    // Agentes asignados a esas campañas (últimos 30 días de asignación, sin duplicar por agente+campaña).
+    // Skills/grupos de esas campañas — para armar la jerarquía Campaña > Skill > Agente en el panel.
+    const gruposRs = await pool.request().query(`
+      SELECT CG_ID as id, CG_CAMPANIA_ID as campaniaId, CG_NOMBRE as nombre, CG_ICONO as icono
+      FROM CCO_GRUPOS WHERE CG_ACTIVO = 1 AND CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
+    `);
+
+    // Agentes asignados a esas campañas — vía sus grupos/skills (CCO_GRUPOS),
+    // que es donde realmente vive el vínculo agente-campaña hoy.
     const agentesRs = await pool.request().query(`
-      SELECT DISTINCT a.CAB_AGENTE_ID as agenteId, a.CAB_CAMPANIA_ID as campaniaId, u.NEUS_NOMBRES as nombre
-      FROM CC_ASIGNACION_BASE a
-      INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = a.CAB_AGENTE_ID
-      WHERE a.CAB_CAMPANIA_ID IN (${campaniaIds.join(',')})
+      SELECT DISTINCT ga.CGA_USUARIO_ID as agenteId, g.CG_CAMPANIA_ID as campaniaId, g.CG_ID as grupoId,
+             g.CG_NOMBRE as grupoNombre, u.NEUS_NOMBRES as nombre
+      FROM CCO_GRUPO_AGENTES ga
+      INNER JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
+      INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = ga.CGA_USUARIO_ID
+      WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
     `);
 
     if (agentesRs.recordset.length === 0) {
-      return res.json({ success: true, data: { campanias: campaniasRs.recordset, agentes: [] } });
+      return res.json({ success: true, data: { campanias: campaniasRs.recordset, grupos: gruposRs.recordset, agentes: [] } });
     }
 
     const agenteIds = [...new Set(agentesRs.recordset.map((a) => a.agenteId))];
@@ -209,19 +221,41 @@ async function getMiPanel(req, res) {
     `);
     const pausaPorAgente = new Map(pausasRs.recordset.map((p) => [p.agenteId, p]));
 
+    // CCO_AGENTE_ESTADO es la fuente real de si un agente puede recibir
+    // conversaciones nuevas (mismo botón "Disponible/No disponible" de Chat
+    // en Vivo / Contact Center) — antes esto se inferí­a solo de USUARIO_TIEMPOS
+    // (ausencia de pausa abierta), lo que marcaba "Disponible" a cualquiera
+    // que ni siquiera hubiera iniciado sesión hoy.
+    const estadoRs = await pool.request().query(`
+      SELECT CAE_USUARIO_ID as agenteId, CAE_ONLINE as online, CAE_DISPONIBLE as disponible, CAE_ULTIMA_CONEXION as ultimaConexion
+      FROM CCO_AGENTE_ESTADO WHERE CAE_USUARIO_ID IN (${agenteIds.join(',')})
+    `);
+    const estadoPorAgente = new Map(estadoRs.recordset.map((e) => [e.agenteId, e]));
+
     const agentes = agentesRs.recordset.map((a) => {
       const pausa = pausaPorAgente.get(a.agenteId);
+      const est = estadoPorAgente.get(a.agenteId);
+      // Sin fila en CCO_AGENTE_ESTADO, o CAE_ONLINE=0: nunca se conectó hoy
+      // o cerró sesión — "desconectado", no "disponible".
+      let estado;
+      if (!est || !est.online) estado = 'desconectado';
+      else if (pausa) estado = 'pausa';
+      else if (!est.disponible) estado = 'no_disponible';
+      else estado = 'disponible';
       return {
         agenteId: a.agenteId,
         nombre: a.nombre,
         campaniaId: a.campaniaId,
-        estado: pausa ? 'pausa' : 'disponible',
+        grupoId: a.grupoId,
+        grupoNombre: a.grupoNombre,
+        estado,
         tipoPausa: pausa ? (PAUSA_LABELS[pausa.statusId] ?? 'pausa') : null,
         pausaDesde: pausa ? pausa.fechaInicio : null,
+        ultimaConexion: est?.ultimaConexion ?? null,
       };
     });
 
-    res.json({ success: true, data: { campanias: campaniasRs.recordset, agentes } });
+    res.json({ success: true, data: { campanias: campaniasRs.recordset, grupos: gruposRs.recordset, agentes } });
   } catch (err) {
     logger.error('operacionesController.getMiPanel', err);
     res.status(500).json({ success: false, message: 'Error al obtener el panel de supervisor' });
@@ -247,14 +281,17 @@ async function getProductividadDia(req, res) {
     }
     const campaniaIdsRs = await campaniasReq.query(
       esAdmin
-        ? 'SELECT CC_ID as id FROM CC_CAMPANIAS'
+        ? 'SELECT CM2_ID as id FROM CCO_CAMPANIAS'
         : `SELECT DISTINCT CS_CAMPANIA_ID as id FROM CC_CAMPANIAS_SUPERVISORES ${campaniasWhere}`
     );
     const campaniaIds = campaniaIdsRs.recordset.map((c) => c.id);
     if (campaniaIds.length === 0) return res.json({ success: true, data: [] });
 
     const agentesRs = await pool.request().query(`
-      SELECT DISTINCT CAB_AGENTE_ID as agenteId FROM CC_ASIGNACION_BASE WHERE CAB_CAMPANIA_ID IN (${campaniaIds.join(',')})
+      SELECT DISTINCT ga.CGA_USUARIO_ID as agenteId
+      FROM CCO_GRUPO_AGENTES ga
+      INNER JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
+      WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
     `);
     const agenteIds = agentesRs.recordset.map((a) => a.agenteId);
     if (agenteIds.length === 0) return res.json({ success: true, data: [] });
@@ -271,11 +308,42 @@ async function getProductividadDia(req, res) {
         GROUP BY neus_id, status_id
       `);
 
+    // Estado ACTUAL (independiente del acumulado de arriba) — misma lógica que
+    // getMiPanel: una fila sin fecha_fin es la pausa en curso ahora mismo.
+    const pausaActivaRs = await pool.request().query(`
+      SELECT neus_id as agenteId, status_id as statusId, fecha_inicio as fechaInicio
+      FROM USUARIO_TIEMPOS
+      WHERE neus_id IN (${agenteIds.join(',')}) AND fecha_fin IS NULL AND status_id IN (2,3,5,6)
+    `);
+    const pausaActivaPorAgente = new Map(pausaActivaRs.recordset.map((p) => [p.agenteId, p]));
+
     const usuariosRs = await pool.request().query(`SELECT NEUS_ID as id, NEUS_NOMBRES as nombre FROM NEUS_USUARIOS WHERE NEUS_ID IN (${agenteIds.join(',')})`);
     const nombrePorId = new Map(usuariosRs.recordset.map((u) => [u.id, u.nombre]));
 
+    const estadoRs = await pool.request().query(`
+      SELECT CAE_USUARIO_ID as agenteId, CAE_ONLINE as online, CAE_DISPONIBLE as disponible, CAE_ULTIMA_CONEXION as ultimaConexion
+      FROM CCO_AGENTE_ESTADO WHERE CAE_USUARIO_ID IN (${agenteIds.join(',')})
+    `);
+    const estadoPorAgente = new Map(estadoRs.recordset.map((e) => [e.agenteId, e]));
+
     const porAgente = new Map();
-    for (const id of agenteIds) porAgente.set(id, { agenteId: id, nombre: nombrePorId.get(id) ?? '', banio: 0, comida: 0, capacitacion: 0, permiso: 0, totalPausaMin: 0 });
+    for (const id of agenteIds) {
+      const pausaActiva = pausaActivaPorAgente.get(id);
+      const est = estadoPorAgente.get(id);
+      let estado;
+      if (!est || !est.online) estado = 'desconectado';
+      else if (pausaActiva) estado = 'pausa';
+      else if (!est.disponible) estado = 'no_disponible';
+      else estado = 'disponible';
+      porAgente.set(id, {
+        agenteId: id,
+        nombre: nombrePorId.get(id) ?? '',
+        banio: 0, comida: 0, capacitacion: 0, permiso: 0, totalPausaMin: 0,
+        estado,
+        tipoPausa: pausaActiva ? (PAUSA_LABELS[pausaActiva.statusId] ?? 'pausa') : null,
+        ultimaConexion: est?.ultimaConexion ?? null,
+      });
+    }
     for (const p of pausasRs.recordset) {
       const row = porAgente.get(p.agenteId);
       if (!row) continue;
@@ -355,8 +423,9 @@ async function getMisAgentes(req, res) {
       .query(`
         SELECT DISTINCT u.NEUS_ID as id, u.NEUS_NOMBRES as nombre
         FROM CC_CAMPANIAS_SUPERVISORES cs
-        INNER JOIN CC_ASIGNACION_BASE a ON a.CAB_CAMPANIA_ID = cs.CS_CAMPANIA_ID
-        INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = a.CAB_AGENTE_ID
+        INNER JOIN CCO_GRUPOS g ON g.CG_CAMPANIA_ID = cs.CS_CAMPANIA_ID
+        INNER JOIN CCO_GRUPO_AGENTES a ON a.CGA_GRUPO_ID = g.CG_ID AND a.CGA_ACTIVO = 1
+        INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = a.CGA_USUARIO_ID
         WHERE cs.CS_SUPERVISOR_ID = @uid
         ORDER BY u.NEUS_NOMBRES
       `);

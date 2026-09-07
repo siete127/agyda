@@ -3393,6 +3393,11 @@ async function ensureCallCenterSchema(pool) {
         CREATE INDEX IX_CC_ASIG_CAMPANIA ON dbo.CC_ASIGNACION_BASE(CAB_CAMPANIA_ID);
       END
 
+      -- CS_CAMPANIA_ID apunta a CCO_CAMPANIAS (el catálogo real que usa
+      -- Configuración > Contact Center), no a CC_CAMPANIAS — esa tabla vieja
+      -- quedó sin uso y vacía; el FK original la referenciaba por error y
+      -- bloqueaba cualquier asignación real de supervisor con un 100% de
+      -- fallos silenciosos (FK violation) hasta esta corrección.
       IF OBJECT_ID('dbo.CC_CAMPANIAS_SUPERVISORES', 'U') IS NULL
       BEGIN
         CREATE TABLE dbo.CC_CAMPANIAS_SUPERVISORES (
@@ -3401,10 +3406,42 @@ async function ensureCallCenterSchema(pool) {
           CS_SUPERVISOR_ID INT           NOT NULL,
           CS_FECHA        DATETIME       NOT NULL DEFAULT GETDATE(),
           CONSTRAINT FK_CC_CAMP_SUP_CAMPANIA FOREIGN KEY (CS_CAMPANIA_ID)
-            REFERENCES dbo.CC_CAMPANIAS(CC_ID) ON DELETE CASCADE,
+            REFERENCES dbo.CCO_CAMPANIAS(CM2_ID) ON DELETE CASCADE,
           CONSTRAINT UQ_CC_CAMP_SUP UNIQUE (CS_CAMPANIA_ID, CS_SUPERVISOR_ID)
         );
         CREATE INDEX IX_CC_CAMP_SUP_SUPERVISOR ON dbo.CC_CAMPANIAS_SUPERVISORES(CS_SUPERVISOR_ID);
+      END
+      ELSE IF EXISTS (
+        SELECT 1 FROM sys.foreign_keys fk
+        WHERE fk.parent_object_id = OBJECT_ID('dbo.CC_CAMPANIAS_SUPERVISORES')
+          AND OBJECT_NAME(fk.referenced_object_id) = 'CC_CAMPANIAS'
+      )
+      BEGIN
+        DECLARE @fkName NVARCHAR(200) = (
+          SELECT fk.name FROM sys.foreign_keys fk
+          WHERE fk.parent_object_id = OBJECT_ID('dbo.CC_CAMPANIAS_SUPERVISORES')
+            AND OBJECT_NAME(fk.referenced_object_id) = 'CC_CAMPANIAS'
+        );
+        EXEC('ALTER TABLE dbo.CC_CAMPANIAS_SUPERVISORES DROP CONSTRAINT ' + @fkName);
+        ALTER TABLE dbo.CC_CAMPANIAS_SUPERVISORES ADD CONSTRAINT FK_CC_CAMP_SUP_CAMPANIA
+          FOREIGN KEY (CS_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID) ON DELETE CASCADE;
+      END
+
+      -- Mismo patrón que CC_CAMPANIAS_SUPERVISORES pero a nivel skill/grupo
+      -- (CCO_GRUPOS) — asignación más granular: un supervisor puede quedar
+      -- acotado a un solo skill dentro de la campaña, no a toda ella.
+      IF OBJECT_ID('dbo.CCO_GRUPO_SUPERVISORES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CCO_GRUPO_SUPERVISORES (
+          GS_ID           INT IDENTITY(1,1) PRIMARY KEY,
+          GS_GRUPO_ID     INT            NOT NULL,
+          GS_SUPERVISOR_ID INT           NOT NULL,
+          GS_FECHA        DATETIME       NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_CCO_GRUPO_SUP_GRUPO FOREIGN KEY (GS_GRUPO_ID)
+            REFERENCES dbo.CCO_GRUPOS(CG_ID) ON DELETE CASCADE,
+          CONSTRAINT UQ_CCO_GRUPO_SUP UNIQUE (GS_GRUPO_ID, GS_SUPERVISOR_ID)
+        );
+        CREATE INDEX IX_CCO_GRUPO_SUP_SUPERVISOR ON dbo.CCO_GRUPO_SUPERVISORES(GS_SUPERVISOR_ID);
       END
 
       IF OBJECT_ID('dbo.CC_METAS', 'U') IS NULL
