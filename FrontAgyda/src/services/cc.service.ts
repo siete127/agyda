@@ -100,6 +100,14 @@ export const ccService = {
   getAgentesDeGrupo: (grupoId: number) => d<{ usuarioId: number; nombre: string }[]>(api.get(`/contact-center/grupos/${grupoId}/agentes`)),
   asignarAgente: (grupoId: number, usuarioId: number) => api.post(`/contact-center/grupos/${grupoId}/agentes`, { usuarioId }).then((r) => r.data),
   quitarAgente: (grupoId: number, usuarioId: number) => api.delete(`/contact-center/grupos/${grupoId}/agentes/${usuarioId}`).then((r) => r.data),
+
+  // ── Supervisores: por campaña completa y por skill (más granular) ──
+  getSupervisoresDeCampania: (campaniaId: number) => d<{ usuarioId: number; nombre: string }[]>(api.get(`/contact-center/campanias/${campaniaId}/supervisores`)),
+  asignarSupervisorACampania: (campaniaId: number, usuarioId: number) => api.post(`/contact-center/campanias/${campaniaId}/supervisores`, { usuarioId }).then((r) => r.data),
+  quitarSupervisorDeCampania: (campaniaId: number, usuarioId: number) => api.delete(`/contact-center/campanias/${campaniaId}/supervisores/${usuarioId}`).then((r) => r.data),
+  getSupervisoresDeGrupo: (grupoId: number) => d<{ usuarioId: number; nombre: string }[]>(api.get(`/contact-center/grupos/${grupoId}/supervisores`)),
+  asignarSupervisorAGrupo: (grupoId: number, usuarioId: number) => api.post(`/contact-center/grupos/${grupoId}/supervisores`, { usuarioId }).then((r) => r.data),
+  quitarSupervisorDeGrupo: (grupoId: number, usuarioId: number) => api.delete(`/contact-center/grupos/${grupoId}/supervisores/${usuarioId}`).then((r) => r.data),
   getMatrizAgentes: () => d<{ grupos: CCGrupo[]; asignaciones: { usuarioId: number; grupoId: number }[] }>(api.get('/contact-center/agentes-matriz')),
   getMisSkills: () => d<CCMiSkill[]>(api.get('/contact-center/mis-skills')),
 

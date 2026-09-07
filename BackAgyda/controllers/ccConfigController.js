@@ -499,6 +499,39 @@ exports.deleteCampania = async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 
+// Supervisores por CAMPAÑA completa — CC_CAMPANIAS_SUPERVISORES (mismo par
+// usado por el módulo Supervisor > Administrar; se expone también acá para
+// asignarlo sin salir de Configuración > Campañas y skills).
+exports.getSupervisoresDeCampania = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const r = await p.request().input('c', sql.Int, req.params.id).query(`
+      SELECT cs.CS_SUPERVISOR_ID usuarioId, u.NEUS_NOMBRES nombre
+      FROM dbo.CC_CAMPANIAS_SUPERVISORES cs LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
+      WHERE cs.CS_CAMPANIA_ID = @c ORDER BY u.NEUS_NOMBRES`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.asignarSupervisorACampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.body?.usuarioId)
+      .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u)
+              INSERT INTO dbo.CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@c, @u);`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.quitarSupervisorDeCampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.params.usuarioId)
+      .query(`DELETE FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
 exports.listGrupos = async (req, res) => {
   try {
     const p = await pool(req);
@@ -581,6 +614,38 @@ exports.quitarAgenteDeGrupo = async (req, res) => {
     const p = await pool(req);
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId)
       .query(`UPDATE dbo.CCO_GRUPO_AGENTES SET CGA_ACTIVO = 0 WHERE CGA_GRUPO_ID = @g AND CGA_USUARIO_ID = @u`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
+// Supervisores por skill (asignación granular, dentro de un solo grupo/skill
+// de la campaña) — mismo patrón que agentes por grupo, tabla CCO_GRUPO_SUPERVISORES.
+exports.getSupervisoresDeGrupo = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const r = await p.request().input('g', sql.Int, req.params.grupoId).query(`
+      SELECT gs.GS_SUPERVISOR_ID usuarioId, u.NEUS_NOMBRES nombre
+      FROM dbo.CCO_GRUPO_SUPERVISORES gs LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = gs.GS_SUPERVISOR_ID
+      WHERE gs.GS_GRUPO_ID = @g ORDER BY u.NEUS_NOMBRES`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.asignarSupervisorAGrupo = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId)
+      .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u)
+              INSERT INTO dbo.CCO_GRUPO_SUPERVISORES (GS_GRUPO_ID, GS_SUPERVISOR_ID) VALUES (@g, @u);`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.quitarSupervisorDeGrupo = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId)
+      .query(`DELETE FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
