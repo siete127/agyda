@@ -10,6 +10,12 @@ const { authenticateToken, verificarRol } = require('../middleware/auth');
 router.post('/incoming-call', webphoneController.incomingCall);
 router.get('/incoming-call', webphoneController.incomingCall);
 
+// Pantalla pública (HTML, sin sesión) para el "Web Form Address" de
+// VICIdial — se abre como iframe en el navegador del agente cuando le
+// cae la llamada, así que no puede requerir login de AGYDA.
+router.get('/pantalla-llamada', webphoneController.pantallaLlamada);
+router.post('/pantalla-llamada', webphoneController.pantallaLlamada);
+
 // Vistas embebidas del Webphone (URLs configurables) — lectura para cualquier
 // usuario autenticado, administración solo AD/TI.
 router.get('/vistas', authenticateToken, webphoneVistasController.getVistas);

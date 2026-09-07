@@ -253,6 +253,70 @@ async function incomingCall(req, res) {
   }
 }
 
+function _escapeHtml(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function _paginaLlamada({ error, phone, postulante }) {
+  const style = `
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;padding:14px;box-sizing:border-box}
+    .card{border-radius:12px;padding:14px 16px}
+    .ok{background:#052e21;border:1px solid #10b981}
+    .warn{background:#3f2d0a;border:1px solid #f59e0b}
+    .err{background:#3f0a0a;border:1px solid #ef4444}
+    h1{font-size:15px;margin:0 0 8px;font-weight:700}
+    p{margin:3px 0;font-size:13px;line-height:1.4}
+    .lbl{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  `;
+  let body;
+  if (error) {
+    body = `<div class="card err"><h1>⚠️ ${_escapeHtml(error)}</h1></div>`;
+  } else if (postulante) {
+    body = `
+      <div class="card ok">
+        <h1>📋 ${_escapeHtml(postulante.nombre)}</h1>
+        <p><span class="lbl">Teléfono:</span> ${_escapeHtml(postulante.telefono)}</p>
+        ${postulante.correo ? `<p><span class="lbl">Correo:</span> ${_escapeHtml(postulante.correo)}</p>` : ''}
+        ${postulante.campania ? `<p><span class="lbl">Postulación:</span> ${_escapeHtml(postulante.campania)}</p>` : ''}
+        ${postulante.fechaRegistro ? `<p><span class="lbl">Registrado:</span> ${_escapeHtml(new Date(postulante.fechaRegistro).toLocaleDateString('es-MX'))}</p>` : ''}
+      </div>`;
+  } else {
+    body = `<div class="card warn"><h1>Sin coincidencia</h1><p>El número ${_escapeHtml(phone || 'desconocido')} no está registrado como postulante.</p></div>`;
+  }
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Llamada entrante</title><style>${style}</style></head><body>${body}</body></html>`;
+}
+
+// Pantalla pública (sin sesión de AGYDA) pensada para el "Web Form Address"
+// de VICIdial: la campaña lo abre como iframe/ventana en el navegador del
+// AGENTE cuando le cae la llamada (VICIdial nunca hace la petición desde su
+// propio servidor) — por eso no puede depender del socket/popup de AGYDA
+// (requeriría que el agente tenga esa pestaña abierta). Esta página consulta
+// el mismo match por teléfono que incomingCall y devuelve el resultado ya
+// pintado en HTML, autosuficiente dentro del iframe.
+async function pantallaLlamada(req, res) {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  try {
+    if (!_isAuthorized(req)) {
+      return res.status(401).send(_paginaLlamada({ error: 'Configura WEBPHONE_EVENT_SECRET y agrega ?secret= a la URL del Web Form.' }));
+    }
+    const body = { ...(req.query || {}), ...(req.body || {}) };
+    const phone = body.phone ?? body.telefono ?? body.dnis ?? null;
+    const telefono10 = _normalizarTelefono10(phone);
+    if (!telefono10) {
+      return res.send(_paginaLlamada({ error: 'VICIdial no mandó el número (dnis) en esta llamada.' }));
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const postulante = await _buscarPostulanteTotisPorTelefono(pool, telefono10);
+    return res.send(_paginaLlamada({ phone, postulante }));
+  } catch (err) {
+    logger.warn('[webphoneController.pantallaLlamada] error:', err?.message || err);
+    return res.status(500).send(_paginaLlamada({ error: 'Error consultando la información del postulante.' }));
+  }
+}
+
 module.exports = {
   incomingCall,
+  pantallaLlamada,
 };
