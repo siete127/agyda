@@ -595,6 +595,26 @@ exports.getMatrizAgentes = async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 
+// Skills (CCO_GRUPOS) y campañas del agente que hace la petición — reverso de
+// getAgentesDeGrupo. Se usa en "Mi día" para que cada agente vea en qué
+// campañas/skills está enrolado, sin exponer la asignación de nadie más.
+exports.getMisSkills = async (req, res) => {
+  try {
+    const uid = usuarioIdDe(req);
+    if (!uid) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const p = await pool(req);
+    const r = await p.request().input('u', sql.Int, uid).query(`
+      SELECT g.CG_ID id, g.CG_NOMBRE nombre, g.CG_ICONO icono,
+        c.CM2_ID campaniaId, c.CM2_NOMBRE campaniaNombre
+      FROM dbo.CCO_GRUPO_AGENTES ga
+      JOIN dbo.CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID AND g.CG_ACTIVO = 1
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = g.CG_CAMPANIA_ID
+      WHERE ga.CGA_USUARIO_ID = @u AND ga.CGA_ACTIVO = 1
+      ORDER BY c.CM2_NOMBRE, g.CG_NOMBRE`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
 // ── Tipificaciones ──────────────────────────────────────────────────────
 exports.listTipificaciones = async (req, res) => {
   try {

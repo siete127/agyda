@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, ArrowRightLeft, History, FileText, Megaphone, UsersRound, Headset } from 'lucide-react'
+import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Loader2, ArrowRightLeft, FileText, Headset } from 'lucide-react'
 import { livechatService } from '@/services/livechat.service'
 import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
@@ -25,7 +25,7 @@ import { AsesoresPanel } from '@/pages/asesores/AsesoresPanel'
 // scroll interno como LivechatPage).
 function AsesoresModal({ onClose }: { onClose: () => void }) {
   return (
-    <Modal isOpen onClose={onClose} title="Asesores" size="lg">
+    <Modal isOpen onClose={onClose} title="Mi día" size="lg">
       <AsesoresPanel />
     </Modal>
   )
@@ -429,6 +429,47 @@ function ConversacionItem({ conv, activa, onClick }: { conv: LivechatConversacio
   )
 }
 
+// Fila de la bandeja de espera integrada en el panel lateral: a diferencia de
+// ConversacionItem (que navega al detalle), esta se toma directo con un
+// botón — son leads sin dueño todavía, cualquier agente puede tomarlos.
+function EsperaItem({ conv, onTomar, tomando }: { conv: LivechatConversacion; onTomar: () => void; tomando: boolean }) {
+  const minutos = minutosEsperando(conv.fechaInicio)
+  const urgente = minutos >= 10
+  const critico = minutos >= 15
+  return (
+    <div
+      className={clsx(
+        'flex items-center gap-2 px-4 py-3 border-b border-gray-100',
+        critico ? 'bg-red-50/60' : urgente ? 'bg-amber-50/60' : undefined,
+      )}
+    >
+      <span
+        className={clsx(
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+          critico ? 'bg-red-500/15 text-red-500' : urgente ? 'bg-amber-500/15 text-amber-500' : 'bg-brand/15 text-brand',
+        )}
+      >
+        {conv.posicionCola ?? '—'}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-sm text-gray-800 truncate">{conv.visitanteNombre || 'Anónimo'}</p>
+        <p className="text-[11px] text-gray-400 truncate">
+          {conv.visitanteEmail || conv.visitanteTelefono || 'Sin contacto'}
+        </p>
+        <p className={clsx('flex items-center gap-1 text-[11px] font-semibold mt-0.5', critico ? 'text-red-500' : urgente ? 'text-amber-600' : 'text-gray-400')}>
+          <Clock size={11} />
+          {tiempoEsperando(conv.fechaInicio)}
+        </p>
+      </div>
+
+      <Button size="sm" onClick={onTomar} disabled={tomando} className="shrink-0">
+        Tomar
+      </Button>
+    </div>
+  )
+}
+
 function ChatPanel({ conversacionId, onCerrada }: { conversacionId: number; onCerrada: () => void }) {
   const qc = useQueryClient()
   const user = useCurrentUser()
@@ -775,14 +816,11 @@ function ChatPanel({ conversacionId, onCerrada }: { conversacionId: number; onCe
 }
 
 export default function LivechatPage() {
-  const qc = useQueryClient()
   const user = useCurrentUser()
   const { can } = useActionAccess()
-  const puedeAtender = can('livechat', 'atender')
   const puedeSupervisar = can('livechat', 'gestionar-campanas')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [historialOpen, setHistorialOpen] = useState(false)
-  const [bandejaOpen, setBandejaOpen] = useState(false)
   const [usuariosCampaniasOpen, setUsuariosCampaniasOpen] = useState(false)
   const [campaniasOpen, setCampaniasOpen] = useState(false)
   const [agentesOpen, setAgentesOpen] = useState(false)
@@ -805,12 +843,6 @@ export default function LivechatPage() {
     }
   }, [user?.id])
 
-  const { data: estado } = useQuery({
-    queryKey: ['livechat-mi-estado'],
-    queryFn: () => livechatService.getMiEstado(),
-    refetchInterval: 30_000,
-  })
-
   const { data: esperando = [], refetch: refetchEsperando } = useQuery({
     queryKey: ['livechat-esperando'],
     queryFn: () => livechatService.getMisConversaciones('esperando'),
@@ -823,12 +855,15 @@ export default function LivechatPage() {
     refetchInterval: 8_000,
   })
 
-  const toggleDisponible = useMutation({
-    mutationFn: (disponible: boolean) => livechatService.setDisponible(disponible),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['livechat-mi-estado'] })
+  const tomarDesdeEspera = useMutation({
+    mutationFn: (conversacionId: number) => livechatService.tomarConversacion(conversacionId),
+    onSuccess: (_data, conversacionId) => {
+      toast.success('Conversación tomada')
+      refetchEsperando()
+      refetchMias()
+      setSelectedId(conversacionId)
     },
-    onError: () => toast.error('No se pudo actualizar tu disponibilidad'),
+    onError: () => toast.error('No se pudo tomar la conversación (quizás ya fue asignada)'),
   })
 
   const handleNuevaAsignada = useCallback(() => {
@@ -869,75 +904,18 @@ export default function LivechatPage() {
     refetchEsperando()
   }
 
-  const conversaciones = [...esperando, ...mias]
-
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <MessageCircle className="text-blue-600" size={22} />
-          <h1 className="text-xl font-bold text-gray-800">Chat en Vivo</h1>
+          <h1 className="text-xl font-bold text-gray-800">Atención a campañas</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" onClick={() => setAsesoresOpen(true)}>
             <Headset size={16} />
-            Asesores
+            Mi día
           </Button>
-          {puedeSupervisar && (
-            <Button variant="ghost" onClick={() => setCampaniasOpen(true)}>
-              <Megaphone size={16} />
-              Campañas
-            </Button>
-          )}
-          <Button variant="ghost" onClick={() => setBandejaOpen(true)} className="relative">
-            <Users size={16} />
-            Bandeja de espera
-            {esperando.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
-                {esperando.length}
-              </span>
-            )}
-          </Button>
-          {puedeSupervisar && (
-            <Button variant="ghost" onClick={() => setUsuariosCampaniasOpen(true)}>
-              <UsersRound size={16} />
-              Grupo de Agentes
-            </Button>
-          )}
-          <Button variant="ghost" onClick={() => setAgentesOpen(true)}>
-            <UserCheck size={16} />
-            Agentes
-          </Button>
-          {puedeSupervisar && (
-            <Button variant="ghost" onClick={() => setSupervisionOpen(true)}>
-              <Users size={16} />
-              Supervisión
-            </Button>
-          )}
-          <Button variant="ghost" onClick={() => setHistorialOpen(true)}>
-            <History size={16} />
-            Historial
-          </Button>
-          {puedeAtender && (
-            // Verde/rojo fijos a propósito — el estado disponible/no disponible
-            // debe leerse igual sin importar el color de marca configurado en
-            // Personalización, así que no usa las variantes 'primary'/'secondary'
-            // de Button (que sí siguen el color de marca).
-            <button
-              onClick={() => toggleDisponible.mutate(!estado?.disponible)}
-              disabled={toggleDisponible.isPending}
-              className={clsx(
-                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all duration-150',
-                'focus:outline-none focus:ring-2 focus:ring-offset-1 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed',
-                estado?.disponible
-                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 border border-emerald-600 focus:ring-emerald-500/30'
-                  : 'bg-red-600 hover:bg-red-700 shadow-sm shadow-red-600/20 border border-red-600 focus:ring-red-500/30',
-              )}
-            >
-              <Power size={16} />
-              {estado?.disponible ? 'Disponible' : 'No disponible'}
-            </button>
-          )}
         </div>
       </div>
 
@@ -950,12 +928,6 @@ export default function LivechatPage() {
           agenteId={user?.id}
         />
       )}
-      {bandejaOpen && (
-        <BandejaEsperaModal
-          onClose={() => setBandejaOpen(false)}
-          onTomada={(conversacionId) => { setSelectedId(conversacionId); refetchMias(); refetchEsperando() }}
-        />
-      )}
       {usuariosCampaniasOpen && <UsuariosCampaniasModal onClose={() => setUsuariosCampaniasOpen(false)} />}
       {campaniasOpen && <CampaniasModal onClose={() => setCampaniasOpen(false)} />}
       {agentesOpen && <AgentesEstadoModal onClose={() => setAgentesOpen(false)} />}
@@ -963,22 +935,57 @@ export default function LivechatPage() {
       {asesoresOpen && <AsesoresModal onClose={() => setAsesoresOpen(false)} />}
 
       <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
-        <div className="w-72 border-r border-gray-100 overflow-y-auto shrink-0">
-          {conversaciones.length === 0 ? (
-            <div className="p-6 text-center text-sm text-gray-400">
-              <User size={28} className="mx-auto mb-2 opacity-40" />
-              Sin conversaciones activas
+        <div className="w-72 border-r border-gray-100 shrink-0 flex flex-col min-h-0">
+          {/* ── Mitad superior: mis conversaciones activas ── */}
+          <div className="flex-1 min-h-0 flex flex-col border-b border-gray-100">
+            <p className="shrink-0 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-400 bg-gray-50/60">
+              Mis conversaciones{mias.length > 0 && ` · ${mias.length}`}
+            </p>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {mias.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-400">
+                  <User size={24} className="mx-auto mb-2 opacity-40" />
+                  Sin conversaciones activas
+                </div>
+              ) : (
+                mias.map((conv) => (
+                  <ConversacionItem
+                    key={conv.id}
+                    conv={conv}
+                    activa={conv.id === selectedId}
+                    onClick={() => setSelectedId(conv.id)}
+                  />
+                ))
+              )}
             </div>
-          ) : (
-            conversaciones.map((conv) => (
-              <ConversacionItem
-                key={conv.id}
-                conv={conv}
-                activa={conv.id === selectedId}
-                onClick={() => setSelectedId(conv.id)}
-              />
-            ))
-          )}
+          </div>
+
+          {/* ── Mitad inferior: bandeja de espera (cualquiera puede tomarlas) ── */}
+          <div className="flex-1 min-h-0 flex flex-col">
+            <p className="shrink-0 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-400 bg-gray-50/60">
+              Bandeja de espera{esperando.length > 0 && ` · ${esperando.length}`}
+            </p>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {esperando.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-400">
+                  <CheckCircle2 size={24} className="mx-auto mb-2 opacity-40" />
+                  Nadie esperando ahora mismo
+                </div>
+              ) : (
+                esperando
+                  .slice()
+                  .sort((a, b) => (a.posicionCola ?? 999) - (b.posicionCola ?? 999))
+                  .map((conv) => (
+                    <EsperaItem
+                      key={conv.id}
+                      conv={conv}
+                      onTomar={() => tomarDesdeEspera.mutate(conv.id)}
+                      tomando={tomarDesdeEspera.isPending}
+                    />
+                  ))
+              )}
+            </div>
+          </div>
         </div>
 
         {selectedId ? (

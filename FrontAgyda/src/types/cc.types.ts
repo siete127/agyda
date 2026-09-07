@@ -132,6 +132,17 @@ export interface CCGrupo {
   esPrincipal: boolean
 }
 
+// Un skill al que está asignado el agente actual, con el nombre de su
+// campaña ya incluido — reverso de CCGrupo (que es "un skill, cuántos
+// agentes"), este es "el agente, en qué skills/campañas está".
+export interface CCMiSkill {
+  id: number
+  nombre: string
+  icono: string | null
+  campaniaId: number
+  campaniaNombre: string
+}
+
 export interface CCTipificacion {
   id: number
   campaniaId: number | null
