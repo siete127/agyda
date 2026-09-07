@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Eye, EyeOff, MessageSquare, RefreshCw, Tag, Sparkles,
   LayoutList, LayoutDashboard, ListChecks, Power, Users, DollarSign, ExternalLink, GitBranch,
-  ListOrdered, GripVertical, MessageCircle, Megaphone, Workflow,
+  ListOrdered, GripVertical, MessageCircle, Megaphone, Workflow, X, Loader2, Check,
 } from 'lucide-react'
 import { chatbotService } from '@/services/chatbot.service'
-import { livechatService } from '@/services/livechat.service'
+import { ccService } from '@/services/cc.service'
+import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { useIsAdmin } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -177,6 +178,103 @@ const TIPO_INFO: Record<TipoEtiquetaMenu, { label: string; icon: React.ElementTy
   arbol_diagnostico: { label: 'Árbol de diagnóstico', icon: Workflow, desc: 'Abre el árbol de decisión guiado configurado en la pestaña "Árbol de Diagnóstico".' },
 }
 
+// Wizard "todo en uno": crea campaña + su canal 'web_publica' (habilitado,
+// con token propio) + un skill/grupo + agentes asignados, sin salir del
+// editor del chatbot. Reusa las mismas rutas que Configuración > Contact
+// Center > Configuraciones del módulo de Asesor — esto no duplica lógica de
+// backend, solo empaqueta 4 llamadas que ahí se hacen en pantallas separadas.
+function NuevaCampaniaWebInline({ onCreada, onCancel }: { onCreada: (campaniaId: number, grupoId: number) => void; onCancel: () => void }) {
+  const [nombreCampania, setNombreCampania] = useState('')
+  const [nombreSkill, setNombreSkill] = useState('Atención general')
+  const [agentesIds, setAgentesIds] = useState<number[]>([])
+  const { data: usuarios = [] } = useUsuariosSimple()
+
+  const canCrear = nombreCampania.trim().length > 0 && nombreSkill.trim().length > 0
+
+  const crear = useMutation({
+    mutationFn: async () => {
+      const campania = await ccService.createCampania({ nombre: nombreCampania.trim() })
+      const campaniaId = campania.data.id as number
+      const grupo = await ccService.createGrupo({ campaniaId, nombre: nombreSkill.trim() })
+      const grupoId = grupo.data.id as number
+      for (const usuarioId of agentesIds) {
+        await ccService.asignarAgente(grupoId, usuarioId)
+      }
+      const canal = await ccService.createCanal({ tipo: 'web_publica', nombre: `Widget Web - ${nombreCampania.trim()}` })
+      const canalId = canal.data.id as number
+      await ccService.updateCanal(canalId, { campaniaId, grupoId, habilitado: true })
+      return { campaniaId, grupoId }
+    },
+    onSuccess: ({ campaniaId, grupoId }) => {
+      toast.success('Campaña, skill y canal web creados')
+      onCreada(campaniaId, grupoId)
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(message || 'Error al crear la campaña')
+    },
+  })
+
+  const toggleAgente = (id: number) => {
+    setAgentesIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-brand/30 bg-brand/5 p-3.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-700">Nueva campaña con widget web</p>
+        <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
+      </div>
+      <p className="text-[0.68rem] text-gray-500">
+        Crea de un golpe la campaña, un skill de atención, el canal "Web pública" ya habilitado con su token, y
+        opcionalmente los agentes que la van a atender. Lo demás (SLA, tipificaciones, motivos de cierre) lo puedes
+        afinar después en Configuración → Contact Center.
+      </p>
+
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-gray-600 uppercase tracking-wide">Nombre de la campaña</label>
+        <input value={nombreCampania} onChange={(e) => setNombreCampania(e.target.value)} className="field" placeholder="ej. Ventas Web" />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-gray-600 uppercase tracking-wide">Nombre del skill / grupo de atención</label>
+        <input value={nombreSkill} onChange={(e) => setNombreSkill(e.target.value)} className="field" placeholder="ej. Atención general" />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-[0.68rem] font-semibold text-gray-600 uppercase tracking-wide">
+          Agentes que atenderán <span className="normal-case font-normal text-gray-400">(opcional, puedes asignarlos después)</span>
+        </label>
+        <div className="max-h-32 overflow-y-auto rounded-lg border border-gray-200 bg-card">
+          {usuarios.length === 0 && <p className="px-2.5 py-2 text-[0.7rem] text-gray-400">Cargando usuarios…</p>}
+          {usuarios.map((u) => {
+            const checked = agentesIds.includes(u.id)
+            return (
+              <button
+                key={u.id} type="button" onClick={() => toggleAgente(u.id)}
+                className={clsx('flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.75rem] transition-colors hover:bg-gray-50',
+                  checked && 'bg-brand/10')}
+              >
+                <span className={clsx('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2', checked ? 'border-brand bg-brand' : 'border-gray-300')}>
+                  {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                </span>
+                {u.nombre}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button isLoading={crear.isPending} disabled={!canCrear} onClick={() => crear.mutate()}>
+          {crear.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Crear y usar esta campaña
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function EtiquetaMenuFormModal({ etiqueta, onClose }: { etiqueta?: EtiquetaMenuChatbot; onClose: () => void }) {
   const qc = useQueryClient()
   const isEdit = !!etiqueta
@@ -187,15 +285,20 @@ function EtiquetaMenuFormModal({ etiqueta, onClose }: { etiqueta?: EtiquetaMenuC
   const [campaniaId, setCampaniaId] = useState<number | ''>(etiqueta?.campaniaId ?? '')
   const [grupoId, setGrupoId] = useState<number | ''>(etiqueta?.grupoId ?? '')
   const [orden, setOrden] = useState(etiqueta?.orden ?? 0)
+  const [creandoCampania, setCreandoCampania] = useState(false)
 
+  // Campañas/grupos de Omnicanal (CCO_*) — no del motor viejo de Livechat:
+  // "escalar_campania" apunta a una campaña real que un agente atiende desde
+  // Contact Center, y el token que el widget necesita sale del canal
+  // 'web_publica' de esa campaña (ver chatbotController.SELECT_ETIQUETA).
   const { data: campanias = [] } = useQuery({
-    queryKey: ['livechat-campanias'],
-    queryFn: () => livechatService.getCampanias(),
+    queryKey: ['cc-campanias'],
+    queryFn: () => ccService.getCampanias(),
     enabled: tipo === 'escalar_campania',
   })
   const { data: grupos = [] } = useQuery({
-    queryKey: ['livechat-grupos', campaniaId],
-    queryFn: () => livechatService.getGrupos(Number(campaniaId)),
+    queryKey: ['cc-grupos', campaniaId],
+    queryFn: () => ccService.getGrupos(Number(campaniaId)),
     enabled: tipo === 'escalar_campania' && campaniaId !== '',
   })
 
@@ -265,36 +368,60 @@ function EtiquetaMenuFormModal({ etiqueta, onClose }: { etiqueta?: EtiquetaMenuC
         </div>
 
         {tipo === 'escalar_campania' && (
-          <div className="grid grid-cols-1 gap-3 rounded-xl bg-gray-50 p-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaña</label>
-              <select
-                value={campaniaId}
-                onChange={(e) => { setCampaniaId(e.target.value ? Number(e.target.value) : ''); setGrupoId('') }}
-                className="field"
-              >
-                <option value="">Elegir campaña…</option>
-                {campanias.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </select>
+          <div className="space-y-3 rounded-xl bg-gray-50 p-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaña</label>
+                <select
+                  value={campaniaId}
+                  onChange={(e) => { setCampaniaId(e.target.value ? Number(e.target.value) : ''); setGrupoId('') }}
+                  className="field"
+                  disabled={creandoCampania}
+                >
+                  <option value="">Elegir campaña…</option>
+                  {campanias.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  Grupo <span className="normal-case font-normal text-gray-400">(opcional)</span>
+                </label>
+                <select
+                  value={grupoId}
+                  onChange={(e) => setGrupoId(e.target.value ? Number(e.target.value) : '')}
+                  className="field"
+                  disabled={campaniaId === '' || creandoCampania}
+                >
+                  <option value="">Cualquiera disponible</option>
+                  {grupos.map((g) => (
+                    <option key={g.id} value={g.id}>{g.nombre}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                Grupo <span className="normal-case font-normal text-gray-400">(opcional)</span>
-              </label>
-              <select
-                value={grupoId}
-                onChange={(e) => setGrupoId(e.target.value ? Number(e.target.value) : '')}
-                className="field"
-                disabled={campaniaId === ''}
+
+            {!creandoCampania ? (
+              <button
+                type="button"
+                onClick={() => setCreandoCampania(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-brand hover:underline"
               >
-                <option value="">Cualquiera disponible</option>
-                {grupos.map((g) => (
-                  <option key={g.id} value={g.id}>{g.nombre}</option>
-                ))}
-              </select>
-            </div>
+                <Plus className="h-3.5 w-3.5" /> Crear una campaña nueva con su widget web
+              </button>
+            ) : (
+              <NuevaCampaniaWebInline
+                onCancel={() => setCreandoCampania(false)}
+                onCreada={(nuevaCampaniaId, nuevoGrupoId) => {
+                  qc.invalidateQueries({ queryKey: ['cc-campanias'] })
+                  qc.invalidateQueries({ queryKey: ['cc-grupos', nuevaCampaniaId] })
+                  setCampaniaId(nuevaCampaniaId)
+                  setGrupoId(nuevoGrupoId)
+                  setCreandoCampania(false)
+                }}
+              />
+            )}
           </div>
         )}
 

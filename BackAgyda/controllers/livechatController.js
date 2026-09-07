@@ -271,6 +271,10 @@ async function intentarAsignarSiguienteEnCola(pool, tenantKey = DEFAULT_TENANT) 
       conversacionId: entry.conversacionId,
       agenteNombre: agente.nombre,
     });
+    // Broadcast a todo el tenant (no solo a la room de esa conversación) —
+    // así el panel de Supervisión se refresca al instante cuando alguien
+    // toma un chat, en vez de esperar hasta 8s al próximo poll.
+    socketService.getIO(tenantKey).emit('livechat:conversacion_tomada', { conversacionId: entry.conversacionId });
   } catch (e) {
     console.warn('⚠️ No se pudo emitir asignación desde cola:', e?.message || e);
   }
@@ -605,6 +609,8 @@ async function cerrarConversacionPorVisitante(pool, conversacion, tenantKey) {
 
   try {
     socketService.getIO().to(`livechat:${conversacionId}`).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
+    // Broadcast a todo el tenant para que el panel de Supervisión se refresque.
+    socketService.getIO(tenantKey).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
   } catch (e) {
     console.warn('⚠️ No se pudo emitir livechat:conversacion_cerrada (salida del visitante):', e?.message || e);
   }
@@ -838,6 +844,10 @@ exports.tomarConversacion = async (req, res) => {
         conversacionId: Number(conversacionId),
         agenteNombre: req.user.nombre || req.user.username || 'Agente',
       });
+      // Broadcast a todo el tenant (no solo a la room de esa conversación) —
+      // así el panel de Supervisión se refresca al instante cuando alguien
+      // toma un chat, en vez de esperar hasta 8s al próximo poll.
+      socketService.getIO(tenantKeyDe(req)).emit('livechat:conversacion_tomada', { conversacionId: Number(conversacionId) });
     } catch (e) {
       console.warn('⚠️ No se pudo emitir livechat:conversacion_tomada:', e?.message || e);
     }
@@ -927,7 +937,8 @@ exports.cerrarConversacion = async (req, res) => {
       .input('comentarioCierre', sql.NVarChar, comentarioCierre || null)
       .query(`
         UPDATE dbo.LIVECHAT_CONVERSACIONES
-        SET LC_ESTADO = 'pendiente_rating', LC_MOTIVO_CIERRE = @motivoCierre, LC_MOTIVO_CIERRE_ID = @motivoCierreId, LC_COMENTARIO_CIERRE = @comentarioCierre
+        SET LC_ESTADO = 'pendiente_rating', LC_MOTIVO_CIERRE = @motivoCierre, LC_MOTIVO_CIERRE_ID = @motivoCierreId, LC_COMENTARIO_CIERRE = @comentarioCierre,
+            LC_FECHA_PENDIENTE_RATING = GETDATE()
         WHERE LC_ID = @convId
       `);
 
@@ -1012,6 +1023,8 @@ exports.calificarConversacion = async (req, res) => {
 
     try {
       socketService.getIO().to(`livechat:${conversacionId}`).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
+      // Broadcast a todo el tenant para que el panel de Supervisión se refresque.
+      socketService.getIO(tenantKeyDe(req)).emit('livechat:conversacion_cerrada', { conversacionId: Number(conversacionId) });
     } catch (e) {
       console.warn('⚠️ No se pudo emitir livechat:conversacion_cerrada:', e?.message || e);
     }
@@ -1205,6 +1218,55 @@ async function escalarChatsSoporteTiEnEsperaCron() {
   }
 }
 
+// Corre cada minuto (ver cron.schedule al final del archivo). Cierra
+// automáticamente las conversaciones que llevan más de LCF_TIMEOUT_RATING_MINUTOS
+// en 'pendiente_rating' sin que el visitante califique — típicamente porque
+// cerró la pestaña sin llenar el rating. Sin este cron, calificarConversacion()
+// es la ÚNICA vía que guarda la transcripción en el CRM y libera el turno de
+// cola de esa conversación, así que un visitante que nunca califica la deja
+// huérfana para siempre (ver comentario en calificarConversacion). Aquí se
+// completa el mismo cierre real que haría el rating, solo que sin LC_RATING
+// (queda NULL — se sabe que fue timeout por LC_FECHA_CIERRE sin LC_RATING).
+async function cerrarChatsSinCalificarCron() {
+  const { listTenants } = require('../config/tenants');
+  for (const { key } of listTenants()) {
+    try {
+      const pool = await databaseService.getPool(key);
+      const config = await getConfig(pool);
+      const timeoutMin = config?.LCF_TIMEOUT_RATING_MINUTOS || 30;
+
+      const rs = await pool.request().input('timeoutMin', sql.Int, timeoutMin).query(`
+        SELECT LC_ID as id, LC_OPO_ID as opoId
+        FROM dbo.LIVECHAT_CONVERSACIONES
+        WHERE LC_ESTADO = 'pendiente_rating'
+          AND LC_FECHA_PENDIENTE_RATING IS NOT NULL
+          AND DATEDIFF(MINUTE, LC_FECHA_PENDIENTE_RATING, GETDATE()) >= @timeoutMin
+      `);
+
+      for (const row of rs.recordset) {
+        await pool.request().input('convId', sql.Int, row.id).query(`
+          UPDATE dbo.LIVECHAT_CONVERSACIONES SET LC_ESTADO = 'cerrada', LC_FECHA_CIERRE = GETDATE()
+          WHERE LC_ID = @convId
+        `);
+
+        await guardarTranscripcionEnCrm(pool, row.id, row.opoId);
+
+        try {
+          socketService.getIO().to(`livechat:${row.id}`).emit('livechat:conversacion_cerrada', { conversacionId: Number(row.id) });
+        } catch (e) {
+          console.warn('⚠️ No se pudo emitir livechat:conversacion_cerrada (timeout de rating):', e?.message || e);
+        }
+      }
+
+      if (rs.recordset.length > 0) {
+        await intentarAsignarSiguienteEnCola(pool, key);
+      }
+    } catch (error) {
+      console.error(`Error en cerrarChatsSinCalificarCron (tenant=${key}):`, error);
+    }
+  }
+}
+
 async function ajustarDisponibilidadPorHorarioCron() {
   const { listTenants } = require('../config/tenants');
   for (const { key } of listTenants()) {
@@ -1255,6 +1317,7 @@ exports.getConfig = async (req, res) => {
         mensajeEnCola: config.LCF_MSG_EN_COLA,
         maxChatsPorAgente: config.LCF_MAX_CHATS_POR_AGENTE,
         timeoutColaMinutos: config.LCF_TIMEOUT_COLA_MINUTOS,
+        timeoutRatingMinutos: config.LCF_TIMEOUT_RATING_MINUTOS,
       },
     });
   } catch (error) {
@@ -1268,7 +1331,7 @@ exports.updateConfig = async (req, res) => {
     const {
       horarioInicio, horarioFin, sabadoHorarioInicio, sabadoHorarioFin, diasSemana,
       mensajeBienvenida, mensajeFueraHorario, mensajeSinAgentes, mensajeEnCola,
-      maxChatsPorAgente, timeoutColaMinutos,
+      maxChatsPorAgente, timeoutColaMinutos, timeoutRatingMinutos,
     } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
     const config = await getConfig(pool);
@@ -1289,6 +1352,7 @@ exports.updateConfig = async (req, res) => {
       .input('mensajeEnCola', sql.NVarChar, mensajeEnCola || null)
       .input('maxChatsPorAgente', sql.Int, Number.isFinite(maxChatsPorAgente) ? maxChatsPorAgente : 5)
       .input('timeoutColaMinutos', sql.Int, Number.isFinite(timeoutColaMinutos) ? timeoutColaMinutos : 15)
+      .input('timeoutRatingMinutos', sql.Int, Number.isFinite(timeoutRatingMinutos) ? timeoutRatingMinutos : 30)
       .query(`
         UPDATE dbo.LIVECHAT_CONFIG
         SET LCF_HORARIO_INICIO = @horarioInicio,
@@ -1301,7 +1365,8 @@ exports.updateConfig = async (req, res) => {
             LCF_MSG_SIN_AGENTES = @mensajeSinAgentes,
             LCF_MSG_EN_COLA = @mensajeEnCola,
             LCF_MAX_CHATS_POR_AGENTE = @maxChatsPorAgente,
-            LCF_TIMEOUT_COLA_MINUTOS = @timeoutColaMinutos
+            LCF_TIMEOUT_COLA_MINUTOS = @timeoutColaMinutos,
+            LCF_TIMEOUT_RATING_MINUTOS = @timeoutRatingMinutos
         WHERE LCF_ID = @id
       `);
 
@@ -1438,6 +1503,8 @@ exports.transferirConversacion = async (req, res) => {
         agenteNombre: agenteDestino.nombre,
       });
       socketService.getIO(tenantKeyDe(req)).to(`user:${agenteDestino.usuarioId}`).emit('livechat:nueva_conversacion', { conversacionId: Number(conversacionId) });
+      // Broadcast a todo el tenant para que el panel de Supervisión se refresque.
+      socketService.getIO(tenantKeyDe(req)).emit('livechat:conversacion_transferida', { conversacionId: Number(conversacionId) });
     } catch (e) {
       console.warn('⚠️ No se pudo emitir evento de transferencia:', e?.message || e);
     }
@@ -1553,6 +1620,14 @@ cron.schedule('* * * * *', () => {
 
 cron.schedule('* * * * *', () => {
   escalarChatsSoporteTiEnEsperaCron();
+}, { timezone: 'America/Mexico_City' });
+
+// Cierra por timeout las conversaciones que el visitante nunca calificó — ver
+// comentario de cerrarChatsSinCalificarCron. Corre cada minuto igual que el
+// resto; el propio DATEDIFF contra LC_FECHA_PENDIENTE_RATING evita cerrar de
+// más aunque el cron pase varias veces mientras el timeout no se cumple.
+cron.schedule('* * * * *', () => {
+  cerrarChatsSinCalificarCron();
 }, { timezone: 'America/Mexico_City' });
 
 // Reutilizadas por livechatInternoController.js (chat interno de empleados

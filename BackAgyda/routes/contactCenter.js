@@ -10,6 +10,13 @@ const ccCron = require('../controllers/ccCronController'); // registra el cron a
 
 const M = 'contact-center';
 
+// ── Público (sin auth) — lo consume extra/Postulacion-Ayudantes/contacto.html
+// y cualquier otra página externa que necesite mostrar el contacto real de
+// una campaña (número de WhatsApp conectado + URLs de Facebook/Instagram
+// capturadas a mano). Nunca expone tokens, credenciales, ni el CM2_ID interno.
+router.get('/publico/campanias/:slug/contacto', cfg.getContactoPublicoCampania);
+router.post('/publico/campanias/:slug/postulantes', cfg.registrarPostulantePublico);
+
 // ── Media (acepta ?token=) ──────────────────────────────────────────────
 router.get('/media/:id', authenticateToken, requireActionAccess(M, 'ver'), inter.verMedia);
 
@@ -47,6 +54,38 @@ router.delete('/canales/:id', authenticateToken, requireActionAccess(M, 'configu
 router.post('/canales/:id/probar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.probarCanal);
 router.post('/canales/:id/suscribir', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.suscribirCanal);
 
+// WhatsApp vía Baileys (no oficial) — vinculación por QR en vez de tokens de
+// Meta. Modo compartido (canal completo, sin :usuarioId): requiere
+// 'configurar-canales' (admin/gestor), afecta a toda la campaña. Modo
+// individual (con :usuarioId): requiere solo 'atender' — cualquier agente
+// del skill vincula/gestiona SU propia sesión (el controller valida que no
+// toque la de otro; ver resolverCanalYUsuario).
+router.post('/canales/:id/baileys/iniciar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.iniciarBaileys);
+router.get('/canales/:id/baileys/estado', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.estadoBaileys);
+router.post('/canales/:id/baileys/cerrar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.cerrarBaileys);
+router.post('/canales/:id/baileys/agente/:usuarioId/iniciar', authenticateToken, requireActionAccess(M, 'atender'), cfg.iniciarBaileys);
+router.get('/canales/:id/baileys/agente/:usuarioId/estado', authenticateToken, requireActionAccess(M, 'atender'), cfg.estadoBaileys);
+router.post('/canales/:id/baileys/agente/:usuarioId/cerrar', authenticateToken, requireActionAccess(M, 'atender'), cfg.cerrarBaileys);
+
+// Messenger vía FCA (no oficial) — vinculación pegando un appstate.json en vez de tokens de Meta.
+router.post('/canales/:id/fca/vincular', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.vincularFca);
+router.get('/canales/:id/fca/estado', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.estadoFca);
+router.post('/canales/:id/fca/cerrar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.cerrarFca);
+router.post('/canales/:id/fca/agente/:usuarioId/vincular', authenticateToken, requireActionAccess(M, 'atender'), cfg.vincularFca);
+router.get('/canales/:id/fca/agente/:usuarioId/estado', authenticateToken, requireActionAccess(M, 'atender'), cfg.estadoFca);
+router.post('/canales/:id/fca/agente/:usuarioId/cerrar', authenticateToken, requireActionAccess(M, 'atender'), cfg.cerrarFca);
+
+// Instagram DM vía API privada (no oficial) — vinculación con usuario+password.
+router.post('/canales/:id/igp/vincular', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.vincularIgPrivate);
+router.get('/canales/:id/igp/estado', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.estadoIgPrivate);
+router.post('/canales/:id/igp/cerrar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.cerrarIgPrivate);
+router.post('/canales/:id/igp/agente/:usuarioId/vincular', authenticateToken, requireActionAccess(M, 'atender'), cfg.vincularIgPrivate);
+router.get('/canales/:id/igp/agente/:usuarioId/estado', authenticateToken, requireActionAccess(M, 'atender'), cfg.estadoIgPrivate);
+router.post('/canales/:id/igp/agente/:usuarioId/cerrar', authenticateToken, requireActionAccess(M, 'atender'), cfg.cerrarIgPrivate);
+
+// Estado de sesión de cada agente del skill, para un canal en modo individual.
+router.get('/canales/:id/sesiones-agentes', authenticateToken, requireActionAccess(M, 'atender'), cfg.listSesionesAgentesCanal);
+
 // ── Config global ─────────────────────────────────────────────────────
 router.get('/config', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.getConfig);
 router.put('/config', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.updateConfig);
@@ -56,6 +95,7 @@ router.get('/campanias', authenticateToken, requireActionAccess(M, 'ver'), cfg.l
 router.post('/campanias', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.createCampania);
 router.put('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.updateCampania);
 router.delete('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.deleteCampania);
+router.get('/campanias/:id/postulantes', authenticateToken, requireActionAccess(M, 'ver'), cfg.listPostulantesCampania);
 
 router.get('/grupos', authenticateToken, requireActionAccess(M, 'ver'), cfg.listGrupos);
 router.post('/grupos', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.createGrupo);

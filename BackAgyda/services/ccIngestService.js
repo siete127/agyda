@@ -27,8 +27,12 @@ async function guardarMedia(pool, { interaccionId, buffer, mime, metaMediaId, no
   return r.recordset[0].id;
 }
 
-// Resuelve la interacción abierta para (canal, clienteExtId) o crea una nueva en cola.
-async function obtenerOCrearInteraccion(pool, canal, { clienteExtId, clienteNombre, clienteTelefono }) {
+// Resuelve la interacción abierta para (canal, clienteExtId) o crea una nueva.
+// agenteFijoId (solo canales con CN_MODO_SESION='individual'): el mensaje
+// llegó por la sesión personal de ese agente — la interacción nace ya
+// 'activa' y asignada a él directo, sin pasar por el ACD/cola general (ver
+// ccRoutingService.rutearInteraccion, que solo se llama para las genéricas).
+async function obtenerOCrearInteraccion(pool, canal, { clienteExtId, clienteNombre, clienteTelefono, agenteFijoId }) {
   const abierta = await pool.request()
     .input('canal', sql.Int, canal.CN_ID)
     .input('ext', sql.NVarChar(80), clienteExtId || null)
@@ -38,6 +42,28 @@ async function obtenerOCrearInteraccion(pool, canal, { clienteExtId, clienteNomb
               AND CI_ESTADO IN ('en_cola','activa','pendiente_tipificacion')
             ORDER BY CI_ID DESC`);
   if (abierta.recordset[0]) return { ...abierta.recordset[0], nueva: false };
+
+  if (agenteFijoId) {
+    const agenteNombre = await pool.request().input('u', sql.Int, agenteFijoId)
+      .query('SELECT NEUS_NOMBRES n FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u');
+    const nombre = agenteNombre.recordset[0]?.n || String(agenteFijoId);
+    const ins = await pool.request()
+      .input('canal', sql.Int, canal.CN_ID).input('tipo', sql.NVarChar(20), canal.CN_TIPO)
+      .input('ext', sql.NVarChar(80), clienteExtId || null).input('nombre', sql.NVarChar(160), clienteNombre || null)
+      .input('tel', sql.NVarChar(40), clienteTelefono || null)
+      .input('camp', sql.Int, canal.CN_CAMPANIA_ID || null).input('grupo', sql.Int, canal.CN_GRUPO_ID || null)
+      .input('agente', sql.Int, agenteFijoId).input('agenteNombre', sql.NVarChar(160), nombre)
+      .query(`INSERT INTO dbo.CCO_INTERACCIONES
+        (CI_CANAL_ID, CI_TIPO, CI_CLIENTE_EXT_ID, CI_CLIENTE_NOMBRE, CI_CLIENTE_TELEFONO,
+         CI_CAMPANIA_ID, CI_GRUPO_ID, CI_AGENTE_ID, CI_AGENTE_NOMBRE, CI_ESTADO)
+        OUTPUT INSERTED.CI_ID id
+        VALUES (@canal, @tipo, @ext, @nombre, @tel, @camp, @grupo, @agente, @agenteNombre, 'activa')`);
+    await pool.request().input('u', sql.Int, agenteFijoId)
+      .query(`MERGE dbo.CCO_AGENTE_ESTADO AS t USING (SELECT @u AS u) s ON t.CAE_USUARIO_ID = s.u
+              WHEN MATCHED THEN UPDATE SET CAE_INTERACCIONES_ACTIVAS = CAE_INTERACCIONES_ACTIVAS + 1
+              WHEN NOT MATCHED THEN INSERT (CAE_USUARIO_ID, CAE_INTERACCIONES_ACTIVAS) VALUES (@u, 1);`);
+    return { id: ins.recordset[0].id, estado: 'activa', agenteId: agenteFijoId, tipo: canal.CN_TIPO, nueva: true, fijaAgente: true };
+  }
 
   const ticket = await pool.request().query(
     `SELECT ISNULL(MAX(CI_TICKET), 0) + 1 AS n FROM dbo.CCO_INTERACCIONES WHERE CI_ESTADO = 'en_cola'`);
@@ -99,7 +125,11 @@ async function ingestarMensajeCliente(pool, tenantKey, canal, evento, { descarga
     ccRouting.emitir(tenantKey, `user:${it.agenteId}`, 'cc:actividad', { interaccionId: it.id });
   }
 
-  if (it.nueva || it.estado === 'en_cola') {
+  if (it.nueva && it.fijaAgente) {
+    // Sesión individual: ya nació 'activa' y asignada — solo avisar al
+    // dueño, sin pasar por el ACD (rutearInteraccion) ni la cola general.
+    ccRouting.emitir(tenantKey, `user:${it.agenteId}`, 'cc:nueva_interaccion', { interaccionId: it.id });
+  } else if (it.nueva || it.estado === 'en_cola') {
     await ccRouting.rutearInteraccion(pool, tenantKey, it.id).catch((e) => console.warn('[ccIngest] ruteo:', e?.message));
     ccRouting.emitir(tenantKey, 'supervisores', 'cc:cola_cambio', {});
   }

@@ -4995,6 +4995,7 @@ async function ensureAllSchemas(pool) {
   await ensureLivechatSchema(pool);
   await ensureLivechatCampanasSchema(pool);
   await ensureContactCenterSchema(pool);
+  await ensureQrCodesSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
   await ensureEncuestasSchema(pool);
@@ -5880,8 +5881,8 @@ END
           ETQ_TEXTO_ES         NVARCHAR(150)   NOT NULL,
           ETQ_TEXTO_EN         NVARCHAR(150)   NULL,
           ETQ_TIPO             NVARCHAR(30)    NOT NULL DEFAULT ('respuesta'),
-          ETQ_CAMPANIA_ID      INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_CAMPANIAS(LCA_ID),
-          ETQ_GRUPO_ID         INT             NULL FOREIGN KEY REFERENCES dbo.LIVECHAT_GRUPOS(LG_ID),
+          ETQ_CAMPANIA_ID      INT             NULL FOREIGN KEY REFERENCES dbo.CCO_CAMPANIAS(CM2_ID),
+          ETQ_GRUPO_ID         INT             NULL FOREIGN KEY REFERENCES dbo.CCO_GRUPOS(CG_ID),
           ETQ_ORDEN            INT             NOT NULL DEFAULT (0),
           ETQ_ACTIVA           BIT             NOT NULL DEFAULT (1),
           ETQ_FECHA_CREACION   DATETIME        NOT NULL DEFAULT GETDATE(),
@@ -5900,6 +5901,42 @@ END
         ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO;
         ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT CK_CHATBOT_ETIQUETAS_TIPO
           CHECK (ETQ_TIPO IN ('respuesta','escalar_campania','escalar_generico','arbol_diagnostico'));
+      END
+    `);
+
+    // ETQ_CAMPANIA_ID/ETQ_GRUPO_ID nacieron con FK hacia el motor viejo de
+    // Livechat (LIVECHAT_CAMPANIAS/LIVECHAT_GRUPOS) — desde que "escalar a
+    // Chat en Vivo" pasó a atenderse en Omnicanal (CCO_*), 'escalar_campania'
+    // debe poder apuntar a una CCO_CAMPANIAS/CCO_GRUPOS real. Se reapuntan las
+    // FK en vez de solo dejarlas sueltas, para conservar la integridad
+    // referencial (nunca se llegó a usar 'escalar_campania' en producción —
+    // sys.foreign_keys confirmado sin filas huérfanas antes de este cambio).
+    await pool.request().query(`
+      IF EXISTS (SELECT 1 FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_CAMPANIA_ID'
+                   AND OBJECT_NAME(fk.referenced_object_id) = 'LIVECHAT_CAMPANIAS')
+      BEGIN
+        DECLARE @fkCamp NVARCHAR(200) = (SELECT fk.name FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_CAMPANIA_ID');
+        EXEC('ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT ' + @fkCamp);
+        UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ETQ_CAMPANIA_ID = NULL, ETQ_TIPO = 'escalar_generico' WHERE ETQ_CAMPANIA_ID IS NOT NULL;
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT FK_CHATBOT_ETQ_CAMPANIA_CCO FOREIGN KEY (ETQ_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID);
+      END
+    `);
+    await pool.request().query(`
+      IF EXISTS (SELECT 1 FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_GRUPO_ID'
+                   AND OBJECT_NAME(fk.referenced_object_id) = 'LIVECHAT_GRUPOS')
+      BEGIN
+        DECLARE @fkGrupo NVARCHAR(200) = (SELECT fk.name FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                 WHERE fk.parent_object_id = OBJECT_ID('dbo.CHATBOT_ETIQUETAS_MENU')
+                   AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'ETQ_GRUPO_ID');
+        EXEC('ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU DROP CONSTRAINT ' + @fkGrupo);
+        UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ETQ_GRUPO_ID = NULL WHERE ETQ_GRUPO_ID IS NOT NULL;
+        ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD CONSTRAINT FK_CHATBOT_ETQ_GRUPO_CCO FOREIGN KEY (ETQ_GRUPO_ID) REFERENCES dbo.CCO_GRUPOS(CG_ID);
       END
     `);
 
@@ -6067,11 +6104,24 @@ IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_SABADO_HORARIO_FIN') IS NULL
 IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_TIMEOUT_COLA_MINUTOS') IS NULL
   ALTER TABLE dbo.LIVECHAT_CONFIG ADD LCF_TIMEOUT_COLA_MINUTOS INT NOT NULL DEFAULT (15);
 
+-- Minutos que se espera la calificación del visitante tras el cierre del agente
+-- (estado 'pendiente_rating') antes de cerrarla automáticamente sin rating y
+-- guardar igualmente su transcripción en el CRM — ver cerrarChatsSinCalificarCron.
+IF COL_LENGTH('dbo.LIVECHAT_CONFIG', 'LCF_TIMEOUT_RATING_MINUTOS') IS NULL
+  ALTER TABLE dbo.LIVECHAT_CONFIG ADD LCF_TIMEOUT_RATING_MINUTOS INT NOT NULL DEFAULT (30);
+
 IF COL_LENGTH('dbo.LIVECHAT_AGENTE_ESTADO', 'LAE_MODO_AUTOMATICO') IS NULL
   ALTER TABLE dbo.LIVECHAT_AGENTE_ESTADO ADD LAE_MODO_AUTOMATICO BIT NOT NULL DEFAULT (1);
 
 IF COL_LENGTH('dbo.LIVECHAT_CONVERSACIONES', 'LC_OPO_ID') IS NULL
   ALTER TABLE dbo.LIVECHAT_CONVERSACIONES ADD LC_OPO_ID INT NULL;
+
+-- Fecha en que la conversación pasó a 'pendiente_rating' (cierre del agente).
+-- LC_FECHA_CIERRE solo se llena hasta que el visitante califica (o el cron de
+-- abajo cierra por timeout), así que sin esta columna no hay forma de saber
+-- cuánto lleva esperando calificación.
+IF COL_LENGTH('dbo.LIVECHAT_CONVERSACIONES', 'LC_FECHA_PENDIENTE_RATING') IS NULL
+  ALTER TABLE dbo.LIVECHAT_CONVERSACIONES ADD LC_FECHA_PENDIENTE_RATING DATETIME NULL;
 `);
     logger.info('✅ Esquema de livechat asegurado');
   } catch (err) {
@@ -6232,6 +6282,23 @@ CREATE TABLE dbo.CCO_CAMPANIAS (
   CM2_ACTIVO BIT NOT NULL DEFAULT 1,
   CM2_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
 );`,
+    // Enlaces de contacto "de respaldo" de la campaña, para páginas externas
+    // (ej. extra/Postulacion-Ayudantes/contacto.html) que quieren mostrar un
+    // botón de Facebook/Instagram real: Messenger (FCA) e Instagram (IGP) son
+    // cuentas PERSONALES automatizadas, sin un perfil público navegable al
+    // que enlazar — por eso estas URLs son texto libre capturado a mano
+    // (ej. la página de Facebook oficial de la empresa, si existe alguna
+    // aparte de la cuenta usada para el bot), no algo derivado del canal.
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_CONTACTO_FACEBOOK_URL') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_CONTACTO_FACEBOOK_URL NVARCHAR(300) NULL;`,
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_CONTACTO_INSTAGRAM_URL') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_CONTACTO_INSTAGRAM_URL NVARCHAR(300) NULL;`,
+    // Slug estable para identificar la campaña en URLs públicas (ej. el
+    // endpoint de solo-lectura que consume contacto.html) sin exponer el
+    // CM2_ID interno. Se autogenera a partir del nombre en el seed de abajo;
+    // el admin puede cambiarlo después vía updateCampania.
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_SLUG') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_SLUG NVARCHAR(80) NULL;`,
     `IF OBJECT_ID('dbo.CCO_GRUPOS', 'U') IS NULL
 CREATE TABLE dbo.CCO_GRUPOS (
   CG_ID INT IDENTITY(1,1) PRIMARY KEY,
@@ -6268,6 +6335,97 @@ CREATE TABLE dbo.CCO_CANALES (
   CN_WEBHOOK_SUSCRITO BIT NOT NULL DEFAULT 0,
   CN_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
 );`,
+    // Modo de sesión del canal, solo aplica a los 3 no-oficiales (Baileys/FCA/
+    // IGP — Meta oficial siempre es "compartido", una app/página por canal ya
+    // funciona así por diseño): 'compartido' = una sola cuenta para toda la
+    // campaña (comportamiento original, sigue siendo el default); 'individual'
+    // = cada agente del skill vincula SU PROPIA cuenta (ver CCO_CANAL_AGENTE_SESION),
+    // y sus chats entrantes se le asignan directo a él, sin pasar por la cola.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_MODO_SESION') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_MODO_SESION NVARCHAR(20) NOT NULL DEFAULT ('compartido');`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_MODO_SESION')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_MODO_SESION
+    CHECK (CN_MODO_SESION IN ('compartido','individual'));
+END`,
+    // Una fila por (canal, agente) cuando CN_MODO_SESION='individual' — mismo
+    // shape de columnas de estado que ya vive en CCO_CANALES para cada tipo no
+    // oficial (Baileys/FCA/IGP), pero aquí multiplicado por agente en vez de
+    // por canal. Las credenciales de sesión de Baileys siguen en disco
+    // (baileys_sessions/{canalId}_{usuarioId}/), igual que en modo compartido.
+    `IF OBJECT_ID('dbo.CCO_CANAL_AGENTE_SESION', 'U') IS NULL
+CREATE TABLE dbo.CCO_CANAL_AGENTE_SESION (
+  CAS_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CAS_CANAL_ID INT NOT NULL,
+  CAS_USUARIO_ID INT NOT NULL,
+  CAS_BAILEYS_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado'),
+  CAS_BAILEYS_NUMERO NVARCHAR(40) NULL,
+  CAS_FCA_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado'),
+  CAS_FCA_USUARIO NVARCHAR(120) NULL,
+  CAS_FCA_APPSTATE NVARCHAR(MAX) NULL,
+  CAS_IGP_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado'),
+  CAS_IGP_USUARIO NVARCHAR(120) NULL,
+  CAS_IGP_SESION NVARCHAR(MAX) NULL,
+  CAS_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CAS_CANAL FOREIGN KEY (CAS_CANAL_ID) REFERENCES dbo.CCO_CANALES(CN_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CAS_CANAL_USUARIO UNIQUE (CAS_CANAL_ID, CAS_USUARIO_ID),
+  CONSTRAINT CK_CAS_BAILEYS_ESTADO CHECK (CAS_BAILEYS_ESTADO IN ('desconectado','esperando_qr','conectado')),
+  CONSTRAINT CK_CAS_FCA_ESTADO CHECK (CAS_FCA_ESTADO IN ('desconectado','conectado','error')),
+  CONSTRAINT CK_CAS_IGP_ESTADO CHECK (CAS_IGP_ESTADO IN ('desconectado','conectado','error'))
+);`,
+    // Canal 'whatsapp_baileys': conexión no oficial (WhatsApp Web multi-device,
+    // sin Graph API ni webhook de Meta) — no requiere tokens, pero sí una
+    // sesión persistente por canal que se vincula escaneando un QR y se guarda
+    // en disco (ver services/canalesBaileys/baileysManager.js). Estas columnas
+    // solo trackean el estado; las credenciales de sesión de Baileys viven en
+    // archivos, no en la BD.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_BAILEYS_ESTADO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_BAILEYS_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado');`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_BAILEYS_NUMERO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_BAILEYS_NUMERO NVARCHAR(40) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_BAILEYS_ESTADO')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_BAILEYS_ESTADO
+    CHECK (CN_BAILEYS_ESTADO IN ('desconectado','esperando_qr','conectado'));
+END`,
+    // Canal 'messenger_fca': Messenger vía ws3-fca (no oficial, login con
+    // cookies de una cuenta PERSONAL de Facebook — appstate.json — en vez de
+    // tokens de una Página). Reutiliza el mismo par estado/identificador que
+    // whatsapp_baileys en concepto (una única sesión no oficial activa por
+    // canal), pero con su propio par de columnas porque el estado de FCA no
+    // pasa por 'esperando_qr' (aquí se "conecta" en cuanto se guarda un
+    // appstate.json válido, o falla de una vez si las cookies ya expiraron).
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_FCA_ESTADO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_FCA_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado');`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_FCA_USUARIO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_FCA_USUARIO NVARCHAR(120) NULL;`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_FCA_APPSTATE') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_FCA_APPSTATE NVARCHAR(MAX) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_FCA_ESTADO')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_FCA_ESTADO
+    CHECK (CN_FCA_ESTADO IN ('desconectado','conectado','error'));
+END`,
+    // Canal 'instagram_privado': Instagram DM vía instagram-private-api +
+    // instagram_mqtt (API privada no oficial, cuenta PERSONAL de Instagram —
+    // no requiere cuenta Business/Creator ni tokens de Meta). Vinculación con
+    // usuario+password la primera vez; CN_IGP_SESION guarda el estado
+    // serializado (cookies) para reconectar después sin pedirlo de nuevo.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_IGP_ESTADO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_IGP_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado');`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_IGP_USUARIO') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_IGP_USUARIO NVARCHAR(120) NULL;`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_IGP_SESION') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_IGP_SESION NVARCHAR(MAX) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_IGP_ESTADO')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_IGP_ESTADO
+    CHECK (CN_IGP_ESTADO IN ('desconectado','conectado','error'));
+END`,
     `IF OBJECT_ID('dbo.CCO_INTERACCIONES', 'U') IS NULL
 CREATE TABLE dbo.CCO_INTERACCIONES (
   CI_ID INT IDENTITY(1,1) PRIMARY KEY,
@@ -6293,6 +6451,22 @@ CREATE TABLE dbo.CCO_INTERACCIONES (
   CONSTRAINT CK_CCO_INT_ESTADO CHECK (CI_ESTADO IN ('en_cola','activa','pendiente_tipificacion','cerrada')),
   CONSTRAINT FK_CCO_INT_CANAL FOREIGN KEY (CI_CANAL_ID) REFERENCES dbo.CCO_CANALES(CN_ID)
 );`,
+    // Calificación del cliente (1-5) tras el cierre — hoy solo la usa el canal
+    // 'web_publica' (el widget de la página web la pide siempre; los demás
+    // canales de Omnicanal no tienen ese paso). A diferencia del motor viejo
+    // de LIVECHAT_*, el cierre NO espera a que califiquen — el chat ya queda
+    // 'cerrada' de una vez (como el resto de Omnicanal) y el rating, si llega,
+    // se guarda encima sin bloquear nada ni requerir un estado intermedio.
+    `IF COL_LENGTH('dbo.CCO_INTERACCIONES', 'CI_RATING') IS NULL
+  ALTER TABLE dbo.CCO_INTERACCIONES ADD CI_RATING TINYINT NULL;`,
+    `IF COL_LENGTH('dbo.CCO_INTERACCIONES', 'CI_COMENTARIO_RATING') IS NULL
+  ALTER TABLE dbo.CCO_INTERACCIONES ADD CI_COMENTARIO_RATING NVARCHAR(MAX) NULL;`,
+    // Oportunidad de CRM ligada (hoy solo la usa 'web_publica', portado de
+    // LIVECHAT_CONVERSACIONES.LC_OPO_ID): si el visitante deja email o
+    // teléfono, se busca/crea un CRM_CONTACTOS + CRM_OPORTUNIDADES y al
+    // cerrar se le adjunta la transcripción completa del chat.
+    `IF COL_LENGTH('dbo.CCO_INTERACCIONES', 'CI_OPO_ID') IS NULL
+  ALTER TABLE dbo.CCO_INTERACCIONES ADD CI_OPO_ID INT NULL;`,
     `IF OBJECT_ID('dbo.CCO_INTERACCIONES', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_INT_ESTADO' AND object_id = OBJECT_ID('dbo.CCO_INTERACCIONES'))
 BEGIN
   CREATE INDEX IX_CCO_INT_ESTADO ON dbo.CCO_INTERACCIONES(CI_ESTADO);
@@ -6397,6 +6571,40 @@ CREATE TABLE dbo.CCO_SIM_TOKENS (
   ST_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
   CONSTRAINT UQ_CCO_SIM_TOKEN UNIQUE (ST_TOKEN)
 );`,
+    // Autogenera el slug de campañas que aún no lo tienen (nombre en
+    // minúsculas, espacios/caracteres raros a '-'), desambiguando colisiones
+    // con el CM2_ID al final. Solo corre sobre filas con CM2_SLUG NULL, así
+    // que un slug ya editado a mano por el admin nunca se pisa.
+    `IF OBJECT_ID('dbo.CCO_CAMPANIAS', 'U') IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.CCO_CAMPANIAS WHERE CM2_SLUG IS NULL)
+UPDATE dbo.CCO_CAMPANIAS
+SET CM2_SLUG = LOWER(LEFT(
+      'c' + CAST(CM2_ID AS NVARCHAR(10)) + '-' +
+      REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        TRIM(CM2_NOMBRE), N'á','a'), N'é','e'), N'í','i'), N'ó','o'), N'ú','u'), N'ñ','n'),
+        ' ', '-'), '(', ''), 60))
+WHERE CM2_SLUG IS NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CAMPANIAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCO_CAMPANIAS_SLUG')
+CREATE UNIQUE INDEX UQ_CCO_CAMPANIAS_SLUG ON dbo.CCO_CAMPANIAS(CM2_SLUG) WHERE CM2_SLUG IS NOT NULL;`,
+    // Postulantes capturados desde la página pública de registro de una
+    // campaña (ej. extra/Postulacion-Ayudantes/registro.html → Totis). Sin
+    // login: cualquiera con el link/QR puede enviar el formulario, así que
+    // solo se guarda lo que el form ya valida (nombre y teléfono obligatorios).
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NULL
+CREATE TABLE dbo.CCO_CAMPANIA_POSTULANTES (
+  CP_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CP_CAMPANIA_ID INT NOT NULL,
+  CP_NOMBRE NVARCHAR(200) NOT NULL,
+  CP_TELEFONO NVARCHAR(20) NOT NULL,
+  CP_CORREO NVARCHAR(200) NULL,
+  CP_REDES_SOCIALES NVARCHAR(MAX) NULL,
+  CP_FECHA_REGISTRO DATETIME NOT NULL DEFAULT GETDATE(),
+  CP_IP NVARCHAR(50) NULL,
+  CONSTRAINT FK_CCO_CP_CAMPANIA FOREIGN KEY (CP_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_CP_CAMPANIA')
+CREATE INDEX IX_CCO_CP_CAMPANIA ON dbo.CCO_CAMPANIA_POSTULANTES(CP_CAMPANIA_ID);`,
   ];
   for (const q of stmts) {
     try { await pool.request().query(q); }
@@ -7049,6 +7257,34 @@ END
   }
 }
 
+// Códigos QR generados desde Configuración > Contact Center > Generador de QR.
+// CQR_ENTORNO distingue solo el propósito del QR (público = apunta a una URL
+// de producción; privado = apunta a una URL local/de red interna para
+// pruebas) — es una etiqueta informativa, no controla permisos ni acceso.
+async function ensureQrCodesSchema(pool) {
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.INTRANET_QR_CODES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_QR_CODES (
+    QR_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    QR_NOMBRE      NVARCHAR(200) NOT NULL,
+    QR_URL         NVARCHAR(1000) NOT NULL,
+    QR_ENTORNO     NVARCHAR(20) NOT NULL DEFAULT ('publico'),
+    QR_IMAGEN_DATAURL NVARCHAR(MAX) NOT NULL,
+    QR_AUTOR_ID    INT NULL,
+    QR_AUTOR_NOMBRE NVARCHAR(200) NULL,
+    QR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+  CREATE INDEX IX_QR_CODES_FECHA ON dbo.INTRANET_QR_CODES(QR_FECHA_CREACION DESC);
+END
+`);
+    logger.info('✅ Esquema de códigos QR asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de códigos QR:', err.message);
+  }
+}
+
 module.exports = {
     ensureNoticiasSchema,
     ensureAllSchemas,
@@ -7059,6 +7295,7 @@ module.exports = {
     ensureReaccionesNoticiasSchema,
     ensureLayoutSchema,
     ensurePersonalizacionSchema,
+    ensureQrCodesSchema,
     ensureReglamentoSchema,
     ensureTicketsSchema,
     ensureProfileSchema,

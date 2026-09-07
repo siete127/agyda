@@ -51,8 +51,13 @@ export const ROUTES: RouteConfig[] = [
   { path: '/activos',          label: 'Activos',         icon: 'Boxes',                moduleKey: 'activos',          roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/vacantes',         label: 'Vacantes',        icon: 'UserPlus',             moduleKey: 'vacantes',         roles: ['AD','TI'],          showInSidebar: true  },
   { path: '/chatbot',          label: 'Chatbot',         icon: 'MessageSquare',        moduleKey: 'chatbot',          roles: ['AD','TI'],          showInSidebar: true  },
-  { path: '/livechat',         label: 'Chat en Vivo',    icon: 'MessageCircle',        moduleKey: 'livechat',         roles: ['AD','TI','CC'],     showInSidebar: true  },
-  { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: true  },
+  // showInSidebar: false — ya no es entrada de menú propia (Chat en Vivo vive
+  // ahora dentro de Asesores/operaciones), pero la ruta sigue existiendo para
+  // los links directos que aún la usan (ej. "Chat relacionado" en Tickets).
+  { path: '/livechat',         label: 'Chat en Vivo',    icon: 'MessageCircle',        moduleKey: 'livechat',         roles: ['AD','TI','CC'],     showInSidebar: false },
+  // showInSidebar: false — ya no es entrada de menú propia; la ruta sigue
+  // existiendo para links directos que aún la usen.
+  { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: false },
 
   // ── Administración ─────────────────────────────────────────────────────
   { path: '/asistencia',       label: 'Asistencia',      icon: 'Clock',                moduleKey: 'asistencia',       roles: ['AD'],               showInSidebar: true  },
@@ -101,7 +106,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/ventas-area/reportes-resultados', label: 'Reportes de resultados', icon: 'BarChart2', moduleKey: 'ventas-area', roles: ['AD','TI'],    showInSidebar: true,  description: 'Reportes de resultados de ventas' },
   { path: '/operaciones',      label: 'Operaciones',     icon: 'Headset',              moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: false, description: 'Campañas activas y asignación de bases' },
   { path: '/operaciones/campanas', label: 'Campañas',    icon: 'Megaphone',            moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Campaña asignada a cada agente CC' },
-  { path: '/operaciones/supervisores', label: 'Supervisores', icon: 'UserCheck',       moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Panel de supervisores de Call Center' },
+  { path: '/operaciones/supervisores', label: 'Supervisor', icon: 'UserCheck',       moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Panel de supervisores de Call Center' },
   { path: '/operaciones/asesores', label: 'Asesores',    icon: 'Headphones',           moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Mi día — estado y tiempos personales' },
   { path: '/operaciones/tiempos', label: 'Tiempos',      icon: 'CalendarClock',        moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Bitácora detallada de sesiones y pausas' },
   { path: '/operaciones/kpis', label: 'KPIs',            icon: 'Gauge',                moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Indicadores clave de operaciones' },

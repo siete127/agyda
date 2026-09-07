@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Lista negra — Postulación Totis</title>
+    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+
+<body>
+
+    <header class="app-header">
+        <div class="app-header-brand">
+            <img src="assets/logo-totis.png" alt="Totis">
+            <span>Postulación de Ayudantes</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <a href="configuracion.html" class="btn-secondary" style="width:auto; padding:10px 16px;">Configuración</a>
+            <button type="button" class="btn-danger-outline" id="logoutBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </button>
+        </div>
+    </header>
+
+    <main class="app-main">
+        <h1 class="page-title">Lista negra</h1>
+        <p class="page-subtitle">Registra personas que no deben ser contratadas — captúralas manualmente o importa un Excel con varios registros a la vez.</p>
+
+        <div class="tabs" role="tablist">
+            <button type="button" class="tab-btn is-active" id="tabManualBtn" role="tab" aria-selected="true">Captura manual</button>
+            <button type="button" class="tab-btn" id="tabExcelBtn" role="tab" aria-selected="false">Importar Excel</button>
+        </div>
+
+        <!-- ===== TAB: Captura manual ===== -->
+        <div class="tab-panel is-active" id="tabManualPanel">
+            <div class="card">
+                <div id="blacklistAlert" class="alert alert-success" style="display:none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    <span>Registro agregado a la lista negra.</span>
+                </div>
+                <div id="blacklistError" class="alert alert-error" style="display:none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <span>Nombre y teléfono son obligatorios.</span>
+                </div>
+
+                <form id="blacklistForm" novalidate>
+                    <input type="hidden" id="blEditId" value="">
+                    <div class="form-field">
+                        <label for="blNombre">Nombre completo <span class="required">*</span></label>
+                        <input type="text" id="blNombre" class="input" placeholder="Ej. Juan Pérez López" required>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="blTelefono">Teléfono <span class="required">*</span></label>
+                        <input type="tel" id="blTelefono" class="input" placeholder="Ej. 55 1234 5678" required>
+                    </div>
+
+                    <div style="display:flex; gap:10px;">
+                        <button type="submit" class="btn-primary" id="blacklistSubmitBtn" style="width:auto; padding-left:24px; padding-right:24px;">
+                            Agregar a la lista
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                        <button type="button" class="btn-secondary" id="blacklistCancelEditBtn" style="width:auto; padding-left:20px; padding-right:20px; display:none;">
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="blacklistTableWrap" style="margin-top:24px; max-width:640px; display:none;">
+                <h3 style="font-size:14px; color:var(--texto-principal); margin-bottom:10px;">Registrados en esta sesión</h3>
+                <div style="overflow-x:auto; border:1px solid var(--borde); border-radius:12px;">
+                    <table style="width:100%; border-collapse:collapse; font-size:13.5px;">
+                        <thead>
+                            <tr style="background:var(--bg-body); text-align:left;">
+                                <th style="padding:10px 14px;">Nombre</th>
+                                <th style="padding:10px 14px;">Teléfono</th>
+                                <th style="padding:10px 14px; width:110px;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="blacklistTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== TAB: Importar Excel ===== -->
+        <div class="tab-panel" id="tabExcelPanel">
+            <div class="card">
+                <div class="alert alert-info">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span>El archivo debe tener las columnas <strong>Nombre</strong> y <strong>Teléfono</strong> (en cualquier orden). Revisa la vista previa antes de importar.</span>
+                </div>
+
+                <label class="dropzone" id="dropzone" for="excelInput">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <p>Arrastra tu archivo aquí o haz clic para seleccionar</p>
+                    <span>Formatos aceptados: .xlsx, .xls, .csv</span>
+                    <input type="file" id="excelInput" accept=".xlsx,.xls,.csv">
+                </label>
+
+                <div class="file-selected" id="fileSelected">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    <span class="file-name" id="fileName"></span>
+                    <button type="button" class="file-remove" id="fileRemoveBtn" aria-label="Quitar archivo">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+
+                <div id="excelError" class="alert alert-error" style="display:none; margin-top:14px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <span id="excelErrorText">No se pudo leer el archivo.</span>
+                </div>
+
+                <div id="excelPreviewWrap" style="margin-top:20px; display:none;">
+                    <h3 style="font-size:14px; color:var(--texto-principal); margin-bottom:10px;">
+                        Vista previa (<span id="excelPreviewCount">0</span> registros detectados)
+                    </h3>
+                    <div style="overflow-x:auto; border:1px solid var(--borde); border-radius:12px; max-height:320px; overflow-y:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:13.5px;">
+                            <thead>
+                                <tr style="background:var(--bg-body); text-align:left;">
+                                    <th style="padding:10px 14px; width:40px;">
+                                        <input type="checkbox" id="excelSelectAll" checked>
+                                    </th>
+                                    <th style="padding:10px 14px;">Nombre</th>
+                                    <th style="padding:10px 14px;">Teléfono</th>
+                                </tr>
+                            </thead>
+                            <tbody id="excelPreviewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <button type="button" class="btn-primary" id="excelSubmitBtn" style="width:auto; margin-top:18px; padding-left:24px; padding-right:24px;" disabled>
+                    Importar archivo
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/auth.js"></script>
+    <script>
+        // Pantalla protegida: si no hay sesión simulada, redirige a login.
+        PostulacionAuth.requireAuth();
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            PostulacionAuth.logout();
+            window.location.href = 'login.html';
+        });
+
+        // --- TABS ---
+        const tabManualBtn = document.getElementById('tabManualBtn');
+        const tabExcelBtn = document.getElementById('tabExcelBtn');
+        const tabManualPanel = document.getElementById('tabManualPanel');
+        const tabExcelPanel = document.getElementById('tabExcelPanel');
+
+        function activateTab(tab) {
+            const isManual = tab === 'manual';
+            tabManualBtn.classList.toggle('is-active', isManual);
+            tabExcelBtn.classList.toggle('is-active', !isManual);
+            tabManualBtn.setAttribute('aria-selected', String(isManual));
+            tabExcelBtn.setAttribute('aria-selected', String(!isManual));
+            tabManualPanel.classList.toggle('is-active', isManual);
+            tabExcelPanel.classList.toggle('is-active', !isManual);
+        }
+
+        tabManualBtn.addEventListener('click', () => activateTab('manual'));
+        tabExcelBtn.addEventListener('click', () => activateTab('excel'));
+
+        // --- CAPTURA MANUAL (solo frontend, sin backend todavía) ---
+        // Los registros se guardan en un array en memoria (se pierden al
+        // recargar la página) y la tabla se re-dibuja completa cada vez que
+        // cambia — así editar/eliminar es sencillo y consistente.
+        const blacklistForm = document.getElementById('blacklistForm');
+        const blacklistAlert = document.getElementById('blacklistAlert');
+        const blacklistAlertText = blacklistAlert.querySelector('span');
+        const blacklistError = document.getElementById('blacklistError');
+        const blacklistTableWrap = document.getElementById('blacklistTableWrap');
+        const blacklistTableBody = document.getElementById('blacklistTableBody');
+        const blEditId = document.getElementById('blEditId');
+        const blNombreInput = document.getElementById('blNombre');
+        const blTelefonoInput = document.getElementById('blTelefono');
+        const blacklistSubmitBtn = document.getElementById('blacklistSubmitBtn');
+        const blacklistCancelEditBtn = document.getElementById('blacklistCancelEditBtn');
+
+        let blacklistRegistros = [];
+        let blacklistNextId = 1;
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function renderBlacklistTable() {
+            blacklistTableWrap.style.display = blacklistRegistros.length ? 'block' : 'none';
+            blacklistTableBody.innerHTML = blacklistRegistros.map((registro) => `
+                <tr style="border-top:1px solid var(--borde);">
+                    <td style="padding:10px 14px;">${escapeHtml(registro.nombre)}</td>
+                    <td style="padding:10px 14px;">${escapeHtml(registro.telefono)}</td>
+                    <td style="padding:10px 14px; white-space:nowrap;">
+                        <button type="button" class="row-action-btn" data-action="edit" data-id="${registro.id}" aria-label="Editar" title="Editar">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
+                        </button>
+                        <button type="button" class="row-action-btn row-action-btn--danger" data-action="delete" data-id="${registro.id}" aria-label="Eliminar" title="Eliminar">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function resetBlacklistForm() {
+            blacklistForm.reset();
+            blEditId.value = '';
+            blacklistSubmitBtn.innerHTML = 'Agregar a la lista <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+            blacklistCancelEditBtn.style.display = 'none';
+        }
+
+        blacklistCancelEditBtn.addEventListener('click', resetBlacklistForm);
+
+        blacklistTableBody.addEventListener('click', (e) => {
+            const btn = e.target.closest('.row-action-btn');
+            if (!btn) return;
+            const id = Number(btn.dataset.id);
+            const registro = blacklistRegistros.find((r) => r.id === id);
+            if (!registro) return;
+
+            if (btn.dataset.action === 'delete') {
+                blacklistRegistros = blacklistRegistros.filter((r) => r.id !== id);
+                renderBlacklistTable();
+                if (Number(blEditId.value) === id) resetBlacklistForm();
+                return;
+            }
+
+            if (btn.dataset.action === 'edit') {
+                blEditId.value = String(id);
+                blNombreInput.value = registro.nombre;
+                blTelefonoInput.value = registro.telefono;
+                blacklistSubmitBtn.innerHTML = 'Guardar cambios <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                blacklistCancelEditBtn.style.display = 'inline-flex';
+                blNombreInput.focus();
+            }
+        });
+
+        blacklistForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const nombre = blNombreInput.value.trim();
+            const telefono = blTelefonoInput.value.trim();
+
+            blacklistAlert.style.display = 'none';
+            blacklistError.style.display = 'none';
+
+            if (!nombre || !telefono) {
+                blacklistError.style.display = 'flex';
+                return;
+            }
+
+            const editId = blEditId.value ? Number(blEditId.value) : null;
+            if (editId) {
+                const registro = blacklistRegistros.find((r) => r.id === editId);
+                if (registro) {
+                    registro.nombre = nombre;
+                    registro.telefono = telefono;
+                }
+                blacklistAlertText.textContent = 'Registro actualizado.';
+            } else {
+                blacklistRegistros.push({ id: blacklistNextId++, nombre, telefono });
+                blacklistAlertText.textContent = 'Registro agregado a la lista negra.';
+            }
+
+            renderBlacklistTable();
+            blacklistAlert.style.display = 'flex';
+            resetBlacklistForm();
+        });
+
+        // --- IMPORTAR EXCEL (parseo real en el navegador con SheetJS) ---
+        const dropzone = document.getElementById('dropzone');
+        const excelInput = document.getElementById('excelInput');
+        const fileSelected = document.getElementById('fileSelected');
+        const fileName = document.getElementById('fileName');
+        const fileRemoveBtn = document.getElementById('fileRemoveBtn');
+        const excelSubmitBtn = document.getElementById('excelSubmitBtn');
+        const excelError = document.getElementById('excelError');
+        const excelErrorText = document.getElementById('excelErrorText');
+        const excelPreviewWrap = document.getElementById('excelPreviewWrap');
+        const excelPreviewBody = document.getElementById('excelPreviewBody');
+        const excelPreviewCount = document.getElementById('excelPreviewCount');
+        const excelSelectAll = document.getElementById('excelSelectAll');
+
+        // Nombres de columna aceptados (sin acentos/mayúsculas) para ubicar
+        // Nombre y Teléfono sin importar cómo vengan escritos en el Excel.
+        const COLUMNAS_NOMBRE = ['nombre', 'nombre completo', 'nombres'];
+        const COLUMNAS_TELEFONO = ['telefono', 'teléfono', 'tel', 'celular', 'numero', 'número', 'phone'];
+
+        let excelFilasDetectadas = [];
+
+        function normalizarClave(str) {
+            return String(str)
+                .trim()
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[̀-ͯ]/g, '');
+        }
+
+        function hideExcelError() {
+            excelError.style.display = 'none';
+        }
+
+        function showExcelError(mensaje) {
+            excelErrorText.textContent = mensaje;
+            excelError.style.display = 'flex';
+        }
+
+        function clearExcelPreview() {
+            excelFilasDetectadas = [];
+            excelPreviewBody.innerHTML = '';
+            excelPreviewWrap.style.display = 'none';
+            excelSubmitBtn.disabled = true;
+        }
+
+        function renderExcelPreview() {
+            excelPreviewCount.textContent = String(excelFilasDetectadas.length);
+            excelPreviewBody.innerHTML = excelFilasDetectadas.map((fila, i) => `
+                <tr style="border-top:1px solid var(--borde);">
+                    <td style="padding:8px 14px;">
+                        <input type="checkbox" class="excel-row-check" data-index="${i}" ${fila.incluir ? 'checked' : ''}>
+                    </td>
+                    <td style="padding:8px 14px;">${escapeHtml(fila.nombre)}</td>
+                    <td style="padding:8px 14px;">${escapeHtml(fila.telefono)}</td>
+                </tr>
+            `).join('');
+            excelPreviewWrap.style.display = excelFilasDetectadas.length ? 'block' : 'none';
+            excelSubmitBtn.disabled = !excelFilasDetectadas.some((f) => f.incluir);
+        }
+
+        excelPreviewBody.addEventListener('change', (e) => {
+            const check = e.target.closest('.excel-row-check');
+            if (!check) return;
+            const fila = excelFilasDetectadas[Number(check.dataset.index)];
+            if (fila) fila.incluir = check.checked;
+            excelSubmitBtn.disabled = !excelFilasDetectadas.some((f) => f.incluir);
+            excelSelectAll.checked = excelFilasDetectadas.every((f) => f.incluir);
+        });
+
+        excelSelectAll.addEventListener('change', () => {
+            excelFilasDetectadas.forEach((f) => { f.incluir = excelSelectAll.checked; });
+            renderExcelPreview();
+        });
+
+        function extraerFilas(sheetRows) {
+            if (!sheetRows.length) return [];
+
+            const encabezados = sheetRows[0].map((c) => normalizarClave(c || ''));
+            const idxNombre = encabezados.findIndex((c) => COLUMNAS_NOMBRE.includes(c));
+            const idxTelefono = encabezados.findIndex((c) => COLUMNAS_TELEFONO.includes(c));
+
+            if (idxNombre === -1 || idxTelefono === -1) {
+                throw new Error('No se encontraron las columnas "Nombre" y "Teléfono" en la primera fila del archivo.');
+            }
+
+            return sheetRows.slice(1)
+                .map((fila) => ({
+                    nombre: String(fila[idxNombre] ?? '').trim(),
+                    telefono: String(fila[idxTelefono] ?? '').trim(),
+                    incluir: true,
+                }))
+                .filter((fila) => fila.nombre || fila.telefono);
+        }
+
+        function procesarArchivo(file) {
+            hideExcelError();
+            clearExcelPreview();
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const primeraHoja = workbook.Sheets[workbook.SheetNames[0]];
+                    const filas = XLSX.utils.sheet_to_json(primeraHoja, { header: 1, defval: '' });
+
+                    const detectadas = extraerFilas(filas);
+                    if (!detectadas.length) {
+                        showExcelError('El archivo no tiene registros para importar.');
+                        return;
+                    }
+
+                    excelFilasDetectadas = detectadas;
+                    excelSelectAll.checked = true;
+                    renderExcelPreview();
+                } catch (err) {
+                    showExcelError(err.message || 'No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.');
+                }
+            };
+            reader.onerror = () => showExcelError('No se pudo leer el archivo.');
+            reader.readAsArrayBuffer(file);
+        }
+
+        function showSelectedFile(file) {
+            if (!file) return;
+            fileName.textContent = file.name;
+            fileSelected.classList.add('is-visible');
+            procesarArchivo(file);
+        }
+
+        function clearSelectedFile() {
+            excelInput.value = '';
+            fileSelected.classList.remove('is-visible');
+            hideExcelError();
+            clearExcelPreview();
+        }
+
+        excelInput.addEventListener('change', () => {
+            showSelectedFile(excelInput.files[0]);
+        });
+
+        fileRemoveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            clearSelectedFile();
+        });
+
+        ['dragenter', 'dragover'].forEach((evt) => {
+            dropzone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                dropzone.classList.add('is-dragover');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach((evt) => {
+            dropzone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('is-dragover');
+            });
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                excelInput.files = e.dataTransfer.files;
+                showSelectedFile(file);
+            }
+        });
+
+        excelSubmitBtn.addEventListener('click', () => {
+            const seleccionadas = excelFilasDetectadas.filter((f) => f.incluir && (f.nombre || f.telefono));
+
+            if (!seleccionadas.length) {
+                showExcelError('Selecciona al menos un registro para importar.');
+                return;
+            }
+
+            seleccionadas.forEach((fila) => {
+                blacklistRegistros.push({
+                    id: blacklistNextId++,
+                    nombre: fila.nombre || '(sin nombre)',
+                    telefono: fila.telefono || '(sin teléfono)',
+                });
+            });
+            renderBlacklistTable();
+
+            const cantidad = seleccionadas.length;
+            clearSelectedFile();
+            activateTab('manual');
+            blacklistAlertText.textContent = `Se importaron ${cantidad} registro${cantidad === 1 ? '' : 's'} desde el Excel.`;
+            blacklistAlert.style.display = 'flex';
+        });
+    </script>
+</body>
+
+</html>

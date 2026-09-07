@@ -2,7 +2,8 @@ import { api } from '@/lib/axios'
 import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
-  CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas,
+  CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
+  CCPostulante,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -54,6 +55,33 @@ export const ccService = {
   probarCanal: (id: number) => api.post(`/contact-center/canales/${id}/probar`).then((r) => r.data),
   suscribirCanal: (id: number) => api.post(`/contact-center/canales/${id}/suscribir`).then((r) => r.data),
 
+  // ── WhatsApp vía Baileys (no oficial, vinculación por QR) ──
+  // usuarioId: solo cuando el canal está en modo 'individual' — apunta a la
+  // ruta .../agente/:usuarioId/... en vez de la del canal compartido.
+  iniciarBaileys: (id: number, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/iniciar`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
+  estadoBaileys: (id: number, usuarioId?: number) =>
+    api.get(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
+  cerrarBaileys: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/cerrar`).then((r) => r.data),
+
+  // ── Messenger vía FCA (no oficial, vinculación pegando appstate.json) ──
+  vincularFca: (id: number, appState: string, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/fca/agente/${usuarioId}` : '/fca'}/vincular`, { appState }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  estadoFca: (id: number, usuarioId?: number) =>
+    api.get(`/contact-center/canales/${id}${usuarioId ? `/fca/agente/${usuarioId}` : '/fca'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  cerrarFca: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/fca/agente/${usuarioId}` : '/fca'}/cerrar`).then((r) => r.data),
+
+  // ── Instagram DM vía API privada (no oficial, vinculación usuario/password) ──
+  vincularIgPrivate: (id: number, usuario: string, password: string, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/igp/agente/${usuarioId}` : '/igp'}/vincular`, { usuario, password }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  estadoIgPrivate: (id: number, usuarioId?: number) =>
+    api.get(`/contact-center/canales/${id}${usuarioId ? `/igp/agente/${usuarioId}` : '/igp'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  cerrarIgPrivate: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/igp/agente/${usuarioId}` : '/igp'}/cerrar`).then((r) => r.data),
+
+  // ── Modo individual: estado de sesión de cada agente del skill ──
+  listSesionesAgentesCanal: (id: number) =>
+    d<CCSesionAgenteCanal[]>(api.get(`/contact-center/canales/${id}/sesiones-agentes`)),
+
   // ── Config global ──
   getConfig: () => d<CCConfig>(api.get('/contact-center/config')),
   updateConfig: (body: Partial<CCConfig>) => api.put('/contact-center/config', body).then((r) => r.data),
@@ -63,6 +91,7 @@ export const ccService = {
   createCampania: (body: { nombre: string; descripcion?: string; maxChatsPorAgente?: number }) => api.post('/contact-center/campanias', body).then((r) => r.data),
   updateCampania: (id: number, body: Record<string, unknown>) => api.put(`/contact-center/campanias/${id}`, body).then((r) => r.data),
   deleteCampania: (id: number) => api.delete(`/contact-center/campanias/${id}`).then((r) => r.data),
+  getPostulantes: (campaniaId: number) => d<CCPostulante[]>(api.get(`/contact-center/campanias/${campaniaId}/postulantes`)),
 
   getGrupos: (campaniaId?: number) => d<CCGrupo[]>(api.get('/contact-center/grupos', { params: campaniaId ? { campaniaId } : {} })),
   createGrupo: (body: { campaniaId: number; nombre: string; descripcion?: string; icono?: string }) => api.post('/contact-center/grupos', body).then((r) => r.data),

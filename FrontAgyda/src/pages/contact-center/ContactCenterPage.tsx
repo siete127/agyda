@@ -4,7 +4,6 @@ import { Headset, Send, Power, Loader2, Clock, CheckCircle2, ArrowRightLeft, Pap
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { ccService } from '@/services/cc.service'
-import { livechatService } from '@/services/livechat.service'
 import { getSocket } from '@/lib/socket'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -17,10 +16,13 @@ function fmtHora(iso: string | null) {
   return dt.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
 }
 
-// Item unificado en la bandeja: CC o livechat "web".
+// Bandeja unificada: WhatsApp, Messenger, Instagram y el widget web público
+// (canal 'web_publica') llegan todos por ccService.getInteracciones — ya no
+// hay un motor paralelo de livechat que atender aparte (ver
+// ccWebPublicaController.js, que ahora responde /api/livechat/conversaciones
+// escribiendo sobre este mismo esquema CCO_*).
 type ItemUnificado = {
   key: string
-  origen: 'cc' | 'web'
   id: number
   titulo: string
   canalLabel: string
@@ -44,21 +46,13 @@ export default function ContactCenterPage() {
   const { data: ccCola = [] } = useQuery({
     queryKey: ['cc-inter', 'en_cola'], queryFn: () => ccService.getInteracciones('en_cola'), refetchInterval: 8000,
   })
-  const { data: webMias = [] } = useQuery({
-    queryKey: ['lc-mias'], queryFn: () => livechatService.getMisConversaciones('activa'), refetchInterval: 8000,
-  })
-  const { data: webCola = [] } = useQuery({
-    queryKey: ['lc-cola'], queryFn: () => livechatService.getMisConversaciones('esperando'), refetchInterval: 8000,
-  })
   const { data: miEstado } = useQuery({
     queryKey: ['cc-mi-estado'], queryFn: () => ccService.getMiEstado(), refetchInterval: 20000,
   })
 
   const toggle = useMutation({
-    mutationFn: async (v: boolean) => {
-      await Promise.allSettled([ccService.setDisponible(v), livechatService.setDisponible(v)])
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-mi-estado'] }); qc.invalidateQueries({ queryKey: ['livechat-mi-estado'] }) },
+    mutationFn: (v: boolean) => ccService.setDisponible(v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cc-mi-estado'] }),
     onError: () => toast.error('No se pudo cambiar la disponibilidad'),
   })
 
@@ -67,13 +61,8 @@ export default function ContactCenterPage() {
     if (!user?.id) return
     const s = getSocket()
     s.emit('joinUser', user.id)
-    const refetch = () => {
-      qc.invalidateQueries({ queryKey: ['cc-inter'] })
-      qc.invalidateQueries({ queryKey: ['lc-mias'] })
-      qc.invalidateQueries({ queryKey: ['lc-cola'] })
-    }
-    const eventos = ['cc:nueva_interaccion', 'cc:mensaje', 'cc:actividad', 'cc:interaccion_cerrada',
-      'livechat:nueva_conversacion', 'livechat:nueva_en_cola', 'livechat:actividad_conversacion']
+    const refetch = () => qc.invalidateQueries({ queryKey: ['cc-inter'] })
+    const eventos = ['cc:nueva_interaccion', 'cc:mensaje', 'cc:actividad', 'cc:interaccion_cerrada']
     eventos.forEach((e) => s.on(e, refetch))
     return () => { eventos.forEach((e) => s.off(e, refetch)) }
   }, [user?.id, qc])
@@ -81,10 +70,8 @@ export default function ContactCenterPage() {
   const items: ItemUnificado[] = [
     ...ccCola.map((i) => mapCc(i, true)),
     ...ccActivas.map((i) => mapCc(i, false)),
-    ...webCola.map((c: any) => mapWeb(c, true)),
-    ...webMias.map((c: any) => mapWeb(c, false)),
   ]
-  const totalCola = ccCola.length + webCola.length
+  const totalCola = ccCola.length
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
@@ -150,12 +137,8 @@ export default function ContactCenterPage() {
         <div className="flex-1 overflow-hidden">
           {!sel ? (
             <div className="flex h-full items-center justify-center text-sm text-gray-400">Selecciona una interacción</div>
-          ) : sel.origen === 'cc' ? (
-            <CCChatPanel interaccionId={sel.id} onClosed={() => { setSel(null); qc.invalidateQueries({ queryKey: ['cc-inter'] }) }} />
           ) : (
-            <div className="flex h-full items-center justify-center px-8 text-center text-sm text-gray-400">
-              Esta conversación web se atiende desde <a href="/livechat" className="ml-1 text-blue-600 underline">Chat en Vivo</a>.
-            </div>
+            <CCChatPanel interaccionId={sel.id} onClosed={() => { setSel(null); qc.invalidateQueries({ queryKey: ['cc-inter'] }) }} />
           )}
         </div>
       </div>
@@ -165,22 +148,12 @@ export default function ContactCenterPage() {
 
 function mapCc(i: CCInteraccion, enCola: boolean): ItemUnificado {
   return {
-    key: `cc-${i.id}`, origen: 'cc', id: i.id,
+    key: `cc-${i.id}`, id: i.id,
     titulo: i.clienteNombre || i.clienteTelefono || 'Cliente',
     canalLabel: CANAL_LABEL[i.tipo] || i.tipo, canalIcono: CANAL_ICONO[i.tipo] || '💬',
     estado: i.estado, enCola,
     subtitulo: i.grupoNombre || i.canalNombre || '',
     hora: fmtHora(i.fechaUltimoMsjCliente || i.fechaInicio),
-  }
-}
-function mapWeb(c: any, enCola: boolean): ItemUnificado {
-  return {
-    key: `web-${c.id}`, origen: 'web', id: c.id,
-    titulo: c.visitanteNombre || 'Visitante web',
-    canalLabel: 'Web', canalIcono: '🌐',
-    estado: c.estado, enCola,
-    subtitulo: c.motivo ? String(c.motivo).slice(0, 40) : 'Chat en vivo',
-    hora: fmtHora(c.fechaInicio),
   }
 }
 

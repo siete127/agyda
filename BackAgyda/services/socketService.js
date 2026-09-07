@@ -459,6 +459,84 @@ function initialize(server) {
     // PENDIENTE multi-empresa: el widget público (C:\inetpub\wwwroot\chat) es un
     // build sin código fuente disponible en este servidor y no declara empresa
     // al conectar — se deja sin namespacing por tenant hasta poder editarlo.
+    // Panel de Configuración > Contact Center > Canales: el admin se une a esta
+    // sala mientras tiene abierta la vinculación por QR de un canal
+    // 'whatsapp_baileys', para recibir 'cc:baileys_estado' (QR nuevo, conectado,
+    // desconectado) sin tener que hacer polling — ver baileysManager.emitirEstado.
+    // usuarioId opcional: presente solo cuando el canal está en modo
+    // 'individual' (ver CCO_CANALES.CN_MODO_SESION) — cada agente se une a su
+    // propia room 'cc:baileys:{canalId}:{usuarioId}' en vez de la genérica
+    // del canal, para no recibir el QR/estado de sesiones de otros agentes.
+    function roomBaileys(canalId, usuarioId) { return usuarioId ? `cc:baileys:${canalId}:${usuarioId}` : `cc:baileys:${canalId}`; }
+    function roomFca(canalId, usuarioId) { return usuarioId ? `cc:fca:${canalId}:${usuarioId}` : `cc:fca:${canalId}`; }
+    function roomIgp(canalId, usuarioId) { return usuarioId ? `cc:igp:${canalId}:${usuarioId}` : `cc:igp:${canalId}`; }
+
+    socket.on('join_cc_baileys', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.join(roomBaileys(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
+      } catch (e) {
+        logger.warn('⚠️ Error en join_cc_baileys:', e?.message || e);
+      }
+    });
+
+    socket.on('leave_cc_baileys', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.leave(roomBaileys(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
+      } catch (e) {
+        logger.warn('⚠️ Error en leave_cc_baileys:', e?.message || e);
+      }
+    });
+
+    // Mismo propósito que join_cc_baileys, para el canal 'messenger_fca'
+    // (recibe 'cc:fca_estado' mientras el admin tiene abierto el panel de
+    // vinculación por appstate.json — ver fcaManager.emitirEstado).
+    socket.on('join_cc_fca', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.join(roomFca(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
+      } catch (e) {
+        logger.warn('⚠️ Error en join_cc_fca:', e?.message || e);
+      }
+    });
+
+    socket.on('leave_cc_fca', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.leave(roomFca(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
+      } catch (e) {
+        logger.warn('⚠️ Error en leave_cc_fca:', e?.message || e);
+      }
+    });
+
+    // Mismo propósito, para el canal 'instagram_privado' — recibe
+    // 'cc:igp_estado' mientras el admin tiene abierto el panel de vinculación
+    // por usuario/password (ver igPrivateManager.emitirEstado).
+    socket.on('join_cc_igp', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.join(roomIgp(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
+      } catch (e) {
+        logger.warn('⚠️ Error en join_cc_igp:', e?.message || e);
+      }
+    });
+
+    socket.on('leave_cc_igp', (payload) => {
+      try {
+        const canalId = Number(payload?.canalId);
+        if (!canalId) return;
+        socket.leave(roomIgp(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
+      } catch (e) {
+        logger.warn('⚠️ Error en leave_cc_igp:', e?.message || e);
+      }
+    });
+
     socket.on('join_livechat_conversation', (payload) => {
       try {
         const conversacionId = Number(payload?.conversacionId);

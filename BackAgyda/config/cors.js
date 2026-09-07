@@ -4,6 +4,7 @@ const allowedOrigins = [
   'https://ventas.ardabytec.vip:8443',
   'https://ventas.ardabytec.vip',
   'https://agyda.ardabytec.vip',
+  'https://qaagyda.ardabytec.vip',
   'https://ardabytec.vip',
   'https://www.ardabytec.vip',
   'https://ardabytec.com',

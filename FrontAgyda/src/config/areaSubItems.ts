@@ -52,7 +52,7 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'reportes-resultados', label: 'Reportes de resultados', kind: 'link', linkTo: '/ventas-area/reportes-resultados', description: 'Reportes de resultados de ventas.' },
   ],
   operaciones: [
-    { slug: 'supervisores', label: 'Supervisores', kind: 'link', linkTo: '/operaciones/supervisores', description: 'Panel de supervisores de Call Center.' },
+    { slug: 'supervisores', label: 'Supervisor', kind: 'link', linkTo: '/operaciones/supervisores', description: 'Panel de supervisores de Call Center.' },
     { slug: 'asesores', label: 'Asesores', kind: 'link', linkTo: '/operaciones/asesores', description: 'Panel de asesores de Call Center.' },
     { slug: 'campanias', label: 'Campañas', kind: 'link', linkTo: '/operaciones', description: 'Campañas activas del Call Center.' },
     { slug: 'asignacion-bases', label: 'Asignación de bases', kind: 'link', linkTo: '/operaciones', description: 'Asignación de bases de registros por campaña.' },

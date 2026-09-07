@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, ArrowRightLeft, History, FileText, Megaphone, UsersRound } from 'lucide-react'
+import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Power, Loader2, ArrowRightLeft, History, FileText, Megaphone, UsersRound, Headset } from 'lucide-react'
 import { livechatService } from '@/services/livechat.service'
 import { getSocket } from '@/lib/socket'
+import { useSocketEvent } from '@/hooks/useSocket'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { Button } from '@/components/ui/Button'
@@ -15,6 +16,20 @@ import toast from 'react-hot-toast'
 import { CampaniasModal } from './CampaniasModal'
 import { UsuariosCampaniasModal } from './UsuariosCampaniasModal'
 import { HistorialConversacionesPanel } from './HistorialConversacionesPanel'
+import { AsesoresPanel } from '@/pages/asesores/AsesoresPanel'
+
+// "Mi día — estado y tiempos personales" en modal, para no salir de Chat en
+// Vivo a revisar el propio estado/pausas — reusa el mismo panel que la ruta
+// /operaciones/asesores, con el Modal genérico de ui/ (aquí sí es apropiado:
+// AsesoresPanel es contenido de cards normal, no una bandeja con su propio
+// scroll interno como LivechatPage).
+function AsesoresModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal isOpen onClose={onClose} title="Asesores" size="lg">
+      <AsesoresPanel />
+    </Modal>
+  )
+}
 
 function formatFecha(iso: string | null) {
   if (!iso) return '—'
@@ -167,12 +182,27 @@ function BandejaEsperaModal({ onClose, onTomada }: { onClose: () => void; onToma
 // ya no filtra por dueño en el backend.
 function SupervisionModal({ onClose }: { onClose: () => void }) {
   const [seleccionadaId, setSeleccionadaId] = useState<number | null>(null)
+  const qc = useQueryClient()
 
   const { data: conversaciones = [], isLoading } = useQuery({
     queryKey: ['livechat-supervision-activas'],
     queryFn: () => livechatService.getConversacionesActivasSupervision(),
+    // El polling queda como red de respaldo — el refresh real viene de los
+    // eventos de socket de abajo, que actualizan la lista al instante en vez
+    // de esperar hasta 8s a que alguien tome/cierre/transfiera una conversación.
     refetchInterval: 8_000,
   })
+
+  // Refresca la lista al instante cuando cambia el estado de cualquier
+  // conversación — así un supervisor ve de inmediato quién tomó un chat de
+  // la bandeja de espera, sin esperar el próximo poll.
+  const refrescarLista = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['livechat-supervision-activas'] })
+  }, [qc])
+  useSocketEvent('livechat:conversacion_tomada', refrescarLista)
+  useSocketEvent('livechat:nueva_en_cola', refrescarLista)
+  useSocketEvent('livechat:conversacion_cerrada', refrescarLista)
+  useSocketEvent('livechat:conversacion_transferida', refrescarLista)
 
   const { data: detalle, isLoading: loadingDetalle } = useQuery({
     queryKey: ['livechat-supervision-detalle', seleccionadaId],
@@ -757,6 +787,7 @@ export default function LivechatPage() {
   const [campaniasOpen, setCampaniasOpen] = useState(false)
   const [agentesOpen, setAgentesOpen] = useState(false)
   const [supervisionOpen, setSupervisionOpen] = useState(false)
+  const [asesoresOpen, setAsesoresOpen] = useState(false)
 
   // Sin esto, 'livechat:nueva_conversacion' y 'livechat:actividad_conversacion'
   // (dirigidos a la sala user:{agenteId}) nunca le llegan a este agente — la
@@ -848,10 +879,16 @@ export default function LivechatPage() {
           <h1 className="text-xl font-bold text-gray-800">Chat en Vivo</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => setCampaniasOpen(true)}>
-            <Megaphone size={16} />
-            Campañas
+          <Button variant="ghost" onClick={() => setAsesoresOpen(true)}>
+            <Headset size={16} />
+            Asesores
           </Button>
+          {puedeSupervisar && (
+            <Button variant="ghost" onClick={() => setCampaniasOpen(true)}>
+              <Megaphone size={16} />
+              Campañas
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setBandejaOpen(true)} className="relative">
             <Users size={16} />
             Bandeja de espera
@@ -861,10 +898,12 @@ export default function LivechatPage() {
               </span>
             )}
           </Button>
-          <Button variant="ghost" onClick={() => setUsuariosCampaniasOpen(true)}>
-            <UsersRound size={16} />
-            Grupo de Agentes
-          </Button>
+          {puedeSupervisar && (
+            <Button variant="ghost" onClick={() => setUsuariosCampaniasOpen(true)}>
+              <UsersRound size={16} />
+              Grupo de Agentes
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setAgentesOpen(true)}>
             <UserCheck size={16} />
             Agentes
@@ -921,6 +960,7 @@ export default function LivechatPage() {
       {campaniasOpen && <CampaniasModal onClose={() => setCampaniasOpen(false)} />}
       {agentesOpen && <AgentesEstadoModal onClose={() => setAgentesOpen(false)} />}
       {supervisionOpen && <SupervisionModal onClose={() => setSupervisionOpen(false)} />}
+      {asesoresOpen && <AsesoresModal onClose={() => setAsesoresOpen(false)} />}
 
       <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
         <div className="w-72 border-r border-gray-100 overflow-y-auto shrink-0">
