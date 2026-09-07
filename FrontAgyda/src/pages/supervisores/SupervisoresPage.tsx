@@ -99,6 +99,9 @@ function PanelEnVivoTab() {
   const [campaniaAbierta, setCampaniaAbierta] = useState<number | null>(null)
   const [skillAbierto, setSkillAbierto] = useState<number | null>(null)
   const [agenteAbierto, setAgenteAbierto] = useState<number | null>(null)
+  // Filtro de estado activo dentro del skill expandido (clic en una de las 4
+  // tarjetas de resumen) — 'todos' o uno de los 4 estados de EstadoAgente.
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | EstadoAgente>('todos')
 
   const { data, isLoading } = useQuery({
     queryKey: ['supervisores-mi-panel'],
@@ -144,13 +147,19 @@ function PanelEnVivoTab() {
     setCampaniaAbierta((v) => (v === id ? null : id))
     setSkillAbierto(null)
     setAgenteAbierto(null)
+    setFiltroEstado('todos')
   }
   const toggleSkill = (id: number) => {
     setSkillAbierto((v) => (v === id ? null : id))
     setAgenteAbierto(null)
+    setFiltroEstado('todos')
   }
   const toggleAgente = (id: number) => {
     setAgenteAbierto((v) => (v === id ? null : id))
+  }
+  const toggleFiltro = (estado: 'todos' | EstadoAgente) => {
+    setFiltroEstado((v) => (v === estado ? 'todos' : estado))
+    setAgenteAbierto(null)
   }
 
   return (
@@ -206,34 +215,92 @@ function PanelEnVivoTab() {
                         </button>
 
                         {skillExpandido && (
-                          <div className="border-t border-gray-100 p-3 space-y-3">
+                          <div className="border-t border-gray-100 p-3 space-y-3 animate-fade-in">
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/10 text-brand"><Users className="h-3.5 w-3.5" /></div>
+                              <button
+                                onClick={() => toggleFiltro('todos')}
+                                title="Ver todos los agentes"
+                                className={clsx(
+                                  'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
+                                  filtroEstado === 'todos' ? 'bg-brand/10 ring-1 ring-brand/30 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                                )}
+                              >
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/10 text-brand transition-transform group-hover:scale-105"><Users className="h-3.5 w-3.5" /></div>
                                 <div><p className="text-base font-bold text-gray-900 leading-tight">{agentesDelSkill.length}</p><p className="text-[0.65rem] text-gray-500">Agentes</p></div>
-                              </div>
-                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><UserCheck className="h-3.5 w-3.5" /></div>
+                              </button>
+                              <button
+                                onClick={() => toggleFiltro('disponible')}
+                                title="Filtrar por agentes disponibles"
+                                className={clsx(
+                                  'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
+                                  filtroEstado === 'disponible' ? 'bg-emerald-100 ring-1 ring-emerald-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                                )}
+                              >
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition-transform group-hover:scale-105"><UserCheck className="h-3.5 w-3.5" /></div>
                                 <div><p className="text-base font-bold text-gray-900 leading-tight">{disponibles}</p><p className="text-[0.65rem] text-gray-500">Disponibles</p></div>
-                              </div>
-                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Coffee className="h-3.5 w-3.5" /></div>
+                              </button>
+                              <button
+                                onClick={() => toggleFiltro('pausa')}
+                                title="Filtrar por agentes en pausa"
+                                className={clsx(
+                                  'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
+                                  filtroEstado === 'pausa' ? 'bg-amber-100 ring-1 ring-amber-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                                )}
+                              >
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition-transform group-hover:scale-105"><Coffee className="h-3.5 w-3.5" /></div>
                                 <div><p className="text-base font-bold text-gray-900 leading-tight">{enPausa}</p><p className="text-[0.65rem] text-gray-500">En pausa</p></div>
-                              </div>
-                              <div className="rounded-lg bg-gray-50 p-2.5 flex items-center gap-2">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-400"><PowerOff className="h-3.5 w-3.5" /></div>
+                              </button>
+                              <button
+                                onClick={() => toggleFiltro('desconectado')}
+                                title="Filtrar por agentes desconectados"
+                                className={clsx(
+                                  'group rounded-lg p-2.5 flex items-center gap-2 text-left transition-all duration-150',
+                                  filtroEstado === 'desconectado' ? 'bg-gray-200 ring-1 ring-gray-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100 hover:-translate-y-0.5',
+                                )}
+                              >
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-400 transition-transform group-hover:scale-105"><PowerOff className="h-3.5 w-3.5" /></div>
                                 <div><p className="text-base font-bold text-gray-900 leading-tight">{desconectados}</p><p className="text-[0.65rem] text-gray-500">Desconectados</p></div>
-                              </div>
+                              </button>
                             </div>
 
-                            {agentesDelSkill.length === 0 ? (
-                              <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
-                                <Users className="h-6 w-6" />
-                                <p className="text-xs">Este skill no tiene agentes asignados</p>
+                            {filtroEstado !== 'todos' && (
+                              <div className="flex items-center gap-2 animate-fade-in">
+                                <span className="text-[0.68rem] text-gray-500">Mostrando solo:</span>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-semibold text-brand">
+                                  {ESTADO_AGENTE_LABELS[filtroEstado]}
+                                </span>
+                                <button
+                                  onClick={() => setFiltroEstado('todos')}
+                                  className="text-[0.68rem] font-medium text-gray-400 hover:text-brand hover:underline"
+                                >
+                                  Quitar filtro
+                                </button>
                               </div>
-                            ) : (
+                            )}
+
+                            {(() => {
+                              const agentesFiltrados = filtroEstado === 'todos'
+                                ? agentesDelSkill
+                                : agentesDelSkill.filter((a) => a.estado === filtroEstado)
+                              if (agentesDelSkill.length === 0) {
+                                return (
+                                  <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
+                                    <Users className="h-6 w-6" />
+                                    <p className="text-xs">Este skill no tiene agentes asignados</p>
+                                  </div>
+                                )
+                              }
+                              if (agentesFiltrados.length === 0) {
+                                return (
+                                  <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
+                                    <Users className="h-6 w-6" />
+                                    <p className="text-xs">Ningún agente en este estado ahora mismo</p>
+                                  </div>
+                                )
+                              }
+                              return (
                               <div className="space-y-1.5">
-                                {agentesDelSkill.map((a) => {
+                                {agentesFiltrados.map((a) => {
                                   const agenteExpandido = agenteAbierto === a.agenteId
                                   const chats = chatsPorAgente.get(a.agenteId) ?? []
                                   return (
@@ -260,7 +327,8 @@ function PanelEnVivoTab() {
                                   )
                                 })}
                               </div>
-                            )}
+                              )
+                            })()}
                           </div>
                         )}
                       </div>
