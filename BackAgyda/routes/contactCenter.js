@@ -105,6 +105,7 @@ router.get('/grupos/:grupoId/agentes', authenticateToken, requireActionAccess(M,
 router.post('/grupos/:grupoId/agentes', authenticateToken, requireActionAccess(M, 'asignar-agentes'), cfg.asignarAgenteAGrupo);
 router.delete('/grupos/:grupoId/agentes/:usuarioId', authenticateToken, requireActionAccess(M, 'asignar-agentes'), cfg.quitarAgenteDeGrupo);
 router.get('/agentes-matriz', authenticateToken, requireActionAccess(M, 'asignar-agentes'), cfg.getMatrizAgentes);
+router.get('/mis-skills', authenticateToken, requireActionAccess(M, 'atender'), cfg.getMisSkills);
 
 router.get('/grupos/:grupoId/plantillas', authenticateToken, requireActionAccess(M, 'ver'), cfg.listPlantillas);
 router.post('/grupos/:grupoId/plantillas', authenticateToken, requireActionAccess(M, 'atender'), cfg.createPlantilla);

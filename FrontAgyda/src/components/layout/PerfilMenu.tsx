@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { User, LogOut, Music2, Headset, Loader2, Coffee, GraduationCap, Hand, Play, Square, Sparkles } from 'lucide-react'
+import { User, LogOut, Music2, Power, Loader2, Coffee, GraduationCap, Hand, Play, Square, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/auth.store'
@@ -230,18 +230,48 @@ export function PerfilMenu() {
         title="Perfil"
         className={clsx('rounded-full transition-transform', open ? 'ring-2 ring-brand ring-offset-2 ring-offset-surface' : 'hover:scale-105')}
       >
-        <Avatar src={user.perfilFotoUrl} name={user.nombres} size="sm" ring="brand" />
+        <Avatar
+          src={user.perfilFotoUrl}
+          name={user.nombres}
+          size="sm"
+          ring="brand"
+          statusDot={esAgenteLivechat ? (miEstado?.disponible ? 'online' : 'offline') : undefined}
+        />
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-2 w-72 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-card shadow-card-lg">
           {/* Cabecera */}
           <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-3.5">
-            <Avatar src={user.perfilFotoUrl} name={user.nombres} size="md" ring="brand" />
-            <div className="min-w-0">
+            <Avatar
+              src={user.perfilFotoUrl}
+              name={user.nombres}
+              size="md"
+              ring="brand"
+              statusDot={esAgenteLivechat ? (miEstado?.disponible ? 'online' : 'offline') : undefined}
+            />
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[0.85rem] font-bold text-gray-900">{user.perfilAlias ?? user.nombres}</p>
               <p className="text-[0.68rem] text-gray-400">{user.usuario} · {user.tipoUsuario}</p>
+              {esAgenteLivechat && (
+                <p className={clsx('mt-0.5 text-[0.66rem] font-semibold', miEstado?.disponible ? 'text-emerald-500' : 'text-gray-400')}>
+                  {miEstado?.disponible ? 'Ahora estás en línea' : 'Ahora estás desconectado'}
+                </p>
+              )}
             </div>
+            {esAgenteLivechat && (
+              <button
+                onClick={() => toggleDisponible.mutate(!miEstado?.disponible)}
+                disabled={toggleDisponible.isPending}
+                title={miEstado?.disponible ? 'Ponerme sin conexión' : 'Ponerme en línea'}
+                className={clsx(
+                  'ml-auto flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50',
+                  miEstado?.disponible ? 'bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                )}
+              >
+                {toggleDisponible.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+              </button>
+            )}
           </div>
 
           {/* Estado de pausa */}
@@ -313,28 +343,6 @@ export function PerfilMenu() {
               </div>
             )}
           </div>
-
-          {/* Chat en vivo */}
-          {esAgenteLivechat && (
-            <button
-              onClick={() => toggleDisponible.mutate(!miEstado?.disponible)}
-              disabled={toggleDisponible.isPending}
-              className="flex w-full items-center gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50 disabled:opacity-50"
-            >
-              <div className={clsx('flex h-8 w-8 items-center justify-center rounded-lg', miEstado?.disponible ? 'bg-emerald-500/15 text-emerald-500' : 'bg-gray-100 text-gray-400')}>
-                <Headset className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[0.8rem] font-semibold text-gray-800">Chat en vivo</p>
-                <p className="text-[0.66rem] text-gray-400">{miEstado?.disponible ? 'Recibiendo conversaciones' : 'No recibes conversaciones'}</p>
-              </div>
-              <span className={clsx('relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors', miEstado?.disponible ? 'bg-emerald-500' : 'bg-gray-200')}>
-                {toggleDisponible.isPending
-                  ? <Loader2 className="absolute inset-0 m-auto h-3 w-3 animate-spin text-white" />
-                  : <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', miEstado?.disponible ? 'translate-x-4' : 'translate-x-0')} />}
-              </span>
-            </button>
-          )}
 
           {/* Burbuja de música */}
           {puedeMusica && (
