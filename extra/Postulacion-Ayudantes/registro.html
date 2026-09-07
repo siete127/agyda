@@ -46,21 +46,6 @@
                     <input type="tel" id="regTelefono" class="input" placeholder="Ej. 55 1234 5678" autocomplete="tel" required>
                 </div>
 
-                <div class="form-field">
-                    <label for="regCorreo">Correo electrónico</label>
-                    <input type="email" id="regCorreo" class="input" placeholder="tucorreo@ejemplo.com" autocomplete="email">
-                </div>
-
-                <div class="form-field">
-                    <label>Redes sociales</label>
-                    <div id="redesList"></div>
-                    <button type="button" class="btn-add-red" id="addRedBtn">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Agregar red social
-                    </button>
-                    <span class="hint">Comparte tu Facebook, Instagram o la que uses para contactarte más fácil.</span>
-                </div>
-
                 <button type="submit" class="btn-primary">
                     Enviar postulación
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
@@ -70,64 +55,13 @@
     </main>
 
     <script>
-        // --- REDES SOCIALES: filas dinámicas (red + usuario/perfil) ---
-        const REDES_OPCIONES = ['Facebook', 'Instagram', 'WhatsApp', 'TikTok'];
-        const redesList = document.getElementById('redesList');
-        const addRedBtn = document.getElementById('addRedBtn');
-        let redFilaIndex = 0;
-
-        function crearFilaRed() {
-            const id = `red-${redFilaIndex++}`;
-            const row = document.createElement('div');
-            row.className = 'red-row';
-            row.dataset.rowId = id;
-
-            const select = document.createElement('select');
-            select.className = 'input red-select';
-            REDES_OPCIONES.forEach((red) => {
-                const opt = document.createElement('option');
-                opt.value = red;
-                opt.textContent = red;
-                select.appendChild(opt);
-            });
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'input red-usuario';
-            input.placeholder = 'Usuario o enlace de tu perfil';
-
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.className = 'red-remove-btn';
-            removeBtn.setAttribute('aria-label', 'Quitar red social');
-            removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
-            removeBtn.addEventListener('click', () => row.remove());
-
-            row.appendChild(select);
-            row.appendChild(input);
-            row.appendChild(removeBtn);
-            redesList.appendChild(row);
-        }
-
-        addRedBtn.addEventListener('click', crearFilaRed);
-
-        // Arranca con una fila lista para no obligar a dar clic en "+" la primera vez.
-        crearFilaRed();
-
-        function getRedesSociales() {
-            return Array.from(redesList.querySelectorAll('.red-row'))
-                .map((row) => ({
-                    red: row.querySelector('.red-select').value,
-                    usuario: row.querySelector('.red-usuario').value.trim(),
-                }))
-                .filter((r) => r.usuario !== '');
-        }
-
         // --- REGISTRO ---
-        // Envía nombre/teléfono/correo/redes al backend real de AGYDA/Omnicanal
-        // (misma campaña "totis" que ya consume contacto.html) y solo entonces
+        // Envía nombre/teléfono al backend real de AGYDA/Omnicanal (misma
+        // campaña "totis" que ya consume contacto.html) y solo entonces
         // redirige — si el guardado falla, el postulante se entera en vez de
-        // perder sus datos en silencio.
+        // perder sus datos en silencio. Correo y redes sociales se quitaron
+        // del formulario (solo se pide lo mínimo); el backend los sigue
+        // aceptando como opcionales si algún día se reactivan.
         const API_BASE = 'https://agyda.ardabytec.vip';
         const CAMPANIA_SLUG = 'totis';
 
@@ -141,8 +75,6 @@
             e.preventDefault();
             const nombre = document.getElementById('regNombre').value.trim();
             const telefono = document.getElementById('regTelefono').value.trim();
-            const correo = document.getElementById('regCorreo').value.trim();
-            const redesSociales = getRedesSociales();
 
             registroAlert.style.display = 'none';
             registroSuccess.style.display = 'none';
@@ -165,7 +97,7 @@
                 const resp = await fetch(`${API_BASE}/api/contact-center/publico/campanias/${CAMPANIA_SLUG}/postulantes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nombre, telefono: telefonoDigitos, correo, redesSociales }),
+                    body: JSON.stringify({ nombre, telefono: telefonoDigitos }),
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok || !data.success) {
