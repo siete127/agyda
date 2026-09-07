@@ -36,17 +36,21 @@
 
     <script src="js/cc-config.js"></script>
     <script>
-        const config = CCConfig.getConfig();
-        const dentroDeHorario = CCConfig.isWithinBusinessHours(config);
+        // Backend real de AGYDA/Omnicanal — la campaña "TOTIS" (slug 'totis')
+        // ya tiene sus canales de WhatsApp/Messenger/Instagram vinculados ahí.
+        // TODO: cuando esta página se despliegue a un dominio propio, cambiar
+        // API_BASE a producción (https://agyda.ardabytec.vip).
+        const API_BASE = 'https://qaagyda.ardabytec.vip';
+        const CAMPANIA_SLUG = 'totis';
+
+        // El teléfono de llamadas sigue siendo local (no existe ese concepto
+        // en Omnicanal) — WhatsApp/Facebook/Instagram y el horario sí vienen
+        // del backend real de la campaña.
+        const configLocal = CCConfig.getConfig();
 
         const statusEl = document.getElementById('contactoStatus');
         const statusText = document.getElementById('contactoStatusText');
         const panel = document.getElementById('contactoPanel');
-
-        statusEl.classList.add(dentroDeHorario ? 'is-abierto' : 'is-cerrado');
-        statusText.textContent = dentroDeHorario
-            ? 'Estamos en horario de atención'
-            : 'Estamos fuera de horario, contáctanos por redes sociales';
 
         function soloDigitos(str) {
             return String(str || '').replace(/\D/g, '');
@@ -75,50 +79,86 @@
             instagram: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>',
         };
 
-        if (dentroDeHorario) {
-            if (config.telefonoLlamada) {
-                panel.appendChild(crearBotonContacto({
-                    href: `tel:${soloDigitos(config.telefonoLlamada)}`,
-                    iconClass: 'icon-llamada',
-                    iconSvg: ICONOS.llamada,
-                    titulo: 'Llámanos',
-                    subtitulo: config.telefonoLlamada,
-                }));
-            } else {
-                panel.innerHTML = '<p class="hint">Aún no se ha configurado un número de teléfono. Ve a Configuración para agregarlo.</p>';
+        function renderPanel(dentroDeHorario, contacto) {
+            statusEl.classList.add(dentroDeHorario ? 'is-abierto' : 'is-cerrado');
+            statusText.textContent = dentroDeHorario
+                ? 'Estamos en horario de atención'
+                : 'Estamos fuera de horario, contáctanos por redes sociales';
+
+            if (dentroDeHorario) {
+                if (configLocal.telefonoLlamada) {
+                    panel.appendChild(crearBotonContacto({
+                        href: `tel:${soloDigitos(configLocal.telefonoLlamada)}`,
+                        iconClass: 'icon-llamada',
+                        iconSvg: ICONOS.llamada,
+                        titulo: 'Llámanos',
+                        subtitulo: configLocal.telefonoLlamada,
+                    }));
+                } else {
+                    panel.innerHTML = '<p class="hint">Aún no se ha configurado un número de teléfono. Ve a Configuración para agregarlo.</p>';
+                }
+                return;
             }
-        } else {
-            if (config.whatsapp) {
+
+            if (contacto.whatsapp) {
                 panel.appendChild(crearBotonContacto({
-                    href: `https://wa.me/${soloDigitos(config.whatsapp)}`,
+                    href: `https://wa.me/${soloDigitos(contacto.whatsapp)}`,
                     iconClass: 'icon-whatsapp',
                     iconSvg: ICONOS.whatsapp,
                     titulo: 'WhatsApp',
                     subtitulo: 'Escríbenos y te contactaremos pronto',
                 }));
             }
-            if (config.facebook) {
+            if (contacto.facebookUrl) {
                 panel.appendChild(crearBotonContacto({
-                    href: config.facebook,
+                    href: contacto.facebookUrl,
                     iconClass: 'icon-facebook',
                     iconSvg: ICONOS.facebook,
                     titulo: 'Facebook',
                     subtitulo: 'Mándanos un mensaje por Messenger',
                 }));
             }
-            if (config.instagram) {
+            if (contacto.instagramUrl) {
                 panel.appendChild(crearBotonContacto({
-                    href: config.instagram,
+                    href: contacto.instagramUrl,
                     iconClass: 'icon-instagram',
                     iconSvg: ICONOS.instagram,
                     titulo: 'Instagram',
                     subtitulo: 'Escríbenos por Instagram',
                 }));
             }
-            if (!config.whatsapp && !config.facebook && !config.instagram) {
-                panel.innerHTML = '<p class="hint">Aún no se han configurado redes sociales de contacto. Ve a Configuración para agregarlas.</p>';
+            if (!contacto.whatsapp && !contacto.facebookUrl && !contacto.instagramUrl) {
+                panel.innerHTML = '<p class="hint">Aún no se han configurado redes sociales de contacto. Ve a Configuración → Contact Center → Campañas y skills → TOTIS.</p>';
             }
         }
+
+        // El horario y los datos de contacto (WhatsApp/Facebook/Instagram)
+        // vienen de la campaña real "TOTIS" en Omnicanal — sin sesión, es un
+        // endpoint público de solo lectura (ver ccConfigController.getContactoPublicoCampania).
+        statusText.textContent = 'Verificando horario...';
+        fetch(`${API_BASE}/api/contact-center/publico/campanias/${CAMPANIA_SLUG}/contacto`)
+            .then((res) => {
+                if (!res.ok) throw new Error('No se pudo cargar el contacto');
+                return res.json();
+            })
+            .then((json) => {
+                const contacto = json.data || {};
+                const dentroDeHorario = CCConfig.isWithinBusinessHours({
+                    horarioInicio: contacto.horarioInicio || configLocal.horarioInicio,
+                    horarioFin: contacto.horarioFin || configLocal.horarioFin,
+                    diasSemana: contacto.diasSemana || configLocal.diasSemana,
+                });
+                renderPanel(dentroDeHorario, contacto);
+            })
+            .catch((err) => {
+                console.warn('No se pudo obtener el contacto de la campaña:', err);
+                // Sin backend disponible: se cae al comportamiento standalone
+                // de siempre (localStorage), para que la página no se quede
+                // en blanco si el backend está caído o cambia de dominio.
+                renderPanel(CCConfig.isWithinBusinessHours(configLocal), {
+                    whatsapp: configLocal.whatsapp, facebookUrl: configLocal.facebook, instagramUrl: configLocal.instagram,
+                });
+            });
     </script>
 </body>
 

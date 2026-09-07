@@ -2,7 +2,7 @@ import { api } from '@/lib/axios'
 import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
-  CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas,
+  CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -55,25 +55,31 @@ export const ccService = {
   suscribirCanal: (id: number) => api.post(`/contact-center/canales/${id}/suscribir`).then((r) => r.data),
 
   // ── WhatsApp vía Baileys (no oficial, vinculación por QR) ──
-  iniciarBaileys: (id: number) =>
-    api.post(`/contact-center/canales/${id}/baileys/iniciar`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
-  estadoBaileys: (id: number) =>
-    api.get(`/contact-center/canales/${id}/baileys/estado`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
-  cerrarBaileys: (id: number) => api.post(`/contact-center/canales/${id}/baileys/cerrar`).then((r) => r.data),
+  // usuarioId: solo cuando el canal está en modo 'individual' — apunta a la
+  // ruta .../agente/:usuarioId/... en vez de la del canal compartido.
+  iniciarBaileys: (id: number, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/iniciar`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
+  estadoBaileys: (id: number, usuarioId?: number) =>
+    api.get(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
+  cerrarBaileys: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/cerrar`).then((r) => r.data),
 
   // ── Messenger vía FCA (no oficial, vinculación pegando appstate.json) ──
-  vincularFca: (id: number, appState: string) =>
-    api.post(`/contact-center/canales/${id}/fca/vincular`, { appState }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
-  estadoFca: (id: number) =>
-    api.get(`/contact-center/canales/${id}/fca/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
-  cerrarFca: (id: number) => api.post(`/contact-center/canales/${id}/fca/cerrar`).then((r) => r.data),
+  vincularFca: (id: number, appState: string, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/fca/agente/${usuarioId}` : '/fca'}/vincular`, { appState }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  estadoFca: (id: number, usuarioId?: number) =>
+    api.get(`/contact-center/canales/${id}${usuarioId ? `/fca/agente/${usuarioId}` : '/fca'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  cerrarFca: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/fca/agente/${usuarioId}` : '/fca'}/cerrar`).then((r) => r.data),
 
   // ── Instagram DM vía API privada (no oficial, vinculación usuario/password) ──
-  vincularIgPrivate: (id: number, usuario: string, password: string) =>
-    api.post(`/contact-center/canales/${id}/igp/vincular`, { usuario, password }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
-  estadoIgPrivate: (id: number) =>
-    api.get(`/contact-center/canales/${id}/igp/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
-  cerrarIgPrivate: (id: number) => api.post(`/contact-center/canales/${id}/igp/cerrar`).then((r) => r.data),
+  vincularIgPrivate: (id: number, usuario: string, password: string, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/igp/agente/${usuarioId}` : '/igp'}/vincular`, { usuario, password }).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  estadoIgPrivate: (id: number, usuarioId?: number) =>
+    api.get(`/contact-center/canales/${id}${usuarioId ? `/igp/agente/${usuarioId}` : '/igp'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; usuario: string | null } }),
+  cerrarIgPrivate: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/igp/agente/${usuarioId}` : '/igp'}/cerrar`).then((r) => r.data),
+
+  // ── Modo individual: estado de sesión de cada agente del skill ──
+  listSesionesAgentesCanal: (id: number) =>
+    d<CCSesionAgenteCanal[]>(api.get(`/contact-center/canales/${id}/sesiones-agentes`)),
 
   // ── Config global ──
   getConfig: () => d<CCConfig>(api.get('/contact-center/config')),

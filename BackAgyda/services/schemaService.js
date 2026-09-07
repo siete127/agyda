@@ -6282,6 +6282,23 @@ CREATE TABLE dbo.CCO_CAMPANIAS (
   CM2_ACTIVO BIT NOT NULL DEFAULT 1,
   CM2_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
 );`,
+    // Enlaces de contacto "de respaldo" de la campaña, para páginas externas
+    // (ej. extra/Postulacion-Ayudantes/contacto.html) que quieren mostrar un
+    // botón de Facebook/Instagram real: Messenger (FCA) e Instagram (IGP) son
+    // cuentas PERSONALES automatizadas, sin un perfil público navegable al
+    // que enlazar — por eso estas URLs son texto libre capturado a mano
+    // (ej. la página de Facebook oficial de la empresa, si existe alguna
+    // aparte de la cuenta usada para el bot), no algo derivado del canal.
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_CONTACTO_FACEBOOK_URL') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_CONTACTO_FACEBOOK_URL NVARCHAR(300) NULL;`,
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_CONTACTO_INSTAGRAM_URL') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_CONTACTO_INSTAGRAM_URL NVARCHAR(300) NULL;`,
+    // Slug estable para identificar la campaña en URLs públicas (ej. el
+    // endpoint de solo-lectura que consume contacto.html) sin exponer el
+    // CM2_ID interno. Se autogenera a partir del nombre en el seed de abajo;
+    // el admin puede cambiarlo después vía updateCampania.
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_SLUG') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_SLUG NVARCHAR(80) NULL;`,
     `IF OBJECT_ID('dbo.CCO_GRUPOS', 'U') IS NULL
 CREATE TABLE dbo.CCO_GRUPOS (
   CG_ID INT IDENTITY(1,1) PRIMARY KEY,
@@ -6317,6 +6334,45 @@ CREATE TABLE dbo.CCO_CANALES (
   CN_VERIFY_TOKEN NVARCHAR(100) NULL,
   CN_WEBHOOK_SUSCRITO BIT NOT NULL DEFAULT 0,
   CN_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    // Modo de sesión del canal, solo aplica a los 3 no-oficiales (Baileys/FCA/
+    // IGP — Meta oficial siempre es "compartido", una app/página por canal ya
+    // funciona así por diseño): 'compartido' = una sola cuenta para toda la
+    // campaña (comportamiento original, sigue siendo el default); 'individual'
+    // = cada agente del skill vincula SU PROPIA cuenta (ver CCO_CANAL_AGENTE_SESION),
+    // y sus chats entrantes se le asignan directo a él, sin pasar por la cola.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_MODO_SESION') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_MODO_SESION NVARCHAR(20) NOT NULL DEFAULT ('compartido');`,
+    `IF OBJECT_ID('dbo.CCO_CANALES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCO_CANALES_MODO_SESION')
+BEGIN
+  ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_MODO_SESION
+    CHECK (CN_MODO_SESION IN ('compartido','individual'));
+END`,
+    // Una fila por (canal, agente) cuando CN_MODO_SESION='individual' — mismo
+    // shape de columnas de estado que ya vive en CCO_CANALES para cada tipo no
+    // oficial (Baileys/FCA/IGP), pero aquí multiplicado por agente en vez de
+    // por canal. Las credenciales de sesión de Baileys siguen en disco
+    // (baileys_sessions/{canalId}_{usuarioId}/), igual que en modo compartido.
+    `IF OBJECT_ID('dbo.CCO_CANAL_AGENTE_SESION', 'U') IS NULL
+CREATE TABLE dbo.CCO_CANAL_AGENTE_SESION (
+  CAS_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CAS_CANAL_ID INT NOT NULL,
+  CAS_USUARIO_ID INT NOT NULL,
+  CAS_BAILEYS_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado'),
+  CAS_BAILEYS_NUMERO NVARCHAR(40) NULL,
+  CAS_FCA_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado'),
+  CAS_FCA_USUARIO NVARCHAR(120) NULL,
+  CAS_FCA_APPSTATE NVARCHAR(MAX) NULL,
+  CAS_IGP_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('desconectado'),
+  CAS_IGP_USUARIO NVARCHAR(120) NULL,
+  CAS_IGP_SESION NVARCHAR(MAX) NULL,
+  CAS_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CAS_CANAL FOREIGN KEY (CAS_CANAL_ID) REFERENCES dbo.CCO_CANALES(CN_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CAS_CANAL_USUARIO UNIQUE (CAS_CANAL_ID, CAS_USUARIO_ID),
+  CONSTRAINT CK_CAS_BAILEYS_ESTADO CHECK (CAS_BAILEYS_ESTADO IN ('desconectado','esperando_qr','conectado')),
+  CONSTRAINT CK_CAS_FCA_ESTADO CHECK (CAS_FCA_ESTADO IN ('desconectado','conectado','error')),
+  CONSTRAINT CK_CAS_IGP_ESTADO CHECK (CAS_IGP_ESTADO IN ('desconectado','conectado','error'))
 );`,
     // Canal 'whatsapp_baileys': conexión no oficial (WhatsApp Web multi-device,
     // sin Graph API ni webhook de Meta) — no requiere tokens, pero sí una
@@ -6515,6 +6571,21 @@ CREATE TABLE dbo.CCO_SIM_TOKENS (
   ST_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
   CONSTRAINT UQ_CCO_SIM_TOKEN UNIQUE (ST_TOKEN)
 );`,
+    // Autogenera el slug de campañas que aún no lo tienen (nombre en
+    // minúsculas, espacios/caracteres raros a '-'), desambiguando colisiones
+    // con el CM2_ID al final. Solo corre sobre filas con CM2_SLUG NULL, así
+    // que un slug ya editado a mano por el admin nunca se pisa.
+    `IF OBJECT_ID('dbo.CCO_CAMPANIAS', 'U') IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.CCO_CAMPANIAS WHERE CM2_SLUG IS NULL)
+UPDATE dbo.CCO_CAMPANIAS
+SET CM2_SLUG = LOWER(LEFT(
+      'c' + CAST(CM2_ID AS NVARCHAR(10)) + '-' +
+      REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        TRIM(CM2_NOMBRE), N'á','a'), N'é','e'), N'í','i'), N'ó','o'), N'ú','u'), N'ñ','n'),
+        ' ', '-'), '(', ''), 60))
+WHERE CM2_SLUG IS NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CAMPANIAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCO_CAMPANIAS_SLUG')
+CREATE UNIQUE INDEX UQ_CCO_CAMPANIAS_SLUG ON dbo.CCO_CAMPANIAS(CM2_SLUG) WHERE CM2_SLUG IS NOT NULL;`,
   ];
   for (const q of stmts) {
     try { await pool.request().query(q); }

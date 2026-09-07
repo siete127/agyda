@@ -22,21 +22,30 @@ const { CC_MEDIA_DIR } = require('../middleware/ccMediaUpload');
 function tipoCanalDe(it) {
   return (it.CN_TIPO || it.tipo || '').toLowerCase();
 }
+// Canal en modo 'individual': el envío usa la sesión del agente DUEÑO de la
+// interacción (CI_AGENTE_ID) — no una sesión genérica del canal, porque en
+// este modo cada agente tiene la suya propia. En modo 'compartido' (default)
+// se pasa undefined, igual que siempre.
+function usuarioSesionDe(it) {
+  return (it.CN_MODO_SESION || 'compartido') === 'individual' ? (it.agenteId || it.CI_AGENTE_ID) : undefined;
+}
 async function enviarTextoCanal(it, destinatarioExtId, texto) {
   const tipo = tipoCanalDe(it);
   const canalId = it.CN_ID || it.canalId;
-  if (tipo === 'whatsapp_baileys') return baileysManager.enviarTexto(canalId, destinatarioExtId, texto);
-  if (tipo === 'messenger_fca') return fcaManager.enviarTexto(canalId, destinatarioExtId, texto);
-  if (tipo === 'instagram_privado') return igPrivateManager.enviarTexto(canalId, destinatarioExtId, texto);
+  const usuarioId = usuarioSesionDe(it);
+  if (tipo === 'whatsapp_baileys') return baileysManager.enviarTexto(canalId, destinatarioExtId, texto, usuarioId);
+  if (tipo === 'messenger_fca') return fcaManager.enviarTexto(canalId, destinatarioExtId, texto, usuarioId);
+  if (tipo === 'instagram_privado') return igPrivateManager.enviarTexto(canalId, destinatarioExtId, texto, usuarioId);
   if (tipo === 'web_publica') return webPublicaManager.enviarTexto(it.id || it.interaccionId || destinatarioExtId, texto);
   return metaClient.enviarTexto(it, destinatarioExtId, texto);
 }
 async function enviarMediaCanal(it, destinatarioExtId, mediaUrl, tipoMedia) {
   const tipo = tipoCanalDe(it);
   const canalId = it.CN_ID || it.canalId;
-  if (tipo === 'whatsapp_baileys') return baileysManager.enviarMedia(canalId, destinatarioExtId, mediaUrl, tipoMedia);
-  if (tipo === 'messenger_fca') return fcaManager.enviarMedia(canalId, destinatarioExtId, mediaUrl);
-  if (tipo === 'instagram_privado') return igPrivateManager.enviarMedia(canalId, destinatarioExtId, mediaUrl, tipoMedia);
+  const usuarioId = usuarioSesionDe(it);
+  if (tipo === 'whatsapp_baileys') return baileysManager.enviarMedia(canalId, destinatarioExtId, mediaUrl, tipoMedia, usuarioId);
+  if (tipo === 'messenger_fca') return fcaManager.enviarMedia(canalId, destinatarioExtId, mediaUrl, usuarioId);
+  if (tipo === 'instagram_privado') return igPrivateManager.enviarMedia(canalId, destinatarioExtId, mediaUrl, tipoMedia, usuarioId);
   if (tipo === 'web_publica') return webPublicaManager.enviarMedia(it.id || it.interaccionId || destinatarioExtId, mediaUrl, tipoMedia);
   return metaClient.enviarMedia(it, destinatarioExtId, mediaUrl, tipoMedia);
 }
@@ -153,7 +162,7 @@ exports.enviarMensaje = async (req, res) => {
     }
     const r = await p.request().input('id', sql.Int, req.params.id).query(`
       SELECT i.CI_ID id, i.CI_ESTADO estado, i.CI_TIPO tipo, i.CI_CLIENTE_EXT_ID clienteExtId,
-             i.CI_FECHA_ULTIMO_MSJ_CLIENTE ultimoCliente, i.CI_CANAL_ID canalId,
+             i.CI_FECHA_ULTIMO_MSJ_CLIENTE ultimoCliente, i.CI_CANAL_ID canalId, i.CI_AGENTE_ID agenteId,
              cn.* FROM dbo.CCO_INTERACCIONES i
       LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID WHERE i.CI_ID = @id`);
     const it = r.recordset[0];
@@ -514,7 +523,7 @@ exports.subirMedia = async (req, res) => {
     const p = await pool(req);
     const uid = usuarioIdDe(req);
     const ir = await p.request().input('id', sql.Int, req.params.id).query(`
-      SELECT i.CI_ID id, i.CI_TIPO tipo, i.CI_CLIENTE_EXT_ID clienteExtId, i.CI_ESTADO estado, cn.*
+      SELECT i.CI_ID id, i.CI_TIPO tipo, i.CI_CLIENTE_EXT_ID clienteExtId, i.CI_ESTADO estado, i.CI_AGENTE_ID agenteId, cn.*
       FROM dbo.CCO_INTERACCIONES i LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID WHERE i.CI_ID = @id`);
     const it = ir.recordset[0];
     if (!it) return res.status(404).json({ success: false, message: 'No encontrada' });

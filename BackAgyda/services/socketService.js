@@ -463,11 +463,19 @@ function initialize(server) {
     // sala mientras tiene abierta la vinculación por QR de un canal
     // 'whatsapp_baileys', para recibir 'cc:baileys_estado' (QR nuevo, conectado,
     // desconectado) sin tener que hacer polling — ver baileysManager.emitirEstado.
+    // usuarioId opcional: presente solo cuando el canal está en modo
+    // 'individual' (ver CCO_CANALES.CN_MODO_SESION) — cada agente se une a su
+    // propia room 'cc:baileys:{canalId}:{usuarioId}' en vez de la genérica
+    // del canal, para no recibir el QR/estado de sesiones de otros agentes.
+    function roomBaileys(canalId, usuarioId) { return usuarioId ? `cc:baileys:${canalId}:${usuarioId}` : `cc:baileys:${canalId}`; }
+    function roomFca(canalId, usuarioId) { return usuarioId ? `cc:fca:${canalId}:${usuarioId}` : `cc:fca:${canalId}`; }
+    function roomIgp(canalId, usuarioId) { return usuarioId ? `cc:igp:${canalId}:${usuarioId}` : `cc:igp:${canalId}`; }
+
     socket.on('join_cc_baileys', (payload) => {
       try {
         const canalId = Number(payload?.canalId);
         if (!canalId) return;
-        socket.join(`cc:baileys:${canalId}`);
+        socket.join(roomBaileys(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
       } catch (e) {
         logger.warn('⚠️ Error en join_cc_baileys:', e?.message || e);
       }
@@ -477,7 +485,7 @@ function initialize(server) {
       try {
         const canalId = Number(payload?.canalId);
         if (!canalId) return;
-        socket.leave(`cc:baileys:${canalId}`);
+        socket.leave(roomBaileys(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
       } catch (e) {
         logger.warn('⚠️ Error en leave_cc_baileys:', e?.message || e);
       }
@@ -490,7 +498,7 @@ function initialize(server) {
       try {
         const canalId = Number(payload?.canalId);
         if (!canalId) return;
-        socket.join(`cc:fca:${canalId}`);
+        socket.join(roomFca(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
       } catch (e) {
         logger.warn('⚠️ Error en join_cc_fca:', e?.message || e);
       }
@@ -500,7 +508,7 @@ function initialize(server) {
       try {
         const canalId = Number(payload?.canalId);
         if (!canalId) return;
-        socket.leave(`cc:fca:${canalId}`);
+        socket.leave(roomFca(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
       } catch (e) {
         logger.warn('⚠️ Error en leave_cc_fca:', e?.message || e);
       }
@@ -513,7 +521,7 @@ function initialize(server) {
       try {
         const canalId = Number(payload?.canalId);
         if (!canalId) return;
-        socket.join(`cc:igp:${canalId}`);
+        socket.join(roomIgp(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
       } catch (e) {
         logger.warn('⚠️ Error en join_cc_igp:', e?.message || e);
       }
@@ -523,7 +531,7 @@ function initialize(server) {
       try {
         const canalId = Number(payload?.canalId);
         if (!canalId) return;
-        socket.leave(`cc:igp:${canalId}`);
+        socket.leave(roomIgp(canalId, payload?.usuarioId ? Number(payload.usuarioId) : null));
       } catch (e) {
         logger.warn('⚠️ Error en leave_cc_igp:', e?.message || e);
       }

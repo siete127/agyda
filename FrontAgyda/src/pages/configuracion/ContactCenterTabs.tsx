@@ -130,17 +130,20 @@ export function CCCanalesTab() {
 function CanalCard({ canal, grupos, campanias, onChanged }: any) {
   const [form, setForm] = useState({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
+    modoSesion: canal.modoSesion ?? 'compartido',
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
   const dirty =
     form.nombre !== canal.nombre || form.habilitado !== canal.habilitado ||
     form.grupoId !== (canal.grupoId ?? '') || form.campaniaId !== (canal.campaniaId ?? '') ||
+    form.modoSesion !== (canal.modoSesion ?? 'compartido') ||
     form.metaPageId !== (canal.metaPageId ?? '') || form.metaBusinessId !== (canal.metaBusinessId ?? '') ||
     form.verifyToken !== (canal.verifyToken ?? '') || !!form.accessToken || !!form.appSecret
 
   const resetForm = () => setForm({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
+    modoSesion: canal.modoSesion ?? 'compartido',
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
@@ -149,6 +152,7 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
     mutationFn: () => ccService.updateCanal(canal.id, {
       nombre: form.nombre, habilitado: form.habilitado,
       grupoId: form.grupoId || null, campaniaId: form.campaniaId || null,
+      modoSesion: form.modoSesion,
       metaPageId: form.metaPageId, metaBusinessId: form.metaBusinessId, verifyToken: form.verifyToken,
       ...(form.accessToken ? { accessToken: form.accessToken } : {}),
       ...(form.appSecret ? { appSecret: form.appSecret } : {}),
@@ -165,6 +169,8 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
   const esIgp = canal.tipo === 'instagram_privado'
   const esWeb = canal.tipo === 'web_publica'
   const esMeta = !esTest && !esBaileys && !esFca && !esIgp && !esWeb
+  const esNoOficial = esBaileys || esFca || esIgp
+  const esIndividual = form.modoSesion === 'individual'
   const { icon: TipoIcono, bg: tipoBg, fg: tipoFg } = CANAL_ICONOS[canal.tipo as CCCanalTipo]
 
   return (
@@ -199,6 +205,28 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
             <select className={field} value={form.campaniaId} onChange={(e) => setForm({ ...form, campaniaId: e.target.value })}>
               <option value="">—</option>{campanias.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select></label>
+          {esNoOficial && (
+            <label className="block sm:col-span-2">
+              <span className={label}>Modo de conexión</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setForm({ ...form, modoSesion: 'compartido' })}
+                  className={clsx('rounded-xl border p-2.5 text-left text-xs transition-colors',
+                    !esIndividual ? 'border-brand bg-brand/5 font-semibold text-brand' : 'border-gray-200 text-ink-secondary hover:bg-gray-50')}>
+                  Compartido de campaña
+                  <p className="mt-0.5 font-normal text-ink-tertiary">Una sola cuenta para todos los agentes del skill (como hoy).</p>
+                </button>
+                <button type="button" onClick={() => setForm({ ...form, modoSesion: 'individual' })}
+                  className={clsx('rounded-xl border p-2.5 text-left text-xs transition-colors',
+                    esIndividual ? 'border-brand bg-brand/5 font-semibold text-brand' : 'border-gray-200 text-ink-secondary hover:bg-gray-50')}>
+                  Individual por agente
+                  <p className="mt-0.5 font-normal text-ink-tertiary">Cada agente del skill vincula su propia cuenta.</p>
+                </button>
+              </div>
+              {form.modoSesion !== (canal.modoSesion ?? 'compartido') && (
+                <p className="mt-1.5 text-[0.7rem] text-amber-600">Cambiar de modo no migra sesiones ya conectadas — guarda primero, luego vuelve a vincular.</p>
+              )}
+            </label>
+          )}
           {esMeta && <>
             <label className="block"><span className={label}>Page ID / Phone Number ID</span>
               <input className={field} value={form.metaPageId} onChange={(e) => setForm({ ...form, metaPageId: e.target.value })} /></label>
@@ -222,9 +250,15 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
             </div>
           </div>
         )}
-        {esBaileys && <BaileysQRPanel canal={canal} onChanged={onChanged} />}
-        {esFca && <FcaAppStatePanel canal={canal} onChanged={onChanged} />}
-        {esIgp && <IgPrivateLoginPanel canal={canal} onChanged={onChanged} />}
+        {esNoOficial && canal.modoSesion === 'individual' ? (
+          <SesionesAgentesPanel canal={canal} tipo={canal.tipo} onChanged={onChanged} />
+        ) : (
+          <>
+            {esBaileys && <BaileysQRPanel canal={canal} onChanged={onChanged} />}
+            {esFca && <FcaAppStatePanel canal={canal} onChanged={onChanged} />}
+            {esIgp && <IgPrivateLoginPanel canal={canal} onChanged={onChanged} />}
+          </>
+        )}
         {esWeb && <WebPublicaTokenPanel canal={canal} />}
       </div>
 
@@ -246,23 +280,24 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
 }
 
 /* ═══ WhatsApp vía Baileys — vinculación por QR (no oficial) ═══ */
-function BaileysQRPanel({ canal, onChanged }: any) {
+function BaileysQRPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged: () => void; usuarioId?: number }) {
   const [estado, setEstado] = useState<CCBaileysEstado>(canal.baileysEstado ?? 'desconectado')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [numero, setNumero] = useState<string | null>(canal.baileysNumero ?? null)
 
-  // Se une a la sala del canal mientras este panel está montado, para recibir
-  // el QR y los cambios de estado en vivo sin tener que refrescar la página.
+  // Se une a la sala del canal (o a la del agente, en modo individual)
+  // mientras este panel está montado, para recibir el QR y los cambios de
+  // estado en vivo sin tener que refrescar la página.
   useEffect(() => {
     const socket = getSocket()
-    socket.emit('join_cc_baileys', { canalId: canal.id })
-    return () => { socket.emit('leave_cc_baileys', { canalId: canal.id }) }
-  }, [canal.id])
+    socket.emit('join_cc_baileys', { canalId: canal.id, usuarioId })
+    return () => { socket.emit('leave_cc_baileys', { canalId: canal.id, usuarioId }) }
+  }, [canal.id, usuarioId])
 
-  useSocketEvent<{ canalId: number; estado: CCBaileysEstado; qrDataUrl: string | null; numero: string | null }>(
+  useSocketEvent<{ canalId: number; usuarioId: number | null; estado: CCBaileysEstado; qrDataUrl: string | null; numero: string | null }>(
     'cc:baileys_estado',
     (payload) => {
-      if (payload.canalId !== canal.id) return
+      if (payload.canalId !== canal.id || (payload.usuarioId || undefined) !== usuarioId) return
       setEstado(payload.estado)
       setQrDataUrl(payload.qrDataUrl)
       setNumero(payload.numero)
@@ -271,12 +306,12 @@ function BaileysQRPanel({ canal, onChanged }: any) {
   )
 
   const iniciar = useMutation({
-    mutationFn: () => ccService.iniciarBaileys(canal.id),
+    mutationFn: () => ccService.iniciarBaileys(canal.id, usuarioId),
     onSuccess: (r) => { setEstado(r.data.estado as CCBaileysEstado); setQrDataUrl(r.data.qrDataUrl); setNumero(r.data.numero) },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo iniciar la sesión'),
   })
   const cerrar = useMutation({
-    mutationFn: () => ccService.cerrarBaileys(canal.id),
+    mutationFn: () => ccService.cerrarBaileys(canal.id, usuarioId),
     onSuccess: () => { setEstado('desconectado'); setQrDataUrl(null); setNumero(null); toast.success('Sesión cerrada'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
   })
@@ -323,21 +358,21 @@ function BaileysQRPanel({ canal, onChanged }: any) {
 }
 
 /* ═══ Messenger vía FCA — vinculación pegando appstate.json (no oficial) ═══ */
-function FcaAppStatePanel({ canal, onChanged }: any) {
+function FcaAppStatePanel({ canal, onChanged, usuarioId }: { canal: any; onChanged: () => void; usuarioId?: number }) {
   const [estado, setEstado] = useState<CCFcaEstado>(canal.fcaEstado ?? 'desconectado')
   const [usuario, setUsuario] = useState<string | null>(canal.fcaUsuario ?? null)
   const [appStateTexto, setAppStateTexto] = useState('')
 
   useEffect(() => {
     const socket = getSocket()
-    socket.emit('join_cc_fca', { canalId: canal.id })
-    return () => { socket.emit('leave_cc_fca', { canalId: canal.id }) }
-  }, [canal.id])
+    socket.emit('join_cc_fca', { canalId: canal.id, usuarioId })
+    return () => { socket.emit('leave_cc_fca', { canalId: canal.id, usuarioId }) }
+  }, [canal.id, usuarioId])
 
-  useSocketEvent<{ canalId: number; estado: CCFcaEstado; usuario: string | null; mensaje: string | null }>(
+  useSocketEvent<{ canalId: number; usuarioId: number | null; estado: CCFcaEstado; usuario: string | null; mensaje: string | null }>(
     'cc:fca_estado',
     (payload) => {
-      if (payload.canalId !== canal.id) return
+      if (payload.canalId !== canal.id || (payload.usuarioId || undefined) !== usuarioId) return
       setEstado(payload.estado)
       setUsuario(payload.usuario)
       if (payload.estado === 'error' && payload.mensaje) toast.error(payload.mensaje)
@@ -346,12 +381,12 @@ function FcaAppStatePanel({ canal, onChanged }: any) {
   )
 
   const vincular = useMutation({
-    mutationFn: () => ccService.vincularFca(canal.id, appStateTexto),
+    mutationFn: () => ccService.vincularFca(canal.id, appStateTexto, usuarioId),
     onSuccess: (r) => { setEstado(r.data.estado as CCFcaEstado); setUsuario(r.data.usuario); setAppStateTexto(''); toast.success('Messenger vinculado'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo vincular — revisa el appstate.json'),
   })
   const cerrar = useMutation({
-    mutationFn: () => ccService.cerrarFca(canal.id),
+    mutationFn: () => ccService.cerrarFca(canal.id, usuarioId),
     onSuccess: () => { setEstado('desconectado'); setUsuario(null); toast.success('Sesión cerrada'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
   })
@@ -404,21 +439,21 @@ function FcaAppStatePanel({ canal, onChanged }: any) {
 }
 
 /* ═══ Instagram DM vía API privada — usuario/password (no oficial) ═══ */
-function IgPrivateLoginPanel({ canal, onChanged }: any) {
+function IgPrivateLoginPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged: () => void; usuarioId?: number }) {
   const [estado, setEstado] = useState<CCIgpEstado>(canal.igpEstado ?? 'desconectado')
   const [usuario, setUsuario] = useState<string | null>(canal.igpUsuario ?? null)
   const [form, setForm] = useState({ usuario: '', password: '' })
 
   useEffect(() => {
     const socket = getSocket()
-    socket.emit('join_cc_igp', { canalId: canal.id })
-    return () => { socket.emit('leave_cc_igp', { canalId: canal.id }) }
-  }, [canal.id])
+    socket.emit('join_cc_igp', { canalId: canal.id, usuarioId })
+    return () => { socket.emit('leave_cc_igp', { canalId: canal.id, usuarioId }) }
+  }, [canal.id, usuarioId])
 
-  useSocketEvent<{ canalId: number; estado: CCIgpEstado; usuario: string | null; mensaje: string | null }>(
+  useSocketEvent<{ canalId: number; usuarioId: number | null; estado: CCIgpEstado; usuario: string | null; mensaje: string | null }>(
     'cc:igp_estado',
     (payload) => {
-      if (payload.canalId !== canal.id) return
+      if (payload.canalId !== canal.id || (payload.usuarioId || undefined) !== usuarioId) return
       setEstado(payload.estado)
       setUsuario(payload.usuario)
       if (payload.estado === 'error' && payload.mensaje) toast.error(payload.mensaje)
@@ -427,12 +462,12 @@ function IgPrivateLoginPanel({ canal, onChanged }: any) {
   )
 
   const vincular = useMutation({
-    mutationFn: () => ccService.vincularIgPrivate(canal.id, form.usuario, form.password),
+    mutationFn: () => ccService.vincularIgPrivate(canal.id, form.usuario, form.password, usuarioId),
     onSuccess: (r) => { setEstado(r.data.estado as CCIgpEstado); setUsuario(r.data.usuario); setForm({ usuario: '', password: '' }); toast.success('Instagram vinculado'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo vincular — revisa usuario y contraseña'),
   })
   const cerrar = useMutation({
-    mutationFn: () => ccService.cerrarIgPrivate(canal.id),
+    mutationFn: () => ccService.cerrarIgPrivate(canal.id, usuarioId),
     onSuccess: () => { setEstado('desconectado'); setUsuario(null); toast.success('Sesión cerrada'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
   })
@@ -474,6 +509,64 @@ function IgPrivateLoginPanel({ canal, onChanged }: any) {
             <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ═══ Modo individual: una fila por agente del skill, cada uno con su propio
+   panel de vinculación (BaileysQRPanel/FcaAppStatePanel/IgPrivateLoginPanel
+   parametrizados con usuarioId) — reusa los mismos componentes de la sesión
+   compartida, solo cambia a quién pertenece la sesión. ═══ */
+function SesionesAgentesPanel({ canal, tipo, onChanged }: { canal: any; tipo: CCCanalTipo; onChanged: () => void }) {
+  const [abierto, setAbierto] = useState<number | null>(null)
+  const { data: agentes = [], isLoading, refetch } = useQuery({
+    queryKey: ['cc-sesiones-agentes', canal.id],
+    queryFn: () => ccService.listSesionesAgentesCanal(canal.id),
+  })
+
+  const estadoDe = (a: any) =>
+    tipo === 'whatsapp_baileys' ? a.baileysEstado : tipo === 'messenger_fca' ? a.fcaEstado : a.igpEstado
+  const detalleDe = (a: any) =>
+    tipo === 'whatsapp_baileys' ? a.baileysNumero : tipo === 'messenger_fca' ? a.fcaUsuario : a.igpUsuario
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <p className="mb-3 text-[0.72rem] text-ink-secondary">
+        Este canal es de sesión <strong>individual</strong>: cada agente del skill vincula su propia cuenta. Los
+        chats que le escriban a la cuenta de un agente se le asignan directo a él, sin pasar por la cola general.
+      </p>
+      {isLoading && <p className="text-xs text-ink-tertiary">Cargando agentes…</p>}
+      {!isLoading && agentes.length === 0 && (
+        <p className="text-xs text-ink-tertiary">Este skill todavía no tiene agentes asignados.</p>
+      )}
+      <div className="space-y-2">
+        {agentes.map((a) => {
+          const estado = estadoDe(a)
+          const detalle = detalleDe(a)
+          const isOpen = abierto === a.usuarioId
+          return (
+            <div key={a.usuarioId} className="rounded-lg border border-gray-200 bg-card">
+              <button type="button" onClick={() => setAbierto(isOpen ? null : a.usuarioId)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
+                <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <span className={clsx('h-2 w-2 flex-shrink-0 rounded-full', estado === 'conectado' ? 'bg-emerald-500' : estado === 'esperando_qr' ? 'bg-amber-400' : estado === 'error' ? 'bg-red-400' : 'bg-gray-300')} />
+                  {a.nombre}
+                </span>
+                <span className="text-[0.7rem] text-ink-tertiary">
+                  {estado === 'conectado' ? `Conectado${detalle ? ` — ${detalle}` : ''}` : estado === 'esperando_qr' ? 'Esperando QR' : estado === 'error' ? 'Error' : 'Sin vincular'}
+                </span>
+              </button>
+              {isOpen && (
+                <div className="border-t border-gray-100 p-3">
+                  {tipo === 'whatsapp_baileys' && <BaileysQRPanel canal={canal} usuarioId={a.usuarioId} onChanged={() => { onChanged(); refetch() }} />}
+                  {tipo === 'messenger_fca' && <FcaAppStatePanel canal={canal} usuarioId={a.usuarioId} onChanged={() => { onChanged(); refetch() }} />}
+                  {tipo === 'instagram_privado' && <IgPrivateLoginPanel canal={canal} usuarioId={a.usuarioId} onChanged={() => { onChanged(); refetch() }} />}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

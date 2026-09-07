@@ -51,6 +51,12 @@ export interface CCMensaje {
   fecha: string
 }
 
+// Modo de sesión de un canal no oficial (Baileys/FCA/IGP): 'compartido' es
+// una sola cuenta para toda la campaña (comportamiento original); 'individual'
+// es una cuenta POR AGENTE del skill, cada quien vincula la suya — ver
+// CCSesionAgenteCanal y ccService.listSesionesAgentesCanal.
+export type CCModoSesion = 'compartido' | 'individual'
+
 export interface CCCanal {
   id: number
   tipo: CCCanalTipo
@@ -58,6 +64,7 @@ export interface CCCanal {
   habilitado: boolean
   grupoId: number | null
   campaniaId: number | null
+  modoSesion: CCModoSesion
   metaPageId: string | null
   metaBusinessId: string | null
   verifyToken: string | null
@@ -65,16 +72,28 @@ export interface CCCanal {
   accessTokenConfigurado: boolean
   appSecretConfigurado: boolean
   webhookUrl: string
-  // Solo presentes/relevantes cuando tipo === 'whatsapp_baileys'.
+  // Solo presentes/relevantes cuando tipo === 'whatsapp_baileys' y modoSesion === 'compartido'.
   baileysEstado?: CCBaileysEstado
   baileysNumero?: string | null
-  // Solo presentes/relevantes cuando tipo === 'messenger_fca'.
+  // Solo presentes/relevantes cuando tipo === 'messenger_fca' y modoSesion === 'compartido'.
   fcaEstado?: CCFcaEstado
   fcaUsuario?: string | null
   fcaAppStateConfigurado?: boolean
-  // Solo presentes/relevantes cuando tipo === 'instagram_privado'.
+  // Solo presentes/relevantes cuando tipo === 'instagram_privado' y modoSesion === 'compartido'.
   igpEstado?: CCIgpEstado
   igpUsuario?: string | null
+}
+
+// Una fila por agente del skill, cuando el canal está en modoSesion === 'individual'.
+export interface CCSesionAgenteCanal {
+  usuarioId: number
+  nombre: string
+  baileysEstado: CCBaileysEstado
+  baileysNumero: string | null
+  fcaEstado: CCFcaEstado
+  fcaUsuario: string | null
+  igpEstado: CCIgpEstado
+  igpUsuario: string | null
 }
 
 export interface CCCampania {
