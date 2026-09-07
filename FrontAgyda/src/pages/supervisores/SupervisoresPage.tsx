@@ -250,54 +250,50 @@ function PanelEnVivoTab() {
             </div>
 
             {skillActivo && (
-              <div className="card p-3 space-y-1.5 animate-fade-in">
+              <div className="card p-2.5 flex flex-wrap gap-1.5 animate-fade-in">
                 <button
                   onClick={() => toggleFiltro('todos')}
-                  title="Ver todos los agentes"
+                  title={`Ver todos los agentes (${agentesDelSkill.length})`}
                   className={clsx(
-                    'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
-                    filtroEstado === 'todos' ? 'bg-brand/10 ring-1 ring-brand/30 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
+                    'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    filtroEstado === 'todos' ? 'bg-brand/10 text-brand ring-1 ring-brand/30' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
                   )}
                 >
-                  <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-transform group-hover:scale-105"><Users className="h-3.5 w-3.5" /></div>
-                  <p className="flex-1 text-sm text-gray-600">Agentes</p>
-                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-brand" title={`${agentesDelSkill.length}`} />
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand" />
+                  Agentes
                 </button>
                 <button
                   onClick={() => toggleFiltro('disponible')}
-                  title="Filtrar por agentes disponibles"
+                  title={`Filtrar por agentes disponibles (${disponibles})`}
                   className={clsx(
-                    'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
-                    filtroEstado === 'disponible' ? 'bg-emerald-100 ring-1 ring-emerald-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
+                    'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    filtroEstado === 'disponible' ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
                   )}
                 >
-                  <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition-transform group-hover:scale-105"><UserCheck className="h-3.5 w-3.5" /></div>
-                  <p className="flex-1 text-sm text-gray-600">Disponibles</p>
-                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-emerald-500" title={`${disponibles}`} />
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />
+                  Disponibles
                 </button>
                 <button
                   onClick={() => toggleFiltro('pausa')}
-                  title="Filtrar por agentes en pausa"
+                  title={`Filtrar por agentes en pausa (${enPausa})`}
                   className={clsx(
-                    'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
-                    filtroEstado === 'pausa' ? 'bg-amber-100 ring-1 ring-amber-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
+                    'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    filtroEstado === 'pausa' ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
                   )}
                 >
-                  <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition-transform group-hover:scale-105"><Coffee className="h-3.5 w-3.5" /></div>
-                  <p className="flex-1 text-sm text-gray-600">En pausa</p>
-                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-amber-500" title={`${enPausa}`} />
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full bg-amber-500" />
+                  En pausa
                 </button>
                 <button
                   onClick={() => toggleFiltro('desconectado')}
-                  title="Filtrar por agentes desconectados"
+                  title={`Filtrar por agentes desconectados (${desconectados})`}
                   className={clsx(
-                    'group w-full rounded-lg p-2.5 flex items-center gap-2.5 text-left transition-all duration-150',
-                    filtroEstado === 'desconectado' ? 'bg-gray-200 ring-1 ring-gray-300 shadow-sm' : 'bg-gray-50 hover:bg-gray-100',
+                    'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    filtroEstado === 'desconectado' ? 'bg-gray-200 text-gray-700 ring-1 ring-gray-300' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
                   )}
                 >
-                  <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400 transition-transform group-hover:scale-105"><PowerOff className="h-3.5 w-3.5" /></div>
-                  <p className="flex-1 text-sm text-gray-600">Desconectados</p>
-                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-gray-400" title={`${desconectados}`} />
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full bg-gray-400" />
+                  Desconectados
                 </button>
               </div>
             )}
