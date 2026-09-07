@@ -71,6 +71,31 @@ const pushService = {
       logger.warn('⚠️ Error consultando suscripciones push:', e?.message || e);
     }
   },
+
+  // Conveniencia para notificar al mismo evento a varios usuarios a la vez
+  // (p. ej. todos los admins configurados en un módulo) sin repetir el `for`
+  // en cada sender de correo — mismo criterio de "nunca romper el flujo que
+  // la llama" que enviarATodasLasSuscripciones.
+  async enviarAVarios(pool, usuarioIds, { titulo, cuerpo, url, tag }) {
+    if (!habilitado || !usuarioIds?.length) return;
+    for (const usuarioId of usuarioIds) {
+      await this.enviarATodasLasSuscripciones(pool, usuarioId, { titulo, cuerpo, url, tag });
+    }
+  },
+
+  // Igual que enviarAVarios, pero abre su propio pool por tenantKey — para
+  // los senders de correo (emailService.js) que no tienen un `pool` mssql a
+  // mano en su scope, solo el tenantKey, igual que ya hacen
+  // getDestinatariosCorreo/getDestinatariosUsuarios en notificacionesCorreoController.
+  async enviarAVariosPorTenant(tenantKey, usuarioIds, payload) {
+    if (!habilitado || !usuarioIds?.length) return;
+    try {
+      const pool = await databaseService.getPool(tenantKey);
+      await this.enviarAVarios(pool, usuarioIds, payload);
+    } catch (e) {
+      logger.warn('⚠️ Error abriendo pool para push:', e?.message || e);
+    }
+  },
 };
 
 module.exports = pushService;

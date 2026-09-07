@@ -126,7 +126,7 @@ function GuardarReglaModal({ regla, onClose }: { regla: ReglaSla | null; onClose
   )
 }
 
-function DiasFestivosPanel() {
+function DiasFestivosPanel({ soloLectura = false }: { soloLectura?: boolean }) {
   const qc = useQueryClient()
   const [fecha, setFecha] = useState('')
   const [descripcion, setDescripcion] = useState('')
@@ -172,30 +172,34 @@ function DiasFestivosPanel() {
             <div key={f.id} className="flex items-center gap-2 py-1.5 text-sm">
               <span className="w-28 font-mono text-xs text-ink-secondary">{f.fecha}</span>
               <span className="flex-1 text-ink-tertiary">{f.descripcion ?? '—'}</span>
-              <button className="text-ink-tertiary hover:text-red-500" onClick={() => eliminar.mutate(f.id)}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {!soloLectura && (
+                <button className="text-ink-tertiary hover:text-red-500" onClick={() => eliminar.mutate(f.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
-        <input type="date" className="field text-sm" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-        <input className="field flex-1 text-sm" placeholder="Descripción (ej. Día de la Independencia)" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
-        <button
-          className="btn-primary flex items-center gap-1 px-3 py-1.5 text-xs"
-          disabled={!fecha || crear.isPending}
-          onClick={() => crear.mutate()}
-        >
-          <Plus className="h-3.5 w-3.5" /> Agregar
-        </button>
-      </div>
+      {!soloLectura && (
+        <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
+          <input type="date" className="field text-sm" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          <input className="field flex-1 text-sm" placeholder="Descripción (ej. Día de la Independencia)" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
+          <button
+            className="btn-primary flex items-center gap-1 px-3 py-1.5 text-xs"
+            disabled={!fecha || crear.isPending}
+            onClick={() => crear.mutate()}
+          >
+            <Plus className="h-3.5 w-3.5" /> Agregar
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-export function SlaTab() {
+export function SlaTab({ soloLectura = false }: { soloLectura?: boolean } = {}) {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'crear' | ReglaSla | null>(null)
 
@@ -238,7 +242,9 @@ export function SlaTab() {
           </h2>
           <p className="mt-0.5 text-xs text-ink-tertiary">Reglas de tiempo de respuesta y resolución, configurables por prioridad y área</p>
         </div>
-        <Button size="sm" onClick={() => setModal('crear')}><Plus className="h-3.5 w-3.5" /> Nueva regla</Button>
+        {!soloLectura && (
+          <Button size="sm" onClick={() => setModal('crear')}><Plus className="h-3.5 w-3.5" /> Nueva regla</Button>
+        )}
       </div>
 
       {reporte && (
@@ -294,17 +300,19 @@ export function SlaTab() {
                   <p className="text-sm font-semibold text-gray-900">{PRIORIDAD_LABELS[r.prioridad as TicketPrioridad] ?? r.prioridad}</p>
                   <p className="text-xs text-gray-500">{r.area ?? 'Todas las áreas'}{r.servicio ? ` · ${r.servicio}` : ''}</p>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => toggleActiva.mutate(r)} title={r.activa ? 'Desactivar' : 'Activar'} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-                    <Power className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => setModal(r)} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => eliminar.mutate(r.id)} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                {!soloLectura && (
+                  <div className="flex gap-1">
+                    <button onClick={() => toggleActiva.mutate(r)} title={r.activa ? 'Desactivar' : 'Activar'} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                      <Power className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => setModal(r)} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => eliminar.mutate(r.id)} className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="mt-3 space-y-1 border-t border-gray-100 pt-2">
                 <p className="text-xs text-gray-600">
@@ -329,9 +337,9 @@ export function SlaTab() {
         </div>
       )}
 
-      <DiasFestivosPanel />
+      <DiasFestivosPanel soloLectura={soloLectura} />
 
-      {modal && <GuardarReglaModal regla={modal === 'crear' ? null : modal} onClose={() => setModal(null)} />}
+      {!soloLectura && modal && <GuardarReglaModal regla={modal === 'crear' ? null : modal} onClose={() => setModal(null)} />}
     </div>
   )
 }

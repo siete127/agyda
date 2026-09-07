@@ -209,6 +209,36 @@ exports.createPostulante = async (req, res) => {
       console.warn('⚠️ No se pudo enviar el correo de aviso de postulación:', e?.message || e);
     }
 
+    // Push a quienes de PERMISOS_MAIL_TO (lista fija de .env, sin usuarioId)
+    // sí tengan cuenta AGYDA — se cruza por correo contra NEUS_USUARIOS. Los
+    // que no tengan cuenta (direcciones externas en la lista) simplemente no
+    // reciben push, pero el correo de arriba les llega igual.
+    try {
+      const { PERMISOS_MAIL_TO } = require('../config/email');
+      if (PERMISOS_MAIL_TO.length) {
+        const reqPush = pool.request();
+        const placeholders = PERMISOS_MAIL_TO.map((correo, i) => {
+          reqPush.input(`c${i}`, sql.NVarChar, correo);
+          return `@c${i}`;
+        });
+        const rsDestPush = await reqPush.query(`
+          SELECT NEUS_ID as id FROM NEUS_USUARIOS
+          WHERE NEUS_ACTIVO = 1 AND NEUS_CORREO IN (${placeholders.join(',')})
+        `);
+        if (rsDestPush.recordset.length) {
+          const pushService = require('../services/pushService');
+          await pushService.enviarAVarios(pool, rsDestPush.recordset.map((r) => r.id), {
+            titulo: 'Nueva postulación',
+            cuerpo: `${nombre} se postuló a: ${vacante.recordset[0].VAC_TITULO}`,
+            url: '/vacantes',
+            tag: `postulante-${postulanteId}`,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ No se pudo enviar push de aviso de postulación:', e?.message || e);
+    }
+
     await logAudit(pool, { userId: null, userName: nombre, modulo: 'vacantes', accion: 'postular', entidadId: String(id), detalle: { postulanteId, email }, ip: req.ip });
     res.status(201).json({ success: true, data });
   } catch (error) {

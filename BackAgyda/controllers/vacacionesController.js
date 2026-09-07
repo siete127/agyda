@@ -1023,6 +1023,22 @@ exports.responderSolicitud = async (req, res) => {
     //   }
     // }
 
+    // Push al solicitante — no depende de tener correo registrado (a
+    // diferencia del email de arriba), así que sí puede ir siempre que el
+    // usuario tenga una suscripción push activa.
+    try {
+      const pushService = require("../services/pushService");
+      const tipoLegibleResp = solicitud.tipo_solicitud === "0100" ? "permiso con goce" : "solicitud de vacaciones";
+      await pushService.enviarATodasLasSuscripciones(pool, parseInt(solicitud.numero_personal, 10), {
+        titulo: estado === "APROBADA" ? "Solicitud aprobada" : "Solicitud rechazada",
+        cuerpo: `Tu ${tipoLegibleResp} fue ${estado === "APROBADA" ? "aprobada" : "rechazada"}${comentarioAdmin ? ": " + comentarioAdmin : ""}`,
+        url: "/vacaciones",
+        tag: `vacacion-resultado-${id}`,
+      });
+    } catch (pushError) {
+      console.error("⚠️ Error enviando push de respuesta de vacaciones:", pushError.message);
+    }
+
     // Saldos solo si se rechazó (fueron devueltos)
     let saldoPermisos = null;
     let saldoVacaciones = null;
@@ -1558,6 +1574,19 @@ exports.accionDesdeEmail = async (req, res) => {
       //   }
       // }
 
+      try {
+        const pushService = require("../services/pushService");
+        const tipoLegibleResp = solicitud.tipo_solicitud === "0100" ? "permiso con goce" : "solicitud de vacaciones";
+        await pushService.enviarATodasLasSuscripciones(pool, parseInt(solicitud.numero_personal, 10), {
+          titulo: "Solicitud aprobada",
+          cuerpo: `Tu ${tipoLegibleResp} fue aprobada`,
+          url: "/vacaciones",
+          tag: `vacacion-resultado-${id}`,
+        });
+      } catch (pushError) {
+        console.error("⚠️ Error enviando push de aprobación de vacaciones:", pushError.message);
+      }
+
       return res.send(`
         <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8" />
         <title>Solicitud Aprobada</title>
@@ -1683,6 +1712,19 @@ exports.procesarRechazoDesdeEmail = async (req, res) => {
     //     console.error("⚠️ Error email rechazo:", emailErr.message);
     //   }
     // }
+
+    try {
+      const pushService = require("../services/pushService");
+      const tipoLegibleResp = solicitud.tipo_solicitud === "0100" ? "permiso con goce" : "solicitud de vacaciones";
+      await pushService.enviarATodasLasSuscripciones(pool, parseInt(solicitud.numero_personal, 10), {
+        titulo: "Solicitud rechazada",
+        cuerpo: `Tu ${tipoLegibleResp} fue rechazada: ${comentario}`,
+        url: "/vacaciones",
+        tag: `vacacion-resultado-${id}`,
+      });
+    } catch (pushError) {
+      console.error("⚠️ Error enviando push de rechazo de vacaciones:", pushError.message);
+    }
 
     return res.send(
       `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Rechazo OK</title></head><body><h1>Solicitud Rechazada</h1><p>Motivo registrado y días devueltos.</p></body></html>`

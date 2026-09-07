@@ -1305,6 +1305,23 @@ END
 IF NOT EXISTS (SELECT 1 FROM dbo.TICKETS_RECORDATORIOS_CONFIG)
   INSERT INTO dbo.TICKETS_RECORDATORIOS_CONFIG (TRC_ACTIVO, TRC_DIAS_SIN_ACTIVIDAD) VALUES (1, 3);
 
+-- Umbrales del panel de KPIs de Tickets (semáforo verde/amarillo de cada
+-- indicador) — los números en sí siempre se calculan en vivo desde TICKETS,
+-- solo el punto de corte "bueno/malo" es configurable. Config global de una
+-- sola fila, mismo patrón que TICKETS_ESCALAMIENTO_CONFIG.
+IF OBJECT_ID('dbo.TICKETS_KPIS_CONFIG', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TICKETS_KPIS_CONFIG (
+    TKC_ID INT IDENTITY(1,1) PRIMARY KEY,
+    TKC_UMBRAL_SLA_BUENO DECIMAL(5,2) NOT NULL DEFAULT 80,
+    TKC_UMBRAL_REABIERTOS_MALO DECIMAL(5,2) NOT NULL DEFAULT 10,
+    TKC_UMBRAL_SATISFACCION_BUENO DECIMAL(3,2) NOT NULL DEFAULT 4,
+    TKC_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE()
+  );
+END
+IF NOT EXISTS (SELECT 1 FROM dbo.TICKETS_KPIS_CONFIG)
+  INSERT INTO dbo.TICKETS_KPIS_CONFIG (TKC_UMBRAL_SLA_BUENO, TKC_UMBRAL_REABIERTOS_MALO, TKC_UMBRAL_SATISFACCION_BUENO) VALUES (80, 10, 4);
+
 -- Config general de Tecnología/TI (fila única global). ZONA_HORARIA es
 -- puramente INFORMATIVA: el sistema real siempre calcula con la hora del
 -- servidor (America/Mexico_City) en SLA, crons y horarios — cambiar este
@@ -1440,6 +1457,11 @@ async function ensureKbSchema(pool) {
       -- artículos ya existentes en el sitio público al agregar la columna.
       IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_PUBLICO')
         ALTER TABLE dbo.KB_ARTICULOS ADD ART_PUBLICO BIT NOT NULL DEFAULT 1;
+      -- Imagen de evidencia del artículo (una sola, se reemplaza al subir
+      -- otra) — separada del texto de ART_CONTENIDO para que el link no se
+      -- mezcle con la Solución. NULL = sin evidencia adjunta.
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='KB_ARTICULOS' AND COLUMN_NAME='ART_EVIDENCIA_URL')
+        ALTER TABLE dbo.KB_ARTICULOS ADD ART_EVIDENCIA_URL NVARCHAR(500) NULL;
     `);
     logger.info('✅ Esquema de ArdaWiki asegurado');
   } catch (err) {

@@ -481,6 +481,19 @@ async function enviarReporteIndicadoresMensual(pool, tenantKey) {
     const usuariosCorreo = await getUsuariosParaNotificarCorreo('direccion-general', tenantKey);
     if (usuariosCorreo.length === 0) return;
 
+    // Notificación in-app + push: no depende de que el correo se pueda
+    // resolver/enviar, así que va antes y en su propio flujo — un usuario
+    // sin correo válido igual debe recibir el aviso por push.
+    for (const usuarioId of usuariosCorreo) {
+      await notificationService.createNotification({
+        usuarioId,
+        mensaje: `Reporte de indicadores de ${periodo} disponible`,
+        tipo: 'reporte_indicadores_mensual',
+        dataExtra: { periodo },
+        tenantKey,
+      });
+    }
+
     const correosRs = await pool.request().query(`SELECT NEUS_ID as id, NEUS_USUARIO as correo FROM NEUS_USUARIOS WHERE NEUS_ID IN (${usuariosCorreo.join(',') || '0'})`);
     const correos = correosRs.recordset.map((u) => u.correo).filter(Boolean);
     if (correos.length === 0) return;

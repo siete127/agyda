@@ -3,6 +3,7 @@ const router = express.Router();
 const kbController = require('../controllers/kbController');
 const { authenticateToken } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
+const { uploadKbImage } = require('../middleware/kbImageUpload');
 
 // Público (sin sesión) — la página institucional consume esto para que
 // cualquier visitante busque soluciones por su cuenta.
@@ -17,5 +18,6 @@ router.post('/articulos', requireActionAccess('tickets', 'gestionar-estado'), kb
 router.put('/articulos/:id', requireActionAccess('tickets', 'gestionar-estado'), kbController.updateArticulo);
 router.post('/articulos/:id/toggle-activo', requireActionAccess('tickets', 'gestionar-estado'), kbController.toggleActivo);
 router.post('/articulos/:id/toggle-publico', requireActionAccess('tickets', 'gestionar-estado'), kbController.togglePublico);
+router.post('/imagenes', requireActionAccess('tickets', 'gestionar-estado'), uploadKbImage.single('imagen'), kbController.uploadImagen);
 
 module.exports = router;
