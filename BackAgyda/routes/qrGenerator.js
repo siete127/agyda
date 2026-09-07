@@ -16,4 +16,11 @@ router.get('/:id/analytics', authenticateToken, qr.analytics);
 router.post('/publico/:token/intento', qr.registrarIntento);
 router.post('/publico/:token/confirmar', qr.registrarConfirmacion);
 
+// Acortador propio (código de 10 caracteres) — administración; la resolución
+// pública GET /p/:codigo se monta en server.js, fuera de /api, por lo mismo
+// que /q/:token de arriba.
+router.get('/urls-cortas', authenticateToken, qr.listarUrlsCortas);
+router.post('/urls-cortas', authenticateToken, qr.crearUrlCorta);
+router.delete('/urls-cortas/:id', authenticateToken, qr.eliminarUrlCorta);
+
 module.exports = router;

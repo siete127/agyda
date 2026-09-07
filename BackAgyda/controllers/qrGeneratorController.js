@@ -305,3 +305,121 @@ exports.registrarConfirmacion = async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+
+// ── Acortador propio: código de 10 caracteres que SIRVE el contenido ─────
+// del destino directo (proxy interno), en vez de un redirect 302 — la URL
+// en la barra del navegador se queda en el código corto todo el tiempo,
+// incluso al recargar la página.
+const ALFABETO_CORTO = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'; // sin 0/O/I/l/1 para evitar confusión visual
+
+function generarCodigoCorto() {
+  let codigo = '';
+  const bytes = crypto.randomBytes(10);
+  for (let i = 0; i < 10; i++) codigo += ALFABETO_CORTO[bytes[i] % ALFABETO_CORTO.length];
+  return codigo;
+}
+
+// Admin — crea una URL corta apuntando a `destino` (URL completa http(s), o
+// ruta relativa al mismo sitio, ej. '/postulacion-totis/registro').
+exports.crearUrlCorta = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const { destino, nombre } = req.body || {};
+    const destinoLimpio = String(destino || '').trim();
+    if (!destinoLimpio) return res.status(400).json({ success: false, message: 'Falta el destino' });
+    if (!/^https?:\/\//i.test(destinoLimpio) && !destinoLimpio.startsWith('/')) {
+      return res.status(400).json({ success: false, message: 'El destino debe ser una URL completa (http/https) o una ruta que empiece con /' });
+    }
+
+    const p = await pool(req);
+    await ensureQrCodesSchema(p);
+
+    let codigo, intentos = 0;
+    do {
+      codigo = generarCodigoCorto();
+      const dup = await p.request().input('c', sql.Char(10), codigo).query('SELECT 1 FROM dbo.INTRANET_URLS_CORTAS WHERE UC_CODIGO = @c');
+      if (!dup.recordset.length) break;
+      intentos++;
+    } while (intentos < 5);
+    if (intentos >= 5) return res.status(500).json({ success: false, message: 'No se pudo generar un código único, intenta de nuevo' });
+
+    const ins = await p.request()
+      .input('codigo', sql.Char(10), codigo).input('destino', sql.NVarChar(1000), destinoLimpio)
+      .input('nombre', sql.NVarChar(200), nombre ? String(nombre).trim() : null)
+      .input('autorId', sql.Int, req.user?.id ?? null).input('autorNombre', sql.NVarChar, req.user?.nombre || req.user?.username || null)
+      .query(`
+        INSERT INTO dbo.INTRANET_URLS_CORTAS (UC_CODIGO, UC_DESTINO, UC_NOMBRE, UC_AUTOR_ID, UC_AUTOR_NOMBRE)
+        OUTPUT INSERTED.UC_ID as id, INSERTED.UC_FECHA_CREACION as fechaCreacion
+        VALUES (@codigo, @destino, @nombre, @autorId, @autorNombre)
+      `);
+
+    const base = publicBaseUrl() || '';
+    res.status(201).json({
+      success: true,
+      data: { id: ins.recordset[0].id, codigo, destino: destinoLimpio, nombre: nombre || null, url: `${base}/p/${codigo}`, fechaCreacion: ins.recordset[0].fechaCreacion },
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.listarUrlsCortas = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await ensureQrCodesSchema(p);
+    const r = await p.request().query(`
+      SELECT UC_ID as id, UC_CODIGO as codigo, UC_DESTINO as destino, UC_NOMBRE as nombre,
+             UC_VISITAS as visitas, UC_AUTOR_NOMBRE as autorNombre, UC_FECHA_CREACION as fechaCreacion
+      FROM dbo.INTRANET_URLS_CORTAS ORDER BY UC_FECHA_CREACION DESC
+    `);
+    const base = publicBaseUrl() || '';
+    res.json({ success: true, data: r.recordset.map((row) => ({ ...row, url: `${base}/p/${row.codigo}` })) });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+exports.eliminarUrlCorta = async (req, res) => {
+  try {
+    if (!esAdmin(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('id', sql.Int, Number(req.params.id)).query('DELETE FROM dbo.INTRANET_URLS_CORTAS WHERE UC_ID = @id');
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Público (sin auth) — resuelve el código y SIRVE el contenido del destino
+// directo (proxy interno vía fetch), sin redirect: la barra de direcciones
+// del navegador se queda en /p/{codigo} todo el tiempo. Si el destino es una
+// ruta relativa (empieza con /), se resuelve contra el propio PUBLIC_BASE_URL
+// del sitio (mismo dominio donde vive este backend); si es una URL completa,
+// se reenvía tal cual.
+exports.resolverUrlCorta = async (req, res) => {
+  try {
+    const codigo = String(req.params.codigo || '');
+    if (!/^[A-Za-z0-9]{10}$/.test(codigo)) return res.status(404).send('Enlace no válido');
+
+    const p = await pool(req);
+    const r = await p.request().input('c', sql.Char(10), codigo).query('SELECT UC_ID id, UC_DESTINO destino FROM dbo.INTRANET_URLS_CORTAS WHERE UC_CODIGO = @c');
+    const row = r.recordset[0];
+    if (!row) return res.status(404).send('Enlace no encontrado');
+
+    p.request().input('id', sql.Int, row.id).query('UPDATE dbo.INTRANET_URLS_CORTAS SET UC_VISITAS = UC_VISITAS + 1 WHERE UC_ID = @id').catch(() => {});
+
+    const destinoUrl = /^https?:\/\//i.test(row.destino) ? row.destino : `${publicBaseUrl() || ''}${row.destino}`;
+    if (!destinoUrl) return res.status(500).send('No se pudo resolver el destino (falta PUBLIC_BASE_URL)');
+
+    const upstream = await fetch(destinoUrl);
+    const contentType = upstream.headers.get('content-type') || 'text/html; charset=utf-8';
+    res.status(upstream.status);
+    res.setHeader('Content-Type', contentType);
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.send(buffer);
+  } catch (e) {
+    console.error('qrGenerator.resolverUrlCorta:', e.message);
+    res.status(500).send('Error al cargar la página');
+  }
+};

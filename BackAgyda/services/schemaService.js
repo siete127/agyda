@@ -7374,6 +7374,29 @@ BEGIN
   CREATE INDEX IX_QR_EVT_VISITANTE ON dbo.INTRANET_QR_EVENTOS(EVT_QR_ID, EVT_VISITANTE_ID, EVT_TIPO, EVT_FECHA);
 END
 `);
+    // Acortador propio: código de 10 caracteres que SIRVE el contenido del
+    // destino directo (proxy interno, ver qrGeneratorController.resolverUrlCorta)
+    // en vez de un redirect 302 — la barra de direcciones se queda en la URL
+    // corta todo el tiempo, incluso al recargar. UC_DESTINO puede ser una URL
+    // completa (http/https, se hace fetch y se reenvía tal cual) o una ruta
+    // relativa al mismo sitio (ej. '/postulacion-totis/registro').
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.INTRANET_URLS_CORTAS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_URLS_CORTAS (
+    UC_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    UC_CODIGO      CHAR(10) NOT NULL,
+    UC_DESTINO     NVARCHAR(1000) NOT NULL,
+    UC_NOMBRE      NVARCHAR(200) NULL,
+    UC_AUTOR_ID    INT NULL,
+    UC_AUTOR_NOMBRE NVARCHAR(200) NULL,
+    UC_VISITAS     INT NOT NULL DEFAULT 0,
+    UC_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_URLS_CORTAS_CODIGO UNIQUE (UC_CODIGO)
+  );
+  CREATE INDEX IX_URLS_CORTAS_FECHA ON dbo.INTRANET_URLS_CORTAS(UC_FECHA_CREACION DESC);
+END
+`);
     logger.info('✅ Esquema de códigos QR asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de códigos QR:', err.message);
