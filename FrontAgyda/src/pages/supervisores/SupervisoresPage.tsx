@@ -501,6 +501,146 @@ function AsignarSupervisorModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+/* ── Tab: Estatus — todos los agentes de todas las campañas, filtrables por estado ── */
+function EstatusTab() {
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | EstadoAgente>('todos')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['supervisores-mi-panel'],
+    queryFn: () => supervisoresService.getMiPanel(),
+    refetchInterval: 15_000,
+  })
+
+  if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+  const agentes = data?.agentes ?? []
+  const grupos = data?.grupos ?? []
+  const campanias = data?.campanias ?? []
+
+  if (agentes.length === 0) {
+    return (
+      <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
+        <Users className="h-8 w-8" />
+        <p className="text-sm">No tienes agentes asignados a tus campañas todavía</p>
+      </div>
+    )
+  }
+
+  const nombreCampania = new Map(campanias.map((c) => [c.id, c.nombre]))
+  const nombreSkill = new Map(grupos.map((g) => [g.id, g.nombre]))
+
+  const disponibles = agentes.filter((a) => a.estado === 'disponible').length
+  const enPausa = agentes.filter((a) => a.estado === 'pausa').length
+  const noDisponibles = agentes.filter((a) => a.estado === 'no_disponible').length
+  const desconectados = agentes.filter((a) => a.estado === 'desconectado').length
+  const agentesFiltrados = filtroEstado === 'todos' ? agentes : agentes.filter((a) => a.estado === filtroEstado)
+
+  const toggleFiltro = (estado: 'todos' | EstadoAgente) => setFiltroEstado((v) => (v === estado ? 'todos' : estado))
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="border-b border-gray-100 px-4 py-3.5 flex flex-wrap items-center gap-1.5">
+        <button
+          onClick={() => toggleFiltro('todos')}
+          title={`Ver todos los agentes (${agentes.length})`}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+            filtroEstado === 'todos' ? 'bg-brand/10 text-brand ring-1 ring-brand/30' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
+          )}
+        >
+          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand" />
+          Agentes
+        </button>
+        <button
+          onClick={() => toggleFiltro('disponible')}
+          title={`Filtrar por agentes disponibles (${disponibles})`}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+            filtroEstado === 'disponible' ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
+          )}
+        >
+          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />
+          Disponibles
+        </button>
+        <button
+          onClick={() => toggleFiltro('pausa')}
+          title={`Filtrar por agentes en pausa (${enPausa})`}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+            filtroEstado === 'pausa' ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
+          )}
+        >
+          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-amber-500" />
+          En pausa
+        </button>
+        <button
+          onClick={() => toggleFiltro('no_disponible')}
+          title={`Filtrar por agentes no disponibles (${noDisponibles})`}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+            filtroEstado === 'no_disponible' ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
+          )}
+        >
+          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-orange-500" />
+          No disponibles
+        </button>
+        <button
+          onClick={() => toggleFiltro('desconectado')}
+          title={`Filtrar por agentes desconectados (${desconectados})`}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
+            filtroEstado === 'desconectado' ? 'bg-gray-200 text-gray-700 ring-1 ring-gray-300' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
+          )}
+        >
+          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-gray-400" />
+          Desconectados
+        </button>
+        {filtroEstado !== 'todos' && (
+          <button
+            onClick={() => setFiltroEstado('todos')}
+            className="text-[0.68rem] font-medium text-gray-400 hover:text-brand hover:underline"
+          >
+            Quitar filtro
+          </button>
+        )}
+      </div>
+
+      <div className="p-3">
+        {agentesFiltrados.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-gray-400">
+            <Users className="h-6 w-6" />
+            <p className="text-xs">Ningún agente en este estado ahora mismo</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {agentesFiltrados.map((a) => {
+              const estilo = ESTADO_ESTILOS[a.estado]
+              return (
+                <div
+                  key={a.agenteId}
+                  className={clsx('w-full flex items-center gap-3 rounded-lg px-3 py-2.5', estilo.card)}
+                >
+                  <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full', estilo.iconBg)}>
+                    {estilo.icon({ className: 'h-3.5 w-3.5' })}
+                  </div>
+                  <div className="min-w-0 flex-1 flex items-baseline gap-2">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{a.nombre}</p>
+                    <p className="text-xs text-gray-500 truncate">{estadoTexto(a)}</p>
+                  </div>
+                  <p className="flex-shrink-0 text-[0.68rem] text-gray-400">
+                    {nombreCampania.get(a.campaniaId) ?? ''} · {nombreSkill.get(a.grupoId) ?? ''}
+                  </p>
+                  <span className={clsx('flex-shrink-0 h-2 w-2 rounded-full', estilo.dot)} />
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Tab: Administrar (admin) ── */
 function AdministrarTab() {
   const qc = useQueryClient()
@@ -570,8 +710,8 @@ export function SupervisoresPage() {
   const isAdmin = useIsADorTI()
   const [searchParams] = useSearchParams()
   const tabInicial = searchParams.get('tab')
-  const [tab, setTab] = useState<'panel' | 'productividad' | 'historial' | 'administrar'>(
-    tabInicial === 'productividad' || tabInicial === 'historial' || tabInicial === 'administrar' ? tabInicial : 'panel',
+  const [tab, setTab] = useState<'panel' | 'productividad' | 'estatus' | 'historial' | 'administrar'>(
+    tabInicial === 'productividad' || tabInicial === 'estatus' || tabInicial === 'historial' || tabInicial === 'administrar' ? tabInicial : 'panel',
   )
 
   return (
@@ -596,6 +736,12 @@ export function SupervisoresPage() {
         >
           <BarChart3 className="h-3.5 w-3.5" /> Productividad
         </button>
+        <button
+          onClick={() => setTab('estatus')}
+          className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'estatus' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
+        >
+          <Circle className="h-3.5 w-3.5" /> Estatus
+        </button>
         {isAdmin && (
           <button
             onClick={() => setTab('historial')}
@@ -616,6 +762,7 @@ export function SupervisoresPage() {
 
       {tab === 'panel' && <PanelEnVivoTab />}
       {tab === 'productividad' && <ProductividadTab />}
+      {tab === 'estatus' && <EstatusTab />}
       {/* Solo admins: no existe "mi propio historial" en Supervisores, así
           que siempre ve el historial completo de todos los agentes (puedeSupervisar=true). */}
       {tab === 'historial' && isAdmin && <HistorialConversacionesPanel puedeSupervisar />}
