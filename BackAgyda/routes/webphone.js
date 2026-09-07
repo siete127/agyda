@@ -15,6 +15,7 @@ router.get('/incoming-call', webphoneController.incomingCall);
 // cae la llamada, así que no puede requerir login de AGYDA.
 router.get('/pantalla-llamada', webphoneController.pantallaLlamada);
 router.post('/pantalla-llamada', webphoneController.pantallaLlamada);
+router.post('/pantalla-llamada/tipificar', webphoneController.guardarTipificacion);
 
 // Vistas embebidas del Webphone (URLs configurables) — lectura para cualquier
 // usuario autenticado, administración solo AD/TI.

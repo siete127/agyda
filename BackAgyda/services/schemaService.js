@@ -5032,6 +5032,7 @@ async function ensureAllSchemas(pool) {
   await ensureLivechatSchema(pool);
   await ensureLivechatCampanasSchema(pool);
   await ensureContactCenterSchema(pool);
+  await ensureWebphoneTipificacionesSchema(pool);
   await ensureQrCodesSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
@@ -6654,6 +6655,35 @@ CREATE INDEX IX_CCO_CP_CAMPANIA ON dbo.CCO_CAMPANIA_POSTULANTES(CP_CAMPANIA_ID);
     catch (err) { console.warn('⚠️ Contact Center schema:', err.message); }
   }
   logger.info('✅ Esquema de Contact Center omnicanal asegurado');
+}
+
+// Tipificación de llamadas del Webphone (pantalla-llamada, el "Web Form" que
+// VICIdial abre como iframe en el navegador del agente al conectar la
+// llamada) — catálogo fijo de disposiciones + observaciones libres. Vive
+// separado de CCO_TIPIFICACIONES (esa es para cerrar interacciones de chat/
+// WhatsApp del Contact Center) porque esto es un formulario público sin
+// sesión que solo necesita registrar el resultado de la llamada telefónica.
+async function ensureWebphoneTipificacionesSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.WEBPHONE_LLAMADAS_TIPIFICADAS', 'U') IS NULL
+CREATE TABLE dbo.WEBPHONE_LLAMADAS_TIPIFICADAS (
+  WLT_ID INT IDENTITY(1,1) PRIMARY KEY,
+  WLT_TELEFONO NVARCHAR(20) NOT NULL,
+  WLT_TIPIFICACION NVARCHAR(20) NOT NULL,
+  WLT_OBSERVACIONES NVARCHAR(500) NULL,
+  WLT_POSTULANTE_ID INT NULL,
+  WLT_EXTENSION NVARCHAR(20) NULL,
+  WLT_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.WEBPHONE_LLAMADAS_TIPIFICADAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WLT_TELEFONO')
+CREATE INDEX IX_WLT_TELEFONO ON dbo.WEBPHONE_LLAMADAS_TIPIFICADAS(WLT_TELEFONO);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Webphone tipificaciones schema:', err.message); }
+  }
+  logger.info('✅ Esquema de tipificación de llamadas (Webphone) asegurado');
 }
 
 // Email Marketing: campañas de correo masivo sobre los contactos que ya existen
