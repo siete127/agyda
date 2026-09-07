@@ -7261,6 +7261,14 @@ END
 // CQR_ENTORNO distingue solo el propósito del QR (público = apunta a una URL
 // de producción; privado = apunta a una URL local/de red interna para
 // pruebas) — es una etiqueta informativa, no controla permisos ni acceso.
+// QR_MODO 'url' (default, comportamiento original): el QR codifica QR_URL
+// tal cual. 'llamada_directa': el QR codifica "tel:{QR_DID}" — al escanear,
+// el teléfono ofrece marcar sin pasar por ningún servidor. 'llamada_medible':
+// el QR apunta a la landing pública /q/{QR_PUBLIC_TOKEN} (sin auth), que
+// registra el recorrido del visitante en INTRANET_QR_EVENTOS (visto → abrió
+// el marcador → confirmó si llamó) antes de ofrecerle el tel:. Portado de
+// C:\Users\Administrator\Desktop\Gesionador mis\app\qr_campaign_service.py
+// (mismo concepto, esquema equivalente sobre SQL Server en vez de una BD aparte).
 async function ensureQrCodesSchema(pool) {
   try {
     await pool.request().batch(`
@@ -7277,6 +7285,50 @@ BEGIN
     QR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE()
   );
   CREATE INDEX IX_QR_CODES_FECHA ON dbo.INTRANET_QR_CODES(QR_FECHA_CREACION DESC);
+END
+`);
+    // Cada ALTER TABLE va en su propio batch: SQL Server resuelve los nombres
+    // de columna al COMPILAR el batch completo, así que un batch que agrega
+    // una columna y en la misma tanda la referencia (índice/constraint)
+    // falla con "Invalid column name" aunque el ALTER anterior ya se haya
+    // ejecutado — cada ALTER/objeto que depende de él necesita su propia
+    // llamada a .batch()/.query() separada (patrón ya usado en el resto de
+    // este archivo para altas de columnas + su índice/constraint).
+    await pool.request().query(`IF COL_LENGTH('dbo.INTRANET_QR_CODES', 'QR_MODO') IS NULL
+  ALTER TABLE dbo.INTRANET_QR_CODES ADD QR_MODO NVARCHAR(20) NOT NULL DEFAULT ('url');`);
+    await pool.request().query(`IF COL_LENGTH('dbo.INTRANET_QR_CODES', 'QR_DID') IS NULL
+  ALTER TABLE dbo.INTRANET_QR_CODES ADD QR_DID NVARCHAR(20) NULL;`);
+    await pool.request().query(`IF COL_LENGTH('dbo.INTRANET_QR_CODES', 'QR_PUBLIC_TOKEN') IS NULL
+  ALTER TABLE dbo.INTRANET_QR_CODES ADD QR_PUBLIC_TOKEN CHAR(32) NULL;`);
+    await pool.request().query(`
+IF OBJECT_ID('dbo.INTRANET_QR_CODES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_QR_CODES_MODO')
+BEGIN
+  ALTER TABLE dbo.INTRANET_QR_CODES ADD CONSTRAINT CK_QR_CODES_MODO
+    CHECK (QR_MODO IN ('url','llamada_directa','llamada_medible'));
+END`);
+    await pool.request().query(`
+IF OBJECT_ID('dbo.INTRANET_QR_CODES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_QR_CODES_TOKEN')
+CREATE UNIQUE INDEX UQ_QR_CODES_TOKEN ON dbo.INTRANET_QR_CODES(QR_PUBLIC_TOKEN) WHERE QR_PUBLIC_TOKEN IS NOT NULL;`);
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.INTRANET_QR_EVENTOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_QR_EVENTOS (
+    EVT_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    EVT_QR_ID       INT NOT NULL,
+    EVT_VISITANTE_ID CHAR(36) NOT NULL,
+    EVT_TIPO        NVARCHAR(20) NOT NULL,
+    EVT_VISITANTE_NOMBRE NVARCHAR(120) NULL,
+    EVT_IP_HASH     CHAR(64) NULL,
+    EVT_USER_AGENT  NVARCHAR(500) NULL,
+    EVT_DISPOSITIVO NVARCHAR(40) NULL,
+    EVT_FECHA       DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_QR_EVT_QR FOREIGN KEY (EVT_QR_ID) REFERENCES dbo.INTRANET_QR_CODES(QR_ID) ON DELETE CASCADE,
+    CONSTRAINT CK_QR_EVT_TIPO CHECK (EVT_TIPO IN ('VIEW','CALL_INTENT','CALL_CONFIRMED','CALL_NOT_COMPLETED'))
+  );
+  CREATE INDEX IX_QR_EVT_QR ON dbo.INTRANET_QR_EVENTOS(EVT_QR_ID);
+  CREATE INDEX IX_QR_EVT_VISITANTE ON dbo.INTRANET_QR_EVENTOS(EVT_QR_ID, EVT_VISITANTE_ID, EVT_TIPO, EVT_FECHA);
 END
 `);
     logger.info('✅ Esquema de códigos QR asegurado');
