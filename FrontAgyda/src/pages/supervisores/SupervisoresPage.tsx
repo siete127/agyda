@@ -529,11 +529,16 @@ function EstatusTab() {
   const nombreCampania = new Map(campanias.map((c) => [c.id, c.nombre]))
   const nombreSkill = new Map(grupos.map((g) => [g.id, g.nombre]))
 
-  const disponibles = agentes.filter((a) => a.estado === 'disponible').length
-  const enPausa = agentes.filter((a) => a.estado === 'pausa').length
-  const noDisponibles = agentes.filter((a) => a.estado === 'no_disponible').length
-  const desconectados = agentes.filter((a) => a.estado === 'desconectado').length
-  const agentesFiltrados = filtroEstado === 'todos' ? agentes : agentes.filter((a) => a.estado === filtroEstado)
+  // getMiPanel devuelve una fila por combinación agente+skill (un agente
+  // puede estar en varios skills) — aquí se listan agentes, no asignaciones,
+  // así que cada agenteId debe aparecer una sola vez.
+  const agentesUnicos = Array.from(new Map(agentes.map((a) => [a.agenteId, a])).values())
+
+  const disponibles = agentesUnicos.filter((a) => a.estado === 'disponible').length
+  const enPausa = agentesUnicos.filter((a) => a.estado === 'pausa').length
+  const noDisponibles = agentesUnicos.filter((a) => a.estado === 'no_disponible').length
+  const desconectados = agentesUnicos.filter((a) => a.estado === 'desconectado').length
+  const agentesFiltrados = filtroEstado === 'todos' ? agentesUnicos : agentesUnicos.filter((a) => a.estado === filtroEstado)
 
   const toggleFiltro = (estado: 'todos' | EstadoAgente) => setFiltroEstado((v) => (v === estado ? 'todos' : estado))
 
@@ -542,7 +547,7 @@ function EstatusTab() {
       <div className="border-b border-gray-100 px-4 py-3.5 flex flex-wrap items-center gap-1.5">
         <button
           onClick={() => toggleFiltro('todos')}
-          title={`Ver todos los agentes (${agentes.length})`}
+          title={`Ver todos los agentes (${agentesUnicos.length})`}
           className={clsx(
             'flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors',
             filtroEstado === 'todos' ? 'bg-brand/10 text-brand ring-1 ring-brand/30' : 'bg-gray-50 text-gray-600 hover:bg-gray-100',
