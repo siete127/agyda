@@ -133,12 +133,18 @@ async function incomingCall(req, res) {
       ...(req.body || {}),
     };
     let userId = _toInt(body.userId ?? body.usuarioId ?? body.neusId);
+    // 'phone_login' y 'agent' son las variables de VICIdial (%phone_login%,
+    // %agent%) que su "Web Form Integration URL" puede sustituir con la
+    // extensión SIP del agente en la llamada — se agregan como alias porque
+    // el resto del sistema ya vive con nombres propios (extension/ext).
     const extensionRaw = _toExtension(
-      body.extension ?? body.ext ?? body.anexo ?? body.sipExtension,
+      body.extension ?? body.ext ?? body.anexo ?? body.sipExtension ?? body.phone_login ?? body.agent,
     );
     const extension = extensionRaw ? _padExtension(extensionRaw) : null;
+    // 'agent_user' y 'user' cubren %agent_user% de VICIdial (usuario de login
+    // del agente, no su extensión SIP) — mismo caso de uso que neusUsuario.
     let neusUsuario = _toUsuarioKey(
-      body.neusUsuario ?? body.NEUS_USUARIO ?? body.neus_usuario,
+      body.neusUsuario ?? body.NEUS_USUARIO ?? body.neus_usuario ?? body.agent_user ?? body.user,
     );
 
     // Si no nos mandan userId, intentar mapear por extension.
@@ -197,7 +203,10 @@ async function incomingCall(req, res) {
       });
     }
 
-    const phone = body.phone ?? body.telefono ?? null;
+    // 'dnis' es el nombre real de VICIdial (%dnis% en su Web Form Integration
+    // URL) para el número marcado/entrante — la integración actual solo manda
+    // esta variable, sin dato del agente (ver comentario arriba).
+    const phone = body.phone ?? body.telefono ?? body.dnis ?? null;
     const telefono10 = _normalizarTelefono10(phone);
 
     // Screen-pop: si el número que llama coincide con un postulante de
