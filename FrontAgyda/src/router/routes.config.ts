@@ -55,7 +55,10 @@ export const ROUTES: RouteConfig[] = [
   // ahora dentro de Asesores/operaciones), pero la ruta sigue existiendo para
   // los links directos que aún la usan (ej. "Chat relacionado" en Tickets).
   { path: '/livechat',         label: 'Chat en Vivo',    icon: 'MessageCircle',        moduleKey: 'livechat',         roles: ['AD','TI','CC'],     showInSidebar: false },
-  { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: true  },
+  // showInSidebar: false — Asesores (/operaciones/asesores → LivechatPage)
+  // ya fusiona esta bandeja con la de Livechat en una sola pantalla; la ruta
+  // sigue existiendo por si algún link directo la usa.
+  { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: false },
 
   // ── Administración ─────────────────────────────────────────────────────
   { path: '/asistencia',       label: 'Asistencia',      icon: 'Clock',                moduleKey: 'asistencia',       roles: ['AD'],               showInSidebar: true  },
