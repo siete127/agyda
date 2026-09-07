@@ -15,6 +15,7 @@ const M = 'contact-center';
 // una campaña (número de WhatsApp conectado + URLs de Facebook/Instagram
 // capturadas a mano). Nunca expone tokens, credenciales, ni el CM2_ID interno.
 router.get('/publico/campanias/:slug/contacto', cfg.getContactoPublicoCampania);
+router.post('/publico/campanias/:slug/postulantes', cfg.registrarPostulantePublico);
 
 // ── Media (acepta ?token=) ──────────────────────────────────────────────
 router.get('/media/:id', authenticateToken, requireActionAccess(M, 'ver'), inter.verMedia);
@@ -94,6 +95,7 @@ router.get('/campanias', authenticateToken, requireActionAccess(M, 'ver'), cfg.l
 router.post('/campanias', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.createCampania);
 router.put('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.updateCampania);
 router.delete('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.deleteCampania);
+router.get('/campanias/:id/postulantes', authenticateToken, requireActionAccess(M, 'ver'), cfg.listPostulantesCampania);
 
 router.get('/grupos', authenticateToken, requireActionAccess(M, 'ver'), cfg.listGrupos);
 router.post('/grupos', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.createGrupo);

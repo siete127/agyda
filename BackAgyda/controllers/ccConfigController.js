@@ -774,3 +774,69 @@ exports.getContactoPublicoCampania = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error' });
   }
 };
+
+// ── Postulantes de una campaña (registro público + listado interno) ────
+// Lo consume extra/Postulacion-Ayudantes/registro.html (sin login: cualquiera
+// con el link/QR puede postularse) y, del lado de gestión, la pantalla
+// interna donde reclutamiento revisa quién se ha registrado.
+exports.registrarPostulantePublico = async (req, res) => {
+  try {
+    const b = req.body || {};
+    const nombre = String(b.nombre || '').trim();
+    const telefono = String(b.telefono || '').replace(/\D/g, '');
+    const correo = b.correo ? String(b.correo).trim().slice(0, 200) : null;
+    const redesSociales = Array.isArray(b.redesSociales) ? b.redesSociales : [];
+
+    if (!nombre || !telefono) {
+      return res.status(400).json({ success: false, message: 'Nombre y teléfono son obligatorios' });
+    }
+    if (telefono.length < 10) {
+      return res.status(400).json({ success: false, message: 'Teléfono inválido' });
+    }
+
+    const p = await pool(req);
+    const camp = await p.request().input('slug', sql.NVarChar(80), String(req.params.slug || '').toLowerCase())
+      .query(`SELECT CM2_ID id FROM dbo.CCO_CAMPANIAS WHERE CM2_SLUG = @slug AND CM2_ACTIVO = 1`);
+    if (!camp.recordset.length) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
+
+    const redesTexto = redesSociales
+      .filter((r) => r && typeof r.usuario === 'string' && r.usuario.trim())
+      .map((r) => `${String(r.red || '').trim()}: ${r.usuario.trim()}`)
+      .join('\n')
+      .slice(0, 4000) || null;
+
+    const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim().slice(0, 50);
+
+    await p.request()
+      .input('c', sql.Int, camp.recordset[0].id)
+      .input('n', sql.NVarChar(200), nombre.slice(0, 200))
+      .input('t', sql.NVarChar(20), telefono.slice(0, 20))
+      .input('co', sql.NVarChar(200), correo)
+      .input('rs', sql.NVarChar(sql.MAX), redesTexto)
+      .input('ip', sql.NVarChar(50), ip || null)
+      .query(`INSERT INTO dbo.CCO_CAMPANIA_POSTULANTES (CP_CAMPANIA_ID, CP_NOMBRE, CP_TELEFONO, CP_CORREO, CP_REDES_SOCIALES, CP_IP)
+              VALUES (@c, @n, @t, @co, @rs, @ip)`);
+
+    res.status(201).json({ success: true, message: 'Postulación registrada' });
+  } catch (e) {
+    console.error('ccConfig.registrarPostulantePublico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al registrar la postulación' });
+  }
+};
+
+exports.listPostulantesCampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    const r = await p.request().input('c', sql.Int, req.params.id).query(`
+      SELECT CP_ID id, CP_NOMBRE nombre, CP_TELEFONO telefono, CP_CORREO correo,
+             CP_REDES_SOCIALES redesSociales, CP_FECHA_REGISTRO fechaRegistro
+      FROM dbo.CCO_CAMPANIA_POSTULANTES
+      WHERE CP_CAMPANIA_ID = @c
+      ORDER BY CP_FECHA_REGISTRO DESC`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) {
+    console.error('ccConfig.listPostulantesCampania:', e.message);
+    res.status(500).json({ success: false, message: 'Error' });
+  }
+};

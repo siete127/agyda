@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
-  ChevronRight, ArrowLeft as ArrowLeftIcon,
+  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -747,7 +747,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
    la campaña de la que realmente dependen en la BD (CN_CAMPANIA_ID /
    CG_CAMPANIA_ID / CT_CAMPANIA_ID apuntan los 3 al mismo CM2_ID). */
 function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onVolver: () => void; onChanged: () => void }) {
-  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'tipificaciones'>('canales')
+  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'tipificaciones' | 'postulantes'>('canales')
   const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales() })
   const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
   const canalesDeCampania = canalesTodos.filter((c) => c.campaniaId === campania.id)
@@ -756,6 +756,7 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
     { key: 'canales' as const, label: 'Canales', icon: Plug, count: canalesDeCampania.length },
     { key: 'skills' as const, label: 'Skills y agentes', icon: Layers, count: grupos.length },
     { key: 'tipificaciones' as const, label: 'Tipificaciones', icon: Tags, count: null },
+    { key: 'postulantes' as const, label: 'Postulantes', icon: ClipboardList, count: null },
   ]
 
   return (
@@ -792,6 +793,52 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
       {seccion === 'canales' && <CanalesDeCampaniaPanel campania={campania} canales={canalesDeCampania} onChanged={onChanged} />}
       {seccion === 'skills' && <SkillsDeCampaniaPanel campania={campania} onChanged={onChanged} />}
       {seccion === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
+      {seccion === 'postulantes' && <PostulantesDeCampaniaPanel campania={campania} />}
+    </div>
+  )
+}
+
+// Lista de solicitudes recibidas desde la página pública de registro (ej.
+// registro.html de Totis) — solo lectura, el envío ocurre sin login desde
+// afuera de AGYDA.
+function PostulantesDeCampaniaPanel({ campania }: any) {
+  const { data: postulantes = [], isLoading } = useQuery({
+    queryKey: ['cc-postulantes', campania.id],
+    queryFn: () => ccService.getPostulantes(campania.id),
+  })
+
+  if (isLoading) {
+    return <div className={clsx(card, 'flex items-center justify-center py-10 text-ink-tertiary')}><Loader2 className="h-5 w-5 animate-spin" /></div>
+  }
+
+  if (postulantes.length === 0) {
+    return (
+      <div className={clsx(card, 'py-10 text-center text-sm text-ink-tertiary')}>
+        Todavía no hay postulaciones registradas para "{campania.nombre}".
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[0.75rem] font-semibold text-ink-tertiary">{postulantes.length} postulante{postulantes.length === 1 ? '' : 's'} registrado{postulantes.length === 1 ? '' : 's'}</p>
+      {postulantes.map((p) => (
+        <div key={p.id} className={clsx(card, 'space-y-2')}>
+          <div className="flex items-start justify-between gap-3">
+            <p className="font-bold text-ink">{p.nombre}</p>
+            <span className="flex-shrink-0 text-[0.68rem] text-ink-tertiary">
+              {new Date(p.fechaRegistro).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-secondary">
+            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-tertiary" /> {p.telefono}</span>
+            {p.correo && <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-ink-tertiary" /> {p.correo}</span>}
+          </div>
+          {p.redesSociales && (
+            <p className="whitespace-pre-line rounded-lg bg-gray-50 px-3 py-2 text-[0.78rem] text-ink-secondary">{p.redesSociales}</p>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

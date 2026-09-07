@@ -123,18 +123,25 @@
                 .filter((r) => r.usuario !== '');
         }
 
-        // --- REGISTRO (solo frontend, sin backend todavía) ---
-        // Valida los campos obligatorios y muestra éxito; no persiste datos
-        // en ningún lado hasta que exista el backend real.
+        // --- REGISTRO ---
+        // Envía nombre/teléfono/correo/redes al backend real de AGYDA/Omnicanal
+        // (misma campaña "totis" que ya consume contacto.html) y solo entonces
+        // redirige — si el guardado falla, el postulante se entera en vez de
+        // perder sus datos en silencio.
+        const API_BASE = 'https://agyda.ardabytec.vip';
+        const CAMPANIA_SLUG = 'totis';
+
         const registroForm = document.getElementById('registroForm');
         const registroAlert = document.getElementById('registroAlert');
         const registroAlertText = document.getElementById('registroAlertText');
         const registroSuccess = document.getElementById('registroSuccess');
+        const submitBtn = registroForm.querySelector('button[type="submit"]');
 
-        registroForm.addEventListener('submit', (e) => {
+        registroForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const nombre = document.getElementById('regNombre').value.trim();
             const telefono = document.getElementById('regTelefono').value.trim();
+            const correo = document.getElementById('regCorreo').value.trim();
             const redesSociales = getRedesSociales();
 
             registroAlert.style.display = 'none';
@@ -153,12 +160,24 @@
                 return;
             }
 
-            // Placeholder: aquí se enviarán nombre, telefono, correo y
-            // redesSociales al backend cuando exista.
-            console.log('Redes sociales capturadas:', redesSociales);
-
-            registroSuccess.style.display = 'flex';
-            window.location.href = 'contacto.html';
+            submitBtn.disabled = true;
+            try {
+                const resp = await fetch(`${API_BASE}/api/contact-center/publico/campanias/${CAMPANIA_SLUG}/postulantes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, telefono: telefonoDigitos, correo, redesSociales }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.success) {
+                    throw new Error(data.message || 'No se pudo registrar la postulación.');
+                }
+                registroSuccess.style.display = 'flex';
+                window.location.href = 'contacto.html';
+            } catch (err) {
+                registroAlertText.textContent = err.message || 'Ocurrió un error al enviar tu postulación. Intenta de nuevo.';
+                registroAlert.style.display = 'flex';
+                submitBtn.disabled = false;
+            }
         });
     </script>
 </body>

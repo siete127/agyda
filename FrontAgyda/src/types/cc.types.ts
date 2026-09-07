@@ -108,6 +108,17 @@ export interface CCCampania {
   agentesCount: number
 }
 
+// Registrado desde la página pública de postulación (ej. registro.html de
+// Totis) — sin login, cualquiera con el link/QR puede enviar el formulario.
+export interface CCPostulante {
+  id: number
+  nombre: string
+  telefono: string
+  correo: string | null
+  redesSociales: string | null
+  fechaRegistro: string
+}
+
 export interface CCGrupo {
   id: number
   campaniaId: number

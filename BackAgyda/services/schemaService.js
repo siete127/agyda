@@ -6586,6 +6586,25 @@ WHERE CM2_SLUG IS NULL;`,
     `IF OBJECT_ID('dbo.CCO_CAMPANIAS', 'U') IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCO_CAMPANIAS_SLUG')
 CREATE UNIQUE INDEX UQ_CCO_CAMPANIAS_SLUG ON dbo.CCO_CAMPANIAS(CM2_SLUG) WHERE CM2_SLUG IS NOT NULL;`,
+    // Postulantes capturados desde la página pública de registro de una
+    // campaña (ej. extra/Postulacion-Ayudantes/registro.html → Totis). Sin
+    // login: cualquiera con el link/QR puede enviar el formulario, así que
+    // solo se guarda lo que el form ya valida (nombre y teléfono obligatorios).
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NULL
+CREATE TABLE dbo.CCO_CAMPANIA_POSTULANTES (
+  CP_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CP_CAMPANIA_ID INT NOT NULL,
+  CP_NOMBRE NVARCHAR(200) NOT NULL,
+  CP_TELEFONO NVARCHAR(20) NOT NULL,
+  CP_CORREO NVARCHAR(200) NULL,
+  CP_REDES_SOCIALES NVARCHAR(MAX) NULL,
+  CP_FECHA_REGISTRO DATETIME NOT NULL DEFAULT GETDATE(),
+  CP_IP NVARCHAR(50) NULL,
+  CONSTRAINT FK_CCO_CP_CAMPANIA FOREIGN KEY (CP_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_CP_CAMPANIA')
+CREATE INDEX IX_CCO_CP_CAMPANIA ON dbo.CCO_CAMPANIA_POSTULANTES(CP_CAMPANIA_ID);`,
   ];
   for (const q of stmts) {
     try { await pool.request().query(q); }
