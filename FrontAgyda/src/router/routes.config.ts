@@ -55,9 +55,7 @@ export const ROUTES: RouteConfig[] = [
   // ahora dentro de Asesores/operaciones), pero la ruta sigue existiendo para
   // los links directos que aún la usan (ej. "Chat relacionado" en Tickets).
   { path: '/livechat',         label: 'Chat en Vivo',    icon: 'MessageCircle',        moduleKey: 'livechat',         roles: ['AD','TI','CC'],     showInSidebar: false },
-  // showInSidebar: false — ya no es entrada de menú propia; la ruta sigue
-  // existiendo para links directos que aún la usen.
-  { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: false },
+  { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: true  },
 
   // ── Administración ─────────────────────────────────────────────────────
   { path: '/asistencia',       label: 'Asistencia',      icon: 'Clock',                moduleKey: 'asistencia',       roles: ['AD'],               showInSidebar: true  },
