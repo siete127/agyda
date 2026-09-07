@@ -1,10 +1,18 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { Headset, LogIn, Coffee, UserCheck, ListTree } from 'lucide-react'
+import { Headset, LogIn, Coffee, UserCheck, ListTree, Megaphone, Tag, Power, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { asesoresService } from '@/services/asesores.service'
 import { TIPO_PAUSA_LABELS } from '@/types/asesores.types'
 import { Spinner } from '@/components/ui/Spinner'
+import { ccService } from '@/services/cc.service'
+import { livechatService } from '@/services/livechat.service'
+
+// El detalle completo (estado del día, tiempos, tabla de sesiones) se deja
+// en el código sin usar por ahora — el panel "Mi día" solo debe mostrar
+// campañas/skills del agente. Cambiar a true si se vuelve a necesitar.
+const MOSTRAR_DETALLE_COMPLETO = false
 
 function hoy() {
   return new Date().toISOString().slice(0, 10)
@@ -48,12 +56,32 @@ const STATUS_LABELS: Record<string, string> = {
 // modal (botón "Asesores" en su header) — si este componente viviera en
 // AsesoresPage.tsx, ese archivo y LivechatPage.tsx se importarían uno al otro.
 export function AsesoresPanel() {
+  const qc = useQueryClient()
   const [fecha, setFecha] = useState(hoy())
 
   const { data, isLoading } = useQuery({
     queryKey: ['asesores-mi-resumen', fecha],
     queryFn: () => asesoresService.getMiResumen(fecha),
     refetchInterval: 15_000,
+    enabled: MOSTRAR_DETALLE_COMPLETO,
+  })
+
+  const { data: misSkills = [], isLoading: cargandoSkills } = useQuery({
+    queryKey: ['cc-mis-skills'],
+    queryFn: () => ccService.getMisSkills(),
+  })
+
+  // Misma query key que PerfilMenu.tsx (['livechat-mi-estado']) — ambos
+  // lugares quedan sincronizados automáticamente por React Query al mutar.
+  const { data: miEstado } = useQuery({
+    queryKey: ['livechat-mi-estado'],
+    queryFn: () => livechatService.getMiEstado(),
+  })
+
+  const toggleDisponible = useMutation({
+    mutationFn: (v: boolean) => livechatService.setDisponible(v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['livechat-mi-estado'] }),
+    onError: () => toast.error('No se pudo cambiar tu estado'),
   })
 
   return (
@@ -61,14 +89,65 @@ export function AsesoresPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Headset className="h-5 w-5 text-brand" /> Asesores
+            <Headset className="h-5 w-5 text-brand" /> Mi día
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Mi día — estado y tiempos personales</p>
+          <p className="text-xs text-gray-500 mt-0.5">Campañas y skills en los que estás enrolado</p>
         </div>
-        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="field" max={hoy()} />
+        {MOSTRAR_DETALLE_COMPLETO && (
+          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="field" max={hoy()} />
+        )}
       </div>
 
-      {isLoading || !data ? (
+      <div className="card p-4 flex items-center gap-3">
+        <button
+          onClick={() => toggleDisponible.mutate(!miEstado?.disponible)}
+          disabled={toggleDisponible.isPending}
+          title={miEstado?.disponible ? 'Ponerme sin conexión' : 'Ponerme en línea'}
+          className={clsx(
+            'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50',
+            miEstado?.disponible ? 'bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+          )}
+        >
+          {toggleDisponible.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Power className="h-5 w-5" />}
+        </button>
+        <div>
+          <p className={clsx('text-sm font-bold', miEstado?.disponible ? 'text-emerald-500' : 'text-gray-500')}>
+            {miEstado?.disponible ? 'Ahora estás en línea' : 'Ahora estás desconectado'}
+          </p>
+          <p className="text-xs text-gray-500">
+            {miEstado?.disponible ? 'Recibiendo conversaciones de livechat' : 'No recibes conversaciones nuevas'}
+          </p>
+        </div>
+      </div>
+
+      {cargandoSkills ? (
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+      ) : misSkills.length === 0 ? (
+        <div className="card p-6 text-center text-sm text-gray-500">
+          Aún no estás asignado a ninguna campaña o skill.
+        </div>
+      ) : (
+        <div className="card p-4">
+          <h2 className="mb-3 text-sm font-bold text-ink flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-brand" /> Mis campañas y skills
+          </h2>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {misSkills.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 rounded-xl border border-gray-100 p-3">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-brand/10 text-base">
+                  {s.icono || <Tag className="h-4 w-4 text-brand" />}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900">{s.nombre}</p>
+                  <p className="truncate text-[0.7rem] text-gray-500">{s.campaniaNombre}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {MOSTRAR_DETALLE_COMPLETO && (isLoading || !data ? (
         <div className="flex justify-center py-16"><Spinner size="lg" /></div>
       ) : (
         <>
@@ -140,7 +219,7 @@ export function AsesoresPanel() {
             </div>
           )}
         </>
-      )}
+      ))}
     </div>
   )
 }

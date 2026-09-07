@@ -176,6 +176,10 @@ app.use('/api/livechat', require('./routes/livechat'));
 app.use('/api/contact-center', require('./routes/contactCenter'));
 app.use('/api/cc/sim', require('./routes/ccSim'));
 app.use('/api/qr-generator', require('./routes/qrGenerator'));
+// Landing pública del QR modo 'llamada_medible' — fuera de /api a propósito:
+// el código físico debe verse como una URL corta y limpia (/q/{token}), no
+// /api/qr-generator/publico/{token}. Sin auth (ver qrGeneratorController.landingPublica).
+app.get('/q/:token', require('./controllers/qrGeneratorController').landingPublica);
 app.use('/api/email-marketing', require('./routes/emailMarketing'));
 app.use('/api/mensajeria', require('./routes/mensajeria'));
 

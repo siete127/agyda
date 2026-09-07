@@ -41,9 +41,10 @@
         const API_BASE = 'https://agyda.ardabytec.vip';
         const CAMPANIA_SLUG = 'totis';
 
-        // El teléfono de llamadas sigue siendo local (no existe ese concepto
-        // en Omnicanal) — WhatsApp/Facebook/Instagram y el horario sí vienen
-        // del backend real de la campaña.
+        // configLocal solo se usa ya como respaldo si el backend no responde
+        // (ver el .catch de abajo) — el teléfono de llamadas, igual que
+        // WhatsApp/Facebook/Instagram y el horario, ahora viene de la
+        // campaña real en Omnicanal (CCO_CAMPANIAS.CM2_CONTACTO_TELEFONO).
         const configLocal = CCConfig.getConfig();
 
         const statusEl = document.getElementById('contactoStatus');
@@ -84,16 +85,17 @@
                 : 'Estamos fuera de horario, contáctanos por redes sociales';
 
             if (dentroDeHorario) {
-                if (configLocal.telefonoLlamada) {
+                const telefono = contacto.telefono || configLocal.telefonoLlamada;
+                if (telefono) {
                     panel.appendChild(crearBotonContacto({
-                        href: `tel:${soloDigitos(configLocal.telefonoLlamada)}`,
+                        href: `tel:${soloDigitos(telefono)}`,
                         iconClass: 'icon-llamada',
                         iconSvg: ICONOS.llamada,
                         titulo: 'Llámanos',
-                        subtitulo: configLocal.telefonoLlamada,
+                        subtitulo: telefono,
                     }));
                 } else {
-                    panel.innerHTML = '<p class="hint">Aún no se ha configurado un número de teléfono. Ve a Configuración para agregarlo.</p>';
+                    panel.innerHTML = '<p class="hint">Aún no se ha configurado un número de teléfono. Ve a Configuración → Contact Center → Campañas y skills → TOTIS → Contacto público.</p>';
                 }
                 return;
             }
@@ -155,6 +157,7 @@
                 // en blanco si el backend está caído o cambia de dominio.
                 renderPanel(CCConfig.isWithinBusinessHours(configLocal), {
                     whatsapp: configLocal.whatsapp, facebookUrl: configLocal.facebook, instagramUrl: configLocal.instagram,
+                    telefono: configLocal.telefonoLlamada,
                 });
             });
     </script>

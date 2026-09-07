@@ -748,7 +748,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
    la campaña de la que realmente dependen en la BD (CN_CAMPANIA_ID /
    CG_CAMPANIA_ID / CT_CAMPANIA_ID apuntan los 3 al mismo CM2_ID). */
 function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onVolver: () => void; onChanged: () => void }) {
-  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'supervisores' | 'tipificaciones' | 'postulantes'>('canales')
+  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'supervisores' | 'tipificaciones' | 'postulantes' | 'contacto'>('canales')
   const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales() })
   const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
   const canalesDeCampania = canalesTodos.filter((c) => c.campaniaId === campania.id)
@@ -759,6 +759,7 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
     { key: 'supervisores' as const, label: 'Supervisores', icon: UserCog, count: null },
     { key: 'tipificaciones' as const, label: 'Tipificaciones', icon: Tags, count: null },
     { key: 'postulantes' as const, label: 'Postulantes', icon: ClipboardList, count: null },
+    { key: 'contacto' as const, label: 'Contacto público', icon: Phone, count: null },
   ]
 
   return (
@@ -805,6 +806,7 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
       )}
       {seccion === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
       {seccion === 'postulantes' && <PostulantesDeCampaniaPanel campania={campania} />}
+      {seccion === 'contacto' && <ContactoPublicoPanel campania={campania} onChanged={onChanged} />}
     </div>
   )
 }
@@ -850,6 +852,76 @@ function PostulantesDeCampaniaPanel({ campania }: any) {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ═══ Contacto público de la campaña ═══
+   Datos que muestran páginas externas (ej. contacto.html de la postulación
+   de Totis) vía el endpoint sin auth GET /publico/campanias/:slug/contacto —
+   antes solo se podían editar con un script directo a la base de datos. */
+function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChanged: () => void }) {
+  const [form, setForm] = useState({
+    slug: campania.slug ?? '', telefono: campania.contactoTelefono ?? '',
+    facebookUrl: campania.contactoFacebookUrl ?? '', instagramUrl: campania.contactoInstagramUrl ?? '',
+  })
+  const dirty = form.slug !== (campania.slug ?? '') || form.telefono !== (campania.contactoTelefono ?? '') ||
+    form.facebookUrl !== (campania.contactoFacebookUrl ?? '') || form.instagramUrl !== (campania.contactoInstagramUrl ?? '')
+
+  const guardar = useMutation({
+    mutationFn: () => ccService.updateCampania(campania.id, {
+      slug: form.slug.trim() || undefined,
+      contactoTelefono: form.telefono.trim() || null,
+      contactoFacebookUrl: form.facebookUrl.trim() || null,
+      contactoInstagramUrl: form.instagramUrl.trim() || null,
+    }),
+    onSuccess: () => { toast.success('Contacto guardado'); onChanged() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al guardar'),
+  })
+
+  const endpointPublico = form.slug ? `/api/contact-center/publico/campanias/${form.slug}/contacto` : null
+
+  return (
+    <div className={clsx(card, 'space-y-4')}>
+      <p className="text-[0.72rem] text-ink-secondary">
+        Estos datos los consumen páginas externas públicas (ej. el formulario de postulación de Totis) para mostrar
+        cómo contactar a esta campaña, sin necesitar sesión. El WhatsApp real se toma solo del canal conectado — aquí
+        solo se captura lo que no sale de ningún canal (teléfono de llamadas, y Facebook/Instagram si Messenger/
+        Instagram no oficiales no tienen un perfil público al que enlazar).
+      </p>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className={label}>Identificador público (slug)</span>
+          <input className={field} value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="ej. totis" />
+        </label>
+        <label className="block">
+          <span className={label}>Teléfono para llamadas (en horario)</span>
+          <input className={field} value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} placeholder="Ej. 5512345678" />
+        </label>
+        <label className="block">
+          <span className={label}>URL de Facebook</span>
+          <input className={field} value={form.facebookUrl} onChange={(e) => setForm({ ...form, facebookUrl: e.target.value })} placeholder="https://facebook.com/..." />
+        </label>
+        <label className="block">
+          <span className={label}>URL de Instagram</span>
+          <input className={field} value={form.instagramUrl} onChange={(e) => setForm({ ...form, instagramUrl: e.target.value })} placeholder="https://instagram.com/..." />
+        </label>
+      </div>
+
+      {endpointPublico && (
+        <div className="rounded-xl bg-gray-50 p-3.5 text-[0.72rem] text-ink-secondary">
+          <p className="font-semibold text-ink-secondary">Endpoint público (fuera de horario, sin sesión):</p>
+          <code className="mt-1.5 block break-all rounded-lg bg-card px-2.5 py-1.5 ring-1 ring-gray-200">{endpointPublico}</code>
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <button onClick={() => guardar.mutate()} disabled={guardar.isPending || !dirty}
+          className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+          {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Guardar cambios
+        </button>
+      </div>
     </div>
   )
 }

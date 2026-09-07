@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
   CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
-  CCPostulante,
+  CCPostulante, CCMiSkill,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -109,6 +109,7 @@ export const ccService = {
   asignarSupervisorAGrupo: (grupoId: number, usuarioId: number) => api.post(`/contact-center/grupos/${grupoId}/supervisores`, { usuarioId }).then((r) => r.data),
   quitarSupervisorDeGrupo: (grupoId: number, usuarioId: number) => api.delete(`/contact-center/grupos/${grupoId}/supervisores/${usuarioId}`).then((r) => r.data),
   getMatrizAgentes: () => d<{ grupos: CCGrupo[]; asignaciones: { usuarioId: number; grupoId: number }[] }>(api.get('/contact-center/agentes-matriz')),
+  getMisSkills: () => d<CCMiSkill[]>(api.get('/contact-center/mis-skills')),
 
   getPlantillasDeGrupo: (grupoId: number) => d<CCPlantilla[]>(api.get(`/contact-center/grupos/${grupoId}/plantillas`)),
   createPlantilla: (grupoId: number, body: { nombre: string; contenido: string; visibilidad?: string }) => api.post(`/contact-center/grupos/${grupoId}/plantillas`, body).then((r) => r.data),

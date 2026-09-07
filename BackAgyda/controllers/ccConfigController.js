@@ -444,6 +444,7 @@ exports.listCampanias = async (req, res) => {
       SELECT c.CM2_ID id, c.CM2_NOMBRE nombre, c.CM2_DESCRIPCION descripcion,
         c.CM2_MAX_CHATS_POR_AGENTE maxChatsPorAgente, c.CM2_ACTIVO activo,
         c.CM2_SLUG slug, c.CM2_CONTACTO_FACEBOOK_URL contactoFacebookUrl, c.CM2_CONTACTO_INSTAGRAM_URL contactoInstagramUrl,
+        c.CM2_CONTACTO_TELEFONO contactoTelefono,
         (SELECT COUNT(*) FROM dbo.CCO_CANALES cn WHERE cn.CN_CAMPANIA_ID = c.CM2_ID) canalesCount,
         (SELECT COUNT(*) FROM dbo.CCO_GRUPOS g WHERE g.CG_CAMPANIA_ID = c.CM2_ID AND g.CG_ACTIVO = 1) skillsCount,
         (SELECT COUNT(DISTINCT ga.CGA_USUARIO_ID) FROM dbo.CCO_GRUPO_AGENTES ga
@@ -485,8 +486,9 @@ exports.updateCampania = async (req, res) => {
       .input('n', sql.NVarChar(200), b.nombre || null).input('d', sql.NVarChar(sql.MAX), b.descripcion ?? null)
       .input('m', sql.Int, b.maxChatsPorAgente ?? null)
       .input('fb', sql.NVarChar(300), b.contactoFacebookUrl ?? null).input('ig', sql.NVarChar(300), b.contactoInstagramUrl ?? null)
+      .input('tel', sql.NVarChar(40), b.contactoTelefono ?? null)
       .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_NOMBRE = ISNULL(@n, CM2_NOMBRE), CM2_DESCRIPCION = @d, CM2_MAX_CHATS_POR_AGENTE = @m,
-              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig WHERE CM2_ID = @id`);
+              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig, CM2_CONTACTO_TELEFONO = @tel WHERE CM2_ID = @id`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -660,6 +662,26 @@ exports.getMatrizAgentes = async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 
+// Skills (CCO_GRUPOS) y campañas del agente que hace la petición — reverso de
+// getAgentesDeGrupo. Se usa en "Mi día" para que cada agente vea en qué
+// campañas/skills está enrolado, sin exponer la asignación de nadie más.
+exports.getMisSkills = async (req, res) => {
+  try {
+    const uid = usuarioIdDe(req);
+    if (!uid) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const p = await pool(req);
+    const r = await p.request().input('u', sql.Int, uid).query(`
+      SELECT g.CG_ID id, g.CG_NOMBRE nombre, g.CG_ICONO icono,
+        c.CM2_ID campaniaId, c.CM2_NOMBRE campaniaNombre
+      FROM dbo.CCO_GRUPO_AGENTES ga
+      JOIN dbo.CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID AND g.CG_ACTIVO = 1
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = g.CG_CAMPANIA_ID
+      WHERE ga.CGA_USUARIO_ID = @u AND ga.CGA_ACTIVO = 1
+      ORDER BY c.CM2_NOMBRE, g.CG_NOMBRE`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
 // ── Tipificaciones ──────────────────────────────────────────────────────
 exports.listTipificaciones = async (req, res) => {
   try {
@@ -805,6 +827,7 @@ exports.getContactoPublicoCampania = async (req, res) => {
       .query(`
         SELECT c.CM2_ID id, c.CM2_NOMBRE nombre,
                c.CM2_CONTACTO_FACEBOOK_URL facebookUrl, c.CM2_CONTACTO_INSTAGRAM_URL instagramUrl,
+               c.CM2_CONTACTO_TELEFONO telefono,
                (SELECT TOP 1 CN_BAILEYS_NUMERO FROM dbo.CCO_CANALES
                  WHERE CN_CAMPANIA_ID = c.CM2_ID AND CN_TIPO = 'whatsapp_baileys'
                    AND CN_HABILITADO = 1 AND CN_BAILEYS_ESTADO = 'conectado'
@@ -829,6 +852,7 @@ exports.getContactoPublicoCampania = async (req, res) => {
         whatsapp: camp.whatsapp || null,
         facebookUrl: camp.facebookUrl || null,
         instagramUrl: camp.instagramUrl || null,
+        telefono: camp.telefono || null,
         horarioInicio: cfgRow?.CF_HORARIO_INICIO || null,
         horarioFin: cfgRow?.CF_HORARIO_FIN || null,
         diasSemana: cfgRow?.CF_DIAS_SEMANA || '1,2,3,4,5',
