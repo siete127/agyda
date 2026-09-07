@@ -261,7 +261,7 @@ function PanelEnVivoTab() {
                 >
                   <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-transform group-hover:scale-105"><Users className="h-3.5 w-3.5" /></div>
                   <p className="flex-1 text-sm text-gray-600">Agentes</p>
-                  <p className="text-base font-bold text-gray-900 leading-tight">{agentesDelSkill.length}</p>
+                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-brand" title={`${agentesDelSkill.length}`} />
                 </button>
                 <button
                   onClick={() => toggleFiltro('disponible')}
@@ -273,7 +273,7 @@ function PanelEnVivoTab() {
                 >
                   <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition-transform group-hover:scale-105"><UserCheck className="h-3.5 w-3.5" /></div>
                   <p className="flex-1 text-sm text-gray-600">Disponibles</p>
-                  <p className="text-base font-bold text-gray-900 leading-tight">{disponibles}</p>
+                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-emerald-500" title={`${disponibles}`} />
                 </button>
                 <button
                   onClick={() => toggleFiltro('pausa')}
@@ -285,7 +285,7 @@ function PanelEnVivoTab() {
                 >
                   <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition-transform group-hover:scale-105"><Coffee className="h-3.5 w-3.5" /></div>
                   <p className="flex-1 text-sm text-gray-600">En pausa</p>
-                  <p className="text-base font-bold text-gray-900 leading-tight">{enPausa}</p>
+                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-amber-500" title={`${enPausa}`} />
                 </button>
                 <button
                   onClick={() => toggleFiltro('desconectado')}
@@ -297,7 +297,7 @@ function PanelEnVivoTab() {
                 >
                   <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400 transition-transform group-hover:scale-105"><PowerOff className="h-3.5 w-3.5" /></div>
                   <p className="flex-1 text-sm text-gray-600">Desconectados</p>
-                  <p className="text-base font-bold text-gray-900 leading-tight">{desconectados}</p>
+                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-gray-400" title={`${desconectados}`} />
                 </button>
               </div>
             )}
