@@ -108,9 +108,6 @@ function emitirEstado(sessionKey) {
 // necesita saber de qué canal vino el mensaje).
 function parseMensajeEntrante(msg) {
   const m = msg.message || {};
-  const jid = msg.key.remoteJid || '';
-  const clienteExtId = jid.split('@')[0] || jid;
-  const clienteNombre = msg.pushName || null;
 
   if (m.conversation) return { texto: m.conversation };
   if (m.extendedTextMessage?.text) return { texto: m.extendedTextMessage.text };
@@ -207,13 +204,27 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
         if (!canal || !canal.CN_HABILITADO) continue;
 
         const { texto, media, nombreOriginal } = parseMensajeEntrante(msg);
+        // El remitente puede llegar como número real (@s.whatsapp.net) o como
+        // LID (@lid) — un identificador interno que WhatsApp usa cuando el
+        // contacto tiene oculto su número de teléfono. Ambos son puramente
+        // numéricos y de longitud similar, así que NO se pueden distinguir
+        // por su forma: hay que preservar el JID completo (con dominio) en
+        // clienteExtId para poder responder al remitente correcto — armar
+        // siempre "numero@s.whatsapp.net" al enviar rompía la respuesta para
+        // cualquier cliente con privacidad de número activada (el mensaje
+        // "se enviaba" sin error pero nunca llegaba, al apuntar a un chat
+        // que no existe). clienteTelefono solo se llena para el caso normal,
+        // ya que un LID no es un teléfono real y no debe usarse para matches
+        // (ej. CCO_CAMPANIA_POSTULANTES) ni mostrarse como contacto.
         const jid = msg.key.remoteJid || '';
-        const clienteExtId = jid.split('@')[0] || jid;
+        const esNumeroReal = jid.endsWith('@s.whatsapp.net');
+        const numeroPuro = jid.split('@')[0] || jid;
+        const clienteExtId = jid || numeroPuro;
 
         await ccIngest.ingestarMensajeCliente(pool, tenantKey, canal, {
           clienteExtId,
           clienteNombre: msg.pushName || null,
-          clienteTelefono: /^\d{8,15}$/.test(clienteExtId) ? clienteExtId : null,
+          clienteTelefono: esNumeroReal && /^\d{8,15}$/.test(numeroPuro) ? numeroPuro : null,
           metaMsgId: msg.key.id ? `baileys_${msg.key.id}` : null,
           texto,
           media: media ? { ...media, tipo: media.tipo, url: null } : null,
