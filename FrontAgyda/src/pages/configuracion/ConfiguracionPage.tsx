@@ -20,6 +20,7 @@ import { InstitucionalTab } from './InstitucionalTab'
 import { VentasTab } from './VentasTab'
 import { FacturacionTab } from './FacturacionTab'
 import { CCSkillsTab, CCConfigTab, CCSimuladorTab } from './ContactCenterTabs'
+import { QrGeneratorTab } from './QrGeneratorTab'
 import { MascotaTab } from './MascotaTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
 import { EnlacesTopbarTab } from './EnlacesTopbarTab'
@@ -64,6 +65,7 @@ const SCREENS: Record<string, ComponentType> = {
   'cc-skills': CCSkillsTab,
   'cc-config': CCConfigTab,
   'cc-simulador': CCSimuladorTab,
+  'qr-generator': QrGeneratorTab,
   'pers-mascota': MascotaTab,
   'pers-botones': BotonesHeaderTab,
   'pers-enlaces': EnlacesTopbarTab,
