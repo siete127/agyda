@@ -6,6 +6,27 @@ export interface SupervisorAsignacion {
   supervisorNombre: string
 }
 
+export type HistorialAsignacionAccion =
+  | 'asignar-supervisor-campania' | 'quitar-supervisor-campania'
+  | 'asignar-supervisor-skill' | 'quitar-supervisor-skill'
+
+export interface HistorialAsignacionDetalle {
+  campaniaId?: number
+  campaniaNombre?: string | null
+  grupoId?: number
+  grupoNombre?: string | null
+  supervisorId?: number
+  supervisorNombre?: string | null
+}
+
+export interface HistorialAsignacion {
+  id: number
+  usuarioNombre: string | null
+  accion: HistorialAsignacionAccion
+  detalle: HistorialAsignacionDetalle | null
+  fecha: string
+}
+
 export type EstadoAgente = 'disponible' | 'pausa' | 'no_disponible' | 'desconectado'
 
 export interface AgenteEstado {

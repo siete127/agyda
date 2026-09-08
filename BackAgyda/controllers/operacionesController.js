@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
+const { logAudit } = require('../services/auditService');
 const logger = global.logger || require('../utils/logger');
 
 async function listCampanias(req, res) {
@@ -147,6 +148,15 @@ async function asignarSupervisor(req, res) {
       .input('campaniaId', sql.Int, campaniaId)
       .input('supervisorId', sql.Int, supervisorId)
       .query('INSERT INTO CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@campaniaId, @supervisorId)');
+    const info = await pool.request().input('c', sql.Int, campaniaId).input('u', sql.Int, supervisorId).query(`
+      SELECT (SELECT CM2_NOMBRE FROM CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
+             (SELECT NEUS_NOMBRES FROM NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'asignar-supervisor-campania',
+      entidadId: campaniaId,
+      detalle: { campaniaId, campaniaNombre: info.recordset[0]?.campaniaNombre, supervisorId, supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.status(201).json({ success: true });
   } catch (err) {
     logger.error('operacionesController.asignarSupervisor', err);
@@ -158,7 +168,17 @@ async function quitarSupervisor(req, res) {
   try {
     const { id } = req.params;
     const pool = await databaseService.getPool(req.user?.empresa);
+    const info = await pool.request().input('id', sql.Int, id).query(`
+      SELECT cs.CS_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre, cs.CS_SUPERVISOR_ID supervisorId, u.NEUS_NOMBRES supervisorNombre
+      FROM CC_CAMPANIAS_SUPERVISORES cs
+      LEFT JOIN CCO_CAMPANIAS c ON c.CM2_ID = cs.CS_CAMPANIA_ID
+      LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
+      WHERE cs.CS_ID = @id`);
     await pool.request().input('id', sql.Int, id).query('DELETE FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_ID = @id');
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-campania',
+      entidadId: id, detalle: info.recordset[0] ?? {}, ip: req.ip,
+    });
     res.json({ success: true });
   } catch (err) {
     logger.error('operacionesController.quitarSupervisor', err);
@@ -774,6 +794,33 @@ async function getKpis(req, res) {
   }
 }
 
+// GET /api/operaciones/supervisores/historial-asignaciones — quién asignó o
+// quitó a qué supervisor de qué campaña/skill y cuándo (INTRANET_AUDITORIA,
+// módulo 'supervisores'). Accesible a cualquier supervisor autenticado —
+// a diferencia de /api/auditoria (solo rol AD), esto es historial del propio
+// módulo, no auditoría general del sistema.
+async function getHistorialAsignaciones(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT TOP 100 AUDIT_ID as id, USUARIO_NOMBRE as usuarioNombre, ACCION as accion,
+             DETALLE as detalle, FECHA as fecha
+      FROM INTRANET_AUDITORIA
+      WHERE MODULO = 'supervisores'
+      ORDER BY FECHA DESC
+    `);
+    const data = rs.recordset.map((r) => {
+      let detalle = null;
+      try { detalle = r.detalle ? JSON.parse(r.detalle) : null; } catch { /* detalle no parseable, se omite */ }
+      return { id: r.id, usuarioNombre: r.usuarioNombre, accion: r.accion, detalle, fecha: r.fecha };
+    });
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('operacionesController.getHistorialAsignaciones', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el historial de asignaciones' });
+  }
+}
+
 module.exports = {
   listCampanias,
   crearCampania,
@@ -793,4 +840,5 @@ module.exports = {
   eliminarMeta,
   getReporteDiario,
   getMiResumenAsesor,
+  getHistorialAsignaciones,
 };

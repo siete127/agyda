@@ -17,6 +17,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente, type ProductividadAgente } from '@/types/supervisores.types'
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
+import { AsignacionSupervisores } from '@/pages/configuracion/ContactCenterTabs'
 
 interface Usuario { id: number; nombre: string; tipoUsuario: string }
 
@@ -757,6 +758,117 @@ function EstatusTab() {
   )
 }
 
+/* ── Asignar supervisor por skill, sin salir del módulo Supervisor ── */
+function AsignarPorSkillPanel() {
+  const qc = useQueryClient()
+  const [campaniaId, setCampaniaId] = useState<number | ''>('')
+  const [skillId, setSkillId] = useState<number | ''>('')
+
+  const { data: campanias = [] } = useQuery({
+    queryKey: ['cc-campanias-supervisor'],
+    queryFn: () => ccService.getCampanias(),
+  })
+  const { data: skills = [] } = useQuery({
+    queryKey: ['cc-grupos-supervisor', campaniaId],
+    queryFn: () => ccService.getGrupos(Number(campaniaId)),
+    enabled: campaniaId !== '',
+  })
+
+  return (
+    <div className="card p-4 space-y-3">
+      <p className="text-sm font-semibold text-gray-900">Asignar supervisor por skill</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaña</label>
+          <select
+            value={campaniaId}
+            onChange={(e) => { setCampaniaId(e.target.value ? Number(e.target.value) : ''); setSkillId('') }}
+            className="field"
+          >
+            <option value="">Selecciona una campaña</option>
+            {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Skill</label>
+          <select
+            value={skillId}
+            onChange={(e) => setSkillId(e.target.value ? Number(e.target.value) : '')}
+            disabled={campaniaId === ''}
+            className="field disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Selecciona un skill</option>
+            {skills.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {skillId !== '' && (
+        <div className="border-t border-gray-100 pt-3">
+          <AsignacionSupervisores
+            nivel="skill"
+            id={Number(skillId)}
+            onChanged={() => qc.invalidateQueries({ queryKey: ['supervisores-historial-asignaciones'] })}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Historial de quién asignó/quitó a qué supervisor y cuándo ── */
+function HistorialAsignacionesPanel() {
+  const { data: historial = [], isLoading } = useQuery({
+    queryKey: ['supervisores-historial-asignaciones'],
+    queryFn: () => supervisoresService.getHistorialAsignaciones(),
+  })
+
+  const ACCION_LABEL: Record<string, string> = {
+    'asignar-supervisor-campania': 'asignó',
+    'quitar-supervisor-campania': 'quitó',
+    'asignar-supervisor-skill': 'asignó',
+    'quitar-supervisor-skill': 'quitó',
+  }
+  const ES_QUITAR = (accion: string) => accion.startsWith('quitar-')
+
+  if (isLoading) return <div className="flex justify-center py-10"><Spinner /></div>
+  if (historial.length === 0) {
+    return (
+      <div className="card flex flex-col items-center gap-2 py-10 text-gray-400">
+        <History className="h-6 w-6" />
+        <p className="text-xs">Todavía no hay cambios registrados</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card divide-y divide-gray-50 overflow-hidden">
+      {historial.map((h) => {
+        const d = h.detalle
+        const alcance = d?.grupoNombre ?? d?.campaniaNombre ?? '—'
+        const tipo = d?.grupoNombre ? 'skill' : 'campaña'
+        return (
+          <div key={h.id} className="flex items-start gap-3 px-4 py-2.5">
+            <div className={clsx('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full', ES_QUITAR(h.accion) ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600')}>
+              {ES_QUITAR(h.accion) ? <Trash2 className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+            </div>
+            <div className="min-w-0 flex-1 text-xs text-gray-600">
+              <span className="font-semibold text-gray-900">{h.usuarioNombre ?? 'Alguien'}</span>{' '}
+              {ACCION_LABEL[h.accion] ?? h.accion} a{' '}
+              <span className="font-medium text-gray-800">{d?.supervisorNombre ?? 'un supervisor'}</span>{' '}
+              {ES_QUITAR(h.accion) ? 'de' : 'a'} la {tipo}{' '}
+              <span className="font-medium text-gray-800">{alcance}</span>
+              <span className="ml-2 text-gray-400">
+                {new Date(h.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ── Tab: Administrar (admin) ── */
 function AdministrarTab() {
   const qc = useQueryClient()
@@ -771,50 +883,61 @@ function AdministrarTab() {
     mutationFn: (id: number) => supervisoresService.quitar(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['supervisores-asignaciones'] })
+      qc.invalidateQueries({ queryKey: ['supervisores-historial-asignaciones'] })
       toast.success('Supervisor quitado de la campaña')
     },
     onError: () => toast.error('Error al quitar el supervisor'),
   })
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => setShowAsignar(true)}><Plus className="h-3.5 w-3.5" /> Asignar supervisor</Button>
+    <div className="space-y-6">
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-gray-900">Supervisores por campaña</p>
+          <Button size="sm" onClick={() => setShowAsignar(true)}><Plus className="h-3.5 w-3.5" /> Asignar supervisor</Button>
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+        ) : asignaciones.length === 0 ? (
+          <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
+            <Users className="h-8 w-8" />
+            <p className="text-sm">No hay supervisores asignados a campañas todavía</p>
+          </div>
+        ) : (
+          <div className="card overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-gray-500">
+                  <th className="px-4 py-2.5 font-semibold">Campaña</th>
+                  <th className="px-4 py-2.5 font-semibold">Supervisor</th>
+                  <th className="px-4 py-2.5 font-semibold"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {asignaciones.map((a) => (
+                  <tr key={a.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                    <td className="px-4 py-2.5 font-medium text-gray-900">{a.campaniaNombre}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{a.supervisorNombre}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => quitar.mutate(a.id)} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 ml-auto">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-      ) : asignaciones.length === 0 ? (
-        <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
-          <Users className="h-8 w-8" />
-          <p className="text-sm">No hay supervisores asignados a campañas todavía</p>
-        </div>
-      ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-gray-500">
-                <th className="px-4 py-2.5 font-semibold">Campaña</th>
-                <th className="px-4 py-2.5 font-semibold">Supervisor</th>
-                <th className="px-4 py-2.5 font-semibold"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {asignaciones.map((a) => (
-                <tr key={a.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 font-medium text-gray-900">{a.campaniaNombre}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{a.supervisorNombre}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button onClick={() => quitar.mutate(a.id)} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 ml-auto">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <AsignarPorSkillPanel />
+
+      <div>
+        <p className="mb-3 text-sm font-semibold text-gray-900">Historial de cambios</p>
+        <HistorialAsignacionesPanel />
+      </div>
 
       {showAsignar && <AsignarSupervisorModal onClose={() => setShowAsignar(false)} />}
     </div>
