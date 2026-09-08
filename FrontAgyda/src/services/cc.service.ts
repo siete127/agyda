@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
   CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
-  CCPostulante,
+  CCPostulante, CCMiSkill,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -92,6 +92,12 @@ export const ccService = {
   updateCampania: (id: number, body: Record<string, unknown>) => api.put(`/contact-center/campanias/${id}`, body).then((r) => r.data),
   deleteCampania: (id: number) => api.delete(`/contact-center/campanias/${id}`).then((r) => r.data),
   getPostulantes: (campaniaId: number) => d<CCPostulante[]>(api.get(`/contact-center/campanias/${campaniaId}/postulantes`)),
+  // Descarga directa (no JSON) — mismo patrón que mediaUrl: el token va por
+  // querystring porque es un <a href> de navegador, no una llamada de axios.
+  tipificacionesExcelUrl: (campaniaId: number) => {
+    const token = useAuthStore.getState().token
+    return `/api/contact-center/campanias/${campaniaId}/tipificaciones-excel${token ? `?token=${encodeURIComponent(token)}` : ''}`
+  },
 
   getGrupos: (campaniaId?: number) => d<CCGrupo[]>(api.get('/contact-center/grupos', { params: campaniaId ? { campaniaId } : {} })),
   createGrupo: (body: { campaniaId: number; nombre: string; descripcion?: string; icono?: string }) => api.post('/contact-center/grupos', body).then((r) => r.data),
@@ -100,7 +106,16 @@ export const ccService = {
   getAgentesDeGrupo: (grupoId: number) => d<{ usuarioId: number; nombre: string }[]>(api.get(`/contact-center/grupos/${grupoId}/agentes`)),
   asignarAgente: (grupoId: number, usuarioId: number) => api.post(`/contact-center/grupos/${grupoId}/agentes`, { usuarioId }).then((r) => r.data),
   quitarAgente: (grupoId: number, usuarioId: number) => api.delete(`/contact-center/grupos/${grupoId}/agentes/${usuarioId}`).then((r) => r.data),
+
+  // ── Supervisores: por campaña completa y por skill (más granular) ──
+  getSupervisoresDeCampania: (campaniaId: number) => d<{ usuarioId: number; nombre: string }[]>(api.get(`/contact-center/campanias/${campaniaId}/supervisores`)),
+  asignarSupervisorACampania: (campaniaId: number, usuarioId: number) => api.post(`/contact-center/campanias/${campaniaId}/supervisores`, { usuarioId }).then((r) => r.data),
+  quitarSupervisorDeCampania: (campaniaId: number, usuarioId: number) => api.delete(`/contact-center/campanias/${campaniaId}/supervisores/${usuarioId}`).then((r) => r.data),
+  getSupervisoresDeGrupo: (grupoId: number) => d<{ usuarioId: number; nombre: string }[]>(api.get(`/contact-center/grupos/${grupoId}/supervisores`)),
+  asignarSupervisorAGrupo: (grupoId: number, usuarioId: number) => api.post(`/contact-center/grupos/${grupoId}/supervisores`, { usuarioId }).then((r) => r.data),
+  quitarSupervisorDeGrupo: (grupoId: number, usuarioId: number) => api.delete(`/contact-center/grupos/${grupoId}/supervisores/${usuarioId}`).then((r) => r.data),
   getMatrizAgentes: () => d<{ grupos: CCGrupo[]; asignaciones: { usuarioId: number; grupoId: number }[] }>(api.get('/contact-center/agentes-matriz')),
+  getMisSkills: () => d<CCMiSkill[]>(api.get('/contact-center/mis-skills')),
 
   getPlantillasDeGrupo: (grupoId: number) => d<CCPlantilla[]>(api.get(`/contact-center/grupos/${grupoId}/plantillas`)),
   createPlantilla: (grupoId: number, body: { nombre: string; contenido: string; visibilidad?: string }) => api.post(`/contact-center/grupos/${grupoId}/plantillas`, body).then((r) => r.data),

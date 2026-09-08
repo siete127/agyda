@@ -6,17 +6,30 @@ export interface SupervisorAsignacion {
   supervisorNombre: string
 }
 
+export type EstadoAgente = 'disponible' | 'pausa' | 'no_disponible' | 'desconectado'
+
 export interface AgenteEstado {
   agenteId: number
   nombre: string
   campaniaId: number
-  estado: 'disponible' | 'pausa'
+  grupoId: number
+  grupoNombre: string
+  estado: EstadoAgente
   tipoPausa: string | null
   pausaDesde: string | null
+  ultimaConexion: string | null
+}
+
+export interface SkillPanel {
+  id: number
+  campaniaId: number
+  nombre: string
+  icono: string | null
 }
 
 export interface PanelSupervisor {
   campanias: { id: number; nombre: string }[]
+  grupos: SkillPanel[]
   agentes: AgenteEstado[]
 }
 
@@ -28,6 +41,9 @@ export interface ProductividadAgente {
   capacitacion: number
   permiso: number
   totalPausaMin: number
+  estado: EstadoAgente
+  tipoPausa: string | null
+  ultimaConexion: string | null
 }
 
 export const TIPO_PAUSA_LABELS: Record<string, string> = {
@@ -35,4 +51,11 @@ export const TIPO_PAUSA_LABELS: Record<string, string> = {
   comida: 'Comida',
   'capacitación': 'Capacitación',
   permiso: 'Permiso',
+}
+
+export const ESTADO_AGENTE_LABELS: Record<EstadoAgente, string> = {
+  disponible: 'Disponible',
+  pausa: 'En pausa',
+  no_disponible: 'No disponible',
+  desconectado: 'Desconectado',
 }

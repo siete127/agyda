@@ -176,6 +176,14 @@ app.use('/api/livechat', require('./routes/livechat'));
 app.use('/api/contact-center', require('./routes/contactCenter'));
 app.use('/api/cc/sim', require('./routes/ccSim'));
 app.use('/api/qr-generator', require('./routes/qrGenerator'));
+// Landing pública del QR modo 'llamada_medible' — fuera de /api a propósito:
+// el código físico debe verse como una URL corta y limpia (/q/{token}), no
+// /api/qr-generator/publico/{token}. Sin auth (ver qrGeneratorController.landingPublica).
+app.get('/q/:token', require('./controllers/qrGeneratorController').landingPublica);
+// Acortador propio: /p/{codigo de 10 caracteres} sirve el contenido del
+// destino directo (proxy interno), sin redirect — la barra de direcciones
+// se queda en esta URL corta. Sin auth (ver qrGeneratorController.resolverUrlCorta).
+app.get('/p/:codigo', require('./controllers/qrGeneratorController').resolverUrlCorta);
 app.use('/api/email-marketing', require('./routes/emailMarketing'));
 app.use('/api/mensajeria', require('./routes/mensajeria'));
 

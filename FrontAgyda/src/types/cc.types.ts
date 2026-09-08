@@ -106,6 +106,16 @@ export interface CCCampania {
   canalesCount: number
   skillsCount: number
   agentesCount: number
+  // Identificador público de la campaña para páginas externas (ej.
+  // contacto.html de Totis) — GET /api/contact-center/publico/campanias/:slug/contacto.
+  slug: string | null
+  // Contacto "de respaldo" mostrado en esas páginas externas: teléfono para
+  // llamadas en horario, y URLs de Facebook/Instagram capturadas a mano
+  // (Messenger/Instagram no oficiales son cuentas personales sin perfil
+  // público al que enlazar, así que esto no sale de ningún canal).
+  contactoTelefono: string | null
+  contactoFacebookUrl: string | null
+  contactoInstagramUrl: string | null
 }
 
 // Registrado desde la página pública de postulación (ej. registro.html de
@@ -130,6 +140,17 @@ export interface CCGrupo {
   agentesCount: number
   // El skill con menor CG_ID entre los activos de su campaña (el primero creado).
   esPrincipal: boolean
+}
+
+// Un skill al que está asignado el agente actual, con el nombre de su
+// campaña ya incluido — reverso de CCGrupo (que es "un skill, cuántos
+// agentes"), este es "el agente, en qué skills/campañas está".
+export interface CCMiSkill {
+  id: number
+  nombre: string
+  icono: string | null
+  campaniaId: number
+  campaniaNombre: string
 }
 
 export interface CCTipificacion {

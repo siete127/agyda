@@ -1,6 +1,8 @@
 const sql = require('mssql');
 const crypto = require('crypto');
+const XLSX = require('xlsx');
 const databaseService = require('../services/databaseService');
+const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
 const metaClient = require('../services/canalesMeta/metaClient');
 const baileysManager = require('../services/canalesBaileys/baileysManager');
 const fcaManager = require('../services/canalesFca/fcaManager');
@@ -444,6 +446,7 @@ exports.listCampanias = async (req, res) => {
       SELECT c.CM2_ID id, c.CM2_NOMBRE nombre, c.CM2_DESCRIPCION descripcion,
         c.CM2_MAX_CHATS_POR_AGENTE maxChatsPorAgente, c.CM2_ACTIVO activo,
         c.CM2_SLUG slug, c.CM2_CONTACTO_FACEBOOK_URL contactoFacebookUrl, c.CM2_CONTACTO_INSTAGRAM_URL contactoInstagramUrl,
+        c.CM2_CONTACTO_TELEFONO contactoTelefono,
         (SELECT COUNT(*) FROM dbo.CCO_CANALES cn WHERE cn.CN_CAMPANIA_ID = c.CM2_ID) canalesCount,
         (SELECT COUNT(*) FROM dbo.CCO_GRUPOS g WHERE g.CG_CAMPANIA_ID = c.CM2_ID AND g.CG_ACTIVO = 1) skillsCount,
         (SELECT COUNT(DISTINCT ga.CGA_USUARIO_ID) FROM dbo.CCO_GRUPO_AGENTES ga
@@ -485,8 +488,9 @@ exports.updateCampania = async (req, res) => {
       .input('n', sql.NVarChar(200), b.nombre || null).input('d', sql.NVarChar(sql.MAX), b.descripcion ?? null)
       .input('m', sql.Int, b.maxChatsPorAgente ?? null)
       .input('fb', sql.NVarChar(300), b.contactoFacebookUrl ?? null).input('ig', sql.NVarChar(300), b.contactoInstagramUrl ?? null)
+      .input('tel', sql.NVarChar(40), b.contactoTelefono ?? null)
       .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_NOMBRE = ISNULL(@n, CM2_NOMBRE), CM2_DESCRIPCION = @d, CM2_MAX_CHATS_POR_AGENTE = @m,
-              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig WHERE CM2_ID = @id`);
+              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig, CM2_CONTACTO_TELEFONO = @tel WHERE CM2_ID = @id`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -495,6 +499,39 @@ exports.deleteCampania = async (req, res) => {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
     await p.request().input('id', sql.Int, req.params.id).query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_ACTIVO = 0 WHERE CM2_ID = @id`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
+// Supervisores por CAMPAÑA completa — CC_CAMPANIAS_SUPERVISORES (mismo par
+// usado por el módulo Supervisor > Administrar; se expone también acá para
+// asignarlo sin salir de Configuración > Campañas y skills).
+exports.getSupervisoresDeCampania = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const r = await p.request().input('c', sql.Int, req.params.id).query(`
+      SELECT cs.CS_SUPERVISOR_ID usuarioId, u.NEUS_NOMBRES nombre
+      FROM dbo.CC_CAMPANIAS_SUPERVISORES cs LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
+      WHERE cs.CS_CAMPANIA_ID = @c ORDER BY u.NEUS_NOMBRES`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.asignarSupervisorACampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.body?.usuarioId)
+      .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u)
+              INSERT INTO dbo.CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@c, @u);`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.quitarSupervisorDeCampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.params.usuarioId)
+      .query(`DELETE FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -585,6 +622,38 @@ exports.quitarAgenteDeGrupo = async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 
+// Supervisores por skill (asignación granular, dentro de un solo grupo/skill
+// de la campaña) — mismo patrón que agentes por grupo, tabla CCO_GRUPO_SUPERVISORES.
+exports.getSupervisoresDeGrupo = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const r = await p.request().input('g', sql.Int, req.params.grupoId).query(`
+      SELECT gs.GS_SUPERVISOR_ID usuarioId, u.NEUS_NOMBRES nombre
+      FROM dbo.CCO_GRUPO_SUPERVISORES gs LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = gs.GS_SUPERVISOR_ID
+      WHERE gs.GS_GRUPO_ID = @g ORDER BY u.NEUS_NOMBRES`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.asignarSupervisorAGrupo = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId)
+      .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u)
+              INSERT INTO dbo.CCO_GRUPO_SUPERVISORES (GS_GRUPO_ID, GS_SUPERVISOR_ID) VALUES (@g, @u);`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+exports.quitarSupervisorDeGrupo = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId)
+      .query(`DELETE FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
 // Matriz agente × skill (para la pantalla de asignación)
 exports.getMatrizAgentes = async (req, res) => {
   try {
@@ -592,6 +661,26 @@ exports.getMatrizAgentes = async (req, res) => {
     const grupos = await p.request().query(`SELECT CG_ID id, CG_NOMBRE nombre, CG_ICONO icono FROM dbo.CCO_GRUPOS WHERE CG_ACTIVO = 1 ORDER BY CG_NOMBRE`);
     const asign = await p.request().query(`SELECT CGA_USUARIO_ID usuarioId, CGA_GRUPO_ID grupoId FROM dbo.CCO_GRUPO_AGENTES WHERE CGA_ACTIVO = 1`);
     res.json({ success: true, data: { grupos: grupos.recordset, asignaciones: asign.recordset } });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+
+// Skills (CCO_GRUPOS) y campañas del agente que hace la petición — reverso de
+// getAgentesDeGrupo. Se usa en "Mi día" para que cada agente vea en qué
+// campañas/skills está enrolado, sin exponer la asignación de nadie más.
+exports.getMisSkills = async (req, res) => {
+  try {
+    const uid = usuarioIdDe(req);
+    if (!uid) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const p = await pool(req);
+    const r = await p.request().input('u', sql.Int, uid).query(`
+      SELECT g.CG_ID id, g.CG_NOMBRE nombre, g.CG_ICONO icono,
+        c.CM2_ID campaniaId, c.CM2_NOMBRE campaniaNombre
+      FROM dbo.CCO_GRUPO_AGENTES ga
+      JOIN dbo.CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID AND g.CG_ACTIVO = 1
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = g.CG_CAMPANIA_ID
+      WHERE ga.CGA_USUARIO_ID = @u AND ga.CGA_ACTIVO = 1
+      ORDER BY c.CM2_NOMBRE, g.CG_NOMBRE`);
+    res.json({ success: true, data: r.recordset });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
 
@@ -740,6 +829,7 @@ exports.getContactoPublicoCampania = async (req, res) => {
       .query(`
         SELECT c.CM2_ID id, c.CM2_NOMBRE nombre,
                c.CM2_CONTACTO_FACEBOOK_URL facebookUrl, c.CM2_CONTACTO_INSTAGRAM_URL instagramUrl,
+               c.CM2_CONTACTO_TELEFONO telefono,
                (SELECT TOP 1 CN_BAILEYS_NUMERO FROM dbo.CCO_CANALES
                  WHERE CN_CAMPANIA_ID = c.CM2_ID AND CN_TIPO = 'whatsapp_baileys'
                    AND CN_HABILITADO = 1 AND CN_BAILEYS_ESTADO = 'conectado'
@@ -764,6 +854,7 @@ exports.getContactoPublicoCampania = async (req, res) => {
         whatsapp: camp.whatsapp || null,
         facebookUrl: camp.facebookUrl || null,
         instagramUrl: camp.instagramUrl || null,
+        telefono: camp.telefono || null,
         horarioInicio: cfgRow?.CF_HORARIO_INICIO || null,
         horarioFin: cfgRow?.CF_HORARIO_FIN || null,
         diasSemana: cfgRow?.CF_DIAS_SEMANA || '1,2,3,4,5',
@@ -838,5 +929,54 @@ exports.listPostulantesCampania = async (req, res) => {
   } catch (e) {
     console.error('ccConfig.listPostulantesCampania:', e.message);
     res.status(500).json({ success: false, message: 'Error' });
+  }
+};
+
+// Excel con una fila por tipificación de llamada registrada desde el Web
+// Form de VICIdial (pantalla-llamada) — se une con el postulante por
+// WLT_POSTULANTE_ID cuando hubo match exacto, y si no por los últimos 10
+// dígitos del teléfono (mismo criterio que _buscarPostulanteTotisPorTelefono
+// en webphoneController), para no perder llamadas de números que llegaron
+// con formato distinto al capturado en el formulario.
+exports.exportarTipificacionesCampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    const r = await p.request().input('c', sql.Int, req.params.id).query(`
+      SELECT
+        ISNULL(cp.CP_NOMBRE, '(sin coincidencia)') postulante,
+        wlt.WLT_TELEFONO telefono,
+        wlt.WLT_TIPIFICACION tipificacion,
+        wlt.WLT_OBSERVACIONES observaciones,
+        wlt.WLT_EXTENSION extension,
+        wlt.WLT_FECHA fecha
+      FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+      LEFT JOIN dbo.CCO_CAMPANIA_POSTULANTES cp
+        ON cp.CP_ID = wlt.WLT_POSTULANTE_ID
+        OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+      WHERE cp.CP_CAMPANIA_ID = @c OR (cp.CP_ID IS NULL AND wlt.WLT_POSTULANTE_ID IS NULL)
+      ORDER BY wlt.WLT_FECHA DESC`);
+
+    const filas = r.recordset.map((row) => ({
+      Postulante: row.postulante,
+      Teléfono: row.telefono,
+      Tipificación: TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion,
+      Observaciones: row.observaciones || '',
+      Extensión: row.extension || '',
+      Fecha: row.fecha ? new Date(row.fecha).toLocaleString('es-MX') : '',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filas.length ? filas : [{ Postulante: '', Teléfono: '', Tipificación: '', Observaciones: '', Extensión: '', Fecha: '' }]);
+    ws['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 26 }, { wch: 50 }, { wch: 10 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tipificaciones');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="tipificaciones_campania_${req.params.id}.xlsx"`);
+    res.send(buffer);
+  } catch (e) {
+    console.error('ccConfig.exportarTipificacionesCampania:', e.message);
+    res.status(500).json({ success: false, message: 'Error al generar el Excel' });
   }
 };
