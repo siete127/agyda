@@ -59,6 +59,7 @@ export const ROUTES: RouteConfig[] = [
   // ya fusiona esta bandeja con la de Livechat en una sola pantalla; la ruta
   // sigue existiendo por si algún link directo la usa.
   { path: '/contact-center',   label: 'Contact Center',  icon: 'Headset',              moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: false },
+  { path: '/contact-center/postulantes', label: 'Postulantes', icon: 'ClipboardList',   moduleKey: 'contact-center',   roles: ['AD','TI','CC'],     showInSidebar: true  },
 
   // ── Administración ─────────────────────────────────────────────────────
   { path: '/asistencia',       label: 'Asistencia',      icon: 'Clock',                moduleKey: 'asistencia',       roles: ['AD'],               showInSidebar: true  },
