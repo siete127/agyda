@@ -27,9 +27,12 @@ function ResumenRatingPorAgente({ filtros }: { filtros: LivechatHistorialFiltros
     queryFn: () => livechatService.getHistorialRatingPorAgente(filtros),
   })
 
-  if (isLoading || ranking.length === 0) return null
+  // Solo agentes con al menos una conversación calificada — un agente con
+  // 0 calificadas no aporta información de calidad al resumen.
+  const conCalificaciones = ranking.filter((r) => r.totalCalificadas > 0)
+  if (isLoading || conCalificaciones.length === 0) return null
 
-  const ordenado = [...ranking].sort((a, b) => (b.ratingPromedio ?? -1) - (a.ratingPromedio ?? -1))
+  const ordenado = [...conCalificaciones].sort((a, b) => (b.ratingPromedio ?? -1) - (a.ratingPromedio ?? -1))
 
   return (
     <div className="rounded-2xl border border-surface-border bg-gradient-to-br from-surface to-card p-4">
