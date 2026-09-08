@@ -238,6 +238,19 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     enabled: miembrosOpen && canal.tipo === 'grupo',
   })
 
+  const quitarMiembro = useMutation({
+    mutationFn: (usuarioId: number) => mensajeriaService.quitarMiembro(canal.id, usuarioId),
+    onSuccess: () => {
+      toast.success('Integrante eliminado')
+      qc.invalidateQueries({ queryKey: ['mensajeria-canal-detalle', canal.id] })
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 403) toast.error('Solo el creador del grupo puede quitar integrantes')
+      else toast.error('No se pudo eliminar al integrante')
+    },
+  })
+
   const oscuro = config?.tema === 'oscuro'
   const colorPropio = config?.colorMensajePropio ?? '#2563EB'
   const colorAjeno = config?.colorMensajeAjeno ?? '#FFFFFF'
@@ -620,6 +633,17 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                           <p className="text-[0.65rem] text-brand">Creador del grupo</p>
                         )}
                       </div>
+                      {user?.id === canal.creadoPor && m.usuarioId !== canal.creadoPor && (
+                        <button
+                          type="button"
+                          onClick={() => quitarMiembro.mutate(m.usuarioId)}
+                          disabled={quitarMiembro.isPending}
+                          title="Quitar del grupo"
+                          className={clsx('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-500 hover:bg-gray-700 hover:text-red-400' : 'text-gray-400 hover:bg-gray-100 hover:text-red-500')}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
