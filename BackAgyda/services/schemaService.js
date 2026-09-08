@@ -1036,8 +1036,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_TICKETS_SERVICIO_
 
 -- Canal por el que se originó el ticket. Valores usados en JS (sin CHECK
 -- constraint, para no requerir migración si se agrega un canal nuevo):
--- 'portal' | 'chatbot' | 'chat_en_vivo' | 'tecnico' | 'api'. NULL en tickets
--- históricos creados antes de esta columna.
+-- 'portal' | 'chatbot' | 'chat_en_vivo' | 'tecnico' | 'api' | 'web_publica'.
+-- NULL en tickets históricos creados antes de esta columna.
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='CANAL_ORIGEN')
   ALTER TABLE dbo.TICKETS ADD CANAL_ORIGEN NVARCHAR(20) NULL;
 
@@ -1407,6 +1407,20 @@ END
       UPDATE dbo.TICKETS_SLA_REGLAS SET TSR_PRIORIDAD = 'P2' WHERE TSR_PRIORIDAD = 'ALTA';
       UPDATE dbo.TICKETS_SLA_REGLAS SET TSR_PRIORIDAD = 'P3' WHERE TSR_PRIORIDAD = 'MEDIA';
       UPDATE dbo.TICKETS_SLA_REGLAS SET TSR_PRIORIDAD = 'P4' WHERE TSR_PRIORIDAD = 'BAJA';
+    `);
+
+    // Usuario "sistema" usado como SOLICITANTE_ID de los tickets creados por el
+    // formulario público anónimo del sitio institucional (ver
+    // publicTicketController.js) — un visitante web no tiene cuenta en
+    // NEUS_USUARIOS, así que sus tickets se asocian a este usuario fijo,
+    // inactivo (no puede iniciar sesión), y sus datos de contacto reales se
+    // guardan al inicio de la descripción del ticket.
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM dbo.NEUS_USUARIOS WHERE NEUS_USUARIO = 'sistema.web.publica')
+BEGIN
+  INSERT INTO dbo.NEUS_USUARIOS (NEUS_NOMBRES, NEUS_USUARIO, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE)
+  VALUES ('Solicitud Web Pública', 'sistema.web.publica', 'CL', 0, 0, 0);
+END
     `);
 
     logger.info('✅ Esquema de tickets asegurado/actualizado');
