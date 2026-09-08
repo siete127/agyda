@@ -1059,7 +1059,8 @@ exports.listPostulantesGestion = async (req, res) => {
       SELECT cp.CP_ID id, cp.CP_NOMBRE nombre, cp.CP_TELEFONO telefono, cp.CP_CORREO correo,
              cp.CP_FECHA_REGISTRO fechaRegistro, cp.CP_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre,
              ult.WLT_TIPIFICACION tipificacion, ult.WLT_OBSERVACIONES observaciones, ult.WLT_FECHA tipificacionFecha
-      ${baseFrom}
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
       OUTER APPLY (
         SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_FECHA
         FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
@@ -1067,6 +1068,7 @@ exports.listPostulantesGestion = async (req, res) => {
            OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
         ORDER BY wlt.WLT_FECHA DESC
       ) ult
+      WHERE 1 = 1 ${whereCampania} ${whereBusqueda}
       ORDER BY cp.CP_FECHA_REGISTRO DESC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
 
