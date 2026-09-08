@@ -19,6 +19,8 @@ import { TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type Estado
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
 import { AsignacionSupervisores } from '@/pages/configuracion/ContactCenterTabs'
+import { Eye } from 'lucide-react'
+import type { CCMensaje } from '@/types/cc.types'
 
 interface Usuario { id: number; nombre: string; tipoUsuario: string }
 
@@ -46,8 +48,8 @@ function estadoTexto(agente: AgenteEstado) {
   return ESTADO_AGENTE_LABELS[agente.estado]
 }
 
-/* ── Fila de chat asignado (nivel 4: chats de un agente) ── */
-function ChatRow({ chat }: { chat: CCInteraccion }) {
+/* ── Fila de chat asignado (nivel 4: chats de un agente) — clic abre el visor de solo lectura ── */
+function ChatRow({ chat, onClick }: { chat: CCInteraccion; onClick: () => void }) {
   const ESTADO_LABEL: Record<string, string> = { activa: 'Activa', en_cola: 'En cola', pendiente_tipificacion: 'Pendiente tipificación' }
   const ESTADO_COLOR: Record<string, string> = {
     activa: 'bg-emerald-100 text-emerald-700',
@@ -55,7 +57,7 @@ function ChatRow({ chat }: { chat: CCInteraccion }) {
     pendiente_tipificacion: 'bg-blue-100 text-blue-700',
   }
   return (
-    <div className="card p-3.5 flex items-center gap-3">
+    <button onClick={onClick} className="card w-full p-3.5 flex items-center gap-3 text-left transition-colors hover:border-brand/30 hover:bg-brand/[0.02]">
       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-500">
         <MessageCircle className="h-4 w-4" />
       </div>
@@ -66,7 +68,79 @@ function ChatRow({ chat }: { chat: CCInteraccion }) {
       <span className={clsx('flex-shrink-0 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold', ESTADO_COLOR[chat.estado] ?? 'bg-gray-100 text-gray-600')}>
         {ESTADO_LABEL[chat.estado] ?? chat.estado}
       </span>
-    </div>
+      <Eye className="h-3.5 w-3.5 flex-shrink-0 text-gray-300" />
+    </button>
+  )
+}
+
+/* ── Modal: ver la conversación completa, solo lectura — sin input ni acciones
+   de escribir/editar/eliminar. El supervisor solo observa lo que ya se dijo. ── */
+function VerConversacionModal({ interaccionId, onClose }: { interaccionId: number; onClose: () => void }) {
+  const { data: inter, isLoading } = useQuery({
+    queryKey: ['cc-inter-detalle-supervisor', interaccionId],
+    queryFn: () => ccService.getInteraccion(interaccionId),
+    refetchInterval: 5000,
+  })
+
+  return (
+    <Modal isOpen onClose={onClose} title="Ver conversación (solo lectura)" size="lg">
+      {isLoading || !inter ? (
+        <div className="flex justify-center py-14"><Spinner /></div>
+      ) : (
+        <div className="flex h-[60vh] flex-col">
+          <div className="flex items-center gap-2.5 border-b border-gray-100 pb-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+              <MessageCircle className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-900 truncate">{inter.clienteNombre || inter.clienteTelefono || 'Sin nombre'}</p>
+              <p className="text-xs text-gray-500">
+                {inter.canalNombre ?? inter.tipo}{inter.grupoNombre ? ` · ${inter.grupoNombre}` : ''}{inter.agenteNombre ? ` · Atiende: ${inter.agenteNombre}` : ''}
+              </p>
+            </div>
+            <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[0.65rem] font-semibold text-amber-700">
+              <Eye className="h-3 w-3" /> Solo lectura
+            </span>
+          </div>
+
+          <div className="flex-1 space-y-2 overflow-y-auto bg-gray-50/40 p-3">
+            {((inter.mensajes ?? []) as CCMensaje[]).length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-400">
+                <MessageCircle className="h-6 w-6" />
+                <p className="text-xs">Sin mensajes todavía</p>
+              </div>
+            ) : (
+              (inter.mensajes as CCMensaje[]).map((m) => (
+                <div key={m.id} className={clsx('flex', m.emisor === 'agente' ? 'justify-end' : m.emisor === 'sistema' ? 'justify-center' : 'justify-start')}>
+                  {m.emisor === 'sistema' ? (
+                    <span className="rounded-full bg-gray-200 px-3 py-1 text-[0.68rem] italic text-gray-500">{m.contenido}</span>
+                  ) : (
+                    <div className={clsx(
+                      'max-w-[70%] rounded-2xl px-3 py-2 text-sm',
+                      m.emisor === 'agente' ? 'rounded-br-sm bg-violet-600 text-white' : 'rounded-bl-sm bg-white text-gray-800 ring-1 ring-gray-200',
+                    )}>
+                      {m.mediaId && m.mediaMime?.startsWith('image/') && (
+                        <img src={ccService.mediaUrl(m.mediaId)} alt="" className="mb-1 max-h-48 rounded-lg" />
+                      )}
+                      {m.mediaId && m.mediaMime?.startsWith('audio/') && (
+                        <audio src={ccService.mediaUrl(m.mediaId)} controls className="mb-1 max-w-full" />
+                      )}
+                      {m.mediaId && !m.mediaMime?.startsWith('image/') && !m.mediaMime?.startsWith('audio/') && (
+                        <a href={ccService.mediaUrl(m.mediaId)} target="_blank" rel="noreferrer" className="mb-1 block text-xs underline">{m.mediaNombre || 'Archivo'}</a>
+                      )}
+                      {m.contenido}
+                      <div className={clsx('mt-0.5 text-[0.6rem]', m.emisor === 'agente' ? 'text-violet-200' : 'text-gray-400')}>
+                        {new Date(m.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -105,6 +179,7 @@ function PanelEnVivoTab() {
   // Filtro de estado activo (clic en una de las 4 tarjetas de resumen) —
   // 'todos' o uno de los 4 estados de EstadoAgente.
   const [filtroEstado, setFiltroEstado] = useState<'todos' | EstadoAgente>('todos')
+  const [chatEnVista, setChatEnVista] = useState<number | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['supervisores-mi-panel'],
@@ -276,7 +351,7 @@ function PanelEnVivoTab() {
                   <p className="text-xs">{agenteSeleccionado.nombre} no tiene chats asignados ahora mismo</p>
                 </div>
               ) : (
-                chatsDelAgente.map((c) => <ChatRow key={c.id} chat={c} />)
+                chatsDelAgente.map((c) => <ChatRow key={c.id} chat={c} onClick={() => setChatEnVista(c.id)} />)
               )}
             </div>
           </div>
@@ -367,6 +442,10 @@ function PanelEnVivoTab() {
           </div>
         )}
       </div>
+
+      {chatEnVista != null && (
+        <VerConversacionModal interaccionId={chatEnVista} onClose={() => setChatEnVista(null)} />
+      )}
     </div>
   )
 }
