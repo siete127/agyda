@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="css/styles.css?v=20260829a">
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 
     <script>
         (function () {
@@ -189,54 +190,70 @@
             <p class="impulso-desc" data-i18n="impulso.desc">Integramos tecnología, seguridad y estrategia para resolver hoy los retos de mañana.</p>
         </div>
 
-        <div class="impulso-grid">
+        <div class="impulso-grid" id="impulsoGrid">
             <div class="impulso-card impulso-card--infra" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">01</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card1.title">Infraestructura TI</h3>
-                    <p data-i18n="impulso.card1.desc">Diseño, implementación y soporte de infraestructura segura y escalable.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">01</span>
+                        <h3 data-i18n="impulso.card1.title">Infraestructura TI</h3>
+                        <p data-i18n="impulso.card1.desc">Diseño, implementación y soporte de infraestructura segura y escalable.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--ciber" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">02</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card2.title">Ciberseguridad</h3>
-                    <p data-i18n="impulso.card2.desc">Protege lo que impulsa tu negocio.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">02</span>
+                        <h3 data-i18n="impulso.card2.title">Ciberseguridad</h3>
+                        <p data-i18n="impulso.card2.desc">Protege lo que impulsa tu negocio.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--digital" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">03</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card3.title">Transformación digital</h3>
-                    <p data-i18n="impulso.card3.desc">Convierte tus procesos en oportunidades.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">03</span>
+                        <h3 data-i18n="impulso.card3.title">Transformación digital</h3>
+                        <p data-i18n="impulso.card3.desc">Convierte tus procesos en oportunidades.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--soporte" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">04</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card4.title">Soporte y mantenimiento</h3>
-                    <p data-i18n="impulso.card4.desc">Tu operación siempre en marcha.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">04</span>
+                        <h3 data-i18n="impulso.card4.title">Soporte y mantenimiento</h3>
+                        <p data-i18n="impulso.card4.desc">Tu operación siempre en marcha.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--consultoria" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">05</span>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">05</span>
+                        <h3 data-i18n="impulso.card5.title">Consultoría TI</h3>
+                        <p data-i18n="impulso.card5.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
+                    </div>
                 </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card5.title">Consultoría TI</h3>
-                    <p data-i18n="impulso.card5.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="soluciones-conectan" class="soluciones-conectan-section">
+        <div class="soluciones-conectan-container">
+            <div class="soluciones-conectan-intro">
+                <h2 data-i18n-html="solConecta.title">Soluciones <br><span class="highlight-blue">que conectan</span><br>tu negocio</h2>
+                <p data-i18n="solConecta.desc">Tecnología, soporte y comunicación integrados para que tu operación nunca se detenga.</p>
+            </div>
+
+            <div class="sol-bubbles-wrap">
+                <div class="sol-bubbles" id="solBubbles" aria-live="polite">
+                    <div class="soluciones-conectan-bg-loop" id="solConectaBgLoop"></div>
+                    <img src="assets/logos-empresa/logo-ardabytec.png" alt="ArdaBytec" class="sol-bubbles-logo">
                 </div>
             </div>
         </div>
@@ -1680,6 +1697,10 @@
                 "impulso.card5.title": "Consultoría TI",
                 "impulso.card5.desc": "Te asesoramos para tomar decisiones tecnológicas inteligentes.",
 
+                "solConecta.title": 'Soluciones <br><span class="highlight-blue">que conectan</span><br>tu negocio',
+                "solConecta.desc": "Tecnología, soporte y comunicación integrados para que tu operación nunca se detenga.",
+                "solConecta.cta": "Conoce nuestras soluciones",
+
                 "nosotros.badge": "Quiénes somos",
                 "nosotros.title": 'Tecnología con propósito, <br>resultados <span class="highlight-blue">para personas</span>',
                 "nosotros.desc": "En <strong>ARDABYTEC</strong> Somos una firma de consultoría especializada en Tecnologías de la Información, con amplia experiencia en soluciones de Contact Center, desarrollo web, aplicaciones móviles y soporte técnico integral.",
@@ -1847,6 +1868,10 @@
                 "impulso.card4.desc": "Your operation always up and running.",
                 "impulso.card5.title": "IT Consulting",
                 "impulso.card5.desc": "We advise you in making smart technology decisions.",
+
+                "solConecta.title": 'Solutions <br><span class="highlight-blue">that connect</span><br>your business',
+                "solConecta.desc": "Technology, support and communication integrated so your operation never stops.",
+                "solConecta.cta": "Discover our solutions",
 
                 "nosotros.badge": "Who we are",
                 "nosotros.title": 'Technology with purpose, <br>results <span class="highlight-blue">for people</span>',
@@ -3994,6 +4019,46 @@
     </script>
 
     <script>
+        // --- SECCIÓN "Servicios que impulsan tu negocio": una tarjeta se
+        // agranda a la vez, de forma cíclica y automática (sin flechas ni
+        // puntos — las 5 siguen visibles, solo cambia cuál está expandida).
+        (function () {
+            const grid = document.getElementById('impulsoGrid');
+            if (!grid) return;
+            const cards = Array.from(grid.querySelectorAll('.impulso-card'));
+            if (!cards.length) return;
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                cards[0].classList.add('is-active');
+                return;
+            }
+
+            let index = 0;
+            const INTERVAL_MS = 3200;
+
+            function activar(i) {
+                cards.forEach((c) => c.classList.remove('is-active'));
+                cards[i].classList.add('is-active');
+            }
+            activar(index);
+
+            let timer = setInterval(() => {
+                index = (index + 1) % cards.length;
+                activar(index);
+            }, INTERVAL_MS);
+
+            // Pausa el ciclo mientras el usuario interactúa con las tarjetas
+            // (tilt/hover) para que no compita con su propio gesto.
+            grid.addEventListener('mouseenter', () => clearInterval(timer));
+            grid.addEventListener('mouseleave', () => {
+                timer = setInterval(() => {
+                    index = (index + 1) % cards.length;
+                    activar(index);
+                }, INTERVAL_MS);
+            });
+        })();
+    </script>
+
+    <script>
         // --- SECCIÓN "QUIÉNES SOMOS": acordeón "Ver más" ---
         (function () {
             const btn = document.getElementById('nosotrosVerMasBtn');
@@ -4119,6 +4184,37 @@
                 fadeOut: true,
                 pauseOnHover: true,
             });
+        }
+    </script>
+
+    <script type="module">
+        import { mountTextLoop } from './assets/effects/text-loop.js';
+
+        const solConectaLoopEl = document.getElementById('solConectaBgLoop');
+        if (solConectaLoopEl) {
+            mountTextLoop(solConectaLoopEl, {
+                text: 'Tecnología • Soporte • Comunicación',
+                shape: 'wave',
+                curviness: 70,
+                separator: '✦',
+                speed: 55,
+                fontSize: 58,
+                fontWeight: 800,
+                letterSpacing: 1,
+                uppercase: true,
+                color: '#0052FF',
+                ribbon: false,
+                pauseOnHover: false,
+            });
+        }
+    </script>
+
+    <script type="module">
+        import { mountSolBubbles } from './assets/effects/sol-bubbles.js';
+
+        const solBubblesEl = document.getElementById('solBubbles');
+        if (solBubblesEl) {
+            mountSolBubbles(solBubblesEl);
         }
     </script>
 

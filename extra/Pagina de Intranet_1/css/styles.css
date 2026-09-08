@@ -842,8 +842,8 @@ html[data-theme="dark"] .badge-item p {
 .impulso-grid {
   max-width: 1400px;
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  display: flex;
+  align-items: stretch;
   gap: 0;
 }
 
@@ -851,6 +851,11 @@ html[data-theme="dark"] .badge-item p {
   position: relative;
   display: flex;
   flex-direction: column;
+  /* Ciclo automático (ver JS en index.html): la tarjeta activa crece y el
+     resto se reparte el espacio restante — flex-grow anima suave porque
+     el ancho real de cada .impulso-card-banner es 100% del flex item. */
+  flex: 1 1 0;
+  transition: flex-grow 0.6s cubic-bezier(0.65, 0, 0.35, 1);
   /* Se solapan levemente para que el corte diagonal de una tarjeta
      "encaje" visualmente con el de la siguiente, como una cinta continua */
   margin-left: -18px;
@@ -863,19 +868,22 @@ html[data-theme="dark"] .badge-item p {
   /* TiltedCard (React Bits, portado a JS+CSS vanilla): inclinación 3D con
      el mouse — ver el <script> con [data-tilt] en index.html. */
   perspective: 800px;
-  will-change: transform;
-  transition: transform 0.1s ease-out;
+  will-change: transform, flex-grow;
 }
 
 .impulso-card:first-child {
   margin-left: 0;
 }
 
+.impulso-card.is-active {
+  flex-grow: 2.6;
+}
+
 .impulso-card-banner {
   position: relative;
-  height: 220px;
+  height: 320px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   overflow: hidden;
   color: #fff;
@@ -890,76 +898,150 @@ html[data-theme="dark"] .badge-item p {
   transform: translateY(-4px);
 }
 
-/* Foto real de fondo por tarjeta, con tinte azul de marca (#1E77F5) para
-   mantener el número y el texto legibles encima y unificar el tono. */
+/* Foto real de fondo por tarjeta, sin tinte de color — se ve tal cual.
+   La legibilidad del número (arriba) y del texto (abajo) ya no depende de
+   un degradado sobre toda la imagen: el número lleva text-shadow y el
+   texto tiene su propio fondo con blur (.impulso-card-content). */
 .impulso-card--infra .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-infraestructura.png');
+  background-image: url('../assets/servicios/servicio-infraestructura.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--ciber .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-ciberseguridad.png');
+  background-image: url('../assets/servicios/servicio-ciberseguridad.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--digital .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-desarrollo.png');
+  background-image: url('../assets/servicios/servicio-desarrollo.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--soporte .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-soporte.png');
+  background-image: url('../assets/servicios/servicio-soporte.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--consultoria .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-consultoria.png');
+  background-image: url('../assets/servicios/servicio-consultoria.png');
   background-size: cover;
   background-position: center;
 }
 
+html[data-theme="dark"] .impulso-card--infra .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-infraestructura.png');
+}
+html[data-theme="dark"] .impulso-card--ciber .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-ciberseguridad.png');
+}
+html[data-theme="dark"] .impulso-card--digital .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-desarrollo.png');
+}
+html[data-theme="dark"] .impulso-card--soporte .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-soporte.png');
+}
+html[data-theme="dark"] .impulso-card--consultoria .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-consultoria.png');
+}
+
 .impulso-number {
-  position: absolute;
-  top: 16px;
-  left: 34px;
-  font-size: 32px;
+  display: block;
+  font-size: 40px;
   font-weight: 800;
   color: #1E77F5;
   letter-spacing: 0.02em;
-  z-index: 2;
+  margin-bottom: 2px;
+  /* Halo blanco reforzado para que nunca se pierda, sin importar qué tan
+     clara u oscura sea la foto justo detrás. */
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.95), 0 0 6px rgba(255, 255, 255, 0.95), 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
+/* Transición foto → texto sin corte: el fondo del bloque de contenido es
+   un degradado que arranca totalmente transparente (se funde con la foto,
+   sin línea de división) y se va haciendo sólido hacia abajo. El blur
+   acompaña la misma curva para que no se note un límite duro del blur.
+   Empieza a cubrir desde el 30% (más arriba que antes) para que el fundido
+   sea más largo y gradual. */
 .impulso-card-content {
-  padding: 18px 34px 0 34px;
+  position: relative;
+  z-index: 2;
+  /* El banner tiene un clip-path en paralelogramo (corte diagonal de 24px
+     en las esquinas inferior-izq/superior-der). Este bloque es rectangular
+     y va pegado al fondo (align-items:flex-end del banner), así que sin
+     este ensanche la cuña diagonal de la esquina inferior-izquierda queda
+     "vacía" de overlay y se ve un triángulo de la foto sin cubrir.
+     Se ensancha 30px por lado; el overflow:hidden del banner recorta el
+     sobrante, así no se nota que ya no mide exactamente 100%. */
+  width: calc(100% + 60px);
+  margin-left: -30px;
+  padding: 56px 52px 18px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(0deg, #000 30%, transparent 100%);
+  mask-image: linear-gradient(0deg, #000 30%, transparent 100%);
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.9) 30%, rgba(255, 255, 255, 0) 100%);
+  transition: opacity 0.3s ease;
 }
 
 .impulso-card-content h3 {
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 700;
-  color: var(--texto-principal);
-  margin-bottom: 6px;
+  color: #0B1224;
+  margin-bottom: 4px;
 }
 
 .impulso-card-content p {
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.5;
-  color: var(--texto-secundario);
+  color: #3A4356;
+  /* Solo la tarjeta activa (más ancha) tiene espacio cómodo para la
+     descripción completa sin partirse en muchas líneas. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+html[data-theme="dark"] .impulso-card-content {
+  background: linear-gradient(0deg, rgba(6, 15, 35, 0.92) 0%, rgba(6, 15, 35, 0.92) 30%, rgba(6, 15, 35, 0) 100%);
+}
+
+html[data-theme="dark"] .impulso-number {
+  /* En oscuro el fondo del overlay ya es azul-oscuro — el número azul se
+     perdía contra él. Blanco puro + halo azul de marca para que siga
+     resaltando y sin perder la identidad de color. */
+  color: #fff;
+  text-shadow: 0 0 14px rgba(30, 119, 245, 0.9), 0 0 6px rgba(30, 119, 245, 0.9), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="dark"] .impulso-card-content h3 {
+  color: #fff;
+}
+
+html[data-theme="dark"] .impulso-card-content p {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 @media (max-width: 992px) {
+  /* En pantallas chicas el ciclo de "una tarjeta grande" no cabe bien —
+     se apilan en 2 columnas, todas del mismo tamaño (sin is-active). */
   .impulso-grid {
+    display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 28px 0;
+    gap: 28px 16px;
   }
   .impulso-card {
     margin-left: 0;
+    flex: initial;
+  }
+  .impulso-card.is-active {
+    flex-grow: initial;
   }
   .impulso-card-banner {
+    height: 260px;
     clip-path: none;
     border-radius: 16px;
-  }
-  .impulso-card-content {
-    padding: 18px 6px 0 6px;
   }
   .impulso-number {
     left: 20px;
@@ -976,6 +1058,355 @@ html[data-theme="dark"] .badge-item p {
   }
   .impulso-desc {
     max-width: 100%;
+  }
+}
+
+/* ==========================================
+   SECCIÓN "SOLUCIONES QUE CONECTAN TU NEGOCIO"
+   (entre Servicios/Impulso y Nosotros — 3 puntos unidos por una curva SVG)
+   ========================================== */
+.soluciones-conectan-section {
+  padding: 90px 24px;
+  background-color: var(--bg-body);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Envoltorio del carrusel de burbujas + la cinta de fondo que pasa "por
+   detrás" de ellas — ambos comparten el mismo centro, para que la cinta se
+   vea como una órbita que atraviesa las esferas, no una franja aparte
+   arriba de la sección. */
+.sol-bubbles-wrap {
+  position: relative;
+}
+
+/* Cinta TextLoop (React Bits, portado a JS vanilla + GSAP) en forma de
+   onda, centrada detrás del carrusel de burbujas (z-index menor que
+   .sol-bubble) para que se lea como si pasara por detrás de las esferas.
+   Vive DENTRO de .sol-bubbles (no de .sol-bubbles-wrap) para centrarse
+   respecto a esos 380px fijos — el wrap crece con el detalle expandido de
+   la burbuja activa, así que centrar ahí la desplazaba hacia arriba.
+   A diferencia del shape "circle" (que se dimensiona por alto), la onda es
+   naturalmente más ancha que alta, así que aquí se dimensiona por ANCHO
+   (ocupa el mismo ancho que el carrusel) y la altura queda proporcional. */
+.soluciones-conectan-bg-loop {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  z-index: 0;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.soluciones-conectan-bg-loop .text-loop-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+html[data-theme="dark"] .soluciones-conectan-bg-loop {
+  opacity: 0.22;
+}
+
+/* Logo fijo en el centro de la cresta, más grande que el contenedor del
+   carrusel (se desborda a propósito) — por encima de la cinta de texto
+   (z-index 0) pero por debajo de las burbujas (z-index 1-3), así queda
+   siempre visible sin importar cuál burbuja esté activa en el ciclo. */
+.sol-bubbles-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 160%;
+  height: 160%;
+  object-fit: contain;
+  z-index: 0.5;
+  opacity: 0.7;
+  pointer-events: none;
+  /* Mismo tinte azul de marca que usan los logos de Aliados, en ambos
+     temas — nada de blanco. */
+  filter: brightness(0) saturate(100%) invert(31%) sepia(94%) saturate(3207%) hue-rotate(210deg) brightness(99%) contrast(96%);
+}
+
+.soluciones-conectan-container {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) 1fr;
+  align-items: center;
+  gap: 40px;
+}
+
+.soluciones-conectan-intro h2 {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--texto-principal);
+  margin-bottom: 14px;
+}
+
+.soluciones-conectan-intro p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  margin-bottom: 26px;
+  max-width: 320px;
+}
+
+/* ---------- TextLoop (React Bits, portado a JS vanilla + GSAP) ---------- */
+.text-loop {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.text-loop-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.text-loop-text {
+  user-select: none;
+}
+
+.text-loop-measure {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ---------- Ciclo de burbujas "Soluciones" (12 items, JS: sol-bubbles.js) ----------
+   Las 12 burbujas viven todas en el DOM a la vez; solo 3 son visibles según
+   su `data-pos` (-1/0/1 respecto a la protagonista), que sol-bubbles.js
+   recalcula cada tick del setInterval. El resto (pos ±2, ±3...) se oculta
+   con opacity/scale 0 pero sigue en el flujo (position: absolute), así el
+   cambio de protagonista es una transición CSS, no un re-render. */
+.sol-bubbles {
+  position: relative;
+  height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sol-bubble {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.5s ease, filter 0.5s ease;
+  pointer-events: none;
+}
+
+.sol-bubble[data-pos="0"] {
+  pointer-events: auto;
+}
+
+/* Protagonista: centrada, grande, al frente. Un poco más abajo del
+   centro exacto para no tapar la punta del logo de fondo. */
+.sol-bubble[data-pos="0"] {
+  transform: translate(-50%, calc(-50% + 40px)) scale(1);
+  opacity: 1;
+  z-index: 3;
+}
+
+/* Apoyo: una a cada lado, chica, semitransparente, ancladas a los
+   extremos BAJOS del arco de fondo (que sube hacia la protagonista al
+   centro) — por eso llevan un translateY positivo, a diferencia de la
+   protagonista que va centrada en el pico. */
+.sol-bubble[data-pos="-1"] {
+  transform: translate(calc(-50% - 219px), calc(-50% + 78px)) scale(0.86);
+  opacity: 0.55;
+  z-index: 2;
+}
+
+.sol-bubble[data-pos="1"] {
+  transform: translate(calc(-50% + 219px), calc(-50% + 78px)) scale(0.86);
+  opacity: 0.55;
+  z-index: 2;
+}
+
+/* Todo lo demás (pos ±2 en adelante): oculto, esperando su turno. */
+.sol-bubble:not([data-pos="0"]):not([data-pos="-1"]):not([data-pos="1"]) {
+  transform: translate(-50%, -50%) scale(0.3);
+  opacity: 0;
+  z-index: 1;
+}
+
+.sol-bubble-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sol-bubble-icon {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--azul-electrico);
+  background: radial-gradient(circle at 32% 28%, #EAF1FF 0%, var(--bg-superficie-alterna) 70%);
+  border: 1.5px solid rgba(0, 82, 255, 0.3);
+  box-shadow: 0 8px 20px rgba(0, 82, 255, 0.18);
+  transition: width 0.6s cubic-bezier(0.65, 0, 0.35, 1), height 0.6s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.4s ease;
+}
+
+.sol-bubble[data-pos="0"] .sol-bubble-icon {
+  width: 210px;
+  height: 210px;
+  box-shadow: 0 16px 36px rgba(0, 82, 255, 0.28);
+}
+
+html[data-theme="dark"] .sol-bubble-icon {
+  background: radial-gradient(circle at 32% 28%, #22345C 0%, var(--bg-superficie-alterna) 70%);
+}
+
+.sol-bubble-title {
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--texto-principal);
+  max-width: 140px;
+}
+
+.sol-bubble[data-pos="0"] .sol-bubble-title {
+  font-size: 19px;
+  max-width: 260px;
+}
+
+/* Detalle (descripción + bullets + acciones): solo existe visualmente en
+   la protagonista. En las de apoyo se colapsa a 0 altura para no empujar
+   el layout ni mostrarse "a medias". */
+.sol-bubble-detail {
+  max-width: 340px;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.5s ease, opacity 0.4s ease 0.05s;
+}
+
+.sol-bubble[data-pos="0"] .sol-bubble-detail {
+  max-height: 260px;
+  opacity: 1;
+  margin-top: 12px;
+}
+
+.sol-bubble-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  margin-bottom: 12px;
+}
+
+.sol-bubble-bullets {
+  list-style: none;
+  text-align: left;
+  margin-bottom: 16px;
+}
+
+.sol-bubble-bullets li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--texto-principal);
+}
+
+.sol-bubble-bullets li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--azul-electrico);
+}
+
+.sol-bubble-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+/* .sol-bubble-link ahora comparte .btn-primary/.btn-primary--hero (mismo
+   botón degradado que tenía el CTA general de la sección) — aquí solo se
+   ajusta el tamaño para que quepa cómodo dentro de la burbuja. */
+.sol-bubble-link {
+  padding: 10px 22px;
+  font-size: 13px;
+  color: var(--blanco);
+}
+
+.sol-bubble-link .arrow {
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.sol-bubble-link:hover .arrow {
+  transform: translateX(3px);
+}
+
+.sol-bubble-pdf {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 22px;
+  border-radius: 50px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blanco);
+  background-color: var(--azul-oscuro);
+  border: 1.5px solid var(--blanco);
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.sol-bubble-pdf:hover {
+  background-color: #16305F;
+  transform: translateY(-2px);
+}
+
+@media (max-width: 900px) {
+  .soluciones-conectan-container {
+    grid-template-columns: 1fr;
+  }
+  .soluciones-conectan-intro {
+    text-align: center;
+  }
+  .soluciones-conectan-intro p {
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .sol-bubbles {
+    height: 420px;
+  }
+  .sol-bubble[data-pos="-1"] {
+    transform: translate(calc(-50% - 120px), -80px) scale(0.5);
+  }
+  .sol-bubble[data-pos="1"] {
+    transform: translate(calc(-50% + 120px), -80px) scale(0.5);
+  }
+  .sol-bubble[data-pos="0"] .sol-bubble-icon {
+    width: 104px;
+    height: 104px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sol-bubble[data-pos="-1"],
+  .sol-bubble[data-pos="1"] {
+    opacity: 0;
   }
 }
 
@@ -1797,8 +2228,13 @@ html[data-theme="dark"] .soluciones-circle-4 {
 }
 
 .aliados-loop {
-  max-width: 1200px;
-  margin: 0 auto;
+  /* Full-bleed: rompe el padding de .aliados-section para que el carrusel
+     llegue hasta el borde real de la ventana y el fade se funda ahí — si se
+     quedara limitado por el padding, esos px extra mostrarían el logo sin
+     degradado justo antes del corte de overflow:hidden de la sección. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   --logoloop-fadeColor: var(--bg-superficie-alterna);
 }
 
