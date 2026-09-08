@@ -7,9 +7,10 @@ const VIEW_W = 1200;
 const VIEW_H = 520;
 const CX = VIEW_W / 2;
 const CY = VIEW_H / 2;
-const EDGE_PAD = 6;
+const EDGE_PAD = 6;
+const WAVE_PERIOD = 320; // ancho de un ciclo completo de la onda (440-120=320)
 
-function buildPath(shape, curviness, ribbonWidth) {
+function buildPath(shape, curviness, ribbonWidth, viewW = VIEW_W, minX = 0, maxX = viewW) {
     const c = Math.max(0, curviness);
     const room = Math.max(20, CY - Math.max(0, ribbonWidth) / 2 - EDGE_PAD);
 
@@ -47,7 +48,13 @@ function buildPath(shape, curviness, ribbonWidth) {
             // -200, 120, 440, 760, 1080, 1400 y las crestas/valles a medio
             // camino entre ellos (-40 arriba, 280 abajo, 600 arriba, 920
             // abajo...), así 600 cae exactamente en una cresta hacia arriba.
-            return `M -200 ${CY} Q -40 ${CY - a} 120 ${CY} T 440 ${CY} T 760 ${CY} T 1080 ${CY} T ${VIEW_W + 200} ${CY}`;
+            const cyclesLeft = Math.max(0, Math.ceil((-200 - minX) / WAVE_PERIOD));
+            const cyclesRight = Math.max(0, Math.ceil((maxX - (VIEW_W + 200)) / WAVE_PERIOD));
+            const startX = -200 - cyclesLeft * WAVE_PERIOD;
+            const endX = 1400 + cyclesRight * WAVE_PERIOD;
+            const pts = [];
+            for (let x = startX + WAVE_PERIOD * 2; x <= endX; x += WAVE_PERIOD) pts.push(`T ${x} ${CY}`);
+            return `M ${startX} ${CY} Q ${startX + WAVE_PERIOD / 2} ${CY - a} ${startX + WAVE_PERIOD} ${CY} ${pts.join(" ")}`;
         }
     }
 }
@@ -77,7 +84,10 @@ export function mountTextLoop(container, options = {}) {
         ribbon = true,
         ribbonColor = '#5227FF',
         ribbonWidth = 86,
-        pauseOnHover = true,
+        pauseOnHover = true,
+        viewW = VIEW_W,
+        viewMinX = 0,
+        viewMaxX = viewW,
     } = options;
 
     if (!window.gsap) {
@@ -86,7 +96,7 @@ export function mountTextLoop(container, options = {}) {
     }
 
     const pathId = `text-loop-${uid++}`;
-    const d = path || buildPath(shape, curviness, ribbonWidth);
+    const d = path || buildPath(shape, curviness, ribbonWidth, viewW, viewMinX, viewMaxX);
     const base = uppercase ? String(text).toUpperCase() : String(text);
     const gap = separator ? ` ${separator} ` : '   ';
     const unit = `${base}${gap}`;
@@ -96,7 +106,7 @@ export function mountTextLoop(container, options = {}) {
     const svgNS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNS, 'svg');
     svg.setAttribute('class', 'text-loop-svg');
-    svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
+    svg.setAttribute('viewBox', `${viewMinX} 0 ${viewMaxX - viewMinX} ${VIEW_H}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     svg.setAttribute('role', 'img');
     svg.setAttribute('aria-label', text);

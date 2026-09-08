@@ -34,14 +34,14 @@
     <header class="main-header">
         <div class="header-container">
 
-            <a href="https://ardabytec.vip/" class="logo">
+            <div class="logo">
                 <img src="assets/logos-empresa/logo1.png" alt="ARDABYTEC" class="logo-img" id="headerLogoImg">
-            </a>
+            </div>
 
             <nav class="nav-menu">
                 <a href="#inicio" class="nav-link active" data-i18n="nav.inicio">Inicio</a>
                 <a href="#nosotros" class="nav-link" data-i18n="nav.nosotros">Nosotros</a>
-                <a href="#soluciones" class="nav-link" data-i18n="nav.soluciones">Soluciones</a>
+                <a href="#soluciones-conectan" class="nav-link" data-i18n="nav.soluciones">Soluciones</a>
                 <a href="#aliados" class="nav-link" data-i18n="nav.aliados">Aliados</a>
                 <a href="#servicios" class="nav-link" data-i18n="nav.servicios">Servicios</a>
                 <a href="#portafolio" class="nav-link" data-i18n="nav.portafolio">Portafolio</a>
@@ -71,8 +71,8 @@
                         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                     </svg>
                 </button>
-                <a href="#" class="nav-link" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
-                <button type="button" class="nav-link logout-btn" id="logoutBtn" style="display:none;">Cerrar sesión</button>
+                <a href="#" class="btn-primary btn-primary--hero header-login-btn" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
+                <button type="button" class="btn-primary btn-primary--hero header-login-btn logout-btn" id="logoutBtn" style="display:none;">Cerrar sesión</button>
                 <div class="demo-btn-wrap">
                     <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="true" aria-expanded="false">
                         Probar demo
@@ -111,6 +111,7 @@
             class="hero-bg-img" aria-hidden="true">
         <div class="hero-bg-overlay" aria-hidden="true"></div>
         <div class="hero-bg-fade" aria-hidden="true"></div>
+        <div class="hero-bg-fade-bottom" aria-hidden="true"></div>
 
         <div class="hero-container">
 
@@ -184,7 +185,7 @@
         </div>
     </section>
 
-    <section class="impulso-section">
+    <section id="servicios" class="impulso-section">
         <div class="impulso-header">
             <h2 data-i18n-html="impulso.title">Servicios que <br>impulsan <span class="highlight-blue">tu negocio</span></h2>
             <p class="impulso-desc" data-i18n="impulso.desc">Integramos tecnología, seguridad y estrategia para resolver hoy los retos de mañana.</p>
@@ -248,6 +249,13 @@
             <div class="soluciones-conectan-intro">
                 <h2 data-i18n-html="solConecta.title">Soluciones <br><span class="highlight-blue">que conectan</span><br>tu negocio</h2>
                 <p data-i18n="solConecta.desc">Tecnología, soporte y comunicación integrados para que tu operación nunca se detenga.</p>
+
+                <div class="soluciones-cta soluciones-cta--intro">
+                    <p data-i18n="soluciones.ctaText">¿Necesitas una arquitectura o desarrollo específico para tu empresa?</p>
+                    <a href="#contacto" class="btn-primary btn-primary--hero">
+                        <span data-i18n="soluciones.ctaBtn">Cotizar Solución Personalizada</span> <span class="arrow">&rarr;</span>
+                    </a>
+                </div>
             </div>
 
             <div class="sol-bubbles-wrap">
@@ -363,292 +371,6 @@
         </div>
     </section>
 
-    <section id="soluciones" class="soluciones-section">
-        <div class="soluciones-circle soluciones-circle-1" aria-hidden="true"></div>
-        <div class="soluciones-circle soluciones-circle-2" aria-hidden="true"></div>
-        <div class="soluciones-circle soluciones-circle-3" aria-hidden="true"></div>
-        <div class="soluciones-circle soluciones-circle-4" aria-hidden="true"></div>
-        <div class="soluciones-header">
-            <span class="soluciones-badge" data-i18n="soluciones.badge">Ecosistema Tecnológico</span>
-            <h2 class="section-title-center" data-i18n-html="soluciones.title">Nuestras <span class="highlight-blue">Soluciones</span></h2>
-            <p class="section-desc-center" data-i18n="soluciones.desc">
-                Desarrollamos e implementamos herramientas robustas a la medida para automatizar tus procesos, potenciar
-                tus canales de comunicación y llevar el rendimiento de tu empresa al siguiente nivel.
-            </p>
-        </div>
-
-        <div class="soluciones-container">
-            <div class="soluciones-grid">
-
-                <!-- 1. Tarificador -->
-                <div class="solucion-card">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🪙</div>
-                        <h3 data-i18n="sol.tarificador.title">Tarificador</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.tarificador.desc">Controla, analiza y gestiona consumos telefónicos en tiempo real
-                            de tu PBX o Asterisk, transformándolos en decisiones estratégicas de negocio.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.tarificador.f1">Control de costos y presupuestos</li>
-                            <li data-i18n="sol.tarificador.f2">Monitoreo en tiempo real (CDR)</li>
-                            <li data-i18n="sol.tarificador.f3">Reportes y gráficos automatizados</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('tarificador')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Tarificador_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 2. Soporte Técnico -->
-                <div class="solucion-card">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🛠️</div>
-                        <h3 data-i18n="sol.soporte.title">Soporte Técnico</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.soporte.desc">Asistencia proactiva para mantener tu infraestructura TI
-                            operativa, segura y libre de interrupciones imprevistas.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.soporte.f1">Soporte 24/7 Remoto/En sitio</li>
-                            <li data-i18n="sol.soporte.f2">Mantenimiento preventivo</li>
-                            <li data-i18n="sol.soporte.f3">Optimización y escalabilidad</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('soporte')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Soporte_Tecnico_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 3. PBX Cloud -->
-                <div class="solucion-card">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">☁️</div>
-                        <h3 data-i18n="sol.pbx.title">PBX Cloud</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.pbx.desc">Telefonía empresarial de última generación en la nube. Conecta a
-                            tus colaboradores dondequiera que estén de manera centralizada.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.pbx.f1">Extensiones móviles/remotas</li>
-                            <li data-i18n="sol.pbx.f2">Cero costos de hardware físico</li>
-                            <li data-i18n="sol.pbx.f3">Administración centralizada</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('pbx')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/PBX_Cloud_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 4. Marcador de Call Center -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">📞</div>
-                        <h3 data-i18n="sol.marcador.title">Marcador de Call Center</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.marcador.desc">Sistemas de marcación predictiva, progresiva y manual que
-                            incrementan sustancialmente la productividad de tus agentes.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.marcador.f1">Marcación predictiva con IA</li>
-                            <li data-i18n="sol.marcador.f2">Integración inmediata con CRMs</li>
-                            <li data-i18n="sol.marcador.f3">Detección inteligente de contestadoras</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('marcador')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Marcador_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf"
-                            target="_blank" class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 5. Kiosko de Call Center -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🖥️</div>
-                        <h3 data-i18n="sol.kiosko.title">Kiosko de Call Center</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.kiosko.desc">Módulos interactivos personalizados para la gestión de turnos,
-                            monitoreo de colas y desempeño de agentes en tiempo real.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.kiosko.f1">Pantallas táctiles intuitivas</li>
-                            <li data-i18n="sol.kiosko.f2">Monitoreo de colas de atención</li>
-                            <li data-i18n="sol.kiosko.f3">Estadísticas de agentes en vivo</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('kiosko')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Kiosko_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 6. IVR's -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🤖</div>
-                        <h3 data-i18n="sol.ivr.title">IVR's</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.ivr.desc">Sistemas de Respuesta de Voz Interactiva multinivel que guían
-                            eficientemente al usuario final hacia el área indicada.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.ivr.f1">Reconocimiento de voz avanzado</li>
-                            <li data-i18n="sol.ivr.f2">Rutas de atención inteligentes</li>
-                            <li data-i18n="sol.ivr.f3">Atención automatizada 24/7</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('ivr')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/IVR_Ardaby_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 7. Intranet -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🏢</div>
-                        <h3 data-i18n="sol.intranet.title">Intranet</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.intranet.desc">Plataforma interna privada para centralizar la comunicación,
-                            almacenar documentos de forma segura y mejorar la colaboración.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.intranet.f1">Gestión documental centralizada</li>
-                            <li data-i18n="sol.intranet.f2">Directorio y noticias internas</li>
-                            <li data-i18n="sol.intranet.f3">Trámites y flujos de trabajo internos</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('intranet')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/INTRANET_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 8. Integraciones de APIs -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🔗</div>
-                        <h3 data-i18n="sol.api.title">Integraciones de APIs</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.api.desc">Interconectamos tus sistemas de software actuales para asegurar
-                            que los datos fluyan de manera rápida, segura y automática.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.api.f1">Sincronización en tiempo real</li>
-                            <li data-i18n="sol.api.f2">Seguridad de datos en tránsito</li>
-                            <li data-i18n="sol.api.f3">Automatización de procesos entre plataformas</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('api')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Integraciones_APIs_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 9. ERP -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">📊</div>
-                        <h3 data-i18n="sol.erp.title">ERP</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.erp.desc">Planificación de recursos empresariales para el control integral
-                            de inventarios, finanzas, ventas y administración.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.erp.f1">Módulos de control a la medida</li>
-                            <li data-i18n="sol.erp.f2">Dashboard de métricas clave</li>
-                            <li data-i18n="sol.erp.f3">Automatización contable y operativa</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('erp')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/ERP_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 10. Envíos Masivos -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">💬</div>
-                        <h3 data-i18n="sol.envios.title">WhatsApp y SMS Masivos</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.envios.desc">Campañas de mensajería masiva escalables para notificaciones,
-                            cobranza o marketing directo a dispositivos móviles.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.envios.f1">API Oficial de WhatsApp Business</li>
-                            <li data-i18n="sol.envios.f2">Tasa de entrega garantizada</li>
-                            <li data-i18n="sol.envios.f3">Automatización con Chatbots avanzados</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('envios')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Envios_WhatsApp_SMS_Dossier_Carta_ArdabyTec_Explicado.pdf"
-                            target="_blank" class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 11. Desarrollo Web -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">💻</div>
-                        <h3 data-i18n="sol.web.title">Desarrollo Web</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.web.desc">Construcción de sitios web optimizados, e-commerce, portales
-                            transaccionales y landing pages rápidas y adaptables.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.web.f1">Diseño 100% responsivo y rápido</li>
-                            <li data-i18n="sol.web.f2">Optimización SEO integrada</li>
-                            <li data-i18n="sol.web.f3">Sistemas interactivos dinámicos</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('web')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Desarrollo_Web_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 12. Asterisk -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">⭐</div>
-                        <h3 data-i18n="sol.asterisk.title">Asterisk</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.asterisk.desc">Diseño, configuración y puesta en marcha de servidores basados en
-                            Asterisk para telefonía IP con código abierto.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.asterisk.f1">Personalización absoluta de dialplan</li>
-                            <li data-i18n="sol.asterisk.f2">Soporte y tuning de seguridad</li>
-                            <li data-i18n="sol.asterisk.f3">Grabaciones integradas e IVRs avanzados</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('asterisk')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/ASTERISK_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-            </div>
-
-            <div class="soluciones-toggle-wrap">
-                <button type="button" class="btn-toggle-soluciones" id="toggleSolucionesBtn">
-                    <span data-i18n="soluciones.verMas">Ver más soluciones</span>
-                    <span class="toggle-arrow">&darr;</span>
-                </button>
-            </div>
-        </div>
-
-        <div class="soluciones-cta">
-            <p data-i18n="soluciones.ctaText">¿Necesitas una arquitectura o desarrollo específico para tu empresa?</p>
-            <a href="#contacto" class="btn-primary">
-                <span data-i18n="soluciones.ctaBtn">Cotizar Solución Personalizada</span> <span class="arrow">&rarr;</span>
-            </a>
-        </div>
-    </section>
 
     <!-- VENTANA MODAL FLOTANTE (ESTRUCTURA DINÁMICA ÚNICA) -->
     <div id="serviceModal" class="modal-overlay">
@@ -701,69 +423,6 @@
         </div>
 
         <div class="aliados-loop" id="aliadosLoop" aria-hidden="false"></div>
-    </section>
-
-    <section id="servicios" class="servicios-section">
-        <div class="servicios-circle servicios-circle-1" aria-hidden="true"></div>
-        <div class="servicios-circle servicios-circle-2" aria-hidden="true"></div>
-        <div class="servicios-circle servicios-circle-3" aria-hidden="true"></div>
-        <div class="servicios-circle servicios-circle-4" aria-hidden="true"></div>
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="servicios.title">Nuestros <span class="highlight-blue">servicios</span></h2>
-            <p class="section-desc-center" data-i18n="servicios.desc">
-                Ofrecemos soluciones integrales para optimizar y transformar tu infraestructura tecnológica.
-            </p>
-        </div>
-
-        <div class="servicios-grid">
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/soporte tecnico-Photoroom.png" alt="Soporte">
-                </div>
-                <h3 data-i18n="servicios.soporte.title">Soporte Técnico</h3>
-                <p data-i18n="servicios.soporte.desc">Atención inmediata y eficiente para mantener tu operación siempre activa.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/infraestructura Ti-Photoroom.png" alt="Infraestructura">
-                </div>
-                <h3 data-i18n="servicios.infra.title">Infraestructura IT</h3>
-                <p data-i18n="servicios.infra.desc">Diseñamos e implementamos infraestructuras seguras, escalables y confiables.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/ciberseguridad-Photoroom.png" alt="Ciberseguridad">
-                </div>
-                <h3 data-i18n="servicios.ciber.title">Ciberseguridad</h3>
-                <p data-i18n="servicios.ciber.desc">Protegemos tu información y sistemas con las mejores prácticas del mercado.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/desarrollo de software-Photoroom.png" alt="Desarrollo">
-                </div>
-                <h3 data-i18n="servicios.dev.title">Desarrollo de Software</h3>
-                <p data-i18n="servicios.dev.desc">Soluciones a la medida que impulsan la productividad de tu empresa.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/consultoria Ti-Photoroom.png" alt="Consultoría">
-                </div>
-                <h3 data-i18n="servicios.consult.title">Consultoría IT</h3>
-                <p data-i18n="servicios.consult.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
-            </div>
-
-        </div>
-
-        <div class="servicios-footer-btn">
-            <a href="#contacto" class="btn-primary">
-                <span data-i18n="servicios.verTodos">Ver todos los servicios</span> <span class="arrow">&rarr;</span>
-            </a>
-        </div>
     </section>
 
     <!-- ==========================================
@@ -1004,29 +663,37 @@
     </div>
 
     <section id="contacto" class="qr-form-section">
-        <div class="qr-form-circle qr-form-circle-1" aria-hidden="true"></div>
-        <div class="qr-form-circle qr-form-circle-2" aria-hidden="true"></div>
-        <div class="qr-form-circle qr-form-circle-3" aria-hidden="true"></div>
-        <div class="qr-form-circle qr-form-circle-4" aria-hidden="true"></div>
+        <div class="qr-form-waves" id="qrFormWaves" aria-hidden="true"></div>
         <div class="qr-form-container">
 
             <div class="qr-form-info">
-                <h2 class="section-title" data-i18n-html="contacto.title">¿Listo para <span class="highlight-blue">empezar?</span></h2>
+                <h2 class="section-title qr-form-title" data-i18n-html="contacto.title">¿Listo para <span class="highlight-blue">transformar</span> tu negocio?</h2>
                 <p class="section-desc" data-i18n="contacto.desc">
-                    Escanea el código QR con la cámara de tu celular o haz clic en el botón para responder nuestro
-                    formulario y recibir una cotización personalizada.
+                    Cuéntanos sobre tu proyecto y recibe una propuesta personalizada.
                 </p>
-                <a href="contacto" class="btn-primary">
+                <a href="contacto" class="btn-primary btn-primary--hero">
                     <span data-i18n="contacto.cta">Ir al formulario</span> <span class="arrow">&rarr;</span>
                 </a>
             </div>
 
-            <div class="qr-display-card">
-                <div class="qr-frame">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=En%20desarrollo...%20Proximamente%20conectado."
-                        alt="Código QR temporal" class="qr-image">
+            <svg class="qr-form-pointer" viewBox="0 0 280 120" aria-hidden="true">
+                <path class="qr-form-pointer-line" d="M10 78
+                         C 26 58, 48 58, 50 76
+                         C 51 90, 34 92, 28 80
+                         C 20 65, 44 44, 74 42
+                         C 130 38, 200 46, 248 58"
+                      fill="none" stroke="#2dd4bf" stroke-width="4" stroke-linecap="round"/>
+                <path class="qr-form-pointer-head" d="M232 44 L256 58 L234 72" fill="none" stroke="#2dd4bf" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+
+            <div class="qr-display-wrap">
+                <span class="qr-caption qr-caption-top" data-i18n="contacto.qrCaption">Escanea con tu celular y cuéntanos tu proyecto</span>
+                <div class="qr-display-card">
+                    <div class="qr-frame">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=En%20desarrollo...%20Proximamente%20conectado."
+                            alt="Código QR temporal" class="qr-image">
+                    </div>
                 </div>
-                <span class="qr-caption" data-i18n="contacto.qrCaption">Escanea con tu celular</span>
             </div>
         </div>
     </section>
@@ -1035,9 +702,6 @@
         <div class="footer-container">
             <div class="footer-brand">
                 <img src="assets/logos-empresa/logo1.png" alt="ARDABYTEC" class="footer-logo-img" id="footerLogoImg">
-                <p class="footer-tagline" data-i18n="footer.tagline">
-                    Soluciones tecnológicas a la medida de tu empresa. Innovación, confianza y resultados medibles.
-                </p>
                 <div class="footer-social">
                     <a target="_blank" href="https://www.facebook.com/ArdabyTec2021?locale=es_LA" class="social-icon" aria-label="Facebook">
                         <img src="assets/redes-sociales/facebook.png" alt="Facebook">
@@ -1056,7 +720,7 @@
                 <ul class="footer-links">
                     <li><a href="#" data-i18n="nav.inicio">Inicio</a></li>
                     <li><a href="#nosotros" data-i18n="nav.nosotros">Nosotros</a></li>
-                    <li><a href="#soluciones" data-i18n="nav.soluciones">Soluciones</a></li>
+                    <li><a href="#soluciones-conectan" data-i18n="nav.soluciones">Soluciones</a></li>
                     <li><a href="#servicios" data-i18n="nav.servicios">Servicios</a></li>
                     <li><a href="#portafolio" data-i18n="nav.portafolio">Portafolio</a></li>
                     <li><a href="#vacantes" data-i18n="nav.vacantes">Vacantes</a></li>
@@ -1072,10 +736,25 @@
                     <li><a href="contacto" target="_blank" data-i18n="contacto.cta">Ir al formulario</a></li>
                 </ul>
             </div>
+
+            <div class="footer-col footer-newsletter">
+                <p class="footer-newsletter-text" data-i18n="footer.newsletterText">Recibe novedades y contenido sobre tecnología en tu correo</p>
+                <form class="footer-newsletter-form" id="footerNewsletterForm">
+                    <input type="email" class="footer-newsletter-input" placeholder="Correo electrónico" data-i18n-placeholder="footer.newsletterPlaceholder" required>
+                    <button type="submit" class="footer-newsletter-btn" aria-label="Suscribirse">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </button>
+                </form>
+            </div>
         </div>
 
         <div class="footer-container footer-bottom">
             <span class="footer-copy">&copy; <span id="footerYear">2026</span> ARDABYTEC. <span data-i18n="footer.rights">Todos los derechos reservados.</span> · AGYDA v20.11.0</span>
+            <div class="footer-legal-links">
+                <a href="#" data-i18n="footer.terms">Términos y condiciones</a>
+                <span class="footer-legal-sep">|</span>
+                <a href="#" data-i18n="footer.privacy">Aviso de privacidad</a>
+            </div>
         </div>
     </footer>
 
@@ -1159,22 +838,6 @@
         menuToggleBtn.addEventListener('click', () => {
             const isOpen = mainHeader.classList.toggle('menu-open');
             menuToggleBtn.setAttribute('aria-expanded', String(isOpen));
-        });
-
-        // --- TOGGLE DE SOLUCIONES ADICIONALES (VER MÁS / VER MENOS) ---
-        const toggleSolucionesBtn = document.getElementById('toggleSolucionesBtn');
-        const solucionesGrid = document.querySelector('.soluciones-grid');
-
-        toggleSolucionesBtn.addEventListener('click', () => {
-            const isExpanded = solucionesGrid.classList.toggle('expanded');
-            toggleSolucionesBtn.classList.toggle('active', isExpanded);
-            const label = toggleSolucionesBtn.querySelector('[data-i18n]');
-            label.setAttribute('data-i18n', isExpanded ? 'soluciones.verMenos' : 'soluciones.verMas');
-            label.innerText = translations[currentLang][isExpanded ? 'soluciones.verMenos' : 'soluciones.verMas'];
-
-            if (!isExpanded) {
-                document.getElementById('soluciones').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
         });
 
         // --- BASE DE DATOS DE INFORMACIÓN DETALLADA PARA MODALES (ES/EN) ---
@@ -1805,10 +1468,10 @@
                 "portafolio.proj3.title": "Renovación de Infraestructura",
                 "portafolio.proj3.desc": "Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.",
 
-                "contacto.title": '¿Listo para <span class="highlight-blue">empezar?</span>',
-                "contacto.desc": "Escanea el código QR con la cámara de tu celular o haz clic en el botón para responder nuestro formulario y recibir una cotización personalizada.",
+                "contacto.title": '¿Listo para <span class="highlight-blue">transformar</span> tu negocio?',
+                "contacto.desc": "Cuéntanos sobre tu proyecto y recibe una propuesta personalizada.",
                 "contacto.cta": "Ir al formulario",
-                "contacto.qrCaption": "Escanea con tu celular",
+                "contacto.qrCaption": "Escanea con tu celular y cuéntanos tu proyecto",
 
                 "vacantes.title": 'Únete a <span class="highlight-blue">nuestro equipo</span>',
                 "vacantes.desc": "Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.",
@@ -1831,6 +1494,10 @@
                 "footer.tagline": "Soluciones tecnológicas a la medida de tu empresa. Innovación, confianza y resultados medibles.",
                 "footer.navTitle": "Navegación", "footer.contactTitle": "Contacto",
                 "footer.rights": "Todos los derechos reservados.",
+                "footer.newsletterText": "Recibe novedades y contenido sobre tecnología en tu correo",
+                "footer.newsletterPlaceholder": "Correo electrónico",
+                "footer.terms": "Términos y condiciones",
+                "footer.privacy": "Aviso de privacidad",
 
                 "chat.title": "Asistente ARDABYTEC",
                 "chat.status": "En línea"
@@ -1977,10 +1644,10 @@
                 "portafolio.proj3.title": "Infrastructure Renewal",
                 "portafolio.proj3.desc": "Design and update of local servers and structured network for a corporate client in the financial sector.",
 
-                "contacto.title": 'Ready to <span class="highlight-blue">get started?</span>',
-                "contacto.desc": "Scan the QR code with your phone's camera or click the button to fill out our form and receive a personalized quote.",
+                "contacto.title": 'Ready to <span class="highlight-blue">transform</span> your business?',
+                "contacto.desc": "Tell us about your project and get a personalized proposal.",
                 "contacto.cta": "Go to the form",
-                "contacto.qrCaption": "Scan with your phone",
+                "contacto.qrCaption": "Scan with your phone and tell us about your project",
 
                 "vacantes.title": 'Join <span class="highlight-blue">our team</span>',
                 "vacantes.desc": "Check out the current job openings at ARDABYTEC and apply today.",
@@ -2003,6 +1670,10 @@
                 "footer.tagline": "Technology solutions built for your business. Innovation, trust and measurable results.",
                 "footer.navTitle": "Navigation", "footer.contactTitle": "Contact",
                 "footer.rights": "All rights reserved.",
+                "footer.newsletterText": "Get news and tech content straight to your inbox",
+                "footer.newsletterPlaceholder": "Email address",
+                "footer.terms": "Terms and conditions",
+                "footer.privacy": "Privacy notice",
 
                 "chat.title": "ARDABYTEC Assistant",
                 "chat.status": "Online"
@@ -2061,26 +1732,31 @@
         const LOGO_DARK_SRC = 'assets/logos-empresa/logo1-modo-oscuro.png';
 
         function updateLogo(theme) {
-            // Sobre el hero (header flotando sin scroll) el logo siempre va en blanco,
-            // sin importar el tema, porque el fondo detrás es la escena oscura.
-            const mainHeaderEl = document.querySelector('.main-header');
-            const floatingOverHero = mainHeaderEl && !mainHeaderEl.classList.contains('is-scrolled');
-            const logoSrc = (theme === 'dark' || floatingOverHero) ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
+            const logoSrc = theme === 'dark' ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
             const headerLogo = document.getElementById('headerLogoImg');
             if (headerLogo) {
                 headerLogo.src = logoSrc;
             }
             const footerLogo = document.getElementById('footerLogoImg');
             if (footerLogo) {
-                footerLogo.src = theme === 'dark' ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
+                footerLogo.src = logoSrc;
             }
         }
 
         const HERO_BG_LIGHT_SRC = 'assets/mascota-empresa/hero-mascota-escena-claro.png';
         const HERO_BG_DARK_SRC = 'assets/mascota-empresa/hero-mascota-escena.png';
+        const HERO_BG_PHONE_LIGHT_SRC = 'assets/mascota-empresa/hero-mascota-telefono-claro.png';
+        const HERO_BG_PHONE_DARK_SRC = 'assets/mascota-empresa/hero-mascota-telefono.png';
+        const HERO_PHONE_BREAKPOINT = 640; // por debajo de este ancho, imagen específica de teléfono (no se agranda/recorta la de escritorio)
 
         function updateHeroImage(theme) {
-            const src = theme === 'dark' ? HERO_BG_DARK_SRC : HERO_BG_LIGHT_SRC;
+            const isPhone = window.innerWidth <= HERO_PHONE_BREAKPOINT;
+            let src;
+            if (isPhone) {
+                src = theme === 'dark' ? HERO_BG_PHONE_DARK_SRC : HERO_BG_PHONE_LIGHT_SRC;
+            } else {
+                src = theme === 'dark' ? HERO_BG_DARK_SRC : HERO_BG_LIGHT_SRC;
+            }
             const heroImg = document.getElementById('heroBgImg');
             if (heroImg) heroImg.src = src;
         }
@@ -2099,11 +1775,54 @@
         updateLogo(getCurrentTheme());
         updateHeroImage(getCurrentTheme());
 
+        // Recalcula solo al cruzar el breakpoint teléfono/escritorio, no en cada resize.
+        (function () {
+            let wasPhone = window.innerWidth <= HERO_PHONE_BREAKPOINT;
+            window.addEventListener('resize', () => {
+                const isPhone = window.innerWidth <= HERO_PHONE_BREAKPOINT;
+                if (isPhone !== wasPhone) {
+                    wasPhone = isPhone;
+                    updateHeroImage(getCurrentTheme());
+                }
+            });
+        })();
+
         // --- HEADER TRANSPARENTE SOBRE EL HERO, SÓLIDO AL HACER SCROLL ---
         (function () {
             const mainHeaderEl = document.querySelector('.main-header');
             const heroSectionEl = document.getElementById('inicio');
+            const heroContainerEl = document.querySelector('.hero-container');
             if (!mainHeaderEl || !heroSectionEl) return;
+
+            // El header flotando sobre el hero es "position: absolute" (no
+            // ocupa espacio en el flujo) y su altura varía mucho según el
+            // ancho (nav en una fila, nav colapsado en dos filas, logo
+            // agrandado en el breakpoint de menú hamburguesa...). Sin
+            // compensación el título del hero queda tapado por el header en
+            // esos anchos intermedios. Se mide la altura real del header y
+            // se aplica como padding-top extra del hero solo cuando hace falta.
+            const navMenuEl = document.querySelector('.nav-menu');
+            const updateHeroOverlap = () => {
+                if (!heroContainerEl) return;
+                if (mainHeaderEl.classList.contains('is-scrolled')) {
+                    heroContainerEl.style.setProperty('--header-overlap', '0px');
+                    return;
+                }
+                // Margen de tolerancia: .hero-section ya aporta 60px de
+                // padding-top propio, así que solo hace falta compensar lo
+                // que exceda eso. Con el menú desplegado no se resta margen,
+                // para no dejar el hero tapado. El panel del menú es
+                // "position: absolute" (ancho ajustado al contenido, no al
+                // header), así que su altura no cuenta en offsetHeight del
+                // header y hay que sumarla aparte.
+                const menuOpen = mainHeaderEl.classList.contains('menu-open');
+                let height = mainHeaderEl.offsetHeight;
+                if (menuOpen && navMenuEl) {
+                    height = Math.max(height, navMenuEl.getBoundingClientRect().bottom);
+                }
+                const overlap = Math.max(0, height - (menuOpen ? 0 : 40));
+                heroContainerEl.style.setProperty('--header-overlap', overlap + 'px');
+            };
 
             const applyScrollState = () => {
                 const heroBottom = heroSectionEl.getBoundingClientRect().bottom;
@@ -2117,11 +1836,25 @@
                     document.body.style.paddingTop = shouldBeScrolled ? mainHeaderEl.offsetHeight + 'px' : '';
                     updateLogo(getCurrentTheme());
                 }
+                updateHeroOverlap();
             };
 
             applyScrollState();
             window.addEventListener('scroll', applyScrollState, { passive: true });
             window.addEventListener('resize', applyScrollState);
+            if (window.ResizeObserver) {
+                new ResizeObserver(updateHeroOverlap).observe(mainHeaderEl);
+                // El panel del menú (position: absolute, ancho ajustado al
+                // contenido) no afecta offsetHeight del header, así que se
+                // observa aparte para recalcular el overlap al abrir/cerrar.
+                if (navMenuEl) new ResizeObserver(updateHeroOverlap).observe(navMenuEl);
+            }
+            const menuToggleBtnEl = document.getElementById('menuToggleBtn');
+            if (menuToggleBtnEl) {
+                menuToggleBtnEl.addEventListener('click', () => {
+                    requestAnimationFrame(updateHeroOverlap);
+                });
+            }
         })();
 
         document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
@@ -4192,20 +3925,63 @@
 
         const solConectaLoopEl = document.getElementById('solConectaBgLoop');
         if (solConectaLoopEl) {
-            mountTextLoop(solConectaLoopEl, {
-                text: 'Tecnología • Soporte • Comunicación',
-                shape: 'wave',
-                curviness: 70,
-                separator: '✦',
-                speed: 55,
-                fontSize: 58,
-                fontWeight: 800,
-                letterSpacing: 1,
-                uppercase: true,
-                color: '#0052FF',
-                ribbon: false,
-                pauseOnHover: false,
-            });
+            const REF_VIEW_W = 1200; // viewBox original del diseño ya aprobado
+            const REF_CENTER_X = 600; // x de la cresta en ese viewBox (bajo la burbuja/logo)
+            let unmountLoop = null;
+
+            // La cresta (x=600 del viewBox original) debe seguir cayendo
+            // EXACTAMENTE en el centro real de .sol-bubbles en pantalla — no
+            // en el centro de la ventana, porque el layout de 2 columnas ya
+            // descentra .sol-bubbles respecto al viewport. Se calcula cuánto
+            // viewBox hace falta a la izquierda y a la derecha de esa cresta
+            // (en el MISMO ratio px/unidad del diseño original) para llegar
+            // a ambos bordes reales de la pantalla, de forma asimétrica.
+            function remountLoop() {
+                const bubblesEl = solConectaLoopEl.parentElement;
+                const bubblesRect = bubblesEl.getBoundingClientRect();
+                const refWidthPx = bubblesRect.width;
+                if (!refWidthPx) return;
+
+                const pxPerUnit = refWidthPx / REF_VIEW_W;
+                const bubblesCenterX = bubblesRect.left + bubblesRect.width / 2;
+
+                // Unidades de viewBox necesarias para cubrir desde la cresta
+                // hasta cada borde de la ventana, al mismo ratio px/unidad.
+                const unitsToLeftEdge = bubblesCenterX / pxPerUnit;
+                const unitsToRightEdge = (window.innerWidth - bubblesCenterX) / pxPerUnit;
+
+                const viewMinX = REF_CENTER_X - unitsToLeftEdge;
+                const viewMaxX = REF_CENTER_X + unitsToRightEdge;
+
+                // El contenedor pasa a ocupar el ancho completo de la
+                // ventana (0 a innerWidth) — ya no depende del ancho de
+                // .sol-bubbles, que solo se usó para medir el ratio.
+                solConectaLoopEl.style.setProperty('--loop-left', `${-bubblesRect.left}px`);
+                solConectaLoopEl.style.setProperty('--loop-width', `${window.innerWidth}px`);
+                solConectaLoopEl.style.setProperty('--loop-transform', 'translateY(-50%)');
+
+                if (unmountLoop) unmountLoop();
+                unmountLoop = mountTextLoop(solConectaLoopEl, {
+                    text: 'Tecnología • Soporte • Comunicación',
+                    shape: 'wave',
+                    curviness: 70,
+                    separator: '✦',
+                    speed: 55,
+                    fontSize: 58,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    uppercase: true,
+                    color: '#017EFD',
+                    ribbon: false,
+                    pauseOnHover: false,
+                    viewW: REF_VIEW_W,
+                    viewMinX,
+                    viewMaxX,
+                });
+            }
+
+            remountLoop();
+            window.addEventListener('resize', remountLoop);
         }
     </script>
 
@@ -4215,6 +3991,60 @@
         const solBubblesEl = document.getElementById('solBubbles');
         if (solBubblesEl) {
             mountSolBubbles(solBubblesEl);
+        }
+    </script>
+
+    <script type="module">
+        import { mountGradientWaves } from './assets/effects/gradient-waves.js';
+
+        const wavesEl = document.getElementById('qrFormWaves');
+        if (wavesEl) {
+            const THEMES = {
+                light: { horizonColor: '#f4f9ff', waveColor: '#8fc2ff', crestColor: '#017EFD', brightness: 1.1, opacity: 0.9 },
+                dark: { horizonColor: '#050b1a', waveColor: '#0f2f5c', crestColor: '#3fa0ff', brightness: 1.0, opacity: 1.0 },
+            };
+
+            function currentTheme() {
+                return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+            }
+
+            const waves = mountGradientWaves(wavesEl, {
+                speed: 0.3,
+                amplitude: 1.3,
+                waveScale: 0.65,
+                waveRatio: 0.9,
+                swell: 18,
+                turbulence: 8,
+                tilt: 1.2,
+                zoom: 1.3,
+                height: 4.5,
+                fogDepth: 20,
+                grain: true,
+                grainIntensity: 0.04,
+                mouseInteraction: true,
+                ...THEMES[currentTheme()],
+            });
+
+            const themeObserver = new MutationObserver(() => {
+                waves.update(THEMES[currentTheme()]);
+            });
+            themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        }
+    </script>
+
+    <script>
+        // El stroke-dasharray/dashoffset de la animación de "trazo dibujándose"
+        // debe coincidir EXACTO con la longitud real del path (no un número
+        // estimado a mano) o el trazo salta/se corta al reiniciar el loop.
+        const pointerLine = document.querySelector('.qr-form-pointer-line');
+        if (pointerLine) {
+            const len = Math.ceil(pointerLine.getTotalLength());
+            pointerLine.style.setProperty('--len', len);
+        }
+        const pointerHead = document.querySelector('.qr-form-pointer-head');
+        if (pointerHead) {
+            const headLen = Math.ceil(pointerHead.getTotalLength());
+            pointerHead.style.setProperty('--head-len', headLen);
         }
     </script>
 
