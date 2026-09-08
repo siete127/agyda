@@ -14,6 +14,7 @@ import { useIsADorTI } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
+import { Avatar } from '@/components/ui/Avatar'
 import { TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente, type ProductividadAgente } from '@/types/supervisores.types'
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
@@ -773,45 +774,63 @@ function AsignarPorSkillPanel() {
     queryFn: () => ccService.getGrupos(Number(campaniaId)),
     enabled: campaniaId !== '',
   })
+  const skillActivo = skills.find((s) => s.id === skillId)
 
   return (
-    <div className="card p-4 space-y-3">
-      <p className="text-sm font-semibold text-gray-900">Asignar supervisor por skill</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaña</label>
-          <select
-            value={campaniaId}
-            onChange={(e) => { setCampaniaId(e.target.value ? Number(e.target.value) : ''); setSkillId('') }}
-            className="field"
-          >
-            <option value="">Selecciona una campaña</option>
-            {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
+    <div className="card overflow-hidden p-0">
+      <div className="flex items-center gap-2.5 border-b border-gray-100 px-4 py-3.5">
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+          <Layers className="h-4 w-4" />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Skill</label>
-          <select
-            value={skillId}
-            onChange={(e) => setSkillId(e.target.value ? Number(e.target.value) : '')}
-            disabled={campaniaId === ''}
-            className="field disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="">Selecciona un skill</option>
-            {skills.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-          </select>
+          <p className="text-sm font-semibold text-gray-900">Asignar supervisor por skill</p>
+          <p className="text-xs text-gray-500">Alcance acotado a un solo skill dentro de una campaña</p>
         </div>
       </div>
 
-      {skillId !== '' && (
-        <div className="border-t border-gray-100 pt-3">
-          <AsignacionSupervisores
-            nivel="skill"
-            id={Number(skillId)}
-            onChanged={() => qc.invalidateQueries({ queryKey: ['supervisores-historial-asignaciones'] })}
-          />
+      <div className="p-4 space-y-4">
+        {/* Selector en forma de "camino" campaña → skill, para reforzar la jerarquía */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wide">1. Campaña</label>
+            <select
+              value={campaniaId}
+              onChange={(e) => { setCampaniaId(e.target.value ? Number(e.target.value) : ''); setSkillId('') }}
+              className="field"
+            >
+              <option value="">Selecciona una campaña</option>
+              {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+          <ChevronRight className="hidden h-4 w-4 flex-shrink-0 text-gray-300 sm:block sm:mt-5" />
+          <div className="flex-1">
+            <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wide">2. Skill</label>
+            <select
+              value={skillId}
+              onChange={(e) => setSkillId(e.target.value ? Number(e.target.value) : '')}
+              disabled={campaniaId === ''}
+              className="field disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="">{campaniaId === '' ? 'Elige una campaña primero' : 'Selecciona un skill'}</option>
+              {skills.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </div>
         </div>
-      )}
+
+        {skillId !== '' && (
+          <div className="animate-fade-in rounded-xl border border-gray-100 bg-gray-50/60 p-3.5">
+            <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+              <Layers className="h-3.5 w-3.5 text-violet-500" />
+              Supervisores de {skillActivo?.nombre ?? 'este skill'}
+            </p>
+            <AsignacionSupervisores
+              nivel="skill"
+              id={Number(skillId)}
+              onChanged={() => qc.invalidateQueries({ queryKey: ['supervisores-historial-asignaciones'] })}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -823,45 +842,45 @@ function HistorialAsignacionesPanel() {
     queryFn: () => supervisoresService.getHistorialAsignaciones(),
   })
 
-  const ACCION_LABEL: Record<string, string> = {
-    'asignar-supervisor-campania': 'asignó',
-    'quitar-supervisor-campania': 'quitó',
-    'asignar-supervisor-skill': 'asignó',
-    'quitar-supervisor-skill': 'quitó',
-  }
-  const ES_QUITAR = (accion: string) => accion.startsWith('quitar-')
-
-  if (isLoading) return <div className="flex justify-center py-10"><Spinner /></div>
+  if (isLoading) return <div className="card flex justify-center py-10"><Spinner /></div>
   if (historial.length === 0) {
     return (
-      <div className="card flex flex-col items-center gap-2 py-10 text-gray-400">
-        <History className="h-6 w-6" />
-        <p className="text-xs">Todavía no hay cambios registrados</p>
+      <div className="card flex flex-col items-center gap-2 py-12 text-gray-400">
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100">
+          <History className="h-5 w-5" />
+        </div>
+        <p className="text-sm">Todavía no hay cambios registrados</p>
+        <p className="text-xs text-gray-400">Cada asignación o remoción de supervisor aparecerá aquí</p>
       </div>
     )
   }
 
   return (
-    <div className="card divide-y divide-gray-50 overflow-hidden">
+    <div className="card divide-y divide-gray-50 overflow-hidden p-0">
       {historial.map((h) => {
         const d = h.detalle
         const alcance = d?.grupoNombre ?? d?.campaniaNombre ?? '—'
         const tipo = d?.grupoNombre ? 'skill' : 'campaña'
+        const esQuitar = h.accion.startsWith('quitar-')
         return (
-          <div key={h.id} className="flex items-start gap-3 px-4 py-2.5">
-            <div className={clsx('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full', ES_QUITAR(h.accion) ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600')}>
-              {ES_QUITAR(h.accion) ? <Trash2 className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+          <div key={h.id} className="flex items-center gap-3 px-4 py-3">
+            <Avatar name={h.usuarioNombre ?? '?'} size="sm" />
+            <div className={clsx('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full', esQuitar ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600')}>
+              {esQuitar ? <Trash2 className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
             </div>
             <div className="min-w-0 flex-1 text-xs text-gray-600">
               <span className="font-semibold text-gray-900">{h.usuarioNombre ?? 'Alguien'}</span>{' '}
-              {ACCION_LABEL[h.accion] ?? h.accion} a{' '}
+              {esQuitar ? 'quitó' : 'asignó'} a{' '}
               <span className="font-medium text-gray-800">{d?.supervisorNombre ?? 'un supervisor'}</span>{' '}
-              {ES_QUITAR(h.accion) ? 'de' : 'a'} la {tipo}{' '}
-              <span className="font-medium text-gray-800">{alcance}</span>
-              <span className="ml-2 text-gray-400">
-                {new Date(h.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              {esQuitar ? 'de' : 'a'}{' '}
+              <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.68rem] font-semibold', tipo === 'skill' ? 'bg-violet-50 text-violet-600' : 'bg-brand/10 text-brand')}>
+                {tipo === 'skill' ? <Layers className="h-2.5 w-2.5" /> : <Circle className="h-2.5 w-2.5 fill-current" />}
+                {alcance}
               </span>
             </div>
+            <span className="flex-shrink-0 text-[0.68rem] text-gray-400">
+              {new Date(h.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
         )
       })}
@@ -893,41 +912,50 @@ function AdministrarTab() {
     <div className="space-y-6">
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-gray-900">Supervisores por campaña</p>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/10 text-brand">
+              <Circle className="h-4 w-4 fill-current" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Supervisores por campaña</p>
+              <p className="text-xs text-gray-500">Ven todos los skills de la campaña asignada</p>
+            </div>
+          </div>
           <Button size="sm" onClick={() => setShowAsignar(true)}><Plus className="h-3.5 w-3.5" /> Asignar supervisor</Button>
         </div>
 
         {isLoading ? (
           <div className="flex justify-center py-16"><Spinner size="lg" /></div>
         ) : asignaciones.length === 0 ? (
-          <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
-            <Users className="h-8 w-8" />
+          <div className="card flex flex-col items-center gap-2 py-12 text-gray-400">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100">
+              <Users className="h-5 w-5" />
+            </div>
             <p className="text-sm">No hay supervisores asignados a campañas todavía</p>
           </div>
         ) : (
-          <div className="card overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-gray-500">
-                  <th className="px-4 py-2.5 font-semibold">Campaña</th>
-                  <th className="px-4 py-2.5 font-semibold">Supervisor</th>
-                  <th className="px-4 py-2.5 font-semibold"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {asignaciones.map((a) => (
-                  <tr key={a.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                    <td className="px-4 py-2.5 font-medium text-gray-900">{a.campaniaNombre}</td>
-                    <td className="px-4 py-2.5 text-gray-600">{a.supervisorNombre}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => quitar.mutate(a.id)} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 ml-auto">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="card overflow-hidden p-0">
+            <div className="divide-y divide-gray-50">
+              {asignaciones.map((a) => (
+                <div key={a.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50/60">
+                  <Avatar name={a.supervisorNombre} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">{a.supervisorNombre}</p>
+                    <p className="flex items-center gap-1 text-xs text-gray-500">
+                      <Circle className="h-2 w-2 fill-current text-brand" />
+                      {a.campaniaNombre}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => quitar.mutate(a.id)}
+                    title="Quitar supervisor de esta campaña"
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
