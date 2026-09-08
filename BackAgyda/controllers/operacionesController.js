@@ -842,10 +842,12 @@ async function getReportePostulantes(req, res) {
   }
 }
 
-// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — detalle
-// fila por fila de cada tipificación registrada en el rango (mismo formato
-// que ccConfigController.exportarTipificacionesCampania, pero acotado por
-// fecha en vez de por una sola campaña).
+// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — un
+// renglón por postulante registrado en el rango, con su tipificación más
+// reciente (mismo criterio que _queryReportePostulantes usa para "Por
+// tipificación" en pantalla — OUTER APPLY TOP 1 por fecha de tipificación,
+// filtrado por fecha de REGISTRO del postulante, no de tipificación — así
+// los totales del Excel cuadran con los de la pantalla).
 async function exportarReportePostulantes(req, res) {
   try {
     const { desde, hasta } = _rangoFechas(req);
@@ -855,23 +857,27 @@ async function exportarReportePostulantes(req, res) {
       .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
       .query(`
         SELECT
-          ISNULL(cp.CP_NOMBRE, '(sin coincidencia)') postulante,
-          wlt.WLT_TELEFONO telefono,
-          wlt.WLT_TIPIFICACION tipificacion,
-          wlt.WLT_OBSERVACIONES observaciones,
-          wlt.WLT_EXTENSION extension,
-          wlt.WLT_FECHA fecha
-        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
-        LEFT JOIN dbo.CCO_CAMPANIA_POSTULANTES cp
-          ON cp.CP_ID = wlt.WLT_POSTULANTE_ID
-          OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
-        WHERE wlt.WLT_FECHA >= @desde AND wlt.WLT_FECHA < DATEADD(DAY, 1, @hasta)
-        ORDER BY wlt.WLT_FECHA DESC`);
+          cp.CP_NOMBRE postulante,
+          cp.CP_TELEFONO telefono,
+          ult.WLT_TIPIFICACION tipificacion,
+          ult.WLT_OBSERVACIONES observaciones,
+          ult.WLT_EXTENSION extension,
+          ult.WLT_FECHA fecha
+        FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+        OUTER APPLY (
+          SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_EXTENSION, wlt.WLT_FECHA
+          FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+          WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+             OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+          ORDER BY wlt.WLT_FECHA DESC
+        ) ult
+        WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+        ORDER BY cp.CP_FECHA_REGISTRO DESC`);
 
     const filas = r.recordset.map((row) => ({
       Postulante: row.postulante,
       Teléfono: row.telefono,
-      Tipificación: TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion,
+      Tipificación: row.tipificacion ? (TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion) : 'Sin tipificar',
       Observaciones: row.observaciones || '',
       Extensión: row.extension || '',
       Fecha: row.fecha ? new Date(row.fecha).toLocaleString('es-MX') : '',
