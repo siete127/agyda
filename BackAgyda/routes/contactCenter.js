@@ -100,6 +100,8 @@ router.get('/campanias/:id/tipificaciones-excel', authenticateToken, requireActi
 
 // ── Gestión de postulantes (transversal a campañas asignadas al agente) ──
 router.get('/postulantes', authenticateToken, requireActionAccess(M, 'ver'), cfg.listPostulantesGestion);
+router.post('/postulantes', authenticateToken, requireActionAccess(M, 'atender'), cfg.crearPostulanteManual);
+router.get('/postulantes/campanias', authenticateToken, requireActionAccess(M, 'ver'), cfg.listCampaniasParaPostulante);
 router.post('/postulantes/:id/tipificacion', authenticateToken, requireActionAccess(M, 'atender'), cfg.tipificarPostulante);
 router.get('/postulantes/:id/notas', authenticateToken, requireActionAccess(M, 'ver'), cfg.listNotasPostulante);
 router.post('/postulantes/:id/notas', authenticateToken, requireActionAccess(M, 'atender'), cfg.crearNotaPostulante);

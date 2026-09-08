@@ -1014,6 +1014,67 @@ exports.exportarTipificacionesCampania = async (req, res) => {
 // Listado global — no por campaña — con buscador y la tipificación más
 // reciente de cada postulante. Un agente solo ve postulantes de las campañas
 // que tiene asignadas (CCO_GRUPO_AGENTES); un gestor/admin ve todos.
+// Campañas para el selector del alta manual — un agente solo ve las suyas
+// (mismo criterio que campaniasVisiblesPara), un gestor/admin ve todas las activas.
+exports.listCampaniasParaPostulante = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const visibles = await campaniasVisiblesPara(req, p);
+    if (Array.isArray(visibles) && visibles.length === 0) return res.json({ success: true, data: [] });
+
+    const request = p.request();
+    let whereCampania = '';
+    if (Array.isArray(visibles)) {
+      const params = visibles.map((id, i) => { request.input(`c${i}`, sql.Int, id); return `@c${i}`; });
+      whereCampania = `AND CM2_ID IN (${params.join(',')})`;
+    }
+    const r = await request.query(`SELECT CM2_ID id, CM2_NOMBRE nombre FROM dbo.CCO_CAMPANIAS WHERE CM2_ACTIVO = 1 ${whereCampania} ORDER BY CM2_NOMBRE`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) {
+    console.error('ccConfig.listCampaniasParaPostulante:', e.message);
+    res.status(500).json({ success: false, message: 'Error al listar campañas' });
+  }
+};
+
+// Alta manual de postulante desde Gestión de postulantes — mismas reglas de
+// validación que registrarPostulantePublico, pero autenticado y verificando
+// que la campaña elegida sea visible para quien lo crea.
+exports.crearPostulanteManual = async (req, res) => {
+  try {
+    const b = req.body || {};
+    const nombre = String(b.nombre || '').trim();
+    const telefono = String(b.telefono || '').replace(/\D/g, '');
+    const campaniaId = Number(b.campaniaId);
+
+    if (!nombre || !telefono || !campaniaId) {
+      return res.status(400).json({ success: false, message: 'Nombre, teléfono y campaña son obligatorios' });
+    }
+    if (telefono.length < 10) return res.status(400).json({ success: false, message: 'Teléfono inválido' });
+
+    const p = await pool(req);
+    if (!esGestor(req)) {
+      const visibles = await campaniasVisiblesPara(req, p);
+      if (!visibles.includes(campaniaId)) return res.status(403).json({ success: false, message: 'No tienes acceso a esa campaña' });
+    }
+
+    const camp = await p.request().input('id', sql.Int, campaniaId).query(`SELECT CM2_ID id FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @id AND CM2_ACTIVO = 1`);
+    if (!camp.recordset.length) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
+
+    const r = await p.request()
+      .input('c', sql.Int, campaniaId)
+      .input('n', sql.NVarChar(200), nombre.slice(0, 200))
+      .input('t', sql.NVarChar(20), telefono.slice(0, 20))
+      .query(`INSERT INTO dbo.CCO_CAMPANIA_POSTULANTES (CP_CAMPANIA_ID, CP_NOMBRE, CP_TELEFONO)
+              OUTPUT INSERTED.CP_ID id
+              VALUES (@c, @n, @t)`);
+
+    res.status(201).json({ success: true, data: { id: r.recordset[0].id } });
+  } catch (e) {
+    console.error('ccConfig.crearPostulanteManual:', e.message);
+    res.status(500).json({ success: false, message: 'Error al crear el postulante' });
+  }
+};
+
 exports.listPostulantesGestion = async (req, res) => {
   try {
     const p = await pool(req);

@@ -153,6 +153,11 @@ export interface CCPostulanteNota {
   fecha: string
 }
 
+export interface CCCampaniaSimple {
+  id: number
+  nombre: string
+}
+
 export interface CCGrupo {
   id: number
   campaniaId: number

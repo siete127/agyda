@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
   CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
-  CCPostulante, CCMiSkill, CCPostulanteGestion, CCPostulanteNota,
+  CCPostulante, CCMiSkill, CCPostulanteGestion, CCPostulanteNota, CCCampaniaSimple,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -108,6 +108,9 @@ export const ccService = {
   getNotasPostulante: (postulanteId: number) => d<CCPostulanteNota[]>(api.get(`/contact-center/postulantes/${postulanteId}/notas`)),
   crearNotaPostulante: (postulanteId: number, nota: string) =>
     d<CCPostulanteNota>(api.post(`/contact-center/postulantes/${postulanteId}/notas`, { nota })),
+  getCampaniasParaPostulante: () => d<CCCampaniaSimple[]>(api.get('/contact-center/postulantes/campanias')),
+  crearPostulante: (body: { nombre: string; telefono: string; campaniaId: number }) =>
+    api.post('/contact-center/postulantes', body).then((r) => r.data),
 
   getGrupos: (campaniaId?: number) => d<CCGrupo[]>(api.get('/contact-center/grupos', { params: campaniaId ? { campaniaId } : {} })),
   createGrupo: (body: { campaniaId: number; nombre: string; descripcion?: string; icono?: string }) => api.post('/contact-center/grupos', body).then((r) => r.data),

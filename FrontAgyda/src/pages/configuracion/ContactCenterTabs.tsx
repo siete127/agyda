@@ -15,6 +15,8 @@ import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
 import { TIPIFICACIONES_LLAMADA } from '@/constants/tipificacionesLlamada'
 import { NotasPostulanteModal } from './NotasPostulanteModal'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-ink-secondary'
@@ -885,6 +887,7 @@ export function CCPostulantesGestionTab() {
   const [qDebounced, setQDebounced] = useState('')
   const [page, setPage] = useState(1)
   const [notasDe, setNotasDe] = useState<number | null>(null)
+  const [nuevoOpen, setNuevoOpen] = useState(false)
   const pageSize = 20
   const qc = useQueryClient()
 
@@ -924,6 +927,13 @@ export function CCPostulantesGestionTab() {
           placeholder="Buscar por nombre o teléfono..."
           className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
         />
+        <button
+          type="button"
+          onClick={() => setNuevoOpen(true)}
+          className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white transition hover:bg-violet-700"
+        >
+          <Plus className="h-3.5 w-3.5" /> Nuevo postulante
+        </button>
       </div>
 
       {isLoading ? (
@@ -1014,7 +1024,70 @@ export function CCPostulantesGestionTab() {
       {notasDe !== null && (
         <NotasPostulanteModal postulanteId={notasDe} onClose={() => setNotasDe(null)} />
       )}
+
+      {nuevoOpen && (
+        <NuevoPostulanteModal
+          onClose={() => setNuevoOpen(false)}
+          onCreado={() => {
+            setNuevoOpen(false)
+            qc.invalidateQueries({ queryKey: ['cc-postulantes-gestion'] })
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function NuevoPostulanteModal({ onClose, onCreado }: { onClose: () => void; onCreado: () => void }) {
+  const [nombre, setNombre] = useState('')
+  const [telefono, setTelefono] = useState('')
+  const [campaniaId, setCampaniaId] = useState<number | ''>('')
+
+  const { data: campanias = [], isLoading: cargandoCampanias } = useQuery({
+    queryKey: ['cc-campanias-para-postulante'],
+    queryFn: () => ccService.getCampaniasParaPostulante(),
+  })
+
+  const crear = useMutation({
+    mutationFn: () => ccService.crearPostulante({ nombre: nombre.trim(), telefono: telefono.trim(), campaniaId: Number(campaniaId) }),
+    onSuccess: () => { toast.success('Postulante creado'); onCreado() },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg || 'No se pudo crear el postulante')
+    },
+  })
+
+  const valido = nombre.trim().length > 0 && telefono.replace(/\D/g, '').length >= 10 && campaniaId !== ''
+
+  return (
+    <Modal isOpen onClose={onClose} title="Nuevo postulante" size="sm">
+      <div className="space-y-3">
+        <div>
+          <label className={label}>Nombre</label>
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={field} placeholder="Nombre completo" />
+        </div>
+        <div>
+          <label className={label}>Teléfono</label>
+          <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={field} placeholder="10 dígitos" maxLength={20} />
+        </div>
+        <div>
+          <label className={label}>Campaña</label>
+          {cargandoCampanias ? (
+            <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-ink-tertiary" /></div>
+          ) : (
+            <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className={field}>
+              <option value="">Selecciona una campaña...</option>
+              {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button isLoading={crear.isPending} disabled={!valido} onClick={() => crear.mutate()}>Crear</Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
