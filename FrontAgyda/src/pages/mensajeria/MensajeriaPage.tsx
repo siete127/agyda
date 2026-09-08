@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Avatar } from '@/components/ui/Avatar'
 import { EmojiPicker } from '@/components/ui/EmojiPicker'
 import { NuevoGrupoModal } from './NuevoGrupoModal'
+import { AgregarMiembrosModal } from './AgregarMiembrosModal'
 import { DriveArchivoPicker } from './DriveArchivoPicker'
 import type { MensajeriaCanal, MensajeriaMensaje, MensajeriaConfig, MensajeriaReaccion } from '@/types/mensajeria.types'
 import { parseMensajeriaMensaje } from '@/types/mensajeria.types'
@@ -186,6 +187,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   const [drivePickerOpen, setDrivePickerOpen] = useState(false)
   const [aparienciaOpen, setAparienciaOpen] = useState(false)
   const [miembrosOpen, setMiembrosOpen] = useState(false)
+  const [agregarMiembrosOpen, setAgregarMiembrosOpen] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [otrosEscribiendo, setOtrosEscribiendo] = useState<string | null>(null)
   // Id del mensaje sobre el que se muestra la barra de reacciones rápidas
@@ -588,9 +590,21 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
               'absolute right-4 top-12 z-20 w-64 rounded-xl border shadow-lg p-3',
               oscuro ? 'bg-gray-800 border-gray-700' : 'bg-card border-gray-200',
             )}>
-              <p className={clsx('mb-2 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>
-                Integrantes {canalDetalle ? `(${canalDetalle.miembros.length})` : ''}
-              </p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className={clsx('text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>
+                  Integrantes {canalDetalle ? `(${canalDetalle.miembros.length})` : ''}
+                </p>
+                {user?.id === canal.creadoPor && (
+                  <button
+                    type="button"
+                    onClick={() => setAgregarMiembrosOpen(true)}
+                    title="Agregar integrantes"
+                    className="flex items-center gap-1 text-[0.68rem] font-semibold text-brand hover:underline"
+                  >
+                    <UserPlus className="h-3 w-3" /> Agregar
+                  </button>
+                )}
+              </div>
               {cargandoMiembros ? (
                 <div className="flex justify-center py-4"><Spinner size="sm" /></div>
               ) : (
@@ -612,6 +626,18 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
               )}
             </div>
           </>
+        )}
+
+        {agregarMiembrosOpen && canalDetalle && (
+          <AgregarMiembrosModal
+            canalId={canal.id}
+            yaMiembros={canalDetalle.miembros}
+            onClose={() => setAgregarMiembrosOpen(false)}
+            onAgregados={() => {
+              setAgregarMiembrosOpen(false)
+              qc.invalidateQueries({ queryKey: ['mensajeria-canal-detalle', canal.id] })
+            }}
+          />
         )}
 
         {aparienciaOpen && config && (
