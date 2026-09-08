@@ -842,30 +842,45 @@ async function getReportePostulantes(req, res) {
   }
 }
 
-// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — mismo
-// reporte de arriba, en un .xlsx de 3 hojas (mismo patrón que
-// ccConfigController.exportarTipificacionesCampania).
+// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — detalle
+// fila por fila de cada tipificación registrada en el rango (mismo formato
+// que ccConfigController.exportarTipificacionesCampania, pero acotado por
+// fecha en vez de por una sola campaña).
 async function exportarReportePostulantes(req, res) {
   try {
     const { desde, hasta } = _rangoFechas(req);
     const pool = await databaseService.getPool(req.user?.empresa);
-    const { porCampania, porTipificacion, sinTipificar } = await _queryReportePostulantes(pool, desde, hasta);
+
+    const r = await pool.request()
+      .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+      .query(`
+        SELECT
+          ISNULL(cp.CP_NOMBRE, '(sin coincidencia)') postulante,
+          wlt.WLT_TELEFONO telefono,
+          wlt.WLT_TIPIFICACION tipificacion,
+          wlt.WLT_OBSERVACIONES observaciones,
+          wlt.WLT_EXTENSION extension,
+          wlt.WLT_FECHA fecha
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        LEFT JOIN dbo.CCO_CAMPANIA_POSTULANTES cp
+          ON cp.CP_ID = wlt.WLT_POSTULANTE_ID
+          OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        WHERE wlt.WLT_FECHA >= @desde AND wlt.WLT_FECHA < DATEADD(DAY, 1, @hasta)
+        ORDER BY wlt.WLT_FECHA DESC`);
+
+    const filas = r.recordset.map((row) => ({
+      Postulante: row.postulante,
+      Teléfono: row.telefono,
+      Tipificación: TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion,
+      Observaciones: row.observaciones || '',
+      Extensión: row.extension || '',
+      Fecha: row.fecha ? new Date(row.fecha).toLocaleString('es-MX') : '',
+    }));
 
     const wb = XLSX.utils.book_new();
-
-    const hojaCampania = porCampania.map((r) => ({
-      Fecha: r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : '',
-      Campaña: r.campania, Total: r.total,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaCampania.length ? hojaCampania : [{ Fecha: '', Campaña: '', Total: '' }]), 'Por campaña');
-
-    const hojaTip = porTipificacion.map((r) => ({ Tipificación: r.etiqueta, Total: r.total }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaTip.length ? hojaTip : [{ Tipificación: '', Total: '' }]), 'Por tipificación');
-
-    const hojaSinTip = sinTipificar.masAntiguos.map((r) => ({
-      Nombre: r.nombre, Teléfono: r.telefono, Campaña: r.campania, 'Días esperando': r.diasEsperando,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaSinTip.length ? hojaSinTip : [{ Nombre: '', Teléfono: '', Campaña: '', 'Días esperando': '' }]), 'Sin tipificar');
+    const ws = XLSX.utils.json_to_sheet(filas.length ? filas : [{ Postulante: '', Teléfono: '', Tipificación: '', Observaciones: '', Extensión: '', Fecha: '' }]);
+    ws['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 26 }, { wch: 50 }, { wch: 10 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tipificaciones');
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
