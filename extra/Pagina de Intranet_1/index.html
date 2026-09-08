@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=20260907c">
+    <link rel="stylesheet" href="css/styles.css?v=20260908b">
 
     <script src="/socket.io/socket.io.js"></script>
 
@@ -874,7 +874,11 @@
                             </div>
                             <div class="postulacion-field">
                                 <label for="postCv" data-i18n="vacantes.form.cv">Currículum (PDF, máx. 5MB)</label>
-                                <input type="file" id="postCv" name="cv" accept="application/pdf" required>
+                                <div class="file-picker">
+                                    <span class="file-picker-btn" data-i18n="soporte.form.elegirArchivo">Elegir archivo</span>
+                                    <span class="file-picker-name" id="postCvNombre" data-i18n="soporte.form.sinArchivo">Ningún archivo seleccionado</span>
+                                    <input type="file" id="postCv" name="cv" accept="application/pdf" required>
+                                </div>
                             </div>
                             <div class="postulacion-field">
                                 <label for="postMensaje" data-i18n="vacantes.form.mensaje">Mensaje (opcional)</label>
@@ -1050,8 +1054,12 @@
                         </div>
                     </div>
                     <div class="postulacion-field">
-                        <label for="solEvidencia" data-i18n="soporte.form.evidencia">Evidencia (opcional, PDF/imagen, máx. 5MB)</label>
-                        <input type="file" id="solEvidencia" name="evidencia" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        <label for="solEvidencia" data-i18n="soporte.form.evidencia">Evidencia (opcional)</label>
+                        <div class="file-picker">
+                            <span class="file-picker-btn" data-i18n="soporte.form.elegirArchivo">Elegir archivo</span>
+                            <span class="file-picker-name" id="solEvidenciaNombre" data-i18n="soporte.form.sinArchivo">Ningún archivo seleccionado</span>
+                            <input type="file" id="solEvidencia" name="evidencia" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        </div>
                     </div>
                     <p id="solicitudPublicaStatus" class="postulacion-status" aria-live="polite"></p>
                     <button type="submit" id="solicitudPublicaSubmitBtn" class="modal-btn-contact postulacion-submit-btn">
@@ -1876,7 +1884,9 @@
                 "soporte.form.sede": "Sede",
                 "soporte.form.impacto": "Impacto",
                 "soporte.form.urgencia": "Urgencia",
-                "soporte.form.evidencia": "Evidencia (opcional, PDF/imagen, máx. 5MB)",
+                "soporte.form.evidencia": "Evidencia (opcional)",
+                "soporte.form.elegirArchivo": "Elegir archivo",
+                "soporte.form.sinArchivo": "Ningún archivo seleccionado",
                 "soporte.form.seleccionar": "Seleccionar…",
                 "soporte.form.enviar": "Enviar solicitud",
 
@@ -2058,7 +2068,9 @@
                 "soporte.form.sede": "Site",
                 "soporte.form.impacto": "Impact",
                 "soporte.form.urgencia": "Urgency",
-                "soporte.form.evidencia": "Evidence (optional, PDF/image, max. 5MB)",
+                "soporte.form.evidencia": "Evidence (optional)",
+                "soporte.form.elegirArchivo": "Choose file",
+                "soporte.form.sinArchivo": "No file selected",
                 "soporte.form.seleccionar": "Select…",
                 "soporte.form.enviar": "Send request",
 
@@ -2133,6 +2145,20 @@
         });
 
         applyTranslations(currentLang);
+
+        // --- SELECTOR DE ARCHIVO CUSTOM (.file-picker) ---
+        // Muestra el nombre real del archivo elegido en vez del texto nativo
+        // del navegador ("No se ha seleccionado ningún archivo"), que no se
+        // puede personalizar con CSS. El <input type="file"> real sigue ahí,
+        // solo invisible y clickeable encima del botón/label falsos.
+        document.querySelectorAll('.file-picker input[type="file"]').forEach((input) => {
+            const nombreEl = input.closest('.file-picker').querySelector('.file-picker-name');
+            if (!nombreEl) return;
+            const textoVacio = nombreEl.textContent;
+            input.addEventListener('change', () => {
+                nombreEl.textContent = input.files[0] ? input.files[0].name : textoVacio;
+            });
+        });
 
         // --- SISTEMA DE MODO OSCURO ---
         const STORAGE_THEME_KEY = 'ardabytec-theme';

@@ -2578,6 +2578,58 @@ html[data-theme="dark"] .vacantes-circle-2 {
   min-height: 70px;
 }
 
+.file-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: var(--bg-superficie-alterna);
+  border: 1.5px solid var(--borde);
+  border-radius: 12px;
+  padding: 8px 14px;
+  transition: border-color 0.2s ease;
+}
+
+.file-picker:focus-within {
+  border-color: var(--azul-electrico);
+}
+
+.file-picker-btn {
+  flex: 0 0 auto;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background-color: var(--azul-electrico);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.file-picker-btn:hover {
+  background-color: var(--azul-oscuro);
+}
+
+.file-picker-name {
+  font-family: 'Poppins', sans-serif;
+  font-size: 13.5px;
+  color: var(--texto-secundario);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-picker input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .postulacion-status {
   font-size: 13.5px;
   font-weight: 600;
