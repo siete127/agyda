@@ -31,6 +31,8 @@ router.delete('/metas/:id', auth.authenticateToken, controller.eliminarMeta);
 
 // Reportes diarios
 router.get('/reportes-diarios', auth.authenticateToken, controller.getReporteDiario);
+router.get('/reportes-postulantes', auth.authenticateToken, controller.getReportePostulantes);
+router.get('/reportes-postulantes/excel', auth.authenticateToken, controller.exportarReportePostulantes);
 
 // Asesores (panel self-service del propio agente)
 router.get('/asesores/mi-resumen', auth.authenticateToken, controller.getMiResumenAsesor);

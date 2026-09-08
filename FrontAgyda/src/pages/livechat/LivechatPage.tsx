@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessageCircle, Send, User, Users, UserCheck, Clock, CheckCircle2, Loader2, ArrowRightLeft, FileText, Headset } from 'lucide-react'
 import { livechatService } from '@/services/livechat.service'
+import { ccService } from '@/services/cc.service'
 import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
 import { useCurrentUser } from '@/hooks/useAuth'
@@ -11,12 +12,18 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Modal } from '@/components/ui/Modal'
 import type { LivechatConversacion, LivechatMensaje, LivechatConfig } from '@/types/livechat.types'
 import { parseLivechatMensaje } from '@/types/livechat.types'
+import { CANAL_ICONO, CANAL_LABEL } from '@/types/cc.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { CampaniasModal } from './CampaniasModal'
 import { UsuariosCampaniasModal } from './UsuariosCampaniasModal'
 import { HistorialConversacionesPanel } from './HistorialConversacionesPanel'
 import { AsesoresPanel } from '@/pages/asesores/AsesoresPanel'
+import { CCChatPanel } from '@/pages/contact-center/CCChatPanel'
+import {
+  type ItemBandeja, idUnificado, nombreUnificado, subtituloUnificado,
+  fechaInicioUnificado, posicionColaUnificado,
+} from './bandejaUnificada'
 
 // "Mi día — estado y tiempos personales" en modal, para no salir de Chat en
 // Vivo a revisar el propio estado/pausas — reusa el mismo panel que la ruta
@@ -399,8 +406,10 @@ function formatHora(iso: string) {
   return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
 }
 
-function ConversacionItem({ conv, activa, onClick }: { conv: LivechatConversacion; activa: boolean; onClick: () => void }) {
-  const esperando = conv.estado === 'esperando'
+function ConversacionItem({ item, activa, onClick }: { item: ItemBandeja; activa: boolean; onClick: () => void }) {
+  const esperando = item.origen === 'livechat' ? item.data.estado === 'esperando' : item.data.estado === 'en_cola'
+  const { pos, total } = posicionColaUnificado(item)
+  const canalIcono = item.origen === 'cc' ? (CANAL_ICONO[item.data.tipo] || '💬') : null
   return (
     <button
       onClick={onClick}
@@ -410,21 +419,22 @@ function ConversacionItem({ conv, activa, onClick }: { conv: LivechatConversacio
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-sm text-gray-800 truncate">
-          {conv.visitanteNombre || 'Visitante anónimo'}
+        <span className="flex items-center gap-1.5 font-medium text-sm text-gray-800 truncate">
+          {canalIcono && <span className="shrink-0">{canalIcono}</span>}
+          {nombreUnificado(item)}
         </span>
         {esperando && (
           <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
             <Clock size={11} />
-            {conv.posicionCola ? `${conv.posicionCola} de ${conv.totalCola}` : 'Esperando'}
+            {pos ? `${pos} de ${total}` : 'Esperando'}
           </span>
         )}
       </div>
-      {(conv.visitanteEmail || conv.visitanteTelefono) && (
-        <p className="text-[11px] text-gray-400 truncate mt-0.5">{conv.visitanteEmail || conv.visitanteTelefono}</p>
-      )}
-      <p className="text-xs text-gray-500 truncate mt-0.5">{conv.motivo || 'Sin motivo especificado'}</p>
-      <p className="text-[11px] text-gray-400 mt-1">{formatHora(conv.fechaInicio)}</p>
+      <p className="text-[11px] text-gray-400 truncate mt-0.5">{subtituloUnificado(item)}</p>
+      <p className="text-xs text-gray-500 truncate mt-0.5">
+        {item.origen === 'livechat' ? (item.data.motivo || 'Sin motivo especificado') : (item.data.grupoNombre || CANAL_LABEL[item.data.tipo] || item.data.tipo)}
+      </p>
+      <p className="text-[11px] text-gray-400 mt-1">{formatHora(fechaInicioUnificado(item))}</p>
     </button>
   )
 }
@@ -432,10 +442,13 @@ function ConversacionItem({ conv, activa, onClick }: { conv: LivechatConversacio
 // Fila de la bandeja de espera integrada en el panel lateral: a diferencia de
 // ConversacionItem (que navega al detalle), esta se toma directo con un
 // botón — son leads sin dueño todavía, cualquier agente puede tomarlos.
-function EsperaItem({ conv, onTomar, tomando }: { conv: LivechatConversacion; onTomar: () => void; tomando: boolean }) {
-  const minutos = minutosEsperando(conv.fechaInicio)
+function EsperaItem({ item, onTomar, tomando }: { item: ItemBandeja; onTomar: () => void; tomando: boolean }) {
+  const fecha = fechaInicioUnificado(item)
+  const minutos = minutosEsperando(fecha)
   const urgente = minutos >= 10
   const critico = minutos >= 15
+  const { pos } = posicionColaUnificado(item)
+  const canalIcono = item.origen === 'cc' ? (CANAL_ICONO[item.data.tipo] || '💬') : null
   return (
     <div
       className={clsx(
@@ -449,17 +462,15 @@ function EsperaItem({ conv, onTomar, tomando }: { conv: LivechatConversacion; on
           critico ? 'bg-red-500/15 text-red-500' : urgente ? 'bg-amber-500/15 text-amber-500' : 'bg-brand/15 text-brand',
         )}
       >
-        {conv.posicionCola ?? '—'}
+        {canalIcono ?? pos ?? '—'}
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-sm text-gray-800 truncate">{conv.visitanteNombre || 'Anónimo'}</p>
-        <p className="text-[11px] text-gray-400 truncate">
-          {conv.visitanteEmail || conv.visitanteTelefono || 'Sin contacto'}
-        </p>
+        <p className="font-medium text-sm text-gray-800 truncate">{nombreUnificado(item)}</p>
+        <p className="text-[11px] text-gray-400 truncate">{subtituloUnificado(item)}</p>
         <p className={clsx('flex items-center gap-1 text-[11px] font-semibold mt-0.5', critico ? 'text-red-500' : urgente ? 'text-amber-600' : 'text-gray-400')}>
           <Clock size={11} />
-          {tiempoEsperando(conv.fechaInicio)}
+          {tiempoEsperando(fecha)}
         </p>
       </div>
 
@@ -819,7 +830,10 @@ export default function LivechatPage() {
   const user = useCurrentUser()
   const { can } = useActionAccess()
   const puedeSupervisar = can('livechat', 'gestionar-campanas')
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  // Bandeja fusionada: Livechat (motor viejo) + Contact Center (WhatsApp/
+  // Messenger/Instagram/web) — el id por sí solo puede colisionar entre
+  // ambas fuentes, así que la selección se guarda como ItemBandeja completo.
+  const [selected, setSelected] = useState<ItemBandeja | null>(null)
   const [historialOpen, setHistorialOpen] = useState(false)
   const [usuariosCampaniasOpen, setUsuariosCampaniasOpen] = useState(false)
   const [campaniasOpen, setCampaniasOpen] = useState(false)
@@ -843,25 +857,53 @@ export default function LivechatPage() {
     }
   }, [user?.id])
 
-  const { data: esperando = [], refetch: refetchEsperando } = useQuery({
+  const { data: esperandoLc = [], refetch: refetchEsperandoLc } = useQuery({
     queryKey: ['livechat-esperando'],
     queryFn: () => livechatService.getMisConversaciones('esperando'),
     refetchInterval: 8_000,
   })
 
-  const { data: mias = [], refetch: refetchMias } = useQuery({
+  const { data: miasLc = [], refetch: refetchMiasLc } = useQuery({
     queryKey: ['livechat-mis-conversaciones'],
     queryFn: () => livechatService.getMisConversaciones('activa'),
     refetchInterval: 8_000,
   })
 
+  // Mismas dos bandejas, ahora también para Contact Center (CCO_*) — ver
+  // ccService.getInteracciones. 'en_cola' es equivalente a 'esperando' de
+  // Livechat; sin filtro trae las 'activa'/'pendiente_tipificacion' propias.
+  const { data: esperandoCc = [], refetch: refetchEsperandoCc } = useQuery({
+    queryKey: ['cc-inter', 'en_cola'],
+    queryFn: () => ccService.getInteracciones('en_cola'),
+    refetchInterval: 8_000,
+  })
+  const { data: miasCc = [], refetch: refetchMiasCc } = useQuery({
+    queryKey: ['cc-inter', 'activa'],
+    queryFn: () => ccService.getInteracciones(),
+    refetchInterval: 8_000,
+  })
+
+  const refetchEsperando = useCallback(() => { refetchEsperandoLc(); refetchEsperandoCc() }, [refetchEsperandoLc, refetchEsperandoCc])
+  const refetchMias = useCallback(() => { refetchMiasLc(); refetchMiasCc() }, [refetchMiasLc, refetchMiasCc])
+
+  const esperando: ItemBandeja[] = [
+    ...esperandoLc.map((data): ItemBandeja => ({ origen: 'livechat', data })),
+    ...esperandoCc.map((data): ItemBandeja => ({ origen: 'cc', data })),
+  ]
+  const mias: ItemBandeja[] = [
+    ...miasLc.map((data): ItemBandeja => ({ origen: 'livechat', data })),
+    ...miasCc.map((data): ItemBandeja => ({ origen: 'cc', data })),
+  ]
+
   const tomarDesdeEspera = useMutation({
-    mutationFn: (conversacionId: number) => livechatService.tomarConversacion(conversacionId),
-    onSuccess: (_data, conversacionId) => {
+    mutationFn: (item: ItemBandeja) => (item.origen === 'livechat'
+      ? livechatService.tomarConversacion(item.data.id)
+      : ccService.tomar(item.data.id)),
+    onSuccess: (_data, item) => {
       toast.success('Conversación tomada')
       refetchEsperando()
       refetchMias()
-      setSelectedId(conversacionId)
+      setSelected(item)
     },
     onError: () => toast.error('No se pudo tomar la conversación (quizás ya fue asignada)'),
   })
@@ -891,15 +933,25 @@ export default function LivechatPage() {
     socket.on('livechat:nueva_conversacion', handleNuevaAsignada)
     socket.on('livechat:nueva_en_cola', handleNuevaEnCola)
     socket.on('livechat:actividad_conversacion', handleActividad)
+    // Equivalentes de Contact Center — mismo tratamiento: nueva interacción
+    // asignada, nueva en cola, o actividad en cualquiera (mensaje/cierre).
+    socket.on('cc:nueva_interaccion', handleNuevaEnCola)
+    socket.on('cc:mensaje', handleActividad)
+    socket.on('cc:actividad', handleActividad)
+    socket.on('cc:interaccion_cerrada', handleActividad)
     return () => {
       socket.off('livechat:nueva_conversacion', handleNuevaAsignada)
       socket.off('livechat:nueva_en_cola', handleNuevaEnCola)
       socket.off('livechat:actividad_conversacion', handleActividad)
+      socket.off('cc:nueva_interaccion', handleNuevaEnCola)
+      socket.off('cc:mensaje', handleActividad)
+      socket.off('cc:actividad', handleActividad)
+      socket.off('cc:interaccion_cerrada', handleActividad)
     }
   }, [handleNuevaAsignada, handleNuevaEnCola, handleActividad])
 
   const handleCerrada = () => {
-    setSelectedId(null)
+    setSelected(null)
     refetchMias()
     refetchEsperando()
   }
@@ -948,12 +1000,12 @@ export default function LivechatPage() {
                   Sin conversaciones activas
                 </div>
               ) : (
-                mias.map((conv) => (
+                mias.map((item) => (
                   <ConversacionItem
-                    key={conv.id}
-                    conv={conv}
-                    activa={conv.id === selectedId}
-                    onClick={() => setSelectedId(conv.id)}
+                    key={idUnificado(item)}
+                    item={item}
+                    activa={!!selected && idUnificado(selected) === idUnificado(item)}
+                    onClick={() => setSelected(item)}
                   />
                 ))
               )}
@@ -974,12 +1026,12 @@ export default function LivechatPage() {
               ) : (
                 esperando
                   .slice()
-                  .sort((a, b) => (a.posicionCola ?? 999) - (b.posicionCola ?? 999))
-                  .map((conv) => (
+                  .sort((a, b) => new Date(fechaInicioUnificado(a)).getTime() - new Date(fechaInicioUnificado(b)).getTime())
+                  .map((item) => (
                     <EsperaItem
-                      key={conv.id}
-                      conv={conv}
-                      onTomar={() => tomarDesdeEspera.mutate(conv.id)}
+                      key={idUnificado(item)}
+                      item={item}
+                      onTomar={() => tomarDesdeEspera.mutate(item)}
                       tomando={tomarDesdeEspera.isPending}
                     />
                   ))
@@ -988,8 +1040,10 @@ export default function LivechatPage() {
           </div>
         </div>
 
-        {selectedId ? (
-          <ChatPanel conversacionId={selectedId} onCerrada={handleCerrada} />
+        {selected?.origen === 'livechat' ? (
+          <ChatPanel conversacionId={selected.data.id} onCerrada={handleCerrada} />
+        ) : selected?.origen === 'cc' ? (
+          <CCChatPanel interaccionId={selected.data.id} onClosed={handleCerrada} />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
             Selecciona una conversación

@@ -151,6 +151,7 @@ const EvaluacionDesempenoPage       = lz(() => import('@/pages/evaluacion-desemp
 const ChatbotPage                   = lz(() => import('@/pages/chatbot/ChatbotPage'),            'ChatbotPage')
 const LivechatPage                  = lz(() => import('@/pages/livechat/LivechatPage'),          'default')
 const ContactCenterPage             = lz(() => import('@/pages/contact-center/ContactCenterPage'), 'default')
+const PostulantesPage                = lz(() => import('@/pages/contact-center/PostulantesPage'), 'default')
 
 const Loader = () => (
   <div className="flex h-full items-center justify-center min-h-[40vh]">
@@ -346,7 +347,10 @@ export const router = createBrowserRouter([
             element: <RoleRoute allowedRoles={['AD', 'CC']} />,
             children: [
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
-              { element: <ModuleRoute moduleKey="contact-center" />, children: [{ path: '/contact-center', element: wrap(<ContactCenterPage />) }] },
+              { element: <ModuleRoute moduleKey="contact-center" />, children: [
+                { path: '/contact-center', element: wrap(<ContactCenterPage />) },
+                { path: '/contact-center/postulantes', element: wrap(<PostulantesPage />) },
+              ] },
             ],
           },
           {

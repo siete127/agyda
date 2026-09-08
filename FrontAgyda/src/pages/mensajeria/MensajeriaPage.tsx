@@ -235,7 +235,20 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   const { data: canalDetalle, isLoading: cargandoMiembros } = useQuery({
     queryKey: ['mensajeria-canal-detalle', canal.id],
     queryFn: () => mensajeriaService.getCanal(canal.id),
-    enabled: (miembrosOpen || agregarMiembrosOpen) && canal.tipo === 'grupo',
+    enabled: miembrosOpen && canal.tipo === 'grupo',
+  })
+
+  const quitarMiembro = useMutation({
+    mutationFn: (usuarioId: number) => mensajeriaService.quitarMiembro(canal.id, usuarioId),
+    onSuccess: () => {
+      toast.success('Integrante eliminado')
+      qc.invalidateQueries({ queryKey: ['mensajeria-canal-detalle', canal.id] })
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 403) toast.error('Solo el creador del grupo puede quitar integrantes')
+      else toast.error('No se pudo eliminar al integrante')
+    },
   })
 
   const oscuro = config?.tema === 'oscuro'
@@ -590,15 +603,16 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
               'absolute right-4 top-12 z-20 w-64 rounded-xl border shadow-lg p-3',
               oscuro ? 'bg-gray-800 border-gray-700' : 'bg-card border-gray-200',
             )}>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <p className={clsx('text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>
                   Integrantes {canalDetalle ? `(${canalDetalle.miembros.length})` : ''}
                 </p>
-                {canal.creadoPor === user?.id && (
+                {user?.id === canal.creadoPor && (
                   <button
-                    onClick={() => { setAgregarMiembrosOpen(true); setMiembrosOpen(false) }}
+                    type="button"
+                    onClick={() => setAgregarMiembrosOpen(true)}
+                    title="Agregar integrantes"
                     className="flex items-center gap-1 text-[0.68rem] font-semibold text-brand hover:underline"
-                    title="Agregar personas al grupo"
                   >
                     <UserPlus className="h-3 w-3" /> Agregar
                   </button>
@@ -619,6 +633,17 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                           <p className="text-[0.65rem] text-brand">Creador del grupo</p>
                         )}
                       </div>
+                      {user?.id === canal.creadoPor && m.usuarioId !== canal.creadoPor && (
+                        <button
+                          type="button"
+                          onClick={() => quitarMiembro.mutate(m.usuarioId)}
+                          disabled={quitarMiembro.isPending}
+                          title="Quitar del grupo"
+                          className={clsx('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-500 hover:bg-gray-700 hover:text-red-400' : 'text-gray-400 hover:bg-gray-100 hover:text-red-500')}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -630,11 +655,11 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
         {agregarMiembrosOpen && canalDetalle && (
           <AgregarMiembrosModal
             canalId={canal.id}
-            miembrosActuales={canalDetalle.miembros}
+            yaMiembros={canalDetalle.miembros}
             onClose={() => setAgregarMiembrosOpen(false)}
             onAgregados={() => {
-              qc.invalidateQueries({ queryKey: ['mensajeria-canal-detalle', canal.id] })
               setAgregarMiembrosOpen(false)
+              qc.invalidateQueries({ queryKey: ['mensajeria-canal-detalle', canal.id] })
             }}
           />
         )}

@@ -653,6 +653,7 @@ export const CONFIG_TREE: ConfigNode[] = [
         key: 'omnicanal', label: 'Configuraciones del módulo de Asesor',
         children: [
           { key: 'cc-skills', label: 'Campañas y skills', screen: 'cc-skills' },
+          { key: 'cc-postulantes', label: 'Gestión de postulantes', screen: 'cc-postulantes' },
           { key: 'cc-config', label: 'SLA, ACW y horario', screen: 'cc-config' },
           { key: 'cc-simulador', label: 'Simulador de prueba', screen: 'cc-simulador' },
         ],

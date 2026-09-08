@@ -1,7 +1,9 @@
 const sql = require('mssql');
+const XLSX = require('xlsx');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
 const { logAudit } = require('../services/auditService');
+const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
 const logger = global.logger || require('../utils/logger');
 
 async function listCampanias(req, res) {
@@ -728,6 +730,153 @@ async function getReporteDiario(req, res) {
   }
 }
 
+/* ── Reportería de postulantes: volumen, tipificación y fugas en un rango ──
+   Rango de fechas propio (no el día único del reporte de arriba) porque
+   volumen de postulantes se entiende mejor en un rango de varios días.
+   Productividad por agente se mide por notas (CCO_POSTULANTE_NOTAS), no por
+   tipificación — WEBPHONE_LLAMADAS_TIPIFICADAS no guarda qué agente tipificó,
+   solo el teléfono/postulante y la fecha, así que no hay forma de atribuir
+   la tipificación a un agente con el esquema actual. */
+
+function _rangoFechas(req) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const hace30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const desde = (req.query.desde || hace30).toString();
+  const hasta = (req.query.hasta || hoy).toString();
+  return { desde, hasta };
+}
+
+async function _queryReportePostulantes(pool, desde, hasta) {
+  const porCampaniaRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT CAST(cp.CP_FECHA_REGISTRO AS date) fecha, c.CM2_NOMBRE campania, COUNT(*) total
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+      GROUP BY CAST(cp.CP_FECHA_REGISTRO AS date), c.CM2_NOMBRE
+      ORDER BY fecha`);
+
+  const tipificadosRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT ult.WLT_TIPIFICACION tipificacion, COUNT(*) total
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      OUTER APPLY (
+        SELECT TOP 1 wlt.WLT_TIPIFICACION
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        ORDER BY wlt.WLT_FECHA DESC
+      ) ult
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+      GROUP BY ult.WLT_TIPIFICACION`);
+  const porTipificacion = tipificadosRs.recordset.map((r) => ({
+    tipificacion: r.tipificacion || null,
+    etiqueta: r.tipificacion ? (TIPIFICACIONES_LLAMADA_LABEL[r.tipificacion] || r.tipificacion) : 'Sin tipificar',
+    total: r.total,
+  }));
+
+  const productividadRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT PN_USUARIO_ID usuarioId, PN_USUARIO_NOMBRE usuarioNombre, COUNT(*) notas
+      FROM dbo.CCO_POSTULANTE_NOTAS
+      WHERE PN_FECHA >= @desde AND PN_FECHA < DATEADD(DAY, 1, @hasta)
+      GROUP BY PN_USUARIO_ID, PN_USUARIO_NOMBRE
+      ORDER BY notas DESC`);
+
+  const sinTipTotalRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT COUNT(*) total
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      OUTER APPLY (
+        SELECT TOP 1 wlt.WLT_TIPIFICACION
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        ORDER BY wlt.WLT_FECHA DESC
+      ) ult
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+        AND ult.WLT_TIPIFICACION IS NULL`);
+
+  const sinTipListaRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT TOP 10 cp.CP_NOMBRE nombre, cp.CP_TELEFONO telefono, c.CM2_NOMBRE campania,
+             DATEDIFF(DAY, cp.CP_FECHA_REGISTRO, GETDATE()) diasEsperando
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+      OUTER APPLY (
+        SELECT TOP 1 wlt.WLT_TIPIFICACION
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        ORDER BY wlt.WLT_FECHA DESC
+      ) ult
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+        AND ult.WLT_TIPIFICACION IS NULL
+      ORDER BY cp.CP_FECHA_REGISTRO ASC`);
+
+  return {
+    porCampania: porCampaniaRs.recordset,
+    porTipificacion,
+    productividadAgentes: productividadRs.recordset,
+    sinTipificar: { total: sinTipTotalRs.recordset[0].total, masAntiguos: sinTipListaRs.recordset },
+  };
+}
+
+// GET /api/operaciones/reportes-postulantes?desde=&hasta= — volumen por
+// campaña/fecha, desglose por tipificación, notas por agente y postulantes
+// sin tipificar (fugas), en un rango de fechas (default: últimos 30 días).
+async function getReportePostulantes(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const data = await _queryReportePostulantes(pool, desde, hasta);
+    res.json({ success: true, data: { desde, hasta, ...data } });
+  } catch (err) {
+    logger.error('operacionesController.getReportePostulantes', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el reporte de postulantes' });
+  }
+}
+
+// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — mismo
+// reporte de arriba, en un .xlsx de 3 hojas (mismo patrón que
+// ccConfigController.exportarTipificacionesCampania).
+async function exportarReportePostulantes(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const { porCampania, porTipificacion, sinTipificar } = await _queryReportePostulantes(pool, desde, hasta);
+
+    const wb = XLSX.utils.book_new();
+
+    const hojaCampania = porCampania.map((r) => ({
+      Fecha: r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : '',
+      Campaña: r.campania, Total: r.total,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaCampania.length ? hojaCampania : [{ Fecha: '', Campaña: '', Total: '' }]), 'Por campaña');
+
+    const hojaTip = porTipificacion.map((r) => ({ Tipificación: r.etiqueta, Total: r.total }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaTip.length ? hojaTip : [{ Tipificación: '', Total: '' }]), 'Por tipificación');
+
+    const hojaSinTip = sinTipificar.masAntiguos.map((r) => ({
+      Nombre: r.nombre, Teléfono: r.telefono, Campaña: r.campania, 'Días esperando': r.diasEsperando,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaSinTip.length ? hojaSinTip : [{ Nombre: '', Teléfono: '', Campaña: '', 'Días esperando': '' }]), 'Sin tipificar');
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte_postulantes_${desde}_a_${hasta}.xlsx"`);
+    res.send(buffer);
+  } catch (err) {
+    logger.error('operacionesController.exportarReportePostulantes', err);
+    res.status(500).json({ success: false, message: 'Error al generar el Excel' });
+  }
+}
+
 /* ── KPIs: indicadores clave consolidados de Operaciones/Call Center ── */
 
 // GET /api/operaciones/kpis — campañas activas, asignación del mes, agentes CC
@@ -839,6 +988,8 @@ module.exports = {
   crearMeta,
   eliminarMeta,
   getReporteDiario,
+  getReportePostulantes,
+  exportarReportePostulantes,
   getMiResumenAsesor,
   getHistorialAsignaciones,
 };

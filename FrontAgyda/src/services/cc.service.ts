@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
   CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
-  CCPostulante, CCMiSkill,
+  CCPostulante, CCMiSkill, CCPostulanteGestion, CCPostulanteNota, CCCampaniaSimple,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -92,6 +92,25 @@ export const ccService = {
   updateCampania: (id: number, body: Record<string, unknown>) => api.put(`/contact-center/campanias/${id}`, body).then((r) => r.data),
   deleteCampania: (id: number) => api.delete(`/contact-center/campanias/${id}`).then((r) => r.data),
   getPostulantes: (campaniaId: number) => d<CCPostulante[]>(api.get(`/contact-center/campanias/${campaniaId}/postulantes`)),
+  // Descarga directa (no JSON) — mismo patrón que mediaUrl: el token va por
+  // querystring porque es un <a href> de navegador, no una llamada de axios.
+  tipificacionesExcelUrl: (campaniaId: number) => {
+    const token = useAuthStore.getState().token
+    return `/api/contact-center/campanias/${campaniaId}/tipificaciones-excel${token ? `?token=${encodeURIComponent(token)}` : ''}`
+  },
+
+  // ── Gestión de postulantes (transversal a campañas asignadas) ──
+  getPostulantesGestion: (params: { q?: string; page?: number; pageSize?: number }) =>
+    api.get<{ data: CCPostulanteGestion[]; total: number }>('/contact-center/postulantes', { params })
+      .then((r) => r.data.data ? r.data : { data: [], total: 0 }),
+  tipificarPostulante: (postulanteId: number, body: { tipificacion: string; observaciones?: string }) =>
+    api.post(`/contact-center/postulantes/${postulanteId}/tipificacion`, body).then((r) => r.data),
+  getNotasPostulante: (postulanteId: number) => d<CCPostulanteNota[]>(api.get(`/contact-center/postulantes/${postulanteId}/notas`)),
+  crearNotaPostulante: (postulanteId: number, nota: string) =>
+    d<CCPostulanteNota>(api.post(`/contact-center/postulantes/${postulanteId}/notas`, { nota })),
+  getCampaniasParaPostulante: () => d<CCCampaniaSimple[]>(api.get('/contact-center/postulantes/campanias')),
+  crearPostulante: (body: { nombre: string; telefono: string; campaniaId: number }) =>
+    api.post('/contact-center/postulantes', body).then((r) => r.data),
 
   getGrupos: (campaniaId?: number) => d<CCGrupo[]>(api.get('/contact-center/grupos', { params: campaniaId ? { campaniaId } : {} })),
   createGrupo: (body: { campaniaId: number; nombre: string; descripcion?: string; icono?: string }) => api.post('/contact-center/grupos', body).then((r) => r.data),

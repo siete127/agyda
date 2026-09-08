@@ -5032,6 +5032,8 @@ async function ensureAllSchemas(pool) {
   await ensureLivechatSchema(pool);
   await ensureLivechatCampanasSchema(pool);
   await ensureContactCenterSchema(pool);
+  await ensureWebphoneTipificacionesSchema(pool);
+  await ensurePostulanteNotasSchema(pool);
   await ensureQrCodesSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
@@ -6656,6 +6658,65 @@ CREATE INDEX IX_CCO_CP_CAMPANIA ON dbo.CCO_CAMPANIA_POSTULANTES(CP_CAMPANIA_ID);
   logger.info('✅ Esquema de Contact Center omnicanal asegurado');
 }
 
+// Tipificación de llamadas del Webphone (pantalla-llamada, el "Web Form" que
+// VICIdial abre como iframe en el navegador del agente al conectar la
+// llamada) — catálogo fijo de disposiciones + observaciones libres. Vive
+// separado de CCO_TIPIFICACIONES (esa es para cerrar interacciones de chat/
+// WhatsApp del Contact Center) porque esto es un formulario público sin
+// sesión que solo necesita registrar el resultado de la llamada telefónica.
+async function ensureWebphoneTipificacionesSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.WEBPHONE_LLAMADAS_TIPIFICADAS', 'U') IS NULL
+CREATE TABLE dbo.WEBPHONE_LLAMADAS_TIPIFICADAS (
+  WLT_ID INT IDENTITY(1,1) PRIMARY KEY,
+  WLT_TELEFONO NVARCHAR(20) NOT NULL,
+  WLT_TIPIFICACION NVARCHAR(20) NOT NULL,
+  WLT_OBSERVACIONES NVARCHAR(500) NULL,
+  WLT_POSTULANTE_ID INT NULL,
+  WLT_EXTENSION NVARCHAR(20) NULL,
+  WLT_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.WEBPHONE_LLAMADAS_TIPIFICADAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WLT_TELEFONO')
+CREATE INDEX IX_WLT_TELEFONO ON dbo.WEBPHONE_LLAMADAS_TIPIFICADAS(WLT_TELEFONO);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Webphone tipificaciones schema:', err.message); }
+  }
+  logger.info('✅ Esquema de tipificación de llamadas (Webphone) asegurado');
+}
+
+// Bitácora de notas por postulante — usada por "Gestión de postulantes" del
+// Contact Center. PN_USUARIO_NOMBRE se desnormaliza para no depender de un
+// JOIN a usuarios al listar.
+async function ensurePostulanteNotasSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NULL
+CREATE TABLE dbo.CCO_POSTULANTE_NOTAS (
+  PN_ID INT IDENTITY(1,1) PRIMARY KEY,
+  PN_POSTULANTE_ID INT NOT NULL,
+  PN_USUARIO_ID INT NOT NULL,
+  PN_USUARIO_NOMBRE NVARCHAR(200) NULL,
+  PN_NOTA NVARCHAR(1000) NOT NULL,
+  PN_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_CCO_PN_POSTULANTE')
+ALTER TABLE dbo.CCO_POSTULANTE_NOTAS
+  ADD CONSTRAINT FK_CCO_PN_POSTULANTE FOREIGN KEY (PN_POSTULANTE_ID)
+    REFERENCES dbo.CCO_CAMPANIA_POSTULANTES(CP_ID);`,
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_PN_POSTULANTE')
+CREATE INDEX IX_CCO_PN_POSTULANTE ON dbo.CCO_POSTULANTE_NOTAS(PN_POSTULANTE_ID);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Postulante notas schema:', err.message); }
+  }
+  logger.info('✅ Esquema de notas de postulante asegurado');
+}
+
 // Email Marketing: campañas de correo masivo sobre los contactos que ya existen
 // en CRM_CONTACTOS — sin lista de contactos aparte. CONT_EMAIL_BAJA se respeta
 // siempre al armar destinatarios, sin importar el filtro de la campaña.
@@ -7372,6 +7433,29 @@ BEGIN
   );
   CREATE INDEX IX_QR_EVT_QR ON dbo.INTRANET_QR_EVENTOS(EVT_QR_ID);
   CREATE INDEX IX_QR_EVT_VISITANTE ON dbo.INTRANET_QR_EVENTOS(EVT_QR_ID, EVT_VISITANTE_ID, EVT_TIPO, EVT_FECHA);
+END
+`);
+    // Acortador propio: código de 10 caracteres que SIRVE el contenido del
+    // destino directo (proxy interno, ver qrGeneratorController.resolverUrlCorta)
+    // en vez de un redirect 302 — la barra de direcciones se queda en la URL
+    // corta todo el tiempo, incluso al recargar. UC_DESTINO puede ser una URL
+    // completa (http/https, se hace fetch y se reenvía tal cual) o una ruta
+    // relativa al mismo sitio (ej. '/postulacion-totis/registro').
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.INTRANET_URLS_CORTAS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_URLS_CORTAS (
+    UC_ID          INT IDENTITY(1,1) PRIMARY KEY,
+    UC_CODIGO      CHAR(10) NOT NULL,
+    UC_DESTINO     NVARCHAR(1000) NOT NULL,
+    UC_NOMBRE      NVARCHAR(200) NULL,
+    UC_AUTOR_ID    INT NULL,
+    UC_AUTOR_NOMBRE NVARCHAR(200) NULL,
+    UC_VISITAS     INT NOT NULL DEFAULT 0,
+    UC_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_URLS_CORTAS_CODIGO UNIQUE (UC_CODIGO)
+  );
+  CREATE INDEX IX_URLS_CORTAS_FECHA ON dbo.INTRANET_URLS_CORTAS(UC_FECHA_CREACION DESC);
 END
 `);
     logger.info('✅ Esquema de códigos QR asegurado');
