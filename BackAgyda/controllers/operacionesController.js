@@ -313,6 +313,31 @@ async function getProductividadDia(req, res) {
         GROUP BY neus_id, status_id
       `);
 
+    // Promedio diario de pausas de los 7 días previos a la fecha consultada
+    // (sin incluirla) — sirve de referencia para detectar si un agente se
+    // está pasando de lo que acostumbra, no de un límite fijo del sistema.
+    const historicoRs = await pool.request()
+      .input('fecha', sql.NVarChar, fecha)
+      .query(`
+        SELECT neus_id as agenteId, CAST(fecha_inicio AS date) as dia,
+               SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutosDia
+        FROM USUARIO_TIEMPOS
+        WHERE neus_id IN (${agenteIds.join(',')})
+          AND status_id IN (2,3,5,6)
+          AND CAST(fecha_inicio AS date) >= DATEADD(DAY, -7, CAST(@fecha AS date))
+          AND CAST(fecha_inicio AS date) < CAST(@fecha AS date)
+        GROUP BY neus_id, CAST(fecha_inicio AS date)
+      `);
+    const diasPorAgente = new Map();
+    for (const h of historicoRs.recordset) {
+      if (!diasPorAgente.has(h.agenteId)) diasPorAgente.set(h.agenteId, []);
+      diasPorAgente.get(h.agenteId).push(h.minutosDia);
+    }
+    const avgSemanalPorAgente = new Map();
+    for (const [id, dias] of diasPorAgente) {
+      avgSemanalPorAgente.set(id, Math.round(dias.reduce((a, b) => a + b, 0) / dias.length));
+    }
+
     // Estado ACTUAL (independiente del acumulado de arriba) — misma lógica que
     // getMiPanel: una fila sin fecha_fin es la pausa en curso ahora mismo.
     const pausaActivaRs = await pool.request().query(`
@@ -347,6 +372,7 @@ async function getProductividadDia(req, res) {
         estado,
         tipoPausa: pausaActiva ? (PAUSA_LABELS[pausaActiva.statusId] ?? 'pausa') : null,
         ultimaConexion: est?.ultimaConexion ?? null,
+        avgSemanalMin: avgSemanalPorAgente.get(id) ?? null,
       });
     }
     for (const p of pausasRs.recordset) {

@@ -14,7 +14,7 @@ import { useIsADorTI } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
-import { TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente } from '@/types/supervisores.types'
+import { TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente, type ProductividadAgente } from '@/types/supervisores.types'
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
 
@@ -370,75 +370,186 @@ function PanelEnVivoTab() {
 }
 
 /* ── Tab: Productividad del día ── */
-function ProductividadTab() {
-  const { data: productividad = [], isLoading } = useQuery({
-    queryKey: ['supervisores-productividad'],
-    queryFn: () => supervisoresService.getProductividad(),
-    refetchInterval: 15_000,
-  })
+const PAUSA_COLORES: Record<'banio' | 'comida' | 'capacitacion' | 'permiso', { bar: string; dot: string; label: string }> = {
+  banio: { bar: 'bg-blue-400', dot: 'bg-blue-400', label: 'Baño' },
+  comida: { bar: 'bg-orange-400', dot: 'bg-orange-400', label: 'Comida' },
+  capacitacion: { bar: 'bg-violet-400', dot: 'bg-violet-400', label: 'Capacitación' },
+  permiso: { bar: 'bg-emerald-400', dot: 'bg-emerald-400', label: 'Permiso' },
+}
 
-  if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10)
+}
 
-  if (productividad.length === 0) {
+/* ── Barras apiladas: minutos en pausa por agente, coloreadas por tipo ── */
+function GraficoPausasPorAgente({ productividad }: { productividad: ProductividadAgente[] }) {
+  const conPausas = productividad.filter((p) => p.totalPausaMin > 0)
+  if (conPausas.length === 0) {
     return (
-      <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
-        <BarChart3 className="h-8 w-8" />
-        <p className="text-sm">Sin datos de productividad para hoy</p>
+      <div className="card flex flex-col items-center gap-2 py-10 text-gray-400">
+        <BarChart3 className="h-6 w-6" />
+        <p className="text-xs">Nadie registró tiempo en pausa este día</p>
       </div>
     )
   }
+  const maxMin = Math.max(...conPausas.map((p) => p.totalPausaMin))
+  const ordenado = [...conPausas].sort((a, b) => b.totalPausaMin - a.totalPausaMin)
 
   return (
-    <div className="card overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-gray-100 text-left text-gray-500">
-            <th className="px-4 py-2.5 font-semibold">Agente</th>
-            <th className="px-4 py-2.5 font-semibold">Estado</th>
-            <th className="px-4 py-2.5 font-semibold">Baño</th>
-            <th className="px-4 py-2.5 font-semibold">Comida</th>
-            <th className="px-4 py-2.5 font-semibold">Capacitación</th>
-            <th className="px-4 py-2.5 font-semibold">Permiso</th>
-            <th className="px-4 py-2.5 font-semibold">Total pausas</th>
-          </tr>
-        </thead>
-        <tbody>
-          {productividad.map((p) => {
-            const enPausa = p.estado === 'pausa'
-            const BADGE_COLOR: Record<string, string> = {
-              disponible: 'bg-emerald-100 text-emerald-700',
-              pausa: 'bg-amber-100 text-amber-700',
-              no_disponible: 'bg-orange-100 text-orange-700',
-              desconectado: 'bg-gray-100 text-gray-500',
-            }
-            const DOT_COLOR: Record<string, string> = {
-              disponible: 'bg-emerald-500',
-              pausa: 'bg-amber-500',
-              no_disponible: 'bg-orange-500',
-              desconectado: 'bg-gray-400',
-            }
-            return (
-              <tr key={p.agenteId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                <td className="px-4 py-2.5 font-medium text-gray-900">{p.nombre}</td>
-                <td className="px-4 py-2.5">
-                  <span className={clsx(
-                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.68rem] font-semibold',
-                    BADGE_COLOR[p.estado],
-                  )}>
-                    <span className={clsx('h-1.5 w-1.5 rounded-full', DOT_COLOR[p.estado])} />
-                    {enPausa ? (TIPO_PAUSA_LABELS[p.tipoPausa ?? ''] ?? p.tipoPausa) : ESTADO_AGENTE_LABELS[p.estado]}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-gray-600">{p.banio} min</td>
-                <td className="px-4 py-2.5 text-gray-600">{p.comida} min</td>
-                <td className="px-4 py-2.5 text-gray-600">{p.capacitacion} min</td>
-                <td className="px-4 py-2.5 text-gray-600">{p.permiso} min</td>
-                <td className="px-4 py-2.5 font-semibold text-gray-900">{p.totalPausaMin} min</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div className="card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-900">Minutos en pausa por agente</p>
+        <div className="flex flex-wrap items-center gap-3">
+          {(Object.keys(PAUSA_COLORES) as (keyof typeof PAUSA_COLORES)[]).map((k) => (
+            <span key={k} className="flex items-center gap-1.5 text-[0.68rem] text-gray-500">
+              <span className={clsx('h-2 w-2 rounded-full', PAUSA_COLORES[k].dot)} />
+              {PAUSA_COLORES[k].label}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        {ordenado.map((p) => (
+          <div key={p.agenteId} className="flex items-center gap-3">
+            <p className="w-36 flex-shrink-0 truncate text-xs font-medium text-gray-700">{p.nombre}</p>
+            <div className="flex h-5 flex-1 overflow-hidden rounded-full bg-gray-100">
+              {(['banio', 'comida', 'capacitacion', 'permiso'] as const).map((k) => {
+                const minutos = p[k]
+                if (minutos <= 0) return null
+                return (
+                  <div
+                    key={k}
+                    className={clsx('h-full transition-all', PAUSA_COLORES[k].bar)}
+                    style={{ width: `${(minutos / maxMin) * 100}%` }}
+                    title={`${PAUSA_COLORES[k].label}: ${minutos} min`}
+                  />
+                )
+              })}
+            </div>
+            <p className="w-14 flex-shrink-0 text-right text-xs font-semibold text-gray-900">{p.totalPausaMin} min</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── Comparativo vs. promedio semanal: flecha + diferencia en minutos ── */
+function ComparativoSemanal({ p }: { p: ProductividadAgente }) {
+  if (p.avgSemanalMin == null) {
+    return <span className="text-[0.68rem] text-gray-400">Sin historial</span>
+  }
+  const diferencia = p.totalPausaMin - p.avgSemanalMin
+  if (Math.abs(diferencia) < 1) {
+    return <span className="text-[0.68rem] text-gray-500">≈ promedio ({p.avgSemanalMin} min)</span>
+  }
+  const arriba = diferencia > 0
+  return (
+    <span className={clsx('flex items-center gap-1 text-[0.68rem] font-medium', arriba ? 'text-red-600' : 'text-emerald-600')}>
+      {arriba ? '↑' : '↓'} {Math.abs(diferencia)} min vs. promedio ({p.avgSemanalMin} min)
+    </span>
+  )
+}
+
+function ProductividadTab() {
+  const [fecha, setFecha] = useState(hoyISO())
+  const esHoy = fecha === hoyISO()
+
+  const { data: productividad = [], isLoading } = useQuery({
+    queryKey: ['supervisores-productividad', fecha],
+    queryFn: () => supervisoresService.getProductividad(fecha),
+    refetchInterval: esHoy ? 15_000 : false,
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="card flex flex-wrap items-end gap-3 p-3">
+        <div>
+          <label className="mb-1 block text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Fecha</label>
+          <input
+            type="date"
+            value={fecha}
+            max={hoyISO()}
+            onChange={(e) => setFecha(e.target.value || hoyISO())}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/15"
+          />
+        </div>
+        {!esHoy && (
+          <button
+            onClick={() => setFecha(hoyISO())}
+            className="text-[0.68rem] font-medium text-brand hover:underline"
+          >
+            Volver a hoy
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+      ) : productividad.length === 0 ? (
+        <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
+          <BarChart3 className="h-8 w-8" />
+          <p className="text-sm">Sin datos de productividad para este día</p>
+        </div>
+      ) : (
+        <>
+          <GraficoPausasPorAgente productividad={productividad} />
+
+          <div className="card overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-gray-500">
+                  <th className="px-4 py-2.5 font-semibold">Agente</th>
+                  <th className="px-4 py-2.5 font-semibold">Estado</th>
+                  <th className="px-4 py-2.5 font-semibold">Baño</th>
+                  <th className="px-4 py-2.5 font-semibold">Comida</th>
+                  <th className="px-4 py-2.5 font-semibold">Capacitación</th>
+                  <th className="px-4 py-2.5 font-semibold">Permiso</th>
+                  <th className="px-4 py-2.5 font-semibold">Total pausas</th>
+                  <th className="px-4 py-2.5 font-semibold">Vs. promedio semanal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productividad.map((p) => {
+                  const enPausa = p.estado === 'pausa'
+                  const BADGE_COLOR: Record<string, string> = {
+                    disponible: 'bg-emerald-100 text-emerald-700',
+                    pausa: 'bg-amber-100 text-amber-700',
+                    no_disponible: 'bg-orange-100 text-orange-700',
+                    desconectado: 'bg-gray-100 text-gray-500',
+                  }
+                  const DOT_COLOR: Record<string, string> = {
+                    disponible: 'bg-emerald-500',
+                    pausa: 'bg-amber-500',
+                    no_disponible: 'bg-orange-500',
+                    desconectado: 'bg-gray-400',
+                  }
+                  return (
+                    <tr key={p.agenteId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{p.nombre}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={clsx(
+                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.68rem] font-semibold',
+                          BADGE_COLOR[p.estado],
+                        )}>
+                          <span className={clsx('h-1.5 w-1.5 rounded-full', DOT_COLOR[p.estado])} />
+                          {enPausa ? (TIPO_PAUSA_LABELS[p.tipoPausa ?? ''] ?? p.tipoPausa) : ESTADO_AGENTE_LABELS[p.estado]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-600">{p.banio} min</td>
+                      <td className="px-4 py-2.5 text-gray-600">{p.comida} min</td>
+                      <td className="px-4 py-2.5 text-gray-600">{p.capacitacion} min</td>
+                      <td className="px-4 py-2.5 text-gray-600">{p.permiso} min</td>
+                      <td className="px-4 py-2.5 font-semibold text-gray-900">{p.totalPausaMin} min</td>
+                      <td className="px-4 py-2.5"><ComparativoSemanal p={p} /></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )
 }

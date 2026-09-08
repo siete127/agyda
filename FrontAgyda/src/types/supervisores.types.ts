@@ -44,6 +44,9 @@ export interface ProductividadAgente {
   estado: EstadoAgente
   tipoPausa: string | null
   ultimaConexion: string | null
+  // Promedio de minutos en pausa por día de los 7 días previos a la fecha
+  // consultada (sin incluirla) — null si no hay historial suficiente.
+  avgSemanalMin: number | null
 }
 
 export const TIPO_PAUSA_LABELS: Record<string, string> = {
