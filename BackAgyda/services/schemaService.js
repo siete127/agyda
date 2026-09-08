@@ -5033,6 +5033,7 @@ async function ensureAllSchemas(pool) {
   await ensureLivechatCampanasSchema(pool);
   await ensureContactCenterSchema(pool);
   await ensureWebphoneTipificacionesSchema(pool);
+  await ensurePostulanteNotasSchema(pool);
   await ensureQrCodesSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
@@ -6684,6 +6685,36 @@ CREATE INDEX IX_WLT_TELEFONO ON dbo.WEBPHONE_LLAMADAS_TIPIFICADAS(WLT_TELEFONO);
     catch (err) { console.warn('⚠️ Webphone tipificaciones schema:', err.message); }
   }
   logger.info('✅ Esquema de tipificación de llamadas (Webphone) asegurado');
+}
+
+// Bitácora de notas por postulante — usada por "Gestión de postulantes" del
+// Contact Center. PN_USUARIO_NOMBRE se desnormaliza para no depender de un
+// JOIN a usuarios al listar.
+async function ensurePostulanteNotasSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NULL
+CREATE TABLE dbo.CCO_POSTULANTE_NOTAS (
+  PN_ID INT IDENTITY(1,1) PRIMARY KEY,
+  PN_POSTULANTE_ID INT NOT NULL,
+  PN_USUARIO_ID INT NOT NULL,
+  PN_USUARIO_NOMBRE NVARCHAR(200) NULL,
+  PN_NOTA NVARCHAR(1000) NOT NULL,
+  PN_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_CCO_PN_POSTULANTE')
+ALTER TABLE dbo.CCO_POSTULANTE_NOTAS
+  ADD CONSTRAINT FK_CCO_PN_POSTULANTE FOREIGN KEY (PN_POSTULANTE_ID)
+    REFERENCES dbo.CCO_CAMPANIA_POSTULANTES(CP_ID);`,
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_PN_POSTULANTE')
+CREATE INDEX IX_CCO_PN_POSTULANTE ON dbo.CCO_POSTULANTE_NOTAS(PN_POSTULANTE_ID);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Postulante notas schema:', err.message); }
+  }
+  logger.info('✅ Esquema de notas de postulante asegurado');
 }
 
 // Email Marketing: campañas de correo masivo sobre los contactos que ya existen

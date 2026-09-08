@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
-  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download,
+  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -13,6 +13,8 @@ import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, 
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
+import { TIPIFICACIONES_LLAMADA } from '@/constants/tipificacionesLlamada'
+import { NotasPostulanteModal } from './NotasPostulanteModal'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-ink-secondary'
@@ -867,6 +869,151 @@ function PostulantesDeCampaniaPanel({ campania }: any) {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ═══ Gestión de postulantes (transversal a campañas asignadas) ═══
+   Apartado nuevo, independiente de PostulantesDeCampaniaPanel (que sigue
+   siendo el listado simple dentro del detalle de cada campaña). Este ve
+   postulantes de TODAS las campañas visibles para el usuario sin elegir
+   campaña primero — el backend ya filtra por agente vs. gestor/admin. */
+const TIPIFICACION_BADGE = 'inline-flex items-center rounded-full px-2.5 py-1 text-[0.7rem] font-semibold'
+
+export function CCPostulantesGestionTab() {
+  const [q, setQ] = useState('')
+  const [qDebounced, setQDebounced] = useState('')
+  const [page, setPage] = useState(1)
+  const [notasDe, setNotasDe] = useState<number | null>(null)
+  const pageSize = 20
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    const t = setTimeout(() => { setQDebounced(q); setPage(1) }, 350)
+    return () => clearTimeout(t)
+  }, [q])
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['cc-postulantes-gestion', qDebounced, page],
+    queryFn: () => ccService.getPostulantesGestion({ q: qDebounced || undefined, page, pageSize }),
+  })
+
+  const postulantes = data?.data ?? []
+  const total = data?.total ?? 0
+  const totalPaginas = Math.max(1, Math.ceil(total / pageSize))
+
+  const tipificar = useMutation({
+    mutationFn: ({ id, tipificacion }: { id: number; tipificacion: string }) =>
+      ccService.tipificarPostulante(id, { tipificacion }),
+    onSuccess: () => {
+      toast.success('Tipificación actualizada')
+      qc.invalidateQueries({ queryKey: ['cc-postulantes-gestion'] })
+    },
+    onError: () => toast.error('No se pudo actualizar la tipificación'),
+  })
+
+  return (
+    <div className="space-y-4">
+      <Header icon={ClipboardList} titulo="Gestión de postulantes" subtitulo="Busca, tipifica y da seguimiento a los postulantes de tus campañas asignadas." />
+
+      <div className={clsx(card, 'flex items-center gap-2.5')}>
+        <Search className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por nombre o teléfono..."
+          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className={clsx(card, 'flex items-center justify-center py-10 text-ink-tertiary')}><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : postulantes.length === 0 ? (
+        <div className={clsx(card, 'py-10 text-center text-sm text-ink-tertiary')}>
+          {qDebounced ? 'Sin resultados para tu búsqueda.' : 'No tienes postulantes visibles todavía.'}
+        </div>
+      ) : (
+        <div className={clsx(cardBare, 'overflow-x-auto')}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+                <th className="px-4 py-3">Nombre</th>
+                <th className="px-4 py-3">Teléfono</th>
+                <th className="px-4 py-3">Campaña</th>
+                <th className="px-4 py-3">Tipificación</th>
+                <th className="px-4 py-3">Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {postulantes.map((p) => (
+                <tr key={p.id} className="border-b border-gray-50 last:border-0">
+                  <td className="px-4 py-3 font-semibold text-ink">{p.nombre}</td>
+                  <td className="px-4 py-3 text-ink-secondary">
+                    <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-tertiary" /> {p.telefono}</span>
+                  </td>
+                  <td className="px-4 py-3 text-ink-secondary">{p.campaniaNombre}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={p.tipificacion ?? ''}
+                        onChange={(e) => e.target.value && tipificar.mutate({ id: p.id, tipificacion: e.target.value })}
+                        className={clsx(TIPIFICACION_BADGE, p.tipificacion ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-ink-tertiary', 'cursor-pointer border-0 outline-none')}
+                      >
+                        <option value="" disabled>Sin tipificar</option>
+                        {TIPIFICACIONES_LLAMADA.map((t) => (
+                          <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {p.tipificacionFecha && (
+                      <p className="mt-1 text-[0.65rem] text-ink-tertiary">
+                        {new Date(p.tipificacionFecha).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setNotasDe(p.id)}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[0.72rem] font-semibold text-ink-secondary transition hover:bg-gray-50"
+                    >
+                      <StickyNote className="h-3.5 w-3.5" /> Notas
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-[0.75rem] text-ink-tertiary">
+          <p>{total} postulante{total === 1 ? '' : 's'} · página {page} de {totalPaginas}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 font-semibold disabled:opacity-40"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPaginas}
+              onClick={() => setPage((p) => Math.min(totalPaginas, p + 1))}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 font-semibold disabled:opacity-40"
+            >
+              Siguiente <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {notasDe !== null && (
+        <NotasPostulanteModal postulanteId={notasDe} onClose={() => setNotasDe(null)} />
+      )}
     </div>
   )
 }

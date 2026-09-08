@@ -129,6 +129,30 @@ export interface CCPostulante {
   fechaRegistro: string
 }
 
+// Fila del listado transversal de "Gestión de postulantes" — el mismo
+// postulante pero con la campaña a la que pertenece y su tipificación más
+// reciente (si alguna vez se le registró una llamada tipificada).
+export interface CCPostulanteGestion {
+  id: number
+  nombre: string
+  telefono: string
+  correo: string | null
+  fechaRegistro: string
+  campaniaId: number
+  campaniaNombre: string
+  tipificacion: string | null
+  observaciones: string | null
+  tipificacionFecha: string | null
+}
+
+export interface CCPostulanteNota {
+  id: number
+  usuarioId: number
+  usuarioNombre: string | null
+  nota: string
+  fecha: string
+}
+
 export interface CCGrupo {
   id: number
   campaniaId: number

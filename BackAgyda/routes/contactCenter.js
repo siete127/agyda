@@ -97,6 +97,12 @@ router.put('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestiona
 router.delete('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.deleteCampania);
 router.get('/campanias/:id/postulantes', authenticateToken, requireActionAccess(M, 'ver'), cfg.listPostulantesCampania);
 router.get('/campanias/:id/tipificaciones-excel', authenticateToken, requireActionAccess(M, 'ver'), cfg.exportarTipificacionesCampania);
+
+// ── Gestión de postulantes (transversal a campañas asignadas al agente) ──
+router.get('/postulantes', authenticateToken, requireActionAccess(M, 'ver'), cfg.listPostulantesGestion);
+router.post('/postulantes/:id/tipificacion', authenticateToken, requireActionAccess(M, 'atender'), cfg.tipificarPostulante);
+router.get('/postulantes/:id/notas', authenticateToken, requireActionAccess(M, 'ver'), cfg.listNotasPostulante);
+router.post('/postulantes/:id/notas', authenticateToken, requireActionAccess(M, 'atender'), cfg.crearNotaPostulante);
 router.get('/campanias/:id/supervisores', authenticateToken, requireActionAccess(M, 'ver'), cfg.getSupervisoresDeCampania);
 router.post('/campanias/:id/supervisores', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.asignarSupervisorACampania);
 router.delete('/campanias/:id/supervisores/:usuarioId', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.quitarSupervisorDeCampania);

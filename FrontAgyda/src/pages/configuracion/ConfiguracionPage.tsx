@@ -19,7 +19,7 @@ import { BrandingTab } from './BrandingTab'
 import { InstitucionalTab } from './InstitucionalTab'
 import { VentasTab } from './VentasTab'
 import { FacturacionTab } from './FacturacionTab'
-import { CCSkillsTab, CCConfigTab, CCSimuladorTab } from './ContactCenterTabs'
+import { CCSkillsTab, CCConfigTab, CCSimuladorTab, CCPostulantesGestionTab } from './ContactCenterTabs'
 import { QrGeneratorTab } from './QrGeneratorTab'
 import { MascotaTab } from './MascotaTab'
 import { BotonesHeaderTab } from './BotonesHeaderTab'
@@ -63,6 +63,7 @@ const SCREENS: Record<string, ComponentType> = {
   ventas: VentasTab,
   facturacion: FacturacionTab,
   'cc-skills': CCSkillsTab,
+  'cc-postulantes': CCPostulantesGestionTab,
   'cc-config': CCConfigTab,
   'cc-simulador': CCSimuladorTab,
   'qr-generator': QrGeneratorTab,
