@@ -7,6 +7,46 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import type { LivechatHistorialFiltros } from '@/types/livechat.types'
 
+function EstrellasPromedio({ rating }: { rating: number | null }) {
+  if (rating == null) return <span className="text-xs text-ink-tertiary">Sin calificaciones</span>
+  return (
+    <div className="flex items-center gap-1" title={`${rating.toFixed(1)} de 5`}>
+      <Star size={13} className="fill-amber-400 text-amber-400" />
+      <span className="text-sm font-semibold text-ink">{rating.toFixed(1)}</span>
+    </div>
+  )
+}
+
+// Resumen de calificación promedio por agente, respetando los mismos
+// filtros que la lista de abajo — para detectar de un vistazo quién tiene
+// mejor/peor calificación sin tener que abrir cada conversación.
+function ResumenRatingPorAgente({ filtros }: { filtros: LivechatHistorialFiltros }) {
+  const { data: ranking = [], isLoading } = useQuery({
+    queryKey: ['livechat-historial-rating', filtros],
+    queryFn: () => livechatService.getHistorialRatingPorAgente(filtros),
+  })
+
+  if (isLoading) return null
+  if (ranking.length === 0) return null
+
+  return (
+    <div className="rounded-xl border border-surface-border bg-surface p-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-tertiary">Calificación promedio por agente</p>
+      <div className="flex flex-wrap gap-2">
+        {ranking.map((r) => (
+          <div key={r.agenteId} className="flex items-center gap-2.5 rounded-lg border border-surface-border bg-card px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink truncate">{r.agenteNombre || 'Sin nombre'}</p>
+              <p className="text-[10px] text-ink-tertiary">{r.totalCalificadas} de {r.totalConversaciones} calificadas</p>
+            </div>
+            <EstrellasPromedio rating={r.ratingPromedio} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function formatFecha(iso: string | null) {
   if (!iso) return '—'
   const d = new Date(iso)
@@ -57,6 +97,18 @@ export function HistorialConversacionesPanel({ puedeSupervisar, agenteId }: { pu
     queryFn: () => livechatService.getHistorial(filtros),
   })
 
+  const { data: campanias = [] } = useQuery({
+    queryKey: ['livechat-campanias'],
+    queryFn: () => livechatService.getCampanias(),
+    enabled: puedeSupervisar,
+  })
+
+  const { data: skills = [] } = useQuery({
+    queryKey: ['livechat-grupos', filtros.campaniaId],
+    queryFn: () => livechatService.getGrupos(filtros.campaniaId!),
+    enabled: puedeSupervisar && filtros.campaniaId != null,
+  })
+
   const exportar = useMutation({
     mutationFn: () => livechatService.exportHistorialCsv(filtros),
     onError: () => toast.error('No se pudo exportar el historial'),
@@ -68,6 +120,8 @@ export function HistorialConversacionesPanel({ puedeSupervisar, agenteId }: { pu
 
   return (
     <div className="space-y-4">
+      {puedeSupervisar && <ResumenRatingPorAgente filtros={filtros} />}
+
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-surface-border bg-surface p-3">
         <div>
           <label className="mb-1 block text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Desde</label>
@@ -87,6 +141,40 @@ export function HistorialConversacionesPanel({ puedeSupervisar, agenteId }: { pu
             className="rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
           />
         </div>
+        {puedeSupervisar && (
+          <>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Campaña</label>
+              <select
+                value={filtros.campaniaId ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value ? Number(e.target.value) : undefined
+                  setFiltros((prev) => ({ ...prev, campaniaId: v, grupoId: undefined }))
+                }}
+                className="rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+              >
+                <option value="">Todas</option>
+                {campanias.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Skill</label>
+              <select
+                value={filtros.grupoId ?? ''}
+                onChange={(e) => setFiltros((prev) => ({ ...prev, grupoId: e.target.value ? Number(e.target.value) : undefined }))}
+                disabled={filtros.campaniaId == null}
+                className="rounded-lg border border-surface-border bg-card px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none disabled:opacity-50"
+              >
+                <option value="">Todos</option>
+                {skills.map((s) => (
+                  <option key={s.id} value={s.id}>{s.nombre}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
         <div className="flex-1 min-w-[160px]">
           <label className="mb-1 block text-xs font-semibold text-ink-tertiary uppercase tracking-wide">Buscar</label>
           <div className="relative">
