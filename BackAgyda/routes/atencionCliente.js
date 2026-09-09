@@ -50,10 +50,25 @@ router.get('/incidencias/evidencias/:evidenciaId/download', auth.authenticateTok
 router.delete('/incidencias/evidencias/:evidenciaId', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.deleteEvidencia);
 
 // ── Casos (unificado) ─────────────────────────────────────────────────────
-// Fase 1 del rediseño: solo lectura por ahora (placeholder). El CRUD completo
-// llega en Fase 3, reemplazando gradualmente a Consultas/Aclaraciones/Quejas/
-// Incidencias — ver plan en curso, sección "Diseño de las 9 fases".
+// Reemplaza gradualmente a Consultas/Aclaraciones/Quejas/Incidencias. Para
+// CASO_TIPO='queja', el control de acceso extra (códigos de empleado) se aplica
+// DENTRO del controlador, no aquí — decisión de diseño, ver casoController.js.
+// Rutas específicas ANTES de /casos/:id para que no colisionen.
 router.get('/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.list);
+router.post('/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.create);
+router.get('/casos/evidencias/:evidenciaId/download', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.downloadEvidencia);
+router.delete('/casos/evidencias/:evidenciaId', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.deleteEvidencia);
+router.get('/casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.getById);
+router.delete('/casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.deleteCaso);
+router.patch('/casos/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.updateEstatus);
+router.patch('/casos/:id/solucion', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.updateSolucion);
+router.get('/casos/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.listComentarios);
+router.post('/casos/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.addComentario);
+router.get('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.listEvidencias);
+router.post('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), uploadCrmDocumento.single('file'), caso.subirEvidencia);
+router.get('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.getAccionCorrectiva);
+router.post('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.createAccionCorrectiva);
+router.get('/clientes/:id/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), caso.listByContacto);
 
 // ── Renovaciones y fechas importantes ────────────────────────────────────────
 router.get('/clientes/:id/fechas-importantes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteFechas.listByContacto);

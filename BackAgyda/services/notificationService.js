@@ -27,6 +27,8 @@ const PUSH_CONFIG_POR_TIPO = {
   'cliente-incidencia-sla-vencido': { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/incidencias' },
   'cliente-incidencia-portal':      { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/incidencias' },
   'cliente-inactivo':               { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/clientes' },
+  'caso-asignado':                  { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/casos' },
+  'caso-automatico':                { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/casos' },
   rat_revision_pendiente:     { titulo: 'AGYDA — Protección de Datos', url: '/legal/proteccion-datos' },
   cumplimiento_vencimiento:   { titulo: 'AGYDA — Cumplimiento Normativo', url: '/legal/cumplimiento-normativo' },
   mc_accion_vencimiento:      { titulo: 'AGYDA — Mejora Continua', url: '/direccion-general/mejora-continua' },

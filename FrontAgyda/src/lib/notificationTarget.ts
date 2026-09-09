@@ -59,6 +59,9 @@ export function notificationTarget(n: NotificationItem): string | null {
   // Consultas / aclaraciones (CRM / atención a clientes)
   if (tipo === 'consulta_nueva' || tipo === 'aclaracion_nueva') return '/atencion-cliente'
 
+  // Casos unificados
+  if (tipo === 'caso-asignado' || tipo === 'caso-automatico') return '/atencion-cliente/casos'
+
   // Seguimiento activo a clientes
   if (tipo === 'cliente-tarea-vence' || tipo === 'cliente-seguimiento-hoy') return '/atencion-cliente/mis-tareas'
   if (tipo === 'cliente-incidencia-sla-riesgo' || tipo === 'cliente-incidencia-sla-vencido' ||
