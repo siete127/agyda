@@ -6,14 +6,19 @@ const notificationService = require('../services/notificationService');
 const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
 const { listTenants } = require('../config/tenants');
 
-// Motor de SLA de las incidencias de cliente (CLI_INCIDENCIAS) — equivalente al
+// Motor de SLA de las incidencias de cliente — equivalente al
 // ticketSlaCronController de TI. Cada 10 min revisa las incidencias abiertas:
 //   - En riesgo (>= 80% del tiempo de SLA consumido, aún no vencido): avisa al asignado.
-//   - Vencida (INC_FECHA_LIMITE_SLA < ahora): avisa al asignado + supervisores y
+//   - Vencida (fecha límite SLA < ahora): avisa al asignado + supervisores y
 //     escala el estatus a 'escalado'.
-// Los BIT INC_SLA_RIESGO_NOTIF / INC_SLA_VENCIDO_NOTIF evitan repetir el aviso.
-// No se pausa el reloj en 'en_espera_cliente' (CLI_INCIDENCIAS no lleva acumulado
-// de espera, a diferencia de TICKETS).
+// Los BIT *_SLA_RIESGO_NOTIF / *_SLA_VENCIDO_NOTIF evitan repetir el aviso.
+// No se pausa el reloj en 'en_espera_cliente'.
+//
+// Fase 6 del rediseño de Atención al Cliente: el motor corre sobre DOS tablas
+// durante la convivencia — CASOS (tipo 'incidencia', destino nuevo de todas las
+// creaciones automáticas desde Fase 6) y CLI_INCIDENCIAS (registros viejos que
+// aún no se resuelven; deja de recibir escrituras nuevas). Cuando ya no queden
+// incidencias abiertas en CLI_INCIDENCIAS, esa mitad puede retirarse (Fase 9).
 
 const UMBRAL_RIESGO = 0.8;
 
@@ -131,9 +136,109 @@ async function runSlaCheckTenant(tenantKey) {
   }
 }
 
+// ── SLA sobre CASOS (tipo 'incidencia') — Fase 6 ────────────────────────────
+async function runSlaCheckCasosTenant(tenantKey) {
+  let pool;
+  try {
+    pool = await databaseService.getPool(tenantKey);
+  } catch (e) {
+    console.error(`[CASO INC SLA][${tenantKey}] Sin pool:`, e.message);
+    return;
+  }
+
+  let casos;
+  try {
+    casos = await pool.request().query(`
+      SELECT k.CASO_ID AS id, k.CASO_FOLIO AS folio, k.CASO_TITULO AS titulo, k.CASO_PRIORIDAD AS prioridad,
+             k.CASO_ESTATUS AS estatus, k.CASO_ASIGNADO_A AS asignadoA,
+             k.CASO_SLA_HORAS AS slaHoras, k.CASO_FECHA_CREACION AS fechaCreacion,
+             k.CASO_FECHA_LIMITE_SLA AS fechaLimiteSla,
+             k.CASO_SLA_RIESGO_NOTIF AS riesgoNotif, k.CASO_SLA_VENCIDO_NOTIF AS vencidoNotif,
+             DATEDIFF(MINUTE, k.CASO_FECHA_CREACION, GETDATE()) AS minutosTranscurridos,
+             c.CONT_NOMBRE AS contactoNombre
+      FROM CASOS k
+      INNER JOIN CRM_CONTACTOS c ON c.CONT_ID = k.CASO_CONTACTO_ID
+      WHERE k.CASO_ACTIVO = 1
+        AND k.CASO_TIPO = 'incidencia'
+        AND k.CASO_ESTATUS NOT IN ('resuelto','cerrado')
+        AND k.CASO_FECHA_LIMITE_SLA IS NOT NULL
+    `);
+  } catch (e) {
+    console.error(`[CASO INC SLA][${tenantKey}] Error consultando casos:`, e.message);
+    return;
+  }
+
+  let supervisores = null;
+  const getSupervisores = async () => {
+    if (supervisores === null) {
+      try { supervisores = await getUsuariosParaNotificarCorreo('atencion-cliente', tenantKey); }
+      catch { supervisores = []; }
+    }
+    return supervisores;
+  };
+
+  for (const c of casos.recordset) {
+    const vencida = c.fechaLimiteSla && new Date(c.fechaLimiteSla) < new Date();
+    const minSla = (c.slaHoras || 0) * 60;
+    const ratio = minSla > 0 ? c.minutosTranscurridos / minSla : 0;
+
+    try {
+      if (vencida) {
+        if (c.vencidoNotif) continue;
+
+        const destinatarios = new Set();
+        if (c.asignadoA) destinatarios.add(c.asignadoA);
+        for (const s of await getSupervisores()) destinatarios.add(s);
+
+        for (const uid of destinatarios) {
+          await notificarCanales(pool, tenantKey, {
+            usuarioId: uid,
+            tipo: 'cliente-incidencia-sla-vencido',
+            mensaje: `SLA vencido: incidencia ${c.folio} — ${c.titulo}`,
+            dataExtra: { casoId: c.id, folio: c.folio },
+            emailFn: (u) => emailService.sendIncidenciaSlaEmail({
+              nombre: u.nombre, correo: u.correo, folio: c.folio, titulo: c.titulo,
+              contactoNombre: c.contactoNombre, prioridad: c.prioridad,
+              fechaLimiteSla: c.fechaLimiteSla, nivel: 'vencido',
+            }),
+          });
+        }
+
+        await pool.request().input('id', sql.Int, c.id).query(`
+          UPDATE CASOS
+          SET CASO_SLA_VENCIDO_NOTIF = 1,
+              CASO_ESTATUS = CASE WHEN CASO_ESTATUS IN ('pendiente','en_proceso','en_espera_cliente')
+                                  THEN 'escalado' ELSE CASO_ESTATUS END
+          WHERE CASO_ID = @id
+        `);
+        continue;
+      }
+
+      if (!c.riesgoNotif && ratio >= UMBRAL_RIESGO) {
+        await notificarCanales(pool, tenantKey, {
+          usuarioId: c.asignadoA,
+          tipo: 'cliente-incidencia-sla-riesgo',
+          mensaje: `SLA en riesgo: incidencia ${c.folio} — ${c.titulo}`,
+          dataExtra: { casoId: c.id, folio: c.folio },
+          emailFn: (u) => emailService.sendIncidenciaSlaEmail({
+            nombre: u.nombre, correo: u.correo, folio: c.folio, titulo: c.titulo,
+            contactoNombre: c.contactoNombre, prioridad: c.prioridad,
+            fechaLimiteSla: c.fechaLimiteSla, nivel: 'riesgo',
+          }),
+        });
+        await pool.request().input('id', sql.Int, c.id)
+          .query(`UPDATE CASOS SET CASO_SLA_RIESGO_NOTIF = 1 WHERE CASO_ID = @id`);
+      }
+    } catch (e) {
+      console.error(`[CASO INC SLA][${tenantKey}] Error procesando caso ${c.id}:`, e.message);
+    }
+  }
+}
+
 async function runSlaCheck() {
   for (const { key } of listTenants()) {
-    await runSlaCheckTenant(key);
+    await runSlaCheckTenant(key);       // CLI_INCIDENCIAS (legacy, en extinción)
+    await runSlaCheckCasosTenant(key);  // CASOS tipo 'incidencia' (Fase 6)
   }
 }
 

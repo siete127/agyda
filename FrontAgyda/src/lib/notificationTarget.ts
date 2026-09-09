@@ -15,6 +15,7 @@ export function notificationTarget(n: NotificationItem): string | null {
   const noticiaId = num(d.noticiaId)
   const canalId = num(d.canalId)
   const documentoId = num(d.documentoId ?? d.docId)
+  const casoId = num(d.casoId)
 
   // Tickets — cualquier tipo que empiece con "ticket" o traiga ticketId
   if (ticketId || tipo.includes('ticket')) {
@@ -59,13 +60,16 @@ export function notificationTarget(n: NotificationItem): string | null {
   // Consultas / aclaraciones (CRM / atención a clientes)
   if (tipo === 'consulta_nueva' || tipo === 'aclaracion_nueva') return '/atencion-cliente'
 
-  // Casos unificados
-  if (tipo === 'caso-asignado' || tipo === 'caso-automatico') return '/atencion-cliente/casos'
+  // Casos unificados — incluye las incidencias automáticas (SLA, encuesta,
+  // portal) que desde la Fase 6 se crean como Caso tipo 'incidencia'.
+  if (casoId || tipo === 'caso-asignado' || tipo === 'caso-automatico' ||
+      tipo === 'cliente-incidencia-sla-riesgo' || tipo === 'cliente-incidencia-sla-vencido' ||
+      tipo === 'cliente-incidencia-portal' || tipo === 'cliente-incidencia-automatica') {
+    return casoId ? `/atencion-cliente/casos?casoId=${casoId}` : '/atencion-cliente/casos'
+  }
 
   // Seguimiento activo a clientes
   if (tipo === 'cliente-tarea-vence' || tipo === 'cliente-seguimiento-hoy') return '/atencion-cliente/mis-tareas'
-  if (tipo === 'cliente-incidencia-sla-riesgo' || tipo === 'cliente-incidencia-sla-vencido' ||
-      tipo === 'cliente-incidencia-portal' || tipo === 'cliente-incidencia-automatica') return '/atencion-cliente/incidencias'
   if (tipo === 'cliente-inactivo' || tipo === 'cliente-nuevo-asignado' || tipo === 'cliente-tarea-asignada') return '/atencion-cliente/clientes'
   if (tipo === 'cliente-pago-por-vencer' || tipo === 'crm-recordatorio-pago' ||
       tipo === 'cliente-pago-confirmado' || tipo === 'cliente-fecha-importante') return '/crm-interno'

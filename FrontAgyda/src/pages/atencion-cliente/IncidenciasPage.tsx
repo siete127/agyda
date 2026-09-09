@@ -59,6 +59,13 @@ export function IncidenciasPage() {
         </div>
       </div>
 
+      <button
+        onClick={() => navigate('/atencion-cliente/casos?tipo=incidencia')}
+        className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-left text-[0.78rem] text-amber-800 hover:bg-amber-100 transition-colors"
+      >
+        Esta pantalla está en reemplazo. Las incidencias nuevas (SLA, encuestas, portal) ya se crean como <strong>Casos</strong> — abre la vista unificada de Casos&nbsp;›
+      </button>
+
       <div className="flex flex-wrap gap-2">
         <select value={filtroEstatus} onChange={(e) => setFiltroEstatus(e.target.value as IncidenciaEstatus | '')} className="field w-auto">
           <option value="">Todos los estatus</option>

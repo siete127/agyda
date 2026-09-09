@@ -2,7 +2,7 @@ const sql       = require('mssql');
 const crypto    = require('crypto');
 const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
-const clienteIncidencias = require('./clienteIncidenciasController');
+const casoController = require('./casoController');
 const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
 const notificationService = require('../services/notificationService');
 const { sanitizeFilename, decryptBuffer } = require('../utils/cryptoDocs');
@@ -153,14 +153,16 @@ exports.getPortal = async (req, res) => {
     // Nunca se exponen datos internos (asignado, comentarios, evidencias).
     let incidencias = [], pagos = [], renovaciones = [];
     if (esCliente) {
+      // Fase 6: el portal lee las incidencias desde CASOS (tipo 'incidencia').
+      // Nunca se exponen asignado / comentarios / evidencias.
       const incRs = await pool.request().input('id', sql.Int, contactoId).query(`
-        SELECT INC_ID as id, INC_FOLIO as folio, INC_TITULO as titulo, INC_CATEGORIA as categoria,
-               INC_PRIORIDAD as prioridad, INC_ESTATUS as estatus, INC_FECHA_CREACION as fechaCreacion,
-               INC_FECHA_LIMITE_SLA as fechaLimiteSla, INC_SOLUCION_PROPUESTA as solucionPropuesta,
-               INC_FECHA_COMPROMISO as fechaCompromiso, INC_FECHA_RESOLUCION as fechaResolucion
-        FROM CLI_INCIDENCIAS
-        WHERE INC_CONTACTO_ID=@id AND INC_ACTIVO=1
-        ORDER BY INC_FECHA_CREACION DESC
+        SELECT CASO_ID as id, CASO_FOLIO as folio, CASO_TITULO as titulo, CASO_CATEGORIA as categoria,
+               CASO_PRIORIDAD as prioridad, CASO_ESTATUS as estatus, CASO_FECHA_CREACION as fechaCreacion,
+               CASO_FECHA_LIMITE_SLA as fechaLimiteSla, CASO_SOLUCION_PROPUESTA as solucionPropuesta,
+               CASO_FECHA_COMPROMISO as fechaCompromiso, CASO_FECHA_RESOLUCION as fechaResolucion
+        FROM CASOS
+        WHERE CASO_CONTACTO_ID=@id AND CASO_ACTIVO=1 AND CASO_TIPO='incidencia'
+        ORDER BY CASO_FECHA_CREACION DESC
       `);
       incidencias = incRs.recordset;
 
@@ -277,8 +279,9 @@ exports.crearIncidenciaPortal = async (req, res) => {
 
     const cat = categoria ? String(categoria).trim().slice(0, 50) : null;
 
-    const resultado = await clienteIncidencias.crearIncidenciaAutomatica(
+    const resultado = await casoController.crearCasoAutomatico(
       {
+        tipo: 'incidencia',
         contactoId: tk.contactoId,
         titulo: tit,
         descripcion: desc,
