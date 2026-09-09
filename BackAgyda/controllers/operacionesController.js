@@ -1,9 +1,14 @@
+const fs = require('fs');
+const path = require('path');
 const sql = require('mssql');
 const XLSX = require('xlsx');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
 const { logAudit } = require('../services/auditService');
 const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
+const { RDL_DIR } = require('../middleware/rdlUpload');
+const reportBuilderCatalog = require('../services/reportBuilderCatalog');
+const reportBuilderRunner = require('../services/reportBuilderRunner');
 const logger = global.logger || require('../utils/logger');
 
 async function listCampanias(req, res) {
@@ -991,6 +996,610 @@ async function getHistorialAsignaciones(req, res) {
   }
 }
 
+/* ── Suite de Reportes: catálogo de definiciones .rdl / .rdlc (SQL Server
+   Reporting Services) subidas por el equipo, organizadas en carpetas propias
+   (CC_RDL_CARPETAS) y con seguridad de acceso por reporte: roles permitidos
+   (CSV de AD/TI/CC/ST/VE) + usuarios sueltos (CSV de NEUS_ID). Un reporte sin
+   roles ni usuarios es público para todo el que entra al módulo. AD/TI siempre
+   ven y administran todo.
+   El archivo físico vive en RDL_DIR y se sirve como estático en /suite-reportes. ── */
+
+const RDL_ROLES_VALIDOS = ['AD', 'TI', 'CC', 'ST', 'VE'];
+
+async function ensureRdlSchema(pool) {
+  try {
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='CC_RDL_CARPETAS')
+      CREATE TABLE CC_RDL_CARPETAS (
+        RDC_ID          INT IDENTITY PRIMARY KEY,
+        RDC_NOMBRE      NVARCHAR(200) NOT NULL,
+        RDC_CREADO_POR  SMALLINT      NULL,
+        RDC_FECHA       DATETIME      NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT UQ_RDC_NOMBRE UNIQUE (RDC_NOMBRE)
+      )
+    `);
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='CC_RDL_REPORTES')
+      CREATE TABLE CC_RDL_REPORTES (
+        RDL_ID            INT IDENTITY PRIMARY KEY,
+        RDL_NOMBRE        NVARCHAR(200)  NOT NULL,
+        RDL_DESCRIPCION   NVARCHAR(1000) NULL,
+        RDL_CARPETA       NVARCHAR(200)  NOT NULL DEFAULT 'General',
+        RDL_CARPETA_ID    INT            NULL,
+        RDL_ARCHIVO       NVARCHAR(400)  NOT NULL,
+        RDL_ARCHIVO_ORIG  NVARCHAR(400)  NOT NULL,
+        RDL_TAMANO        INT            NOT NULL DEFAULT 0,
+        RDL_VERSION_RDL   NVARCHAR(50)   NULL,
+        RDL_COMPATIBLE    BIT            NOT NULL DEFAULT 1,
+        RDL_METADATA      NVARCHAR(MAX)  NULL,
+        RDL_ROLES         NVARCHAR(200)  NULL,
+        RDL_USUARIOS      NVARCHAR(MAX)  NULL,
+        RDL_SUBIDO_POR    SMALLINT       NULL,
+        RDL_SUBIDO_NOMBRE NVARCHAR(200)  NULL,
+        RDL_FECHA         DATETIME       NOT NULL DEFAULT GETDATE()
+      )
+    `);
+    // Migraciones suaves para instalaciones que ya tenían la tabla vieja
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CC_RDL_REPORTES' AND COLUMN_NAME='RDL_CARPETA_ID')
+      ALTER TABLE CC_RDL_REPORTES ADD RDL_CARPETA_ID INT NULL
+    `);
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CC_RDL_REPORTES' AND COLUMN_NAME='RDL_ROLES')
+      ALTER TABLE CC_RDL_REPORTES ADD RDL_ROLES NVARCHAR(200) NULL
+    `);
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CC_RDL_REPORTES' AND COLUMN_NAME='RDL_USUARIOS')
+      ALTER TABLE CC_RDL_REPORTES ADD RDL_USUARIOS NVARCHAR(MAX) NULL
+    `);
+    // Sembrar carpetas desde los valores de texto que ya existían y enlazar
+    await pool.request().query(`
+      INSERT INTO CC_RDL_CARPETAS (RDC_NOMBRE)
+      SELECT DISTINCT RDL_CARPETA FROM CC_RDL_REPORTES r
+      WHERE RDL_CARPETA IS NOT NULL AND LTRIM(RTRIM(RDL_CARPETA)) <> ''
+        AND NOT EXISTS (SELECT 1 FROM CC_RDL_CARPETAS c WHERE c.RDC_NOMBRE = r.RDL_CARPETA)
+    `);
+    await pool.request().query(`
+      UPDATE r SET r.RDL_CARPETA_ID = c.RDC_ID
+      FROM CC_RDL_REPORTES r JOIN CC_RDL_CARPETAS c ON c.RDC_NOMBRE = r.RDL_CARPETA
+      WHERE r.RDL_CARPETA_ID IS NULL
+    `);
+  } catch (e) {
+    logger.warn('operacionesController.ensureRdlSchema', e && e.message);
+  }
+}
+
+// Normaliza el CSV de roles: solo valores válidos, en mayúsculas, sin duplicados.
+function _parseRoles(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : String(raw).split(',');
+  return [...new Set(arr.map((r) => String(r).trim().toUpperCase()).filter((r) => RDL_ROLES_VALIDOS.includes(r)))];
+}
+// Normaliza el CSV de ids de usuario.
+function _parseUsuarios(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : String(raw).split(',');
+  return [...new Set(arr.map((n) => parseInt(String(n).trim(), 10)).filter((n) => Number.isInteger(n) && n > 0))];
+}
+
+// ¿El usuario `user` puede VER el reporte `row`?
+function _puedeVerRdl(user, row) {
+  const tipo = (user?.tipoUsuario || '').toString().toUpperCase();
+  if (tipo === 'AD' || tipo === 'TI') return true; // administradores: todo
+  const roles = _parseRoles(row.RDL_ROLES);
+  const usuarios = _parseUsuarios(row.RDL_USUARIOS);
+  if (roles.length === 0 && usuarios.length === 0) return true; // público
+  if (roles.includes(tipo)) return true;
+  if (user?.id && usuarios.includes(Number(user.id))) return true;
+  return false;
+}
+
+function _mapRdl(r) {
+  let metadata = null;
+  try { metadata = r.RDL_METADATA ? JSON.parse(r.RDL_METADATA) : null; } catch (_) { metadata = null; }
+  return {
+    id: r.RDL_ID,
+    nombre: r.RDL_NOMBRE,
+    descripcion: r.RDL_DESCRIPCION || '',
+    carpeta: r.RDL_CARPETA || 'General',
+    carpetaId: r.RDL_CARPETA_ID ?? null,
+    archivo: r.RDL_ARCHIVO,
+    archivoOriginal: r.RDL_ARCHIVO_ORIG,
+    tamano: r.RDL_TAMANO,
+    versionRdl: r.RDL_VERSION_RDL || null,
+    compatible: !!r.RDL_COMPATIBLE,
+    metadata,
+    roles: _parseRoles(r.RDL_ROLES),
+    usuarios: _parseUsuarios(r.RDL_USUARIOS),
+    subidoPor: r.RDL_SUBIDO_POR,
+    subidoNombre: r.RDL_SUBIDO_NOMBRE || '',
+    fecha: r.RDL_FECHA,
+    url: `/suite-reportes/${encodeURIComponent(r.RDL_ARCHIVO)}`,
+  };
+}
+
+/* ── Carpetas ── */
+
+// GET /api/operaciones/suite-reportes/carpetas
+async function listRdlCarpetas(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().query(`
+      SELECT c.RDC_ID as id, c.RDC_NOMBRE as nombre, c.RDC_FECHA as fecha,
+             (SELECT COUNT(*) FROM CC_RDL_REPORTES r WHERE r.RDL_CARPETA_ID = c.RDC_ID) as reportes
+      FROM CC_RDL_CARPETAS c ORDER BY c.RDC_NOMBRE ASC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('operacionesController.listRdlCarpetas', err);
+    res.status(500).json({ success: false, message: 'Error al listar las carpetas' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/carpetas  { nombre }
+async function crearRdlCarpeta(req, res) {
+  try {
+    const nombre = (req.body.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ success: false, message: 'Nombre de carpeta requerido' });
+    if (nombre.length > 200) return res.status(400).json({ success: false, message: 'Nombre demasiado largo' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    try {
+      const rs = await pool.request()
+        .input('nombre', sql.NVarChar, nombre)
+        .input('creadoPor', sql.SmallInt, req.user?.id ?? null)
+        .query(`
+          INSERT INTO CC_RDL_CARPETAS (RDC_NOMBRE, RDC_CREADO_POR)
+          OUTPUT INSERTED.RDC_ID as id, INSERTED.RDC_NOMBRE as nombre, INSERTED.RDC_FECHA as fecha
+          VALUES (@nombre, @creadoPor)
+        `);
+      res.status(201).json({ success: true, data: { ...rs.recordset[0], reportes: 0 } });
+    } catch (dbErr) {
+      if (dbErr.number === 2601 || dbErr.number === 2627) {
+        return res.status(409).json({ success: false, message: 'Ya existe una carpeta con ese nombre' });
+      }
+      throw dbErr;
+    }
+  } catch (err) {
+    logger.error('operacionesController.crearRdlCarpeta', err);
+    res.status(500).json({ success: false, message: 'Error al crear la carpeta' });
+  }
+}
+
+// PATCH /api/operaciones/suite-reportes/carpetas/:id  { nombre }
+async function renombrarRdlCarpeta(req, res) {
+  try {
+    const nombre = (req.body.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ success: false, message: 'Nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    try {
+      await pool.request()
+        .input('id', sql.Int, req.params.id)
+        .input('nombre', sql.NVarChar, nombre)
+        .query(`
+          UPDATE CC_RDL_CARPETAS SET RDC_NOMBRE = @nombre WHERE RDC_ID = @id;
+          UPDATE CC_RDL_REPORTES SET RDL_CARPETA = @nombre WHERE RDL_CARPETA_ID = @id;
+        `);
+      res.json({ success: true });
+    } catch (dbErr) {
+      if (dbErr.number === 2601 || dbErr.number === 2627) {
+        return res.status(409).json({ success: false, message: 'Ya existe una carpeta con ese nombre' });
+      }
+      throw dbErr;
+    }
+  } catch (err) {
+    logger.error('operacionesController.renombrarRdlCarpeta', err);
+    res.status(500).json({ success: false, message: 'Error al renombrar la carpeta' });
+  }
+}
+
+// DELETE /api/operaciones/suite-reportes/carpetas/:id — solo si está vacía.
+async function eliminarRdlCarpeta(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const usoRs = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT COUNT(*) as total FROM CC_RDL_REPORTES WHERE RDL_CARPETA_ID = @id');
+    if (usoRs.recordset[0].total > 0) {
+      return res.status(409).json({ success: false, message: 'La carpeta tiene reportes — muévelos o elimínalos primero' });
+    }
+    await pool.request().input('id', sql.Int, req.params.id)
+      .query('DELETE FROM CC_RDL_CARPETAS WHERE RDC_ID = @id');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.eliminarRdlCarpeta', err);
+    res.status(500).json({ success: false, message: 'Error al eliminar la carpeta' });
+  }
+}
+
+async function _resolverCarpeta(pool, req) {
+  // Acepta carpetaId numérico o carpeta (nombre) — crea la carpeta si el nombre es nuevo.
+  const carpetaId = parseInt(req.body.carpetaId, 10);
+  if (Number.isInteger(carpetaId) && carpetaId > 0) {
+    const rs = await pool.request().input('id', sql.Int, carpetaId)
+      .query('SELECT RDC_ID as id, RDC_NOMBRE as nombre FROM CC_RDL_CARPETAS WHERE RDC_ID = @id');
+    if (rs.recordset.length > 0) return rs.recordset[0];
+  }
+  const nombre = (req.body.carpeta || '').trim() || 'General';
+  const existe = await pool.request().input('nombre', sql.NVarChar, nombre)
+    .query('SELECT RDC_ID as id, RDC_NOMBRE as nombre FROM CC_RDL_CARPETAS WHERE RDC_NOMBRE = @nombre');
+  if (existe.recordset.length > 0) return existe.recordset[0];
+  const creada = await pool.request()
+    .input('nombre', sql.NVarChar, nombre)
+    .input('creadoPor', sql.SmallInt, req.user?.id ?? null)
+    .query(`
+      INSERT INTO CC_RDL_CARPETAS (RDC_NOMBRE, RDC_CREADO_POR)
+      OUTPUT INSERTED.RDC_ID as id, INSERTED.RDC_NOMBRE as nombre
+      VALUES (@nombre, @creadoPor)
+    `);
+  return creada.recordset[0];
+}
+
+/* ── Reportes RDL ── */
+
+// GET /api/operaciones/suite-reportes/rdl — catálogo, filtrado por la seguridad
+// de cada reporte contra el usuario autenticado.
+async function listRdl(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().query(`
+      SELECT * FROM CC_RDL_REPORTES ORDER BY RDL_CARPETA ASC, RDL_NOMBRE ASC
+    `);
+    const visibles = rs.recordset.filter((r) => _puedeVerRdl(req.user, r)).map(_mapRdl);
+    res.json({ success: true, data: visibles });
+  } catch (err) {
+    logger.error('operacionesController.listRdl', err);
+    res.status(500).json({ success: false, message: 'Error al listar los reportes RDL' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/rdl  (multipart: archivo + campos)
+// El frontend ya parseó el XML con DOMParser y manda `metadata` (JSON) +
+// `versionRdl` + `compatible`. Aquí solo persistimos y catalogamos.
+async function subirRdl(req, res) {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'Archivo .rdl requerido' });
+
+    const nombre = (req.body.nombre || '').trim() || path.basename(req.file.originalname, path.extname(req.file.originalname));
+    const descripcion = (req.body.descripcion || '').trim() || null;
+    const versionRdl = (req.body.versionRdl || '').trim() || null;
+    const compatible = req.body.compatible === 'false' ? 0 : 1;
+    const roles = _parseRoles(req.body.roles).join(',') || null;
+    const usuarios = _parseUsuarios(req.body.usuarios).join(',') || null;
+    let metadata = null;
+    try { metadata = req.body.metadata ? JSON.stringify(JSON.parse(req.body.metadata)) : null; } catch (_) { metadata = null; }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const carpeta = await _resolverCarpeta(pool, req);
+
+    const rs = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('descripcion', sql.NVarChar, descripcion)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('archivo', sql.NVarChar, req.file.filename)
+      .input('archivoOrig', sql.NVarChar, req.file.originalname)
+      .input('tamano', sql.Int, req.file.size || 0)
+      .input('versionRdl', sql.NVarChar, versionRdl)
+      .input('compatible', sql.Bit, compatible)
+      .input('metadata', sql.NVarChar, metadata)
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .input('subidoPor', sql.SmallInt, req.user?.id ?? null)
+      .input('subidoNombre', sql.NVarChar, req.user?.nombre || req.user?.username || null)
+      .query(`
+        INSERT INTO CC_RDL_REPORTES
+          (RDL_NOMBRE, RDL_DESCRIPCION, RDL_CARPETA, RDL_CARPETA_ID, RDL_ARCHIVO, RDL_ARCHIVO_ORIG, RDL_TAMANO,
+           RDL_VERSION_RDL, RDL_COMPATIBLE, RDL_METADATA, RDL_ROLES, RDL_USUARIOS, RDL_SUBIDO_POR, RDL_SUBIDO_NOMBRE)
+        OUTPUT INSERTED.*
+        VALUES
+          (@nombre, @descripcion, @carpeta, @carpetaId, @archivo, @archivoOrig, @tamano,
+           @versionRdl, @compatible, @metadata, @roles, @usuarios, @subidoPor, @subidoNombre)
+      `);
+    res.status(201).json({ success: true, data: _mapRdl(rs.recordset[0]) });
+  } catch (err) {
+    logger.error('operacionesController.subirRdl', err);
+    res.status(500).json({ success: false, message: 'Error al subir el reporte RDL' });
+  }
+}
+
+// GET /api/operaciones/suite-reportes/rdl/:id/raw — descarga del .rdl original.
+async function descargarRdl(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT * FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    if (rs.recordset.length === 0) return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
+    const row = rs.recordset[0];
+    if (!_puedeVerRdl(req.user, row)) return res.status(403).json({ success: false, message: 'No tienes acceso a este reporte' });
+    const full = path.join(RDL_DIR, row.RDL_ARCHIVO);
+    if (!fs.existsSync(full)) return res.status(404).json({ success: false, message: 'El archivo físico no existe' });
+    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader('Content-Disposition', `attachment; filename="${row.RDL_ARCHIVO_ORIG}"`);
+    fs.createReadStream(full).pipe(res);
+  } catch (err) {
+    logger.error('operacionesController.descargarRdl', err);
+    res.status(500).json({ success: false, message: 'Error al descargar el reporte RDL' });
+  }
+}
+
+// PATCH /api/operaciones/suite-reportes/rdl/:id — nombre/descripcion/carpeta + seguridad.
+async function actualizarRdl(req, res) {
+  try {
+    const { nombre, descripcion } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+
+    const actual = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT * FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    if (actual.recordset.length === 0) return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
+
+    const carpeta = (req.body.carpeta !== undefined || req.body.carpetaId !== undefined)
+      ? await _resolverCarpeta(pool, req)
+      : { id: actual.recordset[0].RDL_CARPETA_ID, nombre: actual.recordset[0].RDL_CARPETA };
+
+    const roles = req.body.roles !== undefined ? (_parseRoles(req.body.roles).join(',') || null) : actual.recordset[0].RDL_ROLES;
+    const usuarios = req.body.usuarios !== undefined ? (_parseUsuarios(req.body.usuarios).join(',') || null) : actual.recordset[0].RDL_USUARIOS;
+
+    await pool.request()
+      .input('id', sql.Int, req.params.id)
+      .input('nombre', sql.NVarChar, (nombre || '').trim() || null)
+      .input('descripcion', sql.NVarChar, descripcion != null ? String(descripcion).trim() : null)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .query(`
+        UPDATE CC_RDL_REPORTES SET
+          RDL_NOMBRE = ISNULL(@nombre, RDL_NOMBRE),
+          RDL_DESCRIPCION = @descripcion,
+          RDL_CARPETA = @carpeta,
+          RDL_CARPETA_ID = @carpetaId,
+          RDL_ROLES = @roles,
+          RDL_USUARIOS = @usuarios
+        WHERE RDL_ID = @id
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.actualizarRdl', err);
+    res.status(500).json({ success: false, message: 'Error al actualizar el reporte RDL' });
+  }
+}
+
+// DELETE /api/operaciones/suite-reportes/rdl/:id
+async function eliminarRdl(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT RDL_ARCHIVO FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    if (rs.recordset.length > 0) {
+      const full = path.join(RDL_DIR, rs.recordset[0].RDL_ARCHIVO);
+      try { if (fs.existsSync(full)) fs.unlinkSync(full); } catch (_) { /* best-effort */ }
+    }
+    await pool.request().input('id', sql.Int, req.params.id)
+      .query('DELETE FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.eliminarRdl', err);
+    res.status(500).json({ success: false, message: 'Error al eliminar el reporte RDL' });
+  }
+}
+
+/* ── Constructor de Reportes: catálogo de orígenes/campos, ejecución de
+   definiciones armadas en el front, y persistencia de reportes guardados
+   (reusa la seguridad rol+usuarios de los RDL). ── */
+
+async function ensureReportBuilderSchema(pool) {
+  try {
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='CC_REPORTES_CONSTRUIDOS')
+      CREATE TABLE CC_REPORTES_CONSTRUIDOS (
+        RC_ID            INT IDENTITY PRIMARY KEY,
+        RC_NOMBRE        NVARCHAR(200)  NOT NULL,
+        RC_DESCRIPCION   NVARCHAR(1000) NULL,
+        RC_CARPETA       NVARCHAR(200)  NOT NULL DEFAULT 'General',
+        RC_CARPETA_ID    INT            NULL,
+        RC_ORIGEN        NVARCHAR(60)   NOT NULL,
+        RC_DEFINICION    NVARCHAR(MAX)  NOT NULL,
+        RC_ROLES         NVARCHAR(200)  NULL,
+        RC_USUARIOS      NVARCHAR(MAX)  NULL,
+        RC_CREADO_POR    SMALLINT       NULL,
+        RC_CREADO_NOMBRE NVARCHAR(200)  NULL,
+        RC_FECHA         DATETIME       NOT NULL DEFAULT GETDATE(),
+        RC_ACTUALIZADO   DATETIME       NULL
+      )
+    `);
+  } catch (e) {
+    logger.warn('operacionesController.ensureReportBuilderSchema', e && e.message);
+  }
+}
+
+function _mapReporteConstruido(r) {
+  let definicion = null;
+  try { definicion = r.RC_DEFINICION ? JSON.parse(r.RC_DEFINICION) : null; } catch (_) { definicion = null; }
+  return {
+    id: r.RC_ID,
+    nombre: r.RC_NOMBRE,
+    descripcion: r.RC_DESCRIPCION || '',
+    carpeta: r.RC_CARPETA || 'General',
+    carpetaId: r.RC_CARPETA_ID ?? null,
+    origen: r.RC_ORIGEN,
+    definicion,
+    roles: _parseRoles(r.RC_ROLES),
+    usuarios: _parseUsuarios(r.RC_USUARIOS),
+    creadoPor: r.RC_CREADO_POR,
+    creadoNombre: r.RC_CREADO_NOMBRE || '',
+    fecha: r.RC_FECHA,
+    actualizado: r.RC_ACTUALIZADO,
+    tipo: 'construido',
+  };
+}
+
+// GET /api/operaciones/suite-reportes/builder/catalogo — orígenes, campos y filtros disponibles.
+async function getBuilderCatalogo(req, res) {
+  try {
+    res.json({ success: true, data: reportBuilderCatalog.catalogoPublico() });
+  } catch (err) {
+    logger.error('operacionesController.getBuilderCatalogo', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el catálogo del constructor' });
+  }
+}
+
+// GET /api/operaciones/suite-reportes/builder/catalogo-filtro/:catalogo — opciones de un selector.
+async function getBuilderCatalogoFiltro(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const data = await reportBuilderRunner.catalogoFiltro(pool, req.params.catalogo);
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.getBuilderCatalogoFiltro', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el catálogo del filtro' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/builder/ejecutar — corre una definición y devuelve filas.
+async function ejecutarBuilder(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const resultado = await reportBuilderRunner.ejecutar(pool, req.body?.definicion ?? req.body);
+    res.json({ success: true, data: resultado });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.ejecutarBuilder', err);
+    res.status(500).json({ success: false, message: 'Error al ejecutar el reporte' });
+  }
+}
+
+// GET /api/operaciones/suite-reportes/builder/reportes — reportes guardados visibles.
+async function listReportesConstruidos(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureReportBuilderSchema(pool);
+    const rs = await pool.request().query(`SELECT * FROM CC_REPORTES_CONSTRUIDOS ORDER BY RC_CARPETA, RC_NOMBRE`);
+    const visibles = rs.recordset
+      .filter((r) => _puedeVerRdl(req.user, { RDL_ROLES: r.RC_ROLES, RDL_USUARIOS: r.RC_USUARIOS }))
+      .map(_mapReporteConstruido);
+    res.json({ success: true, data: visibles });
+  } catch (err) {
+    logger.error('operacionesController.listReportesConstruidos', err);
+    res.status(500).json({ success: false, message: 'Error al listar los reportes guardados' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/builder/reportes — guarda una definición.
+async function guardarReporteConstruido(req, res) {
+  try {
+    const { nombre, descripcion, origen, definicion } = req.body || {};
+    if (!nombre || !nombre.trim()) return res.status(400).json({ success: false, message: 'Nombre requerido' });
+    if (!origen || !reportBuilderCatalog.ORIGENES[origen]) return res.status(400).json({ success: false, message: 'Origen inválido' });
+    // Validar la definición compilándola (lanza si algo no cuadra)
+    reportBuilderRunner.compilar(definicion);
+
+    const roles = _parseRoles(req.body.roles).join(',') || null;
+    const usuarios = _parseUsuarios(req.body.usuarios).join(',') || null;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    await ensureReportBuilderSchema(pool);
+    const carpeta = await _resolverCarpeta(pool, req);
+
+    const rs = await pool.request()
+      .input('nombre', sql.NVarChar, nombre.trim())
+      .input('descripcion', sql.NVarChar, (descripcion || '').trim() || null)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('origen', sql.NVarChar, origen)
+      .input('definicion', sql.NVarChar, JSON.stringify(definicion))
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .input('creadoPor', sql.SmallInt, req.user?.id ?? null)
+      .input('creadoNombre', sql.NVarChar, req.user?.nombre || req.user?.username || null)
+      .query(`
+        INSERT INTO CC_REPORTES_CONSTRUIDOS
+          (RC_NOMBRE, RC_DESCRIPCION, RC_CARPETA, RC_CARPETA_ID, RC_ORIGEN, RC_DEFINICION, RC_ROLES, RC_USUARIOS, RC_CREADO_POR, RC_CREADO_NOMBRE)
+        OUTPUT INSERTED.*
+        VALUES
+          (@nombre, @descripcion, @carpeta, @carpetaId, @origen, @definicion, @roles, @usuarios, @creadoPor, @creadoNombre)
+      `);
+    res.status(201).json({ success: true, data: _mapReporteConstruido(rs.recordset[0]) });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.guardarReporteConstruido', err);
+    res.status(500).json({ success: false, message: 'Error al guardar el reporte' });
+  }
+}
+
+// PATCH /api/operaciones/suite-reportes/builder/reportes/:id
+async function actualizarReporteConstruido(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    await ensureReportBuilderSchema(pool);
+    const actual = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT * FROM CC_REPORTES_CONSTRUIDOS WHERE RC_ID = @id');
+    if (actual.recordset.length === 0) return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
+    const row = actual.recordset[0];
+
+    const { nombre, descripcion, definicion } = req.body || {};
+    if (definicion !== undefined) reportBuilderRunner.compilar(definicion);
+
+    const carpeta = (req.body.carpeta !== undefined || req.body.carpetaId !== undefined)
+      ? await _resolverCarpeta(pool, req)
+      : { id: row.RC_CARPETA_ID, nombre: row.RC_CARPETA };
+    const roles = req.body.roles !== undefined ? (_parseRoles(req.body.roles).join(',') || null) : row.RC_ROLES;
+    const usuarios = req.body.usuarios !== undefined ? (_parseUsuarios(req.body.usuarios).join(',') || null) : row.RC_USUARIOS;
+
+    await pool.request()
+      .input('id', sql.Int, req.params.id)
+      .input('nombre', sql.NVarChar, (nombre || '').trim() || null)
+      .input('descripcion', sql.NVarChar, descripcion != null ? String(descripcion).trim() : row.RC_DESCRIPCION)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('definicion', sql.NVarChar, definicion !== undefined ? JSON.stringify(definicion) : row.RC_DEFINICION)
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .query(`
+        UPDATE CC_REPORTES_CONSTRUIDOS SET
+          RC_NOMBRE = ISNULL(@nombre, RC_NOMBRE),
+          RC_DESCRIPCION = @descripcion,
+          RC_CARPETA = @carpeta,
+          RC_CARPETA_ID = @carpetaId,
+          RC_DEFINICION = @definicion,
+          RC_ROLES = @roles,
+          RC_USUARIOS = @usuarios,
+          RC_ACTUALIZADO = GETDATE()
+        WHERE RC_ID = @id
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.actualizarReporteConstruido', err);
+    res.status(500).json({ success: false, message: 'Error al actualizar el reporte' });
+  }
+}
+
+// DELETE /api/operaciones/suite-reportes/builder/reportes/:id
+async function eliminarReporteConstruido(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureReportBuilderSchema(pool);
+    await pool.request().input('id', sql.Int, req.params.id)
+      .query('DELETE FROM CC_REPORTES_CONSTRUIDOS WHERE RC_ID = @id');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.eliminarReporteConstruido', err);
+    res.status(500).json({ success: false, message: 'Error al eliminar el reporte' });
+  }
+}
+
 module.exports = {
   listCampanias,
   crearCampania,
@@ -1013,4 +1622,20 @@ module.exports = {
   exportarReportePostulantes,
   getMiResumenAsesor,
   getHistorialAsignaciones,
+  listRdl,
+  subirRdl,
+  descargarRdl,
+  actualizarRdl,
+  eliminarRdl,
+  listRdlCarpetas,
+  crearRdlCarpeta,
+  renombrarRdlCarpeta,
+  eliminarRdlCarpeta,
+  getBuilderCatalogo,
+  getBuilderCatalogoFiltro,
+  ejecutarBuilder,
+  listReportesConstruidos,
+  guardarReporteConstruido,
+  actualizarReporteConstruido,
+  eliminarReporteConstruido,
 };

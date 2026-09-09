@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 const CRMPublicPage = lazy(() => import('@/pages/ventas/CRMPublicPage'))
+const FormularioPublicoPage = lazy(() => import('@/pages/contact-center/FormularioPublicoPage'))
 import { AppLayout } from '@/layouts/AppLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { VentasLayout } from '@/layouts/VentasLayout'
@@ -118,7 +119,7 @@ const SupervisoresPage              = lz(() => import('@/pages/supervisores/Supe
 const TiemposPage                   = lz(() => import('@/pages/tiempos/TiemposPage'),           'TiemposPage')
 const KpisOperacionesPage           = lz(() => import('@/pages/kpis-operaciones/KpisOperacionesPage'), 'KpisOperacionesPage')
 const MetasPage                     = lz(() => import('@/pages/metas/MetasPage'),               'MetasPage')
-const ReportesDiariosPage           = lz(() => import('@/pages/reportes-diarios/ReportesDiariosPage'), 'ReportesDiariosPage')
+const SuiteReportesPage             = lz(() => import('@/pages/suite-reportes/SuiteReportesPage'), 'SuiteReportesPage')
 const AsesoresPage                  = lz(() => import('@/pages/asesores/AsesoresPage'),         'AsesoresPage')
 const TecnologiaPage                = lz(() => import('@/pages/tecnologia/TecnologiaPage'),    'TecnologiaPage')
 const InternetRedesPage             = lz(() => import('@/pages/internet-redes/InternetRedesPage'), 'InternetRedesPage')
@@ -165,6 +166,11 @@ export const router = createBrowserRouter([
 
   // Ruta pública — se abre desde Vicidial sin sesión de intranet
   { path: '/crm', element: <Suspense fallback={<div />}><CRMPublicPage /></Suspense> },
+
+  // Formularios de Atención en modo EXTERNO — misma idea que /crm de arriba,
+  // pero para un formulario dinámico configurado desde Contact Center >
+  // Formularios de Atención > pestaña "Publicación".
+  { path: '/formulario-publico/:token', element: <Suspense fallback={<div />}><FormularioPublicoPage /></Suspense> },
 
   // Portal del cliente (acceso público con token)
   { path: '/portal', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><CRMPortalPage /></Suspense> },
@@ -307,7 +313,8 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/tiempos', element: wrap(<TiemposPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/kpis', element: wrap(<KpisOperacionesPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/metas', element: wrap(<MetasPage />) }] },
-              { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/reportes-diarios', element: wrap(<ReportesDiariosPage />) }] },
+              { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/suite-reportes', element: wrap(<SuiteReportesPage />) }] },
+              { path: '/operaciones/reportes-diarios', element: <Navigate to="/operaciones/suite-reportes" replace /> },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/asesores', element: wrap(<AsesoresPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/:subSlug', element: wrap(<AreaSubModuloPage areaKey="operaciones" />) }] },
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia',       element: wrap(<TecnologiaPage />) }] },
@@ -344,7 +351,7 @@ export const router = createBrowserRouter([
             children: [{ path: '/webphone', element: wrap(<WebphonePage />) }],
           },
           {
-            element: <RoleRoute allowedRoles={['AD', 'CC']} />,
+            element: <RoleRoute allowedRoles={['AD', 'TI', 'CC']} />,
             children: [
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
               { element: <ModuleRoute moduleKey="contact-center" />, children: [

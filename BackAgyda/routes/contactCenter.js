@@ -17,6 +17,13 @@ const M = 'contact-center';
 router.get('/publico/campanias/:slug/contacto', cfg.getContactoPublicoCampania);
 router.post('/publico/campanias/:slug/postulantes', cfg.registrarPostulantePublico);
 
+// Formulario de Atención en modo EXTERNO — se resuelve por FR_TOKEN_PUBLICO,
+// sin JWT (pensado para que VICIdial abra la URL directo al conectar una
+// llamada, mismo espíritu que /crm?cliente=&agente=&agenteId=). Requiere
+// require() diferido de ccFormulariosController más abajo en el archivo
+// (donde ya se importa como `forms`), así que estas 3 rutas se registran
+// junto a las de administración de formularios, no aquí arriba.
+
 // ── Media (acepta ?token=) ──────────────────────────────────────────────
 router.get('/media/:id', authenticateToken, requireActionAccess(M, 'ver'), inter.verMedia);
 
@@ -141,5 +148,76 @@ router.delete('/tipificaciones-catalogo/:id', authenticateToken, requireActionAc
 
 // ── Simulador (admin/QA) ──────────────────────────────────────────────
 router.post('/sim/interacciones', authenticateToken, requireActionAccess(M, 'atender'), sim.crearInteraccion);
+
+// ── Formularios de Atención ──────────────────────────────────────────
+// Entrega 1: CRUD de Formulario/Versión/Sección/Campo/Asignación desde el
+// constructor. Lectura bajo la acción 'ver' ya existente del módulo;
+// escritura bajo la acción nueva 'gestionar-formularios' (se valida también
+// esGestor() dentro del controlador, mismo patrón que tipificaciones-catalogo
+// y motivos-cierre). La resolución EN VIVO para una interacción real y el
+// cierre con tipificación llegan en la Entrega 3, con sus propias rutas.
+const forms = require('../controllers/ccFormulariosController');
+
+router.get('/formularios/tipos-campo', authenticateToken, requireActionAccess(M, 'ver'), forms.listTiposCampo);
+
+router.get('/formularios', authenticateToken, requireActionAccess(M, 'ver'), forms.listFormularios);
+router.post('/formularios', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.createFormulario);
+router.get('/formularios/:id', authenticateToken, requireActionAccess(M, 'ver'), forms.getFormulario);
+router.patch('/formularios/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.updateFormulario);
+router.put('/formularios/:id/modo', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.setModoFormulario);
+router.delete('/formularios/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.archivarFormulario);
+router.post('/formularios/:id/clonar', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.clonarFormulario);
+router.post('/formularios/:id/versiones', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.crearVersion);
+
+router.get('/formularios/versiones/:versionId', authenticateToken, requireActionAccess(M, 'ver'), forms.getVersionCompleta);
+router.post('/formularios/versiones/:versionId/publicar', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.publicarVersion);
+router.post('/formularios/versiones/:versionId/inactivar', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.inactivarVersion);
+
+// Guardar/leer respuestas — lo usa el agente EN VIVO (bajo 'atender', igual
+// que el campo tipo 'buscador'), no el administrador del formulario.
+router.post('/formularios/versiones/:versionId/respuestas', authenticateToken, requireActionAccess(M, 'atender'), forms.guardarRespuestas);
+router.get('/formularios/versiones/:versionId/respuestas/:interaccionId', authenticateToken, requireActionAccess(M, 'atender'), forms.getRespuestas);
+
+// Acciones sugeridas después de guardar — catálogo bajo 'gestionar-formularios',
+// marcar una como hecha bajo 'atender'.
+router.get('/formularios/:id/acciones-post', authenticateToken, requireActionAccess(M, 'ver'), forms.listAccionesPost);
+router.post('/formularios/:id/acciones-post', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.createAccionPost);
+router.delete('/formularios/acciones-post/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.deleteAccionPost);
+router.post('/formularios/interacciones/:interaccionId/acciones-post/:accionId/marcar', authenticateToken, requireActionAccess(M, 'atender'), forms.marcarAccionEjecutada);
+
+router.post('/formularios/versiones/:versionId/secciones', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.createSeccion);
+router.put('/formularios/secciones/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.updateSeccion);
+router.delete('/formularios/secciones/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.deleteSeccion);
+
+router.post('/formularios/secciones/:seccionId/campos', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.createCampo);
+router.put('/formularios/campos/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.updateCampo);
+router.delete('/formularios/campos/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.deleteCampo);
+
+router.get('/formularios-asignaciones', authenticateToken, requireActionAccess(M, 'ver'), forms.listAsignaciones);
+router.post('/formularios-asignaciones', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.createAsignacion);
+router.delete('/formularios-asignaciones/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.deleteAsignacion);
+
+// Tipificaciones heredadas de la(s) campaña(s) asignadas + selección de
+// cuáles aplican a este formulario, y buscador de interacciones de esas
+// mismas campañas — pedido 2026-09-08.
+router.get('/formularios/:id/tipificaciones', authenticateToken, requireActionAccess(M, 'ver'), forms.listTipificacionesDelFormulario);
+router.put('/formularios/:id/tipificaciones', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.setTipificacionesDelFormulario);
+router.get('/formularios/:id/interacciones', authenticateToken, requireActionAccess(M, 'ver'), forms.buscarInteraccionesDelFormulario);
+
+// Campo tipo 'buscador' dentro del constructor — lo usa el AGENTE en vivo
+// durante una atención real, no el administrador del formulario, por eso va
+// bajo 'atender' (mismo permiso que enviar mensajes/cerrar interacciones) en
+// vez de 'gestionar-formularios'.
+router.get('/formularios/:id/buscador', authenticateToken, requireActionAccess(M, 'atender'), forms.buscarRegistrosCampoBuscador);
+router.post('/formularios/:id/buscador/registrar', authenticateToken, requireActionAccess(M, 'atender'), forms.crearRegistroCampoBuscador);
+router.get('/formularios/:id/canales-disponibles', authenticateToken, requireActionAccess(M, 'atender'), forms.listCanalesDisponiblesDelFormulario);
+
+// Público (sin auth) — formulario en modo EXTERNO, ver comentario arriba
+// junto a /publico/campanias/:slug/contacto.
+router.get('/formularios-publico/:token', forms.getFormularioPublico);
+router.get('/formularios-publico/:token/canales-disponibles', forms.listCanalesDisponiblesPublico);
+router.get('/formularios-publico/:token/buscador', forms.buscarRegistrosCampoBuscadorPublico);
+router.post('/formularios-publico/:token/buscador/registrar', forms.crearRegistroCampoBuscadorPublico);
+router.post('/formularios-publico/:token/versiones/:versionId/respuestas', forms.guardarRespuestasPublico);
 
 module.exports = router;
