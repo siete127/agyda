@@ -125,7 +125,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/atencion-cliente/satisfaccion', label: 'Satisfacción', icon: 'Smile',        moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Encuestas y medición de satisfacción' },
   { path: '/atencion-cliente/retencion',    label: 'Retención',    icon: 'ShieldAlert',  moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Clientes en riesgo y acciones de retención' },
   { path: '/atencion-cliente/clientes',     label: 'Seguimiento de clientes', icon: 'Users', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Expediente y seguimiento de clientes' },
-  { path: '/atencion-cliente/mis-tareas',   label: 'Mis Tareas',   icon: 'ClipboardCheck', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Tareas de clientes asignadas a ti' },
+  { path: '/atencion-cliente/mis-tareas',   label: 'Mi agenda',    icon: 'CalendarClock', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Tu agenda del día: tareas y seguimientos pendientes' },
   { path: '/atencion-cliente/incidencias',  label: 'Incidencias',  icon: 'AlertOctagon',  moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Gestión de incidencias de clientes' },
   { path: '/atencion-cliente/clientes/dashboard', label: 'Dashboard de Clientes', icon: 'BarChart3', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Métricas y reportes de clientes' },
   { path: '/rh',               label: 'Recursos Humanos', icon: 'UserPlus',            moduleKey: 'rh-area',          roles: ['AD','TI'],          showInSidebar: true,  description: 'Vacantes abiertas y candidatos en proceso' },

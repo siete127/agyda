@@ -11,7 +11,7 @@ const PRIORIDADES_VALIDAS = ['baja', 'media', 'alta', 'critica'];
 // genérico anterior (abierta/en_proceso/resuelta/cerrada).
 const ESTATUS_VALIDOS = ['pendiente', 'en_proceso', 'en_espera_cliente', 'resuelto', 'escalado', 'cerrado'];
 const ESTATUS_QUE_CIERRAN = ['resuelto', 'cerrado'];
-const ORIGENES_VALIDOS = ['manual', 'encuesta', 'pago_vencido'];
+const ORIGENES_VALIDOS = ['manual', 'encuesta', 'pago_vencido', 'portal'];
 const SLA_HORAS_POR_PRIORIDAD = { baja: 72, media: 48, alta: 24, critica: 8 };
 
 const INCIDENCIA_SELECT_FIELDS = `
@@ -457,14 +457,30 @@ exports.deleteEvidencia = async (req, res) => {
   }
 };
 
-// Fase 4 (encuestas negativas) y Fase 3 (pago muy vencido) crean incidencias
-// automáticamente vía esta función interna, sin pasar por HTTP.
-exports.crearIncidenciaAutomatica = async ({ contactoId, titulo, descripcion, categoria, prioridad, origen, tenantKey }) => {
+// Fase 4 (encuestas negativas), Fase 3 (pago muy vencido) y el portal del cliente
+// crean incidencias sin pasar por el flujo HTTP autenticado. `opts`:
+//   - prioridadDefault: prioridad si `prioridad` no es válida (default 'alta').
+//   - asignarAResponsable: si true, INC_ASIGNADO_A = CONT_RESPONSABLE_ID.
+//   - notifTipo: tipo de notificación al responsable (default 'cliente-incidencia-automatica').
+//   - notifEmailFn(usuario, ctx): si se pasa, envía correo al responsable.
+exports.crearIncidenciaAutomatica = async ({ contactoId, titulo, descripcion, categoria, prioridad, origen, tenantKey }, opts = {}) => {
+  const {
+    prioridadDefault = 'alta',
+    asignarAResponsable = false,
+    notifTipo = 'cliente-incidencia-automatica',
+    notifEmailFn = null,
+  } = opts;
   const pool = await databaseService.getPool(tenantKey);
   const transaction = new sql.Transaction(pool);
   try {
-    const prio = PRIORIDADES_VALIDAS.includes(prioridad) ? prioridad : 'alta';
+    const prio = PRIORIDADES_VALIDAS.includes(prioridad) ? prioridad : prioridadDefault;
     const slaHoras = SLA_HORAS_POR_PRIORIDAD[prio];
+
+    const contacto = await pool.request()
+      .input('id', sql.Int, contactoId)
+      .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
+    const responsableId = contacto.recordset[0]?.responsableId || null;
+    const asignadoA = asignarAResponsable ? responsableId : null;
 
     await transaction.begin();
     const folio = await generarFolioEnTransaccion(transaction);
@@ -478,30 +494,34 @@ exports.crearIncidenciaAutomatica = async ({ contactoId, titulo, descripcion, ca
       .input('prioridad', sql.NVarChar(20), prio)
       .input('slaHoras', sql.Int, slaHoras)
       .input('origen', sql.NVarChar(20), origen)
+      .input('asignadoA', sql.Int, asignadoA)
       .query(`
         INSERT INTO CLI_INCIDENCIAS
           (INC_FOLIO, INC_CONTACTO_ID, INC_TITULO, INC_DESCRIPCION, INC_CATEGORIA, INC_PRIORIDAD,
-           INC_SLA_HORAS, INC_FECHA_LIMITE_SLA, INC_ORIGEN)
+           INC_SLA_HORAS, INC_FECHA_LIMITE_SLA, INC_ORIGEN, INC_ASIGNADO_A)
         OUTPUT INSERTED.INC_ID
         VALUES (@folio, @contactoId, @titulo, @descripcion, @categoria, @prioridad,
-                @slaHoras, DATEADD(HOUR, @slaHoras, GETDATE()), @origen)
+                @slaHoras, DATEADD(HOUR, @slaHoras, GETDATE()), @origen, @asignadoA)
       `);
     await transaction.commit();
 
     const id = rs.recordset[0].INC_ID;
 
-    const contacto = await pool.request()
-      .input('id', sql.Int, contactoId)
-      .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
-    const responsableId = contacto.recordset[0]?.responsableId;
     if (responsableId) {
       await notificationService.createNotification({
         usuarioId: responsableId,
-        mensaje: `Incidencia automática creada: ${folio} — ${titulo}`,
-        tipo: 'cliente-incidencia-automatica',
-        dataExtra: { incidenciaId: id, contactoId },
+        mensaje: `Incidencia creada: ${folio} — ${titulo}`,
+        tipo: notifTipo,
+        dataExtra: { incidenciaId: id, contactoId, folio },
         tenantKey,
       });
+      if (notifEmailFn) {
+        try {
+          const u = await pool.request().input('uid', sql.Int, responsableId)
+            .query(`SELECT NEUS_NOMBRES AS nombre, NEUS_CORREO AS correo FROM NEUS_USUARIOS WHERE NEUS_ID = @uid`);
+          if (u.recordset[0]?.correo) await notifEmailFn(u.recordset[0], { folio, titulo });
+        } catch (e) { console.warn('crearIncidenciaAutomatica correo:', e.message); }
+      }
     }
 
     return { id, folio };

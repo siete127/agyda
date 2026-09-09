@@ -98,7 +98,7 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'satisfaccion', label: 'Satisfacción', kind: 'link', linkTo: '/atencion-cliente/satisfaccion', description: 'Encuestas y medición de satisfacción.' },
     { slug: 'retencion', label: 'Retención', kind: 'link', linkTo: '/atencion-cliente/retencion', description: 'Clientes en riesgo y acciones de retención.' },
     { slug: 'clientes', label: 'Seguimiento de clientes', kind: 'link', linkTo: '/atencion-cliente/clientes', description: 'Expediente y seguimiento de clientes.' },
-    { slug: 'mis-tareas', label: 'Mis Tareas', kind: 'link', linkTo: '/atencion-cliente/mis-tareas', description: 'Tareas de clientes asignadas a ti.' },
+    { slug: 'mis-tareas', label: 'Mi agenda', kind: 'link', linkTo: '/atencion-cliente/mis-tareas', description: 'Tu agenda del día: tareas y seguimientos pendientes.' },
     { slug: 'incidencias', label: 'Incidencias', kind: 'link', linkTo: '/atencion-cliente/incidencias', description: 'Gestión de incidencias de clientes.' },
     { slug: 'dashboard-clientes', label: 'Dashboard de Clientes', kind: 'link', linkTo: '/atencion-cliente/clientes/dashboard', description: 'Métricas y reportes de clientes.' },
   ],

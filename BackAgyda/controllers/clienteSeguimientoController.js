@@ -7,6 +7,8 @@ const ESTATUS_COLOR_VALIDOS = ['verde', 'azul', 'amarillo', 'naranja', 'rojo', '
 const TIPOS_CONTACTO_VALIDOS = ['llamada', 'whatsapp', 'correo', 'reunion', 'visita', 'otro'];
 const PRIORIDADES_VALIDAS = ['baja', 'media', 'alta', 'urgente'];
 const ESTATUS_TAREA_VALIDOS = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
+// Minutos "avísame antes" que acepta el recordatorio de agenda de una tarea.
+const RECORDAR_MIN_VALIDOS = [0, 5, 10, 15, 30, 60, 120, 1440];
 
 // Catálogo de tipos de actividad del punto 4 del flujo del documento.
 const TIPOS_TAREA_VALIDOS = [
@@ -110,12 +112,14 @@ exports.listTareasByContacto = async (req, res) => {
       .query(`
         SELECT TAR_ID as id, TAR_CONTACTO_ID as contactoId, TAR_TIPO as tipo, TAR_TITULO as titulo, TAR_DESCRIPCION as descripcion,
                TAR_PRIORIDAD as prioridad, TAR_ASIGNADO_A as asignadoA, U.NEUS_NOMBRES as asignadoNombre,
-               TAR_FECHA_VENCIMIENTO as fechaVencimiento, TAR_ESTATUS as estatus,
+               TAR_FECHA_VENCIMIENTO as fechaVencimiento, TAR_FECHA_HORA as fechaHora, TAR_RECORDAR_MIN_ANTES as recordarMinAntes,
+               TAR_ESTATUS as estatus,
                TAR_CREADO_POR as creadoPor, TAR_FECHA_CREACION as fechaCreacion, TAR_FECHA_COMPLETADA as fechaCompletada
         FROM CLI_TAREAS T
         LEFT JOIN NEUS_USUARIOS U ON U.NEUS_ID = T.TAR_ASIGNADO_A
         WHERE TAR_CONTACTO_ID = @id AND TAR_ACTIVO = 1
-        ORDER BY CASE WHEN TAR_ESTATUS = 'completada' THEN 1 ELSE 0 END, TAR_FECHA_VENCIMIENTO ASC
+        ORDER BY CASE WHEN TAR_ESTATUS = 'completada' THEN 1 ELSE 0 END,
+                 COALESCE(TAR_FECHA_HORA, CAST(TAR_FECHA_VENCIMIENTO AS DATETIME)) ASC
       `);
     res.json({ success: true, data: result.recordset });
   } catch (e) {
@@ -133,11 +137,13 @@ exports.listTareasMias = async (req, res) => {
       .query(`
         SELECT TAR_ID as id, TAR_CONTACTO_ID as contactoId, CONT_NOMBRE as contactoNombre, TAR_TIPO as tipo,
                TAR_TITULO as titulo, TAR_DESCRIPCION as descripcion, TAR_PRIORIDAD as prioridad,
-               TAR_FECHA_VENCIMIENTO as fechaVencimiento, TAR_ESTATUS as estatus, TAR_FECHA_CREACION as fechaCreacion
+               TAR_FECHA_VENCIMIENTO as fechaVencimiento, TAR_FECHA_HORA as fechaHora, TAR_RECORDAR_MIN_ANTES as recordarMinAntes,
+               TAR_ESTATUS as estatus, TAR_FECHA_CREACION as fechaCreacion
         FROM CLI_TAREAS T
         INNER JOIN CRM_CONTACTOS C ON C.CONT_ID = T.TAR_CONTACTO_ID
         WHERE TAR_ASIGNADO_A = @userId AND TAR_ACTIVO = 1
-        ORDER BY CASE WHEN TAR_ESTATUS = 'completada' THEN 1 ELSE 0 END, TAR_FECHA_VENCIMIENTO ASC
+        ORDER BY CASE WHEN TAR_ESTATUS = 'completada' THEN 1 ELSE 0 END,
+                 COALESCE(TAR_FECHA_HORA, CAST(TAR_FECHA_VENCIMIENTO AS DATETIME)) ASC
       `);
     res.json({ success: true, data: result.recordset });
   } catch (e) {
@@ -151,11 +157,19 @@ exports.createTarea = async (req, res) => {
     const contactoId = parseInt(req.params.id, 10);
     if (!Number.isFinite(contactoId)) return res.status(400).json({ success: false, message: 'id inválido' });
 
-    const { tipo, titulo, descripcion, prioridad, asignadoA, fechaVencimiento } = req.body || {};
+    const { tipo, titulo, descripcion, prioridad, asignadoA, fechaVencimiento, fechaHora, recordarMinAntes } = req.body || {};
     if (!titulo || !String(titulo).trim()) return res.status(400).json({ success: false, message: 'Título requerido' });
     const tipoTarea = TIPOS_TAREA_VALIDOS.includes(tipo) ? tipo : 'otro';
     const prio = PRIORIDADES_VALIDAS.includes(prioridad) ? prioridad : 'media';
     const asignado = asignadoA ? parseInt(asignadoA, 10) : null;
+
+    // Recordatorio de agenda: si viene fecha-hora, esa es la referencia y la
+    // fecha de vencimiento (DATE) se deriva de ella cuando no se manda aparte.
+    const fechaHoraVal = fechaHora ? new Date(fechaHora) : null;
+    if (fechaHora && isNaN(fechaHoraVal?.getTime())) return res.status(400).json({ success: false, message: 'Fecha y hora inválida' });
+    const recordarMin = recordarMinAntes != null && RECORDAR_MIN_VALIDOS.includes(Number(recordarMinAntes))
+      ? Number(recordarMinAntes) : null;
+    const fechaVenc = fechaVencimiento || (fechaHoraVal ? fechaHoraVal.toISOString().slice(0, 10) : null);
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const ins = await pool.request()
@@ -165,12 +179,14 @@ exports.createTarea = async (req, res) => {
       .input('descripcion', sql.NVarChar(sql.MAX), descripcion || null)
       .input('prioridad', sql.NVarChar(20), prio)
       .input('asignadoA', sql.Int, asignado)
-      .input('fechaVencimiento', sql.Date, fechaVencimiento || null)
+      .input('fechaVencimiento', sql.Date, fechaVenc)
+      .input('fechaHora', sql.DateTime, fechaHoraVal)
+      .input('recordarMinAntes', sql.Int, fechaHoraVal ? recordarMin : null)
       .input('creadoPor', sql.Int, getUserId(req))
       .query(`
-        INSERT INTO CLI_TAREAS (TAR_CONTACTO_ID, TAR_TIPO, TAR_TITULO, TAR_DESCRIPCION, TAR_PRIORIDAD, TAR_ASIGNADO_A, TAR_FECHA_VENCIMIENTO, TAR_CREADO_POR)
+        INSERT INTO CLI_TAREAS (TAR_CONTACTO_ID, TAR_TIPO, TAR_TITULO, TAR_DESCRIPCION, TAR_PRIORIDAD, TAR_ASIGNADO_A, TAR_FECHA_VENCIMIENTO, TAR_FECHA_HORA, TAR_RECORDAR_MIN_ANTES, TAR_CREADO_POR)
         OUTPUT INSERTED.TAR_ID
-        VALUES (@contactoId, @tipo, @titulo, @descripcion, @prioridad, @asignadoA, @fechaVencimiento, @creadoPor)
+        VALUES (@contactoId, @tipo, @titulo, @descripcion, @prioridad, @asignadoA, @fechaVencimiento, @fechaHora, @recordarMinAntes, @creadoPor)
       `);
 
     const tareaId = ins.recordset[0].TAR_ID;
@@ -221,6 +237,65 @@ exports.updateTareaEstatus = async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('Error updateTareaEstatus:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Edición de una tarea (además del cambio de estatus). Si cambia la fecha-hora o
+// la fecha de vencimiento, se resetean los BIT de alerta para que el cron de
+// agenda vuelva a evaluar el recordatorio.
+exports.updateTarea = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'id inválido' });
+    const { tipo, titulo, descripcion, prioridad, asignadoA, fechaVencimiento, fechaHora, recordarMinAntes } = req.body || {};
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const actual = await pool.request().input('id', sql.Int, id)
+      .query(`SELECT TAR_FECHA_HORA as fechaHora, TAR_FECHA_VENCIMIENTO as fechaVencimiento FROM CLI_TAREAS WHERE TAR_ID=@id AND TAR_ACTIVO=1`);
+    if (!actual.recordset.length) return res.status(404).json({ success: false, message: 'Tarea no encontrada' });
+
+    const r = pool.request().input('id', sql.Int, id);
+    const sets = [];
+    if (titulo != null)       { if (!String(titulo).trim()) return res.status(400).json({ success: false, message: 'Título requerido' }); r.input('titulo', sql.NVarChar(200), String(titulo).trim()); sets.push('TAR_TITULO=@titulo'); }
+    if (descripcion != null)  { r.input('descripcion', sql.NVarChar(sql.MAX), descripcion || null); sets.push('TAR_DESCRIPCION=@descripcion'); }
+    if (tipo != null)         { r.input('tipo', sql.NVarChar(40), TIPOS_TAREA_VALIDOS.includes(tipo) ? tipo : 'otro'); sets.push('TAR_TIPO=@tipo'); }
+    if (prioridad != null)    { r.input('prioridad', sql.NVarChar(20), PRIORIDADES_VALIDAS.includes(prioridad) ? prioridad : 'media'); sets.push('TAR_PRIORIDAD=@prioridad'); }
+    if (asignadoA !== undefined) { r.input('asignadoA', sql.Int, asignadoA ? parseInt(asignadoA, 10) : null); sets.push('TAR_ASIGNADO_A=@asignadoA'); }
+
+    let fechaCambio = false;
+    if (fechaHora !== undefined) {
+      const fhv = fechaHora ? new Date(fechaHora) : null;
+      if (fechaHora && isNaN(fhv?.getTime())) return res.status(400).json({ success: false, message: 'Fecha y hora inválida' });
+      r.input('fechaHora', sql.DateTime, fhv);
+      const recordarMin = recordarMinAntes != null && RECORDAR_MIN_VALIDOS.includes(Number(recordarMinAntes)) ? Number(recordarMinAntes) : null;
+      r.input('recordarMinAntes', sql.Int, fhv ? recordarMin : null);
+      sets.push('TAR_FECHA_HORA=@fechaHora', 'TAR_RECORDAR_MIN_ANTES=@recordarMinAntes');
+      fechaCambio = true;
+    }
+    if (fechaVencimiento !== undefined) {
+      r.input('fechaVencimiento', sql.Date, fechaVencimiento || null);
+      sets.push('TAR_FECHA_VENCIMIENTO=@fechaVencimiento');
+      fechaCambio = true;
+    }
+    if (fechaCambio) sets.push('TAR_ALERTA_PREVIA_NOTIF=0', 'TAR_ALERTA_VENCE_NOTIF=0');
+
+    if (!sets.length) return res.json({ success: true });
+
+    const result = await r.query(`
+      UPDATE CLI_TAREAS SET ${sets.join(', ')} WHERE TAR_ID=@id AND TAR_ACTIVO=1;
+      SELECT @@ROWCOUNT as affected;
+    `);
+    if (!(result.recordset?.[0]?.affected || 0)) return res.status(404).json({ success: false, message: 'Tarea no encontrada' });
+
+    await logAudit(pool, {
+      userId: getUserId(req), userName: req.user?.nombre || null,
+      modulo: 'atencion-cliente', accion: 'editar-tarea-cliente', entidadId: id, detalle: { campos: sets }, ip: req.ip,
+    });
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error updateTarea:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };
@@ -315,6 +390,58 @@ exports.getHistorial = async (req, res) => {
     res.json({ success: true, data });
   } catch (e) {
     console.error('Error getHistorial:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// "Mi agenda del día" del usuario logueado: tareas propias vencidas o de hoy +
+// seguimientos de la bitácora cuya próxima fecha llegó a hoy. Filtra por usuario,
+// no lleva requireActionAccess (patrón de listTareasMias).
+exports.getMiAgenda = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(400).json({ success: false, message: 'Sin usuario' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const tareas = await pool.request()
+      .input('userId', sql.Int, userId)
+      .query(`
+        SELECT TAR_ID as id, TAR_CONTACTO_ID as contactoId, CONT_NOMBRE as contactoNombre, TAR_TIPO as tipo,
+               TAR_TITULO as titulo, TAR_DESCRIPCION as descripcion, TAR_PRIORIDAD as prioridad,
+               TAR_FECHA_VENCIMIENTO as fechaVencimiento, TAR_FECHA_HORA as fechaHora, TAR_RECORDAR_MIN_ANTES as recordarMinAntes,
+               TAR_ESTATUS as estatus, TAR_FECHA_CREACION as fechaCreacion
+        FROM CLI_TAREAS T
+        INNER JOIN CRM_CONTACTOS C ON C.CONT_ID = T.TAR_CONTACTO_ID
+        WHERE T.TAR_ASIGNADO_A = @userId AND T.TAR_ACTIVO = 1
+          AND T.TAR_ESTATUS NOT IN ('completada','cancelada')
+          AND COALESCE(T.TAR_FECHA_HORA, CAST(T.TAR_FECHA_VENCIMIENTO AS DATETIME)) IS NOT NULL
+          AND COALESCE(T.TAR_FECHA_HORA, CAST(T.TAR_FECHA_VENCIMIENTO AS DATETIME)) < DATEADD(DAY, 1, CAST(GETDATE() AS DATE))
+        ORDER BY COALESCE(T.TAR_FECHA_HORA, CAST(T.TAR_FECHA_VENCIMIENTO AS DATETIME)) ASC
+      `);
+
+    const seguimientos = await pool.request()
+      .input('userId', sql.Int, userId)
+      .query(`
+        WITH Ultimo AS (
+          SELECT s.*, ROW_NUMBER() OVER (PARTITION BY s.SEG_CONTACTO_ID ORDER BY s.SEG_FECHA DESC) AS rn
+          FROM CLI_SEGUIMIENTOS s
+          WHERE s.SEG_ACTIVO = 1
+        )
+        SELECT u.SEG_ID as seguimientoId, u.SEG_CONTACTO_ID as contactoId, c.CONT_NOMBRE as contactoNombre,
+               CONVERT(NVARCHAR(10), u.SEG_PROXIMA_FECHA, 23) as proximaFecha,
+               u.SEG_MOTIVO as motivo, u.SEG_ACUERDOS as acuerdos
+        FROM Ultimo u
+        INNER JOIN CRM_CONTACTOS c ON c.CONT_ID = u.SEG_CONTACTO_ID
+        WHERE u.rn = 1 AND u.SEG_USUARIO_ID = @userId
+          AND u.SEG_PROXIMA_FECHA IS NOT NULL
+          AND u.SEG_PROXIMA_FECHA <= CAST(GETDATE() AS DATE)
+        ORDER BY u.SEG_PROXIMA_FECHA ASC
+      `);
+
+    res.json({ success: true, data: { tareas: tareas.recordset, seguimientos: seguimientos.recordset } });
+  } catch (e) {
+    console.error('Error getMiAgenda:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

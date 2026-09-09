@@ -191,6 +191,11 @@ app.use('/api/mensajeria', require('./routes/mensajeria'));
 
 // CRM: arrancar cron de automatizaciones
 require('./controllers/crmAutomatizacionesController');
+// Seguimiento a clientes: crons de agenda (tareas/seguimientos/inactividad) y de
+// SLA de incidencias — también se cargan al montar routes/atencionCliente.js,
+// esto es respaldo.
+require('./controllers/clienteAgendaCronController');
+require('./controllers/clienteIncidenciasSlaCronController');
 app.use('/api/eventos', require('./routes/calendario'));
 // app.use('/api/mundial', require('./routes/mundial'));
 

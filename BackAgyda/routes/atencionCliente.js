@@ -5,6 +5,8 @@ const clienteSeguimiento = require('../controllers/clienteSeguimientoController'
 const clienteIncidencias = require('../controllers/clienteIncidenciasController');
 const clienteFechas = require('../controllers/clienteFechasController');
 const clienteFechasCron = require('../controllers/clienteFechasCronController');
+const clienteAgendaCron = require('../controllers/clienteAgendaCronController');
+const clienteIncSlaCron = require('../controllers/clienteIncidenciasSlaCronController');
 const clienteDashboard = require('../controllers/clienteDashboardController');
 const auth = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
@@ -21,12 +23,16 @@ router.get('/clientes/:id/historial', auth.authenticateToken, requireActionAcces
 
 // ── Clientes: tareas ───────────────────────────────────────────────────────
 router.get('/tareas/mias', auth.authenticateToken, clienteSeguimiento.listTareasMias);
+router.get('/mi-agenda', auth.authenticateToken, clienteSeguimiento.getMiAgenda);
 router.get('/clientes/:id/tareas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteSeguimiento.listTareasByContacto);
 router.post('/clientes/:id/tareas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.createTarea);
 router.patch('/tareas/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.updateTareaEstatus);
+router.patch('/tareas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.updateTarea);
 router.delete('/tareas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.deleteTarea);
+router.post('/agenda/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), clienteAgendaCron.runNow);
 
 // ── Incidencias ─────────────────────────────────────────────────────────────
+router.post('/incidencias/sla/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), clienteIncSlaCron.runNow);
 router.get('/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.list);
 router.get('/incidencias/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.getById);
 router.post('/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.create);

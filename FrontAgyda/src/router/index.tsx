@@ -133,7 +133,7 @@ const SatisfaccionPage               = lz(() => import('@/pages/atencion-cliente
 const RetencionPage                  = lz(() => import('@/pages/atencion-cliente/RetencionPage'), 'RetencionPage')
 const ClientesListaPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientesListaPage'), 'ClientesListaPage')
 const ClientePerfilPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientePerfilPage'), 'ClientePerfilPage')
-const MisTareasPage                  = lz(() => import('@/pages/atencion-cliente/MisTareasPage'), 'MisTareasPage')
+const MiAgendaPage                   = lz(() => import('@/pages/atencion-cliente/MiAgendaPage'), 'MiAgendaPage')
 const IncidenciasPage                = lz(() => import('@/pages/atencion-cliente/IncidenciasPage'), 'IncidenciasPage')
 const ClientesDashboardPage          = lz(() => import('@/pages/atencion-cliente/ClientesDashboardPage'), 'ClientesDashboardPage')
 const RHPage                        = lz(() => import('@/pages/rh/RHPage'),                    'RHPage')
@@ -331,7 +331,8 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes', element: wrap(<ClientesListaPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes/dashboard', element: wrap(<ClientesDashboardPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes/:id', element: wrap(<ClientePerfilPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mis-tareas', element: wrap(<MisTareasPage />) }] },
+              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mis-tareas', element: wrap(<MiAgendaPage />) }] },
+              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mi-agenda', element: wrap(<MiAgendaPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/incidencias', element: wrap(<IncidenciasPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/:subSlug', element: wrap(<AreaSubModuloPage areaKey="atencion-cliente" />) }] },
               { element: <ModuleRoute moduleKey="rh-area" />,         children: [{ path: '/rh',               element: wrap(<RHPage />) }] },

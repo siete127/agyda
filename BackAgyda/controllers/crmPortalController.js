@@ -1,17 +1,36 @@
 const sql       = require('mssql');
 const crypto    = require('crypto');
-const nodemailer = require('nodemailer');
 const databaseService = require('../services/databaseService');
+const emailService = require('../services/emailService');
+const clienteIncidencias = require('./clienteIncidenciasController');
+const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
+const notificationService = require('../services/notificationService');
 const { sanitizeFilename, decryptBuffer } = require('../utils/cryptoDocs');
 
-const transporter = nodemailer.createTransport({
-  host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
-  port:   parseInt(process.env.SMTP_PORT || '465'),
-  secure: (process.env.SMTP_SECURE || 'true') === 'true',
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-});
-
 const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+
+// Rate-limit en memoria para la creación de incidencias desde el portal: un
+// intento por contacto cada 60 s (patrón de asistenciaController._checkRateLimit).
+const _incidenciaRateMap = new Map();
+function _rateLimitIncidencia(contactoId) {
+  const ahora = Date.now();
+  const ultimo = _incidenciaRateMap.get(contactoId) ?? 0;
+  if (ahora - ultimo < 60_000) return false;
+  _incidenciaRateMap.set(contactoId, ahora);
+  return true;
+}
+
+// Valida un token de portal y devuelve { contactoId } o null.
+async function resolverToken(pool, token) {
+  if (!token) return null;
+  const rs = await pool.request()
+    .input('token', sql.NVarChar, token)
+    .query(`SELECT PT_CONTACTO_ID as contactoId, PT_EXPIRA as expira FROM CRM_PORTAL_TOKENS WHERE PT_TOKEN=@token AND PT_ACTIVO=1`);
+  const row = rs.recordset[0];
+  if (!row) return null;
+  if (row.expira && new Date(row.expira) < new Date()) return null;
+  return { contactoId: row.contactoId };
+}
 
 // Admin: enviar invitación de acceso al portal a un contacto
 exports.invitar = async (req, res) => {
@@ -44,17 +63,7 @@ exports.invitar = async (req, res) => {
       .query(`INSERT INTO CRM_PORTAL_TOKENS (PT_CONTACTO_ID,PT_TOKEN,PT_EMAIL,PT_EXPIRA) VALUES (@cid,@token,@email,@expira)`);
 
     const link = `${BASE_URL}/portal?token=${token}`;
-    await transporter.sendMail({
-      from:    `"Ardabytec" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-      to:      correo,
-      subject: 'Tu acceso al portal de seguimiento',
-      html: `
-        <p>Hola <strong>${nombre}</strong>,</p>
-        <p>Te invitamos a revisar el estado de tus proyectos en nuestro portal:</p>
-        <p><a href="${link}" style="background:#4f46e5;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;display:inline-block">Ver mi portal</a></p>
-        <p style="color:#888;font-size:12px">Este enlace es válido por 30 días.</p>
-      `,
-    });
+    await emailService.sendInvitacionPortalEmail({ nombre, correo, link });
 
     res.json({ success: true, message: `Invitación enviada a ${correo}` });
   } catch (e) {
@@ -82,9 +91,15 @@ exports.getPortal = async (req, res) => {
     if (expira && new Date(expira) < new Date())
       return res.status(401).json({ success: false, message: 'Enlace expirado' });
 
+    // Telemetría: marca cuándo abrió el cliente su portal (best-effort).
+    pool.request().input('token', sql.NVarChar, token)
+      .query(`UPDATE CRM_PORTAL_TOKENS SET PT_ULTIMA_APERTURA=GETDATE() WHERE PT_TOKEN=@token`)
+      .catch(() => {});
+
     const cont = await pool.request()
       .input('id', sql.Int, contactoId)
-      .query(`SELECT CONT_NOMBRE as nombre, CONT_EMPRESA as empresa FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
+      .query(`SELECT CONT_NOMBRE as nombre, CONT_EMPRESA as empresa, CONT_ES_CLIENTE as esCliente FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
+    const esCliente = !!cont.recordset[0]?.esCliente;
 
     const opos = await pool.request()
       .input('id', sql.Int, contactoId)
@@ -134,13 +149,55 @@ exports.getPortal = async (req, res) => {
         ORDER BY DOC_FECHA_SUBIDA DESC
       `);
 
+    // Seguimiento a clientes: solo para contactos dados de alta como cliente.
+    // Nunca se exponen datos internos (asignado, comentarios, evidencias).
+    let incidencias = [], pagos = [], renovaciones = [];
+    if (esCliente) {
+      const incRs = await pool.request().input('id', sql.Int, contactoId).query(`
+        SELECT INC_ID as id, INC_FOLIO as folio, INC_TITULO as titulo, INC_CATEGORIA as categoria,
+               INC_PRIORIDAD as prioridad, INC_ESTATUS as estatus, INC_FECHA_CREACION as fechaCreacion,
+               INC_FECHA_LIMITE_SLA as fechaLimiteSla, INC_SOLUCION_PROPUESTA as solucionPropuesta,
+               INC_FECHA_COMPROMISO as fechaCompromiso, INC_FECHA_RESOLUCION as fechaResolucion
+        FROM CLI_INCIDENCIAS
+        WHERE INC_CONTACTO_ID=@id AND INC_ACTIVO=1
+        ORDER BY INC_FECHA_CREACION DESC
+      `);
+      incidencias = incRs.recordset;
+
+      const pagRs = await pool.request().input('id', sql.Int, contactoId).query(`
+        SELECT REC_ID as id, REC_CONCEPTO as concepto, REC_MONTO as monto, REC_MONTO_PAGADO as montoPagado,
+               CONVERT(NVARCHAR(10), REC_FECHA_LIMITE, 23) as fechaLimite, REC_ESTATUS as estatus,
+               DATEDIFF(DAY, CAST(GETDATE() AS DATE), REC_FECHA_LIMITE) as diasRestantes
+        FROM CRM_RECORDATORIOS_PAGO
+        WHERE REC_CONTACTO_ID=@id AND REC_ACTIVO=1 AND REC_ESTATUS IN ('pendiente','enviado','parcial')
+        ORDER BY REC_FECHA_LIMITE ASC
+      `);
+      pagos = pagRs.recordset.map((p) => ({
+        ...p,
+        estatusVisual: p.diasRestantes < 0 ? 'vencido' : p.diasRestantes === 0 ? 'vence_hoy' : 'proximo_vencer',
+      }));
+
+      const renRs = await pool.request().input('id', sql.Int, contactoId).query(`
+        SELECT FEC_ID as id, FEC_TIPO as tipo, FEC_DESCRIPCION as descripcion,
+               CONVERT(NVARCHAR(10), FEC_FECHA, 23) as fecha,
+               DATEDIFF(DAY, CAST(GETDATE() AS DATE), FEC_FECHA) as diasRestantes
+        FROM CLI_FECHAS_IMPORTANTES
+        WHERE FEC_CONTACTO_ID=@id AND FEC_ACTIVO=1 AND FEC_ESTATUS='vigente'
+        ORDER BY FEC_FECHA ASC
+      `);
+      renovaciones = renRs.recordset;
+    }
+
     res.json({
       success: true,
       data: {
-        contacto:      { ...cont.recordset[0], email },
+        contacto:      { nombre: cont.recordset[0]?.nombre, empresa: cont.recordset[0]?.empresa, email, esCliente },
         oportunidades: oposConCots,
         interacciones: interacciones.recordset,
         documentos:    documentos.recordset,
+        incidencias,
+        pagos,
+        renovaciones,
       },
     });
   } catch (e) {
@@ -194,6 +251,76 @@ exports.downloadDocumentoPortal = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.send(decrypted);
   } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Portal: el cliente abre una incidencia/solicitud. Público, token en el body
+// (mismo patrón que aprobar/rechazar cotización). Prioridad forzada a 'media'
+// (el cliente no elige), asignada al responsable del contacto.
+exports.crearIncidenciaPortal = async (req, res) => {
+  try {
+    const { portalToken, titulo, descripcion, categoria } = req.body || {};
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const tk = await resolverToken(pool, portalToken);
+    if (!tk) return res.status(401).json({ success: false, message: 'Enlace inválido o expirado' });
+
+    const tit = String(titulo || '').trim();
+    const desc = String(descripcion || '').trim();
+    if (!tit || tit.length > 200) return res.status(400).json({ success: false, message: 'El título es requerido (máx. 200 caracteres)' });
+    if (!desc || desc.length > 4000) return res.status(400).json({ success: false, message: 'La descripción es requerida (máx. 4000 caracteres)' });
+
+    if (!_rateLimitIncidencia(tk.contactoId)) {
+      return res.status(429).json({ success: false, message: 'Espera un momento antes de enviar otra solicitud' });
+    }
+
+    const cat = categoria ? String(categoria).trim().slice(0, 50) : null;
+
+    const resultado = await clienteIncidencias.crearIncidenciaAutomatica(
+      {
+        contactoId: tk.contactoId,
+        titulo: tit,
+        descripcion: desc,
+        categoria: cat,
+        prioridad: 'media',
+        origen: 'portal',
+        tenantKey: req.user?.empresa,
+      },
+      {
+        prioridadDefault: 'media',
+        asignarAResponsable: true,
+        notifTipo: 'cliente-incidencia-portal',
+        notifEmailFn: (u, ctx) => emailService.sendIncidenciaSlaEmail({
+          nombre: u.nombre, correo: u.correo, folio: ctx.folio, titulo: ctx.titulo,
+          contactoNombre: null, prioridad: 'media', fechaLimiteSla: null, nivel: 'riesgo',
+        }),
+      },
+    );
+
+    if (!resultado) return res.status(500).json({ success: false, message: 'No se pudo registrar la solicitud' });
+
+    // Si el contacto no tiene responsable, avisar a los supervisores del módulo.
+    try {
+      const resp = await pool.request().input('id', sql.Int, tk.contactoId)
+        .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
+      if (!resp.recordset[0]?.responsableId) {
+        const sup = await getUsuariosParaNotificarCorreo('atencion-cliente', req.user?.empresa);
+        for (const uid of sup) {
+          await notificationService.createNotification({
+            usuarioId: uid,
+            mensaje: `Solicitud desde el portal: ${resultado.folio} — ${tit}`,
+            tipo: 'cliente-incidencia-portal',
+            dataExtra: { incidenciaId: resultado.id, folio: resultado.folio, contactoId: tk.contactoId },
+            tenantKey: req.user?.empresa,
+          });
+        }
+      }
+    } catch (e) { console.warn('crearIncidenciaPortal aviso supervisores:', e.message); }
+
+    res.status(201).json({ success: true, folio: resultado.folio });
+  } catch (e) {
+    console.error('Error crearIncidenciaPortal:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

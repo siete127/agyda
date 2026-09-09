@@ -1,7 +1,8 @@
 import { api } from '@/lib/axios'
 import {
   type CliSeguimiento, type CliTarea, type Prioridad, type EstatusTarea, type TipoContacto, type TipoTarea, type HistorialEvento,
-  parseCliSeguimiento, parseCliTarea, parseHistorialEvento,
+  type MiAgenda,
+  parseCliSeguimiento, parseCliTarea, parseHistorialEvento, parseAgendaSeguimiento,
 } from '@/types/clienteSeguimiento.types'
 
 const norm = <T>(data: unknown, parse: (r: Record<string, unknown>) => T): T[] => {
@@ -33,10 +34,22 @@ export const clienteSeguimientoService = {
     const { data } = await api.get('/atencion-cliente/tareas/mias')
     return norm(data?.data ?? data, parseCliTarea)
   },
-  createTarea: (contactoId: number, body: { tipo?: TipoTarea; titulo: string; descripcion?: string; prioridad?: Prioridad; asignadoA?: number; fechaVencimiento?: string }) =>
+  createTarea: (contactoId: number, body: { tipo?: TipoTarea; titulo: string; descripcion?: string; prioridad?: Prioridad; asignadoA?: number; fechaVencimiento?: string; fechaHora?: string; recordarMinAntes?: number }) =>
     api.post(`/atencion-cliente/clientes/${contactoId}/tareas`, body).then((r) => r.data),
+  updateTarea: (id: number, body: { tipo?: TipoTarea; titulo?: string; descripcion?: string; prioridad?: Prioridad; asignadoA?: number | null; fechaVencimiento?: string | null; fechaHora?: string | null; recordarMinAntes?: number | null }) =>
+    api.patch(`/atencion-cliente/tareas/${id}`, body).then((r) => r.data),
   updateTareaEstatus: (id: number, estatus: EstatusTarea) =>
     api.patch(`/atencion-cliente/tareas/${id}/estatus`, { estatus }).then((r) => r.data),
   deleteTarea: (id: number) =>
     api.delete(`/atencion-cliente/tareas/${id}`).then((r) => r.data),
+
+  // ── Mi agenda del día ──
+  getMiAgenda: async (): Promise<MiAgenda> => {
+    const { data } = await api.get('/atencion-cliente/mi-agenda')
+    const d = data?.data ?? data ?? {}
+    return {
+      tareas: ((d.tareas ?? []) as Record<string, unknown>[]).map(parseCliTarea),
+      seguimientos: ((d.seguimientos ?? []) as Record<string, unknown>[]).map(parseAgendaSeguimiento),
+    }
+  },
 }

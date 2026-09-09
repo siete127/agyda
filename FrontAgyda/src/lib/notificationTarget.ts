@@ -59,5 +59,13 @@ export function notificationTarget(n: NotificationItem): string | null {
   // Consultas / aclaraciones (CRM / atención a clientes)
   if (tipo === 'consulta_nueva' || tipo === 'aclaracion_nueva') return '/atencion-cliente'
 
+  // Seguimiento activo a clientes
+  if (tipo === 'cliente-tarea-vence' || tipo === 'cliente-seguimiento-hoy') return '/atencion-cliente/mis-tareas'
+  if (tipo === 'cliente-incidencia-sla-riesgo' || tipo === 'cliente-incidencia-sla-vencido' ||
+      tipo === 'cliente-incidencia-portal' || tipo === 'cliente-incidencia-automatica') return '/atencion-cliente/incidencias'
+  if (tipo === 'cliente-inactivo' || tipo === 'cliente-nuevo-asignado' || tipo === 'cliente-tarea-asignada') return '/atencion-cliente/clientes'
+  if (tipo === 'cliente-pago-por-vencer' || tipo === 'crm-recordatorio-pago' ||
+      tipo === 'cliente-pago-confirmado' || tipo === 'cliente-fecha-importante') return '/crm-interno'
+
   return null
 }

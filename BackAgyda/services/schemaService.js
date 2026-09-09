@@ -2005,6 +2005,12 @@ BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ES_CLIENTE BIT NOT NULL
     CONSTRAINT DF_CRM_CONTACTOS_ES_CLIENTE DEFAULT (0);
 END`,
+    // Anti-spam de la alerta de inactividad de cliente (clienteAgendaCronController):
+    // sello de la última vez que se avisó "este cliente lleva N días sin contacto".
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_ULTIMA_ALERTA_INACTIVIDAD')
+BEGIN
+  ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ULTIMA_ALERTA_INACTIVIDAD DATETIME NULL;
+END`,
     `IF OBJECT_ID('dbo.CRM_ACTIVIDADES', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.CRM_ACTIVIDADES (
@@ -2044,6 +2050,40 @@ END`,
     }
   }
   logger.info('✅ Esquema CRM asegurado/actualizado');
+}
+
+// Portal público del cliente (acceso por token, sin login). La tabla se creaba
+// solo en routes/crmSetup.js (endpoint manual); aquí se asegura al arrancar para
+// que exista en cada tenant sin correr ese setup a mano.
+async function ensureCrmPortalSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_PORTAL_TOKENS', 'U') IS NULL
+      CREATE TABLE dbo.CRM_PORTAL_TOKENS (
+        PT_ID          INT IDENTITY(1,1) PRIMARY KEY,
+        PT_CONTACTO_ID INT NOT NULL,
+        PT_TOKEN       NVARCHAR(100) NOT NULL UNIQUE,
+        PT_EMAIL       NVARCHAR(300) NOT NULL,
+        PT_ACTIVO      BIT DEFAULT 1,
+        PT_EXPIRA      DATETIME NULL,
+        PT_FECHA       DATETIME DEFAULT GETDATE()
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmPortalTokensSchema:', err.message);
+  }
+
+  // Telemetría: cuándo abrió el cliente su portal por última vez.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_PORTAL_TOKENS') AND name = 'PT_ULTIMA_APERTURA')
+        ALTER TABLE dbo.CRM_PORTAL_TOKENS ADD PT_ULTIMA_APERTURA DATETIME NULL;
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmPortalTokensUltimaAperturaSchema:', err.message);
+  }
+
+  logger.info('✅ Esquema de portal del cliente asegurado');
 }
 
 // Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
@@ -3827,6 +3867,58 @@ async function ensureClienteSeguimientoSchema(pool) {
   } catch (err) {
     console.warn('⚠️ CliTareasTipoSchema:', err.message);
   }
+
+  // Recordatorio de agenda: una tarea con TAR_FECHA_HORA (fecha + hora exacta) es
+  // el recordatorio; TAR_RECORDAR_MIN_ANTES = minutos antes para el aviso previo.
+  // Los dos BIT evitan que el cron (clienteAgendaCronController) repita la misma
+  // alerta — se resetean a 0 cuando updateTarea cambia la fecha.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_FECHA_HORA')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_FECHA_HORA DATETIME NULL;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_RECORDAR_MIN_ANTES')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_RECORDAR_MIN_ANTES INT NULL;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_ALERTA_PREVIA_NOTIF')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_ALERTA_PREVIA_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_ALERTA_VENCE_NOTIF')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_ALERTA_VENCE_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CLI_TAREAS_ALERTAS' AND object_id = OBJECT_ID('dbo.CLI_TAREAS'))
+        CREATE INDEX IX_CLI_TAREAS_ALERTAS ON dbo.CLI_TAREAS(TAR_ESTATUS, TAR_FECHA_HORA, TAR_FECHA_VENCIMIENTO) WHERE TAR_ACTIVO = 1;
+    `);
+    // Al agregar las columnas por primera vez, marcar como ya notificado todo lo
+    // que está completado/cancelado o venció hace más de una semana, para que la
+    // primera corrida del cron no dispare una avalancha de avisos retroactivos.
+    await pool.request().batch(`
+      UPDATE dbo.CLI_TAREAS
+      SET TAR_ALERTA_PREVIA_NOTIF = 1, TAR_ALERTA_VENCE_NOTIF = 1
+      WHERE (TAR_ALERTA_PREVIA_NOTIF = 0 OR TAR_ALERTA_VENCE_NOTIF = 0)
+        AND (
+          TAR_ESTATUS IN ('completada','cancelada')
+          OR COALESCE(TAR_FECHA_HORA, CAST(TAR_FECHA_VENCIMIENTO AS DATETIME)) < DATEADD(DAY, -7, GETDATE())
+        );
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliTareasAgendaSchema:', err.message);
+  }
+
+  // Sello de cuándo se avisó la "próxima fecha de seguimiento" de la bitácora,
+  // para que el cron no repita el aviso.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_SEGUIMIENTOS') AND name = 'SEG_ALERTA_PROXIMA_NOTIF')
+        ALTER TABLE dbo.CLI_SEGUIMIENTOS ADD SEG_ALERTA_PROXIMA_NOTIF DATETIME NULL;
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliSeguimientosAlertaProximaSchema:', err.message);
+  }
 }
 
 // Gestión de incidencias de cliente — Fase 5 del módulo "Seguimiento de
@@ -3897,6 +3989,28 @@ async function ensureClienteIncidenciasSchema(pool) {
     `);
   } catch (err) {
     console.warn('⚠️ CliIncidenciasFechaCompromisoSchema:', err.message);
+  }
+
+  // Motor de SLA activo (clienteIncidenciasSlaCronController): estos BIT evitan
+  // que el cron repita el aviso de "SLA en riesgo" / "SLA vencido". Al agregarse
+  // por primera vez, se marcan como ya notificado las incidencias ya cerradas.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_INCIDENCIAS') AND name = 'INC_SLA_RIESGO_NOTIF')
+        ALTER TABLE dbo.CLI_INCIDENCIAS ADD INC_SLA_RIESGO_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_INCIDENCIAS') AND name = 'INC_SLA_VENCIDO_NOTIF')
+        ALTER TABLE dbo.CLI_INCIDENCIAS ADD INC_SLA_VENCIDO_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      UPDATE dbo.CLI_INCIDENCIAS
+      SET INC_SLA_RIESGO_NOTIF = 1, INC_SLA_VENCIDO_NOTIF = 1
+      WHERE (INC_SLA_RIESGO_NOTIF = 0 OR INC_SLA_VENCIDO_NOTIF = 0)
+        AND INC_ESTATUS IN ('resuelto','cerrado');
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliIncidenciasSlaNotifSchema:', err.message);
   }
 
   try {
@@ -5043,6 +5157,7 @@ async function ensureAllSchemas(pool) {
   await ensureCrmSchema(pool);
   await ensureCrmCotizacionesSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
+  await ensureCrmPortalSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
