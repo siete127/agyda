@@ -4066,6 +4066,134 @@ async function ensureClienteIncidenciasSchema(pool) {
   }
 }
 
+// "Caso" unificado (Fase 1 del rediseño de Atención al Cliente): reemplaza
+// gradualmente a Consulta/Aclaración/Queja/Incidencia con una sola entidad con
+// CASO_TIPO. Molde directo de ensureClienteIncidenciasSchema — mismo patrón de
+// folio/prioridad/SLA/estatus/evidencias cifradas. Las tablas viejas (CONSULTAS,
+// ACLARACIONES, QUEJAS, CLI_INCIDENCIAS) NO se tocan aquí; esta fase solo crea
+// el esquema nuevo, vacío. CASO_ORIGEN_TABLA/CASO_ORIGEN_ID + el índice único
+// filtrado IX_CASOS_ORIGEN son lo que hace idempotente la migración de datos
+// (fase siguiente): un mismo registro origen nunca se inserta dos veces.
+async function ensureCasosSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS (
+          CASO_ID                  INT IDENTITY(1,1) PRIMARY KEY,
+          CASO_FOLIO                NVARCHAR(20) NOT NULL,
+          CASO_TIPO                 NVARCHAR(20) NOT NULL,
+          CASO_CONTACTO_ID          INT NULL,
+          CASO_CLIENTE_NOMBRE_LIBRE NVARCHAR(200) NULL,
+          CASO_TITULO               NVARCHAR(200) NOT NULL,
+          CASO_DESCRIPCION          NVARCHAR(MAX) NULL,
+          CASO_CATEGORIA            NVARCHAR(50) NULL,
+          CASO_REFERENCIA           NVARCHAR(100) NULL,
+          CASO_PRIORIDAD            NVARCHAR(20) NOT NULL DEFAULT 'media',
+          CASO_SLA_HORAS            INT NULL,
+          CASO_FECHA_LIMITE_SLA     DATETIME NULL,
+          CASO_ESTATUS              NVARCHAR(20) NOT NULL DEFAULT 'pendiente',
+          CASO_ORIGEN               NVARCHAR(20) NOT NULL DEFAULT 'manual',
+          CASO_ASIGNADO_A           INT NULL,
+          CASO_CREADO_POR           INT NULL,
+          CASO_FECHA_CREACION       DATETIME NOT NULL DEFAULT GETDATE(),
+          CASO_FECHA_RESOLUCION     DATETIME NULL,
+          CASO_ACTIVO               BIT NOT NULL DEFAULT 1,
+          CASO_SOLUCION_PROPUESTA   NVARCHAR(MAX) NULL,
+          CASO_FECHA_COMPROMISO     DATE NULL,
+          CASO_SLA_RIESGO_NOTIF     BIT NOT NULL DEFAULT 0,
+          CASO_SLA_VENCIDO_NOTIF    BIT NOT NULL DEFAULT 0,
+          CASO_ORIGEN_TABLA         NVARCHAR(20) NULL,
+          CASO_ORIGEN_ID            INT NULL,
+          CONSTRAINT UQ_CASOS_FOLIO UNIQUE (CASO_FOLIO)
+        );
+        CREATE INDEX IX_CASOS_CONTACTO ON dbo.CASOS(CASO_CONTACTO_ID);
+        CREATE INDEX IX_CASOS_ESTATUS ON dbo.CASOS(CASO_ESTATUS) WHERE CASO_ACTIVO = 1;
+        CREATE INDEX IX_CASOS_TIPO ON dbo.CASOS(CASO_TIPO);
+        CREATE UNIQUE INDEX IX_CASOS_ORIGEN ON dbo.CASOS(CASO_ORIGEN_TABLA, CASO_ORIGEN_ID) WHERE CASO_ORIGEN_TABLA IS NOT NULL;
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS_COMENTARIOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS_COMENTARIOS (
+          CCO_ID           INT IDENTITY(1,1) PRIMARY KEY,
+          CCO_CASO_ID      INT NOT NULL,
+          CCO_COMENTARIO   NVARCHAR(MAX) NOT NULL,
+          CCO_USUARIO_ID   INT NULL,
+          CCO_FECHA        DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_CCO_CASO FOREIGN KEY (CCO_CASO_ID) REFERENCES dbo.CASOS(CASO_ID)
+        );
+        CREATE INDEX IX_CASOS_COMENTARIOS_CASO ON dbo.CASOS_COMENTARIOS(CCO_CASO_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosComentariosSchema:', err.message);
+  }
+
+  // Evidencias — misma estructura cifrada AES-256-GCM que CLI_INCIDENCIAS_EVIDENCIAS
+  // (utils/cryptoDocs.js, misma EXPEDIENTE_ENCRYPTION_KEY), abierta a nivel de
+  // esquema a cualquier CASO_TIPO aunque hoy la UI solo la use para 'incidencia'.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS_EVIDENCIAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS_EVIDENCIAS (
+          EVI_ID               INT IDENTITY(1,1) PRIMARY KEY,
+          EVI_CASO_ID          INT NOT NULL,
+          EVI_NOMBRE_ORIGINAL  NVARCHAR(255) NOT NULL,
+          EVI_MIME_TYPE        NVARCHAR(100) NULL,
+          EVI_TAMANO_BYTES     BIGINT NOT NULL,
+          EVI_DESCRIPCION      NVARCHAR(500) NULL,
+          EVI_ENCRYPTED_DATA   VARBINARY(MAX) NOT NULL,
+          EVI_CONTENT_HASH     CHAR(64) NOT NULL,
+          EVI_ENC_ALGO         NVARCHAR(30) NOT NULL DEFAULT 'aes-256-gcm',
+          EVI_ENC_IV           VARBINARY(12) NOT NULL,
+          EVI_ENC_TAG          VARBINARY(16) NOT NULL,
+          EVI_KEY_ID           NVARCHAR(50) NULL,
+          EVI_SUBIDO_POR       INT NULL,
+          EVI_FECHA_SUBIDA     DATETIME NOT NULL DEFAULT GETDATE(),
+          EVI_ACTIVO           BIT NOT NULL DEFAULT 1,
+          CONSTRAINT FK_EVI_CASO FOREIGN KEY (EVI_CASO_ID) REFERENCES dbo.CASOS(CASO_ID)
+        );
+        CREATE INDEX IX_CASOS_EVIDENCIAS_CASO ON dbo.CASOS_EVIDENCIAS(EVI_CASO_ID, EVI_ACTIVO);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosEvidenciasSchema:', err.message);
+  }
+
+  // Acción correctiva — molde de QUEJAS_ACCION_CORRECTIVA, igualmente abierta a
+  // nivel de esquema a cualquier tipo de caso (hoy la UI solo la usa para 'queja').
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS_ACCION_CORRECTIVA', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS_ACCION_CORRECTIVA (
+          AC_ID                INT IDENTITY(1,1) PRIMARY KEY,
+          AC_CASO_ID           INT NOT NULL,
+          AC_REDACTOR_ID       INT NOT NULL,
+          AC_REDACTOR_NOMBRE   NVARCHAR(200) NULL,
+          AC_DESCRIPCION       NVARCHAR(MAX) NOT NULL,
+          AC_RESPONSABLE       NVARCHAR(200) NOT NULL,
+          AC_FECHA_COMPROMISO  DATE NOT NULL,
+          AC_ESTADO            NVARCHAR(30) NOT NULL DEFAULT 'pendiente',
+          AC_FECHA_REGISTRO    DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT UQ_CASOS_ACCION_CORRECTIVA_CASO UNIQUE (AC_CASO_ID),
+          CONSTRAINT FK_AC_CASO FOREIGN KEY (AC_CASO_ID) REFERENCES dbo.CASOS(CASO_ID)
+        );
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosAccionCorrectivaSchema:', err.message);
+  }
+}
+
 // Renovaciones y fechas importantes de cliente (contrato, servicio, mantenimiento,
 // cumpleaños, personalizadas) — Fase 6 del módulo "Seguimiento de Clientes".
 // FEC_DIAS_ALERTA es un CSV configurable por registro (default '30,15,7'),
@@ -5174,6 +5302,7 @@ async function ensureAllSchemas(pool) {
   await ensureAtencionClienteSchema(pool);
   await ensureClienteSeguimientoSchema(pool);
   await ensureClienteIncidenciasSchema(pool);
+  await ensureCasosSchema(pool);
   await ensureClienteFechasSchema(pool);
   await ensureRhAreaSchema(pool);
   await ensureDecisionesSchema(pool);

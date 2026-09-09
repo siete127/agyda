@@ -7,6 +7,7 @@ const clienteFechas = require('../controllers/clienteFechasController');
 const clienteFechasCron = require('../controllers/clienteFechasCronController');
 const clienteAgendaCron = require('../controllers/clienteAgendaCronController');
 const clienteIncSlaCron = require('../controllers/clienteIncidenciasSlaCronController');
+const caso = require('../controllers/casoController');
 const clienteDashboard = require('../controllers/clienteDashboardController');
 const auth = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
@@ -47,6 +48,12 @@ router.post('/incidencias/:id/evidencias', auth.authenticateToken, requireAction
 router.get('/incidencias/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.listEvidencias);
 router.get('/incidencias/evidencias/:evidenciaId/download', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.downloadEvidencia);
 router.delete('/incidencias/evidencias/:evidenciaId', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.deleteEvidencia);
+
+// ── Casos (unificado) ─────────────────────────────────────────────────────
+// Fase 1 del rediseño: solo lectura por ahora (placeholder). El CRUD completo
+// llega en Fase 3, reemplazando gradualmente a Consultas/Aclaraciones/Quejas/
+// Incidencias — ver plan en curso, sección "Diseño de las 9 fases".
+router.get('/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.list);
 
 // ── Renovaciones y fechas importantes ────────────────────────────────────────
 router.get('/clientes/:id/fechas-importantes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteFechas.listByContacto);

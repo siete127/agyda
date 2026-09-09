@@ -415,6 +415,8 @@ const ACCIONES_POR_MODULO = {
     { key: 'clientes-encuestas',     nombre: 'Enviar encuestas',        descripcion: 'Enviar encuestas de satisfacción a clientes' },
     { key: 'incidencias-ver',        nombre: 'Ver incidencias',         descripcion: 'Consultar el listado y detalle de incidencias de clientes' },
     { key: 'incidencias-gestionar',  nombre: 'Gestionar incidencias',   descripcion: 'Crear, asignar, comentar y cambiar el estatus de incidencias' },
+    { key: 'casos-ver',              nombre: 'Ver casos',               descripcion: 'Consultar el listado y detalle de casos de clientes (consultas, aclaraciones, quejas, incidencias)' },
+    { key: 'casos-gestionar',        nombre: 'Gestionar casos',         descripcion: 'Crear, asignar, comentar y cambiar el estatus de casos' },
     { key: 'clientes-renovaciones',  nombre: 'Gestionar renovaciones',  descripcion: 'Gestionar fechas importantes y renovaciones de clientes' },
     { key: 'clientes-dashboard',     nombre: 'Ver dashboard',           descripcion: 'Ver el dashboard y reportes del módulo de clientes' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
