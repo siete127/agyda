@@ -14,18 +14,21 @@ function notifyAccesosUpdated(usuarioId, tenantKey) {
 }
 
 // Módulos por defecto según rol (para inicialización automática)
-const ALL_MODULES = ['noticias','tickets','proyectos','vacaciones','asistencia-personal','calendario','quejas','reglamento','drive','organigrama','musica','webphone','clientes','crm','encuestas','reports','usuarios','vacaciones-admin','staff-ti','activos','vacantes','chatbot','livechat','contact-center','mensajeria','asistencia','nomina','accesos','auditoria','expedientes','gastos','mi-area','evaluacion','configuracion','direccion-general','calidad','marketing','legal','finanzas','ventas-area','operaciones','tecnologia','atencion-cliente','rh-area','capacitacion','incapacidades','evaluacion-desempeno'];
+// Nota: el módulo 'quejas' se retiró en la Fase 9 del rediseño de Atención al
+// Cliente (Quejas vive ahora en 'atencion-cliente' → Casos). Se dejó de listar
+// aquí; los accesos existentes se migraron por backfill.
+const ALL_MODULES = ['noticias','tickets','proyectos','vacaciones','asistencia-personal','calendario','reglamento','drive','organigrama','musica','webphone','clientes','crm','encuestas','reports','usuarios','vacaciones-admin','staff-ti','activos','vacantes','chatbot','livechat','contact-center','mensajeria','asistencia','nomina','accesos','auditoria','expedientes','gastos','mi-area','evaluacion','configuracion','direccion-general','calidad','marketing','legal','finanzas','ventas-area','operaciones','tecnologia','atencion-cliente','rh-area','capacitacion','incapacidades','evaluacion-desempeno'];
 const DEFAULT_MODULES_BY_ROLE = {
   ad:  ALL_MODULES,  // AD normal: todos los módulos (pero respeta restricciones del admin)
-  cc:  ['noticias','tickets','vacaciones','calendario','quejas','reglamento','musica','evaluacion','asistencia-personal','webphone','mensajeria'],
-  st:  ['noticias','tickets','vacaciones','calendario','proyectos','quejas','reglamento','drive','organigrama','musica','clientes','gastos','mi-area','mensajeria'],
-  ve:  ['noticias','tickets','vacaciones','calendario','proyectos','quejas','reglamento','drive','organigrama','musica','clientes','gastos','mi-area','mensajeria'],
+  cc:  ['noticias','tickets','vacaciones','calendario','reglamento','musica','evaluacion','asistencia-personal','webphone','mensajeria'],
+  st:  ['noticias','tickets','vacaciones','calendario','proyectos','reglamento','drive','organigrama','musica','clientes','gastos','mi-area','mensajeria'],
+  ve:  ['noticias','tickets','vacaciones','calendario','proyectos','reglamento','drive','organigrama','musica','clientes','gastos','mi-area','mensajeria'],
   cl:  ['tickets'],
   ti:  ALL_MODULES,  // TI: todos los módulos por defecto
 };
 function getDefaultModulesByRole(tipo) {
   const t = (tipo || '').toLowerCase();
-  return DEFAULT_MODULES_BY_ROLE[t] ?? ['noticias','tickets','vacaciones','calendario','quejas','reglamento'];
+  return DEFAULT_MODULES_BY_ROLE[t] ?? ['noticias','tickets','vacaciones','calendario','reglamento'];
 }
 
 // Módulos reales del sidebar — solo los que se pueden asignar por acceso
@@ -38,7 +41,6 @@ const MODULOS_DISPONIBLES = [
   { key: 'drive',       nombre: 'Drive',               descripcion: 'Almacenamiento y documentos' },
   { key: 'organigrama', nombre: 'Organigrama',         descripcion: 'Estructura organizacional' },
   { key: 'musica',      nombre: 'Música',              descripcion: 'Reproductor de música' },
-  { key: 'quejas',      nombre: 'Quejas',              descripcion: 'Registro y seguimiento de quejas' },
   { key: 'reglamento',  nombre: 'Reglamento',          descripcion: 'Políticas y reglamento interno' },
   { key: 'clientes',    nombre: 'Clientes',            descripcion: 'Gestión de clientes' },
   { key: 'productos-servicios', nombre: 'Productos y Servicios', descripcion: 'Catálogo de productos y servicios' },
@@ -250,14 +252,8 @@ const ACCIONES_POR_MODULO = {
     { key: 'eliminar',             nombre: 'Eliminar pista',        descripcion: 'Borrar una pista de la lista general o privada' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
-  quejas: [
-    { key: 'ver',                nombre: 'Ver quejas',            descripcion: 'Consultar quejas, estadísticas y comentarios' },
-    { key: 'crear',               nombre: 'Crear queja',           descripcion: 'Registrar una nueva queja' },
-    { key: 'comentar',             nombre: 'Comentar',              descripcion: 'Agregar comentarios a una queja' },
-    { key: 'gestionar-estatus',    nombre: 'Gestionar estatus',     descripcion: 'Actualizar el estatus o eliminar una queja' },
-    { key: 'accion-correctiva',    nombre: 'Acción correctiva',     descripcion: 'Registrar o consultar la acción correctiva de una queja' },
-    { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
-  ],
+  // Módulo 'quejas' retirado en la Fase 9 — Quejas es ahora un tipo de Caso
+  // dentro de 'atencion-cliente'.
   reglamento: [
     { key: 'ver',                nombre: 'Ver reglamento',        descripcion: 'Consultar el PDF y el estatus de aceptación' },
     { key: 'aceptar',             nombre: 'Aceptar reglamento',    descripcion: 'Aceptar el reglamento vigente' },
@@ -398,12 +394,13 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   'atencion-cliente': [
-    { key: 'ver-consultas',          nombre: 'Ver consultas',           descripcion: 'Consultar el listado y detalle de consultas de clientes' },
-    { key: 'crear-consulta',         nombre: 'Registrar consulta',      descripcion: 'Registrar una nueva consulta de cliente' },
-    { key: 'gestionar-consultas',    nombre: 'Gestionar consultas',     descripcion: 'Ver todas las consultas de todos los usuarios, cambiar su estado y comentar' },
-    { key: 'ver-aclaraciones',       nombre: 'Ver aclaraciones',        descripcion: 'Consultar el listado y detalle de aclaraciones de clientes' },
-    { key: 'crear-aclaracion',       nombre: 'Registrar aclaración',    descripcion: 'Registrar una nueva aclaración de cliente' },
-    { key: 'gestionar-aclaraciones', nombre: 'Gestionar aclaraciones',  descripcion: 'Ver todas las aclaraciones de todos los usuarios, cambiar su estado y comentar' },
+    // Consultas / Aclaraciones / Incidencias: unificadas en "Casos" (Fase 9).
+    // Las acciones ver-consultas / crear-consulta / gestionar-consultas /
+    // ver-aclaraciones / crear-aclaracion / gestionar-aclaraciones /
+    // incidencias-ver / incidencias-gestionar se retiraron; los roles/usuarios
+    // que las tenían recibieron casos-ver / casos-gestionar por backfill.
+    { key: 'casos-ver',              nombre: 'Ver casos',               descripcion: 'Consultar el listado y detalle de casos de clientes (consultas, aclaraciones, quejas, incidencias)' },
+    { key: 'casos-gestionar',        nombre: 'Gestionar casos',         descripcion: 'Crear, asignar, comentar y cambiar el estatus de casos' },
     { key: 'ver-retencion',          nombre: 'Ver retención',           descripcion: 'Consultar el listado de evaluaciones de retención de clientes' },
     { key: 'crear-retencion',        nombre: 'Registrar evaluación',    descripcion: 'Registrar una nueva evaluación de riesgo/retención de cliente' },
     { key: 'clientes-ver',           nombre: 'Ver clientes',            descripcion: 'Ver el listado y expediente/perfil completo de clientes' },
@@ -413,10 +410,6 @@ const ACCIONES_POR_MODULO = {
     { key: 'clientes-tareas',        nombre: 'Gestionar tareas',        descripcion: 'Crear, asignar y actualizar tareas de clientes' },
     { key: 'clientes-pagos',         nombre: 'Gestionar pagos',         descripcion: 'Crear recordatorios de pago y confirmar pagos con comprobante' },
     { key: 'clientes-encuestas',     nombre: 'Enviar encuestas',        descripcion: 'Enviar encuestas de satisfacción a clientes' },
-    { key: 'incidencias-ver',        nombre: 'Ver incidencias',         descripcion: 'Consultar el listado y detalle de incidencias de clientes' },
-    { key: 'incidencias-gestionar',  nombre: 'Gestionar incidencias',   descripcion: 'Crear, asignar, comentar y cambiar el estatus de incidencias' },
-    { key: 'casos-ver',              nombre: 'Ver casos',               descripcion: 'Consultar el listado y detalle de casos de clientes (consultas, aclaraciones, quejas, incidencias)' },
-    { key: 'casos-gestionar',        nombre: 'Gestionar casos',         descripcion: 'Crear, asignar, comentar y cambiar el estatus de casos' },
     { key: 'clientes-renovaciones',  nombre: 'Gestionar renovaciones',  descripcion: 'Gestionar fechas importantes y renovaciones de clientes' },
     { key: 'clientes-dashboard',     nombre: 'Ver dashboard',           descripcion: 'Ver el dashboard y reportes del módulo de clientes' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },

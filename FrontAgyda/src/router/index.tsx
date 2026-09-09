@@ -54,10 +54,8 @@ const WebphonePage             = lz(() => import('@/pages/webphone/WebphonePage'
 const NotificacionesPage       = lz(() => import('@/pages/notificaciones/NotificacionesPage'),       'NotificacionesPage')
 const MusicaPage               = lz(() => import('@/pages/musica/MusicaPage'),                         'MusicaPage')
 const VentasPage               = lz(() => import('@/pages/ventas/VentasPage'),                          'VentasPage')
-// Fase 8: Quejas reemplazado por /atencion-cliente/casos?tipo=queja. Import y
-// página se retiran en Fase 9 (junto con quejaController y su módulo de permisos).
-// const QuejasPage               = lz(() => import('@/pages/quejas/QuejasPage'),                             'QuejasPage')
-// const QuejasDashboardPage      = lz(() => import('@/pages/quejas/QuejasDashboardPage'),                    'QuejasDashboardPage')
+// Quejas / Consultas / Aclaraciones / Incidencias sueltas: unificadas en "Casos"
+// (Fase 9). Las rutas viejas redirigen a /atencion-cliente/casos.
 const AsistenciaReportePage    = lz(() => import('@/pages/asistencia/AsistenciaReportePage'),              'AsistenciaReportePage')
 const MiAsistenciaPage         = lz(() => import('@/pages/asistencia/MiAsistenciaPage'),                   'MiAsistenciaPage')
 const ReglamentoPage           = lz(() => import('@/pages/reglamento/ReglamentoPage'),                     'ReglamentoPage')
@@ -129,17 +127,12 @@ const RespaldosPage                 = lz(() => import('@/pages/respaldos/Respald
 const SistemasPage                  = lz(() => import('@/pages/sistemas/SistemasPage'),         'SistemasPage')
 const AtencionClientePage           = lz(() => import('@/pages/atencion-cliente/AtencionClientePage'), 'AtencionClientePage')
 const CasosPage                     = lz(() => import('@/pages/atencion-cliente/CasosPage'), 'CasosPage')
-// Fase 8: Consultas/Aclaraciones/Incidencias reemplazadas por Casos. Imports y
-// páginas se retiran en Fase 9.
-// const ConsultasPage                 = lz(() => import('@/pages/atencion-cliente/ConsultasPage'),  'ConsultasPage')
-// const AclaracionesPage              = lz(() => import('@/pages/atencion-cliente/AclaracionesPage'), 'AclaracionesPage')
 const SeguimientoPage                = lz(() => import('@/pages/atencion-cliente/SeguimientoPage'), 'SeguimientoPage')
 const SatisfaccionPage               = lz(() => import('@/pages/atencion-cliente/SatisfaccionPage'), 'SatisfaccionPage')
 const RetencionPage                  = lz(() => import('@/pages/atencion-cliente/RetencionPage'), 'RetencionPage')
 const ClientesListaPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientesListaPage'), 'ClientesListaPage')
 const ClientePerfilPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientePerfilPage'), 'ClientePerfilPage')
 const MiAgendaPage                   = lz(() => import('@/pages/atencion-cliente/MiAgendaPage'), 'MiAgendaPage')
-// const IncidenciasPage                = lz(() => import('@/pages/atencion-cliente/IncidenciasPage'), 'IncidenciasPage') // Fase 8 → Casos
 const ClientesDashboardPage          = lz(() => import('@/pages/atencion-cliente/ClientesDashboardPage'), 'ClientesDashboardPage')
 const RHPage                        = lz(() => import('@/pages/rh/RHPage'),                    'RHPage')
 const PortalAreasPage               = lz(() => import('@/pages/portal-areas/PortalAreasPage'),  'PortalAreasPage')

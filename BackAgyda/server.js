@@ -106,9 +106,9 @@ app.use('/api/comentarios', require('./routes/comentarios'));
 app.use('/api/proyectos', require('./routes/proyectos'));
 app.use('/api/tareas', require('./routes/tareas'));
 app.use('/api/permisos', require('./routes/permisos'));
-app.use('/api/quejas', require('./routes/quejas'));
-app.use('/api/consultas', require('./routes/consultas'));
-app.use('/api/aclaraciones', require('./routes/aclaraciones'));
+// Quejas / Consultas / Aclaraciones: unificadas en "Casos" (rutas en
+// /api/atencion-cliente/casos). Fase 9 del rediseño — controladores y rutas
+// legacy eliminados; las tablas SQL se conservan como respaldo histórico.
 app.use('/api/seguimiento', require('./routes/seguimiento'));
 app.use('/api/encuestas', require('./routes/encuestas'));
 app.use('/api/nomina',   require('./routes/nomina'));

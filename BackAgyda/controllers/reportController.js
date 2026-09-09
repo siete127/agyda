@@ -365,17 +365,19 @@ exports.getResumenGeneral = async (req, res) => {
 
     const ids = usuarios.map((u) => u.id).join(',');
 
-    // 2. Quejas por usuario
+    // 2. Quejas por usuario — desde CASOS (tipo 'queja'); la tabla QUEJAS legacy
+    //    quedó congelada en la Fase 9.
     const quejasResult = await pool.request()
       .input('fromDate', sql.NVarChar, fromDate)
       .input('toDate', sql.NVarChar, toDate)
       .query(`
-        SELECT USUARIO_ID as usuarioId, COUNT(*) as total
-        FROM QUEJAS
-        WHERE CAST(FECHA AS date) >= @fromDate AND CAST(FECHA AS date) <= @toDate
-          AND USUARIO_ID IN (${ids})
-        GROUP BY USUARIO_ID
-      `);
+        SELECT CASO_CREADO_POR as usuarioId, COUNT(*) as total
+        FROM CASOS
+        WHERE CASO_TIPO = 'queja'
+          AND CAST(CASO_FECHA_CREACION AS date) >= @fromDate AND CAST(CASO_FECHA_CREACION AS date) <= @toDate
+          AND CASO_CREADO_POR IN (${ids})
+        GROUP BY CASO_CREADO_POR
+      `).catch(() => ({ recordset: [] }));
     const quejasPorUser = Object.fromEntries(quejasResult.recordset.map((r) => [r.usuarioId, r.total]));
 
     // 3. Pausas por tipo (statusId: 2=baño,3=comida,5=capacitación,6=permiso)

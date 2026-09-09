@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/atencionClienteController');
 const clienteSeguimiento = require('../controllers/clienteSeguimientoController');
-const clienteIncidencias = require('../controllers/clienteIncidenciasController');
 const clienteFechas = require('../controllers/clienteFechasController');
 const clienteFechasCron = require('../controllers/clienteFechasCronController');
 const clienteAgendaCron = require('../controllers/clienteAgendaCronController');
@@ -32,22 +31,10 @@ router.patch('/tareas/:id', auth.authenticateToken, requireActionAccess('atencio
 router.delete('/tareas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.deleteTarea);
 router.post('/agenda/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), clienteAgendaCron.runNow);
 
-// ── Incidencias ─────────────────────────────────────────────────────────────
+// ── Incidencias → unificadas en "Casos" (Fase 9). Solo queda el cron de SLA,
+//    que ahora corre sobre CASOS tipo 'incidencia'. La tabla CLI_INCIDENCIAS y
+//    sus rutas/controlador legacy se eliminaron; la tabla SQL se conserva.
 router.post('/incidencias/sla/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), clienteIncSlaCron.runNow);
-router.get('/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.list);
-router.get('/incidencias/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.getById);
-router.post('/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.create);
-router.patch('/incidencias/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.updateEstatus);
-router.patch('/incidencias/:id/solucion', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.updateSolucion);
-router.get('/incidencias/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.listComentarios);
-router.post('/incidencias/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.addComentario);
-router.get('/clientes/:id/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteIncidencias.listByContacto);
-
-// ── Incidencias: evidencias (adjuntos) ────────────────────────────────────
-router.post('/incidencias/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), uploadCrmDocumento.single('file'), clienteIncidencias.subirEvidencia);
-router.get('/incidencias/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.listEvidencias);
-router.get('/incidencias/evidencias/:evidenciaId/download', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.downloadEvidencia);
-router.delete('/incidencias/evidencias/:evidenciaId', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.deleteEvidencia);
 
 // ── Casos (unificado) ─────────────────────────────────────────────────────
 // Reemplaza gradualmente a Consultas/Aclaraciones/Quejas/Incidencias. Para

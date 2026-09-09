@@ -22,9 +22,10 @@ export function notificationTarget(n: NotificationItem): string | null {
     return ticketId ? `/tickets?id=${ticketId}` : '/tickets'
   }
 
-  // Quejas
+  // Quejas — Fase 9: son un tipo de Caso. El id viejo (tabla QUEJAS) ya no
+  // resuelve un caso, así que se abre la lista de casos tipo queja.
   if (quejaId || tipo === 'queja' || tipo === 'queja_nueva') {
-    return quejaId ? `/quejas?quejaId=${quejaId}` : '/quejas'
+    return '/atencion-cliente/casos?tipo=queja'
   }
 
   // Encuestas
