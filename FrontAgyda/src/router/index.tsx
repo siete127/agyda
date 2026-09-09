@@ -126,6 +126,7 @@ const InternetRedesPage             = lz(() => import('@/pages/internet-redes/In
 const RespaldosPage                 = lz(() => import('@/pages/respaldos/RespaldosPage'),       'RespaldosPage')
 const SistemasPage                  = lz(() => import('@/pages/sistemas/SistemasPage'),         'SistemasPage')
 const AtencionClientePage           = lz(() => import('@/pages/atencion-cliente/AtencionClientePage'), 'AtencionClientePage')
+const CasosPage                     = lz(() => import('@/pages/atencion-cliente/CasosPage'), 'CasosPage')
 const ConsultasPage                 = lz(() => import('@/pages/atencion-cliente/ConsultasPage'),  'ConsultasPage')
 const AclaracionesPage              = lz(() => import('@/pages/atencion-cliente/AclaracionesPage'), 'AclaracionesPage')
 const SeguimientoPage                = lz(() => import('@/pages/atencion-cliente/SeguimientoPage'), 'SeguimientoPage')
@@ -323,6 +324,7 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia/sistemas', element: wrap(<SistemasPage />) }] },
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia/:subSlug', element: wrap(<AreaSubModuloPage areaKey="ti" />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente', element: wrap(<AtencionClientePage />) }] },
+              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/casos', element: wrap(<CasosPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/consultas', element: wrap(<ConsultasPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/aclaraciones', element: wrap(<AclaracionesPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/seguimiento', element: wrap(<SeguimientoPage />) }] },

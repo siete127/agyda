@@ -90,6 +90,7 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'mantenimiento', label: 'Mantenimiento', kind: 'link', linkTo: '/tecnologia', description: 'Mantenimientos preventivos y correctivos.' },
   ],
   'atencion-cliente': [
+    { slug: 'casos', label: 'Casos', kind: 'link', linkTo: '/atencion-cliente/casos', description: 'Casos de clientes: consultas, aclaraciones, quejas e incidencias.' },
     { slug: 'atencion', label: 'Atención', kind: 'link', linkTo: '/atencion-cliente/consultas', description: 'Registro general de atención a clientes.' },
     { slug: 'consultas', label: 'Consultas', kind: 'link', linkTo: '/atencion-cliente/consultas', description: 'Consultas recibidas de clientes.' },
     { slug: 'quejas', label: 'Quejas', kind: 'link', linkTo: '/quejas', description: 'Registro y seguimiento de quejas.' },

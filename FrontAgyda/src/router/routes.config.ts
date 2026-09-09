@@ -119,6 +119,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/tecnologia/sistemas', label: 'Sistemas',     icon: 'Server',               moduleKey: 'tecnologia',       roles: ['AD','TI'],          showInSidebar: true,  description: 'Sistemas internos y su estado' },
   { path: '/tecnologia/respaldos', label: 'Respaldos',   icon: 'HardDriveDownload',     moduleKey: 'tecnologia',       roles: ['AD','TI'],          showInSidebar: true,  description: 'Estado y calendario de respaldos' },
   { path: '/atencion-cliente', label: 'Atención al Cliente', icon: 'Headphones',       moduleKey: 'atencion-cliente', roles: ['AD','TI'],          showInSidebar: false },
+  { path: '/atencion-cliente/casos',        label: 'Casos',        icon: 'Inbox',       moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Casos de clientes: consultas, aclaraciones, quejas e incidencias' },
   { path: '/atencion-cliente/consultas',    label: 'Consultas',    icon: 'Headset',      moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Consultas recibidas de clientes' },
   { path: '/atencion-cliente/aclaraciones', label: 'Aclaraciones', icon: 'FileQuestion', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Aclaraciones solicitadas por clientes' },
   { path: '/atencion-cliente/seguimiento',  label: 'Seguimiento',  icon: 'ListChecks',   moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Seguimiento de casos abiertos' },
