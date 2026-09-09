@@ -5034,6 +5034,7 @@ async function ensureAllSchemas(pool) {
   await ensureContactCenterSchema(pool);
   await ensureWebphoneTipificacionesSchema(pool);
   await ensurePostulanteNotasSchema(pool);
+  await ensureFormulariosAtencionSchema(pool);
   await ensureQrCodesSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
@@ -6715,6 +6716,328 @@ CREATE INDEX IX_CCO_PN_POSTULANTE ON dbo.CCO_POSTULANTE_NOTAS(PN_POSTULANTE_ID);
     catch (err) { console.warn('⚠️ Postulante notas schema:', err.message); }
   }
   logger.info('✅ Esquema de notas de postulante asegurado');
+}
+
+// ── Formularios de Atención (Contact Center) ────────────────────────────
+// Constructor dinámico de formularios usados durante una interacción
+// omnicanal: Formulario -> Versión (inmutable al publicar) -> Secciones ->
+// Campos (+ Opciones estáticas) -> Asignación a Campaña+Canal. Prefijo
+// "CCF_" para no colisionar con CCO_* (Contact Center core) ni con FORM_*
+// si algún día existiera otro módulo de formularios ajeno a Contact Center.
+//
+// Reglas de diseño (ver también ccFormulariosController.js):
+// - Empresa/tenant NO lleva columna propia: el aislamiento ya lo da el pool
+//   de conexión por empresa (databaseService.getPool), igual que el resto
+//   de CCO_*. Una fila de estas tablas SIEMPRE vive en la BD de una sola
+//   empresa.
+// - Una CCF_FORM_VERSIONES en estado 'publicado' nunca se modifica: para
+//   cambiar algo se clona a una versión nueva en 'borrador'. Las respuestas
+//   históricas (Entrega 3, CCO_INTERACCION_FORM_RESPUESTAS) guardan el
+//   FV_ID exacto usado, no el formulario "vigente".
+// - Las respuestas NO generan una columna SQL por campo dinámico (Entrega 3):
+//   se guardan tipadas (texto/número/fecha/booleano/json) contra FC_ID.
+async function ensureFormulariosAtencionSchema(pool) {
+  const stmts = [
+    // Cabecera del formulario — agrupa versiones, no se edita contenido aquí.
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORMULARIOS (
+  FR_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FR_CODIGO NVARCHAR(60) NOT NULL,
+  FR_NOMBRE NVARCHAR(200) NOT NULL,
+  FR_DESCRIPCION NVARCHAR(MAX) NULL,
+  FR_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('borrador'),
+  FR_ACTIVO BIT NOT NULL DEFAULT 1,
+  FR_CREADO_POR INT NULL,
+  FR_CREADO_POR_NOMBRE NVARCHAR(160) NULL,
+  FR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  FR_ACTUALIZADO_POR INT NULL,
+  FR_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT CK_CCF_FR_ESTADO CHECK (FR_ESTADO IN ('borrador','publicado','inactivo','archivado'))
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCF_FR_CODIGO')
+CREATE UNIQUE INDEX UQ_CCF_FR_CODIGO ON dbo.CCF_FORMULARIOS(FR_CODIGO);`,
+
+    // Modo del formulario: 'interno' (default, comportamiento original — el
+    // agente lo llena desde la bandeja del Contact Center, con su sesión
+    // normal) o 'externo' (se expone además en una URL pública sin login,
+    // pensada para que VICIdial la abra directo al conectar una llamada,
+    // mismo espíritu que /crm?cliente=&agente=&agenteId= ya usado hoy). El
+    // token se genera solo cuando se activa modo externo (ver
+    // ccFormulariosController.setModoFormulario) — nunca antes, para no
+    // regalar URLs públicas de formularios que nunca se pensaron para eso.
+    `IF COL_LENGTH('dbo.CCF_FORMULARIOS', 'FR_MODO') IS NULL
+  ALTER TABLE dbo.CCF_FORMULARIOS ADD FR_MODO NVARCHAR(10) NOT NULL DEFAULT ('interno');`,
+    `IF COL_LENGTH('dbo.CCF_FORMULARIOS', 'FR_TOKEN_PUBLICO') IS NULL
+  ALTER TABLE dbo.CCF_FORMULARIOS ADD FR_TOKEN_PUBLICO NVARCHAR(64) NULL;`,
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCF_FR_MODO')
+BEGIN
+  ALTER TABLE dbo.CCF_FORMULARIOS ADD CONSTRAINT CK_CCF_FR_MODO CHECK (FR_MODO IN ('interno','externo'));
+END`,
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCF_FR_TOKEN_PUBLICO')
+CREATE UNIQUE INDEX UQ_CCF_FR_TOKEN_PUBLICO ON dbo.CCF_FORMULARIOS(FR_TOKEN_PUBLICO) WHERE FR_TOKEN_PUBLICO IS NOT NULL;`,
+
+    // Versión: la unidad real de contenido. FV_NUMERO es correlativo por
+    // formulario (1, 2, 3...). Solo una versión por formulario puede estar
+    // 'publicado' a la vez (se valida en el controller, no aquí, porque
+    // requiere lógica de "despublicar la anterior" en la misma transacción).
+    `IF OBJECT_ID('dbo.CCF_FORM_VERSIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_VERSIONES (
+  FV_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FV_FORMULARIO_ID INT NOT NULL,
+  FV_NUMERO INT NOT NULL,
+  FV_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('borrador'),
+  FV_ROWVERSION ROWVERSION,
+  FV_CREADO_POR INT NULL,
+  FV_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  FV_PUBLICADO_POR INT NULL,
+  FV_PUBLICADO_POR_NOMBRE NVARCHAR(160) NULL,
+  FV_FECHA_PUBLICACION DATETIME NULL,
+  CONSTRAINT CK_CCF_FV_ESTADO CHECK (FV_ESTADO IN ('borrador','publicado','inactivo','archivado')),
+  CONSTRAINT FK_CCF_FV_FORMULARIO FOREIGN KEY (FV_FORMULARIO_ID) REFERENCES dbo.CCF_FORMULARIOS(FR_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CCF_FV_FORM_NUMERO UNIQUE (FV_FORMULARIO_ID, FV_NUMERO)
+);`,
+    // FV_ROWVERSION habilita optimistic locking real (SQL Server ROWVERSION,
+    // valor binario que cambia automático en cada UPDATE de la fila) — el
+    // constructor manda el rowversion que tenía al abrir el borrador, y el
+    // UPDATE falla si alguien más ya lo cambió mientras tanto (ver
+    // ccFormulariosController.actualizarVersion).
+    `IF OBJECT_ID('dbo.CCF_FORM_VERSIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FV_FORMULARIO')
+CREATE INDEX IX_CCF_FV_FORMULARIO ON dbo.CCF_FORM_VERSIONES(FV_FORMULARIO_ID);`,
+
+    // Sección: agrupador visual dentro de una versión.
+    `IF OBJECT_ID('dbo.CCF_FORM_SECCIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_SECCIONES (
+  FS_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FS_VERSION_ID INT NOT NULL,
+  FS_CODIGO NVARCHAR(60) NULL,
+  FS_TITULO NVARCHAR(200) NOT NULL,
+  FS_DESCRIPCION NVARCHAR(MAX) NULL,
+  FS_ORDEN INT NOT NULL DEFAULT 0,
+  FS_VISIBLE BIT NOT NULL DEFAULT 1,
+  FS_COLAPSABLE BIT NOT NULL DEFAULT 0,
+  FS_ESTADO_INICIAL_COLAPSADO BIT NOT NULL DEFAULT 0,
+  FS_CONFIG_JSON NVARCHAR(MAX) NULL,
+  CONSTRAINT FK_CCF_FS_VERSION FOREIGN KEY (FS_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_SECCIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FS_VERSION')
+CREATE INDEX IX_CCF_FS_VERSION ON dbo.CCF_FORM_SECCIONES(FS_VERSION_ID, FS_ORDEN);`,
+
+    // Campo: la unidad atómica del formulario. FC_TIPO se resuelve en el
+    // frontend contra un registry de componentes (ComponentRegistry), nunca
+    // un switch disperso. FC_CATALOGO_FUENTE + FC_CATALOGO_CONFIG_JSON
+    // describen de dónde salen las opciones cuando FC_TIPO usa catálogo
+    // (ver CatalogProvider en el frontend, Entrega 2).
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPOS', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_CAMPOS (
+  FC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FC_SECCION_ID INT NOT NULL,
+  FC_CODIGO NVARCHAR(80) NOT NULL,
+  FC_TIPO NVARCHAR(30) NOT NULL,
+  FC_ETIQUETA NVARCHAR(200) NOT NULL,
+  FC_DESCRIPCION NVARCHAR(MAX) NULL,
+  FC_PLACEHOLDER NVARCHAR(200) NULL,
+  FC_AYUDA NVARCHAR(500) NULL,
+  FC_OBLIGATORIO BIT NOT NULL DEFAULT 0,
+  FC_SOLO_LECTURA BIT NOT NULL DEFAULT 0,
+  FC_VISIBLE BIT NOT NULL DEFAULT 1,
+  FC_VALOR_PREDETERMINADO NVARCHAR(MAX) NULL,
+  FC_ORDEN INT NOT NULL DEFAULT 0,
+  FC_ANCHO NVARCHAR(20) NOT NULL DEFAULT ('completo'),
+  FC_LONGITUD_MIN INT NULL,
+  FC_LONGITUD_MAX INT NULL,
+  FC_VALOR_MIN DECIMAL(18,4) NULL,
+  FC_VALOR_MAX DECIMAL(18,4) NULL,
+  FC_REGEX NVARCHAR(300) NULL,
+  FC_CATALOGO_FUENTE NVARCHAR(30) NULL,
+  FC_CATALOGO_CONFIG_JSON NVARCHAR(MAX) NULL,
+  FC_CONFIG_JSON NVARCHAR(MAX) NULL,
+  CONSTRAINT CK_CCF_FC_ANCHO CHECK (FC_ANCHO IN ('completo','medio','tercio')),
+  CONSTRAINT FK_CCF_FC_SECCION FOREIGN KEY (FC_SECCION_ID) REFERENCES dbo.CCF_FORM_SECCIONES(FS_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FC_SECCION')
+CREATE INDEX IX_CCF_FC_SECCION ON dbo.CCF_FORM_CAMPOS(FC_SECCION_ID, FC_ORDEN);`,
+
+    // Opciones estáticas (lista desplegable, radio, checkbox, multiselección)
+    // cuando FC_CATALOGO_FUENTE es NULL o 'estatico'.
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPO_OPCIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_CAMPO_OPCIONES (
+  FO_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FO_CAMPO_ID INT NOT NULL,
+  FO_VALOR NVARCHAR(200) NOT NULL,
+  FO_ETIQUETA NVARCHAR(200) NOT NULL,
+  FO_ORDEN INT NOT NULL DEFAULT 0,
+  FO_ACTIVO BIT NOT NULL DEFAULT 1,
+  CONSTRAINT FK_CCF_FO_CAMPO FOREIGN KEY (FO_CAMPO_ID) REFERENCES dbo.CCF_FORM_CAMPOS(FC_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPO_OPCIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FO_CAMPO')
+CREATE INDEX IX_CCF_FO_CAMPO ON dbo.CCF_FORM_CAMPO_OPCIONES(FO_CAMPO_ID, FO_ORDEN);`,
+
+    // Reglas dinámicas (Entrega 2: motor de reglas evaluado en el
+    // DynamicFormRenderer). Se guardan como filas simples condición->acción
+    // en vez de un único JSON gigante, para poder auditarlas/listarlas
+    // individualmente en el constructor.
+    `IF OBJECT_ID('dbo.CCF_FORM_REGLAS', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_REGLAS (
+  FL_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FL_VERSION_ID INT NOT NULL,
+  FL_NOMBRE NVARCHAR(200) NULL,
+  FL_ORDEN INT NOT NULL DEFAULT 0,
+  FL_ACTIVO BIT NOT NULL DEFAULT 1,
+  FL_CAMPO_ORIGEN_ID INT NOT NULL,
+  FL_OPERADOR NVARCHAR(20) NOT NULL,
+  FL_VALOR_COMPARACION NVARCHAR(MAX) NULL,
+  FL_ACCION NVARCHAR(30) NOT NULL,
+  FL_CAMPO_DESTINO_ID INT NULL,
+  FL_SECCION_DESTINO_ID INT NULL,
+  FL_VALOR_ACCION NVARCHAR(MAX) NULL,
+  CONSTRAINT CK_CCF_FL_OPERADOR CHECK (FL_OPERADOR IN ('eq','ne','gt','lt','gte','lte','contains','not_contains','empty','not_empty','in','not_in')),
+  CONSTRAINT CK_CCF_FL_ACCION CHECK (FL_ACCION IN ('show_field','hide_field','require_field','optional_field','enable_field','disable_field','set_value','clear_value','show_section','hide_section','load_catalog')),
+  CONSTRAINT FK_CCF_FL_VERSION FOREIGN KEY (FL_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FL_CAMPO_ORIGEN FOREIGN KEY (FL_CAMPO_ORIGEN_ID) REFERENCES dbo.CCF_FORM_CAMPOS(FC_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_REGLAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FL_VERSION')
+CREATE INDEX IX_CCF_FL_VERSION ON dbo.CCF_FORM_REGLAS(FL_VERSION_ID);`,
+
+    // Asignación: Campaña (+ Canal opcional) -> Versión publicada. Un NULL en
+    // FA_CANAL_ID = aplica a todos los canales de esa campaña que no tengan
+    // una asignación más específica (estrategia de resolución determinista:
+    // ver ccFormulariosController.resolverAsignacion — primero intenta
+    // canal exacto, si no hay cae al NULL "cualquier canal" de la campaña).
+    // El índice filtrado único evita 2 asignaciones ACTIVAS ambiguas para el
+    // mismo par (campaña, canal).
+    `IF OBJECT_ID('dbo.CCF_FORM_ASIGNACIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_ASIGNACIONES (
+  FA_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FA_CAMPANIA_ID INT NOT NULL,
+  FA_CANAL_ID INT NULL,
+  FA_FORM_VERSION_ID INT NOT NULL,
+  FA_ACTIVO BIT NOT NULL DEFAULT 1,
+  FA_CREADO_POR INT NULL,
+  FA_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCF_FA_CAMPANIA FOREIGN KEY (FA_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID),
+  CONSTRAINT FK_CCF_FA_CANAL FOREIGN KEY (FA_CANAL_ID) REFERENCES dbo.CCO_CANALES(CN_ID),
+  CONSTRAINT FK_CCF_FA_VERSION FOREIGN KEY (FA_FORM_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_ASIGNACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCF_FA_CAMPANIA_CANAL_ACTIVA')
+CREATE UNIQUE INDEX UQ_CCF_FA_CAMPANIA_CANAL_ACTIVA ON dbo.CCF_FORM_ASIGNACIONES(FA_CAMPANIA_ID, FA_CANAL_ID) WHERE FA_ACTIVO = 1;`,
+    `IF OBJECT_ID('dbo.CCF_FORM_ASIGNACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FA_VERSION')
+CREATE INDEX IX_CCF_FA_VERSION ON dbo.CCF_FORM_ASIGNACIONES(FA_FORM_VERSION_ID);`,
+
+    // Tipificaciones permitidas por formulario: restringe, para las
+    // interacciones que usaron ESTE formulario, cuáles de las tipificaciones
+    // de la(s) campaña(s) asignadas son válidas al cerrar (ver
+    // ccFormulariosController.listTipificacionesDeCampanias/
+    // listTipificacionesPermitidas). Vive a nivel de FORMULARIO (no de
+    // versión): la restricción de tipificaciones es una decisión de negocio
+    // sobre el formulario como concepto, no algo que deba re-configurarse en
+    // cada nueva versión. Sin filas para un formulario = todas las
+    // tipificaciones de sus campañas asignadas son válidas (compatibilidad,
+    // mismo criterio que getUserAllowedActions en moduleAccess.js).
+    `IF OBJECT_ID('dbo.CCF_FORM_TIPIFICACIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_TIPIFICACIONES (
+  FT_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FT_FORMULARIO_ID INT NOT NULL,
+  FT_TIPIFICACION_ID INT NOT NULL,
+  CONSTRAINT FK_CCF_FT_FORMULARIO FOREIGN KEY (FT_FORMULARIO_ID) REFERENCES dbo.CCF_FORMULARIOS(FR_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FT_TIPIFICACION FOREIGN KEY (FT_TIPIFICACION_ID) REFERENCES dbo.CCO_TIPIFICACIONES(CT_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CCF_FT_FORM_TIPIF UNIQUE (FT_FORMULARIO_ID, FT_TIPIFICACION_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_TIPIFICACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FT_FORMULARIO')
+CREATE INDEX IX_CCF_FT_FORMULARIO ON dbo.CCF_FORM_TIPIFICACIONES(FT_FORMULARIO_ID);`,
+
+    // Respuestas capturadas por el agente (o desde el modo externo) durante
+    // una atención real — una fila por campo respondido. Tipada en vez de
+    // un solo NVARCHAR(MAX) por fila (ver objetivo de reportería del
+    // diseño original): cada respuesta llena UNA sola de las 4 columnas de
+    // valor según FC_TIPO, para que se pueda filtrar/agrupar por reportes
+    // sin tener que deserializar nada. FIR_VERSION_ID se guarda aparte de
+    // FIR_CAMPO_ID a propósito: aunque el campo ya "sabe" su versión via
+    // FK, guardarlo aquí también deja la fila autocontenida para reportería
+    // aunque el formulario se reestructure después.
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_FORM_RESPUESTAS', 'U') IS NULL
+CREATE TABLE dbo.CCF_INTERACCION_FORM_RESPUESTAS (
+  FIR_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FIR_INTERACCION_ID INT NOT NULL,
+  FIR_VERSION_ID INT NOT NULL,
+  FIR_CAMPO_ID INT NOT NULL,
+  FIR_VALOR_TEXTO NVARCHAR(MAX) NULL,
+  FIR_VALOR_NUMERO DECIMAL(18,4) NULL,
+  FIR_VALOR_FECHA DATETIME NULL,
+  FIR_VALOR_BOOLEANO BIT NULL,
+  FIR_VALOR_JSON NVARCHAR(MAX) NULL,
+  FIR_CREADO_POR INT NULL,
+  FIR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  FIR_ACTUALIZADO_POR INT NULL,
+  FIR_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCF_FIR_INTERACCION FOREIGN KEY (FIR_INTERACCION_ID) REFERENCES dbo.CCO_INTERACCIONES(CI_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FIR_VERSION FOREIGN KEY (FIR_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID),
+  CONSTRAINT FK_CCF_FIR_CAMPO FOREIGN KEY (FIR_CAMPO_ID) REFERENCES dbo.CCF_FORM_CAMPOS(FC_ID),
+  CONSTRAINT UQ_CCF_FIR_INTERACCION_CAMPO UNIQUE (FIR_INTERACCION_ID, FIR_CAMPO_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_FORM_RESPUESTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FIR_INTERACCION')
+CREATE INDEX IX_CCF_FIR_INTERACCION ON dbo.CCF_INTERACCION_FORM_RESPUESTAS(FIR_INTERACCION_ID);`,
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_FORM_RESPUESTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FIR_CAMPO')
+CREATE INDEX IX_CCF_FIR_CAMPO ON dbo.CCF_INTERACCION_FORM_RESPUESTAS(FIR_CAMPO_ID);`,
+
+    // Catálogo de acciones sugeridas DESPUÉS de guardar un registro del
+    // formulario — arquitectura desacoplada de ejecutores (como pedía el
+    // diseño original: CREATE_FOLLOWUP, SEND_WHATSAPP, etc.) pero sin
+    // integrar proveedores externos todavía. Por ahora cada acción es una
+    // sugerencia visual que el agente marca como hecha manualmente (ver
+    // CCF_INTERACCION_ACCIONES_EJECUTADAS) — el "handler" real que dispare
+    // un WhatsApp/webhook de verdad es un paso posterior, ejecutado fuera de
+    // la transacción de guardado (outbox), cuando se conecte un proveedor.
+    `IF OBJECT_ID('dbo.CCF_FORM_ACCIONES_POST', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_ACCIONES_POST (
+  FAP_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FAP_FORMULARIO_ID INT NOT NULL,
+  FAP_TIPO NVARCHAR(30) NOT NULL,
+  FAP_ETIQUETA NVARCHAR(200) NOT NULL,
+  FAP_DESCRIPCION NVARCHAR(500) NULL,
+  FAP_ORDEN INT NOT NULL DEFAULT 0,
+  FAP_ACTIVO BIT NOT NULL DEFAULT 1,
+  CONSTRAINT CK_CCF_FAP_TIPO CHECK (FAP_TIPO IN ('create_followup','return_to_queue','send_whatsapp','send_sms','send_email','call_webhook','change_customer_status','change_stage','custom')),
+  CONSTRAINT FK_CCF_FAP_FORMULARIO FOREIGN KEY (FAP_FORMULARIO_ID) REFERENCES dbo.CCF_FORMULARIOS(FR_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_ACCIONES_POST', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FAP_FORMULARIO')
+CREATE INDEX IX_CCF_FAP_FORMULARIO ON dbo.CCF_FORM_ACCIONES_POST(FAP_FORMULARIO_ID);`,
+
+    // Bitácora de qué acción se marcó/ejecutó para qué interacción — el
+    // agente la tilda manualmente en el modal de "después de guardar"; si en
+    // el futuro un handler real la dispara sola, escribe aquí igual.
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS', 'U') IS NULL
+CREATE TABLE dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS (
+  FAE_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FAE_INTERACCION_ID INT NOT NULL,
+  FAE_ACCION_ID INT NOT NULL,
+  FAE_USUARIO_ID INT NULL,
+  FAE_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCF_FAE_INTERACCION FOREIGN KEY (FAE_INTERACCION_ID) REFERENCES dbo.CCO_INTERACCIONES(CI_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FAE_ACCION FOREIGN KEY (FAE_ACCION_ID) REFERENCES dbo.CCF_FORM_ACCIONES_POST(FAP_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FAE_INTERACCION')
+CREATE INDEX IX_CCF_FAE_INTERACCION ON dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS(FAE_INTERACCION_ID);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Formularios de Atención schema:', err.message); }
+  }
+  logger.info('✅ Esquema de Formularios de Atención asegurado');
 }
 
 // Email Marketing: campañas de correo masivo sobre los contactos que ya existen

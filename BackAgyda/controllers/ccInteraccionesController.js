@@ -71,10 +71,14 @@ const SELECT_INT = `
     i.CI_FECHA_ULTIMO_MSJ_CLIENTE as fechaUltimoMsjCliente, i.CI_FECHA_CIERRE as fechaCierre,
     i.CI_TICKET as ticket,
     cn.CN_NOMBRE as canalNombre,
-    g.CG_NOMBRE as grupoNombre
+    g.CG_NOMBRE as grupoNombre,
+    cm.CM2_NOMBRE as campaniaNombre,
+    ti.CT_NOMBRE as tipificacionNombre
   FROM dbo.CCO_INTERACCIONES i
   LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
   LEFT JOIN dbo.CCO_GRUPOS g ON g.CG_ID = i.CI_GRUPO_ID
+  LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
+  LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
 `;
 
 // GET /interacciones?estado=en_cola|activa  (bandeja del agente)
@@ -473,6 +477,17 @@ exports.historial = async (req, res) => {
     const where = [`i.CI_ESTADO = 'cerrada'`];
     if (req.query.agenteId) { rq.input('a', sql.Int, req.query.agenteId); where.push('i.CI_AGENTE_ID = @a'); }
     if (req.query.canalId) { rq.input('c', sql.Int, req.query.canalId); where.push('i.CI_CANAL_ID = @c'); }
+    // campaniaId acepta CSV ("3,7,12") para el buscador de Formularios de
+    // Atención, que filtra por TODAS las campañas asignadas a un formulario
+    // a la vez — evita tener que hacer N llamadas, una por campaña.
+    if (req.query.campaniaId) {
+      const ids = String(req.query.campaniaId).split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0);
+      if (ids.length) {
+        const params = ids.map((id, i) => { rq.input(`camp${i}`, sql.Int, id); return `@camp${i}`; });
+        where.push(`i.CI_CAMPANIA_ID IN (${params.join(',')})`);
+      }
+    }
+    if (req.query.tipificacionId) { rq.input('tip', sql.Int, req.query.tipificacionId); where.push('i.CI_TIPIFICACION_ID = @tip'); }
     if (req.query.fechaDesde) { rq.input('fd', sql.DateTime, new Date(req.query.fechaDesde)); where.push('i.CI_FECHA_CIERRE >= @fd'); }
     if (req.query.fechaHasta) { rq.input('fh', sql.DateTime, new Date(req.query.fechaHasta)); where.push('i.CI_FECHA_CIERRE <= @fh'); }
     if (req.query.texto) { rq.input('t', sql.NVarChar(200), `%${req.query.texto}%`); where.push('(i.CI_CLIENTE_NOMBRE LIKE @t OR i.CI_CLIENTE_TELEFONO LIKE @t)'); }

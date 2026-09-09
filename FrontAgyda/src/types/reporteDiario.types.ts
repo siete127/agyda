@@ -57,3 +57,108 @@ export interface ReportePostulantes {
   productividadAgentes: ReportePostulantesAgente[]
   sinTipificar: { total: number; masAntiguos: ReportePostulantesSinTipificar[] }
 }
+
+// ── Suite de reportes: definiciones .rdl / .rdlc del catálogo ──
+import type { RdlDefinition } from '@/lib/rdl'
+
+export type RdlRol = 'AD' | 'TI' | 'CC' | 'ST' | 'VE'
+
+export interface RdlCarpeta {
+  id: number
+  nombre: string
+  fecha: string
+  reportes: number
+}
+
+export interface RdlReporte {
+  id: number
+  nombre: string
+  descripcion: string
+  carpeta: string
+  carpetaId: number | null
+  archivo: string
+  archivoOriginal: string
+  tamano: number
+  versionRdl: string | null
+  compatible: boolean
+  metadata: RdlDefinition | null
+  roles: RdlRol[]
+  usuarios: number[]
+  subidoPor: number | null
+  subidoNombre: string
+  fecha: string
+  url: string
+}
+
+/* ── Constructor de reportes (variables del sistema, estilo InConcert) ── */
+
+export type RbFormato = 'entero' | 'decimal' | 'minutos' | 'duracion'
+export type RbFiltroTipo = 'fecha_rango' | 'texto' | 'id' | 'id_lista' | 'enum'
+
+export interface RbDimension { id: string; label: string; tipo: string }
+export interface RbMetrica { id: string; label: string; formato: RbFormato }
+export interface RbFiltroDef {
+  id: string
+  label: string
+  tipo: RbFiltroTipo
+  valores: string[] | null
+  catalogo: string | null
+  porDefecto: boolean
+}
+export interface RbOrigen {
+  id: string
+  label: string
+  descripcion: string
+  dimensiones: RbDimension[]
+  metricas: RbMetrica[]
+  filtros: RbFiltroDef[]
+  ordenPorDefecto: string
+}
+export interface RbCatalogo { origenes: Record<string, RbOrigen> }
+
+export interface RbFiltroValor {
+  id: string
+  desde?: string
+  hasta?: string
+  valor?: string
+  valores?: (string | number)[]
+}
+export interface RbDefinicion {
+  origen: string
+  dimensiones: string[]
+  metricas: string[]
+  filtros: RbFiltroValor[]
+  orden?: { campo: string; dir: 'asc' | 'desc' }
+  limite?: number
+}
+export interface RbColumna {
+  id: string
+  label: string
+  tipo?: string
+  formato?: RbFormato
+  esDimension: boolean
+}
+export interface RbResultado {
+  columnas: RbColumna[]
+  filas: Record<string, unknown>[]
+  totales: Record<string, number>
+  meta: { limite: number; orden: { campo: string; dir: string }; filasDevueltas: number; truncado: boolean }
+  sql?: string
+}
+
+export interface RbReporteGuardado {
+  id: number
+  nombre: string
+  descripcion: string
+  carpeta: string
+  carpetaId: number | null
+  origen: string
+  definicion: RbDefinicion | null
+  roles: RdlRol[]
+  usuarios: number[]
+  creadoPor: number | null
+  creadoNombre: string
+  fecha: string
+  actualizado: string | null
+  tipo: 'construido'
+}

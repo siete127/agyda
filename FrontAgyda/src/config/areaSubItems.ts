@@ -60,7 +60,7 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'metas', label: 'Metas', kind: 'link', linkTo: '/operaciones/metas', description: 'Metas operativas del Call Center.' },
     { slug: 'tiempos', label: 'Tiempos', kind: 'link', linkTo: '/operaciones/tiempos', description: 'Tiempos de llamada y disponibilidad.' },
     { slug: 'kpis', label: 'KPIs', kind: 'link', linkTo: '/operaciones/kpis', description: 'Indicadores clave de operaciones.' },
-    { slug: 'reportes-diarios', label: 'Reportes diarios', kind: 'link', linkTo: '/operaciones/reportes-diarios', description: 'Reportes diarios de operación.' },
+    { slug: 'suite-reportes', label: 'Suite de reportes', kind: 'link', linkTo: '/operaciones/suite-reportes', description: 'Catálogo de reportes de operación y definiciones RDL.' },
   ],
   calidad: [
     { slug: 'monitoreo-llamadas', label: 'Monitoreo de llamadas', kind: 'placeholder', description: 'Monitoreo en vivo y grabado de llamadas.' },
