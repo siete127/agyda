@@ -1,28 +1,50 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, User, FileText, Building2, History, ClipboardList, DollarSign, Smile, AlertOctagon, CalendarClock, ListTree } from 'lucide-react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ChevronLeft, User, FileText, Building2, History, Inbox } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Spinner } from '@/components/ui/Spinner'
+import { Tabs, type TabItem } from '@/components/ui/Tabs'
 import { crmService } from '@/services/crm.service'
 import { CLIENTE_ESTATUS_COLORES } from '@/types/crm.types'
 import { DatosGeneralesTab } from './components/DatosGeneralesTab'
 import { DocumentosTab } from './components/DocumentosTab'
-import { SeguimientoTab } from './components/SeguimientoTab'
-import { TareasTab } from './components/TareasTab'
-import { PagosTab } from './components/PagosTab'
-import { EncuestasTab } from './components/EncuestasTab'
-import { IncidenciasTab } from './components/IncidenciasTab'
-import { RenovacionesTab } from './components/RenovacionesTab'
-import { HistorialTab } from './components/HistorialTab'
+import { SeguimientoConsolidadoTab, type SubSeguimiento } from './components/SeguimientoConsolidadoTab'
+import { CasosPagosTab, type SubCasosPagos } from './components/CasosPagosTab'
 
-type Tab = 'datos' | 'documentos' | 'seguimiento' | 'tareas' | 'pagos' | 'encuestas' | 'incidencias' | 'renovaciones' | 'historial'
+// Fase 7: expediente de 9 pestañas → 4.
+//   datos       → DatosGeneralesTab
+//   seguimiento → bitácora + tareas + renovaciones + historial (sub-tabs)
+//   casos-pagos → casos del cliente + control de pagos + satisfacción (sub-tabs)
+//   documentos  → DocumentosTab
+// Estado en la URL: ?tab=casos-pagos&sub=casos — permite que Historial y las
+// notificaciones enlacen a la sección exacta.
+type Tab = 'datos' | 'seguimiento' | 'casos-pagos' | 'documentos'
+const TAB_KEYS: Tab[] = ['datos', 'seguimiento', 'casos-pagos', 'documentos']
+
+const SUB_DEFAULT: Record<'seguimiento' | 'casos-pagos', string> = {
+  seguimiento: 'bitacora',
+  'casos-pagos': 'casos',
+}
+const SUB_VALIDAS: Record<'seguimiento' | 'casos-pagos', string[]> = {
+  seguimiento: ['bitacora', 'tareas', 'renovaciones', 'historial'],
+  'casos-pagos': ['casos', 'pagos', 'satisfaccion'],
+}
 
 export function ClientePerfilPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const contactoId = Number(id)
-  const [tab, setTab] = useState<Tab>('datos')
+  const [params, setParams] = useSearchParams()
+
+  const tab: Tab = TAB_KEYS.includes(params.get('tab') as Tab) ? (params.get('tab') as Tab) : 'datos'
+  const setTab = (t: Tab) => setParams((p) => { p.set('tab', t); p.delete('sub'); return p }, { replace: true })
+
+  const subGrupo = (tab === 'seguimiento' || tab === 'casos-pagos') ? tab : null
+  const subRaw = params.get('sub')
+  const sub = subGrupo && subRaw && SUB_VALIDAS[subGrupo].includes(subRaw)
+    ? subRaw
+    : subGrupo ? SUB_DEFAULT[subGrupo] : ''
+  const setSub = (s: string) => setParams((p) => { p.set('sub', s); return p }, { replace: true })
 
   const { data: cliente, isLoading, error } = useQuery({
     queryKey: ['cliente-expediente', contactoId],
@@ -51,16 +73,11 @@ export function ClientePerfilPage() {
 
   const cfg = CLIENTE_ESTATUS_COLORES.find((e) => e.key === cliente.estatusCliente) ?? CLIENTE_ESTATUS_COLORES[0]
 
-  const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
-    { key: 'datos', label: 'Expediente', icon: User },
-    { key: 'documentos', label: `Documentación${cliente.conteos?.documentos ? ` (${cliente.conteos.documentos})` : ''}`, icon: FileText },
+  const TABS: TabItem<Tab>[] = [
+    { key: 'datos', label: 'Datos', icon: User },
     { key: 'seguimiento', label: 'Seguimiento', icon: History },
-    { key: 'tareas', label: 'Tareas y recordatorios', icon: ClipboardList },
-    { key: 'pagos', label: `Control de pagos${cliente.conteos?.pagos ? ` (${cliente.conteos.pagos})` : ''}`, icon: DollarSign },
-    { key: 'encuestas', label: `Satisfacción${cliente.conteos?.encuestas ? ` (${cliente.conteos.encuestas})` : ''}`, icon: Smile },
-    { key: 'incidencias', label: 'Incidencias', icon: AlertOctagon },
-    { key: 'renovaciones', label: 'Renovaciones', icon: CalendarClock },
-    { key: 'historial', label: 'Historial', icon: ListTree },
+    { key: 'casos-pagos', label: 'Casos y pagos', icon: Inbox },
+    { key: 'documentos', label: 'Documentos', icon: FileText, badge: cliente.conteos?.documentos },
   ]
 
   return (
@@ -99,30 +116,26 @@ export function ClientePerfilPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 rounded-xl bg-gray-100 p-1 w-fit flex-wrap">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={clsx(
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-all',
-              tab === t.key ? 'bg-card shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700',
-            )}
-          >
-            <t.icon className="h-3.5 w-3.5" /> {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
       {tab === 'datos' && <DatosGeneralesTab cliente={cliente} />}
+      {tab === 'seguimiento' && (
+        <SeguimientoConsolidadoTab
+          contactoId={cliente.id}
+          sub={sub as SubSeguimiento}
+          onSubChange={setSub}
+        />
+      )}
+      {tab === 'casos-pagos' && (
+        <CasosPagosTab
+          contactoId={cliente.id}
+          clienteNombre={cliente.nombre}
+          sub={sub as SubCasosPagos}
+          onSubChange={setSub}
+          conteos={cliente.conteos}
+        />
+      )}
       {tab === 'documentos' && <DocumentosTab contactoId={cliente.id} />}
-      {tab === 'seguimiento' && <SeguimientoTab contactoId={cliente.id} />}
-      {tab === 'tareas' && <TareasTab contactoId={cliente.id} />}
-      {tab === 'pagos' && <PagosTab contactoId={cliente.id} />}
-      {tab === 'encuestas' && <EncuestasTab contactoId={cliente.id} />}
-      {tab === 'incidencias' && <IncidenciasTab contactoId={cliente.id} />}
-      {tab === 'renovaciones' && <RenovacionesTab contactoId={cliente.id} />}
-      {tab === 'historial' && <HistorialTab contactoId={cliente.id} />}
     </div>
   )
 }

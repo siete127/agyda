@@ -15,12 +15,17 @@ import {
 // Modal único que reemplaza NuevaConsultaModal / NuevaAclaracionModal /
 // NuevaQuejaModal / NuevaIncidenciaModal. El selector de tipo arriba adapta
 // qué campos se muestran, replicando lo que cada modal viejo pedía.
-export function NuevoCasoModal({ onClose, onCreated }: { onClose: () => void; onCreated?: (id: number) => void }) {
+export function NuevoCasoModal({ onClose, onCreated, contactoPreset }: {
+  onClose: () => void
+  onCreated?: (id: number) => void
+  // Cuando se abre desde el expediente de un cliente: el contacto viene fijo.
+  contactoPreset?: { id: number; nombre: string }
+}) {
   const qc = useQueryClient()
   const { data: usuarios } = useUsuariosSimple()
   const [tipo, setTipo] = useState<CasoTipo>('consulta')
-  const [contactoId, setContactoId] = useState('')
-  const [clienteNombreLibre, setClienteNombreLibre] = useState('')
+  const [contactoId, setContactoId] = useState(contactoPreset ? String(contactoPreset.id) : '')
+  const [clienteNombreLibre, setClienteNombreLibre] = useState(contactoPreset?.nombre ?? '')
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [referencia, setReferencia] = useState('')
@@ -61,6 +66,8 @@ export function NuevoCasoModal({ onClose, onCreated }: { onClose: () => void; on
     }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['casos'] })
+      const cid = contactoId ? Number(contactoId) : contactoPreset?.id
+      if (cid) qc.invalidateQueries({ queryKey: ['cliente-casos', cid] })
       toast.success(`Caso ${r?.data?.folio ?? ''} registrado`)
       onCreated?.(r?.data?.id)
       onClose()
@@ -96,7 +103,12 @@ export function NuevoCasoModal({ onClose, onCreated }: { onClose: () => void; on
           </div>
         </div>
 
-        {muestraCliente && (
+        {muestraCliente && contactoPreset ? (
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Cliente</label>
+            <input value={contactoPreset.nombre} disabled className="field bg-gray-50 text-gray-500" />
+          </div>
+        ) : muestraCliente && (
           <>
             {clientes && clientes.length > 0 && (
               <div>
