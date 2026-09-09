@@ -40,10 +40,10 @@
 
             <nav class="nav-menu">
                 <a href="#inicio" class="nav-link active" data-i18n="nav.inicio">Inicio</a>
-                <a href="#nosotros" class="nav-link" data-i18n="nav.nosotros">Nosotros</a>
-                <a href="#soluciones-conectan" class="nav-link" data-i18n="nav.soluciones">Soluciones</a>
-                <a href="#aliados" class="nav-link" data-i18n="nav.aliados">Aliados</a>
                 <a href="#servicios" class="nav-link" data-i18n="nav.servicios">Servicios</a>
+                <a href="#soluciones-conectan" class="nav-link" data-i18n="nav.soluciones">Soluciones</a>
+                <a href="#nosotros" class="nav-link" data-i18n="nav.nosotros">Nosotros</a>
+                <a href="#aliados" class="nav-link" data-i18n="nav.aliados">Aliados</a>
                 <a href="#portafolio" class="nav-link" data-i18n="nav.portafolio">Portafolio</a>
                 <a href="#vacantes" class="nav-link" data-i18n="nav.vacantes">Vacantes</a>
                 <a href="#ardawiki" class="nav-link" data-i18n="nav.baseConocimiento">ArdaWiki</a>
@@ -55,7 +55,7 @@
                     <button type="button" class="lang-btn active" id="langEsBtn" data-lang="es">ES</button>
                     <button type="button" class="lang-btn" id="langEnBtn" data-lang="en">EN</button>
                 </div>
-                <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Cambiar tema">
+                <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Cambiar tema" data-i18n-aria-label="aria.cambiarTema">
                     <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="4"></circle>
                         <line x1="12" y1="2" x2="12" y2="4"></line>
@@ -72,30 +72,30 @@
                     </svg>
                 </button>
                 <a href="#" class="btn-primary btn-primary--hero header-login-btn" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
-                <button type="button" class="btn-primary btn-primary--hero header-login-btn logout-btn" id="logoutBtn" style="display:none;">Cerrar sesión</button>
+                <button type="button" class="btn-primary btn-primary--hero header-login-btn logout-btn" id="logoutBtn" style="display:none;" data-i18n="nav.logout">Cerrar sesión</button>
                 <div class="demo-btn-wrap">
                     <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="true" aria-expanded="false">
-                        Probar demo
+                        <span data-i18n="nav.probarDemo">Probar demo</span>
                         <span class="demo-btn-arrow" aria-hidden="true">&rarr;</span>
                     </button>
                     <div class="demo-popover" id="demoPopover">
-                        <p class="demo-popover-title">Prueba AGYDA con estas credenciales</p>
+                        <p class="demo-popover-title" data-i18n="demo.titulo">Prueba AGYDA con estas credenciales</p>
                         <div class="demo-popover-cred">
-                            <span class="demo-popover-role">Administrador</span>
-                            <span class="demo-popover-line"><strong>Usuario:</strong> admindemo</span>
-                            <span class="demo-popover-line"><strong>Contraseña:</strong> AdminDemo2026</span>
+                            <span class="demo-popover-role" data-i18n="demo.administrador">Administrador</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.usuario">Usuario:</strong> admindemo</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.contrasena">Contraseña:</strong> AdminDemo2026</span>
                         </div>
                         <div class="demo-popover-cred">
-                            <span class="demo-popover-role">Agente</span>
-                            <span class="demo-popover-line"><strong>Usuario:</strong> agente</span>
-                            <span class="demo-popover-line"><strong>Contraseña:</strong> Demo2026</span>
+                            <span class="demo-popover-role" data-i18n="demo.agente">Agente</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.usuario">Usuario:</strong> agente</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.contrasena">Contraseña:</strong> Demo2026</span>
                         </div>
                         <a href="https://agyda.ardabytec.vip/login?tenant=demo" target="_blank" rel="noopener" class="demo-popover-go">
-                            Ir al login <span aria-hidden="true">&rarr;</span>
+                            <span data-i18n="demo.irAlLogin">Ir al login</span> <span aria-hidden="true">&rarr;</span>
                         </a>
                     </div>
                 </div>
-                <button type="button" class="menu-toggle-btn" id="menuToggleBtn" aria-label="Abrir menú" aria-expanded="false">
+                <button type="button" class="menu-toggle-btn" id="menuToggleBtn" aria-label="Abrir menú" data-i18n-aria-label="aria.abrirMenu" aria-expanded="false">
                     <span class="menu-toggle-bar"></span>
                     <span class="menu-toggle-bar"></span>
                     <span class="menu-toggle-bar"></span>
@@ -107,7 +107,7 @@
 
     <section id="inicio" class="hero-section">
         <img id="heroBgImg" src="assets/mascota-empresa/hero-mascota-escena.png"
-            alt="Mascota ArdabyTec en escena futurista con vista a la ciudad"
+            alt="Mascota ArdabyTec en escena futurista con vista a la ciudad" data-i18n-alt="alt.heroMascota"
             class="hero-bg-img" aria-hidden="true">
         <div class="hero-bg-overlay" aria-hidden="true"></div>
         <div class="hero-bg-fade" aria-hidden="true"></div>
@@ -313,7 +313,7 @@
         <div class="nosotros-valores">
             <span class="nosotros-eyebrow" data-i18n="nosotros.valores.title">Nuestros valores</span>
             <div class="nosotros-valores-row">
-                <button type="button" class="valores-nav valores-nav--prev" id="valoresPrevBtn" aria-label="Anterior">
+                <button type="button" class="valores-nav valores-nav--prev" id="valoresPrevBtn" aria-label="Anterior" data-i18n-aria-label="aria.anterior">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </button>
 
@@ -364,7 +364,7 @@
                     </div>
                 </div>
 
-                <button type="button" class="valores-nav valores-nav--next" id="valoresNextBtn" aria-label="Siguiente">
+                <button type="button" class="valores-nav valores-nav--next" id="valoresNextBtn" aria-label="Siguiente" data-i18n-aria-label="aria.siguiente">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </button>
             </div>
@@ -429,79 +429,21 @@
        SECCIÓN PORTAFOLIO
        ========================================== -->
     <section id="portafolio" class="portafolio-section">
-        <div class="portafolio-circle portafolio-circle-1" aria-hidden="true"></div>
-        <div class="portafolio-circle portafolio-circle-2" aria-hidden="true"></div>
-        <div class="portafolio-circle portafolio-circle-3" aria-hidden="true"></div>
-        <div class="portafolio-circle portafolio-circle-4" aria-hidden="true"></div>
-
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="portafolio.title">Nuestro <span class="highlight-blue">Portafolio</span></h2>
-            <p class="section-desc-center" data-i18n="portafolio.desc">
-                Casos de éxito y proyectos destacados donde hemos implementado tecnología de alto impacto.
-            </p>
-        </div>
-
-        <div class="portafolio-container">
-            <div class="portafolio-grid">
-                
-                <!-- Proyecto 1 -->
-                <div class="portafolio-card">
-                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-1">
-                        <span class="portafolio-placeholder-icon">🛒</span>
-                    </div>
-                    <div class="portafolio-content">
-                        <span class="portafolio-tag" data-i18n="portafolio.tag1">Desarrollo Web</span>
-                        <h3 class="portafolio-title" data-i18n="portafolio.proj1.title">Plataforma E-commerce B2B</h3>
-                        <p class="portafolio-desc" data-i18n="portafolio.proj1.desc">Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.</p>
-                    </div>
-                </div>
-
-                <!-- Proyecto 2 -->
-                <div class="portafolio-card">
-                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-2">
-                        <span class="portafolio-placeholder-icon">☁️</span>
-                    </div>
-                    <div class="portafolio-content">
-                        <span class="portafolio-tag" data-i18n="portafolio.tag2">Call Center</span>
-                        <h3 class="portafolio-title" data-i18n="portafolio.proj2.title">Migración a PBX Cloud</h3>
-                        <p class="portafolio-desc" data-i18n="portafolio.proj2.desc">Implementación de telefonía virtual para 150 agentes remotos, reduciendo los costos operativos mensuales.</p>
-                    </div>
-                </div>
-
-                <!-- Proyecto 3 -->
-                <div class="portafolio-card">
-                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-3">
-                        <span class="portafolio-placeholder-icon">🖥️</span>
-                    </div>
-                    <div class="portafolio-content">
-                        <span class="portafolio-tag" data-i18n="portafolio.tag3">Soporte IT</span>
-                        <h3 class="portafolio-title" data-i18n="portafolio.proj3.title">Renovación de Infraestructura</h3>
-                        <p class="portafolio-desc" data-i18n="portafolio.proj3.desc">Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.</p>
-                    </div>
-                </div>
-
+        <div class="portafolio-container portafolio-container--carousel">
+            <div class="portafolio-info">
+                <p class="portafolio-eyebrow" data-i18n="portafolio.eyebrow">Nuestro portafolio</p>
+                <h2 class="portafolio-title-main" data-i18n-html="portafolio.title">Casos de <span class="highlight-blue">éxito, proyectos destacados</span></h2>
+                <p class="portafolio-desc-main" data-i18n="portafolio.desc">Transformamos desafíos empresariales en soluciones tecnológicas que optimizan procesos, conectan equipos y generan resultados medibles.</p>
             </div>
-        </div>
-    </section>
-
-    <section id="vacantes" class="vacantes-section">
-        <div class="vacantes-circle vacantes-circle-1" aria-hidden="true"></div>
-        <div class="vacantes-circle vacantes-circle-2" aria-hidden="true"></div>
-
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="vacantes.title">Únete a <span class="highlight-blue">nuestro equipo</span></h2>
-            <p class="section-desc-center" data-i18n="vacantes.desc">
-                Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.
-            </p>
-        </div>
-
-        <div class="vacantes-container">
-            <div id="vacantesGrid" class="vacantes-grid">
-                <!-- Tarjetas inyectadas dinámicamente por JS desde /api/vacantes -->
+            <div class="portafolio-carousel-wrap">
+                <button type="button" class="portafolio-carousel-arrow portafolio-carousel-arrow--prev" id="portafolioPrevBtn" aria-label="Anterior" data-i18n-aria-label="aria.anterior">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <div class="portafolio-carousel" id="portafolioCarousel"></div>
+                <button type="button" class="portafolio-carousel-arrow portafolio-carousel-arrow--next" id="portafolioNextBtn" aria-label="Siguiente" data-i18n-aria-label="aria.siguiente">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
             </div>
-            <p id="vacantesEmpty" class="vacantes-empty" data-i18n="vacantes.empty" style="display:none;">
-                Por el momento no hay vacantes disponibles. ¡Vuelve pronto!
-            </p>
         </div>
     </section>
 
@@ -510,7 +452,7 @@
             <button class="modal-close-btn" onclick="closeVacanteModal()">&times;</button>
             <div class="modal-body">
                 <div class="modal-header-info">
-                    <span class="modal-top-icon">💼</span>
+                    <span id="vacModalIcon" class="modal-top-icon"></span>
                     <h2 id="vacModalTitulo">Título del puesto</h2>
                 </div>
                 <div class="modal-scroll-area">
@@ -610,43 +552,12 @@
         </div>
     </div>
 
-    <section id="ardawiki" class="vacantes-section">
-        <div class="vacantes-circle vacantes-circle-1" aria-hidden="true"></div>
-        <div class="vacantes-circle vacantes-circle-2" aria-hidden="true"></div>
-
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="kb.title">Resuelve tu problema <span class="highlight-blue">por tu cuenta</span></h2>
-            <p class="section-desc-center" data-i18n="kb.desc">
-                Busca en nuestra ArdaWiki y encuentra la solución paso a paso, sin esperar a que un técnico te atienda.
-            </p>
-        </div>
-
-        <div class="vacantes-container">
-            <div class="kb-search-wrap">
-                <div class="kb-search-pill">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="kb-search-icon"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
-                    <input type="text" id="kbBuscarInput"
-                        data-i18n-placeholder="kb.buscarPlaceholder" placeholder="Ej: no puedo entrar a mi correo, impresora, contraseña...">
-                    <button type="button" class="kb-search-btn" id="kbBuscarBtn" aria-label="Buscar">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div id="kbGrid" class="vacantes-grid">
-                <!-- Tarjetas inyectadas dinámicamente por JS desde /api/kb/publicos -->
-            </div>
-            <p id="kbEmpty" class="vacantes-empty" data-i18n="kb.empty" style="display:none;">
-                No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.
-            </p>
-        </div>
-    </section>
-
     <div id="kbModal" class="modal-overlay">
         <div class="modal-container">
             <button class="modal-close-btn" onclick="closeKbModal()">&times;</button>
             <div class="modal-body">
                 <div class="modal-header-info">
-                    <span class="modal-top-icon">📖</span>
+                    <span id="kbModalIcon" class="modal-top-icon"></span>
                     <h2 id="kbModalTitulo">Título del artículo</h2>
                 </div>
                 <div class="modal-scroll-area">
@@ -661,6 +572,81 @@
             </div>
         </div>
     </div>
+
+    <section class="talento-section">
+        <div class="talento-container">
+            <div class="talento-info">
+                <p class="talento-eyebrow" data-i18n="talento.eyebrow">Talento y conocimiento</p>
+                <h2 class="talento-title" data-i18n-html="talento.title">Más oportunidades <br>para <span class="highlight-blue">crecer juntos</span></h2>
+                <p class="talento-desc" data-i18n="talento.desc">Explora nuestras vacantes y accede a contenido tecnológico.</p>
+            </div>
+            <div class="talento-stack-wrap">
+                <div class="talento-stack" id="talentoStack" aria-hidden="true"></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="vacantesDedicada" class="vista-dedicada" style="display:none;" aria-labelledby="vacantesDedicadaTitulo">
+        <div class="vista-dedicada-hero">
+            <img src="assets/mascota-empresa/hero-vacantes.png" alt="Equipo de ARDABYTEC colaborando en oficina" data-i18n-alt="alt.equipoOficina"
+                class="hero-bg-img" aria-hidden="true">
+            <div class="hero-bg-overlay" aria-hidden="true"></div>
+            <div class="hero-bg-fade" aria-hidden="true"></div>
+            <div class="vista-dedicada-hero-content">
+                <button type="button" class="vista-dedicada-volver" data-volver-dedicada>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    <span data-i18n="vacantes.volver">Volver al inicio</span>
+                </button>
+                <p class="vista-dedicada-breadcrumb" data-i18n="vacantes.breadcrumb">Talento ArdabyTec</p>
+                <h1 id="vacantesDedicadaTitulo" class="vista-dedicada-titulo" data-i18n-html="vacantes.title">Únete a <span class="highlight-blue">nuestro equipo</span></h1>
+                <p class="vista-dedicada-desc" data-i18n="vacantes.desc">Tu talento impulsa la tecnología que conecta negocios. Conoce nuestras vacantes y forma parte de un equipo que sigue creciendo.</p>
+            </div>
+        </div>
+        <div class="vista-dedicada-body">
+            <div id="vacantesFilas" class="filas-lista">
+                <!-- Filas inyectadas dinámicamente por JS desde /api/vacantes -->
+            </div>
+            <p id="vacantesFilasEmpty" class="vacantes-empty" data-i18n="vacantes.empty" style="display:none;">
+                Por el momento no hay vacantes disponibles. ¡Vuelve pronto!
+            </p>
+        </div>
+    </section>
+
+    <section id="ardawikiDedicada" class="vista-dedicada" style="display:none;" aria-labelledby="ardawikiDedicadaTitulo">
+        <div class="vista-dedicada-hero">
+            <img src="assets/mascota-empresa/hero-ardawiki.png" alt="Colaborador consultando artículos de ArdaWiki" data-i18n-alt="alt.colaboradorWiki"
+                class="hero-bg-img" aria-hidden="true">
+            <div class="hero-bg-overlay" aria-hidden="true"></div>
+            <div class="hero-bg-fade" aria-hidden="true"></div>
+            <div class="vista-dedicada-hero-content">
+                <button type="button" class="vista-dedicada-volver" data-volver-dedicada>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    <span data-i18n="vacantes.volver">Volver al inicio</span>
+                </button>
+                <p class="vista-dedicada-breadcrumb" data-i18n="kb.breadcrumb">ArdaWiki</p>
+                <h1 id="ardawikiDedicadaTitulo" class="vista-dedicada-titulo" data-i18n-html="kb.title">Encuentra la respuesta <span class="highlight-blue">que necesitas</span></h1>
+                <p class="vista-dedicada-desc" data-i18n="kb.desc">Explora nuestra base de conocimiento y encuentra guías, soluciones y buenas prácticas para resolver dudas.</p>
+            </div>
+        </div>
+        <div class="vista-dedicada-body">
+            <div class="kb-search-wrap">
+                <div class="kb-search-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="kb-search-icon"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+                    <input type="text" id="kbBuscarInputDedicada"
+                        data-i18n-placeholder="kb.buscarPlaceholder" placeholder="Ej: no puedo entrar a mi correo, impresora, contraseña...">
+                    <button type="button" class="kb-search-btn" id="kbBuscarBtnDedicada" aria-label="Buscar" data-i18n-aria-label="aria.buscar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="kbFilas" class="filas-lista">
+                <!-- Filas inyectadas dinámicamente por JS desde /api/kb/publicos -->
+            </div>
+            <p id="kbFilasEmpty" class="vacantes-empty" data-i18n="kb.empty" style="display:none;">
+                No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.
+            </p>
+        </div>
+    </section>
 
     <section id="contacto" class="qr-form-section">
         <div class="qr-form-waves" id="qrFormWaves" aria-hidden="true"></div>
@@ -690,8 +676,8 @@
                 <span class="qr-caption qr-caption-top" data-i18n="contacto.qrCaption">Escanea con tu celular y cuéntanos tu proyecto</span>
                 <div class="qr-display-card">
                     <div class="qr-frame">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=En%20desarrollo...%20Proximamente%20conectado."
-                            alt="Código QR temporal" class="qr-image">
+                        <img src="assets/qr/formulario-de-contacto.png"
+                            alt="Código QR del formulario de contacto" data-i18n-alt="alt.qrContacto" class="qr-image">
                     </div>
                 </div>
             </div>
@@ -719,9 +705,9 @@
                 <h4 class="footer-col-title" data-i18n="footer.navTitle">Navegación</h4>
                 <ul class="footer-links">
                     <li><a href="#" data-i18n="nav.inicio">Inicio</a></li>
-                    <li><a href="#nosotros" data-i18n="nav.nosotros">Nosotros</a></li>
-                    <li><a href="#soluciones-conectan" data-i18n="nav.soluciones">Soluciones</a></li>
                     <li><a href="#servicios" data-i18n="nav.servicios">Servicios</a></li>
+                    <li><a href="#soluciones-conectan" data-i18n="nav.soluciones">Soluciones</a></li>
+                    <li><a href="#nosotros" data-i18n="nav.nosotros">Nosotros</a></li>
                     <li><a href="#portafolio" data-i18n="nav.portafolio">Portafolio</a></li>
                     <li><a href="#vacantes" data-i18n="nav.vacantes">Vacantes</a></li>
                     <li><a href="#ardawiki" data-i18n="nav.baseConocimiento">ArdaWiki</a></li>
@@ -738,10 +724,10 @@
             </div>
 
             <div class="footer-col footer-newsletter">
-                <p class="footer-newsletter-text" data-i18n="footer.newsletterText">Recibe novedades y contenido sobre tecnología en tu correo</p>
-                <form class="footer-newsletter-form" id="footerNewsletterForm">
+                <p class="footer-newsletter-text" data-i18n="footer.newsletterText" style="display:none;">Recibe novedades y contenido sobre tecnología en tu correo</p>
+                <form class="footer-newsletter-form" id="footerNewsletterForm" style="display:none;">
                     <input type="email" class="footer-newsletter-input" placeholder="Correo electrónico" data-i18n-placeholder="footer.newsletterPlaceholder" required>
-                    <button type="submit" class="footer-newsletter-btn" aria-label="Suscribirse">
+                    <button type="submit" class="footer-newsletter-btn" aria-label="Suscribirse" data-i18n-aria-label="aria.suscribirse">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </button>
                 </form>
@@ -758,8 +744,8 @@
         </div>
     </footer>
 
-    <button type="button" id="chatToggleBtn" class="floating-mascot-btn" aria-label="Abrir chat">
-        <img src="assets/mascota-empresa/boton flotante mascota.png" alt="Mascota ARDABYTEC">
+    <button type="button" id="chatToggleBtn" class="floating-mascot-btn" aria-label="Abrir chat" data-i18n-aria-label="aria.abrirChat">
+        <img src="assets/mascota-empresa/boton flotante mascota.png" alt="Mascota ARDABYTEC" data-i18n-alt="alt.mascotaChat">
     </button>
 
     <div id="chatPanel" class="chat-panel" aria-hidden="true">
@@ -771,7 +757,7 @@
                     <span class="chat-header-status" data-i18n="chat.status">En línea</span>
                 </div>
             </div>
-            <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Cerrar chat">&times;</button>
+            <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Cerrar chat" data-i18n-aria-label="aria.cerrarChat">&times;</button>
         </div>
 
         <div id="chatMessages" class="chat-messages"></div>
@@ -780,7 +766,7 @@
 
         <form id="chatForm" class="chat-input-row" autocomplete="off">
             <input type="text" id="chatInput" placeholder="Escribe tu mensaje..." autocomplete="off">
-            <button type="submit" class="chat-send-btn" aria-label="Enviar">
+            <button type="submit" class="chat-send-btn" aria-label="Enviar" data-i18n-aria-label="aria.enviar">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             </button>
         </form>
@@ -1330,6 +1316,12 @@
                 "nav.inicio": "Inicio", "nav.nosotros": "Nosotros", "nav.soluciones": "Soluciones",
                 "nav.aliados": "Aliados", "nav.servicios": "Servicios", "nav.contacto": "Contacto",
                 "nav.portafolio": "Portafolio", "nav.vacantes": "Vacantes", "nav.login": "Iniciar sesión",
+                "nav.logout": "Cerrar sesión", "nav.probarDemo": "Probar demo",
+                "demo.titulo": "Prueba AGYDA con estas credenciales",
+                "demo.administrador": "Administrador", "demo.agente": "Agente",
+                "demo.usuario": "Usuario:", "demo.contrasena": "Contraseña:",
+                "demo.irAlLogin": "Ir al login",
+                "vacantes.volver": "Volver al inicio",
                 "nav.baseConocimiento": "ArdaWiki",
 
                 "hero.eyebrow": "Soluciones que impulsan",
@@ -1391,6 +1383,21 @@
                 "soluciones.verMenos": "Ver menos soluciones",
 
                 "common.saberMas": "Saber más", "common.fichaPdf": "Ficha PDF",
+
+                "aria.cambiarTema": "Cambiar tema",
+                "aria.abrirMenu": "Abrir menú",
+                "aria.anterior": "Anterior",
+                "aria.siguiente": "Siguiente",
+                "aria.buscar": "Buscar",
+                "aria.suscribirse": "Suscribirse",
+                "aria.abrirChat": "Abrir chat",
+                "aria.cerrarChat": "Cerrar chat",
+                "aria.enviar": "Enviar",
+                "alt.heroMascota": "Mascota ArdabyTec en escena futurista con vista a la ciudad",
+                "alt.equipoOficina": "Equipo de ARDABYTEC colaborando en oficina",
+                "alt.colaboradorWiki": "Colaborador consultando artículos de ArdaWiki",
+                "alt.qrContacto": "Código QR del formulario de contacto",
+                "alt.mascotaChat": "Mascota ARDABYTEC",
 
                 "sol.tarificador.title": "Tarificador",
                 "sol.tarificador.desc": "Controla, analiza y gestiona consumos telefónicos en tiempo real de tu PBX o Asterisk, transformándolos en decisiones estratégicas de negocio.",
@@ -1456,8 +1463,9 @@
                 "servicios.consult.title": "Consultoría IT", "servicios.consult.desc": "Te asesoramos para tomar decisiones tecnológicas inteligentes.",
                 "servicios.verTodos": "Ver todos los servicios",
                 
-                "portafolio.title": 'Nuestro <span class="highlight-blue">Portafolio</span>',
-                "portafolio.desc": "Casos de éxito y proyectos destacados donde hemos implementado tecnología de alto impacto.",
+                "portafolio.eyebrow": "Nuestro portafolio",
+                "portafolio.title": 'Casos de <span class="highlight-blue">éxito, proyectos destacados</span>',
+                "portafolio.desc": "Transformamos desafíos empresariales en soluciones tecnológicas que optimizan procesos, conectan equipos y generan resultados medibles.",
                 "portafolio.tag1": "Desarrollo Web",
                 "portafolio.proj1.title": "Plataforma E-commerce B2B",
                 "portafolio.proj1.desc": "Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.",
@@ -1467,18 +1475,30 @@
                 "portafolio.tag3": "Soporte IT",
                 "portafolio.proj3.title": "Renovación de Infraestructura",
                 "portafolio.proj3.desc": "Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.",
+                "portafolio.verMas": "Ver más",
+                "portafolio.verMenos": "Ver menos",
 
                 "contacto.title": '¿Listo para <span class="highlight-blue">transformar</span> tu negocio?',
                 "contacto.desc": "Cuéntanos sobre tu proyecto y recibe una propuesta personalizada.",
                 "contacto.cta": "Ir al formulario",
                 "contacto.qrCaption": "Escanea con tu celular y cuéntanos tu proyecto",
 
+                "talento.eyebrow": "Talento y conocimiento",
+                "talento.title": 'Más oportunidades <br>para <span class="highlight-blue">crecer juntos</span>',
+                "talento.desc": "Explora nuestras vacantes y accede a contenido tecnológico.",
+                "talento.cardVacantes": "Vacantes",
+                "talento.cardVacantesBtn": "Ver vacantes",
+                "talento.cardWiki": "ArdaWiki",
+                "talento.cardWikiBtn": "Visitar ArdaWiki",
+
+                "vacantes.breadcrumb": "Talento ArdabyTec",
                 "vacantes.title": 'Únete a <span class="highlight-blue">nuestro equipo</span>',
-                "vacantes.desc": "Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.",
+                "vacantes.desc": "Tu talento impulsa la tecnología que conecta negocios. Conoce nuestras vacantes y forma parte de un equipo que sigue creciendo.",
                 "vacantes.empty": "Por el momento no hay vacantes disponibles. ¡Vuelve pronto!",
                 "vacantes.verDetalle": "Ver detalle y postular",
-                "kb.title": 'Resuelve tu problema <span class="highlight-blue">por tu cuenta</span>',
-                "kb.desc": "Busca en nuestra ArdaWiki y encuentra la solución paso a paso, sin esperar a que un técnico te atienda.",
+                "kb.breadcrumb": "ArdaWiki",
+                "kb.title": 'Encuentra la respuesta <span class="highlight-blue">que necesitas</span>',
+                "kb.desc": "Explora nuestra base de conocimiento y encuentra guías, soluciones y buenas prácticas para resolver dudas.",
                 "kb.buscarPlaceholder": "Ej: no puedo entrar a mi correo, impresora, contraseña...",
                 "kb.empty": "No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.",
                 "vacantes.modal.descripcion": "Descripción del puesto",
@@ -1506,6 +1526,12 @@
                 "nav.inicio": "Home", "nav.nosotros": "About", "nav.soluciones": "Solutions",
                 "nav.aliados": "Partners", "nav.servicios": "Services", "nav.contacto": "Contact",
                 "nav.portafolio": "Portfolio", "nav.vacantes": "Careers", "nav.login": "Login",
+                "nav.logout": "Log out", "nav.probarDemo": "Try demo",
+                "demo.titulo": "Try AGYDA with these credentials",
+                "demo.administrador": "Administrator", "demo.agente": "Agent",
+                "demo.usuario": "Username:", "demo.contrasena": "Password:",
+                "demo.irAlLogin": "Go to login",
+                "vacantes.volver": "Back to home",
                 "nav.baseConocimiento": "ArdaWiki",
 
                 "hero.eyebrow": "Solutions that drive you forward",
@@ -1567,6 +1593,21 @@
                 "soluciones.verMenos": "View fewer solutions",
 
                 "common.saberMas": "Learn more", "common.fichaPdf": "PDF Sheet",
+
+                "aria.cambiarTema": "Toggle theme",
+                "aria.abrirMenu": "Open menu",
+                "aria.anterior": "Previous",
+                "aria.siguiente": "Next",
+                "aria.buscar": "Search",
+                "aria.suscribirse": "Subscribe",
+                "aria.abrirChat": "Open chat",
+                "aria.cerrarChat": "Close chat",
+                "aria.enviar": "Send",
+                "alt.heroMascota": "ArdabyTec mascot in a futuristic scene overlooking the city",
+                "alt.equipoOficina": "ARDABYTEC team collaborating in the office",
+                "alt.colaboradorWiki": "Team member consulting ArdaWiki articles",
+                "alt.qrContacto": "QR code for the contact form",
+                "alt.mascotaChat": "ARDABYTEC mascot",
 
                 "sol.tarificador.title": "Call Rating System",
                 "sol.tarificador.desc": "Monitor, analyze and manage real-time phone usage from your PBX or Asterisk, turning it into strategic business decisions.",
@@ -1632,8 +1673,9 @@
                 "servicios.consult.title": "IT Consulting", "servicios.consult.desc": "We advise you in making smart technology decisions.",
                 "servicios.verTodos": "See all services",
                 
-                "portafolio.title": 'Our <span class="highlight-blue">Portfolio</span>',
-                "portafolio.desc": "Success stories and featured projects where we have implemented high-impact technology.",
+                "portafolio.eyebrow": "Our portfolio",
+                "portafolio.title": 'Success <span class="highlight-blue">stories, featured projects</span>',
+                "portafolio.desc": "We turn business challenges into technology solutions that streamline processes, connect teams, and deliver measurable results.",
                 "portafolio.tag1": "Web Development",
                 "portafolio.proj1.title": "B2B E-commerce Platform",
                 "portafolio.proj1.desc": "Creation of a wholesale sales portal with real-time ERP integration, optimizing the supply chain.",
@@ -1643,18 +1685,30 @@
                 "portafolio.tag3": "IT Support",
                 "portafolio.proj3.title": "Infrastructure Renewal",
                 "portafolio.proj3.desc": "Design and update of local servers and structured network for a corporate client in the financial sector.",
+                "portafolio.verMas": "See more",
+                "portafolio.verMenos": "See less",
 
                 "contacto.title": 'Ready to <span class="highlight-blue">transform</span> your business?',
                 "contacto.desc": "Tell us about your project and get a personalized proposal.",
                 "contacto.cta": "Go to the form",
                 "contacto.qrCaption": "Scan with your phone and tell us about your project",
 
+                "talento.eyebrow": "Talent and knowledge",
+                "talento.title": 'More opportunities <br>to <span class="highlight-blue">grow together</span>',
+                "talento.desc": "Explore our job openings and access technology content.",
+                "talento.cardVacantes": "Careers",
+                "talento.cardVacantesBtn": "View openings",
+                "talento.cardWiki": "ArdaWiki",
+                "talento.cardWikiBtn": "Visit ArdaWiki",
+
+                "vacantes.breadcrumb": "ArdabyTec Talent",
                 "vacantes.title": 'Join <span class="highlight-blue">our team</span>',
-                "vacantes.desc": "Check out the current job openings at ARDABYTEC and apply today.",
+                "vacantes.desc": "Your talent drives the technology that connects businesses. Check out our openings and join a growing team.",
                 "vacantes.empty": "There are no open positions right now. Check back soon!",
                 "vacantes.verDetalle": "View details & apply",
-                "kb.title": 'Solve it <span class="highlight-blue">yourself</span>',
-                "kb.desc": "Search our ArdaWiki and find the solution step by step, no need to wait for a technician.",
+                "kb.breadcrumb": "ArdaWiki",
+                "kb.title": 'Find the answer <span class="highlight-blue">you need</span>',
+                "kb.desc": "Explore our knowledge base and find guides, solutions, and best practices to solve your issues.",
                 "kb.buscarPlaceholder": "E.g: can't log into my email, printer, password...",
                 "kb.empty": "We couldn't find any articles matching your search. Try different words or contact us.",
                 "vacantes.modal.descripcion": "Job description",
@@ -1693,6 +1747,18 @@
             document.querySelectorAll('[data-i18n-html]').forEach(el => {
                 const key = el.getAttribute('data-i18n-html');
                 if (dict[key] !== undefined) el.innerHTML = dict[key];
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (dict[key] !== undefined) el.setAttribute('placeholder', dict[key]);
+            });
+            document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+                const key = el.getAttribute('data-i18n-aria-label');
+                if (dict[key] !== undefined) el.setAttribute('aria-label', dict[key]);
+            });
+            document.querySelectorAll('[data-i18n-alt]').forEach(el => {
+                const key = el.getAttribute('data-i18n-alt');
+                if (dict[key] !== undefined) el.setAttribute('alt', dict[key]);
             });
 
             const titleEl = document.querySelector('title[data-es]');
@@ -2017,7 +2083,10 @@
                 togglePwBtn.addEventListener('click', function () {
                     const showing = pwInput.type === 'text';
                     pwInput.type = showing ? 'password' : 'text';
-                    togglePwBtn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+                    const label = showing
+                        ? (currentLang === 'en' ? 'Show password' : 'Mostrar contraseña')
+                        : (currentLang === 'en' ? 'Hide password' : 'Ocultar contraseña');
+                    togglePwBtn.setAttribute('aria-label', label);
                 });
             }
 
@@ -2046,7 +2115,7 @@
 
                         if (res.ok && data.success) {
                             localStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
-                            loginModalStatus.innerText = 'Inicio de sesión correcto.';
+                            loginModalStatus.innerText = currentLang === 'en' ? 'Login successful.' : 'Inicio de sesión correcto.';
                             loginModalStatus.className = 'login-modal-status success';
 
                             setTimeout(function () {
@@ -2054,11 +2123,11 @@
                                 if (typeof window.renderSessionUI === 'function') window.renderSessionUI();
                             }, 600);
                         } else {
-                            loginModalStatus.innerText = data.message || 'Usuario o contraseña incorrectos.';
+                            loginModalStatus.innerText = data.message || (currentLang === 'en' ? 'Incorrect username or password.' : 'Usuario o contraseña incorrectos.');
                             loginModalStatus.className = 'login-modal-status error';
                         }
                     } catch (err) {
-                        loginModalStatus.innerText = 'Ocurrió un error de conexión. Intenta de nuevo más tarde.';
+                        loginModalStatus.innerText = currentLang === 'en' ? 'A connection error occurred. Please try again later.' : 'Ocurrió un error de conexión. Intenta de nuevo más tarde.';
                         loginModalStatus.className = 'login-modal-status error';
                     } finally {
                         loginModalSubmitBtn.disabled = false;
@@ -2124,6 +2193,114 @@
             }
         };
 
+        // --- MAPEO DE ÍCONOS SVG (sin emojis) ---
+        // Íconos inline estilo "line icon" (viewBox 24x24, stroke=currentColor),
+        // consistentes con el resto del sitio (ver header/nav y sol-bubbles.js).
+        // Se infiere el ícono a partir de palabras clave del título/categoría,
+        // porque la API no manda un campo de ícono.
+        const ICONS_SVG = {
+            maletin: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>',
+            telefono: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>',
+            monitor: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>',
+            grafica: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>',
+            persona: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
+            laptop: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>',
+            impresora: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>',
+            wifi: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>',
+            engranaje: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>',
+            documento: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>',
+            ondas: '<svg xmlns="http://www/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-3 3.5-3 5 0s3.5 3 5 0 3.5-3 5 0 3.5 3 5 0"></path></svg>',
+            pin: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>',
+            flecha: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>',
+        };
+        // Corrige un typo de xmlns en el ícono "ondas" (fallback de ArdaWiki)
+        ICONS_SVG.ondas = ICONS_SVG.ondas.replace('http://www/2000/svg', 'http://www.w3.org/2000/svg');
+
+        function iconoVacantePorTexto(...campos) {
+            const texto = campos.filter(Boolean).join(' ').toLowerCase();
+            if (/telef[oó]nic|call\s*center|llamad/.test(texto)) return ICONS_SVG.telefono;
+            if (/t[eé]cnic|soporte/.test(texto)) return ICONS_SVG.monitor;
+            if (/comercial|ventas/.test(texto)) return ICONS_SVG.grafica;
+            return ICONS_SVG.maletin;
+        }
+
+        function iconoKbPorTexto(...campos) {
+            const texto = campos.filter(Boolean).join(' ').toLowerCase();
+            if (/cuenta|seguridad/.test(texto)) return ICONS_SVG.persona;
+            if (/software|aplicaci[oó]n/.test(texto)) return ICONS_SVG.laptop;
+            if (/hardware|impresora/.test(texto)) return ICONS_SVG.impresora;
+            if (/red|conectividad/.test(texto)) return ICONS_SVG.wifi;
+            if (/procedimiento|interno/.test(texto)) return ICONS_SVG.engranaje;
+            return ICONS_SVG.documento;
+        }
+
+        // --- VISTAS DEDICADAS (Vacantes / ArdaWiki) ---
+        // Muestra una sección tipo página completa dentro del mismo home, sin
+        // router ni recarga: se ocultan las secciones normales del home (el
+        // header y el footer NUNCA se ocultan) y se muestra el bloque
+        // `.vista-dedicada` correspondiente. "Volver" restaura todo.
+        (function () {
+            const HOME_SECTION_SELECTORS = [
+                '#inicio', '.pilares-section', '#nosotros', '#soluciones-conectan', '#aliados',
+                '#servicios', '#portafolio', '.talento-section', '#contacto'
+            ];
+
+            function homeSections() {
+                return HOME_SECTION_SELECTORS
+                    .map((sel) => document.querySelector(sel))
+                    .filter(Boolean);
+            }
+
+            function abrirVistaDedicada(id) {
+                const vista = document.getElementById(id);
+                if (!vista) return;
+                homeSections().forEach((el) => { el.dataset.prevDisplay = el.style.display; el.style.display = 'none'; });
+                document.querySelectorAll('.vista-dedicada').forEach((el) => { el.style.display = 'none'; });
+                vista.style.display = '';
+                // El título usa el mismo sistema de "split text" con
+                // IntersectionObserver que el resto del sitio (animación de
+                // scroll-reveal). Como esta sección estuvo display:none,
+                // el observer nunca disparó y el texto queda a medio
+                // revelar (translúcido/desalineado) hasta que el usuario
+                // haga scroll — se fuerza visible de una vez al abrir.
+                vista.querySelectorAll('[data-split]').forEach((el) => el.classList.add('is-split-visible'));
+                window.scrollTo({ top: 0, behavior: 'auto' });
+            }
+
+            window.cerrarVistaDedicada = function () {
+                document.querySelectorAll('.vista-dedicada').forEach((el) => { el.style.display = 'none'; });
+                homeSections().forEach((el) => { el.style.display = el.dataset.prevDisplay || ''; });
+                window.scrollTo({ top: 0, behavior: 'auto' });
+            };
+
+            window.abrirVacantesDedicada = () => abrirVistaDedicada('vacantesDedicada');
+            window.abrirArdawikiDedicada = () => abrirVistaDedicada('ardawikiDedicada');
+
+            document.querySelectorAll('[data-volver-dedicada]').forEach((btn) => {
+                btn.addEventListener('click', () => window.cerrarVistaDedicada());
+            });
+
+            // #vacantes y #ardawiki ahora solo existen "detrás" de sus
+            // vistas dedicadas (ocultas por homeSections() al abrir
+            // cualquiera de las dos) — cualquier link del sitio que
+            // apunte a esas anclas (nav, footer) debe abrir la vista
+            // dedicada correspondiente en vez de hacer scroll a una
+            // sección invisible, si no el link queda marcado "activo" sin
+            // que la vista realmente cambie.
+            document.querySelectorAll('a[href="#vacantes"]').forEach((link) => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    window.abrirVacantesDedicada();
+                });
+            });
+            document.querySelectorAll('a[href="#ardawiki"]').forEach((link) => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    window.abrirArdawikiDedicada();
+                });
+            });
+        })();
+
         // --- MÓDULO DE VACANTES ---
         (function () {
             const MODALIDAD_LABELS = {
@@ -2139,10 +2316,34 @@
                 return div.innerHTML;
             }
 
+            function filaVacanteHtml(v) {
+                const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[v.modalidad] || '';
+                const icono = iconoVacantePorTexto(v.titulo, v.categoria);
+                return `
+                    <div class="fila-item">
+                        <div class="fila-icono">${icono}</div>
+                        <div class="fila-info">
+                            <h3 class="fila-titulo">${escapeHtml(v.titulo)}</h3>
+                            <div class="fila-meta">
+                                ${v.ubicacion ? `<span class="fila-meta-item">${ICONS_SVG.pin} ${escapeHtml(v.ubicacion)}</span>` : ''}
+                                ${modalidadLabel ? `<span class="fila-meta-item">${ICONS_SVG.maletin} ${escapeHtml(modalidadLabel)}</span>` : ''}
+                            </div>
+                            <p class="fila-desc">${escapeHtml((v.descripcion || '').slice(0, 130))}${(v.descripcion || '').length > 130 ? '…' : ''}</p>
+                        </div>
+                        <button type="button" class="fila-accion" onclick="openVacanteModal(${v.id})">
+                            <span data-i18n="vacantes.verDetalle">Ver detalle y postular</span>
+                            ${ICONS_SVG.flecha}
+                        </button>
+                    </div>
+                `;
+            }
+
             async function cargarVacantes() {
                 const grid = document.getElementById('vacantesGrid');
                 const empty = document.getElementById('vacantesEmpty');
-                if (!grid) return;
+                const filas = document.getElementById('vacantesFilas');
+                const filasEmpty = document.getElementById('vacantesFilasEmpty');
+                if (!grid && !filas) return;
 
                 try {
                     const res = await fetch('/api/vacantes');
@@ -2151,29 +2352,39 @@
                     vacantesCache = vacantes;
 
                     if (!vacantes.length) {
-                        grid.innerHTML = '';
+                        if (grid) grid.innerHTML = '';
                         if (empty) empty.style.display = '';
+                        if (filas) filas.innerHTML = '';
+                        if (filasEmpty) filasEmpty.style.display = '';
                         return;
                     }
                     if (empty) empty.style.display = 'none';
+                    if (filasEmpty) filasEmpty.style.display = 'none';
 
-                    grid.innerHTML = vacantes.map(v => {
-                        const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[v.modalidad] || '';
-                        return `
-                            <div class="vacante-card">
-                                <div class="vacante-card-banner"><span class="vacante-card-banner-icon">💼</span></div>
-                                <div class="vacante-card-content">
-                                    <h3 class="vacante-title">${escapeHtml(v.titulo)}</h3>
-                                    <div class="vacante-meta">
-                                        ${v.ubicacion ? `<span class="vacante-badge">📍 ${escapeHtml(v.ubicacion)}</span>` : ''}
-                                        ${modalidadLabel ? `<span class="vacante-badge">💼 ${escapeHtml(modalidadLabel)}</span>` : ''}
+                    if (grid) {
+                        grid.innerHTML = vacantes.map(v => {
+                            const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[v.modalidad] || '';
+                            const icono = iconoVacantePorTexto(v.titulo, v.categoria);
+                            return `
+                                <div class="vacante-card">
+                                    <div class="vacante-card-banner"><span class="vacante-card-banner-icon">${icono}</span></div>
+                                    <div class="vacante-card-content">
+                                        <h3 class="vacante-title">${escapeHtml(v.titulo)}</h3>
+                                        <div class="vacante-meta">
+                                            ${v.ubicacion ? `<span class="vacante-badge">${ICONS_SVG.pin} ${escapeHtml(v.ubicacion)}</span>` : ''}
+                                            ${modalidadLabel ? `<span class="vacante-badge">${ICONS_SVG.maletin} ${escapeHtml(modalidadLabel)}</span>` : ''}
+                                        </div>
+                                        <p class="vacante-short-desc">${escapeHtml((v.descripcion || '').slice(0, 130))}${(v.descripcion || '').length > 130 ? '…' : ''}</p>
+                                        <button type="button" class="btn-quick-view" onclick="openVacanteModal(${v.id})" data-i18n="vacantes.verDetalle">Ver detalle y postular</button>
                                     </div>
-                                    <p class="vacante-short-desc">${escapeHtml((v.descripcion || '').slice(0, 130))}${(v.descripcion || '').length > 130 ? '…' : ''}</p>
-                                    <button type="button" class="btn-quick-view" onclick="openVacanteModal(${v.id})" data-i18n="vacantes.verDetalle">Ver detalle y postular</button>
                                 </div>
-                            </div>
-                        `;
-                    }).join('');
+                            `;
+                        }).join('');
+                    }
+
+                    if (filas) {
+                        filas.innerHTML = vacantes.map(filaVacanteHtml).join('');
+                    }
 
                     applyTranslations(currentLang);
                     if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
@@ -2181,6 +2392,7 @@
                 } catch (e) {
                     console.warn('No se pudieron cargar las vacantes:', e);
                     if (empty) empty.style.display = '';
+                    if (filasEmpty) filasEmpty.style.display = '';
                 }
             }
 
@@ -2190,6 +2402,9 @@
 
                 const modal = document.getElementById('vacanteModal');
                 modal.dataset.currentVacanteId = id;
+
+                const iconEl = document.getElementById('vacModalIcon');
+                if (iconEl) iconEl.innerHTML = iconoVacantePorTexto(vacante.titulo, vacante.categoria);
 
                 document.getElementById('vacModalTitulo').innerText = vacante.titulo || '';
                 document.getElementById('vacModalDescripcion').innerText = vacante.descripcion || '';
@@ -2203,20 +2418,20 @@
                 }
 
                 const ubicacionEl = document.getElementById('vacModalUbicacion');
-                ubicacionEl.innerText = vacante.ubicacion ? `📍 ${vacante.ubicacion}` : '';
+                ubicacionEl.innerHTML = vacante.ubicacion ? `${ICONS_SVG.pin} ${escapeHtml(vacante.ubicacion)}` : '';
                 ubicacionEl.style.display = vacante.ubicacion ? '' : 'none';
 
                 const modalidadEl = document.getElementById('vacModalModalidad');
                 const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[vacante.modalidad] || '';
-                modalidadEl.innerText = modalidadLabel ? `💼 ${modalidadLabel}` : '';
+                modalidadEl.innerHTML = modalidadLabel ? `${ICONS_SVG.maletin} ${escapeHtml(modalidadLabel)}` : '';
                 modalidadEl.style.display = modalidadLabel ? '' : 'none';
 
                 const contratoEl = document.getElementById('vacModalContrato');
-                contratoEl.innerText = vacante.tipoContrato ? `📄 ${vacante.tipoContrato}` : '';
+                contratoEl.innerHTML = vacante.tipoContrato ? `${ICONS_SVG.documento} ${escapeHtml(vacante.tipoContrato)}` : '';
                 contratoEl.style.display = vacante.tipoContrato ? '' : 'none';
 
                 const salarioEl = document.getElementById('vacModalSalario');
-                salarioEl.innerText = vacante.salario ? `💰 ${vacante.salario}` : '';
+                salarioEl.innerHTML = vacante.salario ? `${ICONS_SVG.grafica} ${escapeHtml(vacante.salario)}` : '';
                 salarioEl.style.display = vacante.salario ? '' : 'none';
 
                 document.getElementById('postulacionForm').reset();
@@ -2262,27 +2477,29 @@
                     const cvInput = document.getElementById('postCv');
                     const file = cvInput.files[0];
 
+                    const postMsg = (es, en) => (currentLang === 'en' ? en : es);
+
                     statusEl.className = 'postulacion-status';
                     statusEl.innerText = '';
 
                     if (!file) {
-                        statusEl.innerText = 'Selecciona tu CV en formato PDF.';
+                        statusEl.innerText = postMsg('Selecciona tu CV en formato PDF.', 'Select your CV in PDF format.');
                         statusEl.className = 'postulacion-status error';
                         return;
                     }
                     if (file.type !== 'application/pdf') {
-                        statusEl.innerText = 'El archivo debe ser un PDF.';
+                        statusEl.innerText = postMsg('El archivo debe ser un PDF.', 'The file must be a PDF.');
                         statusEl.className = 'postulacion-status error';
                         return;
                     }
                     if (file.size > 5 * 1024 * 1024) {
-                        statusEl.innerText = 'El archivo no debe superar los 5MB.';
+                        statusEl.innerText = postMsg('El archivo no debe superar los 5MB.', 'The file must not exceed 5MB.');
                         statusEl.className = 'postulacion-status error';
                         return;
                     }
 
                     submitBtn.disabled = true;
-                    statusEl.innerText = 'Enviando postulación…';
+                    statusEl.innerText = postMsg('Enviando postulación…', 'Submitting application…');
 
                     try {
                         const base64 = await fileToBase64(file);
@@ -2293,7 +2510,7 @@
                         });
                         const uploadJson = await uploadRes.json();
                         if (!uploadRes.ok || !uploadJson.url) {
-                            throw new Error(uploadJson.message || 'No se pudo subir el CV');
+                            throw new Error(uploadJson.message || postMsg('No se pudo subir el CV', 'Could not upload the CV'));
                         }
 
                         const postRes = await fetch(`/api/vacantes/${vacanteId}/postulantes`, {
@@ -2309,15 +2526,15 @@
                         });
                         const postJson = await postRes.json();
                         if (!postRes.ok || !postJson.success) {
-                            throw new Error(postJson.message || 'No se pudo enviar la postulación');
+                            throw new Error(postJson.message || postMsg('No se pudo enviar la postulación', 'Could not submit the application'));
                         }
 
-                        statusEl.innerText = '¡Postulación enviada! Nos pondremos en contacto contigo pronto.';
+                        statusEl.innerText = postMsg('¡Postulación enviada! Nos pondremos en contacto contigo pronto.', 'Application sent! We will contact you soon.');
                         statusEl.className = 'postulacion-status success';
                         postulacionForm.reset();
                         setTimeout(closeVacanteModal, 2200);
                     } catch (err) {
-                        statusEl.innerText = err.message || 'Ocurrió un error al enviar tu postulación.';
+                        statusEl.innerText = err.message || postMsg('Ocurrió un error al enviar tu postulación.', 'An error occurred while submitting your application.');
                         statusEl.className = 'postulacion-status error';
                     } finally {
                         submitBtn.disabled = false;
@@ -2350,16 +2567,48 @@
                 return lineas.map((linea) => {
                     if (KB_IMG_LINE_REGEX.test(linea.trim())) {
                         const src = kbEscapeHtml(linea.trim());
-                        return `<img src="${src}" alt="Imagen del artículo" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
+                        const imgAlt = currentLang === 'en' ? 'Article image' : 'Imagen del artículo';
+                        return `<img src="${src}" alt="${imgAlt}" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
                     }
                     return kbEscapeHtml(linea);
                 }).join('<br>');
             }
 
+            function kbResumenSinImagenes(a) {
+                return (a.contenido || '')
+                    .split('\n')
+                    .filter((linea) => !KB_IMG_LINE_REGEX.test(linea.trim()))
+                    .join('\n');
+            }
+
+            function filaKbHtml(a) {
+                const contenidoSinImagenes = kbResumenSinImagenes(a);
+                const resumen = contenidoSinImagenes.slice(0, 130);
+                const icono = iconoKbPorTexto(a.titulo, a.categoria);
+                return `
+                    <div class="fila-item">
+                        <div class="fila-icono">${icono}</div>
+                        <div class="fila-info">
+                            <h3 class="fila-titulo">${kbEscapeHtml(a.titulo)}</h3>
+                            <div class="fila-meta">
+                                ${a.categoria ? `<span class="fila-meta-item">${kbEscapeHtml(a.categoria)}</span>` : ''}
+                            </div>
+                            <p class="fila-desc">${kbEscapeHtml(resumen)}${contenidoSinImagenes.length > 130 ? '…' : ''}</p>
+                        </div>
+                        <button type="button" class="fila-accion" onclick="openKbModal(${a.id})">
+                            <span>${currentLang === 'en' ? 'Read solution' : 'Ver más'}</span>
+                            ${ICONS_SVG.flecha}
+                        </button>
+                    </div>
+                `;
+            }
+
             async function cargarKb(q) {
                 const grid = document.getElementById('kbGrid');
                 const empty = document.getElementById('kbEmpty');
-                if (!grid) return;
+                const filas = document.getElementById('kbFilas');
+                const filasEmpty = document.getElementById('kbFilasEmpty');
+                if (!grid && !filas) return;
 
                 try {
                     const url = q ? `/api/kb/publicos?q=${encodeURIComponent(q)}` : '/api/kb/publicos';
@@ -2369,40 +2618,48 @@
                     kbCache = articulos;
 
                     if (!articulos.length) {
-                        grid.innerHTML = '';
+                        if (grid) grid.innerHTML = '';
                         if (empty) empty.style.display = '';
+                        if (filas) filas.innerHTML = '';
+                        if (filasEmpty) filasEmpty.style.display = '';
                         return;
                     }
                     if (empty) empty.style.display = 'none';
+                    if (filasEmpty) filasEmpty.style.display = 'none';
 
-                    grid.innerHTML = articulos.map(a => {
-                        // El resumen de la tarjeta no debe mostrar links de imagen
-                        // crudos — se corta el texto antes de la primera línea que
-                        // sea solo una URL de imagen (ver kbRenderContenidoConImagenes).
-                        const contenidoSinImagenes = (a.contenido || '')
-                            .split('\n')
-                            .filter((linea) => !KB_IMG_LINE_REGEX.test(linea.trim()))
-                            .join('\n');
-                        const resumen = contenidoSinImagenes.slice(0, 130);
-                        return `
-                            <div class="vacante-card">
-                                <div class="vacante-card-banner"><span class="vacante-card-banner-icon">📖</span></div>
-                                <div class="vacante-card-content">
-                                    <h3 class="vacante-title">${kbEscapeHtml(a.titulo)}</h3>
-                                    <div class="vacante-meta">
-                                        ${a.categoria ? `<span class="vacante-badge">🏷️ ${kbEscapeHtml(a.categoria)}</span>` : ''}
+                    if (grid) {
+                        grid.innerHTML = articulos.map(a => {
+                            // El resumen de la tarjeta no debe mostrar links de imagen
+                            // crudos — se corta el texto antes de la primera línea que
+                            // sea solo una URL de imagen (ver kbRenderContenidoConImagenes).
+                            const contenidoSinImagenes = kbResumenSinImagenes(a);
+                            const resumen = contenidoSinImagenes.slice(0, 130);
+                            const icono = iconoKbPorTexto(a.titulo, a.categoria);
+                            return `
+                                <div class="vacante-card">
+                                    <div class="vacante-card-banner"><span class="vacante-card-banner-icon">${icono}</span></div>
+                                    <div class="vacante-card-content">
+                                        <h3 class="vacante-title">${kbEscapeHtml(a.titulo)}</h3>
+                                        <div class="vacante-meta">
+                                            ${a.categoria ? `<span class="vacante-badge">${kbEscapeHtml(a.categoria)}</span>` : ''}
+                                        </div>
+                                        <p class="vacante-short-desc">${kbEscapeHtml(resumen)}${contenidoSinImagenes.length > 130 ? '…' : ''}</p>
+                                        <button type="button" class="btn-quick-view" onclick="openKbModal(${a.id})">${currentLang === 'en' ? 'Read solution' : 'Ver solución'}</button>
                                     </div>
-                                    <p class="vacante-short-desc">${kbEscapeHtml(resumen)}${contenidoSinImagenes.length > 130 ? '…' : ''}</p>
-                                    <button type="button" class="btn-quick-view" onclick="openKbModal(${a.id})">${currentLang === 'en' ? 'Read solution' : 'Ver solución'}</button>
                                 </div>
-                            </div>
-                        `;
-                    }).join('');
+                            `;
+                        }).join('');
+                    }
+
+                    if (filas) {
+                        filas.innerHTML = articulos.map(filaKbHtml).join('');
+                    }
 
                     if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
                 } catch (e) {
                     console.warn('No se pudo cargar ArdaWiki:', e);
                     if (empty) empty.style.display = '';
+                    if (filasEmpty) filasEmpty.style.display = '';
                 }
             }
 
@@ -2411,6 +2668,8 @@
                 if (!articulo) return;
 
                 const modal = document.getElementById('kbModal');
+                const iconEl = document.getElementById('kbModalIcon');
+                if (iconEl) iconEl.innerHTML = iconoKbPorTexto(articulo.titulo, articulo.categoria);
                 document.getElementById('kbModalTitulo').innerText = articulo.titulo || '';
                 // articulo.evidenciaUrl es el campo dedicado (ver ART_EVIDENCIA_URL);
                 // kbRenderContenidoConImagenes queda solo como compatibilidad con
@@ -2451,29 +2710,50 @@
                 });
             }
 
+            // El buscador existe dos veces en el DOM: la barra original de la
+            // sección #ardawiki del home y la copia dentro de la vista dedicada
+            // (#kbBuscarInputDedicada/#kbBuscarBtnDedicada). Ambas deben quedar
+            // sincronizadas y disparar la misma búsqueda.
             const kbInput = document.getElementById('kbBuscarInput');
-            if (kbInput) {
-                kbInput.addEventListener('input', () => {
+            const kbInputDedicada = document.getElementById('kbBuscarInputDedicada');
+            const kbInputs = [kbInput, kbInputDedicada].filter(Boolean);
+
+            function valorBusquedaActual(origen) {
+                return origen ? origen.value.trim() : '';
+            }
+
+            function sincronizarInputs(valor, origen) {
+                kbInputs.forEach((inp) => { if (inp !== origen) inp.value = valor; });
+            }
+
+            kbInputs.forEach((inp) => {
+                inp.addEventListener('input', () => {
                     clearTimeout(kbDebounceTimer);
-                    kbDebounceTimer = setTimeout(() => cargarKb(kbInput.value.trim()), 350);
+                    const valor = valorBusquedaActual(inp);
+                    sincronizarInputs(valor, inp);
+                    kbDebounceTimer = setTimeout(() => cargarKb(valor), 350);
                 });
-                kbInput.addEventListener('keydown', (e) => {
+                inp.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         clearTimeout(kbDebounceTimer);
-                        cargarKb(kbInput.value.trim());
+                        const valor = valorBusquedaActual(inp);
+                        sincronizarInputs(valor, inp);
+                        cargarKb(valor);
                     }
                 });
-            }
+            });
 
             const kbBuscarBtn = document.getElementById('kbBuscarBtn');
-            if (kbBuscarBtn) {
-                kbBuscarBtn.addEventListener('click', () => {
+            const kbBuscarBtnDedicada = document.getElementById('kbBuscarBtnDedicada');
+            [kbBuscarBtn, kbBuscarBtnDedicada].filter(Boolean).forEach((btn, i) => {
+                btn.addEventListener('click', () => {
                     clearTimeout(kbDebounceTimer);
-                    cargarKb(kbInput ? kbInput.value.trim() : '');
+                    const origen = i === 0 ? kbInput : kbInputDedicada;
+                    cargarKb(valorBusquedaActual(origen));
                 });
-            }
+            });
 
-            window.refreshKbLang = () => cargarKb(kbInput ? kbInput.value.trim() : '');
+            window.refreshKbLang = () => cargarKb(valorBusquedaActual(kbInput || kbInputDedicada));
             cargarKb();
         })();
 
@@ -3991,6 +4271,7 @@
         const solBubblesEl = document.getElementById('solBubbles');
         if (solBubblesEl) {
             mountSolBubbles(solBubblesEl);
+            if (typeof applyTranslations === 'function') applyTranslations(currentLang);
         }
     </script>
 
@@ -4029,6 +4310,149 @@
                 waves.update(THEMES[currentTheme()]);
             });
             themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        }
+    </script>
+
+    <script type="module">
+        import { mountStack } from './assets/effects/stack.js';
+
+        const talentoStackEl = document.getElementById('talentoStack');
+        if (talentoStackEl) {
+            function buildCard({ icon, titleKey, titleFallback, btnKey, btnFallback, className, onActivate }) {
+                // La tarjeta ya NO es un link navegable en sí (antes toda su
+                // área hacía click-to-navigate, lo cual competía con el
+                // drag del Stack) — solo el botón interno abre la vista
+                // dedicada, el resto de la tarjeta es únicamente el área
+                // de arrastre.
+                const card = document.createElement('div');
+                card.className = `talento-card ${className}`;
+                card.innerHTML = `
+                    <div class="talento-card-icon">${icon}</div>
+                    <h3 class="talento-card-title" data-i18n="${titleKey}">${titleFallback}</h3>
+                    <button type="button" class="talento-card-btn" data-i18n="${btnKey}">${btnFallback}</button>
+                `;
+                if (typeof onActivate === 'function') {
+                    const btn = card.querySelector('.talento-card-btn');
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        onActivate();
+                    });
+                }
+                return card;
+            }
+
+            const ICON_VACANTES = '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>';
+            const ICON_WIKI = '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>';
+
+            const cardWiki = buildCard({
+                icon: ICON_WIKI,
+                titleKey: 'talento.cardWiki',
+                titleFallback: 'ArdaWiki',
+                btnKey: 'talento.cardWikiBtn',
+                btnFallback: 'Visitar ArdaWiki',
+                className: 'talento-card--wiki',
+                onActivate: () => { if (typeof window.abrirArdawikiDedicada === 'function') window.abrirArdawikiDedicada(); },
+            });
+            const cardVacantes = buildCard({
+                icon: ICON_VACANTES,
+                titleKey: 'talento.cardVacantes',
+                titleFallback: 'Vacantes',
+                btnKey: 'talento.cardVacantesBtn',
+                btnFallback: 'Ver vacantes →',
+                className: 'talento-card--vacantes',
+                onActivate: () => { if (typeof window.abrirVacantesDedicada === 'function') window.abrirVacantesDedicada(); },
+            });
+
+            mountStack(talentoStackEl, {
+                cards: [cardWiki, cardVacantes],
+                randomRotation: true,
+                sensitivity: 180,
+                sendToBackOnClick: false,
+                autoplay: true,
+                autoplayDelay: 3500,
+                pauseOnHover: true,
+            });
+
+            if (typeof applyTranslations === 'function') {
+                applyTranslations(currentLang);
+            }
+        }
+    </script>
+
+    <script type="module">
+        import { mountCarousel } from './assets/effects/carousel.js';
+
+        const carouselEl = document.getElementById('portafolioCarousel');
+        if (carouselEl) {
+            const IMG_BASE = 'assets/imagenes-complementarias/';
+            const PROYECTOS = [
+                { img: IMG_BASE + 'Plataforma B2B.png', tagKey: 'portafolio.tag1', tagFallback: 'Desarrollo Web', titleKey: 'portafolio.proj1.title', titleFallback: 'Plataforma E-commerce B2B', descKey: 'portafolio.proj1.desc', descFallback: 'Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.' },
+                { img: IMG_BASE + 'Migración PBX Cloud.png', tagKey: 'portafolio.tag2', tagFallback: 'Call Center', titleKey: 'portafolio.proj2.title', titleFallback: 'Migración a PBX Cloud', descKey: 'portafolio.proj2.desc', descFallback: 'Implementación de telefonía virtual para 150 agentes remotos, reduciendo los costos operativos mensuales.' },
+                { img: IMG_BASE + 'Renovacion de infraestructura.png', tagKey: 'portafolio.tag3', tagFallback: 'Soporte IT', titleKey: 'portafolio.proj3.title', titleFallback: 'Renovación de Infraestructura', descKey: 'portafolio.proj3.desc', descFallback: 'Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.' },
+            ];
+
+            function buildProjectCard(p) {
+                // render() debe crear un NODO NUEVO en cada llamada — con
+                // loop:true el carrusel arma [último, ...items, primero],
+                // reutilizando el mismo objeto "item" en dos posiciones del
+                // riel; si render() devolviera siempre el mismo elemento
+                // cacheado, appendChild lo movería de una posición a otra
+                // en vez de duplicarlo, dejando una tarjeta vacía.
+                function render() {
+                    const el = document.createElement('div');
+                    el.className = 'portafolio-carousel-card';
+                    el.innerHTML = `
+                        <div class="portafolio-carousel-media">
+                            <img src="${p.img}" alt="${p.titleFallback}" loading="lazy">
+                            <div class="portafolio-carousel-media-fade" aria-hidden="true"></div>
+                        </div>
+                        <div class="portafolio-carousel-content">
+                            <span class="portafolio-tag" data-i18n="${p.tagKey}">${p.tagFallback}</span>
+                            <h3 class="portafolio-title" data-i18n="${p.titleKey}">${p.titleFallback}</h3>
+                            <p class="portafolio-desc" data-i18n="${p.descKey}">${p.descFallback}</p>
+                            <button type="button" class="portafolio-ver-mas">
+                                <span data-i18n="portafolio.verMas">Ver más</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                        </div>
+                    `;
+                    // "Ver más" solo se muestra si la descripción realmente se
+                    // recorta (más de 3 líneas) — se mide después de insertar
+                    // en el DOM, cuando el navegador ya calculó el layout real.
+                    const descEl = el.querySelector('.portafolio-desc');
+                    const verMasBtn = el.querySelector('.portafolio-ver-mas');
+                    verMasBtn.addEventListener('click', () => {
+                        const expanded = descEl.classList.toggle('is-expanded');
+                        verMasBtn.classList.toggle('is-expanded', expanded);
+                        verMasBtn.querySelector('span').textContent = expanded
+                            ? (currentLang === 'en' ? 'See less' : 'Ver menos')
+                            : (currentLang === 'en' ? 'See more' : 'Ver más');
+                    });
+                    requestAnimationFrame(() => {
+                        if (descEl.scrollHeight <= descEl.clientHeight + 1) {
+                            verMasBtn.style.display = 'none';
+                        }
+                    });
+                    return el;
+                }
+                return { render };
+            }
+
+            const carouselCtrl = mountCarousel(carouselEl, {
+                items: PROYECTOS.map(buildProjectCard),
+                baseWidth: 420,
+                autoplay: true,
+                autoplayDelay: 4000,
+                pauseOnHover: true,
+                loop: true,
+            });
+
+            document.getElementById('portafolioPrevBtn')?.addEventListener('click', () => carouselCtrl.prev());
+            document.getElementById('portafolioNextBtn')?.addEventListener('click', () => carouselCtrl.next());
+
+            if (typeof applyTranslations === 'function') {
+                applyTranslations(currentLang);
+            }
         }
     </script>
 

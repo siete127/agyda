@@ -1314,11 +1314,17 @@ html[data-theme="dark"] .soluciones-conectan-bg-loop {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   color: var(--azul-electrico);
   background: radial-gradient(circle at 32% 28%, #EAF1FF 0%, var(--bg-superficie-alterna) 70%);
-  border: 1.5px solid rgba(0, 82, 255, 0.3);
   box-shadow: 0 8px 20px rgba(0, 82, 255, 0.18);
   transition: width 0.6s cubic-bezier(0.65, 0, 0.35, 1), height 0.6s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.4s ease;
+}
+
+.sol-bubble-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .sol-bubble[data-pos="0"] .sol-bubble-icon {
@@ -1494,7 +1500,7 @@ html[data-theme="dark"] .sol-bubble-icon {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #1E77F5;
+  color: var(--verde-agua);
   margin-bottom: 14px;
 }
 
@@ -2597,209 +2603,251 @@ html[data-theme="dark"] .servicios-circle-4 {
   overflow: hidden;
 }
 
-.portafolio-circle {
-  position: absolute;
-  z-index: 0;
-  border-radius: 50%;
-  background: var(--azul-electrico);
-  opacity: 0.06;
-  animation: portafolioCircleFloat ease-in-out infinite;
-}
-
-html[data-theme="dark"] .portafolio-circle {
-  opacity: 0.14;
-}
-
-.portafolio-circle-1 {
-  width: 260px;
-  height: 260px;
-  top: 8%;
-  left: 6%;
-  animation-duration: 10s;
-}
-
-.portafolio-circle-2 {
-  width: 180px;
-  height: 180px;
-  bottom: 10%;
-  left: 12%;
-  background: var(--azul-oscuro);
-  animation-duration: 8s;
-  animation-delay: -3s;
-}
-
-html[data-theme="dark"] .portafolio-circle-2 {
-  background: var(--azul-electrico);
-}
-
-.portafolio-circle-3 {
-  width: 220px;
-  height: 220px;
-  top: 12%;
-  right: 8%;
-  animation-duration: 9s;
-  animation-delay: -5s;
-}
-
-.portafolio-circle-4 {
-  width: 150px;
-  height: 150px;
-  bottom: 6%;
-  right: 14%;
-  background: var(--azul-oscuro);
-  animation-duration: 7s;
-  animation-delay: -1.5s;
-}
-
-html[data-theme="dark"] .portafolio-circle-4 {
-  background: var(--azul-electrico);
-}
-
-@keyframes portafolioCircleFloat {
-  0%, 100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(14px, -18px);
-  }
-}
-
 .portafolio-container {
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.portafolio-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 30px;
-}
-
-.portafolio-card {
-  background-color: var(--bg-superficie);
-  border-radius: 24px;
-  border: 1px solid var(--borde);
-  box-shadow: 0 10px 30px rgba(15, 32, 66, 0.03);
-  overflow: hidden;
-  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+/* --- Layout de 2 columnas: texto + Carousel (React Bits, portado) --- */
+.portafolio-container--carousel {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  position: relative;
-  animation: servicioCardFloat 4.5s ease-in-out infinite;
-  animation-delay: calc(var(--portafolio-index, 0) * -0.9s);
-  will-change: transform;
+  align-items: center;
+  justify-content: space-between;
+  gap: 60px;
+  flex-wrap: wrap;
 }
 
-.portafolio-card:nth-child(1) { --portafolio-index: 0; }
-.portafolio-card:nth-child(2) { --portafolio-index: 1; }
-.portafolio-card:nth-child(3) { --portafolio-index: 2; }
-.portafolio-card:nth-child(4) { --portafolio-index: 3; }
-.portafolio-card:nth-child(5) { --portafolio-index: 4; }
-.portafolio-card:nth-child(6) { --portafolio-index: 5; }
-
-.portafolio-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: conic-gradient(from var(--glow-angle, 0deg), transparent 0%, transparent 65%, var(--azul-electrico) 85%, var(--azul-oscuro) 92%, transparent 100%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  opacity: 0.55;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  animation: servicioGlowSpin 3s linear infinite;
+.portafolio-info {
+  flex: 1 1 420px;
+  min-width: 280px;
 }
 
-.portafolio-card:hover {
-  transform: translateY(-10px);
-  border-color: var(--azul-electrico);
-  box-shadow: 0 15px 35px rgba(0, 82, 255, 0.08);
+.portafolio-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--azul-electrico);
+  margin-bottom: 14px;
 }
 
-.portafolio-card:hover::after {
-  opacity: 1;
+.portafolio-title-main {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--texto-principal);
+  margin-bottom: 18px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .portafolio-card,
-  .portafolio-card::after {
-    animation: none;
-  }
+.portafolio-desc-main {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  max-width: 420px;
+  margin-bottom: 28px;
 }
 
-.portafolio-img-container {
-  width: 100%;
-  height: 220px;
-  background-color: var(--fondo-claro);
-  overflow: hidden;
-  position: relative;
-}
-
-.portafolio-img-container img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.4s ease;
-}
-
-.portafolio-img-placeholder {
+.portafolio-carousel-arrow {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #017EFD 0%, #001A66 100%);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1.5px solid var(--borde);
+  background-color: var(--bg-superficie);
+  color: var(--azul-electrico);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  box-shadow: 0 6px 18px rgba(15, 32, 66, 0.12);
 }
 
-.portafolio-img-placeholder.proyecto-2 {
-  background: linear-gradient(135deg, #0066FF 0%, #003D99 100%);
+.portafolio-carousel-arrow--prev {
+  left: -64px;
 }
 
-.portafolio-img-placeholder.proyecto-3 {
-  background: linear-gradient(135deg, #0040CC 0%, #000D33 100%);
+.portafolio-carousel-arrow--next {
+  right: -64px;
 }
 
-.portafolio-placeholder-icon {
-  font-size: 64px;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
-  transition: transform 0.4s ease;
+.portafolio-carousel-arrow:hover {
+  background-color: var(--azul-electrico);
+  border-color: var(--azul-electrico);
+  color: #FFFFFF;
+  transform: translateY(-50%) translateY(-2px);
 }
 
-.portafolio-card:hover .portafolio-placeholder-icon {
-  transform: scale(1.06);
+.portafolio-carousel-wrap {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  justify-content: center;
 }
 
-.portafolio-card:hover .portafolio-img-container img {
-  transform: scale(1.06);
+/* --- Componente Carousel (React Bits), estilos base --- */
+.carousel-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  padding: 16px;
+  height: 464px;
+  box-sizing: border-box;
 }
 
-.portafolio-content {
-  padding: 30px;
-  flex-grow: 1;
+.carousel-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.carousel-track {
+  display: flex;
+  height: 100%;
+}
+
+.carousel-item {
+  position: relative;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.carousel-indicators-container {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.carousel-indicators {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+}
+
+.carousel-indicator {
+  height: 8px;
+  width: 8px;
+  border: none;
+  padding: 0;
+  appearance: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background-color: var(--borde);
+  transition: background-color 150ms, transform 150ms;
+}
+
+.carousel-indicator:focus-visible {
+  outline: 2px solid var(--azul-electrico);
+  outline-offset: 2px;
+}
+
+.carousel-indicator.active {
+  background-color: var(--azul-electrico);
+  transform: scale(1.2);
+}
+
+/* --- Tarjeta de proyecto dentro del Carousel --- */
+.portafolio-carousel-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-superficie);
+  border: 1px solid var(--borde);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(15, 32, 66, 0.06);
+}
+
+.portafolio-carousel-media {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(135deg, var(--azul-electrico) 0%, var(--azul-oscuro) 100%);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.portafolio-carousel-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Difumina la unión entre la imagen y el texto en vez de dejar un borde/
+   línea dura: 3 capas de blur creciente hacia abajo (mismo patrón exacto
+   que .hero-bg-fade), y la capa final agrega el degradado de color que
+   termina 100% sólido en var(--bg-superficie) antes de llegar al texto. */
+.portafolio-carousel-media-fade,
+.portafolio-carousel-media-fade::before,
+.portafolio-carousel-media-fade::after {
+  -webkit-backdrop-filter: blur(var(--fade-blur, 6px));
+  backdrop-filter: blur(var(--fade-blur, 6px));
+}
+
+.portafolio-carousel-media-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 80px;
+  pointer-events: none;
+  --fade-blur: 1.5px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 35%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 35%, black 100%);
+}
+
+.portafolio-carousel-media-fade::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  --fade-blur: 4px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 25%, black 55%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 25%, black 55%, black 100%);
+}
+
+.portafolio-carousel-media-fade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  --fade-blur: 9px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 40%, black 70%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 40%, black 70%, black 100%);
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    transparent 35%,
+    var(--bg-superficie) 80%,
+    var(--bg-superficie) 100%);
+}
+
+.portafolio-carousel-media + .portafolio-carousel-content {
+  position: relative;
+  margin-top: -34px;
+  padding-top: 44px;
+}
+
+.portafolio-carousel-content {
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .portafolio-tag {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--azul-electrico);
-  background-color: rgba(0, 82, 255, 0.1);
-  padding: 5px 12px;
-  border-radius: 50px;
-  display: inline-block;
-  margin-bottom: 15px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  display: none;
 }
 
 .portafolio-title {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   color: var(--texto-principal);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .portafolio-desc {
@@ -2807,6 +2855,63 @@ html[data-theme="dark"] .portafolio-circle-4 {
   line-height: 1.6;
   color: var(--texto-secundario);
   margin-bottom: 0;
+  /* Recorta a 3 líneas; "Ver más" se muestra solo si el texto real excede
+     ese alto (medido por JS al montar la tarjeta). */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.portafolio-desc.is-expanded {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
+
+.portafolio-ver-mas {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--azul-electrico);
+  cursor: pointer;
+}
+
+.portafolio-ver-mas svg {
+  transition: transform 0.2s ease;
+}
+
+.portafolio-ver-mas.is-expanded svg {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 768px) {
+  .portafolio-container--carousel {
+    flex-direction: column;
+    text-align: center;
+  }
+  .portafolio-desc-main {
+    max-width: 100%;
+    margin: 0 auto 28px;
+  }
+  .portafolio-title-main {
+    font-size: 30px;
+  }
+  .portafolio-carousel-arrow--prev {
+    left: -16px;
+  }
+  .portafolio-carousel-arrow--next {
+    right: -16px;
+  }
 }
 
 /* ==========================================
@@ -3179,6 +3284,190 @@ html[data-theme="dark"] .vacantes-circle-2 {
 .postulacion-submit-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ==========================================
+   9.6. SECCIÓN "MÁS OPORTUNIDADES PARA CRECER JUNTOS"
+   (Stack de tarjetas Vacantes / ArdaWiki, React Bits "Stack" portado)
+   ========================================== */
+.talento-section {
+  padding: 100px 24px;
+  background-color: var(--bg-superficie-alterna);
+  position: relative;
+  overflow: hidden;
+}
+
+.talento-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 60px;
+  flex-wrap: wrap;
+}
+
+.talento-info {
+  flex: 1 1 420px;
+  min-width: 280px;
+}
+
+.talento-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--verde-agua);
+  margin-bottom: 14px;
+}
+
+.talento-title {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--texto-principal);
+  margin-bottom: 18px;
+}
+
+.talento-desc {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  max-width: 420px;
+}
+
+.talento-stack-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  /* El offset del Stack (la tarjeta de atrás se desplaza hacia la esquina
+     superior-derecha) descentra visualmente el conjunto respecto a este
+     contenedor — se compensa moviendo el wrap ligeramente para que el
+     "centro visual" del par de tarjetas caiga en el centro real. Un poco
+     más de margen a la derecha corre todo el bloque hacia la izquierda. */
+  padding: 9px 40px 0 13px;
+}
+
+.talento-stack.stack-container {
+  width: 340px;
+  height: 420px;
+}
+
+/* --- Componente Stack (React Bits), estilos base --- */
+.stack-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  perspective: 600px;
+}
+
+.card-rotate {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.card {
+  border-radius: 1.25rem;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  will-change: transform;
+}
+
+/* --- Tarjetas de contenido dentro del Stack (Vacantes / ArdaWiki) --- */
+.talento-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 32px 24px;
+  text-decoration: none;
+  background: linear-gradient(160deg, #FFFFFF 0%, #EAF1FB 100%);
+  border: 1.5px solid var(--verde-agua);
+  border-radius: 1.25rem;
+  box-sizing: border-box;
+  box-shadow: 0 20px 45px -15px rgba(15, 32, 66, 0.2);
+}
+
+html[data-theme="dark"] .talento-card {
+  background: linear-gradient(160deg, #0F2042 0%, #0A162E 100%);
+  box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.5);
+}
+
+/* Sin esto, arrastrar desde el texto/ícono (en vez del margen vacío de las
+   esquinas) dispara el drag NATIVO del navegador para el link/imagen, que
+   compite con el drag manual del Stack — se sentía como que "solo las
+   esquinas" respondían al arrastre. */
+.talento-card,
+.talento-card * {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.talento-card-icon {
+  color: var(--verde-agua);
+  opacity: 0.9;
+}
+
+.talento-card-icon svg {
+  width: 56px;
+  height: 56px;
+}
+
+.talento-card-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--verde-agua);
+}
+
+.talento-card-btn {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--azul-electrico);
+  color: #FFFFFF;
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 14px 30px;
+  border: none;
+  border-radius: 50px;
+  white-space: nowrap;
+  cursor: pointer;
+  /* El resto de la tarjeta es área de arrastre (Stack); este botón es la
+     única parte "clickeable" real, así que sí debe poder recibir el
+     puntero (el resto conserva pointer-events normal para el drag). */
+  position: relative;
+  z-index: 1;
+}
+
+.talento-card-btn:hover {
+  background-color: var(--azul-oscuro);
+}
+
+@media (max-width: 768px) {
+  .talento-container {
+    flex-direction: column;
+    text-align: center;
+  }
+  .talento-desc {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  .talento-title {
+    font-size: 30px;
+  }
 }
 
 /* ==========================================
@@ -3652,31 +3941,33 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
    ========================================== */
 .floating-mascot-btn {
   position: fixed;
-  right: 28px;
-  bottom: 28px;
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  background-color: var(--bg-superficie);
-  box-shadow: 0 10px 30px rgba(0, 82, 255, 0.25);
+  right: 20px;
+  bottom: 20px;
+  width: 120px;
+  height: 120px;
+  border-radius: 0;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 500;
+  overflow: visible;
   animation: floatMascotBtn 3.5s ease-in-out infinite;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  transition: transform 0.25s ease;
 }
 
 .floating-mascot-btn img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
+  object-fit: contain;
+  border-radius: 0;
 }
 
 .floating-mascot-btn:hover {
   transform: scale(1.08);
-  box-shadow: 0 14px 36px rgba(0, 82, 255, 0.35);
+  animation-play-state: paused;
 }
 
 @keyframes floatMascotBtn {
@@ -3684,16 +3975,12 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   50% { transform: translateY(-8px); }
 }
 
-.floating-mascot-btn:hover {
-  animation-play-state: paused;
-}
-
 @media (max-width: 600px) {
   .floating-mascot-btn {
-    width: 60px;
-    height: 60px;
-    right: 16px;
-    bottom: 16px;
+    width: 90px;
+    height: 90px;
+    right: 12px;
+    bottom: 12px;
   }
 }
 
@@ -4470,9 +4757,9 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
 .chat-header-avatar {
   width: 34px;
   height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 0;
+  object-fit: contain;
+  background-color: transparent;
 }
 
 .chat-header-info strong {
@@ -4943,5 +5230,364 @@ html[data-theme="dark"] .chat-quick-reply-btn:hover {
   .social-icon:hover,
   .floating-mascot-btn:hover img {
     transform: none !important;
+  }
+}
+
+/* ==========================================
+   17. VISTAS DEDICADAS (Vacantes / ArdaWiki)
+   ========================================== */
+/* Página completa embebida dentro del home (sin router ni recarga): se
+   activa/desactiva por JS ocultando el resto de secciones del home. El
+   header y el footer del sitio quedan siempre visibles por fuera de este
+   bloque. Se adapta al tema claro/oscuro del sitio (mismas variables que
+   el resto de las secciones), no un fondo oscuro fijo. */
+.vista-dedicada {
+  background-color: var(--bg-superficie-alterna);
+  color: var(--texto-principal);
+  min-height: 60vh;
+}
+
+/* Mismo tratamiento visual que el hero principal (#inicio): imagen +
+   .hero-bg-overlay + .hero-bg-fade — por eso NO lleva overflow:hidden (el
+   fade lo necesita sin recortar, ver comentario junto a .hero-bg-fade más
+   arriba en este archivo). Usa las mismas variables de tema que
+   .hero-section para adaptarse a claro/oscuro igual que el hero principal. */
+.vista-dedicada-hero {
+  position: relative;
+  min-height: 320px;
+  display: flex;
+  align-items: flex-end;
+  background: linear-gradient(160deg, var(--bg-body) 0%, var(--bg-superficie-alterna) 55%, #ECF1F9 100%);
+}
+
+html[data-theme="dark"] .vista-dedicada-hero {
+  background: #060B18;
+}
+
+/* A diferencia del hero principal (altura más estable), aquí el alto real
+   de .vista-dedicada-hero varía según el largo del título/descripción —
+   con decimales de subpíxel en el layout, el -1px de .hero-bg-fade no
+   siempre alcanza a cubrir el borde real y se asoma una línea de 1px de
+   la imagen sin difuminar. Se extiende un poco más para tener margen.
+   También se reduce el blur de cada capa (la imagen de esta vista es más
+   angosta verticalmente que el hero principal, así que el mismo blur
+   pensado para 180px sobre una imagen más alta aquí cubre demasiado
+   rostro/contenido de la foto). */
+.vista-dedicada-hero .hero-bg-fade {
+  bottom: -3px;
+  height: 130px;
+}
+
+.vista-dedicada-hero .hero-bg-fade {
+  --fade-blur: 4px;
+}
+
+.vista-dedicada-hero .hero-bg-fade::before {
+  --fade-blur: 10px;
+}
+
+.vista-dedicada-hero .hero-bg-fade::after {
+  --fade-blur: 20px;
+}
+
+.vista-dedicada-hero-content {
+  position: relative;
+  /* Debe quedar POR ENCIMA de .hero-bg-fade (z-index:2) — si no, el
+     backdrop-filter:blur() del fade difumina el título en vez de solo la
+     franja inferior de la imagen (mismo z-index:3 que usa .hero-container
+     en el hero principal para lograr lo mismo). */
+  z-index: 3;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 110px 24px 48px;
+}
+
+.vista-dedicada-volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(15, 32, 66, 0.18);
+  color: var(--texto-principal);
+  font-family: 'Poppins', sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px 9px 12px;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  margin-bottom: 22px;
+}
+
+html[data-theme="dark"] .vista-dedicada-volver {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #F1F5F9;
+}
+
+.vista-dedicada-volver:hover {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(15, 32, 66, 0.32);
+}
+
+html[data-theme="dark"] .vista-dedicada-volver:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.vista-dedicada-volver svg {
+  flex-shrink: 0;
+}
+
+.vista-dedicada-breadcrumb {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--verde-agua);
+  margin-bottom: 10px;
+}
+
+.vista-dedicada-titulo {
+  font-size: 38px;
+  font-weight: 800;
+  color: var(--texto-principal);
+  margin-bottom: 14px;
+  max-width: 720px;
+}
+
+html[data-theme="dark"] .vista-dedicada-titulo {
+  color: #FFFFFF;
+}
+
+.vista-dedicada-titulo .highlight-blue {
+  color: var(--azul-electrico);
+}
+
+.vista-dedicada-desc {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  max-width: 560px;
+}
+
+html[data-theme="dark"] .vista-dedicada-desc {
+  color: #B8C4DA;
+}
+
+.vista-dedicada-body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px 100px;
+  position: relative;
+  z-index: 3;
+}
+
+/* El backdrop-filter:blur() de .hero-bg-fade deja una costura de 1-2px en
+   su propio borde (artefacto de renderizado del navegador, no una
+   cuestión de posición/color) por la que se asoma la imagen sin difuminar.
+   Se cubre con una franja sólida del mismo color que el fondo de la
+   sección, superpuesta sobre ese borde exacto — con z-index mayor que
+   .hero-bg-fade (2), si no queda tapada por él en vez de taparlo. */
+.vista-dedicada .vista-dedicada-body::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  /* .vista-dedicada-body está centrado con max-width:1200px — left/right:0
+     solo cubriría ese ancho, dejando sin tapar los márgenes laterales
+     donde la imagen/fade sí llegan hasta el borde real de la pantalla. */
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  height: 20px;
+  background: var(--bg-superficie-alterna);
+  z-index: 4;
+}
+
+/* Buscador de ArdaWiki reutilizado dentro de la vista dedicada: mismo
+   componente, pero adaptado al tema del sitio. */
+.vista-dedicada-body .kb-search-wrap {
+  margin-bottom: 32px;
+}
+
+.vista-dedicada-body .kb-search-pill {
+  background: var(--bg-superficie);
+  border: 1px solid var(--borde);
+}
+
+.vista-dedicada-body .kb-search-pill input {
+  color: var(--texto-principal);
+}
+
+.vista-dedicada-body .kb-search-pill input::placeholder {
+  color: var(--texto-secundario);
+}
+
+.vista-dedicada-body .kb-search-icon {
+  color: var(--texto-secundario);
+}
+
+/* --- Listado en filas horizontales --- */
+.filas-lista {
+  display: flex;
+  flex-direction: column;
+}
+
+.fila-item {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 26px 8px;
+  border-bottom: 1px solid var(--borde);
+  text-align: left;
+}
+
+.fila-item:last-child {
+  border-bottom: none;
+}
+
+.fila-icono {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(1, 126, 253, 0.16);
+  color: var(--azul-electrico);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html[data-theme="dark"] .fila-icono {
+  color: #F1F5F9;
+}
+
+.fila-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fila-titulo {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--texto-principal);
+  margin: 0;
+}
+
+.fila-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.fila-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--texto-secundario);
+}
+
+.fila-meta-item svg {
+  flex-shrink: 0;
+  color: var(--verde-agua);
+}
+
+.fila-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  margin: 0;
+  max-width: 640px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fila-accion {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--borde);
+  padding: 4px 0 4px 22px;
+  margin-left: 6px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--azul-electrico);
+  white-space: nowrap;
+  transition: color 0.2s ease, gap 0.2s ease;
+}
+
+html[data-theme="dark"] .fila-accion {
+  color: #5EB3FF;
+}
+
+.fila-accion:hover {
+  color: var(--azul-oscuro);
+  gap: 13px;
+}
+
+html[data-theme="dark"] .fila-accion:hover {
+  color: #8FCBFF;
+}
+
+.fila-accion svg {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.fila-accion:hover svg {
+  transform: translateX(3px);
+}
+
+@media (max-width: 860px) {
+  .vista-dedicada-hero-content {
+    padding: 100px 20px 36px;
+  }
+
+  .vista-dedicada-titulo {
+    font-size: 28px;
+  }
+
+  .vista-dedicada-body {
+    padding: 32px 20px 70px;
+  }
+
+  .fila-item {
+    flex-wrap: wrap;
+    padding: 22px 4px;
+  }
+
+  .fila-info {
+    flex-basis: calc(100% - 78px);
+  }
+
+  .fila-accion {
+    flex-basis: 100%;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    padding: 14px 0 0;
+    margin-left: 0;
+    margin-top: 6px;
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fila-accion,
+  .fila-accion svg,
+  .vista-dedicada-volver {
+    transition: none !important;
   }
 }
