@@ -54,8 +54,10 @@ const WebphonePage             = lz(() => import('@/pages/webphone/WebphonePage'
 const NotificacionesPage       = lz(() => import('@/pages/notificaciones/NotificacionesPage'),       'NotificacionesPage')
 const MusicaPage               = lz(() => import('@/pages/musica/MusicaPage'),                         'MusicaPage')
 const VentasPage               = lz(() => import('@/pages/ventas/VentasPage'),                          'VentasPage')
-const QuejasPage               = lz(() => import('@/pages/quejas/QuejasPage'),                             'QuejasPage')
-const QuejasDashboardPage      = lz(() => import('@/pages/quejas/QuejasDashboardPage'),                    'QuejasDashboardPage')
+// Fase 8: Quejas reemplazado por /atencion-cliente/casos?tipo=queja. Import y
+// página se retiran en Fase 9 (junto con quejaController y su módulo de permisos).
+// const QuejasPage               = lz(() => import('@/pages/quejas/QuejasPage'),                             'QuejasPage')
+// const QuejasDashboardPage      = lz(() => import('@/pages/quejas/QuejasDashboardPage'),                    'QuejasDashboardPage')
 const AsistenciaReportePage    = lz(() => import('@/pages/asistencia/AsistenciaReportePage'),              'AsistenciaReportePage')
 const MiAsistenciaPage         = lz(() => import('@/pages/asistencia/MiAsistenciaPage'),                   'MiAsistenciaPage')
 const ReglamentoPage           = lz(() => import('@/pages/reglamento/ReglamentoPage'),                     'ReglamentoPage')
@@ -127,15 +129,17 @@ const RespaldosPage                 = lz(() => import('@/pages/respaldos/Respald
 const SistemasPage                  = lz(() => import('@/pages/sistemas/SistemasPage'),         'SistemasPage')
 const AtencionClientePage           = lz(() => import('@/pages/atencion-cliente/AtencionClientePage'), 'AtencionClientePage')
 const CasosPage                     = lz(() => import('@/pages/atencion-cliente/CasosPage'), 'CasosPage')
-const ConsultasPage                 = lz(() => import('@/pages/atencion-cliente/ConsultasPage'),  'ConsultasPage')
-const AclaracionesPage              = lz(() => import('@/pages/atencion-cliente/AclaracionesPage'), 'AclaracionesPage')
+// Fase 8: Consultas/Aclaraciones/Incidencias reemplazadas por Casos. Imports y
+// páginas se retiran en Fase 9.
+// const ConsultasPage                 = lz(() => import('@/pages/atencion-cliente/ConsultasPage'),  'ConsultasPage')
+// const AclaracionesPage              = lz(() => import('@/pages/atencion-cliente/AclaracionesPage'), 'AclaracionesPage')
 const SeguimientoPage                = lz(() => import('@/pages/atencion-cliente/SeguimientoPage'), 'SeguimientoPage')
 const SatisfaccionPage               = lz(() => import('@/pages/atencion-cliente/SatisfaccionPage'), 'SatisfaccionPage')
 const RetencionPage                  = lz(() => import('@/pages/atencion-cliente/RetencionPage'), 'RetencionPage')
 const ClientesListaPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientesListaPage'), 'ClientesListaPage')
 const ClientePerfilPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientePerfilPage'), 'ClientePerfilPage')
 const MiAgendaPage                   = lz(() => import('@/pages/atencion-cliente/MiAgendaPage'), 'MiAgendaPage')
-const IncidenciasPage                = lz(() => import('@/pages/atencion-cliente/IncidenciasPage'), 'IncidenciasPage')
+// const IncidenciasPage                = lz(() => import('@/pages/atencion-cliente/IncidenciasPage'), 'IncidenciasPage') // Fase 8 → Casos
 const ClientesDashboardPage          = lz(() => import('@/pages/atencion-cliente/ClientesDashboardPage'), 'ClientesDashboardPage')
 const RHPage                        = lz(() => import('@/pages/rh/RHPage'),                    'RHPage')
 const PortalAreasPage               = lz(() => import('@/pages/portal-areas/PortalAreasPage'),  'PortalAreasPage')
@@ -224,7 +228,7 @@ export const router = createBrowserRouter([
           { element: <ModuleRoute moduleKey="mensajeria" />,          children: [{ path: '/mensajeria',       element: wrap(<MensajeriaPage />) }] },
           { element: <ModuleRoute moduleKey="vacaciones" />,          children: [{ path: '/vacaciones',       element: wrap(<VacacionesPage />) }] },
           { element: <ModuleRoute moduleKey="calendario" />,          children: [{ path: '/calendario',       element: wrap(<CalendarioPage />) }] },
-          { element: <ModuleRoute moduleKey="quejas" />,              children: [{ path: '/quejas',           element: wrap(<QuejasPage />) }] },
+          { path: '/quejas', element: <Navigate to="/atencion-cliente/casos?tipo=queja" replace /> }, // Fase 8 (import y página se retiran en Fase 9)
           { element: <ModuleRoute moduleKey="reglamento" />,          children: [{ path: '/reglamento',       element: wrap(<ReglamentoPage />) }] },
           { element: <ModuleRoute moduleKey="drive" />,               children: [{ path: '/drive',            element: wrap(<DrivePage />) }] },
           { element: <ModuleRoute moduleKey="organigrama" />,         children: [{ path: '/organigrama',      element: wrap(<OrganigramaPage />) }] },
@@ -242,7 +246,7 @@ export const router = createBrowserRouter([
           {
             element: <RoleRoute allowedRoles={['AD']} />,
             children: [
-              { element: <ModuleRoute moduleKey="quejas" />,    children: [{ path: '/quejas/dashboard', element: wrap(<QuejasDashboardPage />) }] },
+              { path: '/quejas/dashboard', element: <Navigate to="/atencion-cliente/clientes/dashboard" replace /> }, // Fase 8
               { element: <ModuleRoute moduleKey="asistencia" />, children: [{ path: '/asistencia',      element: wrap(<AsistenciaReportePage />) }] },
               { element: <ModuleRoute moduleKey="nomina" />,    children: [{ path: '/nomina',           element: wrap(<NominaPage />) }] },
             ],
@@ -325,8 +329,9 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia/:subSlug', element: wrap(<AreaSubModuloPage areaKey="ti" />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente', element: wrap(<AtencionClientePage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/casos', element: wrap(<CasosPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/consultas', element: wrap(<ConsultasPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/aclaraciones', element: wrap(<AclaracionesPage />) }] },
+              // Fase 8: rutas viejas redirigen a Casos (imports/páginas se retiran en Fase 9).
+              { path: '/atencion-cliente/consultas', element: <Navigate to="/atencion-cliente/casos?tipo=consulta" replace /> },
+              { path: '/atencion-cliente/aclaraciones', element: <Navigate to="/atencion-cliente/casos?tipo=aclaracion" replace /> },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/seguimiento', element: wrap(<SeguimientoPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/satisfaccion', element: wrap(<SatisfaccionPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/retencion', element: wrap(<RetencionPage />) }] },
@@ -335,7 +340,7 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes/:id', element: wrap(<ClientePerfilPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mis-tareas', element: wrap(<MiAgendaPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mi-agenda', element: wrap(<MiAgendaPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/incidencias', element: wrap(<IncidenciasPage />) }] },
+              { path: '/atencion-cliente/incidencias', element: <Navigate to="/atencion-cliente/casos?tipo=incidencia" replace /> }, // Fase 8
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/:subSlug', element: wrap(<AreaSubModuloPage areaKey="atencion-cliente" />) }] },
               { element: <ModuleRoute moduleKey="rh-area" />,         children: [{ path: '/rh',               element: wrap(<RHPage />) }] },
               { element: <ModuleRoute moduleKey="rh-area" />,         children: [{ path: '/rh/reclutamiento', element: wrap(<ReclutamientoPage />) }] },

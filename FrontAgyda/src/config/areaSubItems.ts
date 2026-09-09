@@ -89,18 +89,14 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'respaldos', label: 'Respaldos', kind: 'link', linkTo: '/tecnologia/respaldos', description: 'Estado y calendario de respaldos.' },
     { slug: 'mantenimiento', label: 'Mantenimiento', kind: 'link', linkTo: '/tecnologia', description: 'Mantenimientos preventivos y correctivos.' },
   ],
+  // Fase 8: Consultas / Aclaraciones / Quejas / Incidencias unificadas en "Casos".
   'atencion-cliente': [
     { slug: 'casos', label: 'Casos', kind: 'link', linkTo: '/atencion-cliente/casos', description: 'Casos de clientes: consultas, aclaraciones, quejas e incidencias.' },
-    { slug: 'atencion', label: 'Atención', kind: 'link', linkTo: '/atencion-cliente/consultas', description: 'Registro general de atención a clientes.' },
-    { slug: 'consultas', label: 'Consultas', kind: 'link', linkTo: '/atencion-cliente/consultas', description: 'Consultas recibidas de clientes.' },
-    { slug: 'quejas', label: 'Quejas', kind: 'link', linkTo: '/quejas', description: 'Registro y seguimiento de quejas.' },
-    { slug: 'aclaraciones', label: 'Aclaraciones', kind: 'link', linkTo: '/atencion-cliente/aclaraciones', description: 'Aclaraciones solicitadas por clientes.' },
-    { slug: 'seguimiento', label: 'Seguimiento', kind: 'link', linkTo: '/atencion-cliente/seguimiento', description: 'Seguimiento de casos abiertos.' },
+    { slug: 'seguimiento', label: 'Seguimiento', kind: 'link', linkTo: '/atencion-cliente/seguimiento', description: 'Casos abiertos que requieren seguimiento.' },
     { slug: 'satisfaccion', label: 'Satisfacción', kind: 'link', linkTo: '/atencion-cliente/satisfaccion', description: 'Encuestas y medición de satisfacción.' },
     { slug: 'retencion', label: 'Retención', kind: 'link', linkTo: '/atencion-cliente/retencion', description: 'Clientes en riesgo y acciones de retención.' },
     { slug: 'clientes', label: 'Seguimiento de clientes', kind: 'link', linkTo: '/atencion-cliente/clientes', description: 'Expediente y seguimiento de clientes.' },
     { slug: 'mis-tareas', label: 'Mi agenda', kind: 'link', linkTo: '/atencion-cliente/mis-tareas', description: 'Tu agenda del día: tareas y seguimientos pendientes.' },
-    { slug: 'incidencias', label: 'Incidencias', kind: 'link', linkTo: '/atencion-cliente/incidencias', description: 'Gestión de incidencias de clientes.' },
     { slug: 'dashboard-clientes', label: 'Dashboard de Clientes', kind: 'link', linkTo: '/atencion-cliente/clientes/dashboard', description: 'Métricas y reportes de clientes.' },
   ],
   legal: [

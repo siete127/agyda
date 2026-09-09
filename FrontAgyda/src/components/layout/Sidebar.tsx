@@ -74,7 +74,7 @@ const GROUPS = [
   },
   {
     label: 'Atención al Cliente',
-    keys: ['atencion-cliente', 'quejas'],
+    keys: ['atencion-cliente'], // Fase 8: 'quejas' (módulo legacy) retirado — Quejas ahora vive en Casos
   },
   {
     label: 'Legal y Cumplimiento',

@@ -27,7 +27,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/vacaciones',       label: 'Vacaciones',      icon: 'Umbrella',             moduleKey: 'vacaciones',       roles: INT,                  showInSidebar: true  },
   { path: '/mi-asistencia',    label: 'Mi Asistencia',   icon: 'Clock',                moduleKey: 'asistencia-personal', roles: ['AD','TI','CC'],  showInSidebar: true  },
   { path: '/calendario',       label: 'Calendario',      icon: 'Calendar',             moduleKey: 'calendario',       roles: INT,                  showInSidebar: true  },
-  { path: '/quejas',           label: 'Quejas',          icon: 'MessageSquareWarning', moduleKey: 'quejas',           roles: INT,                  showInSidebar: true  },
+  { path: '/quejas',           label: 'Quejas',          icon: 'MessageSquareWarning', moduleKey: 'quejas',           roles: INT,                  showInSidebar: false }, // Fase 8: reemplazado por /atencion-cliente/casos
   { path: '/proyectos',        label: 'Proyectos',       icon: 'Briefcase',            moduleKey: 'proyectos',        roles: NO_CC,                showInSidebar: true  },
   { path: '/evaluacion-capacitacion', label: 'Evaluación CC', icon: 'ClipboardCheck', moduleKey: 'evaluacion',       roles: ['AD','TI','CC'],     showInSidebar: true  },
   { path: '/reglamento',       label: 'Reglamento',      icon: 'BookOpen',             moduleKey: 'reglamento',       roles: INT,                  showInSidebar: true  },
@@ -120,14 +120,14 @@ export const ROUTES: RouteConfig[] = [
   { path: '/tecnologia/respaldos', label: 'Respaldos',   icon: 'HardDriveDownload',     moduleKey: 'tecnologia',       roles: ['AD','TI'],          showInSidebar: true,  description: 'Estado y calendario de respaldos' },
   { path: '/atencion-cliente', label: 'Atención al Cliente', icon: 'Headphones',       moduleKey: 'atencion-cliente', roles: ['AD','TI'],          showInSidebar: false },
   { path: '/atencion-cliente/casos',        label: 'Casos',        icon: 'Inbox',       moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Casos de clientes: consultas, aclaraciones, quejas e incidencias' },
-  { path: '/atencion-cliente/consultas',    label: 'Consultas',    icon: 'Headset',      moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Consultas recibidas de clientes' },
-  { path: '/atencion-cliente/aclaraciones', label: 'Aclaraciones', icon: 'FileQuestion', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Aclaraciones solicitadas por clientes' },
-  { path: '/atencion-cliente/seguimiento',  label: 'Seguimiento',  icon: 'ListChecks',   moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Seguimiento de casos abiertos' },
+  { path: '/atencion-cliente/consultas',    label: 'Consultas',    icon: 'Headset',      moduleKey: 'atencion-cliente', roles: INT, showInSidebar: false, description: 'Consultas recibidas de clientes' }, // Fase 8: reemplazado por Casos
+  { path: '/atencion-cliente/aclaraciones', label: 'Aclaraciones', icon: 'FileQuestion', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: false, description: 'Aclaraciones solicitadas por clientes' }, // Fase 8: reemplazado por Casos
+  { path: '/atencion-cliente/seguimiento',  label: 'Seguimiento',  icon: 'ListChecks',   moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Casos abiertos que requieren seguimiento' }, // Fase 5: ahora lee de CASOS (worklist)
   { path: '/atencion-cliente/satisfaccion', label: 'Satisfacción', icon: 'Smile',        moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Encuestas y medición de satisfacción' },
   { path: '/atencion-cliente/retencion',    label: 'Retención',    icon: 'ShieldAlert',  moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Clientes en riesgo y acciones de retención' },
   { path: '/atencion-cliente/clientes',     label: 'Seguimiento de clientes', icon: 'Users', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Expediente y seguimiento de clientes' },
   { path: '/atencion-cliente/mis-tareas',   label: 'Mi agenda',    icon: 'CalendarClock', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Tu agenda del día: tareas y seguimientos pendientes' },
-  { path: '/atencion-cliente/incidencias',  label: 'Incidencias',  icon: 'AlertOctagon',  moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Gestión de incidencias de clientes' },
+  { path: '/atencion-cliente/incidencias',  label: 'Incidencias',  icon: 'AlertOctagon',  moduleKey: 'atencion-cliente', roles: INT, showInSidebar: false, description: 'Gestión de incidencias de clientes' }, // Fase 8: reemplazado por Casos (tipo incidencia)
   { path: '/atencion-cliente/clientes/dashboard', label: 'Dashboard de Clientes', icon: 'BarChart3', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Métricas y reportes de clientes' },
   { path: '/rh',               label: 'Recursos Humanos', icon: 'UserPlus',            moduleKey: 'rh-area',          roles: ['AD','TI'],          showInSidebar: true,  description: 'Vacantes abiertas y candidatos en proceso' },
   { path: '/rh/reclutamiento', label: 'Reclutamiento',   icon: 'UserSearch',           moduleKey: 'rh-area',          roles: ['AD','TI'],          showInSidebar: true,  description: 'Vacantes, candidatos, entrevistas y contratación' },
@@ -142,7 +142,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/ventas',           label: 'Ventas',          icon: 'ShoppingCart',         moduleKey: 'ventas',           roles: ['AD','CC','ST','VE'], showInSidebar: false },
   { path: '/notificaciones',   label: 'Notificaciones',  icon: 'Bell',                 moduleKey: '*',                roles: [],                   showInSidebar: false },
   { path: '/perfil',           label: 'Mi Perfil',       icon: 'User',                 moduleKey: '*',                roles: [],                   showInSidebar: false },
-  { path: '/quejas/dashboard', label: 'Dashboard Quejas',icon: 'BarChart2',            moduleKey: 'quejas',           roles: ['AD'],               showInSidebar: false },
+  { path: '/quejas/dashboard', label: 'Dashboard Quejas',icon: 'BarChart2',            moduleKey: 'quejas',           roles: ['AD'],               showInSidebar: false }, // Fase 8: métricas ahora en Dashboard de Clientes
 ]
 
 export function getRouteLabel(path: string): string {
