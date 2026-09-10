@@ -128,6 +128,7 @@ const SistemasPage                  = lz(() => import('@/pages/sistemas/Sistemas
 const AtencionClientePage           = lz(() => import('@/pages/atencion-cliente/AtencionClientePage'), 'AtencionClientePage')
 const CasosPage                     = lz(() => import('@/pages/atencion-cliente/CasosPage'), 'CasosPage')
 const AgendaCitasPage                = lz(() => import('@/pages/atencion-cliente/AgendaCitasPage'), 'AgendaCitasPage')
+const OfertasPage                    = lz(() => import('@/pages/atencion-cliente/OfertasPage'), 'OfertasPage')
 const SeguimientoPage                = lz(() => import('@/pages/atencion-cliente/SeguimientoPage'), 'SeguimientoPage')
 const SatisfaccionPage               = lz(() => import('@/pages/atencion-cliente/SatisfaccionPage'), 'SatisfaccionPage')
 const RetencionPage                  = lz(() => import('@/pages/atencion-cliente/RetencionPage'), 'RetencionPage')
@@ -324,6 +325,7 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente', element: wrap(<AtencionClientePage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/casos', element: wrap(<CasosPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/agenda', element: wrap(<AgendaCitasPage />) }] },
+              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/ofertas', element: wrap(<OfertasPage />) }] },
               // Fase 8: rutas viejas redirigen a Casos (imports/páginas se retiran en Fase 9).
               { path: '/atencion-cliente/consultas', element: <Navigate to="/atencion-cliente/casos?tipo=consulta" replace /> },
               { path: '/atencion-cliente/aclaraciones', element: <Navigate to="/atencion-cliente/casos?tipo=aclaracion" replace /> },

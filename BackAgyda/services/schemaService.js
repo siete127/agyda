@@ -4315,6 +4315,53 @@ async function ensureCitasSchema(pool) {
   }
 }
 
+// Ofertas a segmento de clientes (CRM Cliente — Fase 8). Campaña simple: se
+// arma un mensaje, se elige un segmento (tags / estatus / tipo de cliente) y
+// se envía por correo + WhatsApp de una vez, con registro de cada envío.
+async function ensureOfertasSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_OFERTAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CRM_OFERTAS (
+          OF_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          OF_TITULO        NVARCHAR(200) NOT NULL,
+          OF_MENSAJE       NVARCHAR(MAX) NOT NULL,
+          OF_SEGMENTO_JSON NVARCHAR(MAX) NULL,
+          OF_CANALES       NVARCHAR(60) NOT NULL DEFAULT 'correo',
+          OF_ESTATUS       NVARCHAR(20) NOT NULL DEFAULT 'borrador',
+          OF_CREADA_POR    INT NULL,
+          OF_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+          OF_FECHA_ENVIO   DATETIME NULL
+        );
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmOfertasSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_OFERTAS_ENVIOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CRM_OFERTAS_ENVIOS (
+          OE_ID          INT IDENTITY(1,1) PRIMARY KEY,
+          OE_OFERTA_ID   INT NOT NULL,
+          OE_CONTACTO_ID INT NOT NULL,
+          OE_CANAL       NVARCHAR(20) NOT NULL,
+          OE_RESULTADO   NVARCHAR(20) NOT NULL DEFAULT 'enviado',
+          OE_DETALLE     NVARCHAR(300) NULL,
+          OE_FECHA       DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_OE_OFERTA FOREIGN KEY (OE_OFERTA_ID) REFERENCES dbo.CRM_OFERTAS(OF_ID)
+        );
+        CREATE INDEX IX_CRM_OFERTAS_ENVIOS_OFERTA ON dbo.CRM_OFERTAS_ENVIOS(OE_OFERTA_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmOfertasEnviosSchema:', err.message);
+  }
+}
+
 // Renovaciones y fechas importantes de cliente (contrato, servicio, mantenimiento,
 // cumpleaños, personalizadas) — Fase 6 del módulo "Seguimiento de Clientes".
 // FEC_DIAS_ALERTA es un CSV configurable por registro (default '30,15,7'),
@@ -5425,6 +5472,7 @@ async function ensureAllSchemas(pool) {
   await ensureClienteIncidenciasSchema(pool);
   await ensureCasosSchema(pool);
   await ensureCitasSchema(pool);
+  await ensureOfertasSchema(pool);
   await ensureClienteFechasSchema(pool);
   await ensureRhAreaSchema(pool);
   await ensureDecisionesSchema(pool);

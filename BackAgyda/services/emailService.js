@@ -2099,6 +2099,15 @@ async function sendRecordatorioCitaEmail({ contactoNombre, contactoCorreo, titul
   }
 }
 
+// HTML de una oferta de campaña (CRM Cliente — Fase 8). Reusa el shell del módulo.
+function _ofertaHtml(titulo, mensaje) {
+  return _shellSeguimiento({
+    titulo: `🎁 ${titulo}`,
+    saludo: 'Hola,',
+    cuerpoHtml: `<div style="color:#333;font-size:15px;line-height:1.6;white-space:pre-wrap;">${String(mensaje || '').replace(/</g, '&lt;')}</div>`,
+  });
+}
+
 module.exports = {
   initialize,
   sendPermisoEmail,
@@ -2106,6 +2115,7 @@ module.exports = {
   verify,
   sendTestEmail,
   sendRecordatorioCitaEmail,
+  _ofertaHtml,
   mailer,
   sendCorreoGenerico,
   isMailerListo,

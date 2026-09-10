@@ -9,6 +9,7 @@ const clienteIncSlaCron = require('../controllers/clienteIncidenciasSlaCronContr
 const citaRecordatorioCron = require('../controllers/citaRecordatorioCronController');
 const caso = require('../controllers/casoController');
 const cita = require('../controllers/citaController');
+const oferta = require('../controllers/ofertaController');
 const clienteDashboard = require('../controllers/clienteDashboardController');
 const auth = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
@@ -77,6 +78,13 @@ router.post('/tratamientos', auth.authenticateToken, requireActionAccess('atenci
 router.get('/tratamientos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.getTratamiento);
 router.patch('/tratamientos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.updateTratamiento);
 router.post('/tratamientos/:id/sesiones', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.addSesion);
+
+// ── Ofertas a segmento de clientes (CRM Cliente) ─────────────────────────────
+router.get('/ofertas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.list);
+router.post('/ofertas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.create);
+router.post('/ofertas/preview-segmento', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.previewSegmento);
+router.post('/ofertas/:id/enviar', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.enviar);
+router.get('/ofertas/:id/envios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.getEnvios);
 
 // ── Renovaciones y fechas importantes ────────────────────────────────────────
 router.get('/clientes/:id/fechas-importantes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteFechas.listByContacto);

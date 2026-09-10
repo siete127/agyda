@@ -93,6 +93,7 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
   'atencion-cliente': [
     { slug: 'casos', label: 'Casos', kind: 'link', linkTo: '/atencion-cliente/casos', description: 'Casos de clientes: consultas, aclaraciones, quejas e incidencias.' },
     { slug: 'agenda', label: 'Agenda', kind: 'link', linkTo: '/atencion-cliente/agenda', description: 'Agenda de citas y sesiones de tratamiento de clientes.' },
+    { slug: 'ofertas', label: 'Ofertas', kind: 'link', linkTo: '/atencion-cliente/ofertas', description: 'Campañas de oferta a segmentos de clientes por correo y WhatsApp.' },
     { slug: 'seguimiento', label: 'Seguimiento', kind: 'link', linkTo: '/atencion-cliente/seguimiento', description: 'Casos abiertos que requieren seguimiento.' },
     { slug: 'satisfaccion', label: 'Satisfacción', kind: 'link', linkTo: '/atencion-cliente/satisfaccion', description: 'Encuestas y medición de satisfacción.' },
     { slug: 'retencion', label: 'Retención', kind: 'link', linkTo: '/atencion-cliente/retencion', description: 'Clientes en riesgo y acciones de retención.' },
