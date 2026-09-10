@@ -401,6 +401,8 @@ const ACCIONES_POR_MODULO = {
     // que las tenían recibieron casos-ver / casos-gestionar por backfill.
     { key: 'casos-ver',              nombre: 'Ver casos',               descripcion: 'Consultar el listado y detalle de casos de clientes (consultas, aclaraciones, quejas, incidencias)' },
     { key: 'casos-gestionar',        nombre: 'Gestionar casos',         descripcion: 'Crear, asignar, comentar y cambiar el estatus de casos' },
+    { key: 'citas-ver',              nombre: 'Ver agenda de citas',     descripcion: 'Consultar la agenda de citas y las sesiones de tratamiento de clientes' },
+    { key: 'citas-gestionar',        nombre: 'Gestionar citas',         descripcion: 'Agendar, reprogramar, cancelar citas y sesiones de tratamiento; resolver solicitudes del portal' },
     { key: 'ver-retencion',          nombre: 'Ver retención',           descripcion: 'Consultar el listado de evaluaciones de retención de clientes' },
     { key: 'crear-retencion',        nombre: 'Registrar evaluación',    descripcion: 'Registrar una nueva evaluación de riesgo/retención de cliente' },
     { key: 'clientes-ver',           nombre: 'Ver clientes',            descripcion: 'Ver el listado y expediente/perfil completo de clientes' },

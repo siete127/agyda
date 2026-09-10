@@ -4194,6 +4194,127 @@ async function ensureCasosSchema(pool) {
   }
 }
 
+// Citas y tratamientos del cliente (CRM Cliente — Fase 1). Molde de
+// ensureCasosSchema / ensureClienteSeguimientoSchema. Entidad "Cita" propia
+// (modalidad videollamada/telefónica/genérica, estado agendada→confirmada→
+// asistió/no-asistió, recordatorio configurable por cita) que reemplaza el uso
+// aproximado de CLI_TAREAS para agendar; "Tratamiento" agrupa citas en una serie
+// de sesiones con progreso y nota de evolución por sesión. Nada de esto toca
+// tablas existentes.
+async function ensureCitasSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_TRATAMIENTOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_TRATAMIENTOS (
+          TRAT_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          TRAT_CONTACTO_ID     INT NOT NULL,
+          TRAT_NOMBRE          NVARCHAR(200) NOT NULL,
+          TRAT_DESCRIPCION     NVARCHAR(MAX) NULL,
+          TRAT_TOTAL_SESIONES  INT NULL,
+          TRAT_ESTATUS         NVARCHAR(20) NOT NULL DEFAULT 'activo',
+          TRAT_ASIGNADO_A      INT NULL,
+          TRAT_CREADO_POR      INT NULL,
+          TRAT_FECHA_INICIO    DATE NULL,
+          TRAT_FECHA_CREACION  DATETIME NOT NULL DEFAULT GETDATE(),
+          TRAT_ACTIVO          BIT NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IX_CLI_TRAT_CONTACTO ON dbo.CLI_TRATAMIENTOS(TRAT_CONTACTO_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliTratamientosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_CITAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_CITAS (
+          CITA_ID                    INT IDENTITY(1,1) PRIMARY KEY,
+          CITA_CONTACTO_ID           INT NOT NULL,
+          CITA_TRATAMIENTO_ID        INT NULL,
+          CITA_NUMERO_SESION         INT NULL,
+          CITA_MODALIDAD             NVARCHAR(20) NOT NULL DEFAULT 'videollamada',
+          CITA_TITULO                NVARCHAR(200) NOT NULL,
+          CITA_MOTIVO                NVARCHAR(MAX) NULL,
+          CITA_FECHA_HORA            DATETIME NOT NULL,
+          CITA_DURACION_MIN          INT NOT NULL DEFAULT 30,
+          CITA_ENLACE                NVARCHAR(500) NULL,
+          CITA_TELEFONO              NVARCHAR(30) NULL,
+          CITA_ESTATUS               NVARCHAR(20) NOT NULL DEFAULT 'agendada',
+          CITA_CONFIRMADA_POR_CLIENTE BIT NOT NULL DEFAULT 0,
+          CITA_FECHA_CONFIRMACION    DATETIME NULL,
+          CITA_RECORDAR_MIN_ANTES    NVARCHAR(60) NULL,
+          CITA_ALERTA_24H_NOTIF      BIT NOT NULL DEFAULT 0,
+          CITA_ALERTA_1H_NOTIF       BIT NOT NULL DEFAULT 0,
+          CITA_ASIGNADO_A            INT NULL,
+          CITA_CREADO_POR            INT NULL,
+          CITA_FECHA_CREACION        DATETIME NOT NULL DEFAULT GETDATE(),
+          CITA_NOTA_RESULTADO        NVARCHAR(MAX) NULL,
+          CITA_ACTIVO                BIT NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IX_CLI_CITAS_CONTACTO ON dbo.CLI_CITAS(CITA_CONTACTO_ID);
+        CREATE INDEX IX_CLI_CITAS_FECHA ON dbo.CLI_CITAS(CITA_FECHA_HORA) WHERE CITA_ACTIVO = 1;
+        CREATE INDEX IX_CLI_CITAS_TRATAMIENTO ON dbo.CLI_CITAS(CITA_TRATAMIENTO_ID);
+        CREATE INDEX IX_CLI_CITAS_ESTATUS ON dbo.CLI_CITAS(CITA_ESTATUS) WHERE CITA_ACTIVO = 1;
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliCitasSchema:', err.message);
+  }
+
+  // Solicitudes de cambio del cliente desde el portal (reprogramar/cancelar).
+  // El equipo las aprueba desde el CRM; el portal nunca reagenda por sí mismo.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_CITAS_SOLICITUDES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_CITAS_SOLICITUDES (
+          SOL_ID                INT IDENTITY(1,1) PRIMARY KEY,
+          SOL_CITA_ID           INT NOT NULL,
+          SOL_TIPO              NVARCHAR(20) NOT NULL,
+          SOL_FECHA_PROPUESTA   DATETIME NULL,
+          SOL_MOTIVO            NVARCHAR(500) NULL,
+          SOL_ESTATUS           NVARCHAR(20) NOT NULL DEFAULT 'pendiente',
+          SOL_RESUELTA_POR      INT NULL,
+          SOL_FECHA_RESOLUCION  DATETIME NULL,
+          SOL_FECHA             DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_SOL_CITA FOREIGN KEY (SOL_CITA_ID) REFERENCES dbo.CLI_CITAS(CITA_ID)
+        );
+        CREATE INDEX IX_CLI_CITAS_SOL_CITA ON dbo.CLI_CITAS_SOLICITUDES(SOL_CITA_ID);
+        CREATE INDEX IX_CLI_CITAS_SOL_ESTATUS ON dbo.CLI_CITAS_SOLICITUDES(SOL_ESTATUS);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliCitasSolicitudesSchema:', err.message);
+  }
+
+  // Bitácora de recordatorios de cita enviados — alimenta el reporte de
+  // efectividad (Fase 7) y sirve de guardia anti-repetición para umbrales de
+  // anticipación arbitrarios (además de los BIT rápidos de CLI_CITAS).
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_CITAS_RECORD_LOG', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_CITAS_RECORD_LOG (
+          LOG_ID          INT IDENTITY(1,1) PRIMARY KEY,
+          LOG_CITA_ID     INT NOT NULL,
+          LOG_CANAL       NVARCHAR(20) NOT NULL,
+          LOG_UMBRAL_MIN  INT NULL,
+          LOG_RESULTADO   NVARCHAR(20) NOT NULL DEFAULT 'enviado',
+          LOG_DETALLE     NVARCHAR(300) NULL,
+          LOG_FECHA       DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_LOG_CITA FOREIGN KEY (LOG_CITA_ID) REFERENCES dbo.CLI_CITAS(CITA_ID)
+        );
+        CREATE INDEX IX_CLI_CITAS_RECORD_LOG_CITA ON dbo.CLI_CITAS_RECORD_LOG(LOG_CITA_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliCitasRecordLogSchema:', err.message);
+  }
+}
+
 // Renovaciones y fechas importantes de cliente (contrato, servicio, mantenimiento,
 // cumpleaños, personalizadas) — Fase 6 del módulo "Seguimiento de Clientes".
 // FEC_DIAS_ALERTA es un CSV configurable por registro (default '30,15,7'),
@@ -5303,6 +5424,7 @@ async function ensureAllSchemas(pool) {
   await ensureClienteSeguimientoSchema(pool);
   await ensureClienteIncidenciasSchema(pool);
   await ensureCasosSchema(pool);
+  await ensureCitasSchema(pool);
   await ensureClienteFechasSchema(pool);
   await ensureRhAreaSchema(pool);
   await ensureDecisionesSchema(pool);
