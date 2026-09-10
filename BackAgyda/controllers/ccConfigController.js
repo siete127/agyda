@@ -95,13 +95,14 @@ exports.listCanales = async (req, res) => {
              CN_BAILEYS_ESTADO baileysEstado, CN_BAILEYS_NUMERO baileysNumero,
              CN_FCA_ESTADO fcaEstado, CN_FCA_USUARIO fcaUsuario,
              CASE WHEN CN_FCA_APPSTATE IS NOT NULL AND LEN(CN_FCA_APPSTATE) > 0 THEN 1 ELSE 0 END fcaAppStateConfigurado,
-             CN_IGP_ESTADO igpEstado, CN_IGP_USUARIO igpUsuario
+             CN_IGP_ESTADO igpEstado, CN_IGP_USUARIO igpUsuario,
+             CN_ES_CANAL_CRM esCanalCrm
       FROM dbo.CCO_CANALES ORDER BY CN_ID`);
     const base = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || '';
     const tk = tenantKeyDe(req);
     res.json({ success: true, data: r.recordset.map((c) => ({
       ...c,
-      habilitado: !!c.habilitado, webhookSuscrito: !!c.webhookSuscrito,
+      habilitado: !!c.habilitado, webhookSuscrito: !!c.webhookSuscrito, esCanalCrm: !!c.esCanalCrm,
       accessTokenConfigurado: !!c.accessTokenConfigurado, appSecretConfigurado: !!c.appSecretConfigurado,
       webhookUrl: `${base}/api/cc/webhook/${tk}/${c.id}`,
     })) });
@@ -160,11 +161,17 @@ exports.updateCanal = async (req, res) => {
       .input('tok', sql.NVarChar(600), accessToken || null)
       .input('sec', sql.NVarChar(200), appSecret || null)
       .input('vt', sql.NVarChar(100), b.verifyToken != null ? b.verifyToken : ex.CN_VERIFY_TOKEN)
+      .input('crm', sql.Bit, b.esCanalCrm != null ? !!b.esCanalCrm : !!ex.CN_ES_CANAL_CRM)
       .query(`UPDATE dbo.CCO_CANALES SET
         CN_NOMBRE=@nombre, CN_HABILITADO=@hab, CN_GRUPO_ID=@grupo, CN_CAMPANIA_ID=@camp, CN_MODO_SESION=@modo,
         CN_META_PAGE_ID=@page, CN_META_BUSINESS_ID=@biz, CN_ACCESS_TOKEN=@tok,
-        CN_APP_SECRET=@sec, CN_VERIFY_TOKEN=@vt, CN_FECHA_ACTUALIZACION=GETDATE()
+        CN_APP_SECRET=@sec, CN_VERIFY_TOKEN=@vt, CN_ES_CANAL_CRM=@crm, CN_FECHA_ACTUALIZACION=GETDATE()
         WHERE CN_ID=@id`);
+    // Solo un canal puede ser el del CRM: si este se marcó, desmarca los demás.
+    if (b.esCanalCrm) {
+      await p.request().input('id', sql.Int, req.params.id)
+        .query(`UPDATE dbo.CCO_CANALES SET CN_ES_CANAL_CRM=0 WHERE CN_ID<>@id AND CN_ES_CANAL_CRM=1`);
+    }
     res.json({ success: true });
   } catch (e) {
     console.error('ccConfig.updateCanal:', e.message);

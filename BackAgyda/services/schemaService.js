@@ -6761,6 +6761,11 @@ BEGIN
   ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_MODO_SESION
     CHECK (CN_MODO_SESION IN ('compartido','individual'));
 END`,
+    // CRM Cliente — Fase 6: marca el canal de WhatsApp que usan los
+    // recordatorios del CRM (citas, pagos, renovaciones). Si ninguno está
+    // marcado, crmWhatsappService toma el primer WhatsApp conectado.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_ES_CANAL_CRM') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_ES_CANAL_CRM BIT NOT NULL DEFAULT 0;`,
     // Una fila por (canal, agente) cuando CN_MODO_SESION='individual' — mismo
     // shape de columnas de estado que ya vive en CCO_CANALES para cada tipo no
     // oficial (Baileys/FCA/IGP), pero aquí multiplicado por agente en vez de

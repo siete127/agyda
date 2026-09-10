@@ -65,6 +65,7 @@ export interface CCCanal {
   grupoId: number | null
   campaniaId: number | null
   modoSesion: CCModoSesion
+  esCanalCrm?: boolean
   metaPageId: string | null
   metaBusinessId: string | null
   verifyToken: string | null

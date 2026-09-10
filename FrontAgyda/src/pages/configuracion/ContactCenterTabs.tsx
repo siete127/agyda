@@ -135,20 +135,20 @@ export function CCCanalesTab() {
 function CanalCard({ canal, grupos, campanias, onChanged }: any) {
   const [form, setForm] = useState({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
-    modoSesion: canal.modoSesion ?? 'compartido',
+    modoSesion: canal.modoSesion ?? 'compartido', esCanalCrm: !!canal.esCanalCrm,
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
   const dirty =
     form.nombre !== canal.nombre || form.habilitado !== canal.habilitado ||
     form.grupoId !== (canal.grupoId ?? '') || form.campaniaId !== (canal.campaniaId ?? '') ||
-    form.modoSesion !== (canal.modoSesion ?? 'compartido') ||
+    form.modoSesion !== (canal.modoSesion ?? 'compartido') || form.esCanalCrm !== !!canal.esCanalCrm ||
     form.metaPageId !== (canal.metaPageId ?? '') || form.metaBusinessId !== (canal.metaBusinessId ?? '') ||
     form.verifyToken !== (canal.verifyToken ?? '') || !!form.accessToken || !!form.appSecret
 
   const resetForm = () => setForm({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
-    modoSesion: canal.modoSesion ?? 'compartido',
+    modoSesion: canal.modoSesion ?? 'compartido', esCanalCrm: !!canal.esCanalCrm,
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
@@ -157,7 +157,7 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
     mutationFn: () => ccService.updateCanal(canal.id, {
       nombre: form.nombre, habilitado: form.habilitado,
       grupoId: form.grupoId || null, campaniaId: form.campaniaId || null,
-      modoSesion: form.modoSesion,
+      modoSesion: form.modoSesion, esCanalCrm: form.esCanalCrm,
       metaPageId: form.metaPageId, metaBusinessId: form.metaBusinessId, verifyToken: form.verifyToken,
       ...(form.accessToken ? { accessToken: form.accessToken } : {}),
       ...(form.appSecret ? { appSecret: form.appSecret } : {}),
@@ -210,6 +210,17 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
             <select className={field} value={form.campaniaId} onChange={(e) => setForm({ ...form, campaniaId: e.target.value })}>
               <option value="">—</option>{campanias.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select></label>
+          {(canal.tipo === 'whatsapp_baileys' || canal.tipo === 'whatsapp') && (
+            <label className="flex items-start gap-2 text-xs font-medium text-ink-tertiary sm:col-span-2">
+              <Switch checked={form.esCanalCrm} onChange={(v) => setForm({ ...form, esCanalCrm: v })} />
+              <span>
+                Usar para recordatorios del CRM
+                <span className="mt-0.5 block font-normal text-ink-tertiary/70">
+                  Los recordatorios de citas, pagos y renovaciones se enviarán por WhatsApp desde este canal (además del correo).
+                </span>
+              </span>
+            </label>
+          )}
           {esNoOficial && (
             <label className="block sm:col-span-2">
               <span className={label}>Modo de conexión</span>

@@ -3,6 +3,7 @@ const cron = require('node-cron');
 const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const notificationService = require('../services/notificationService');
+const crmWhatsappService = require('../services/crmWhatsappService');
 const { listTenants } = require('../config/tenants');
 
 // Renovaciones y fechas importantes de cliente (Fase 6) — evalúa los umbrales
@@ -30,7 +31,8 @@ async function runAlertasFechasImportantesTenant(tenantKey) {
              CONVERT(NVARCHAR(10), f.FEC_FECHA, 23) as fecha, f.FEC_RECURRENTE_ANUAL as recurrenteAnual,
              f.FEC_DIAS_ALERTA as diasAlerta, f.FEC_ULTIMA_ALERTA_DIAS as ultimaAlertaDias,
              DATEDIFF(DAY, CAST(GETDATE() AS DATE), f.FEC_FECHA) as diasRestantes,
-             c.CONT_NOMBRE as contactoNombre, c.CONT_RESPONSABLE_ID as responsableId
+             c.CONT_NOMBRE as contactoNombre, c.CONT_RESPONSABLE_ID as responsableId,
+             c.CONT_TELEFONO as contactoTelefono
       FROM CLI_FECHAS_IMPORTANTES f
       INNER JOIN CRM_CONTACTOS c ON c.CONT_ID = f.FEC_CONTACTO_ID
       WHERE f.FEC_ACTIVO = 1 AND f.FEC_ESTATUS = 'vigente'
@@ -64,6 +66,16 @@ async function runAlertasFechasImportantesTenant(tenantKey) {
               dataExtra: { fechaId: fec.id, contactoId: fec.contactoId, diasRestantes: fec.diasRestantes },
               tenantKey,
             });
+          }
+
+          // WhatsApp al cliente (canal adicional; el correo/notif de arriba van
+          // al responsable interno). Fase 6.
+          if (fec.contactoTelefono) {
+            await crmWhatsappService.enviarTexto(pool, tenantKey, fec.contactoTelefono,
+              crmWhatsappService.templates.renovacion({
+                contactoNombre: fec.contactoNombre, descripcion: fec.descripcion,
+                tipo: fec.tipo, fecha: fec.fecha, diasRestantes: fec.diasRestantes,
+              }));
           }
 
           await pool.request()

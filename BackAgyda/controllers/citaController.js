@@ -4,6 +4,7 @@ const { logAudit } = require('../services/auditService');
 const notificationService = require('../services/notificationService');
 const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
 const emailService = require('../services/emailService');
+const crmWhatsappService = require('../services/crmWhatsappService');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Citas y tratamientos del cliente (CRM Cliente — Fase 2). CRUD completo, molde
@@ -655,6 +656,16 @@ exports.enviarRecordatorioCita = async (pool, tenantKey, cita, umbralMin) => {
     }
   } else {
     await registrar('correo', 'enviado', 'contacto sin correo — omitido');
+  }
+
+  // WhatsApp al cliente (canal adicional; nunca reemplaza al correo). Fase 6.
+  if (cita.contactoTelefono) {
+    const r = await crmWhatsappService.enviarTexto(pool, tenantKey, cita.contactoTelefono,
+      crmWhatsappService.templates.cita({
+        contactoNombre: cita.contactoNombre, titulo: cita.titulo, modalidad: cita.modalidad,
+        fechaHora: cita.fechaHora, enlace: cita.enlace, telefono: cita.telefono,
+      }));
+    await registrar('whatsapp', r.ok ? 'enviado' : 'fallido', r.ok ? (r.canal || null) : (r.error || null));
   }
 
   // Notificación interna al asesor.

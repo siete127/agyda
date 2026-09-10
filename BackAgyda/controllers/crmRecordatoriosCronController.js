@@ -3,6 +3,7 @@ const cron = require('node-cron');
 const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const notificationService = require('../services/notificationService');
+const crmWhatsappService = require('../services/crmWhatsappService');
 const { listTenants } = require('../config/tenants');
 
 const UMBRALES_ALERTA_DIAS = [30, 15, 7];
@@ -18,7 +19,7 @@ async function runAlertasVencimientoProximo(pool, tenantKey) {
              CONVERT(NVARCHAR(10), r.REC_FECHA_LIMITE, 23) as fechaLimite, r.REC_CREADO_POR as creadoPor,
              r.REC_ULTIMA_ALERTA_DIAS as ultimaAlertaDias,
              DATEDIFF(DAY, CAST(GETDATE() AS DATE), r.REC_FECHA_LIMITE) as diasRestantes,
-             c.CONT_NOMBRE as contactoNombre, c.CONT_CORREO as contactoCorreo,
+             c.CONT_NOMBRE as contactoNombre, c.CONT_CORREO as contactoCorreo, c.CONT_TELEFONO as contactoTelefono,
              o.OPO_NOMBRE as opoNombre
       FROM CRM_RECORDATORIOS_PAGO r
       INNER JOIN CRM_CONTACTOS c ON c.CONT_ID = r.REC_CONTACTO_ID
@@ -30,18 +31,28 @@ async function runAlertasVencimientoProximo(pool, tenantKey) {
 
     for (const rec of proximos.recordset) {
       if (rec.ultimaAlertaDias === rec.diasRestantes) continue; // ya se avisó este umbral
-      if (!rec.contactoCorreo) continue;
+      if (!rec.contactoCorreo && !rec.contactoTelefono) continue;
 
       try {
-        await emailService.sendAlertaVencimientoProximo({
-          contactoNombre: rec.contactoNombre,
-          contactoCorreo: rec.contactoCorreo,
-          concepto: rec.concepto,
-          monto: rec.monto,
-          fechaLimite: rec.fechaLimite,
-          diasRestantes: rec.diasRestantes,
-          opoNombre: rec.opoNombre || null,
-        });
+        if (rec.contactoCorreo) {
+          await emailService.sendAlertaVencimientoProximo({
+            contactoNombre: rec.contactoNombre,
+            contactoCorreo: rec.contactoCorreo,
+            concepto: rec.concepto,
+            monto: rec.monto,
+            fechaLimite: rec.fechaLimite,
+            diasRestantes: rec.diasRestantes,
+            opoNombre: rec.opoNombre || null,
+          });
+        }
+        // WhatsApp (canal adicional). Fase 6.
+        if (rec.contactoTelefono) {
+          await crmWhatsappService.enviarTexto(pool, tenantKey, rec.contactoTelefono,
+            crmWhatsappService.templates.pago({
+              contactoNombre: rec.contactoNombre, concepto: rec.concepto, monto: rec.monto,
+              fechaLimite: rec.fechaLimite, diasRestantes: rec.diasRestantes,
+            }));
+        }
 
         await pool.request()
           .input('id', sql.Int, rec.id)
@@ -88,7 +99,7 @@ async function runRecordatoriosPagoTenant(tenantKey) {
              r.REC_CONCEPTO as concepto, r.REC_MONTO as monto,
              CONVERT(NVARCHAR(10), r.REC_FECHA_LIMITE, 23) as fechaLimite,
              r.REC_CREADO_POR as creadoPor,
-             c.CONT_NOMBRE as contactoNombre, c.CONT_CORREO as contactoCorreo,
+             c.CONT_NOMBRE as contactoNombre, c.CONT_CORREO as contactoCorreo, c.CONT_TELEFONO as contactoTelefono,
              o.OPO_NOMBRE as opoNombre
       FROM CRM_RECORDATORIOS_PAGO r
       INNER JOIN CRM_CONTACTOS c ON c.CONT_ID = r.REC_CONTACTO_ID
@@ -99,20 +110,30 @@ async function runRecordatoriosPagoTenant(tenantKey) {
     `);
 
     for (const rec of pendientes.recordset) {
-      if (!rec.contactoCorreo) {
-        console.warn(`[CRM RECORDATORIOS] Recordatorio ${rec.id} sin correo de contacto — se omite, queda pendiente`);
+      if (!rec.contactoCorreo && !rec.contactoTelefono) {
+        console.warn(`[CRM RECORDATORIOS] Recordatorio ${rec.id} sin correo ni teléfono — se omite, queda pendiente`);
         continue;
       }
 
       try {
-        await emailService.sendRecordatorioPagoEmail({
-          contactoNombre: rec.contactoNombre,
-          contactoCorreo: rec.contactoCorreo,
-          concepto: rec.concepto,
-          monto: rec.monto,
-          fechaLimite: rec.fechaLimite,
-          opoNombre: rec.opoNombre || null,
-        });
+        if (rec.contactoCorreo) {
+          await emailService.sendRecordatorioPagoEmail({
+            contactoNombre: rec.contactoNombre,
+            contactoCorreo: rec.contactoCorreo,
+            concepto: rec.concepto,
+            monto: rec.monto,
+            fechaLimite: rec.fechaLimite,
+            opoNombre: rec.opoNombre || null,
+          });
+        }
+        // WhatsApp (canal adicional). Fase 6.
+        if (rec.contactoTelefono) {
+          await crmWhatsappService.enviarTexto(pool, tenantKey, rec.contactoTelefono,
+            crmWhatsappService.templates.pago({
+              contactoNombre: rec.contactoNombre, concepto: rec.concepto, monto: rec.monto,
+              fechaLimite: rec.fechaLimite, diasRestantes: 0,
+            }));
+        }
 
         await pool.request()
           .input('id', sql.Int, rec.id)
