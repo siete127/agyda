@@ -47,6 +47,52 @@ function renderizarParaContacto({ asuntoTpl, htmlTpl, textoTpl }, contacto, tena
 // CONT_EMAIL_BAJA = 0 se aplica SIEMPRE, sin excepción — es lo que hace que
 // el unsubscribe sea real (a diferencia del origen, donde esa exclusión
 // existía en la query pero nunca se activaba porque nada marcaba la baja).
+// Estatus de caso que cuentan como "abierto" (réplica de seguimientoController).
+const CASO_ESTATUS_ABIERTOS = ['pendiente', 'en_proceso', 'en_espera_cliente', 'escalado'];
+
+// Segmentos dinámicos por estado del cliente en el CRM/Atención — cada uno es
+// un fragmento SQL que se agrega al `base`. Sirven para dirigir campañas de
+// reactivación/retención en vez de un blast a toda la base, y para NO mandar
+// promoción a quien tiene un caso abierto.
+const SEGMENTOS = {
+  // Clientes con al menos un caso de Atención sin resolver.
+  'seg-caso-abierto': `AND EXISTS (
+      SELECT 1 FROM dbo.CASOS k
+      WHERE k.CASO_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND k.CASO_ACTIVO = 1
+        AND k.CASO_ESTATUS IN (${CASO_ESTATUS_ABIERTOS.map((e) => `'${e}'`).join(',')})
+    )`,
+  // Lo contrario: sin ningún caso abierto — para promociones sin molestar a
+  // quien está esperando respuesta a una queja/incidencia.
+  'seg-sin-caso-abierto': `AND NOT EXISTS (
+      SELECT 1 FROM dbo.CASOS k
+      WHERE k.CASO_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND k.CASO_ACTIVO = 1
+        AND k.CASO_ESTATUS IN (${CASO_ESTATUS_ABIERTOS.map((e) => `'${e}'`).join(',')})
+    )`,
+  // Clientes cuya última evaluación de retención los deja "en riesgo".
+  'seg-en-riesgo': `AND (
+      SELECT TOP 1 r.AR_ESTATUS FROM dbo.AC_RETENCION r
+      WHERE r.AR_CLIENTE_ID = CRM_CONTACTOS.CONT_ID
+      ORDER BY r.AR_FECHA_EVALUACION DESC
+    ) = 'riesgo'`,
+  // Clientes formales sin ninguna interacción, caso ni seguimiento en 90 días.
+  'seg-inactivo': `AND CONT_ES_CLIENTE = 1
+    AND NOT EXISTS (
+      SELECT 1 FROM dbo.CRM_INTERACCIONES i
+      JOIN dbo.CRM_OPORTUNIDADES o ON o.OPO_ID = i.INT_OPO_ID
+      WHERE o.OPO_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND i.INT_FECHA >= DATEADD(DAY, -90, GETDATE())
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM dbo.CASOS k
+      WHERE k.CASO_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND k.CASO_FECHA_CREACION >= DATEADD(DAY, -90, GETDATE())
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM dbo.CLI_SEGUIMIENTOS s
+      WHERE s.SEG_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND s.SEG_FECHA >= DATEADD(DAY, -90, GETDATE())
+    )`,
+};
+
+const FILTROS_VALIDOS = ['todos', 'tag', 'manual', ...Object.keys(SEGMENTOS)];
+
 async function resolverDestinatarios(pool, campania) {
   const base = `
     SELECT CONT_ID as id, CONT_NOMBRE as nombre, CONT_EMPRESA as empresa, CONT_CORREO as correo
@@ -68,6 +114,11 @@ async function resolverDestinatarios(pool, campania) {
     ids = ids.map(Number).filter(Number.isInteger);
     if (ids.length === 0) return [];
     const r = await pool.request().query(`${base} AND CONT_ID IN (${ids.join(',')})`);
+    return r.recordset;
+  }
+
+  if (SEGMENTOS[campania.filtro]) {
+    const r = await pool.request().query(`${base} ${SEGMENTOS[campania.filtro]}`);
     return r.recordset;
   }
 
@@ -244,4 +295,6 @@ module.exports = {
   cancelarEnvio,
   reanudarEnvio,
   generarLinkBaja,
+  FILTROS_VALIDOS,
+  SEGMENTOS_KEYS: Object.keys(SEGMENTOS),
 };

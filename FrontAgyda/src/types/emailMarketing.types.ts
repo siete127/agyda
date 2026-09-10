@@ -1,5 +1,16 @@
 export type EmailCampaniaEstado = 'borrador' | 'programada' | 'enviando' | 'pausada' | 'completada' | 'cancelada'
-export type EmailCampaniaFiltro = 'todos' | 'tag' | 'manual'
+export type EmailCampaniaFiltro =
+  | 'todos' | 'tag' | 'manual'
+  | 'seg-caso-abierto' | 'seg-sin-caso-abierto' | 'seg-en-riesgo' | 'seg-inactivo'
+
+// Segmentos dinámicos por estado del cliente — el backend los resuelve contra
+// CASOS / AC_RETENCION / interacciones.
+export const EMAIL_SEGMENTOS: { key: EmailCampaniaFiltro; label: string; desc: string }[] = [
+  { key: 'seg-sin-caso-abierto', label: 'Sin caso abierto', desc: 'Clientes que no están esperando respuesta de un caso — seguro para promociones.' },
+  { key: 'seg-caso-abierto', label: 'Con caso abierto', desc: 'Clientes con un caso de Atención sin resolver.' },
+  { key: 'seg-en-riesgo', label: 'En riesgo de fuga', desc: 'Su última evaluación de retención los marca "en riesgo".' },
+  { key: 'seg-inactivo', label: 'Inactivos (90 días)', desc: 'Clientes formales sin interacción, caso ni seguimiento en 90 días.' },
+]
 export type EmailEnvioEstado = 'pendiente' | 'enviado' | 'fallido' | 'omitido_baja'
 
 export interface EmailPlantilla {

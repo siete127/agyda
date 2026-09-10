@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Modal } from '@/components/ui/Modal'
 import type { EmailCampania, EmailCampaniaFiltro, EmailCampaniaEstado } from '@/types/emailMarketing.types'
+import { EMAIL_SEGMENTOS } from '@/types/emailMarketing.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { ReporteCampaniaModal } from './ReporteCampaniaModal'
@@ -87,8 +88,9 @@ function CrearCampaniaModal({ onClose }: { onClose: () => void }) {
     })
   }
 
+  const esSegmento = filtro.startsWith('seg-')
   const puedeCrear = nombre.trim() && plantillaId &&
-    (filtro === 'todos' || (filtro === 'tag' && filtroTag.trim()) || (filtro === 'manual' && seleccionados.size > 0))
+    (filtro === 'todos' || esSegmento || (filtro === 'tag' && filtroTag.trim()) || (filtro === 'manual' && seleccionados.size > 0))
 
   return (
     <Modal isOpen onClose={onClose} title="Nueva campaña de email" size="lg">
@@ -109,7 +111,7 @@ function CrearCampaniaModal({ onClose }: { onClose: () => void }) {
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Destinatarios</label>
-          <div className="flex gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-1.5 mb-2">
             {([
               { key: 'todos' as const, label: 'Todos los contactos' },
               { key: 'tag' as const, label: 'Por etiqueta' },
@@ -128,6 +130,29 @@ function CrearCampaniaModal({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+
+          <p className="mb-1.5 text-[0.68rem] font-semibold uppercase tracking-wide text-gray-400">Segmentos por estado del cliente</p>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {EMAIL_SEGMENTOS.map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFiltro(key)}
+                className={clsx(
+                  'px-3 py-1.5 rounded-lg text-xs font-semibold border',
+                  filtro === key ? 'bg-brand text-white border-brand' : 'bg-card text-gray-600 border-gray-200',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {esSegmento && (
+            <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-[0.72rem] text-blue-700">
+              {EMAIL_SEGMENTOS.find((s) => s.key === filtro)?.desc}
+            </p>
+          )}
 
           {filtro === 'tag' && (
             <input
