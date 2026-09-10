@@ -57,6 +57,13 @@ export interface CCMensaje {
 // CCSesionAgenteCanal y ccService.listSesionesAgentesCanal.
 export type CCModoSesion = 'compartido' | 'individual'
 
+// Cómo se reparten las conversaciones que entran por este nivel.
+// Canal: 'campania' hereda de su campaña. Campaña: 'global' hereda del CCO_CONFIG.
+// 'auto' = el sistema asigna; 'manual' = queda en cola y los agentes la jalan.
+export type CCModoAsignacionCanal = 'campania' | 'auto' | 'manual'
+export type CCModoAsignacionCampania = 'global' | 'auto' | 'manual'
+export type CCModoAsignacionGlobal = 'auto' | 'manual'
+
 export interface CCCanal {
   id: number
   tipo: CCCanalTipo
@@ -65,6 +72,7 @@ export interface CCCanal {
   grupoId: number | null
   campaniaId: number | null
   modoSesion: CCModoSesion
+  modoAsignacion?: CCModoAsignacionCanal
   esCanalCrm?: boolean
   metaPageId: string | null
   metaBusinessId: string | null
@@ -117,6 +125,7 @@ export interface CCCampania {
   contactoTelefono: string | null
   contactoFacebookUrl: string | null
   contactoInstagramUrl: string | null
+  modoAsignacion?: CCModoAsignacionCampania
 }
 
 // Registrado desde la página pública de postulación (ej. registro.html de
@@ -239,6 +248,7 @@ export interface CCConfig {
   horarioInicio: string
   horarioFin: string
   diasSemana: string
+  modoAsignacion: CCModoAsignacionGlobal
 }
 
 export interface CCMetricas {

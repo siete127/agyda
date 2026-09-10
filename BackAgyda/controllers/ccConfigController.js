@@ -37,6 +37,7 @@ exports.getConfig = async (req, res) => {
       msgFueraHorario: row.CF_MSG_FUERA_HORARIO || '',
       horarioInicio: row.CF_HORARIO_INICIO || '', horarioFin: row.CF_HORARIO_FIN || '',
       diasSemana: row.CF_DIAS_SEMANA || '1,2,3,4,5',
+      modoAsignacion: row.CF_MODO_ASIGNACION === 'manual' ? 'manual' : 'auto',
     } });
   } catch (e) {
     console.error('ccConfig.getConfig:', e.message);
@@ -62,11 +63,13 @@ exports.updateConfig = async (req, res) => {
       .input('hi', sql.NVarChar(5), b.horarioInicio || null)
       .input('hf', sql.NVarChar(5), b.horarioFin || null)
       .input('ds', sql.NVarChar(20), b.diasSemana || null)
+      .input('modo', sql.NVarChar(12), b.modoAsignacion === 'manual' ? 'manual' : 'auto')
       .query(`UPDATE dbo.CCO_CONFIG SET
         CF_SLA_PRIMERA_RESPUESTA_SEG=@sla1, CF_SLA_RESPUESTA_SEG=@sla2, CF_ACW_SEG=@acw,
         CF_MAX_INTERACCIONES_POR_AGENTE=@max, CF_AUTOCIERRE_INACTIVIDAD_MIN=@auto,
         CF_MSG_BIENVENIDA=@mb, CF_MSG_FUERA_HORARIO=@mf,
         CF_HORARIO_INICIO=@hi, CF_HORARIO_FIN=@hf, CF_DIAS_SEMANA=@ds,
+        CF_MODO_ASIGNACION=@modo,
         CF_FECHA_ACTUALIZACION=GETDATE()
         WHERE CF_ID=(SELECT TOP 1 CF_ID FROM dbo.CCO_CONFIG ORDER BY CF_ID)`);
     res.json({ success: true });
@@ -89,6 +92,7 @@ exports.listCanales = async (req, res) => {
     const r = await p.request().query(`
       SELECT CN_ID id, CN_TIPO tipo, CN_NOMBRE nombre, CN_HABILITADO habilitado,
              CN_GRUPO_ID grupoId, CN_CAMPANIA_ID campaniaId, CN_MODO_SESION modoSesion,
+             CN_MODO_ASIGNACION modoAsignacion,
              CN_META_PAGE_ID metaPageId, CN_META_BUSINESS_ID metaBusinessId,
              CN_VERIFY_TOKEN verifyToken, CN_WEBHOOK_SUSCRITO webhookSuscrito,
              CASE WHEN CN_ACCESS_TOKEN IS NOT NULL AND LEN(CN_ACCESS_TOKEN) > 0 THEN 1 ELSE 0 END accessTokenConfigurado,
@@ -150,6 +154,7 @@ exports.updateCanal = async (req, res) => {
     // son almacenes distintos: CCO_CANALES vs CCO_CANAL_AGENTE_SESION), así
     // que el admin debe volver a vincular tras cambiar de modo.
     const modoSesion = b.modoSesion === 'individual' ? 'individual' : (b.modoSesion === 'compartido' ? 'compartido' : ex.CN_MODO_SESION);
+    const modoAsignacion = ['campania', 'auto', 'manual'].includes(b.modoAsignacion) ? b.modoAsignacion : (ex.CN_MODO_ASIGNACION || 'campania');
     await p.request()
       .input('id', sql.Int, req.params.id)
       .input('nombre', sql.NVarChar(120), b.nombre ?? ex.CN_NOMBRE)
@@ -157,6 +162,7 @@ exports.updateCanal = async (req, res) => {
       .input('grupo', sql.Int, b.grupoId != null ? b.grupoId : ex.CN_GRUPO_ID)
       .input('camp', sql.Int, b.campaniaId != null ? b.campaniaId : ex.CN_CAMPANIA_ID)
       .input('modo', sql.NVarChar(20), modoSesion)
+      .input('modoAsig', sql.NVarChar(12), modoAsignacion)
       .input('page', sql.NVarChar(60), b.metaPageId != null ? b.metaPageId : ex.CN_META_PAGE_ID)
       .input('biz', sql.NVarChar(60), b.metaBusinessId != null ? b.metaBusinessId : ex.CN_META_BUSINESS_ID)
       .input('tok', sql.NVarChar(600), accessToken || null)
@@ -165,6 +171,7 @@ exports.updateCanal = async (req, res) => {
       .input('crm', sql.Bit, b.esCanalCrm != null ? !!b.esCanalCrm : !!ex.CN_ES_CANAL_CRM)
       .query(`UPDATE dbo.CCO_CANALES SET
         CN_NOMBRE=@nombre, CN_HABILITADO=@hab, CN_GRUPO_ID=@grupo, CN_CAMPANIA_ID=@camp, CN_MODO_SESION=@modo,
+        CN_MODO_ASIGNACION=@modoAsig,
         CN_META_PAGE_ID=@page, CN_META_BUSINESS_ID=@biz, CN_ACCESS_TOKEN=@tok,
         CN_APP_SECRET=@sec, CN_VERIFY_TOKEN=@vt, CN_ES_CANAL_CRM=@crm, CN_FECHA_ACTUALIZACION=GETDATE()
         WHERE CN_ID=@id`);
@@ -483,7 +490,7 @@ exports.listCampanias = async (req, res) => {
       SELECT c.CM2_ID id, c.CM2_NOMBRE nombre, c.CM2_DESCRIPCION descripcion,
         c.CM2_MAX_CHATS_POR_AGENTE maxChatsPorAgente, c.CM2_ACTIVO activo,
         c.CM2_SLUG slug, c.CM2_CONTACTO_FACEBOOK_URL contactoFacebookUrl, c.CM2_CONTACTO_INSTAGRAM_URL contactoInstagramUrl,
-        c.CM2_CONTACTO_TELEFONO contactoTelefono,
+        c.CM2_CONTACTO_TELEFONO contactoTelefono, c.CM2_MODO_ASIGNACION modoAsignacion,
         (SELECT COUNT(*) FROM dbo.CCO_CANALES cn WHERE cn.CN_CAMPANIA_ID = c.CM2_ID) canalesCount,
         (SELECT COUNT(*) FROM dbo.CCO_GRUPOS g WHERE g.CG_CAMPANIA_ID = c.CM2_ID AND g.CG_ACTIVO = 1) skillsCount,
         (SELECT COUNT(DISTINCT ga.CGA_USUARIO_ID) FROM dbo.CCO_GRUPO_AGENTES ga
@@ -526,8 +533,10 @@ exports.updateCampania = async (req, res) => {
       .input('m', sql.Int, b.maxChatsPorAgente ?? null)
       .input('fb', sql.NVarChar(300), b.contactoFacebookUrl ?? null).input('ig', sql.NVarChar(300), b.contactoInstagramUrl ?? null)
       .input('tel', sql.NVarChar(40), b.contactoTelefono ?? null)
+      .input('modoAsig', sql.NVarChar(12), ['global', 'auto', 'manual'].includes(b.modoAsignacion) ? b.modoAsignacion : null)
       .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_NOMBRE = ISNULL(@n, CM2_NOMBRE), CM2_DESCRIPCION = @d, CM2_MAX_CHATS_POR_AGENTE = @m,
-              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig, CM2_CONTACTO_TELEFONO = @tel WHERE CM2_ID = @id`);
+              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig, CM2_CONTACTO_TELEFONO = @tel,
+              CM2_MODO_ASIGNACION = ISNULL(@modoAsig, CM2_MODO_ASIGNACION) WHERE CM2_ID = @id`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };

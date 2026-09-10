@@ -135,20 +135,20 @@ export function CCCanalesTab() {
 function CanalCard({ canal, grupos, campanias, onChanged }: any) {
   const [form, setForm] = useState({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
-    modoSesion: canal.modoSesion ?? 'compartido', esCanalCrm: !!canal.esCanalCrm,
+    modoSesion: canal.modoSesion ?? 'compartido', modoAsignacion: canal.modoAsignacion ?? 'campania', esCanalCrm: !!canal.esCanalCrm,
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
   const dirty =
     form.nombre !== canal.nombre || form.habilitado !== canal.habilitado ||
     form.grupoId !== (canal.grupoId ?? '') || form.campaniaId !== (canal.campaniaId ?? '') ||
-    form.modoSesion !== (canal.modoSesion ?? 'compartido') || form.esCanalCrm !== !!canal.esCanalCrm ||
+    form.modoSesion !== (canal.modoSesion ?? 'compartido') || form.modoAsignacion !== (canal.modoAsignacion ?? 'campania') || form.esCanalCrm !== !!canal.esCanalCrm ||
     form.metaPageId !== (canal.metaPageId ?? '') || form.metaBusinessId !== (canal.metaBusinessId ?? '') ||
     form.verifyToken !== (canal.verifyToken ?? '') || !!form.accessToken || !!form.appSecret
 
   const resetForm = () => setForm({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
-    modoSesion: canal.modoSesion ?? 'compartido', esCanalCrm: !!canal.esCanalCrm,
+    modoSesion: canal.modoSesion ?? 'compartido', modoAsignacion: canal.modoAsignacion ?? 'campania', esCanalCrm: !!canal.esCanalCrm,
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
@@ -157,7 +157,7 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
     mutationFn: () => ccService.updateCanal(canal.id, {
       nombre: form.nombre, habilitado: form.habilitado,
       grupoId: form.grupoId || null, campaniaId: form.campaniaId || null,
-      modoSesion: form.modoSesion, esCanalCrm: form.esCanalCrm,
+      modoSesion: form.modoSesion, modoAsignacion: form.modoAsignacion, esCanalCrm: form.esCanalCrm,
       metaPageId: form.metaPageId, metaBusinessId: form.metaBusinessId, verifyToken: form.verifyToken,
       ...(form.accessToken ? { accessToken: form.accessToken } : {}),
       ...(form.appSecret ? { appSecret: form.appSecret } : {}),
@@ -209,6 +209,12 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
           <label className="block"><span className={label}>Campaña</span>
             <select className={field} value={form.campaniaId} onChange={(e) => setForm({ ...form, campaniaId: e.target.value })}>
               <option value="">—</option>{campanias.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select></label>
+          <label className="block"><span className={label}>Asignación</span>
+            <select className={field} value={form.modoAsignacion} onChange={(e) => setForm({ ...form, modoAsignacion: e.target.value })}>
+              <option value="campania">Seguir la campaña</option>
+              <option value="auto">Automática</option>
+              <option value="manual">Manual — los agentes jalan de la cola</option>
             </select></label>
           {(canal.tipo === 'whatsapp_baileys' || canal.tipo === 'whatsapp') && (
             <label className="flex items-start gap-2 text-xs font-medium text-ink-tertiary sm:col-span-2">
@@ -1110,9 +1116,11 @@ function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChange
   const [form, setForm] = useState({
     slug: campania.slug ?? '', telefono: campania.contactoTelefono ?? '',
     facebookUrl: campania.contactoFacebookUrl ?? '', instagramUrl: campania.contactoInstagramUrl ?? '',
+    modoAsignacion: campania.modoAsignacion ?? 'global',
   })
   const dirty = form.slug !== (campania.slug ?? '') || form.telefono !== (campania.contactoTelefono ?? '') ||
-    form.facebookUrl !== (campania.contactoFacebookUrl ?? '') || form.instagramUrl !== (campania.contactoInstagramUrl ?? '')
+    form.facebookUrl !== (campania.contactoFacebookUrl ?? '') || form.instagramUrl !== (campania.contactoInstagramUrl ?? '') ||
+    form.modoAsignacion !== (campania.modoAsignacion ?? 'global')
 
   const guardar = useMutation({
     mutationFn: () => ccService.updateCampania(campania.id, {
@@ -1120,8 +1128,9 @@ function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChange
       contactoTelefono: form.telefono.trim() || null,
       contactoFacebookUrl: form.facebookUrl.trim() || null,
       contactoInstagramUrl: form.instagramUrl.trim() || null,
+      modoAsignacion: form.modoAsignacion,
     }),
-    onSuccess: () => { toast.success('Contacto guardado'); onChanged() },
+    onSuccess: () => { toast.success('Guardado'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al guardar'),
   })
 
@@ -1135,6 +1144,16 @@ function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChange
         solo se captura lo que no sale de ningún canal (teléfono de llamadas, y Facebook/Instagram si Messenger/
         Instagram no oficiales no tienen un perfil público al que enlazar).
       </p>
+
+      <label className="block">
+        <span className={label}>Asignación de conversaciones</span>
+        <select className={field} value={form.modoAsignacion} onChange={(e) => setForm({ ...form, modoAsignacion: e.target.value })}>
+          <option value="global">Seguir la configuración global</option>
+          <option value="auto">Automática — el sistema asigna a un agente</option>
+          <option value="manual">Manual — los agentes jalan de la cola</option>
+        </select>
+        <span className="mt-0.5 block text-[0.65rem] text-gray-400">Un canal de esta campaña puede sobreescribir esto.</span>
+      </label>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
@@ -1622,6 +1641,12 @@ export function CCConfigTab() {
         {num('autocierreInactividadMin', 'Autocierre por inactividad (min)', 'Cierra la interacción si el cliente no responde')}
         <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Mensaje de bienvenida</span>
           <input className={field} value={form.msgBienvenida} onChange={(e) => setForm({ ...form, msgBienvenida: e.target.value })} /></label>
+        <label className="block sm:col-span-2"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Modo de asignación por defecto</span>
+          <select className={field} value={form.modoAsignacion ?? 'auto'} onChange={(e) => setForm({ ...form, modoAsignacion: e.target.value })}>
+            <option value="auto">Automática — el sistema asigna a un agente disponible</option>
+            <option value="manual">Manual — las conversaciones caen a la cola y los agentes las jalan</option>
+          </select>
+          <span className="mt-0.5 block text-[0.65rem] text-gray-400">Cada campaña y cada canal puede sobreescribir esto.</span></label>
       </div>
       <div className="flex justify-end">
         <button onClick={() => guardar.mutate()} disabled={guardar.isPending} className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
