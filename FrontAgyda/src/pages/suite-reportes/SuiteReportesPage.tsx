@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { api, getApiError } from '@/lib/axios'
 import { reporteDiarioService } from '@/services/reporteDiario.service'
+import { ccService } from '@/services/cc.service'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -64,6 +65,7 @@ function useUsuarios() {
 const REPORTES_BASE = [
   { id: 'postulantes', carpeta: 'Operación', nombre: 'Reportería de postulantes', descripcion: 'Volumen, tipificación y fugas por rango de fechas.', icon: ClipboardList },
   { id: 'interacciones', carpeta: 'Operación', nombre: 'Interacciones', descripcion: 'Buscador de interacciones cerradas — todas las campañas y canales.', icon: Search },
+  { id: 'ejecutivo-reclutamiento', carpeta: 'Operación', nombre: 'Reporte Ejecutivo de Reclutamiento', descripcion: 'Embudo, KPIs de conversión y gráficos de un formulario de captación.', icon: BarChart2 },
 ] as const
 
 type SeleccionBase = { tipo: 'base'; id: string }
@@ -333,6 +335,7 @@ export function SuiteReportesPage() {
         <main className="flex-1 overflow-y-auto bg-white p-5">
           {sel?.tipo === 'base' && sel.id === 'postulantes' && <ReportePostulantesView />}
           {sel?.tipo === 'base' && sel.id === 'interacciones' && <InteraccionesView />}
+          {sel?.tipo === 'base' && sel.id === 'ejecutivo-reclutamiento' && <ReporteEjecutivoReclutamientoView />}
 
           {sel?.tipo === 'builder' && (
             <ReportBuilder onGuardar={(def, origen) => setGuardarBuilderOpen({ def, origen })} />
@@ -787,6 +790,176 @@ function SeguridadEditor({
 }
 
 /* ══════════ Visor del reporte operativo de postulantes ══════════ */
+
+// Colores fijos por etapa del embudo — mismo criterio de "semáforo" que ya
+// usa el resto del sistema (verde = avance, ámbar = pendiente, rojo = pérdida).
+const COLOR_ESTATUS: Record<string, string> = {
+  interesado: '#2563eb',
+  'cita agendada': '#7c3aed',
+  'cita confirmada': '#0891b2',
+  asistió: '#059669',
+  asistio: '#059669',
+  contratado: '#059669',
+  'no asistió': '#d97706',
+  'no asistio': '#d97706',
+  'no interesado': '#dc2626',
+  descartado: '#dc2626',
+}
+function colorDeEstatus(estatus: string) {
+  return COLOR_ESTATUS[estatus.toLowerCase()] ?? '#6b7280'
+}
+
+function ReporteEjecutivoReclutamientoView() {
+  const [desde, setDesde] = useState(hace30Dias())
+  const [hasta, setHasta] = useState(hoy())
+  const [campaniaId, setCampaniaId] = useState<number | ''>('')
+
+  const { data: campanias = [] } = useQuery({
+    queryKey: ['suite-reporte-ejecutivo-campanias'],
+    queryFn: () => ccService.getCampanias(),
+  })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['suite-reporte-ejecutivo-reclutamiento', desde, hasta, campaniaId],
+    queryFn: () => reporteDiarioService.getReporteEjecutivoReclutamiento({ desde, hasta, campaniaId: Number(campaniaId) }),
+    enabled: campaniaId !== '',
+  })
+
+  const maxEstatus = data ? Math.max(1, ...data.graficos.distribucionPorEstatus.map((e) => e.cantidad)) : 1
+  const maxCanal = data ? Math.max(1, ...data.graficos.origenPorCanal.map((c) => c.cantidad)) : 1
+  const maxAgente = data ? Math.max(1, ...data.graficos.gestionPorAsesor.map((a) => a.cantidad)) : 1
+  const maxAgenda = data ? Math.max(1, ...data.graficos.agendaPorFechaAsistencia.map((a) => a.cantidad)) : 1
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+        <span className="flex items-center gap-1.5 text-[0.72rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Parámetros
+        </span>
+        <div>
+          <label className="mb-1 block text-[0.68rem] text-ink-secondary">Campaña</label>
+          <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className="field">
+            <option value="">Selecciona una campaña</option>
+            {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[0.68rem] text-ink-secondary">Desde</label>
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field" max={hasta} />
+        </div>
+        <div>
+          <label className="mb-1 block text-[0.68rem] text-ink-secondary">Hasta</label>
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="field" min={desde} max={hoy()} />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-base font-bold text-ink">Reporte Ejecutivo de Reclutamiento</h2>
+        <p className="text-xs text-gray-500">Control y seguimiento de postulantes de una campaña, por rango de fechas</p>
+      </div>
+
+      {campaniaId === '' ? (
+        <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
+          <BarChart2 className="h-8 w-8" />
+          <p className="text-sm">Selecciona una campaña para ver su reporte</p>
+        </div>
+      ) : isLoading || !data ? (
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+      ) : (
+        <>
+          <DashboardStatRow
+            stats={[
+              { key: 'total', icon: ClipboardList, label: 'Total postulantes', value: data.indicadores.totalPostulantes, tone: 'brand' },
+              { key: 'con-asistencia', icon: CheckCircle2, label: 'Con fecha de asistencia', value: data.indicadores.conFechaAsistencia, tone: 'success' },
+              { key: 'con-horario', icon: SlidersHorizontal, label: 'Con horario', value: data.indicadores.conHorario, tone: 'brand' },
+              { key: 'con-canal', icon: Users, label: 'Con canal identificado', value: data.indicadores.conCanalIdentificado, tone: 'success' },
+            ]}
+          />
+
+          <div className="card p-4">
+            <h3 className="mb-3 text-sm font-bold text-ink">Embudo por estatus</h3>
+            {data.embudo.length === 0 ? (
+              <p className="py-4 text-center text-xs text-ink-tertiary">Sin postulantes en este rango</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {data.embudo.map((e) => (
+                  <div key={e.estatus} className="rounded-xl border border-gray-100 p-3" style={{ borderTopColor: colorDeEstatus(e.estatus), borderTopWidth: 3 }}>
+                    <p className="truncate text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">{e.estatus}</p>
+                    <p className="text-lg font-bold text-ink">{e.cantidad} <span className="text-xs font-medium text-ink-tertiary">| {e.porcentaje}%</span></p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card p-4">
+            <h3 className="mb-3 text-sm font-bold text-ink">KPIs de conversión y calidad del proceso</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {[
+                { label: 'Citas / Total', value: data.kpisConversion.citasSobreTotal },
+                { label: 'Confirmadas / Citas', value: data.kpisConversion.confirmadasSobreCitas },
+                { label: 'Asistencia registrada', value: data.kpisConversion.asistenciaRegistrada },
+                { label: 'Contratación / Total', value: data.kpisConversion.contratacionSobreTotal },
+                { label: 'Descarte + No interés', value: data.kpisConversion.descarteMasNoInteres },
+              ].map((k) => (
+                <div key={k.label} className="rounded-xl bg-gray-50 p-3 text-center">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-tertiary">{k.label}</p>
+                  <p className="text-base font-bold text-ink">{k.value}%</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="card p-4">
+              <h3 className="mb-3 text-sm font-bold text-ink">Distribución por estatus</h3>
+              {data.graficos.distribucionPorEstatus.length === 0 ? (
+                <p className="py-4 text-center text-xs text-ink-tertiary">Sin datos</p>
+              ) : (
+                <ProgressBarList items={data.graficos.distribucionPorEstatus.map((e) => ({
+                  key: e.estatus, label: e.estatus, value: e.cantidad, max: maxEstatus, color: colorDeEstatus(e.estatus),
+                }))} />
+              )}
+            </div>
+
+            <div className="card p-4">
+              <h3 className="mb-3 text-sm font-bold text-ink">Origen de postulantes</h3>
+              {data.graficos.origenPorCanal.length === 0 ? (
+                <p className="py-4 text-center text-xs text-ink-tertiary">Sin datos</p>
+              ) : (
+                <ProgressBarList items={data.graficos.origenPorCanal.map((c) => ({
+                  key: c.canal, label: c.canal, value: c.cantidad, max: maxCanal,
+                }))} />
+              )}
+            </div>
+
+            <div className="card p-4">
+              <h3 className="mb-3 text-sm font-bold text-ink">Gestión por asesor</h3>
+              {data.graficos.gestionPorAsesor.length === 0 ? (
+                <p className="py-4 text-center text-xs text-ink-tertiary">Sin datos</p>
+              ) : (
+                <ProgressBarList items={data.graficos.gestionPorAsesor.map((a) => ({
+                  key: a.agente, label: a.agente, value: a.cantidad, max: maxAgente,
+                }))} />
+              )}
+            </div>
+
+            <div className="card p-4">
+              <h3 className="mb-3 text-sm font-bold text-ink">Agenda por fecha de asistencia</h3>
+              {data.graficos.agendaPorFechaAsistencia.length === 0 ? (
+                <p className="py-4 text-center text-xs text-ink-tertiary">Sin citas agendadas en este rango</p>
+              ) : (
+                <ProgressBarList items={data.graficos.agendaPorFechaAsistencia.map((a) => ({
+                  key: a.fecha, label: new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }), value: a.cantidad, max: maxAgenda,
+                }))} />
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 function ReportePostulantesView() {
   const [desde, setDesde] = useState(hace30Dias())

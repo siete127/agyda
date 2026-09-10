@@ -34,6 +34,7 @@ router.delete('/metas/:id', auth.authenticateToken, controller.eliminarMeta);
 router.get('/reportes-diarios', auth.authenticateToken, controller.getReporteDiario);
 router.get('/reportes-postulantes', auth.authenticateToken, controller.getReportePostulantes);
 router.get('/reportes-postulantes/excel', auth.authenticateToken, controller.exportarReportePostulantes);
+router.get('/reportes-postulantes/ejecutivo-reclutamiento', auth.authenticateToken, controller.getReporteEjecutivoReclutamiento);
 
 // Interacciones cerradas — listado general con buscador (todas las campañas/canales)
 router.get('/interacciones', auth.authenticateToken, controller.listInteracciones);

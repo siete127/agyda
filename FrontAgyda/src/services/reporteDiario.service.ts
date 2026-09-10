@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   ReporteDiario, ReportePostulantes, RdlReporte, RdlCarpeta, RdlRol,
   RbCatalogo, RbDefinicion, RbResultado, RbReporteGuardado,
-  InteraccionItem, InteraccionesFiltro,
+  InteraccionItem, InteraccionesFiltro, ReporteEjecutivoReclutamiento,
 } from '@/types/reporteDiario.types'
 import { parseRdl } from '@/lib/rdl'
 
@@ -16,6 +16,11 @@ export const reporteDiarioService = {
   async getPostulantes(params: { desde?: string; hasta?: string }): Promise<ReportePostulantes> {
     const { data } = await api.get('/operaciones/reportes-postulantes', { params })
     return data?.data as ReportePostulantes
+  },
+
+  async getReporteEjecutivoReclutamiento(params: { desde?: string; hasta?: string; campaniaId: number }): Promise<ReporteEjecutivoReclutamiento> {
+    const { data } = await api.get('/operaciones/reportes-postulantes/ejecutivo-reclutamiento', { params })
+    return data?.data as ReporteEjecutivoReclutamiento
   },
 
   // Descarga directa (no JSON) — mismo patrón que ccService.tipificacionesExcelUrl:
