@@ -3091,6 +3091,7 @@
                     liveChatCerrado: 'El agente cerró la conversación. Si necesitas algo más, aquí estoy. 🙂',
                     liveChatSugerencia: 'Parece que no estoy resolviendo tu duda. ¿Quieres hablar con un agente?',
                     liveChatAsignado: (nombre) => `¡${nombre || 'Un agente'} se unió a la conversación! 👋`,
+                    liveChatEnCola: 'Sigues en la fila para un agente. Si prefieres, puedes dejar tus datos.',
                     liveChatSalirCola: 'Prefiero dejar mis datos',
                     liveChatPedirRating: 'Antes de irte, ¿cómo calificarías la atención que recibiste?',
                     liveChatOpcionesRating: ['⭐ 1', '⭐⭐ 2', '⭐⭐⭐ 3', '⭐⭐⭐⭐ 4', '⭐⭐⭐⭐⭐ 5'],
@@ -3129,6 +3130,7 @@
                     liveChatCerrado: 'The agent closed the conversation. Let me know if you need anything else. 🙂',
                     liveChatSugerencia: 'Looks like I\'m not solving your question. Would you like to talk to an agent?',
                     liveChatAsignado: (nombre) => `${nombre || 'An agent'} joined the conversation! 👋`,
+                    liveChatEnCola: 'You are still in line for an agent. If you prefer, you can leave your details.',
                     liveChatSalirCola: 'I\'d rather leave my details',
                     liveChatPedirRating: 'Before you go, how would you rate the support you received?',
                     liveChatOpcionesRating: ['⭐ 1', '⭐⭐ 2', '⭐⭐⭐ 3', '⭐⭐⭐⭐ 4', '⭐⭐⭐⭐⭐ 5'],
@@ -3459,7 +3461,7 @@
                 if (liveChatSocket) return liveChatSocket;
                 liveChatSocket = io();
                 liveChatSocket.on('receive_livechat_message', (msg) => {
-                    if (!msg || msg.conversacionId !== liveChatConversacionId) return;
+                    if (!msg || Number(msg.conversacionId) !== Number(liveChatConversacionId)) return;
                     // 'sistema' incluido a propósito: es como llega el motivo cuando el
                     // agente cierra el chat ("El agente cerró la conversación. Motivo: ...")
                     // y avisos de transferencia — antes solo se mostraban mensajes del
@@ -3469,16 +3471,17 @@
                     }
                 });
                 liveChatSocket.on('livechat:conversacion_tomada', (payload) => {
-                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    if (!payload || Number(payload.conversacionId) !== Number(liveChatConversacionId)) return;
                     if (estado === 'chat_vivo_cola') {
                         detenerPollingCola();
                         estado = 'chat_vivo';
                         botDice(() => t().liveChatAsignado(payload.agenteNombre || ''), 300);
                         setQuickReplies([]);
+                        guardarEstadoChat();
                     }
                 });
                 liveChatSocket.on('livechat:conversacion_cerrada', (payload) => {
-                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    if (!payload || Number(payload.conversacionId) !== Number(liveChatConversacionId)) return;
                     finalizarChatVivo(() => t().liveChatCerrado);
                 });
                 // El agente cerró desde su lado (motivo incluido) — el backend ya manda
@@ -3488,7 +3491,7 @@
                 // sin esto la conversación quedaba en 'pendiente_rating' para siempre y
                 // nunca llegaba al Historial (LC_ESTADO solo pasa a 'cerrada' al calificar).
                 liveChatSocket.on('livechat:pendiente_calificacion', (payload) => {
-                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    if (!payload || Number(payload.conversacionId) !== Number(liveChatConversacionId)) return;
                     iniciarCalificacion(payload.conversacionId);
                 });
                 return liveChatSocket;
@@ -3558,15 +3561,36 @@
                 detenerPollingCola();
                 liveChatColaPollTimer = setInterval(async () => {
                     if (!liveChatConversacionId || estado !== 'chat_vivo_cola') { detenerPollingCola(); return; }
-                    try {
-                        const res = await fetch(`/api/livechat/conversaciones/${liveChatConversacionId}/cola`);
-                        const json = await res.json().catch(() => ({}));
-                        if (json.success && json.data && json.data.enCola === false) {
-                            // Ya no está en cola: o fue asignado (el socket lo maneja) o se cerró.
-                            detenerPollingCola();
+                    await verificarSiFuiTomado();
+                }, 8000);
+            }
+
+            // Consulta el estado real de la conversación: si un agente ya la tomó
+            // (el evento por socket pudo perderse), pasa a 'chat_vivo'. Devuelve
+            // true si quedó en chat_vivo.
+            async function verificarSiFuiTomado() {
+                if (!liveChatConversacionId) return false;
+                try {
+                    const res = await fetch(`/api/livechat/conversaciones/${liveChatConversacionId}/cola`);
+                    const json = await res.json().catch(() => ({}));
+                    const d = json && json.data;
+                    if (!d) return false;
+                    if (d.enCola === false && (d.estado === 'activa' || d.estado === 'pendiente_tipificacion')) {
+                        detenerPollingCola();
+                        if (estado !== 'chat_vivo') {
+                            estado = 'chat_vivo';
+                            setQuickReplies([]);
+                            await botDice(() => t().liveChatAsignado(''), 200);
+                            guardarEstadoChat();
                         }
-                    } catch (e) {}
-                }, 15000);
+                        return true;
+                    }
+                    if (d.enCola === false && d.estado === 'cerrada') {
+                        detenerPollingCola();
+                        finalizarChatVivo(() => t().liveChatCerrado);
+                    }
+                } catch (e) {}
+                return false;
             }
 
             // Punto de entrada real de "Hablar con alguien": antes solo llamaba a
@@ -3874,10 +3898,18 @@
                 }
 
                 if (estado === 'chat_vivo_cola') {
-                    if (normalizar(mensaje) === normalizar(t().liveChatSalirCola)) {
+                    const m = normalizar(mensaje);
+                    const quiereSalir = m === normalizar(t().liveChatSalirCola)
+                        || ['salir', 'cancelar', 'ya no', 'dejar mis datos', 'prefiero dejar mis datos', 'quit', 'cancel', 'exit'].includes(m);
+                    if (quiereSalir) {
                         await salirDeLaCola();
                         return;
                     }
+                    // Puede que un agente ya te haya tomado sin que el evento
+                    // llegara — verifica el estado antes de descartar el mensaje.
+                    const tomado = await verificarSiFuiTomado();
+                    if (tomado) { await handleUserMessageInterno(mensaje); return; }
+                    await botDice(() => t().liveChatEnCola, 300);
                     setQuickReplies([t().liveChatSalirCola], null);
                     return;
                 }

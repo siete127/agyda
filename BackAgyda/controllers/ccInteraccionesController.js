@@ -149,6 +149,22 @@ exports.tomar = async (req, res) => {
       WHEN MATCHED THEN UPDATE SET CAE_INTERACCIONES_ACTIVAS = CAE_INTERACCIONES_ACTIVAS + 1
       WHEN NOT MATCHED THEN INSERT (CAE_USUARIO_ID, CAE_ONLINE, CAE_DISPONIBLE, CAE_INTERACCIONES_ACTIVAS) VALUES (@u, 1, 1, 1);`);
     ccRouting.emitir(tenantKeyDe(req), `cc:interaccion:${req.params.id}`, 'cc:interaccion_tomada', { interaccionId: Number(req.params.id) });
+
+    // Si es una conversación del widget web público que estaba en cola, el
+    // visitante sigue en 'chat_vivo_cola' esperando — hay que avisarle que un
+    // agente ya lo tomó para que pase a 'chat_vivo' (mismo contrato que usa
+    // ccWebPublicaController.iniciarConversacion cuando el ruteo asigna al toque).
+    try {
+      const canal = await p.request().input('id', sql.Int, req.params.id)
+        .query(`SELECT cn.CN_TIPO tipo FROM dbo.CCO_INTERACCIONES i
+                JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID WHERE i.CI_ID = @id`);
+      if (canal.recordset[0]?.tipo === 'web_publica') {
+        socketService.getIO().to(`livechat:${req.params.id}`).emit('livechat:conversacion_tomada', {
+          conversacionId: Number(req.params.id), agenteNombre: nombre,
+        });
+      }
+    } catch (e) { console.warn('[cc.tomar] emit al widget falló:', e?.message || e); }
+
     res.json({ success: true });
   } catch (e) {
     console.error('cc.tomar:', e.message);
