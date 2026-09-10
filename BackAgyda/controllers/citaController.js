@@ -25,6 +25,22 @@ function getUserId(req) {
     : null;
 }
 
+// Normaliza una fecha-hora del cliente a "YYYY-MM-DD HH:mm:ss" SIN zona, para
+// guardarla como wall-clock literal (misma referencia que GETDATE() del server,
+// que corre en horario de México). Evita el corrimiento de 6 h que produce
+// bindear un Date de JS como sql.DateTime. Acepta 'YYYY-MM-DDTHH:mm[:ss]' o
+// un ISO con Z (se toma la parte local resultante).
+function fechaHoraSql(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) return `${m[1]} ${m[2]}:${m[3]}:${m[4] || '00'}`;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // CSV de minutos de anticipación → array de enteros válidos, ordenado desc.
 function parseRecordar(csv) {
   if (!csv) return [];
@@ -41,7 +57,8 @@ const CITA_SELECT_FIELDS = `
   K.CITA_TRATAMIENTO_ID as tratamientoId, T.TRAT_NOMBRE as tratamientoNombre,
   T.TRAT_TOTAL_SESIONES as tratamientoTotalSesiones,
   K.CITA_NUMERO_SESION as numeroSesion, K.CITA_MODALIDAD as modalidad,
-  K.CITA_TITULO as titulo, K.CITA_MOTIVO as motivo, K.CITA_FECHA_HORA as fechaHora,
+  K.CITA_TITULO as titulo, K.CITA_MOTIVO as motivo,
+  CONVERT(NVARCHAR(19), K.CITA_FECHA_HORA, 126) as fechaHora,
   K.CITA_DURACION_MIN as duracionMin, K.CITA_ENLACE as enlace, K.CITA_TELEFONO as telefono,
   K.CITA_ESTATUS as estatus, K.CITA_CONFIRMADA_POR_CLIENTE as confirmadaPorCliente,
   K.CITA_FECHA_CONFIRMACION as fechaConfirmacion, K.CITA_RECORDAR_MIN_ANTES as recordarMinAntes,
@@ -132,8 +149,9 @@ exports.getById = async (req, res) => {
     const cita = rs.recordset[0];
     // Solicitud de cambio pendiente, si la hay.
     const sol = await pool.request().input('id', sql.Int, id)
-      .query(`SELECT TOP 1 SOL_ID as id, SOL_TIPO as tipo, SOL_FECHA_PROPUESTA as fechaPropuesta,
-              SOL_MOTIVO as motivo, SOL_FECHA as fecha
+      .query(`SELECT TOP 1 SOL_ID as id, SOL_TIPO as tipo,
+              CONVERT(NVARCHAR(19), SOL_FECHA_PROPUESTA, 126) as fechaPropuesta,
+              SOL_MOTIVO as motivo, CONVERT(NVARCHAR(19), SOL_FECHA, 126) as fecha
               FROM CLI_CITAS_SOLICITUDES WHERE SOL_CITA_ID=@id AND SOL_ESTATUS='pendiente'
               ORDER BY SOL_FECHA DESC`);
     cita.solicitudPendiente = sol.recordset[0] || null;
@@ -176,7 +194,7 @@ exports.create = async (req, res) => {
       .input('modalidad', sql.NVarChar(20), modal)
       .input('titulo', sql.NVarChar(200), String(titulo).trim())
       .input('motivo', sql.NVarChar(sql.MAX), motivo || null)
-      .input('fechaHora', sql.DateTime, fechaHora)
+      .input('fechaHora', sql.VarChar(19), fechaHoraSql(fechaHora))
       .input('duracionMin', sql.Int, duracionMin ? parseInt(duracionMin, 10) : 30)
       .input('enlace', sql.NVarChar(500), modal === 'videollamada' ? (enlace || null) : null)
       .input('telefono', sql.NVarChar(30), modal === 'telefonica' ? (telefono || null) : null)
@@ -190,7 +208,7 @@ exports.create = async (req, res) => {
            CITA_ASIGNADO_A, CITA_RECORDAR_MIN_ANTES, CITA_CREADO_POR)
         OUTPUT INSERTED.CITA_ID
         VALUES (@contactoId, @tratamientoId, @numeroSesion, @modalidad, @titulo,
-                @motivo, @fechaHora, @duracionMin, @enlace, @telefono,
+                @motivo, CONVERT(DATETIME, @fechaHora, 120), @duracionMin, @enlace, @telefono,
                 @asignadoA, @recordar, @creadoPor)
       `);
     const id = rs.recordset[0].CITA_ID;
@@ -230,7 +248,7 @@ exports.update = async (req, res) => {
     if (b.modalidad != null) { r.input('modalidad', sql.NVarChar(20), MODALIDADES_VALIDAS.includes(b.modalidad) ? b.modalidad : 'videollamada'); sets.push('CITA_MODALIDAD=@modalidad'); }
     if (b.titulo != null) { r.input('titulo', sql.NVarChar(200), String(b.titulo).trim()); sets.push('CITA_TITULO=@titulo'); }
     if (b.motivo != null) { r.input('motivo', sql.NVarChar(sql.MAX), b.motivo || null); sets.push('CITA_MOTIVO=@motivo'); }
-    if (b.fechaHora != null) { r.input('fechaHora', sql.DateTime, b.fechaHora); sets.push('CITA_FECHA_HORA=@fechaHora'); sets.push('CITA_ALERTA_24H_NOTIF=0'); sets.push('CITA_ALERTA_1H_NOTIF=0'); }
+    if (b.fechaHora != null) { r.input('fechaHora', sql.VarChar(19), fechaHoraSql(b.fechaHora)); sets.push('CITA_FECHA_HORA=CONVERT(DATETIME, @fechaHora, 120)'); sets.push('CITA_ALERTA_24H_NOTIF=0'); sets.push('CITA_ALERTA_1H_NOTIF=0'); }
     if (b.duracionMin != null) { r.input('duracionMin', sql.Int, parseInt(b.duracionMin, 10) || 30); sets.push('CITA_DURACION_MIN=@duracionMin'); }
     if (b.enlace != null) { r.input('enlace', sql.NVarChar(500), b.enlace || null); sets.push('CITA_ENLACE=@enlace'); }
     if (b.telefono != null) { r.input('telefono', sql.NVarChar(30), b.telefono || null); sets.push('CITA_TELEFONO=@telefono'); }
@@ -485,7 +503,7 @@ exports.addSesion = async (req, res) => {
       .input('modalidad', sql.NVarChar(20), modal)
       .input('titulo', sql.NVarChar(200), (titulo && String(titulo).trim()) || `${trat.nombre} — sesión ${numeroSesion}`)
       .input('motivo', sql.NVarChar(sql.MAX), motivo || null)
-      .input('fechaHora', sql.DateTime, fechaHora)
+      .input('fechaHora', sql.VarChar(19), fechaHoraSql(fechaHora))
       .input('duracionMin', sql.Int, duracionMin ? parseInt(duracionMin, 10) : 30)
       .input('enlace', sql.NVarChar(500), modal === 'videollamada' ? (enlace || null) : null)
       .input('telefono', sql.NVarChar(30), modal === 'telefonica' ? (telefono || null) : null)
@@ -499,7 +517,7 @@ exports.addSesion = async (req, res) => {
            CITA_ASIGNADO_A, CITA_RECORDAR_MIN_ANTES, CITA_CREADO_POR)
         OUTPUT INSERTED.CITA_ID
         VALUES (@contactoId, @tratamientoId, @numeroSesion, @modalidad, @titulo,
-                @motivo, @fechaHora, @duracionMin, @enlace, @telefono,
+                @motivo, CONVERT(DATETIME, @fechaHora, 120), @duracionMin, @enlace, @telefono,
                 @asignadoA, @recordar, @creadoPor)
       `);
     res.status(201).json({ success: true, data: { id: rs.recordset[0].CITA_ID, numeroSesion } });
@@ -516,9 +534,9 @@ exports.listSolicitudes = async (req, res) => {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
       SELECT S.SOL_ID as id, S.SOL_CITA_ID as citaId, S.SOL_TIPO as tipo,
-             S.SOL_FECHA_PROPUESTA as fechaPropuesta, S.SOL_MOTIVO as motivo,
-             S.SOL_ESTATUS as estatus, S.SOL_FECHA as fecha,
-             K.CITA_TITULO as citaTitulo, K.CITA_FECHA_HORA as citaFechaHora,
+             CONVERT(NVARCHAR(19), S.SOL_FECHA_PROPUESTA, 126) as fechaPropuesta, S.SOL_MOTIVO as motivo,
+             S.SOL_ESTATUS as estatus, CONVERT(NVARCHAR(19), S.SOL_FECHA, 126) as fecha,
+             K.CITA_TITULO as citaTitulo, CONVERT(NVARCHAR(19), K.CITA_FECHA_HORA, 126) as citaFechaHora,
              C.CONT_NOMBRE as contactoNombre, K.CITA_ASIGNADO_A as asignadoA
       FROM CLI_CITAS_SOLICITUDES S
       INNER JOIN CLI_CITAS K ON K.CITA_ID = S.SOL_CITA_ID
@@ -542,22 +560,28 @@ exports.resolverSolicitud = async (req, res) => {
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const sol = (await pool.request().input('id', sql.Int, id).query(`
-      SELECT SOL_CITA_ID as citaId, SOL_TIPO as tipo, SOL_FECHA_PROPUESTA as fechaPropuesta, SOL_ESTATUS as estatus
+      SELECT SOL_CITA_ID as citaId, SOL_TIPO as tipo,
+             CASE WHEN SOL_FECHA_PROPUESTA IS NULL THEN 0 ELSE 1 END as tieneFecha,
+             SOL_ESTATUS as estatus
       FROM CLI_CITAS_SOLICITUDES WHERE SOL_ID=@id
     `)).recordset[0];
     if (!sol) return res.status(404).json({ success: false, message: 'Solicitud no encontrada' });
     if (sol.estatus !== 'pendiente') return res.status(409).json({ success: false, message: 'La solicitud ya fue resuelta' });
 
     if (accion === 'aprobar') {
-      if (sol.tipo === 'reprogramar' && sol.fechaPropuesta) {
+      if (sol.tipo === 'reprogramar' && sol.tieneFecha) {
+        // Copia la fecha propuesta a la cita enteramente en SQL (sin round-trip
+        // por JS, que corre el reloj).
         await pool.request()
-          .input('cid', sql.Int, sol.citaId)
-          .input('f', sql.DateTime, sol.fechaPropuesta)
+          .input('sid', sql.Int, id)
           .query(`
-            UPDATE CLI_CITAS
-            SET CITA_FECHA_HORA=@f, CITA_ESTATUS='agendada', CITA_CONFIRMADA_POR_CLIENTE=0,
-                CITA_FECHA_CONFIRMACION=NULL, CITA_ALERTA_24H_NOTIF=0, CITA_ALERTA_1H_NOTIF=0
-            WHERE CITA_ID=@cid
+            UPDATE K
+            SET K.CITA_FECHA_HORA = S.SOL_FECHA_PROPUESTA, K.CITA_ESTATUS='agendada',
+                K.CITA_CONFIRMADA_POR_CLIENTE=0, K.CITA_FECHA_CONFIRMACION=NULL,
+                K.CITA_ALERTA_24H_NOTIF=0, K.CITA_ALERTA_1H_NOTIF=0
+            FROM CLI_CITAS K
+            INNER JOIN CLI_CITAS_SOLICITUDES S ON S.SOL_CITA_ID = K.CITA_ID
+            WHERE S.SOL_ID=@sid
           `);
       } else if (sol.tipo === 'cancelar') {
         await pool.request().input('cid', sql.Int, sol.citaId)
@@ -610,7 +634,8 @@ exports.enviarRecordatorioCita = async (pool, tenantKey, cita, umbralMin) => {
     }
   };
 
-  // Correo al cliente.
+  // Correo al cliente. Si el contacto no tiene correo, se registra igual como
+  // 'enviado' con detalle — así el cron no reintenta este umbral para siempre.
   if (cita.contactoCorreo) {
     try {
       await emailService.sendRecordatorioCitaEmail({
@@ -628,6 +653,8 @@ exports.enviarRecordatorioCita = async (pool, tenantKey, cita, umbralMin) => {
     } catch (e) {
       await registrar('correo', 'fallido', e.message);
     }
+  } else {
+    await registrar('correo', 'enviado', 'contacto sin correo — omitido');
   }
 
   // Notificación interna al asesor.

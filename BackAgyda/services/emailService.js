@@ -2052,13 +2052,20 @@ async function sendInvitacionPortalEmail({ nombre, correo, link }) {
 // ── Citas del cliente (CRM Cliente — Fase 2) ────────────────────────────────
 const _MODALIDAD_CITA_LABEL = { videollamada: 'Videollamada', telefonica: 'Llamada telefónica', generica: 'Cita' };
 
-async function sendRecordatorioCitaEmail({ contactoNombre, contactoCorreo, titulo, modalidad, fechaHora, duracionMin, enlace, telefono, umbralMin }) {
+async function sendRecordatorioCitaEmail({ contactoNombre, contactoCorreo, titulo, modalidad, fechaHora, duracionMin, enlace, telefono }) {
   try {
     if (!mailer) { console.warn('⚠️ [sendRecordatorioCitaEmail] SMTP no configurado. Email simulado'); return; }
     if (!contactoCorreo) return;
 
     const cuando = fechaHora ? new Date(fechaHora).toLocaleString('es-MX', { dateStyle: 'full', timeStyle: 'short' }) : 'por confirmar';
-    const antic = umbralMin >= 1440 ? `${Math.round(umbralMin / 1440)} día(s)` : `${umbralMin} minuto(s)`;
+    // Tiempo real que falta (no el umbral del cron, que puede diferir si la cita
+    // se creó tarde). Se calcula desde la fecha de la cita.
+    const minsFaltan = fechaHora ? Math.max(0, Math.round((new Date(fechaHora).getTime() - Date.now()) / 60000)) : null;
+    const antic = minsFaltan == null ? ''
+      : minsFaltan >= 2880 ? `en ${Math.round(minsFaltan / 1440)} días`
+      : minsFaltan >= 1440 ? 'mañana'
+      : minsFaltan >= 60 ? `en ${Math.round(minsFaltan / 60)} h`
+      : `en ${minsFaltan} min`;
     const modalLabel = _MODALIDAD_CITA_LABEL[modalidad] || 'Cita';
     const filas = [
       ['Cita', titulo],
@@ -2074,7 +2081,7 @@ async function sendRecordatorioCitaEmail({ contactoNombre, contactoCorreo, titul
     const html = _shellSeguimiento({
       titulo: '📅 Recordatorio de cita',
       saludo: `Hola ${contactoNombre || ''},`,
-      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Te recordamos tu próxima cita con nosotros (en ${antic}):</p>` + _datosTabla(filas),
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Te recordamos tu próxima cita con nosotros${antic ? ` (${antic})` : ''}:</p>` + _datosTabla(filas),
       ctaHtml,
     });
     const text = `Recordatorio de cita\n${titulo}\n${modalLabel}\n${cuando} (${duracionMin || 30} min)` +
