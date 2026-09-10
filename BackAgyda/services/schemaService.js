@@ -7122,6 +7122,16 @@ CREATE TABLE dbo.CCO_CONFIG (
 );`,
     `IF OBJECT_ID('dbo.CCO_CONFIG', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CCO_CONFIG)
 INSERT INTO dbo.CCO_CONFIG (CF_MSG_BIENVENIDA) VALUES (N'Hola, en un momento te atendemos.');`,
+    // Modo de asignación (cascada canal -> campaña -> global). Default 'auto'
+    // = comportamiento actual (el sistema asigna a un agente disponible).
+    // 'manual' = la conversación queda en cola visible para todos los agentes
+    // de la campaña y ellos la jalan.
+    `IF COL_LENGTH('dbo.CCO_CONFIG', 'CF_MODO_ASIGNACION') IS NULL
+  ALTER TABLE dbo.CCO_CONFIG ADD CF_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CF_MODO_ASIGNACION DEFAULT 'auto';`,
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_MODO_ASIGNACION') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CM2_MODO_ASIGNACION DEFAULT 'global';`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_MODO_ASIGNACION') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CN_MODO_ASIGNACION DEFAULT 'campania';`,
     `IF OBJECT_ID('dbo.CCO_AGENTE_ESTADO', 'U') IS NULL
 CREATE TABLE dbo.CCO_AGENTE_ESTADO (
   CAE_USUARIO_ID INT NOT NULL PRIMARY KEY,
