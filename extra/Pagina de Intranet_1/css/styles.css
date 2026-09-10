@@ -19,7 +19,12 @@
 }
 
 html[data-theme="dark"] {
-  --bg-body: #0B1120;
+  /* --bg-body ahora coincide exactamente con el color al que funde el
+     difuminado de la derecha del Hero (--bg-superficie-alterna) — antes
+     eran dos tonos de azul oscuro ligeramente distintos (#0B1120 vs
+     #0F1729) y se notaba una costura de color entre el fondo general de
+     la página y cualquier sección que sí usara el color del hero. */
+  --bg-body: #0F1729;
   --bg-superficie: #131C31;
   --bg-superficie-alterna: #0F1729;
   --texto-principal: #F1F5F9;
@@ -416,7 +421,7 @@ button.demo-btn {
 }
 
 html[data-theme="dark"] .hero-section {
-  background: #060B18;
+  background: var(--bg-superficie-alterna);
 }
 
 .hero-bg-img {
@@ -437,7 +442,7 @@ html[data-theme="dark"] .hero-section {
 }
 
 html[data-theme="dark"] .hero-bg-overlay {
-  background: linear-gradient(90deg, #060B18 0%, #060B18 38%, rgba(6, 11, 24, 0.75) 52%, transparent 72%);
+  background: linear-gradient(90deg, var(--bg-superficie-alterna) 0%, var(--bg-superficie-alterna) 38%, rgba(15, 23, 41, 0.75) 52%, transparent 72%);
 }
 
 /* --------------------------------------------------------------------
@@ -1362,7 +1367,11 @@ html[data-theme="dark"] .sol-bubble-icon {
 }
 
 .sol-bubble[data-pos="0"] .sol-bubble-detail {
-  max-height: 320px;
+  /* 320px alcanzaba justo para desc + 3 bullets, pero en textos más
+     largos (o en móvil, donde el ancho del bloque es menor y el texto
+     ocupa más líneas) el contenido real superaba ese máximo y el
+     overflow:hidden recortaba lo último del flujo: el botón "Ficha PDF". */
+  max-height: 420px;
   opacity: 1;
   margin-top: 12px;
 }
@@ -1687,6 +1696,24 @@ html[data-theme="dark"] .sol-bubble-icon {
   .valor-icon svg {
     width: 24px;
     height: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* A 320-480px, 2 valores por vista (texto + ícono cada uno, con
+     white-space:nowrap) ya no caben sin que el segundo ítem empuje su
+     ícono encima del texto del primero — se reduce a 1 valor a la vez
+     (el JS ya calcula VISIBLE()=1 en este rango) y se baja el tamaño de
+     letra para que quepa cómodo incluso el nombre más largo. */
+  .valor-item {
+    flex: 0 0 100%;
+    font-size: 15px;
+    gap: 10px;
+    border-right: none;
+  }
+  .valor-icon svg {
+    width: 22px;
+    height: 22px;
   }
 }
 
@@ -2904,17 +2931,20 @@ html[data-theme="dark"] .servicios-circle-4 {
   color: var(--texto-secundario);
   margin-bottom: 0;
   /* Recorta a 3 líneas; "Ver más" se muestra solo si el texto real excede
-     ese alto (medido por JS al montar la tarjeta). */
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
+     ese alto (medido por JS al montar la tarjeta). -webkit-line-clamp
+     necesita display:-webkit-box para funcionar como "clamp" real (texto
+     completo + "…" al límite de palabra) — dentro de una tarjeta con
+     rotación 3D (rotateY del carrusel) y viewports muy angostos, ese modo
+     de caja no siempre se aplica de forma consistente y el navegador
+     recorta el texto a mitad de palabra sin puntos suspensivos. Se usa
+     en su lugar max-height = 3 líneas con overflow:hidden normal, que no
+     depende de ese modo de caja y siempre recorta por línea completa. */
+  max-height: calc(1.6em * 3);
   overflow: hidden;
 }
 
 .portafolio-desc.is-expanded {
-  -webkit-line-clamp: unset;
-  line-clamp: unset;
+  max-height: none;
   overflow: visible;
 }
 
@@ -2947,6 +2977,15 @@ html[data-theme="dark"] .servicios-circle-4 {
     flex-direction: column;
     text-align: center;
   }
+  .portafolio-info {
+    /* En escritorio flex-basis:420px reserva espacio junto al carrusel;
+       en columna (móvil) ese mismo mínimo fuerza al contenedor a
+       desbordarse cuando el viewport es más angosto que 420px (la
+       mayoría de celulares), cortando el párrafo por la derecha. */
+    flex-basis: auto;
+    min-width: 0;
+    width: 100%;
+  }
   .portafolio-desc-main {
     max-width: 100%;
     margin: 0 auto 28px;
@@ -2954,11 +2993,58 @@ html[data-theme="dark"] .servicios-circle-4 {
   .portafolio-title-main {
     font-size: 30px;
   }
+  /* En móvil ya no hay espacio de sobra a los costados de la tarjeta
+     (ocupa casi todo el ancho) para que las flechas floten fuera de ella
+     como en escritorio — se reserva un padding lateral en el wrap para
+     que las flechas tengan su propio espacio y no se superpongan a la
+     imagen/contenido de la tarjeta. */
+  .portafolio-carousel-wrap {
+    width: 100%;
+    padding: 0 18px;
+  }
+  .carousel-container {
+    max-width: 100%;
+    /* 464px (altura fija pensada para escritorio) reservaba solo ~198px
+       para el texto tras descontar la imagen (200px) y los paddings —
+       insuficiente para título + 3 líneas de descripción + "Ver más", así
+       que el overflow:hidden de .carousel-viewport recortaba la última
+       línea de la descripción y hasta el propio título. 415px es lo
+       medido como necesario para el texto más largo de las 3 tarjetas
+       (222px de contenido + 150px de imagen + paddings) sin dejar hueco
+       vacío de sobra en las tarjetas con menos texto (antes 520px). */
+    height: 415px;
+  }
+  .portafolio-carousel-media {
+    height: 150px;
+  }
+  .portafolio-carousel-arrow {
+    width: 28px;
+    height: 28px;
+  }
   .portafolio-carousel-arrow--prev {
-    left: -16px;
+    left: -2px;
   }
   .portafolio-carousel-arrow--next {
-    right: -16px;
+    right: -2px;
+  }
+  .portafolio-carousel-content {
+    /* Un poco más de aire a la derecha que a los otros lados: la flecha
+       "siguiente" del carrusel (28px, casi pegada al borde de la card)
+       queda muy cerca del final del texto en anchos angostos. */
+    padding: 16px 20px 16px 16px;
+  }
+  .portafolio-carousel-media + .portafolio-carousel-content {
+    margin-top: -24px;
+    padding-top: 34px;
+  }
+  .portafolio-title {
+    font-size: 16.5px;
+  }
+  .portafolio-desc {
+    font-size: 13.5px;
+    max-height: none;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
   }
 }
 
@@ -3509,12 +3595,45 @@ html[data-theme="dark"] .talento-card {
     flex-direction: column;
     text-align: center;
   }
+  .talento-info {
+    /* Igual que .portafolio-info: flex-basis:420px reserva espacio junto
+       al Stack en escritorio, pero en columna (móvil) ese mínimo excede
+       el viewport disponible (320-480px) y desborda el título/párrafo
+       por la derecha en vez de hacer wrap. */
+    flex-basis: auto;
+    min-width: 0;
+    width: 100%;
+  }
   .talento-desc {
     max-width: 100%;
     margin: 0 auto;
   }
   .talento-title {
     font-size: 30px;
+  }
+  .talento-stack-wrap {
+    /* El padding asimétrico (compensación de offset del Stack pensada
+       para escritorio) suma ancho extra que, junto con la tarjeta de
+       340px fija, desborda cualquier viewport móvil — se centra sin
+       ese padding en este breakpoint. */
+    padding: 20px 0 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 340px de ancho fijo para la tarjeta del Stack es mayor que el propio
+     viewport en un celular (320-480px), desbordando el título y párrafo
+     de al lado por la derecha — se escala la tarjeta completa al ancho
+     real disponible, manteniendo la proporción original (340:420).
+     El propio efecto Stack desplaza la tarjeta de atrás hacia la derecha
+     (translate proporcional al tamaño del contenedor, ver stack.js) —
+     hay que reservar ESE espacio extra además del margen de la sección,
+     si no la tarjeta trasera se sale por el borde de la pantalla aunque
+     la tarjeta base ya quepa. */
+  .talento-stack.stack-container {
+    width: min(340px, calc(100vw - 48px - 50px));
+    height: min(420px, calc((100vw - 48px - 50px) * 420 / 340));
   }
 }
 
@@ -3541,8 +3660,8 @@ html[data-theme="dark"] .talento-card {
   padding: 50px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 50px;
+  justify-content: center;
+  gap: 8px;
   position: relative;
   z-index: 1;
 }
@@ -3635,12 +3754,21 @@ html[data-theme="dark"] .talento-card {
 }
 
 .qr-form-pointer {
-  position: absolute;
-  top: 50%;
-  left: 58%;
-  width: 280px;
-  height: 120px;
-  transform: translate(-72%, -60%);
+  /* Antes era position:absolute con left/width en % y px fijos — al
+     achicar .qr-form-container ese cálculo manual dejaba de coincidir
+     con el hueco real entre el texto y el QR (o invadía el texto, o
+     quedaba corta sin llegar al QR). Se convierte en un ítem flex más
+     de .qr-form-container: el navegador reparte el espacio disponible
+     automáticamente entre las 3 columnas, así que la flecha SIEMPRE
+     ocupa exactamente el hueco real, sin importar el ancho de pantalla.
+     El SVG tiene viewBox, así que reescalar su ancho no distorsiona el
+     trazo. */
+  flex: 1 1 auto;
+  min-width: 60px;
+  max-width: 260px;
+  height: auto;
+  aspect-ratio: 260 / 120;
+  align-self: center;
   z-index: 3;
   pointer-events: none;
   filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.55));
@@ -4024,11 +4152,17 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
 }
 
 @media (max-width: 600px) {
+  /* En móvil el botón flotante del chat coincide, durante el scroll, con
+     la esquina inferior derecha de cualquier tarjeta/card que llegue
+     hasta ahí (Portafolio, Talento) — al ser position:fixed siempre
+     ocupa el mismo punto de la pantalla sin importar el contenido que
+     pase debajo, tapando parcialmente texto o botones. Se reduce más
+     que antes para minimizar esa área de solape. */
   .floating-mascot-btn {
-    width: 90px;
-    height: 90px;
-    right: 12px;
-    bottom: 12px;
+    width: 46px;
+    height: 46px;
+    right: 8px;
+    bottom: 8px;
   }
 }
 
@@ -4107,6 +4241,21 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
     flex-direction: column;
     align-items: center;
   }
+  /* La flecha apunta en diagonal de izquierda a derecha, pensada para el
+     layout horizontal de escritorio — en columna (texto arriba, QR abajo)
+     su posición fija en % del ancho ya no coincide con ningún elemento
+     real y queda flotando encima del texto o de la tarjeta. Se oculta. */
+  .qr-form-pointer {
+    display: none;
+  }
+  /* margin-top:-19px en .qr-caption-top acerca el texto "Escanea..." a la
+     tarjeta QR en el layout horizontal de escritorio (donde el texto
+     empieza más abajo, alineado con el centro del QR) — en columna ese
+     mismo margen negativo lo sube por encima del botón "Ir al formulario"
+     que queda justo antes en el flujo, solapándolos. */
+  .qr-caption-top {
+    margin-top: 32px;
+  }
 
   .footer-container {
     flex-wrap: wrap;
@@ -4143,6 +4292,24 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   }
   .nosotros-intro h2 {
     font-size: 26px;
+  }
+
+  /* En escritorio "Nosotros" es un grid de 2 columnas (texto | misión y
+     visión) alineado a la izquierda de forma natural; en móvil pasa a 1
+     columna pero seguía alineado a la izquierda, deslavado respecto al
+     resto de secciones (Hero, Servicios, Soluciones, etc.) que sí centran
+     su texto en este breakpoint. Se centra todo el bloque para que
+     "Nosotros" luzca consistente con el resto de la página en móvil. */
+  .nosotros-top {
+    text-align: center;
+  }
+  .nosotros-mv-item {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .nosotros-valores {
+    text-align: center;
   }
 
   .servicio-card {
@@ -4200,7 +4367,16 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
     padding-bottom: 60px;
     overflow: hidden;
   }
-  .hero-bg-img {
+  /* Todos los selectores de este bloque (.hero-bg-img, .hero-bg-overlay,
+     .hero-bg-fade, .hero-container, etc.) se reutilizan también dentro
+     de .vista-dedicada-hero (Vacantes/ArdaWiki) — sin acotarlos a
+     ".hero-section" aquí, este override pensado solo para el Hero
+     principal se filtraba también a esas vistas: su imagen pasaba a
+     position:static (dejando de comportarse como fondo) y, como
+     .vista-dedicada-hero es un flex-row, ese cambio empujaba todo el
+     contenido de texto hacia la derecha, fuera de la pantalla —
+     exactamente el "la vista se rompe en teléfono" reportado. */
+  .hero-section .hero-bg-img {
     position: static;
     display: block;
     width: 100%;
@@ -4213,7 +4389,7 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
        teléfonos y tablets angostas. */
     object-position: center 72%;
   }
-  .hero-bg-overlay {
+  .hero-section .hero-bg-overlay {
     display: none;
   }
   /* El degradado va en el borde SUPERIOR de la imagen (donde empieza,
@@ -4222,7 +4398,7 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
      flujo normal después de la imagen. Los mask-image y el gradiente de
      color de las capas se invierten (to top en vez de to bottom) para que
      el difuminado se revele hacia arriba. */
-  .hero-bg-fade {
+  .hero-section .hero-bg-fade {
     position: absolute;
     top: 0;
     left: 0;
@@ -4233,11 +4409,11 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
     -webkit-mask-image: linear-gradient(to top, transparent 0%, black 22%, black 100%);
     mask-image: linear-gradient(to top, transparent 0%, black 22%, black 100%);
   }
-  .hero-bg-fade::before {
+  .hero-section .hero-bg-fade::before {
     -webkit-mask-image: linear-gradient(to top, transparent 0%, transparent 8%, black 30%, black 100%);
     mask-image: linear-gradient(to top, transparent 0%, transparent 8%, black 30%, black 100%);
   }
-  .hero-bg-fade::after {
+  .hero-section .hero-bg-fade::after {
     -webkit-mask-image: linear-gradient(to top, transparent 0%, transparent 12%, black 40%, black 100%);
     mask-image: linear-gradient(to top, transparent 0%, transparent 12%, black 40%, black 100%);
   }
@@ -4247,10 +4423,10 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
      viéndose como una banda sólida en vez de una transición. Se escalan a
      ~20% (misma proporción que 36/180) para que la sensación de "difuminado
      progresivo" se mantenga en la franja más chica. */
-  .hero-bg-fade {
+  .hero-section .hero-bg-fade {
     --fade-blur: 1.2px;
   }
-  .hero-bg-fade::before {
+  .hero-section .hero-bg-fade::before {
     --fade-blur: 3px;
   }
   /* El color final del degradado (antes --bg-superficie-alterna) es el
@@ -4260,7 +4436,7 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
      punto es ~blanco por su gradiente diagonal), así que debe fundirse
      hacia ESE color — no hacia el de la sección siguiente, pero tampoco
      "sin degradado" (eso deja un salto dsco de imagen nítida a nada). */
-  .hero-bg-fade::after {
+  .hero-section .hero-bg-fade::after {
     --fade-blur: 7px;
     /* --bg-body: el mismo color de fondo que usa toda la página (body),
        no un blanco fijo aparte. */
@@ -4270,13 +4446,13 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
       color-mix(in srgb, var(--bg-body) 75%, transparent) 40%,
       var(--bg-body) 100%);
   }
-  html[data-theme="dark"] .hero-bg-fade::after {
+  html[data-theme="dark"] .hero-section .hero-bg-fade::after {
     --fade-blur: 7px;
     background: linear-gradient(to top,
       transparent 0%,
       transparent 10%,
-      rgba(6, 11, 24, 0.75) 40%,
-      #060B18 100%);
+      rgba(15, 23, 41, 0.75) 40%,
+      var(--bg-superficie-alterna) 100%);
   }
 
   /* Segundo fade, borde INFERIOR de la imagen: en flujo normal justo
@@ -4313,8 +4489,8 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
     background: linear-gradient(to bottom,
       transparent 0%,
       transparent 10%,
-      rgba(6, 11, 24, 0.75) 40%,
-      #060B18 100%);
+      rgba(15, 23, 41, 0.75) 40%,
+      var(--bg-superficie-alterna) 100%);
   }
 
   .hero-container {
@@ -5323,7 +5499,7 @@ html[data-theme="dark"] .chat-quick-reply-btn:hover {
 }
 
 html[data-theme="dark"] .vista-dedicada-hero {
-  background: #060B18;
+  background: var(--bg-superficie-alterna);
 }
 
 /* A diferencia del hero principal (altura más estable), aquí el alto real

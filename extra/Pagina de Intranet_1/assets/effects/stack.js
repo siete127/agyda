@@ -64,9 +64,13 @@ export function mountStack(container, options = {}) {
             item.card.style.transition = `transform 0.4s ${SPRING_EASING}`;
             // Offset hacia la esquina superior-derecha: la tarjeta de
             // atrás debe mostrar buena parte de su silueta (no solo un
-            // filo de borde), sin llegar al abanico completo.
-            const offsetX = z * 26;
-            const offsetY = z * -18;
+            // filo de borde), sin llegar al abanico completo. En % del
+            // tamaño real del contenedor (no px fijos) — con un valor fijo,
+            // una tarjeta más chica (móvil) se desborda del wrapper porque
+            // el mismo desplazamiento absoluto pesa proporcionalmente más
+            // cuanto menor es el ancho disponible.
+            const offsetX = z * container.clientWidth * 0.076;
+            const offsetY = z * container.clientHeight * -0.054;
             item.card.style.transform =
                 `translate(${offsetX}px, ${offsetY}px) rotateZ(${z * 8 + item.randomRotate}deg) scale(${1 - z * 0.045})`;
             item.card.style.transformOrigin = '90% 90%';
