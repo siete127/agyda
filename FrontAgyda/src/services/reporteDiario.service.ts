@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   ReporteDiario, ReportePostulantes, RdlReporte, RdlCarpeta, RdlRol,
   RbCatalogo, RbDefinicion, RbResultado, RbReporteGuardado,
+  InteraccionItem, InteraccionesFiltro,
 } from '@/types/reporteDiario.types'
 import { parseRdl } from '@/lib/rdl'
 
@@ -46,6 +47,26 @@ export const reporteDiarioService = {
 
   async eliminarRdlCarpeta(id: number): Promise<void> {
     await api.delete(`/operaciones/suite-reportes/carpetas/${id}`)
+  },
+
+  /* ── Suite de reportes: listado de interacciones cerradas (buscador) ── */
+
+  async listInteracciones(filtro: InteraccionesFiltro): Promise<InteraccionItem[]> {
+    const { data } = await api.get('/operaciones/interacciones', { params: filtro })
+    return (data?.data ?? []) as InteraccionItem[]
+  },
+
+  interaccionesExcelUrl(filtro: InteraccionesFiltro): string {
+    const token = useAuthStore.getState().token
+    const qs = new URLSearchParams()
+    if (filtro.texto) qs.set('texto', filtro.texto)
+    if (filtro.agenteId) qs.set('agenteId', String(filtro.agenteId))
+    if (filtro.tipificacionId) qs.set('tipificacionId', String(filtro.tipificacionId))
+    if (filtro.campaniaId) qs.set('campaniaId', String(filtro.campaniaId))
+    if (filtro.desde) qs.set('desde', filtro.desde)
+    if (filtro.hasta) qs.set('hasta', filtro.hasta)
+    if (token) qs.set('token', token)
+    return `/api/operaciones/interacciones/excel?${qs.toString()}`
   },
 
   /* ── Suite de reportes: catálogo de definiciones RDL ── */

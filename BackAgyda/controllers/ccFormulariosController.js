@@ -56,6 +56,14 @@ const TIPOS_CAMPO_VALIDOS = [
   'buscador',
 ];
 
+// Fuentes válidas para un campo tipo 'catalogo' — 'estatico' (opciones
+// escritas a mano en CCF_FORM_CAMPO_OPCIONES, comportamiento original) o
+// 'tipificaciones_campania' (resuelto en vivo vía
+// getOpcionesCatalogoDinamico(Publico) desde CCO_TIPIFICACIONES de la
+// campaña asignada al formulario — pedido 2026-09-09). Diseñado para poder
+// agregar más fuentes (usuarios, sucursales) sin tocar el contrato.
+const CATALOGO_FUENTES_VALIDAS = ['estatico', 'tipificaciones_campania'];
+
 function slugCodigo(nombre) {
   return String(nombre || '')
     .trim()
@@ -629,6 +637,9 @@ exports.createCampo = async (req, res) => {
     if (!TIPOS_CAMPO_VALIDOS.includes(tipo)) {
       return res.status(400).json({ success: false, message: `Tipo de campo no soportado: "${tipo}"` });
     }
+    if (b.catalogoFuente && !CATALOGO_FUENTES_VALIDAS.includes(b.catalogoFuente)) {
+      return res.status(400).json({ success: false, message: `Fuente de catálogo no soportada: "${b.catalogoFuente}"` });
+    }
     const ancho = ANCHOS_VALIDOS.includes(b.ancho) ? b.ancho : 'completo';
 
     const r = await p.request()
@@ -695,6 +706,9 @@ exports.updateCampo = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Este formulario está archivado y ya no se puede editar. Clónalo o crea una nueva versión a partir de otra.' });
     }
     const b = req.body || {};
+    if (b.catalogoFuente && !CATALOGO_FUENTES_VALIDAS.includes(b.catalogoFuente)) {
+      return res.status(400).json({ success: false, message: `Fuente de catálogo no soportada: "${b.catalogoFuente}"` });
+    }
     if (b.tipo !== undefined && !TIPOS_CAMPO_VALIDOS.includes(b.tipo)) {
       return res.status(400).json({ success: false, message: `Tipo de campo no soportado: "${b.tipo}"` });
     }
@@ -902,47 +916,90 @@ exports.listCanalesDisponiblesDelFormulario = async (req, res) => {
 // duplican aquí). Esto solo agrega una capa de selección: cuáles de esas
 // tipificaciones son válidas para cerrar una interacción que usó ESTE
 // formulario. Sin selección guardada = todas están permitidas.
+// Campañas asignadas + tipificaciones heredadas — compartido entre el panel
+// admin (listTipificacionesDelFormulario) y el uso en vivo, tanto interno
+// como público (campo tipo 'catalogo' con catalogoFuente
+// 'tipificaciones_campania' — ver getOpcionesCatalogoDinamico más abajo).
+async function _tipificacionesDelFormulario(p, formularioId) {
+  const campanias = await p.request().input('id', sql.Int, formularioId).query(`
+    SELECT DISTINCT fa.FA_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre
+    FROM dbo.CCF_FORM_ASIGNACIONES fa
+    JOIN dbo.CCF_FORM_VERSIONES fv ON fv.FV_ID = fa.FA_FORM_VERSION_ID
+    JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = fa.FA_CAMPANIA_ID
+    WHERE fv.FV_FORMULARIO_ID = @id AND fa.FA_ACTIVO = 1`);
+
+  if (!campanias.recordset.length) return { campanias: [], tipificaciones: [] };
+
+  const campaniaIds = campanias.recordset.map((c) => c.campaniaId);
+  const rq1 = p.request();
+  const params = campaniaIds.map((id, i) => { rq1.input(`camp${i}`, sql.Int, id); return `@camp${i}`; });
+  const tipificaciones = await rq1.query(`
+    SELECT CT_ID id, CT_CAMPANIA_ID campaniaId, CT_NOMBRE nombre, CT_DESCRIPCION descripcion,
+           CT_REQUIERE_COMENTARIO requiereComentario, CT_ORDEN orden
+    FROM dbo.CCO_TIPIFICACIONES
+    WHERE CT_ACTIVO = 1 AND (CT_CAMPANIA_ID IN (${params.join(',')}) OR CT_CAMPANIA_ID IS NULL)
+    ORDER BY CT_ORDEN, CT_NOMBRE`);
+
+  return { campanias: campanias.recordset, tipificaciones: tipificaciones.recordset };
+}
+
 exports.listTipificacionesDelFormulario = async (req, res) => {
   try {
     const p = await pool(req);
-    // Campañas de las asignaciones activas de este formulario (a través de
-    // sus versiones — un formulario puede tener varias versiones asignadas
-    // a campañas distintas a lo largo del tiempo, aunque lo normal es 1).
-    const campanias = await p.request().input('id', sql.Int, req.params.id).query(`
-      SELECT DISTINCT fa.FA_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre
-      FROM dbo.CCF_FORM_ASIGNACIONES fa
-      JOIN dbo.CCF_FORM_VERSIONES fv ON fv.FV_ID = fa.FA_FORM_VERSION_ID
-      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = fa.FA_CAMPANIA_ID
-      WHERE fv.FV_FORMULARIO_ID = @id AND fa.FA_ACTIVO = 1`);
-
-    if (!campanias.recordset.length) {
+    const { campanias, tipificaciones } = await _tipificacionesDelFormulario(p, req.params.id);
+    if (!campanias.length) {
       return res.json({ success: true, data: { campanias: [], tipificaciones: [], seleccionadas: [] } });
     }
-
-    const campaniaIds = campanias.recordset.map((c) => c.campaniaId);
-    const rq1 = p.request();
-    const params = campaniaIds.map((id, i) => { rq1.input(`camp${i}`, sql.Int, id); return `@camp${i}`; });
-    const tipificaciones = await rq1.query(`
-      SELECT CT_ID id, CT_CAMPANIA_ID campaniaId, CT_NOMBRE nombre, CT_DESCRIPCION descripcion,
-             CT_REQUIERE_COMENTARIO requiereComentario, CT_ORDEN orden
-      FROM dbo.CCO_TIPIFICACIONES
-      WHERE CT_ACTIVO = 1 AND (CT_CAMPANIA_ID IN (${params.join(',')}) OR CT_CAMPANIA_ID IS NULL)
-      ORDER BY CT_ORDEN, CT_NOMBRE`);
-
     const seleccionadas = await p.request().input('id', sql.Int, req.params.id)
       .query('SELECT FT_TIPIFICACION_ID id FROM dbo.CCF_FORM_TIPIFICACIONES WHERE FT_FORMULARIO_ID = @id');
-
     res.json({
       success: true,
-      data: {
-        campanias: campanias.recordset,
-        tipificaciones: tipificaciones.recordset,
-        seleccionadas: seleccionadas.recordset.map((r) => r.id),
-      },
+      data: { campanias, tipificaciones, seleccionadas: seleccionadas.recordset.map((r) => r.id) },
     });
   } catch (e) {
     console.error('ccFormularios.listTipificacionesDelFormulario:', e.message);
     res.status(500).json({ success: false, message: 'Error al obtener las tipificaciones del formulario' });
+  }
+};
+
+// GET /formularios/:id/opciones-catalogo?fuente=tipificaciones_campania —
+// opciones de un catálogo DINÁMICO para un campo tipo 'catalogo' del
+// constructor. Hoy solo soporta 'tipificaciones_campania' (las tipificaciones
+// de la campaña asignada, mismo criterio que la pestaña Tipificaciones);
+// diseñado para agregar más fuentes (usuarios, sucursales, etc.) sin cambiar
+// el contrato — el frontend solo sabe que le pide un catálogo por nombre y
+// recibe {valor, etiqueta}[].
+exports.getOpcionesCatalogoDinamico = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const fuente = String(req.query.fuente || '');
+    if (fuente === 'tipificaciones_campania') {
+      const { tipificaciones } = await _tipificacionesDelFormulario(p, req.params.id);
+      return res.json({ success: true, data: tipificaciones.map((t) => ({ valor: String(t.id), etiqueta: t.nombre })) });
+    }
+    res.json({ success: true, data: [] });
+  } catch (e) {
+    console.error('ccFormularios.getOpcionesCatalogoDinamico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al obtener el catálogo' });
+  }
+};
+
+// Misma resolución que getOpcionesCatalogoDinamico pero por token público
+// (modo externo, sin sesión) — usa _resolverFormularioPublico igual que el
+// resto de endpoints públicos del formulario.
+exports.getOpcionesCatalogoDinamicoPublico = async (req, res) => {
+  try {
+    const r = await _resolverFormularioPublico(req.params.token);
+    if (!r) return res.status(404).json({ success: false, message: 'Formulario no disponible' });
+    const fuente = String(req.query.fuente || '');
+    if (fuente === 'tipificaciones_campania') {
+      const { tipificaciones } = await _tipificacionesDelFormulario(r.pool, r.formularioId);
+      return res.json({ success: true, data: tipificaciones.map((t) => ({ valor: String(t.id), etiqueta: t.nombre })) });
+    }
+    res.json({ success: true, data: [] });
+  } catch (e) {
+    console.error('ccFormularios.getOpcionesCatalogoDinamicoPublico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al obtener el catálogo' });
   }
 };
 
@@ -1072,7 +1129,7 @@ async function _buscarEnFuentesDeCampania(p, campaniaIds, canalIds, texto) {
   const r = await rq.query(`
     SELECT TOP 25 * FROM (
       SELECT 'interaccion' origen, i.CI_ID id, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
-             i.CI_FECHA_CIERRE fecha, cn.CN_NOMBRE canalNombre, ti.CT_NOMBRE tipificacionNombre
+             i.CI_FECHA_CIERRE fecha, i.CI_CANAL_ID canalId, cn.CN_NOMBRE canalNombre, ti.CT_NOMBRE tipificacionNombre
       FROM dbo.CCO_INTERACCIONES i
       LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
       LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
@@ -1080,8 +1137,11 @@ async function _buscarEnFuentesDeCampania(p, campaniaIds, canalIds, texto) {
 
       UNION ALL
 
+      -- Los postulantes (CCO_CAMPANIA_POSTULANTES) no tienen canal propio —
+      -- se registraron desde el formulario web de Totis, no desde un canal
+      -- del Contact Center — de ahí canalId/canalNombre NULL a propósito.
       SELECT 'postulante' origen, cp.CP_ID id, cp.CP_NOMBRE clienteNombre, cp.CP_TELEFONO clienteTelefono,
-             cp.CP_FECHA_REGISTRO fecha, NULL canalNombre,
+             cp.CP_FECHA_REGISTRO fecha, NULL canalId, NULL canalNombre,
              (SELECT TOP 1 WLT_TIPIFICACION FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS WHERE WLT_POSTULANTE_ID = cp.CP_ID ORDER BY WLT_FECHA DESC) tipificacionNombre
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
       WHERE cp.CP_CAMPANIA_ID IN (${paramsCampPost.join(',')})
@@ -1228,7 +1288,7 @@ exports.getFormularioPublico = async (req, res) => {
     const campos = await r.pool.request().input('id', sql.Int, versionId).query(`
       SELECT c.FC_ID id, c.FC_SECCION_ID seccionId, c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta,
              c.FC_PLACEHOLDER placeholder, c.FC_AYUDA ayuda, c.FC_OBLIGATORIO obligatorio, c.FC_VISIBLE visible,
-             c.FC_ORDEN orden, c.FC_ANCHO ancho
+             c.FC_ORDEN orden, c.FC_ANCHO ancho, c.FC_CATALOGO_FUENTE catalogoFuente, c.FC_CONFIG_JSON configJson
       FROM dbo.CCF_FORM_CAMPOS c
       JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
       WHERE s.FS_VERSION_ID = @id ORDER BY c.FC_ORDEN`);
@@ -1447,11 +1507,40 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
   const respuestas = Array.isArray(b.respuestas) ? b.respuestas : [];
 
   const camposValidos = await p.request().input('id', sql.Int, versionId).query(`
-    SELECT c.FC_ID id, c.FC_TIPO tipo, c.FC_OBLIGATORIO obligatorio, c.FC_ETIQUETA etiqueta
+    SELECT c.FC_ID id, c.FC_CODIGO codigo, c.FC_ETIQUETA etiqueta, c.FC_TIPO tipo, c.FC_OBLIGATORIO obligatorio, c.FC_CATALOGO_FUENTE catalogoFuente
     FROM dbo.CCF_FORM_CAMPOS c JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
     WHERE s.FS_VERSION_ID = @id`);
   const mapaCampos = new Map(camposValidos.recordset.map((c) => [c.id, c]));
   const respuestasValidas = respuestas.filter((r) => mapaCampos.has(Number(r.campoId)));
+
+  // Deriva nombre/teléfono de las respuestas del formulario cuando no vienen
+  // explícitos en el body — bug real encontrado 2026-09-09: el bloque "Datos
+  // del cliente" del frontend es un formulario aparte de los campos propios
+  // (Nombre Interesado/Teléfono Interesado); si el agente solo llena estos
+  // últimos y deja vacío el bloque de arriba, el teléfono nunca llegaba a
+  // CI_CLIENTE_TELEFONO aunque sí quedara guardado como respuesta de campo.
+  // Mismo criterio de detección por TIPO que ya usa el frontend para
+  // autocompletar (nunca por código específico, para que aplique a
+  // cualquier formulario).
+  const campoTelefono = camposValidos.recordset.find((c) => c.tipo === 'telefono');
+  const campoNombre = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+    ?? camposValidos.recordset.find((c) => c.tipo === 'texto_corto');
+  const respuestaDe = (campo) => campo && respuestasValidas.find((r) => Number(r.campoId) === campo.id)?.valor;
+
+  // Detecta el campo tipo 'catalogo' cuya fuente es 'tipificaciones_campania'
+  // — su respuesta guarda el CT_ID (ver getOpcionesCatalogoDinamico: opciones
+  // como {valor: String(t.id), etiqueta: t.nombre}), y ese CT_ID es lo que
+  // debe quedar en CI_TIPIFICACION_ID de la interacción. Bug real encontrado
+  // 2026-09-09: esa respuesta se guardaba en CCF_INTERACCION_FORM_RESPUESTAS
+  // pero nunca se reflejaba en CCO_INTERACCIONES, por eso Suite de Reportes
+  // (que lee CI_TIPIFICACION_ID, no las respuestas del formulario) siempre
+  // la veía vacía.
+  const campoTipificacion = camposValidos.recordset.find((c) => c.tipo === 'catalogo' && c.catalogoFuente === 'tipificaciones_campania');
+  const tipificacionIdDetectada = (() => {
+    const v = respuestaDe(campoTipificacion);
+    const n = Number(v);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
 
   let interaccionId = b.interaccionId ? Number(b.interaccionId) : null;
 
@@ -1463,8 +1552,8 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
       // crearRegistroCampoBuscador, validado dentro de esta misma
       // transacción para que "interacción creada sin respuestas" nunca
       // quede como estado intermedio si algo falla después.
-      const clienteNombre = String(b.clienteNombre || '').trim();
-      const clienteTelefono = String(b.clienteTelefono || '').trim();
+      const clienteNombre = String(b.clienteNombre || respuestaDe(campoNombre) || '').trim();
+      const clienteTelefono = String(b.clienteTelefono || respuestaDe(campoTelefono) || '').trim();
       const canalId = Number(b.canalId);
       if (!canalId) { await tx.rollback(); return { error: [400, 'Falta el canal'] }; }
 
@@ -1479,6 +1568,16 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
         return { error: [403, 'Este canal no está asignado al formulario'] };
       }
 
+      // La tipificación detectada debe pertenecer a la campaña real de esta
+      // interacción (o ser una global CT_CAMPANIA_ID NULL) — nunca confiar
+      // en el CT_ID que manda el cliente sin revalidarlo contra la campaña.
+      let tipificacionIdValidada = null;
+      if (tipificacionIdDetectada) {
+        const tip = await new sql.Request(tx).input('id', sql.Int, tipificacionIdDetectada).input('c', sql.Int, canalRow.campaniaId)
+          .query(`SELECT 1 x FROM dbo.CCO_TIPIFICACIONES WHERE CT_ID = @id AND CT_ACTIVO = 1 AND (CT_CAMPANIA_ID = @c OR CT_CAMPANIA_ID IS NULL)`);
+        if (tip.recordset.length) tipificacionIdValidada = tipificacionIdDetectada;
+      }
+
       let agenteNombre = agenteInfo.nombre || null;
       if (agenteInfo.uid && !agenteNombre) {
         const ag = await new sql.Request(tx).input('u', sql.Int, agenteInfo.uid).query('SELECT NEUS_NOMBRES n FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u');
@@ -1489,11 +1588,27 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
         .input('nombre', sql.NVarChar(160), clienteNombre || null).input('tel', sql.NVarChar(40), clienteTelefono || null)
         .input('camp', sql.Int, canalRow.campaniaId).input('agenteId', sql.Int, agenteInfo.uid || null)
         .input('agenteNombre', sql.NVarChar(160), agenteNombre)
+        .input('tip', sql.Int, tipificacionIdValidada)
         .query(`INSERT INTO dbo.CCO_INTERACCIONES
-                  (CI_CANAL_ID, CI_TIPO, CI_CLIENTE_NOMBRE, CI_CLIENTE_TELEFONO, CI_CAMPANIA_ID, CI_AGENTE_ID, CI_AGENTE_NOMBRE, CI_ESTADO, CI_FECHA_INICIO, CI_FECHA_CIERRE)
+                  (CI_CANAL_ID, CI_TIPO, CI_CLIENTE_NOMBRE, CI_CLIENTE_TELEFONO, CI_CAMPANIA_ID, CI_AGENTE_ID, CI_AGENTE_NOMBRE, CI_ESTADO, CI_TIPIFICACION_ID, CI_FECHA_INICIO, CI_FECHA_CIERRE)
                 OUTPUT INSERTED.CI_ID id
-                VALUES (@canal, @tipo, @nombre, @tel, @camp, @agenteId, @agenteNombre, 'cerrada', GETDATE(), GETDATE())`);
+                VALUES (@canal, @tipo, @nombre, @tel, @camp, @agenteId, @agenteNombre, 'cerrada', @tip, GETDATE(), GETDATE())`);
       interaccionId = ins.recordset[0].id;
+    } else if (tipificacionIdDetectada) {
+      // Reabrir/re-guardar sobre una interacción existente: revalidar contra
+      // la campaña real de ESA interacción (no la del canal recién resuelto,
+      // que aquí no aplica) antes de actualizar CI_TIPIFICACION_ID.
+      const actual = await new sql.Request(tx).input('id', sql.Int, interaccionId)
+        .query('SELECT CI_CAMPANIA_ID campaniaId FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
+      const campaniaIdActual = actual.recordset[0]?.campaniaId;
+      if (campaniaIdActual) {
+        const tip = await new sql.Request(tx).input('id', sql.Int, tipificacionIdDetectada).input('c', sql.Int, campaniaIdActual)
+          .query(`SELECT 1 x FROM dbo.CCO_TIPIFICACIONES WHERE CT_ID = @id AND CT_ACTIVO = 1 AND (CT_CAMPANIA_ID = @c OR CT_CAMPANIA_ID IS NULL)`);
+        if (tip.recordset.length) {
+          await new sql.Request(tx).input('id', sql.Int, interaccionId).input('tip', sql.Int, tipificacionIdDetectada)
+            .query('UPDATE dbo.CCO_INTERACCIONES SET CI_TIPIFICACION_ID = @tip WHERE CI_ID = @id');
+        }
+      }
     }
 
     for (const r of respuestasValidas) {

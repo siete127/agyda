@@ -212,10 +212,16 @@ router.get('/formularios/:id/buscador', authenticateToken, requireActionAccess(M
 router.post('/formularios/:id/buscador/registrar', authenticateToken, requireActionAccess(M, 'atender'), forms.crearRegistroCampoBuscador);
 router.get('/formularios/:id/canales-disponibles', authenticateToken, requireActionAccess(M, 'atender'), forms.listCanalesDisponiblesDelFormulario);
 
+// Catálogo dinámico para campos tipo 'catalogo' (ej. tipificaciones de la
+// campaña) — lo consulta tanto el constructor (previsualización) como el
+// agente en vivo, por eso 'ver' cubre ambos casos sin duplicar ruta.
+router.get('/formularios/:id/opciones-catalogo', authenticateToken, requireActionAccess(M, 'ver'), forms.getOpcionesCatalogoDinamico);
+
 // Público (sin auth) — formulario en modo EXTERNO, ver comentario arriba
 // junto a /publico/campanias/:slug/contacto.
 router.get('/formularios-publico/:token', forms.getFormularioPublico);
 router.get('/formularios-publico/:token/canales-disponibles', forms.listCanalesDisponiblesPublico);
+router.get('/formularios-publico/:token/opciones-catalogo', forms.getOpcionesCatalogoDinamicoPublico);
 router.get('/formularios-publico/:token/buscador', forms.buscarRegistrosCampoBuscadorPublico);
 router.post('/formularios-publico/:token/buscador/registrar', forms.crearRegistroCampoBuscadorPublico);
 router.post('/formularios-publico/:token/versiones/:versionId/respuestas', forms.guardarRespuestasPublico);

@@ -35,6 +35,7 @@ export interface CCFormBuscadorResultado {
   clienteNombre: string | null
   clienteTelefono: string | null
   fecha: string | null
+  canalId: number | null
   canalNombre: string | null
   tipificacionNombre: string | null
 }
@@ -225,6 +226,8 @@ export interface CCFormPublicoCampo {
   visible: boolean
   orden: number
   ancho: CCFormAncho
+  catalogoFuente: string | null
+  configJson: string | null
   opciones: { valor: string; etiqueta: string; orden: number }[]
 }
 

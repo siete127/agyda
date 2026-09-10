@@ -34,6 +34,10 @@ router.get('/reportes-diarios', auth.authenticateToken, controller.getReporteDia
 router.get('/reportes-postulantes', auth.authenticateToken, controller.getReportePostulantes);
 router.get('/reportes-postulantes/excel', auth.authenticateToken, controller.exportarReportePostulantes);
 
+// Interacciones cerradas — listado general con buscador (todas las campañas/canales)
+router.get('/interacciones', auth.authenticateToken, controller.listInteracciones);
+router.get('/interacciones/excel', auth.authenticateToken, controller.exportarInteracciones);
+
 // Suite de reportes — catálogo de definiciones .rdl / .rdlc de Reporting Services
 router.get('/suite-reportes/carpetas', auth.authenticateToken, controller.listRdlCarpetas);
 router.post('/suite-reportes/carpetas', auth.authenticateToken, controller.crearRdlCarpeta);

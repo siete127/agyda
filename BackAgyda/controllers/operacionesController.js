@@ -834,6 +834,105 @@ async function exportarReportePostulantes(req, res) {
   }
 }
 
+/* ── Interacciones cerradas: listado general con buscador real (todas las
+   campañas/canales del Contact Center, no acotado a un formulario) ──
+   Mismo criterio de "cerrada" que buscarInteraccionesDelFormulario
+   (ccFormulariosController.js), pero sin el filtro de campañas de un
+   formulario — este es el listado completo para la Suite de reportes. */
+
+function _buildWhereInteracciones(req, rq) {
+  const where = [`i.CI_ESTADO = 'cerrada'`];
+  if (req.query.texto) {
+    rq.input('texto', sql.NVarChar(200), `%${req.query.texto}%`);
+    where.push('(i.CI_CLIENTE_NOMBRE LIKE @texto OR i.CI_CLIENTE_TELEFONO LIKE @texto)');
+  }
+  if (req.query.agenteId) {
+    rq.input('agenteId', sql.Int, req.query.agenteId);
+    where.push('i.CI_AGENTE_ID = @agenteId');
+  }
+  if (req.query.tipificacionId) {
+    rq.input('tipificacionId', sql.Int, req.query.tipificacionId);
+    where.push('i.CI_TIPIFICACION_ID = @tipificacionId');
+  }
+  if (req.query.campaniaId) {
+    rq.input('campaniaId', sql.Int, req.query.campaniaId);
+    where.push('i.CI_CAMPANIA_ID = @campaniaId');
+  }
+  if (req.query.desde) {
+    rq.input('desde', sql.DateTime, new Date(`${req.query.desde}T00:00:00`));
+    where.push('i.CI_FECHA_CIERRE >= @desde');
+  }
+  if (req.query.hasta) {
+    rq.input('hasta', sql.DateTime, new Date(`${req.query.hasta}T23:59:59`));
+    where.push('i.CI_FECHA_CIERRE <= @hasta');
+  }
+  return where;
+}
+
+// GET /api/operaciones/interacciones?texto=&agenteId=&tipificacionId=&campaniaId=&desde=&hasta=
+async function listInteracciones(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rq = pool.request();
+    const where = _buildWhereInteracciones(req, rq);
+
+    const rs = await rq.query(`
+      SELECT TOP 300
+        i.CI_ID id, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
+        i.CI_AGENTE_ID agenteId, i.CI_AGENTE_NOMBRE agenteNombre,
+        i.CI_FECHA_INICIO fechaInicio, i.CI_FECHA_CIERRE fechaCierre, i.CI_ESTADO estado,
+        cn.CN_NOMBRE canalNombre, cm.CM2_NOMBRE campaniaNombre, ti.CT_NOMBRE tipificacionNombre
+      FROM dbo.CCO_INTERACCIONES i
+      LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+      LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
+      LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
+      WHERE ${where.join(' AND ')}
+      ORDER BY i.CI_FECHA_CIERRE DESC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('operacionesController.listInteracciones', err);
+    res.status(500).json({ success: false, message: 'Error al buscar interacciones' });
+  }
+}
+
+// GET /api/operaciones/interacciones/excel — mismo filtro de arriba, en .xlsx
+async function exportarInteracciones(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rq = pool.request();
+    const where = _buildWhereInteracciones(req, rq);
+
+    const rs = await rq.query(`
+      SELECT TOP 2000
+        i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
+        cm.CM2_NOMBRE campaniaNombre, cn.CN_NOMBRE canalNombre, i.CI_AGENTE_NOMBRE agenteNombre,
+        ti.CT_NOMBRE tipificacionNombre, i.CI_FECHA_CIERRE fechaCierre
+      FROM dbo.CCO_INTERACCIONES i
+      LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+      LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
+      LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
+      WHERE ${where.join(' AND ')}
+      ORDER BY i.CI_FECHA_CIERRE DESC
+    `);
+
+    const hoja = rs.recordset.map((r) => ({
+      Cliente: r.clienteNombre || '', Teléfono: r.clienteTelefono || '', Campaña: r.campaniaNombre || '',
+      Canal: r.canalNombre || '', Agente: r.agenteNombre || '', Tipificación: r.tipificacionNombre || '',
+      Cierre: r.fechaCierre ? new Date(r.fechaCierre).toLocaleString('es-MX') : '',
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja.length ? hoja : [{ Cliente: '' }]), 'Interacciones');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="interacciones_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.send(buffer);
+  } catch (err) {
+    logger.error('operacionesController.exportarInteracciones', err);
+    res.status(500).json({ success: false, message: 'Error al generar el Excel' });
+  }
+}
+
 /* ── KPIs: indicadores clave consolidados de Operaciones/Call Center ── */
 
 // GET /api/operaciones/kpis — campañas activas, asignación del mes, agentes CC
@@ -1524,6 +1623,8 @@ module.exports = {
   getReporteDiario,
   getReportePostulantes,
   exportarReportePostulantes,
+  listInteracciones,
+  exportarInteracciones,
   getMiResumenAsesor,
   listRdl,
   subirRdl,
