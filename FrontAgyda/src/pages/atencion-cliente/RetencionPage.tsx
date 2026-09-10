@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ShieldAlert, Plus, Clock, AlertCircle, ChevronLeft, UserCheck } from 'lucide-react'
+import { ShieldAlert, Plus, Clock, AlertCircle, ChevronLeft, UserCheck, Briefcase } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { useActionAccess } from '@/hooks/useActionAccess'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { crmService } from '@/services/crm.service'
+import { GenerarOportunidadModal } from './components/GenerarOportunidadModal'
 
 interface Retencion {
   id: number
@@ -126,8 +128,11 @@ function NuevaEvaluacionModal({ onClose }: { onClose: () => void }) {
 export function RetencionPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const { can, isLoading: loadingAccess } = useActionAccess()
+  const { isAllowed } = useModuleAccess()
   const puedeCrear = can('atencion-cliente', 'crear-retencion')
+  const puedeGenerarOportunidad = isAllowed('crm')
   const [showNueva, setShowNueva] = useState(false)
+  const [oportunidadPara, setOportunidadPara] = useState<Retencion | null>(null)
 
   const { data: evaluaciones = [], isLoading, error } = useQuery<Retencion[]>({
     queryKey: ['retencion'],
@@ -242,9 +247,19 @@ export function RetencionPage({ embedded = false }: { embedded?: boolean }) {
                     </span>
                   </div>
                   {e.motivoRiesgo && <p className="text-sm text-gray-500 mt-1 leading-relaxed">{e.motivoRiesgo}</p>}
-                  <p className="flex items-center gap-1 text-[0.68rem] text-gray-400 mt-1.5">
-                    <Clock className="h-3 w-3" /> {fmtFecha(e.fechaEvaluacion)}
-                  </p>
+                  <div className="mt-1.5 flex items-center justify-between gap-3">
+                    <p className="flex items-center gap-1 text-[0.68rem] text-gray-400">
+                      <Clock className="h-3 w-3" /> {fmtFecha(e.fechaEvaluacion)}
+                    </p>
+                    {puedeGenerarOportunidad && e.clienteId != null && (
+                      <button
+                        onClick={() => setOportunidadPara(e)}
+                        className="inline-flex items-center gap-1 text-[0.68rem] font-bold text-brand hover:underline"
+                      >
+                        <Briefcase className="h-3 w-3" /> Generar oportunidad
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -253,6 +268,15 @@ export function RetencionPage({ embedded = false }: { embedded?: boolean }) {
       )}
 
       {showNueva && <NuevaEvaluacionModal onClose={() => setShowNueva(false)} />}
+      {oportunidadPara && oportunidadPara.clienteId != null && (
+        <GenerarOportunidadModal
+          contactoId={oportunidadPara.clienteId}
+          contactoNombre={oportunidadPara.clienteNombre}
+          tituloSugerido={`Retención — ${oportunidadPara.clienteNombre}`}
+          contextoNota={`Generada desde una evaluación de retención (${oportunidadPara.estatus}).${oportunidadPara.motivoRiesgo ? `\n\nMotivo: ${oportunidadPara.motivoRiesgo}` : ''}`}
+          onClose={() => setOportunidadPara(null)}
+        />
+      )}
     </div>
   )
 }

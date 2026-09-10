@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Send, Clock, Paperclip, Plus, Download, Trash2 } from 'lucide-react'
+import { Send, Clock, Paperclip, Plus, Download, Trash2, Briefcase } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -12,6 +12,8 @@ import {
   type Caso, type CasoEstatus, type AccionCorrectivaEstado,
 } from '@/types/caso.types'
 import { useActionAccess } from '@/hooks/useActionAccess'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
+import { GenerarOportunidadModal } from './GenerarOportunidadModal'
 
 function fmtFecha(f: string) {
   try { return new Date(f).toLocaleString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
@@ -167,10 +169,13 @@ export function CasoDetalleModal({ caso, onClose, queryKeysToInvalidate }: {
   queryKeysToInvalidate: unknown[][]
 }) {
   const { can } = useActionAccess()
+  const { isAllowed } = useModuleAccess()
   const puedeGestionar = can('atencion-cliente', 'casos-gestionar')
+  const puedeGenerarOportunidad = isAllowed('crm') && caso.contactoId != null
   const qc = useQueryClient()
   const [comentario, setComentario] = useState('')
   const [editandoSolucion, setEditandoSolucion] = useState(false)
+  const [generandoOportunidad, setGenerandoOportunidad] = useState(false)
   const [solucionPropuesta, setSolucionPropuesta] = useState(caso.solucionPropuesta ?? '')
   const [fechaCompromiso, setFechaCompromiso] = useState(caso.fechaCompromiso ?? '')
 
@@ -226,6 +231,15 @@ export function CasoDetalleModal({ caso, onClose, queryKeysToInvalidate }: {
           {clienteMostrado && <p className="text-xs text-gray-500">{clienteMostrado}</p>}
           {caso.referencia && <p className="text-[0.72rem] text-gray-400">Referencia: {caso.referencia}</p>}
           {caso.descripcion && <p className="mt-2 text-sm text-gray-600 leading-relaxed">{caso.descripcion}</p>}
+
+          {puedeGenerarOportunidad && (
+            <button
+              onClick={() => setGenerandoOportunidad(true)}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/5 px-3 py-1.5 text-[0.72rem] font-bold text-brand hover:bg-brand/10 transition-colors"
+            >
+              <Briefcase className="h-3.5 w-3.5" /> Generar oportunidad de venta
+            </button>
+          )}
         </div>
 
         {puedeGestionar && caso.estatus !== 'cerrado' && (
@@ -316,6 +330,16 @@ export function CasoDetalleModal({ caso, onClose, queryKeysToInvalidate }: {
           <Button variant="ghost" onClick={onClose}>Cerrar</Button>
         </div>
       </div>
+
+      {generandoOportunidad && caso.contactoId != null && (
+        <GenerarOportunidadModal
+          contactoId={caso.contactoId}
+          contactoNombre={clienteMostrado}
+          tituloSugerido={`[${caso.folio}] ${caso.titulo}`}
+          contextoNota={`Generada desde el caso ${caso.folio}${caso.descripcion ? `\n\n${caso.descripcion}` : ''}`}
+          onClose={() => setGenerandoOportunidad(false)}
+        />
+      )}
     </Modal>
   )
 }
