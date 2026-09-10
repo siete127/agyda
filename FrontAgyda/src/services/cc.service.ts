@@ -23,6 +23,8 @@ export const ccService = {
   },
   cerrar: (id: number, body: { motivoCierreId?: number; tipificacionId?: number; comentario?: string }) =>
     api.post(`/contact-center/interacciones/${id}/cerrar`, body).then((r) => r.data),
+  retipificar: (id: number, body: { tipificacionId: number; comentario?: string }) =>
+    api.post(`/contact-center/interacciones/${id}/retipificar`, body).then((r) => r.data),
   transferir: (id: number, body: { nuevoAgenteId?: number; nuevoGrupoId?: number }) =>
     api.post(`/contact-center/interacciones/${id}/transferir`, body).then((r) => r.data),
   agentesTransferibles: (id: number) => d<CCAgenteEstado[]>(api.get(`/contact-center/interacciones/${id}/agentes-transferibles`)),
