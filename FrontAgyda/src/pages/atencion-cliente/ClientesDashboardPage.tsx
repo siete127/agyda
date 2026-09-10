@@ -8,6 +8,7 @@ import {
   ChevronLeft, BarChart3, Users, UserPlus, UserX, FileWarning,
   ClipboardList, Clock, DollarSign, AlertTriangle, CheckCircle2,
   Send, Smile, AlertOctagon, CalendarClock, FileSpreadsheet, History,
+  CalendarDays, CalendarCheck, CalendarX, UserCheck, Mail, MessageCircle, Globe,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { DashboardStatRow, type DashboardStat } from '@/components/ui/DashboardStatRow'
@@ -77,6 +78,26 @@ export function ClientesDashboardPage() {
     { key: 'renovacionesProximas', icon: CalendarClock, label: 'Renovaciones (30d)', value: data.renovacionesProximas, tone: 'warn' },
   ] : []
 
+  const statsCitas: DashboardStat[] = data ? [
+    { key: 'citasAgendadas', icon: CalendarDays, label: 'Citas agendadas', value: data.citasAgendadas, tone: 'brand' },
+    { key: 'citasConfirmadas', icon: CalendarCheck, label: 'Confirmadas', value: data.citasConfirmadas, tone: 'success' },
+    { key: 'citasAsistidas', icon: UserCheck, label: 'Asistieron', value: data.citasAsistidas, tone: 'success' },
+    { key: 'citasNoAsistidas', icon: CalendarX, label: 'No asistieron', value: data.citasNoAsistidas, tone: 'critical' },
+    { key: 'citasCanceladas', icon: CalendarX, label: 'Canceladas', value: data.citasCanceladas, tone: 'warn' },
+    { key: 'tasaNoShow', icon: AlertTriangle, label: 'Tasa de no-show', value: data.tasaNoShow !== null ? `${data.tasaNoShow}%` : '—', tone: data.tasaNoShow !== null && data.tasaNoShow > 20 ? 'critical' : 'warn' },
+    { key: 'citasProximas', icon: CalendarClock, label: 'Próximas', value: data.citasProximas, tone: 'brand' },
+    { key: 'citasSolicitudesPendientes', icon: Clock, label: 'Solicitudes de cambio', value: data.citasSolicitudesPendientes, tone: data.citasSolicitudesPendientes > 0 ? 'warn' : 'brand' },
+  ] : []
+
+  const statsRecordatorios: DashboardStat[] = data ? [
+    { key: 'recordatoriosCorreo', icon: Mail, label: 'Recordatorios por correo', value: data.recordatoriosCorreo, tone: 'brand' },
+    { key: 'recordatoriosWhatsapp', icon: MessageCircle, label: 'Recordatorios por WhatsApp', value: data.recordatoriosWhatsapp, tone: 'success' },
+    { key: 'recordatoriosFallidos', icon: AlertTriangle, label: 'Envíos fallidos', value: data.recordatoriosFallidos, tone: data.recordatoriosFallidos > 0 ? 'critical' : 'brand' },
+    { key: 'portalTokensActivos', icon: Globe, label: 'Portales activos', value: data.portalTokensActivos, tone: 'brand' },
+    { key: 'portalAbiertos30d', icon: Globe, label: 'Abiertos (30d)', value: data.portalAbiertos30d, tone: 'success' },
+    { key: 'citasConfirmadasPorCliente', icon: CalendarCheck, label: 'Citas confirmadas vía portal', value: data.citasConfirmadasPorCliente, tone: 'success' },
+  ] : []
+
   return (
     <div className="space-y-5 animate-fade-in">
       <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
@@ -129,10 +150,58 @@ export function ClientesDashboardPage() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || !data ? (
         <div className="flex justify-center py-20"><Spinner size="lg" /></div>
       ) : (
-        <DashboardStatRow stats={stats} />
+        <div className="space-y-6">
+          <DashboardStatRow stats={stats} />
+
+          <section className="space-y-3">
+            <h2 className="text-[0.82rem] font-bold text-gray-700 uppercase tracking-wide px-1">Citas y asistencia</h2>
+            <DashboardStatRow stats={statsCitas} />
+            {data.citasPorAsesor.length > 0 && (
+              <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-[0.7rem] uppercase tracking-wide text-gray-400">
+                        <th className="px-4 py-2.5 text-left font-bold">Asesor</th>
+                        <th className="px-4 py-2.5 text-right font-bold">Total</th>
+                        <th className="px-4 py-2.5 text-right font-bold">Asistió</th>
+                        <th className="px-4 py-2.5 text-right font-bold">No asistió</th>
+                        <th className="px-4 py-2.5 text-right font-bold">Canceladas</th>
+                        <th className="px-4 py-2.5 text-right font-bold">No-show</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {data.citasPorAsesor.map((a) => {
+                        const fin = a.asistio + a.noAsistio
+                        const ns = fin > 0 ? Math.round((a.noAsistio / fin) * 100) : null
+                        return (
+                          <tr key={a.asesor ?? '—'}>
+                            <td className="px-4 py-2.5 font-semibold text-gray-800">{a.asesor ?? '—'}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">{a.total}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-emerald-700">{a.asistio}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-red-600">{a.noAsistio}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-amber-600">{a.cancelada}</td>
+                            <td className={clsx('px-4 py-2.5 text-right tabular-nums font-semibold', ns !== null && ns > 20 ? 'text-red-600' : 'text-gray-500')}>
+                              {ns !== null ? `${ns}%` : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-[0.82rem] font-bold text-gray-700 uppercase tracking-wide px-1">Recordatorios y portal</h2>
+            <DashboardStatRow stats={statsRecordatorios} />
+          </section>
+        </div>
       )}
     </div>
   )

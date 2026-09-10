@@ -21,6 +21,23 @@ export interface ClienteDashboardData {
   incidenciasAbiertas: number
   incidenciasResueltas: number
   renovacionesProximas: number
+  // Citas y asistencia (Fase 7)
+  citasAgendadas: number
+  citasConfirmadas: number
+  citasAsistidas: number
+  citasNoAsistidas: number
+  citasCanceladas: number
+  citasProximas: number
+  citasSolicitudesPendientes: number
+  tasaNoShow: number | null
+  citasPorAsesor: { asesor: string | null; total: number; asistio: number; noAsistio: number; cancelada: number }[]
+  // Recordatorios y portal (Fase 7)
+  recordatoriosCorreo: number
+  recordatoriosWhatsapp: number
+  recordatoriosFallidos: number
+  portalTokensActivos: number
+  portalAbiertos30d: number
+  citasConfirmadasPorCliente: number
 }
 
 export interface ClienteReporteFila {

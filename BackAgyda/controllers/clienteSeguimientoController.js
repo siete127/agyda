@@ -362,6 +362,14 @@ exports.getHistorial = async (req, res) => {
       FROM CRM_ENCUESTAS_ENVIADAS WHERE CES_CONTACTO_ID=@id
 
       UNION ALL
+      -- Casos del cliente (incluye las incidencias, que desde la Fase 6 del
+      -- rediseño de Atención al Cliente viven en CASOS).
+      SELECT 'incidencia', CASO_ID, CASO_FECHA_CREACION, CONCAT('Caso ', CASO_FOLIO, ': ', CASO_TITULO),
+             CONCAT(CASO_TIPO, ' — ', CASO_ESTATUS), NULL, CASO_CREADO_POR
+      FROM CASOS WHERE CASO_CONTACTO_ID=@id AND CASO_ACTIVO=1
+
+      UNION ALL
+      -- CLI_INCIDENCIAS legacy: registros anteriores a la Fase 6 (ya no crece).
       SELECT 'incidencia', INC_ID, INC_FECHA_CREACION, CONCAT('Incidencia ', INC_FOLIO, ': ', INC_TITULO),
              CONCAT('Prioridad ', INC_PRIORIDAD, ' — ', INC_ESTATUS), NULL, INC_CREADO_POR
       FROM CLI_INCIDENCIAS WHERE INC_CONTACTO_ID=@id AND INC_ACTIVO=1
