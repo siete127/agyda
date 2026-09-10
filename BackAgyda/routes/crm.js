@@ -92,6 +92,8 @@ router.post('/portal/invitar',  authenticateToken, verificarRol(['AD']), crmPort
 router.get('/portal/datos',     crmPortal.getPortal);   // público con token
 router.get('/portal/documentos/:docId/download', crmPortal.downloadDocumentoPortal); // público con token en query
 router.post('/portal/incidencias', crmPortal.crearIncidenciaPortal); // público, token en el body
+router.post('/portal/citas/:id/confirmar', crmPortal.confirmarCitaPortal); // público, token en el body
+router.post('/portal/citas/:id/solicitar-cambio', crmPortal.solicitarCambioCitaPortal); // público, token en el body
 
 // ── Seguimiento a Clientes: Recordatorios de pago ──────
 router.get('/recordatorios', authenticateToken, requireAnyActionAccess([['crm','seguimiento-ver'],['atencion-cliente','clientes-ver']]), crmRecordatorios.listByContacto);

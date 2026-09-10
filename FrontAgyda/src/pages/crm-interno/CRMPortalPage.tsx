@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { clsx } from 'clsx'
-import { TrendingUp, Building2, Mail, FileText, PhoneCall, CalendarDays, ArrowRight, Download, AlertOctagon, DollarSign, RefreshCw, Plus, X } from 'lucide-react'
+import { TrendingUp, Building2, Mail, FileText, PhoneCall, CalendarDays, ArrowRight, Download, AlertOctagon, DollarSign, RefreshCw, Plus, X, Video, Phone, Calendar, CheckCircle2, Clock } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { apiPublico } from '@/lib/axios'
 
@@ -36,6 +36,14 @@ interface PortalPago {
   fechaLimite: string; estatus: string; diasRestantes: number; estatusVisual: string
 }
 
+interface PortalCita {
+  id: number; titulo: string; modalidad: string; fechaHora: string; duracionMin: number
+  enlace: string | null; telefono: string | null; estatus: string
+  confirmadaPorCliente: boolean; tratamientoNombre: string | null
+  numeroSesion: number | null; tratamientoTotalSesiones: number | null
+  solicitudPendienteTipo: string | null
+}
+
 interface PortalRenovacion {
   id: number; tipo: string; descripcion: string; fecha: string; diasRestantes: number
 }
@@ -58,6 +66,18 @@ interface PortalData {
   incidencias: PortalIncidencia[]
   pagos: PortalPago[]
   renovaciones: PortalRenovacion[]
+  citas: PortalCita[]
+}
+
+const CITA_MODALIDAD_UI: Record<string, { label: string; cls: string }> = {
+  videollamada: { label: 'Videollamada', cls: 'bg-violet-100 text-violet-700' },
+  telefonica:   { label: 'Llamada',      cls: 'bg-teal-100 text-teal-700' },
+  generica:     { label: 'Cita',         cls: 'bg-gray-100 text-gray-600' },
+}
+const CITA_ESTATUS_UI: Record<string, { label: string; cls: string }> = {
+  agendada:     { label: 'Por confirmar', cls: 'bg-amber-100 text-amber-700' },
+  confirmada:   { label: 'Confirmada',    cls: 'bg-emerald-100 text-emerald-700' },
+  reprogramada: { label: 'Reprogramada',  cls: 'bg-blue-100 text-blue-700' },
 }
 
 const INC_ESTATUS_UI: Record<string, { label: string; cls: string }> = {
@@ -82,6 +102,8 @@ export function CRMPortalPage() {
   const [opoSel,  setOpoSel]  = useState<number | null>(null)
 
   const [showNuevaSolicitud, setShowNuevaSolicitud] = useState(false)
+  const [cambioCita, setCambioCita] = useState<PortalCita | null>(null)
+  const [confirmandoCita, setConfirmandoCita] = useState<number | null>(null)
 
   const fetchData = () => {
     if (!token) { setError('Enlace inválido'); setLoading(false); return }
@@ -95,6 +117,14 @@ export function CRMPortalPage() {
     fetchData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  const confirmarCita = (citaId: number) => {
+    setConfirmandoCita(citaId)
+    apiPublico.post(`/crm/portal/citas/${citaId}/confirmar`, { portalToken: token })
+      .then(() => fetchData())
+      .catch((e) => alert(e.response?.data?.message ?? 'No se pudo confirmar'))
+      .finally(() => setConfirmandoCita(null))
+  }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -112,7 +142,7 @@ export function CRMPortalPage() {
     </div>
   )
 
-  const { contacto, oportunidades, interacciones, documentos, incidencias, pagos, renovaciones } = data
+  const { contacto, oportunidades, interacciones, documentos, incidencias, pagos, renovaciones, citas } = data
   const fmtSize = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
   const opoActual = oportunidades.find((o) => o.id === opoSel) ?? null
   const intDeOpo  = interacciones.filter((i) => i.opoId === opoSel)
@@ -291,6 +321,75 @@ export function CRMPortalPage() {
           </div>
         )}
 
+        {/* Tus citas */}
+        {contacto.esCliente && citas.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="flex items-center gap-1.5 text-[0.82rem] font-bold text-gray-700 uppercase tracking-wide px-1">
+              <CalendarDays className="h-4 w-4" /> Tus citas
+            </h2>
+            <div className="space-y-2">
+              {citas.map((c) => {
+                const modal = CITA_MODALIDAD_UI[c.modalidad] ?? CITA_MODALIDAD_UI.generica
+                const est = CITA_ESTATUS_UI[c.estatus] ?? { label: c.estatus, cls: 'bg-gray-100 text-gray-600' }
+                const Icon = c.modalidad === 'videollamada' ? Video : c.modalidad === 'telefonica' ? Phone : Calendar
+                const cuando = new Date(c.fechaHora).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+                return (
+                  <div key={c.id} className="rounded-2xl bg-card border border-gray-200 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.62rem] font-semibold', modal.cls)}>
+                            <Icon className="h-3 w-3" /> {modal.label}
+                          </span>
+                          <span className={clsx('rounded-full px-2 py-0.5 text-[0.62rem] font-semibold', est.cls)}>{est.label}</span>
+                          {c.confirmadaPorCliente && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[0.62rem] font-bold text-emerald-700">
+                              <CheckCircle2 className="h-3 w-3" /> Confirmada
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-[0.86rem] font-semibold text-gray-800">{c.titulo}</p>
+                        <p className="text-[0.72rem] text-gray-500 capitalize">{cuando} · {c.duracionMin} min</p>
+                        {c.tratamientoNombre && (
+                          <p className="text-[0.66rem] text-gray-400">
+                            {c.tratamientoNombre}{c.numeroSesion ? ` · sesión ${c.numeroSesion}${c.tratamientoTotalSesiones ? ` de ${c.tratamientoTotalSesiones}` : ''}` : ''}
+                          </p>
+                        )}
+                        {c.modalidad === 'videollamada' && c.enlace && (
+                          <a href={c.enlace} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[0.72rem] font-semibold text-brand hover:underline">
+                            Entrar a la videollamada
+                          </a>
+                        )}
+                        {c.modalidad === 'telefonica' && c.telefono && (
+                          <p className="text-[0.72rem] text-gray-500">Te llamaremos al {c.telefono}</p>
+                        )}
+                      </div>
+                    </div>
+                    {c.solicitudPendienteTipo ? (
+                      <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-[0.72rem] text-amber-700">
+                        <Clock className="h-3.5 w-3.5" /> Tu solicitud de {c.solicitudPendienteTipo === 'cancelar' ? 'cancelación' : 'reprogramación'} está en revisión.
+                      </p>
+                    ) : (
+                      <div className="mt-3 flex gap-2">
+                        {!c.confirmadaPorCliente && (
+                          <button onClick={() => confirmarCita(c.id)} disabled={confirmandoCita === c.id}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[0.72rem] font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                            {confirmandoCita === c.id ? 'Confirmando…' : 'Confirmar asistencia'}
+                          </button>
+                        )}
+                        <button onClick={() => setCambioCita(c)}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[0.72rem] font-bold text-gray-600 hover:bg-gray-50 transition-colors">
+                          Solicitar cambio
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Solicitudes e incidencias */}
         {contacto.esCliente && (
           <div className="space-y-3">
@@ -397,6 +496,88 @@ export function CRMPortalPage() {
       {showNuevaSolicitud && (
         <NuevaSolicitudModal token={token} onClose={() => setShowNuevaSolicitud(false)} onCreada={() => { setShowNuevaSolicitud(false); fetchData() }} />
       )}
+      {cambioCita && (
+        <SolicitarCambioCitaModal
+          token={token}
+          cita={cambioCita}
+          onClose={() => setCambioCita(null)}
+          onEnviada={() => { setCambioCita(null); fetchData() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function SolicitarCambioCitaModal({ token, cita, onClose, onEnviada }: {
+  token: string
+  cita: PortalCita
+  onClose: () => void
+  onEnviada: () => void
+}) {
+  const [tipo, setTipo] = useState<'reprogramar' | 'cancelar'>('reprogramar')
+  const [fecha, setFecha] = useState('')
+  const [hora, setHora] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const enviar = () => {
+    if (tipo === 'reprogramar' && (!fecha || !hora)) { setErr('Indica la fecha y hora que te conviene'); return }
+    if (!motivo.trim()) { setErr('Cuéntanos el motivo'); return }
+    setEnviando(true); setErr(null)
+    apiPublico.post(`/crm/portal/citas/${cita.id}/solicitar-cambio`, {
+      portalToken: token,
+      tipo,
+      fechaPropuesta: tipo === 'reprogramar' ? `${fecha}T${hora}:00` : undefined,
+      motivo: motivo.trim(),
+    })
+      .then(() => { alert('Solicitud enviada. Un asesor la revisará y te confirmará.'); onEnviada() })
+      .catch((e) => { setErr(e.response?.data?.message ?? 'No se pudo enviar'); setEnviando(false) })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-[0.95rem] font-bold text-gray-900">Solicitar cambio de cita</h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mb-3 text-[0.78rem] text-gray-500">{cita.titulo}</p>
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            {(['reprogramar', 'cancelar'] as const).map((t) => (
+              <button key={t} onClick={() => setTipo(t)}
+                className={clsx('flex-1 rounded-lg border-2 py-2 text-[0.78rem] font-semibold capitalize transition-all',
+                  tipo === t ? 'border-brand bg-brand/10 text-brand' : 'border-gray-200 text-gray-400')}>
+                {t}
+              </button>
+            ))}
+          </div>
+          {tipo === 'reprogramar' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Fecha que prefieres</label>
+                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Hora</label>
+                <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand" />
+              </div>
+            </div>
+          )}
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600">Motivo</label>
+            <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} rows={3} className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand" placeholder="¿Por qué necesitas el cambio?" />
+          </div>
+          {err && <p className="text-xs text-red-600">{err}</p>}
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100">Cancelar</button>
+          <button onClick={enviar} disabled={enviando} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">
+            {enviando ? 'Enviando…' : 'Enviar solicitud'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

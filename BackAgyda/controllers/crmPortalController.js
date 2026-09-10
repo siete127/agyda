@@ -151,8 +151,28 @@ exports.getPortal = async (req, res) => {
 
     // Seguimiento a clientes: solo para contactos dados de alta como cliente.
     // Nunca se exponen datos internos (asignado, comentarios, evidencias).
-    let incidencias = [], pagos = [], renovaciones = [];
+    let incidencias = [], pagos = [], renovaciones = [], citas = [];
     if (esCliente) {
+      // Citas próximas del cliente (CRM Cliente — Fase 5). Solo campos que el
+      // cliente debe ver: nunca asesor interno ni notas de evolución.
+      const citRs = await pool.request().input('id', sql.Int, contactoId).query(`
+        SELECT K.CITA_ID as id, K.CITA_TITULO as titulo, K.CITA_MODALIDAD as modalidad,
+               CONVERT(NVARCHAR(19), K.CITA_FECHA_HORA, 126) as fechaHora,
+               K.CITA_DURACION_MIN as duracionMin, K.CITA_ENLACE as enlace, K.CITA_TELEFONO as telefono,
+               K.CITA_ESTATUS as estatus, K.CITA_CONFIRMADA_POR_CLIENTE as confirmadaPorCliente,
+               T.TRAT_NOMBRE as tratamientoNombre, K.CITA_NUMERO_SESION as numeroSesion,
+               T.TRAT_TOTAL_SESIONES as tratamientoTotalSesiones,
+               (SELECT TOP 1 S.SOL_TIPO FROM CLI_CITAS_SOLICITUDES S
+                  WHERE S.SOL_CITA_ID = K.CITA_ID AND S.SOL_ESTATUS = 'pendiente') as solicitudPendienteTipo
+        FROM CLI_CITAS K
+        LEFT JOIN CLI_TRATAMIENTOS T ON T.TRAT_ID = K.CITA_TRATAMIENTO_ID
+        WHERE K.CITA_CONTACTO_ID = @id AND K.CITA_ACTIVO = 1
+          AND K.CITA_ESTATUS NOT IN ('cancelada','asistio','no_asistio')
+          AND K.CITA_FECHA_HORA >= DATEADD(HOUR, -1, GETDATE())
+        ORDER BY K.CITA_FECHA_HORA ASC
+      `);
+      citas = citRs.recordset;
+
       // Fase 6: el portal lee las incidencias desde CASOS (tipo 'incidencia').
       // Nunca se exponen asignado / comentarios / evidencias.
       const incRs = await pool.request().input('id', sql.Int, contactoId).query(`
@@ -200,6 +220,7 @@ exports.getPortal = async (req, res) => {
         incidencias,
         pagos,
         renovaciones,
+        citas,
       },
     });
   } catch (e) {
@@ -327,3 +348,134 @@ exports.crearIncidenciaPortal = async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+
+// ── Portal: gestión de citas (CRM Cliente — Fase 5) ─────────────────────────
+const _citaRateMap = new Map();
+function _rateLimitCita(contactoId) {
+  const ahora = Date.now();
+  const ultimo = _citaRateMap.get(contactoId) ?? 0;
+  if (ahora - ultimo < 30_000) return false;
+  _citaRateMap.set(contactoId, ahora);
+  return true;
+}
+
+async function _notificarAsesorCita(pool, tenantKey, citaId, tipo, contactoNombre) {
+  try {
+    const cita = (await pool.request().input('id', sql.Int, citaId)
+      .query(`SELECT CITA_ASIGNADO_A as asignadoA FROM CLI_CITAS WHERE CITA_ID=@id`)).recordset[0];
+    const destinatarios = new Set();
+    if (cita?.asignadoA) destinatarios.add(cita.asignadoA);
+    for (const s of await getUsuariosParaNotificarCorreo('atencion-cliente', tenantKey)) destinatarios.add(s);
+    for (const uid of destinatarios) {
+      await notificationService.createNotification({
+        usuarioId: uid,
+        mensaje: tipo === 'confirmada'
+          ? `${contactoNombre || 'Un cliente'} confirmó su cita`
+          : `${contactoNombre || 'Un cliente'} solicitó ${tipo === 'cancelar' ? 'cancelar' : 'reprogramar'} una cita`,
+        tipo: tipo === 'confirmada' ? 'cliente-cita-confirmada' : 'cliente-cita-solicitud',
+        dataExtra: { citaId },
+        tenantKey,
+      });
+    }
+  } catch (e) {
+    console.warn('[portal cita] notif asesor:', e.message);
+  }
+}
+
+// El cliente confirma su asistencia a una cita.
+exports.confirmarCitaPortal = async (req, res) => {
+  try {
+    const { portalToken } = req.body || {};
+    const citaId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(citaId)) return res.status(400).json({ success: false, message: 'id inválido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const tk = await resolverToken(pool, portalToken);
+    if (!tk) return res.status(401).json({ success: false, message: 'Enlace inválido o expirado' });
+
+    const cita = (await pool.request().input('id', sql.Int, citaId).input('c', sql.Int, tk.contactoId)
+      .query(`SELECT CITA_ID id, CITA_ESTATUS estatus FROM CLI_CITAS WHERE CITA_ID=@id AND CITA_CONTACTO_ID=@c AND CITA_ACTIVO=1`)).recordset[0];
+    if (!cita) return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+    if (['cancelada', 'asistio', 'no_asistio'].includes(cita.estatus)) {
+      return res.status(409).json({ success: false, message: 'Esta cita ya no se puede confirmar' });
+    }
+
+    await pool.request().input('id', sql.Int, citaId).query(`
+      UPDATE CLI_CITAS
+      SET CITA_CONFIRMADA_POR_CLIENTE=1, CITA_ESTATUS='confirmada', CITA_FECHA_CONFIRMACION=GETDATE()
+      WHERE CITA_ID=@id
+    `);
+
+    const cont = (await pool.request().input('c', sql.Int, tk.contactoId)
+      .query(`SELECT CONT_NOMBRE nombre FROM CRM_CONTACTOS WHERE CONT_ID=@c`)).recordset[0];
+    await _notificarAsesorCita(pool, req.user?.empresa, citaId, 'confirmada', cont?.nombre);
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error confirmarCitaPortal:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// El cliente solicita reprogramar o cancelar. NO reagenda: crea una solicitud
+// que el equipo aprueba desde el CRM.
+exports.solicitarCambioCitaPortal = async (req, res) => {
+  try {
+    const { portalToken, tipo, fechaPropuesta, motivo } = req.body || {};
+    const citaId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(citaId)) return res.status(400).json({ success: false, message: 'id inválido' });
+    if (!['reprogramar', 'cancelar'].includes(tipo)) return res.status(400).json({ success: false, message: 'tipo inválido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const tk = await resolverToken(pool, portalToken);
+    if (!tk) return res.status(401).json({ success: false, message: 'Enlace inválido o expirado' });
+
+    if (!_rateLimitCita(tk.contactoId)) {
+      return res.status(429).json({ success: false, message: 'Espera un momento antes de enviar otra solicitud' });
+    }
+
+    const cita = (await pool.request().input('id', sql.Int, citaId).input('c', sql.Int, tk.contactoId)
+      .query(`SELECT CITA_ID id, CITA_ESTATUS estatus FROM CLI_CITAS WHERE CITA_ID=@id AND CITA_CONTACTO_ID=@c AND CITA_ACTIVO=1`)).recordset[0];
+    if (!cita) return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+    if (['cancelada', 'asistio', 'no_asistio'].includes(cita.estatus)) {
+      return res.status(409).json({ success: false, message: 'Esta cita ya no admite cambios' });
+    }
+
+    // ¿Ya hay una solicitud pendiente para esta cita?
+    const pend = (await pool.request().input('id', sql.Int, citaId)
+      .query(`SELECT TOP 1 1 x FROM CLI_CITAS_SOLICITUDES WHERE SOL_CITA_ID=@id AND SOL_ESTATUS='pendiente'`)).recordset[0];
+    if (pend) return res.status(409).json({ success: false, message: 'Ya tienes una solicitud pendiente para esta cita' });
+
+    const fh = tipo === 'reprogramar' && fechaPropuesta ? fechaHoraSql(fechaPropuesta) : null;
+    await pool.request()
+      .input('cid', sql.Int, citaId)
+      .input('tipo', sql.NVarChar(20), tipo)
+      .input('f', sql.VarChar(19), fh)
+      .input('m', sql.NVarChar(500), motivo ? String(motivo).slice(0, 500) : null)
+      .query(`
+        INSERT INTO CLI_CITAS_SOLICITUDES (SOL_CITA_ID, SOL_TIPO, SOL_FECHA_PROPUESTA, SOL_MOTIVO)
+        VALUES (@cid, @tipo, CASE WHEN @f IS NULL THEN NULL ELSE CONVERT(DATETIME, @f, 120) END, @m)
+      `);
+
+    const cont = (await pool.request().input('c', sql.Int, tk.contactoId)
+      .query(`SELECT CONT_NOMBRE nombre FROM CRM_CONTACTOS WHERE CONT_ID=@c`)).recordset[0];
+    await _notificarAsesorCita(pool, req.user?.empresa, citaId, tipo, cont?.nombre);
+
+    res.status(201).json({ success: true });
+  } catch (e) {
+    console.error('Error solicitarCambioCitaPortal:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Normaliza fecha-hora naïf igual que citaController (evita corrimiento de zona).
+function fechaHoraSql(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) return `${m[1]} ${m[2]}:${m[3]}:${m[4] || '00'}`;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
