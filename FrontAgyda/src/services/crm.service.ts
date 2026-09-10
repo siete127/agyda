@@ -102,8 +102,17 @@ export const crmService = {
     const { data } = await api.delete(`/crm/oportunidades/${id}`)
     return data
   },
-  generarProyecto: (opoId: number, nombreProyecto: string, miembros: { nombre: string; rol: 'lider' | 'miembro' | 'revisor' }[]) =>
-    api.post(`/crm/oportunidades/${opoId}/generar-proyecto`, { nombreProyecto, miembros }).then(r => r.data as { success: boolean; proyectoId: number }),
+  generarProyecto: (
+    opoId: number,
+    nombreProyecto: string,
+    miembros: { nombre: string; rol: 'lider' | 'miembro' | 'revisor' }[],
+    datosCliente?: {
+      tipoCliente?: string; productoServicio?: string; responsableId?: number
+      estatusCliente?: string; observacionesIniciales?: string
+    },
+  ) =>
+    api.post(`/crm/oportunidades/${opoId}/generar-proyecto`, { nombreProyecto, miembros, datosCliente })
+      .then(r => r.data as { success: boolean; proyectoId: number; altaCliente?: boolean; contactoId?: number | null }),
   getActividades: async (opoId: number): Promise<CRMActividad[]> => {
     const { data } = await api.get(`/crm/oportunidades/${opoId}/actividades`)
     return norm(data?.data ?? data, parseCRMActividad)

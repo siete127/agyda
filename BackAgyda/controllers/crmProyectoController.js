@@ -2,9 +2,11 @@ const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const notificationService = require('../services/notificationService');
 const { logAudit } = require('../services/auditService');
+const clienteSeguimientoController = require('./clienteSeguimientoController');
 
 const TAREAS_INICIALES = ['Seguimiento al cliente', 'Preparar propuesta'];
 const ROLES_VALIDOS = new Set(['lider', 'miembro', 'revisor']);
+const ESTATUS_CLIENTE_VALIDOS = ['verde', 'azul', 'amarillo', 'naranja', 'rojo', 'negro', 'morado'];
 
 function getUserId(req) {
   return req.user && (req.user.id || req.user.userId || req.user.NEUS_ID)
@@ -33,7 +35,9 @@ exports.generarProyectoDesdeOportunidad = async (req, res) => {
       .query(`
         SELECT o.OPO_ID as id, o.OPO_NOMBRE as nombre, o.OPO_PROYECTO_ID as proyectoId,
                o.OPO_ASIGNADO_A as asignadoA, o.OPO_CREADO_POR as creadoPor,
-               c.CONT_NOMBRE as contactoNombre, c.CONT_EMPRESA as contactoEmpresa
+               o.OPO_CONTACTO_ID as contactoId,
+               c.CONT_NOMBRE as contactoNombre, c.CONT_EMPRESA as contactoEmpresa,
+               c.CONT_ES_CLIENTE as contactoEsCliente
         FROM CRM_OPORTUNIDADES o
         LEFT JOIN CRM_CONTACTOS c ON c.CONT_ID = o.OPO_CONTACTO_ID
         WHERE o.OPO_ID = @opoId AND o.OPO_ACTIVO = 1
@@ -42,6 +46,13 @@ exports.generarProyectoDesdeOportunidad = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Oportunidad no encontrada' });
     }
     const opo = opoResult.recordset[0];
+
+    // Alta de cliente en el mismo flujo (opcional). Si la oportunidad tiene un
+    // contacto que aún no es cliente formal y el modal manda datosCliente, se
+    // marca CONT_ES_CLIENTE=1 con esos datos dentro de la misma transacción.
+    const dc = req.body?.datosCliente;
+    const haráAltaCliente = !!dc && opo.contactoId != null && !opo.contactoEsCliente;
+    const responsableClienteId = haráAltaCliente && dc.responsableId ? parseInt(dc.responsableId, 10) || null : null;
 
     if (opo.proyectoId) {
       return res.status(409).json({ success: false, message: 'Esta oportunidad ya tiene un proyecto vinculado', proyectoId: opo.proyectoId });
@@ -119,7 +130,41 @@ exports.generarProyectoDesdeOportunidad = async (req, res) => {
       .input('proyId', sql.Int, proyectoId)
       .query(`UPDATE CRM_OPORTUNIDADES SET OPO_PROYECTO_ID = @proyId WHERE OPO_ID = @opoId`);
 
+    if (haráAltaCliente) {
+      const estatusCliente = dc.estatusCliente && ESTATUS_CLIENTE_VALIDOS.includes(dc.estatusCliente) ? dc.estatusCliente : 'verde';
+      await new sql.Request(transaction)
+        .input('id', sql.Int, opo.contactoId)
+        .input('tipoCliente', sql.NVarChar(50), dc.tipoCliente || null)
+        .input('productoServicio', sql.NVarChar(300), dc.productoServicio || null)
+        .input('responsableId', sql.Int, responsableClienteId)
+        .input('estatusCliente', sql.NVarChar(20), estatusCliente)
+        .input('observacionesIniciales', sql.NVarChar(sql.MAX), dc.observacionesIniciales || `Alta desde la oportunidad CRM "${opo.nombre}"`)
+        .query(`
+          UPDATE CRM_CONTACTOS SET
+            CONT_TIPO_CLIENTE = ISNULL(@tipoCliente, CONT_TIPO_CLIENTE),
+            CONT_PRODUCTO_SERVICIO = ISNULL(@productoServicio, CONT_PRODUCTO_SERVICIO),
+            CONT_RESPONSABLE_ID = ISNULL(@responsableId, CONT_RESPONSABLE_ID),
+            CONT_ESTATUS_CLIENTE = @estatusCliente,
+            CONT_MEDIO_CONTACTO = ISNULL(CONT_MEDIO_CONTACTO, 'Web'),
+            CONT_OBSERVACIONES_INICIALES = ISNULL(CONT_OBSERVACIONES_INICIALES, @observacionesIniciales),
+            CONT_ES_CLIENTE = 1
+          WHERE CONT_ID = @id AND CONT_ACTIVO = 1
+        `);
+    }
+
     await transaction.commit();
+
+    // Automatización de alta de cliente (best-effort, fuera de la transacción —
+    // igual que crmContactosController.altaCliente): seguimiento inicial +
+    // tarea de bienvenida + notificación al responsable.
+    if (haráAltaCliente) {
+      await clienteSeguimientoController.registrarAltaAutomatica(pool, {
+        contactoId: opo.contactoId,
+        responsableId: responsableClienteId,
+        userId: creadorId,
+        tenantKey: req.user?.empresa,
+      });
+    }
 
     // Notificar a cada miembro agregado (resolviendo su id por nombre, igual que proyectoController.createProyecto)
     try {
@@ -144,10 +189,10 @@ exports.generarProyectoDesdeOportunidad = async (req, res) => {
     await logAudit(pool, {
       userId: creadorId, userName: req.user?.nombre || null,
       modulo: 'crm', accion: 'generar-proyecto', entidadId: String(proyectoId),
-      detalle: { opoId, nombreProyecto }, ip: req.ip,
+      detalle: { opoId, nombreProyecto, altaCliente: haráAltaCliente, contactoId: opo.contactoId }, ip: req.ip,
     });
 
-    res.status(201).json({ success: true, proyectoId });
+    res.status(201).json({ success: true, proyectoId, altaCliente: haráAltaCliente, contactoId: opo.contactoId });
   } catch (e) {
     if (transaction) await transaction.rollback();
     console.error('Error generarProyectoDesdeOportunidad:', e);

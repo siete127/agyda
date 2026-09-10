@@ -819,12 +819,15 @@ function OportunidadDrawer({
             <div className="flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[0.75rem] font-semibold text-indigo-700">
               <Briefcase className="h-3.5 w-3.5" /> Proyecto vinculado (#{opo.proyectoId})
             </div>
-          ) : opo.etapa === 'propuesta' && (
+          ) : (
             <button
               onClick={() => setShowGenerarProyecto(true)}
               className="flex items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-[0.75rem] font-semibold text-gray-500 hover:border-brand/40 hover:text-brand transition-colors"
             >
-              <Briefcase className="h-3.5 w-3.5" /> Generar proyecto de seguimiento
+              <Briefcase className="h-3.5 w-3.5" />
+              {contactoActual && !contactoActual.esCliente
+                ? 'Convertir en cliente y crear proyecto'
+                : 'Generar proyecto de seguimiento'}
             </button>
           )}
 
