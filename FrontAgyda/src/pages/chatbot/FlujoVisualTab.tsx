@@ -6,7 +6,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessageCircle, Megaphone, Users, Workflow, Radio, Info, Plus, Trash2, X, ChevronDown } from 'lucide-react'
+import { MessageCircle, Megaphone, Users, Workflow, Radio, Info, Plus, Trash2, X, ChevronDown, Sparkles } from 'lucide-react'
 import { chatbotFlujoService } from '@/services/chatbotFlujo.service'
 import { ccService } from '@/services/cc.service'
 import { Spinner } from '@/components/ui/Spinner'
@@ -23,7 +23,10 @@ const ESTILO_TIPO: Record<TipoNodoFlujo, { icon: React.ElementType; clases: stri
   etiqueta: { icon: Radio, clases: 'border-brand bg-brand/10 text-brand' },
   nodo_arbol: { icon: Workflow, clases: 'border-violet-400 bg-violet-500/10 text-violet-700' },
   campania: { icon: Megaphone, clases: 'border-emerald-400 bg-emerald-500/10 text-emerald-700' },
+  captura_lead: { icon: Sparkles, clases: 'border-amber-400 bg-amber-500/10 text-amber-700' },
 }
+
+const CAPTURA_LEAD_NODE_ID = 'captura_lead-0'
 
 const TIPO_ETIQUETA_ACCION: Record<string, string> = {
   respuesta: 'Muestra una respuesta',
@@ -70,7 +73,7 @@ function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
 const nodeTypes: NodeTypes = { caja: CajaNodo }
 
 function posicionPorDefecto(tipo: TipoNodoFlujo, indice: number) {
-  const columnaBase: Record<TipoNodoFlujo, number> = { respuesta: 0, etiqueta: 360, nodo_arbol: 720, campania: 1080 }
+  const columnaBase: Record<TipoNodoFlujo, number> = { respuesta: 0, etiqueta: 360, nodo_arbol: 720, campania: 1080, captura_lead: 1080 }
   return { x: columnaBase[tipo], y: indice * 110 }
 }
 
@@ -289,20 +292,39 @@ function FlujoVisualCanvas() {
       data: { tipo: 'campania', titulo: c.texto, subtitulo: 'Campaña de Chat en Vivo', activa: c.activa, soloDestino: true },
       draggable: false,
     }))
+    if (flujo.capturaLead) {
+      nodos.push({
+        id: CAPTURA_LEAD_NODE_ID,
+        type: 'caja',
+        position: { x: 1080, y: -140 },
+        data: { tipo: 'captura_lead', titulo: 'Captura de lead', subtitulo: 'pide nombre y contacto', activa: true, soloDestino: true },
+        draggable: false,
+      })
+    }
     return nodos
   }, [flujo])
 
   const initialEdges = useMemo<Edge[]>(() => {
     if (!flujo) return []
-    return flujo.conexiones.map((c) => ({
-      id: String(c.id),
-      source: `${c.origenTipo}-${c.origenId}`,
-      target: `${c.destinoTipo}-${c.destinoId}`,
-      label: c.etiqueta || undefined,
-      animated: c.esOpcionArbol,
-      deletable: !c.esOpcionArbol,
-      style: c.esOpcionArbol ? { stroke: 'rgb(167 139 250)' } : undefined,
-    }))
+    return flujo.conexiones.map((c) => {
+      const target = c.destinoTipo === 'captura_lead'
+        ? CAPTURA_LEAD_NODE_ID
+        : `${c.destinoTipo}-${c.destinoId}`
+      return {
+        id: String(c.id),
+        source: `${c.origenTipo}-${c.origenId}`,
+        target,
+        label: c.etiqueta || undefined,
+        animated: c.esOpcionArbol,
+        deletable: !c.esOpcionArbol && !c.esAutomatica,
+        // opciones del árbol = violeta animado · automáticas = gris punteado · manuales = azul sólido
+        style: c.esOpcionArbol
+          ? { stroke: 'rgb(167 139 250)' }
+          : c.esAutomatica
+            ? { stroke: 'rgb(148 163 184)', strokeDasharray: '5 4' }
+            : undefined,
+      }
+    })
   }, [flujo])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
@@ -348,12 +370,17 @@ function FlujoVisualCanvas() {
   }, [isAdmin, eliminarConexion])
 
   const onNodeClick = useCallback((_: unknown, node: Node<CajaData>) => {
+    if (node.data.tipo === 'captura_lead') { setSeleccion(null); return }
     const [tipo, idStr] = node.id.split('-')
     setSeleccion({ tipo: tipo as TipoNodoFlujo, id: Number(idStr) })
   }, [])
 
   const onNodeDoubleClick = useCallback((_: unknown, node: Node<CajaData>) => {
     if (!isAdmin || !flujo) return
+    if (node.data.tipo === 'captura_lead') {
+      toast('Se dispara sola con las respuestas marcadas "señal de interés"', { icon: 'ℹ️' })
+      return
+    }
     const [tipo, idStr] = node.id.split('-')
     const id = Number(idStr)
     if (tipo === 'campania') { toast('Las campañas se editan en Contact Center', { icon: 'ℹ️' }); return }
@@ -415,9 +442,9 @@ function FlujoVisualCanvas() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-[0.7rem] text-ink-tertiary">
-        {(Object.keys(ESTILO_TIPO) as TipoNodoFlujo[]).map((t) => {
+        {(['respuesta', 'etiqueta', 'nodo_arbol', 'campania', 'captura_lead'] as TipoNodoFlujo[]).map((t) => {
           const { icon: Icon, clases } = ESTILO_TIPO[t]
-          const label = t === 'respuesta' ? 'Respuesta' : t === 'etiqueta' ? 'Botón de menú' : t === 'nodo_arbol' ? 'Nodo del árbol' : 'Campaña'
+          const label = t === 'respuesta' ? 'Respuesta' : t === 'etiqueta' ? 'Botón de menú' : t === 'nodo_arbol' ? 'Nodo del árbol' : t === 'campania' ? 'Campaña' : 'Captura de lead'
           return (
             <span key={t} className="flex items-center gap-1">
               <span className={clsx('flex h-4 w-4 items-center justify-center rounded', clases)}><Icon className="h-2.5 w-2.5" /></span>
@@ -425,6 +452,8 @@ function FlujoVisualCanvas() {
             </span>
           )
         })}
+        <span className="flex items-center gap-1"><span className="inline-block h-0 w-5 border-t-2 border-dashed border-slate-400" /> conexión automática</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-0 w-5 border-t-2 border-brand" /> conexión manual</span>
       </div>
 
       <div className="relative h-[65vh] rounded-2xl border border-surface-border overflow-hidden bg-surface">
@@ -466,8 +495,10 @@ function FlujoVisualCanvas() {
         <Info size={15} className="text-brand shrink-0 mt-0.5" />
         <p className="text-xs text-ink-secondary leading-relaxed">
           Este es el mismo contenido que las listas de la pestaña Conversación — editarlo aquí lo cambia allá y
-          en el widget. Las cajas verdes (campañas) se administran en Configuración → Contact Center. Los enlaces
-          violeta animados son las opciones del Árbol de Diagnóstico.
+          en el widget. Las líneas <b>punteadas grises</b> son el flujo que el bot ya sigue por convención
+          (una etiqueta va a su campaña, un botón matchea otra respuesta, "señal de interés" dispara la captura
+          de lead); crea una conexión manual sobre el mismo par para fijarla. Los enlaces violeta son el Árbol de
+          Diagnóstico; las cajas verdes se administran en Contact Center.
         </p>
       </div>
 

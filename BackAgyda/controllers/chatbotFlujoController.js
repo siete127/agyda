@@ -25,6 +25,7 @@ exports.getFlujo = async (req, res) => {
 
     const respuestas = await pool.request().query(`
       SELECT RESP_PK as id, RESP_ID as codigo, RESP_TEXTO_ES as texto, RESP_BOTONES as botones,
+             RESP_KEYWORDS as keywords, RESP_SENAL_INTERES as senalInteres,
              RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY
       FROM dbo.CHATBOT_RESPUESTAS ORDER BY RESP_PK
     `);
@@ -69,14 +70,85 @@ exports.getFlujo = async (req, res) => {
         esOpcionArbol: true,
       }));
 
+    // ── Conexiones AUTOMÁTICAS ──────────────────────────────────────────────
+    // El widget hoy no lee CHATBOT_FLUJO_CONEXIONES: enruta por convención
+    // (una etiqueta va a su campaña / al árbol / a la respuesta que matchea su
+    // texto; el texto libre de RESP_BOTONES matchea otra respuesta por keyword;
+    // senalInteres dispara la captura de lead). Se derivan aquí para que el
+    // lienzo muestre el flujo real. Son de solo lectura (id string "auto-…");
+    // una conexión manual con el mismo par (origen→destino) la reemplaza.
+    const respsData = respuestas.recordset.map((r) => ({
+      ...r,
+      botones: parseJsonArray(r.botones),
+      keywords: parseJsonArray(r.keywords),
+    }));
+
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    // Mismo criterio que buscarRespuesta del widget: gana la keyword contenida más larga.
+    const matchRespuesta = (texto) => {
+      const tn = norm(texto);
+      if (!tn) return null;
+      let mejor = null; let mejorLen = 0;
+      for (const r of respsData) {
+        for (const kw of r.keywords) {
+          const kn = norm(kw);
+          if (kn && tn.includes(kn) && kn.length > mejorLen) { mejorLen = kn.length; mejor = r; }
+        }
+      }
+      return mejor;
+    };
+
+    const nodoInicio = nodosArbol.recordset.find((n) => n.codigo === 'inicio');
+    const manualPairs = new Set(
+      conexiones.recordset.map((c) => `${c.origenTipo}:${c.origenId}->${c.destinoTipo}:${c.destinoId}`),
+    );
+    const auto = [];
+    const pushAuto = (origenTipo, origenId, destinoTipo, destinoId, etiqueta) => {
+      if (destinoId == null) return;
+      const key = `${origenTipo}:${origenId}->${destinoTipo}:${destinoId}`;
+      if (manualPairs.has(key)) return; // el admin ya la fijó a mano
+      auto.push({
+        id: `auto-${auto.length}-${key}`,
+        origenTipo, origenId, destinoTipo, destinoId,
+        etiqueta: etiqueta || null,
+        esAutomatica: true,
+      });
+    };
+
+    // Etiqueta del menú -> su destino real
+    for (const e of etiquetas.recordset) {
+      if (e.tipoAccion === 'escalar_campania' && e.campaniaId != null) {
+        pushAuto('etiqueta', e.id, 'campania', e.campaniaId);
+      } else if (e.tipoAccion === 'arbol_diagnostico' && nodoInicio) {
+        pushAuto('etiqueta', e.id, 'nodo_arbol', nodoInicio.id);
+      } else if (e.tipoAccion === 'respuesta') {
+        const r = matchRespuesta(e.texto);
+        if (r) pushAuto('etiqueta', e.id, 'respuesta', r.id);
+      }
+    }
+
+    // Respuesta -> respuesta (por el texto libre de sus botones) o -> captura de lead
+    for (const r of respsData) {
+      if (r.senalInteres) {
+        pushAuto('respuesta', r.id, 'captura_lead', 0, 'pide datos de contacto');
+      }
+      for (const bt of r.botones) {
+        const destino = matchRespuesta(bt);
+        if (destino && destino.id !== r.id) pushAuto('respuesta', r.id, 'respuesta', destino.id, bt);
+      }
+    }
+
+    const hayCapturaLead = auto.some((c) => c.destinoTipo === 'captura_lead');
+
     res.json({
       success: true,
       data: {
-        respuestas: respuestas.recordset.map((r) => ({ ...r, botones: parseJsonArray(r.botones) })),
+        respuestas: respsData.map(({ keywords, ...r }) => r), // keywords no se exponen al canvas
         etiquetas: etiquetas.recordset,
         nodosArbol: nodosArbol.recordset,
         campanias: campanias.recordset,
-        conexiones: [...conexiones.recordset, ...conexionesDesdeArbol],
+        capturaLead: hayCapturaLead,
+        conexiones: [...conexiones.recordset, ...conexionesDesdeArbol, ...auto],
       },
     });
   } catch (error) {

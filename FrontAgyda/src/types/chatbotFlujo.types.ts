@@ -1,4 +1,4 @@
-export type TipoNodoFlujo = 'respuesta' | 'etiqueta' | 'nodo_arbol' | 'campania'
+export type TipoNodoFlujo = 'respuesta' | 'etiqueta' | 'nodo_arbol' | 'campania' | 'captura_lead'
 
 export interface FlujoRespuesta {
   id: number
@@ -44,6 +44,7 @@ export interface FlujoConexion {
   destinoId: number
   etiqueta: string | null
   esOpcionArbol?: boolean
+  esAutomatica?: boolean
 }
 
 export interface FlujoCompleto {
@@ -51,6 +52,7 @@ export interface FlujoCompleto {
   etiquetas: FlujoEtiqueta[]
   nodosArbol: FlujoNodoArbol[]
   campanias: FlujoCampania[]
+  capturaLead: boolean
   conexiones: FlujoConexion[]
 }
 
@@ -76,6 +78,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
   const conexiones = Array.isArray(raw.conexiones) ? raw.conexiones : []
 
   return {
+    capturaLead: parseBool(raw.capturaLead, false),
     respuestas: (respuestas as Record<string, unknown>[]).map((r) => ({
       id: Number(pick(r, 'id') ?? 0),
       codigo: String(pick(r, 'codigo') ?? ''),
@@ -116,6 +119,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       destinoId: Number(pick(c, 'destinoId') ?? 0),
       etiqueta: pick(c, 'etiqueta') ? String(pick(c, 'etiqueta')) : null,
       esOpcionArbol: parseBool(pick(c, 'esOpcionArbol'), false),
+      esAutomatica: parseBool(pick(c, 'esAutomatica'), false),
     })),
   }
 }
