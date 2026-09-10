@@ -2049,12 +2049,56 @@ async function sendInvitacionPortalEmail({ nombre, correo, link }) {
   }
 }
 
+// ── Citas del cliente (CRM Cliente — Fase 2) ────────────────────────────────
+const _MODALIDAD_CITA_LABEL = { videollamada: 'Videollamada', telefonica: 'Llamada telefónica', generica: 'Cita' };
+
+async function sendRecordatorioCitaEmail({ contactoNombre, contactoCorreo, titulo, modalidad, fechaHora, duracionMin, enlace, telefono, umbralMin }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendRecordatorioCitaEmail] SMTP no configurado. Email simulado'); return; }
+    if (!contactoCorreo) return;
+
+    const cuando = fechaHora ? new Date(fechaHora).toLocaleString('es-MX', { dateStyle: 'full', timeStyle: 'short' }) : 'por confirmar';
+    const antic = umbralMin >= 1440 ? `${Math.round(umbralMin / 1440)} día(s)` : `${umbralMin} minuto(s)`;
+    const modalLabel = _MODALIDAD_CITA_LABEL[modalidad] || 'Cita';
+    const filas = [
+      ['Cita', titulo],
+      ['Modalidad', modalLabel],
+      ['Fecha y hora', cuando],
+      ['Duración', `${duracionMin || 30} min`],
+    ];
+    if (modalidad === 'telefonica' && telefono) filas.push(['Teléfono', telefono]);
+    const ctaHtml = (modalidad === 'videollamada' && enlace)
+      ? `<p style="text-align:center;margin:24px 0;"><a href="${enlace}" style="background:#1B4FD8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Unirme a la videollamada</a></p>`
+      : '';
+
+    const html = _shellSeguimiento({
+      titulo: '📅 Recordatorio de cita',
+      saludo: `Hola ${contactoNombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Te recordamos tu próxima cita con nosotros (en ${antic}):</p>` + _datosTabla(filas),
+      ctaHtml,
+    });
+    const text = `Recordatorio de cita\n${titulo}\n${modalLabel}\n${cuando} (${duracionMin || 30} min)` +
+      (modalidad === 'videollamada' && enlace ? `\nEnlace: ${enlace}` : '') +
+      (modalidad === 'telefonica' && telefono ? `\nTeléfono: ${telefono}` : '');
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: contactoCorreo,
+      subject: `Recordatorio: ${titulo}`,
+      text, html,
+    });
+    logger.debug(`✅ [sendRecordatorioCitaEmail] Enviado a ${contactoCorreo}`);
+  } catch (err) {
+    console.error('❌ [sendRecordatorioCitaEmail] Error general:', err?.message || err);
+  }
+}
+
 module.exports = {
   initialize,
   sendPermisoEmail,
   sendVacacionSolicitudEmail,
   verify,
   sendTestEmail,
+  sendRecordatorioCitaEmail,
   mailer,
   sendCorreoGenerico,
   isMailerListo,

@@ -7,6 +7,7 @@ const clienteFechasCron = require('../controllers/clienteFechasCronController');
 const clienteAgendaCron = require('../controllers/clienteAgendaCronController');
 const clienteIncSlaCron = require('../controllers/clienteIncidenciasSlaCronController');
 const caso = require('../controllers/casoController');
+const cita = require('../controllers/citaController');
 const clienteDashboard = require('../controllers/clienteDashboardController');
 const auth = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
@@ -56,6 +57,24 @@ router.post('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess
 router.get('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.getAccionCorrectiva);
 router.post('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.createAccionCorrectiva);
 router.get('/clientes/:id/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), caso.listByContacto);
+
+// ── Citas y tratamientos (CRM Cliente) ───────────────────────────────────────
+// Rutas específicas ANTES de /citas/:id para que no colisionen.
+router.get('/citas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.list);
+router.post('/citas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.create);
+router.get('/citas/solicitudes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.listSolicitudes);
+router.patch('/citas/solicitudes/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.resolverSolicitud);
+router.get('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.getById);
+router.patch('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.update);
+router.delete('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.remove);
+router.patch('/citas/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.updateEstatus);
+router.post('/citas/:id/cancelar', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.cancelar);
+router.get('/clientes/:id/citas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), cita.listByContacto);
+router.get('/tratamientos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.listTratamientos);
+router.post('/tratamientos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.createTratamiento);
+router.get('/tratamientos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.getTratamiento);
+router.patch('/tratamientos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.updateTratamiento);
+router.post('/tratamientos/:id/sesiones', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.addSesion);
 
 // ── Renovaciones y fechas importantes ────────────────────────────────────────
 router.get('/clientes/:id/fechas-importantes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteFechas.listByContacto);

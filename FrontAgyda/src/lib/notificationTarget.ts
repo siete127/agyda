@@ -16,6 +16,7 @@ export function notificationTarget(n: NotificationItem): string | null {
   const canalId = num(d.canalId)
   const documentoId = num(d.documentoId ?? d.docId)
   const casoId = num(d.casoId)
+  const citaId = num(d.citaId)
 
   // Tickets — cualquier tipo que empiece con "ticket" o traiga ticketId
   if (ticketId || tipo.includes('ticket')) {
@@ -67,6 +68,11 @@ export function notificationTarget(n: NotificationItem): string | null {
       tipo === 'cliente-incidencia-sla-riesgo' || tipo === 'cliente-incidencia-sla-vencido' ||
       tipo === 'cliente-incidencia-portal' || tipo === 'cliente-incidencia-automatica') {
     return casoId ? `/atencion-cliente/casos?casoId=${casoId}` : '/atencion-cliente/casos'
+  }
+
+  // Citas del cliente
+  if (citaId || tipo === 'cliente-cita-asignada' || tipo === 'cliente-cita-confirmada' || tipo === 'cliente-cita-solicitud') {
+    return citaId ? `/atencion-cliente/agenda?citaId=${citaId}` : '/atencion-cliente/agenda'
   }
 
   // Seguimiento activo a clientes
