@@ -63,7 +63,7 @@ export function QuejasAlertBubble() {
     dismiss(alerta.uid)
     // Fase 8: Quejas vive en Casos. El id del evento es de la tabla vieja QUEJAS;
     // se abre la lista de casos tipo queja (la ruta /quejas también redirige aquí).
-    navigate('/atencion-cliente/casos?tipo=queja')
+    navigate('/atencion-cliente/clientes?tab=casos&tipo=queja')
   }
 
   if (!esSupervisor || alertas.length === 0) return null

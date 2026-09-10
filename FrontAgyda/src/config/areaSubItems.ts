@@ -90,15 +90,12 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'mantenimiento', label: 'Mantenimiento', kind: 'link', linkTo: '/tecnologia', description: 'Mantenimientos preventivos y correctivos.' },
   ],
   // Fase 8: Consultas / Aclaraciones / Quejas / Incidencias unificadas en "Casos".
+  // Todas las pantallas viven como pestañas dentro de "Seguimiento de clientes".
   'atencion-cliente': [
-    { slug: 'casos', label: 'Casos', kind: 'link', linkTo: '/atencion-cliente/casos', description: 'Casos de clientes: consultas, aclaraciones, quejas e incidencias.' },
-    { slug: 'agenda', label: 'Agenda', kind: 'link', linkTo: '/atencion-cliente/agenda', description: 'Agenda de citas y sesiones de tratamiento de clientes.' },
-    { slug: 'ofertas', label: 'Ofertas', kind: 'link', linkTo: '/atencion-cliente/ofertas', description: 'Campañas de oferta a segmentos de clientes por correo y WhatsApp.' },
-    { slug: 'seguimiento', label: 'Seguimiento', kind: 'link', linkTo: '/atencion-cliente/seguimiento', description: 'Casos abiertos que requieren seguimiento.' },
-    { slug: 'satisfaccion', label: 'Satisfacción', kind: 'link', linkTo: '/atencion-cliente/satisfaccion', description: 'Encuestas y medición de satisfacción.' },
-    { slug: 'retencion', label: 'Retención', kind: 'link', linkTo: '/atencion-cliente/retencion', description: 'Clientes en riesgo y acciones de retención.' },
-    { slug: 'clientes', label: 'Seguimiento de clientes', kind: 'link', linkTo: '/atencion-cliente/clientes', description: 'Expediente y seguimiento de clientes.' },
-    { slug: 'mis-tareas', label: 'Mi agenda', kind: 'link', linkTo: '/atencion-cliente/mis-tareas', description: 'Tu agenda del día: tareas y seguimientos pendientes.' },
+    { slug: 'clientes', label: 'Seguimiento de clientes', kind: 'link', linkTo: '/atencion-cliente/clientes', description: 'Clientes, casos, agenda, ofertas, satisfacción y retención en un solo lugar.' },
+    { slug: 'casos', label: 'Casos', kind: 'link', linkTo: '/atencion-cliente/clientes?tab=casos', description: 'Consultas, aclaraciones, quejas e incidencias.' },
+    { slug: 'agenda', label: 'Agenda', kind: 'link', linkTo: '/atencion-cliente/clientes?tab=agenda', description: 'Citas y sesiones de tratamiento.' },
+    { slug: 'ofertas', label: 'Ofertas', kind: 'link', linkTo: '/atencion-cliente/clientes?tab=ofertas', description: 'Campañas a segmentos por correo y WhatsApp.' },
     { slug: 'dashboard-clientes', label: 'Dashboard de Clientes', kind: 'link', linkTo: '/atencion-cliente/clientes/dashboard', description: 'Métricas y reportes de clientes.' },
   ],
   legal: [

@@ -123,7 +123,7 @@ function NuevaEvaluacionModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function RetencionPage() {
+export function RetencionPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const { can, isLoading: loadingAccess } = useActionAccess()
   const puedeCrear = can('atencion-cliente', 'crear-retencion')
@@ -141,41 +141,52 @@ export function RetencionPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
-        <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
-      </button>
+      {!embedded && (
+        <>
+          <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
+            <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
+          </button>
 
-      {/* Header */}
-      <div className="card overflow-hidden">
-        <div
-          className="animate-gradient-x relative overflow-hidden px-6 py-5"
-          style={{
-            backgroundImage: 'linear-gradient(90deg, #450A0A 0%, #B91C1C 25%, #F87171 50%, #B91C1C 75%, #450A0A 100%)',
-            backgroundSize: '200% 100%',
-          }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-                <ShieldAlert className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Retención de Clientes</h1>
-                <p className="mt-0.5 text-xs text-red-100/80">
-                  {evaluaciones.length} evaluación{evaluaciones.length !== 1 ? 'es' : ''} registrada{evaluaciones.length !== 1 ? 's' : ''}
-                </p>
+          <div className="card overflow-hidden">
+            <div
+              className="animate-gradient-x relative overflow-hidden px-6 py-5"
+              style={{
+                backgroundImage: 'linear-gradient(90deg, #450A0A 0%, #B91C1C 25%, #F87171 50%, #B91C1C 75%, #450A0A 100%)',
+                backgroundSize: '200% 100%',
+              }}
+            >
+              <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+              <div className="relative flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                    <ShieldAlert className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold text-white tracking-tight">Retención de Clientes</h1>
+                    <p className="mt-0.5 text-xs text-red-100/80">
+                      {evaluaciones.length} evaluación{evaluaciones.length !== 1 ? 'es' : ''} registrada{evaluaciones.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                {puedeCrear && (
+                  <Button onClick={() => setShowNueva(true)}
+                    className="bg-card !text-red-700 hover:bg-red-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                    <Plus className="h-3.5 w-3.5" /> Nueva evaluación
+                  </Button>
+                )}
               </div>
             </div>
-            {puedeCrear && (
-              <Button onClick={() => setShowNueva(true)}
-                className="bg-card !text-red-700 hover:bg-red-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
-                <Plus className="h-3.5 w-3.5" /> Nueva evaluación
-              </Button>
-            )}
           </div>
+        </>
+      )}
+
+      {embedded && puedeCrear && (
+        <div className="flex justify-end">
+          <Button onClick={() => setShowNueva(true)} className="text-[0.78rem] py-1.5 px-3">
+            <Plus className="h-3.5 w-3.5" /> Nueva evaluación
+          </Button>
         </div>
-      </div>
+      )}
 
       {/* Resumen */}
       <div className="grid grid-cols-3 gap-3">

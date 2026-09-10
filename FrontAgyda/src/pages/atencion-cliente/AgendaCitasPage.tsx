@@ -27,7 +27,7 @@ function fmtHora(f: string) {
   catch { return '' }
 }
 
-export function AgendaCitasPage() {
+export function AgendaCitasPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const { can } = useActionAccess()
   const puedeGestionar = can('atencion-cliente', 'citas-gestionar')
@@ -102,35 +102,47 @@ export function AgendaCitasPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
-        <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
-      </button>
+      {!embedded && (
+        <>
+          <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
+            <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
+          </button>
 
-      <div className="card overflow-hidden">
-        <div className="animate-gradient-x relative overflow-hidden px-6 py-5"
-          style={{ backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)', backgroundSize: '200% 100%' }}>
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-                <CalendarClock className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Agenda</h1>
-                <p className="mt-0.5 text-xs text-blue-100/80">
-                  {abiertas} cita{abiertas !== 1 ? 's' : ''} próxima{abiertas !== 1 ? 's' : ''}
-                  {sinConfirmar > 0 && ` · ${sinConfirmar} sin confirmar`}
-                </p>
+          <div className="card overflow-hidden">
+            <div className="animate-gradient-x relative overflow-hidden px-6 py-5"
+              style={{ backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)', backgroundSize: '200% 100%' }}>
+              <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                    <CalendarClock className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold text-white tracking-tight">Agenda</h1>
+                    <p className="mt-0.5 text-xs text-blue-100/80">
+                      {abiertas} cita{abiertas !== 1 ? 's' : ''} próxima{abiertas !== 1 ? 's' : ''}
+                      {sinConfirmar > 0 && ` · ${sinConfirmar} sin confirmar`}
+                    </p>
+                  </div>
+                </div>
+                {puedeGestionar && (
+                  <button onClick={() => setNueva(true)} className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-white/25 transition-colors">
+                    <Plus className="h-4 w-4" /> Nueva cita
+                  </button>
+                )}
               </div>
             </div>
-            {puedeGestionar && (
-              <button onClick={() => setNueva(true)} className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-white/25 transition-colors">
-                <Plus className="h-4 w-4" /> Nueva cita
-              </button>
-            )}
           </div>
+        </>
+      )}
+
+      {embedded && puedeGestionar && (
+        <div className="flex justify-end">
+          <button onClick={() => setNueva(true)} className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-brand-dark transition-colors">
+            <Plus className="h-4 w-4" /> Nueva cita
+          </button>
         </div>
-      </div>
+      )}
 
       <SolicitudesCitaPanel />
 

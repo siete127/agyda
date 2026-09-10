@@ -19,7 +19,7 @@ function fmtFecha(f: string) {
   catch { return f }
 }
 
-export function SatisfaccionPage() {
+export function SatisfaccionPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { can } = useActionAccess()
@@ -45,43 +45,54 @@ export function SatisfaccionPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
-        <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
-      </button>
+      {!embedded && (
+        <>
+          <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
+            <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
+          </button>
 
-      {/* Header */}
-      <div className="card overflow-hidden">
-        <div
-          className="animate-gradient-x relative overflow-hidden px-6 py-5"
-          style={{
-            backgroundImage: 'linear-gradient(90deg, #713F12 0%, #CA8A04 25%, #FDE047 50%, #CA8A04 75%, #713F12 100%)',
-            backgroundSize: '200% 100%',
-          }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-                <Smile className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Encuestas de Satisfacción</h1>
-                <p className="mt-0.5 text-xs text-yellow-100/90">
-                  {encuestas.length} encuesta{encuestas.length !== 1 ? 's' : ''} de satisfacción
-                </p>
+          <div className="card overflow-hidden">
+            <div
+              className="animate-gradient-x relative overflow-hidden px-6 py-5"
+              style={{
+                backgroundImage: 'linear-gradient(90deg, #713F12 0%, #CA8A04 25%, #FDE047 50%, #CA8A04 75%, #713F12 100%)',
+                backgroundSize: '200% 100%',
+              }}
+            >
+              <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+              <div className="relative flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                    <Smile className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold text-white tracking-tight">Encuestas de Satisfacción</h1>
+                    <p className="mt-0.5 text-xs text-yellow-100/90">
+                      {encuestas.length} encuesta{encuestas.length !== 1 ? 's' : ''} de satisfacción
+                    </p>
+                  </div>
+                </div>
+                {puedeGestionar && (
+                  <button
+                    onClick={() => setShowCrear(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-yellow-700 hover:bg-yellow-50 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Nueva encuesta
+                  </button>
+                )}
               </div>
             </div>
-            {puedeGestionar && (
-              <button
-                onClick={() => setShowCrear(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-yellow-700 hover:bg-yellow-50 transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" /> Nueva encuesta
-              </button>
-            )}
           </div>
+        </>
+      )}
+
+      {embedded && puedeGestionar && (
+        <div className="flex justify-end">
+          <button onClick={() => setShowCrear(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-brand-dark transition-colors">
+            <Plus className="h-3.5 w-3.5" /> Nueva encuesta
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Contenido */}
       {isLoading ? (

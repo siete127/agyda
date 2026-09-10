@@ -8,6 +8,7 @@ import { VentasLayout } from '@/layouts/VentasLayout'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RoleRoute } from './RoleRoute'
 import { ModuleRoute } from './ModuleRoute'
+import { RedirectTab } from './RedirectTab'
 import { LoginPage } from '@/pages/login/LoginPage'
 import { AuthBridgePage } from '@/pages/login/AuthBridgePage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
@@ -126,15 +127,11 @@ const InternetRedesPage             = lz(() => import('@/pages/internet-redes/In
 const RespaldosPage                 = lz(() => import('@/pages/respaldos/RespaldosPage'),       'RespaldosPage')
 const SistemasPage                  = lz(() => import('@/pages/sistemas/SistemasPage'),         'SistemasPage')
 const AtencionClientePage           = lz(() => import('@/pages/atencion-cliente/AtencionClientePage'), 'AtencionClientePage')
-const CasosPage                     = lz(() => import('@/pages/atencion-cliente/CasosPage'), 'CasosPage')
-const AgendaCitasPage                = lz(() => import('@/pages/atencion-cliente/AgendaCitasPage'), 'AgendaCitasPage')
-const OfertasPage                    = lz(() => import('@/pages/atencion-cliente/OfertasPage'), 'OfertasPage')
-const SeguimientoPage                = lz(() => import('@/pages/atencion-cliente/SeguimientoPage'), 'SeguimientoPage')
-const SatisfaccionPage               = lz(() => import('@/pages/atencion-cliente/SatisfaccionPage'), 'SatisfaccionPage')
-const RetencionPage                  = lz(() => import('@/pages/atencion-cliente/RetencionPage'), 'RetencionPage')
-const ClientesListaPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientesListaPage'), 'ClientesListaPage')
+// Módulo "Seguimiento de clientes": una sola pantalla con pestañas que colapsa
+// Casos / Agenda / Ofertas / Satisfacción / Retención / Mi agenda + la lista de
+// clientes. Las rutas viejas redirigen (RedirectTab preserva el query).
+const SeguimientoClientesPage        = lz(() => import('@/pages/atencion-cliente/SeguimientoClientesPage'), 'SeguimientoClientesPage')
 const ClientePerfilPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientePerfilPage'), 'ClientePerfilPage')
-const MiAgendaPage                   = lz(() => import('@/pages/atencion-cliente/MiAgendaPage'), 'MiAgendaPage')
 const ClientesDashboardPage          = lz(() => import('@/pages/atencion-cliente/ClientesDashboardPage'), 'ClientesDashboardPage')
 const RHPage                        = lz(() => import('@/pages/rh/RHPage'),                    'RHPage')
 const PortalAreasPage               = lz(() => import('@/pages/portal-areas/PortalAreasPage'),  'PortalAreasPage')
@@ -223,7 +220,7 @@ export const router = createBrowserRouter([
           { element: <ModuleRoute moduleKey="mensajeria" />,          children: [{ path: '/mensajeria',       element: wrap(<MensajeriaPage />) }] },
           { element: <ModuleRoute moduleKey="vacaciones" />,          children: [{ path: '/vacaciones',       element: wrap(<VacacionesPage />) }] },
           { element: <ModuleRoute moduleKey="calendario" />,          children: [{ path: '/calendario',       element: wrap(<CalendarioPage />) }] },
-          { path: '/quejas', element: <Navigate to="/atencion-cliente/casos?tipo=queja" replace /> }, // Fase 8 (import y página se retiran en Fase 9)
+          { path: '/quejas', element: <Navigate to="/atencion-cliente/clientes?tab=casos&tipo=queja" replace /> }, // Quejas viven en Casos, dentro del módulo unificado
           { element: <ModuleRoute moduleKey="reglamento" />,          children: [{ path: '/reglamento',       element: wrap(<ReglamentoPage />) }] },
           { element: <ModuleRoute moduleKey="drive" />,               children: [{ path: '/drive',            element: wrap(<DrivePage />) }] },
           { element: <ModuleRoute moduleKey="organigrama" />,         children: [{ path: '/organigrama',      element: wrap(<OrganigramaPage />) }] },
@@ -323,21 +320,22 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia/sistemas', element: wrap(<SistemasPage />) }] },
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia/:subSlug', element: wrap(<AreaSubModuloPage areaKey="ti" />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente', element: wrap(<AtencionClientePage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/casos', element: wrap(<CasosPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/agenda', element: wrap(<AgendaCitasPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/ofertas', element: wrap(<OfertasPage />) }] },
-              // Fase 8: rutas viejas redirigen a Casos (imports/páginas se retiran en Fase 9).
-              { path: '/atencion-cliente/consultas', element: <Navigate to="/atencion-cliente/casos?tipo=consulta" replace /> },
-              { path: '/atencion-cliente/aclaraciones', element: <Navigate to="/atencion-cliente/casos?tipo=aclaracion" replace /> },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/seguimiento', element: wrap(<SeguimientoPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/satisfaccion', element: wrap(<SatisfaccionPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/retencion', element: wrap(<RetencionPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes', element: wrap(<ClientesListaPage />) }] },
+              // Módulo unificado con pestañas.
+              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes', element: wrap(<SeguimientoClientesPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes/dashboard', element: wrap(<ClientesDashboardPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes/:id', element: wrap(<ClientePerfilPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mis-tareas', element: wrap(<MiAgendaPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mi-agenda', element: wrap(<MiAgendaPage />) }] },
-              { path: '/atencion-cliente/incidencias', element: <Navigate to="/atencion-cliente/casos?tipo=incidencia" replace /> }, // Fase 8
+              // Rutas viejas → pestaña del módulo, preservando el query (deep-links).
+              { path: '/atencion-cliente/casos', element: <RedirectTab tab="casos" /> },
+              { path: '/atencion-cliente/agenda', element: <RedirectTab tab="agenda" /> },
+              { path: '/atencion-cliente/ofertas', element: <RedirectTab tab="ofertas" /> },
+              { path: '/atencion-cliente/satisfaccion', element: <RedirectTab tab="satisfaccion" /> },
+              { path: '/atencion-cliente/retencion', element: <RedirectTab tab="retencion" /> },
+              { path: '/atencion-cliente/mis-tareas', element: <RedirectTab tab="mi-agenda" /> },
+              { path: '/atencion-cliente/mi-agenda', element: <RedirectTab tab="mi-agenda" /> },
+              { path: '/atencion-cliente/seguimiento', element: <RedirectTab tab="casos" extra={{ estatus: 'abiertos' }} /> },
+              { path: '/atencion-cliente/consultas', element: <RedirectTab tab="casos" extra={{ tipo: 'consulta' }} /> },
+              { path: '/atencion-cliente/aclaraciones', element: <RedirectTab tab="casos" extra={{ tipo: 'aclaracion' }} /> },
+              { path: '/atencion-cliente/incidencias', element: <RedirectTab tab="casos" extra={{ tipo: 'incidencia' }} /> },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/:subSlug', element: wrap(<AreaSubModuloPage areaKey="atencion-cliente" />) }] },
               { element: <ModuleRoute moduleKey="rh-area" />,         children: [{ path: '/rh',               element: wrap(<RHPage />) }] },
               { element: <ModuleRoute moduleKey="rh-area" />,         children: [{ path: '/rh/reclutamiento', element: wrap(<ReclutamientoPage />) }] },

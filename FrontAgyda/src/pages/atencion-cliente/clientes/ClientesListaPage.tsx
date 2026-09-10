@@ -8,12 +8,17 @@ import { CLIENTE_ESTATUS_COLORES } from '@/types/crm.types'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { NuevoClienteModal } from './NuevoClienteModal'
 
-export function ClientesListaPage() {
+export function ClientesListaPage({ embedded = false, onAbrirCliente }: {
+  embedded?: boolean
+  onAbrirCliente?: (id: number) => void
+}) {
   const navigate = useNavigate()
   const { can } = useActionAccess()
   const puedeGestionar = can('atencion-cliente', 'clientes-gestionar')
   const [busqueda, setBusqueda] = useState('')
   const [showNuevo, setShowNuevo] = useState(false)
+
+  const abrir = (id: number) => (onAbrirCliente ? onAbrirCliente(id) : navigate(`/atencion-cliente/clientes/${id}`))
 
   const { data: clientes = [], isLoading } = useQuery({
     queryKey: ['clientes-lista'],
@@ -27,42 +32,57 @@ export function ClientesListaPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
-        <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
-      </button>
+      {!embedded && (
+        <>
+          <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
+            <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
+          </button>
 
-      <div className="card overflow-hidden">
-        <div
-          className="animate-gradient-x relative overflow-hidden px-6 py-5"
-          style={{
-            backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)',
-            backgroundSize: '200% 100%',
-          }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-                <Users className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Seguimiento de clientes</h1>
-                <p className="mt-0.5 text-xs text-blue-100/80">
-                  {clientes.length} cliente{clientes.length !== 1 ? 's' : ''} registrado{clientes.length !== 1 ? 's' : ''}
-                </p>
+          <div className="card overflow-hidden">
+            <div
+              className="animate-gradient-x relative overflow-hidden px-6 py-5"
+              style={{
+                backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)',
+                backgroundSize: '200% 100%',
+              }}
+            >
+              <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+              <div className="relative flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                    <Users className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold text-white tracking-tight">Seguimiento de clientes</h1>
+                    <p className="mt-0.5 text-xs text-blue-100/80">
+                      {clientes.length} cliente{clientes.length !== 1 ? 's' : ''} registrado{clientes.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                {puedeGestionar && (
+                  <button
+                    onClick={() => setShowNuevo(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-brand shadow-sm hover:bg-blue-50 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Nuevo cliente
+                  </button>
+                )}
               </div>
             </div>
-            {puedeGestionar && (
-              <button
-                onClick={() => setShowNuevo(true)}
-                className="flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-[0.78rem] font-semibold text-brand shadow-sm hover:bg-blue-50 transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" /> Nuevo cliente
-              </button>
-            )}
           </div>
+        </>
+      )}
+
+      {embedded && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[0.8rem] text-gray-500">{clientes.length} cliente{clientes.length !== 1 ? 's' : ''}</p>
+          {puedeGestionar && (
+            <button onClick={() => setShowNuevo(true)} className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-brand-dark transition-colors">
+              <Plus className="h-3.5 w-3.5" /> Nuevo cliente
+            </button>
+          )}
         </div>
-      </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -97,7 +117,7 @@ export function ClientesListaPage() {
             return (
               <button
                 key={c.id}
-                onClick={() => navigate(`/atencion-cliente/clientes/${c.id}`)}
+                onClick={() => abrir(c.id)}
                 className="flex flex-col gap-2 rounded-2xl border border-gray-200/60 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -126,7 +146,7 @@ export function ClientesListaPage() {
         </div>
       )}
 
-      {showNuevo && <NuevoClienteModal onClose={() => setShowNuevo(false)} onCreated={(id) => navigate(`/atencion-cliente/clientes/${id}`)} />}
+      {showNuevo && <NuevoClienteModal onClose={() => setShowNuevo(false)} onCreated={(id) => { setShowNuevo(false); abrir(id) }} />}
     </div>
   )
 }

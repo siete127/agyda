@@ -15,15 +15,18 @@ import { CasoDetalleModal } from './components/CasoDetalleModal'
 
 const ESTATUS_ABIERTOS: CasoEstatus[] = ['pendiente', 'en_proceso', 'en_espera_cliente', 'escalado']
 
-export function CasosPage() {
+export function CasosPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const { can } = useActionAccess()
   const puedeGestionar = can('atencion-cliente', 'casos-gestionar')
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const [filtroTipo, setFiltroTipo] = useState<CasoTipo | ''>('')
+  const [filtroTipo, setFiltroTipo] = useState<CasoTipo | ''>((searchParams.get('tipo') as CasoTipo) || '')
   const [filtroEstatus, setFiltroEstatus] = useState<CasoEstatus | ''>('')
   const [filtroPrioridad, setFiltroPrioridad] = useState<CasoPrioridad | ''>('')
+  // Vista rápida: 'todos' o 'abiertos' (worklist — reemplaza la pantalla vieja
+  // "Seguimiento"). El redirect de /atencion-cliente/seguimiento trae ?estatus=abiertos.
+  const [vista, setVista] = useState<'todos' | 'abiertos'>(searchParams.get('estatus') === 'abiertos' ? 'abiertos' : 'todos')
   const [detalle, setDetalle] = useState<Caso | null>(null)
   const [nuevo, setNuevo] = useState(false)
 
@@ -59,49 +62,68 @@ export function CasosPage() {
 
   const abiertos = casos.filter((c) => ESTATUS_ABIERTOS.includes(c.estatus))
   const vencidosSla = abiertos.filter((c) => c.fechaLimiteSla && new Date(c.fechaLimiteSla) < new Date())
+  const casosVisibles = vista === 'abiertos' ? abiertos : casos
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
-        <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
-      </button>
+      {!embedded && (
+        <>
+          <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
+            <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
+          </button>
 
-      <div className="card overflow-hidden">
-        <div
-          className="animate-gradient-x relative overflow-hidden px-6 py-5"
-          style={{
-            backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)',
-            backgroundSize: '200% 100%',
-          }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-                <Inbox className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Casos</h1>
-                <p className="mt-0.5 text-xs text-blue-100/80">
-                  {abiertos.length} abierto{abiertos.length !== 1 ? 's' : ''}
-                  {vencidosSla.length > 0 && ` · ${vencidosSla.length} con SLA vencido`}
-                </p>
+          <div className="card overflow-hidden">
+            <div
+              className="animate-gradient-x relative overflow-hidden px-6 py-5"
+              style={{
+                backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)',
+                backgroundSize: '200% 100%',
+              }}
+            >
+              <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                    <Inbox className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold text-white tracking-tight">Casos</h1>
+                    <p className="mt-0.5 text-xs text-blue-100/80">
+                      {abiertos.length} abierto{abiertos.length !== 1 ? 's' : ''}
+                      {vencidosSla.length > 0 && ` · ${vencidosSla.length} con SLA vencido`}
+                    </p>
+                  </div>
+                </div>
+                {puedeGestionar && (
+                  <button onClick={() => setNuevo(true)} className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-white/25 transition-colors">
+                    <Plus className="h-4 w-4" /> Nuevo caso
+                  </button>
+                )}
               </div>
             </div>
-            {puedeGestionar && (
-              <button onClick={() => setNuevo(true)} className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-white/25 transition-colors">
-                <Plus className="h-4 w-4" /> Nuevo caso
-              </button>
-            )}
           </div>
+        </>
+      )}
+
+      {embedded && puedeGestionar && (
+        <div className="flex justify-end">
+          <button onClick={() => setNuevo(true)} className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-brand-dark transition-colors">
+            <Plus className="h-4 w-4" /> Nuevo caso
+          </button>
         </div>
-      </div>
+      )}
 
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[0.78rem] text-amber-800">
-        Vista unificada nueva — reemplaza gradualmente a Consultas, Aclaraciones, Quejas e Incidencias.
-      </div>
-
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1 rounded-xl bg-gray-100 p-1">
+          {(['todos', 'abiertos'] as const).map((v) => (
+            <button key={v} onClick={() => setVista(v)}
+              className={clsx('rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition-all',
+                vista === v ? 'bg-card shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700')}>
+              {v === 'todos' ? 'Todos' : 'Abiertos'}
+              {v === 'abiertos' && abiertos.length > 0 && <span className="ml-1 text-[0.65rem] text-gray-400">{abiertos.length}</span>}
+            </button>
+          ))}
+        </div>
         <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value as CasoTipo | '')} className="field w-auto">
           <option value="">Todos los tipos</option>
           {(Object.keys(CASO_TIPO_CONFIG) as CasoTipo[]).map((t) => <option key={t} value={t}>{CASO_TIPO_CONFIG[t].label}</option>)}
@@ -118,15 +140,15 @@ export function CasosPage() {
 
       {isLoading ? (
         <div className="flex justify-center py-20"><Spinner size="lg" /></div>
-      ) : casos.length === 0 ? (
+      ) : casosVisibles.length === 0 ? (
         <div className="card flex flex-col items-center justify-center gap-3 py-20 text-center">
           <Inbox className="h-8 w-8 text-gray-300" />
-          <p className="text-sm font-semibold text-gray-700">Sin casos</p>
+          <p className="text-sm font-semibold text-gray-700">{vista === 'abiertos' ? 'Sin casos abiertos' : 'Sin casos'}</p>
         </div>
       ) : (
         <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
           <div className="divide-y divide-gray-50">
-            {casos.map((c) => {
+            {casosVisibles.map((c) => {
               const tipoCfg = CASO_TIPO_CONFIG[c.tipo]
               const estCfg = ESTATUS_CASO_CONFIG[c.estatus]
               const prioCfg = PRIORIDAD_CASO_CONFIG[c.prioridad]

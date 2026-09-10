@@ -9,7 +9,7 @@ import { TareaRow } from './clientes/components/TareasTab'
 
 type Tab = 'hoy' | 'todas'
 
-export function MiAgendaPage() {
+export function MiAgendaPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('hoy')
 
@@ -35,27 +35,31 @@ export function MiAgendaPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
-        <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
-      </button>
+      {!embedded && (
+        <>
+          <button onClick={() => navigate('/atencion-cliente')} className="flex items-center gap-1.5 text-xs font-medium text-brand hover:underline">
+            <ChevronLeft className="h-3.5 w-3.5" /> Volver a Atención al Cliente
+          </button>
 
-      <div className="card overflow-hidden">
-        <div
-          className="animate-gradient-x relative overflow-hidden px-6 py-5"
-          style={{ backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)', backgroundSize: '200% 100%' }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-              <CalendarClock className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">Mi agenda</h1>
-              <p className="mt-0.5 text-xs text-blue-100/80">{totalHoy} pendiente{totalHoy !== 1 ? 's' : ''} para hoy</p>
+          <div className="card overflow-hidden">
+            <div
+              className="animate-gradient-x relative overflow-hidden px-6 py-5"
+              style={{ backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)', backgroundSize: '200% 100%' }}
+            >
+              <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+              <div className="relative flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                  <CalendarClock className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-white tracking-tight">Mi agenda</h1>
+                  <p className="mt-0.5 text-xs text-blue-100/80">{totalHoy} pendiente{totalHoy !== 1 ? 's' : ''} para hoy</p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       <div className="flex gap-2">
         {(['hoy', 'todas'] as Tab[]).map((t) => (

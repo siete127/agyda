@@ -62,22 +62,22 @@ export function notificationTarget(n: NotificationItem): string | null {
   // Consultas / aclaraciones (CRM / atención a clientes)
   if (tipo === 'consulta_nueva' || tipo === 'aclaracion_nueva') return '/atencion-cliente'
 
-  // Casos unificados — incluye las incidencias automáticas (SLA, encuesta,
-  // portal) que desde la Fase 6 se crean como Caso tipo 'incidencia'.
+  // Módulo unificado "Seguimiento de clientes" — todo entra como pestaña.
+  // Casos (incluye las incidencias automáticas de SLA/encuesta/portal).
   if (casoId || tipo === 'caso-asignado' || tipo === 'caso-automatico' ||
       tipo === 'cliente-incidencia-sla-riesgo' || tipo === 'cliente-incidencia-sla-vencido' ||
       tipo === 'cliente-incidencia-portal' || tipo === 'cliente-incidencia-automatica') {
-    return casoId ? `/atencion-cliente/casos?casoId=${casoId}` : '/atencion-cliente/casos'
+    return casoId ? `/atencion-cliente/clientes?tab=casos&casoId=${casoId}` : '/atencion-cliente/clientes?tab=casos'
   }
 
   // Citas del cliente
   if (citaId || tipo === 'cliente-cita-asignada' || tipo === 'cliente-cita-confirmada' || tipo === 'cliente-cita-solicitud') {
-    return citaId ? `/atencion-cliente/agenda?citaId=${citaId}` : '/atencion-cliente/agenda'
+    return citaId ? `/atencion-cliente/clientes?tab=agenda&citaId=${citaId}` : '/atencion-cliente/clientes?tab=agenda'
   }
 
   // Seguimiento activo a clientes
-  if (tipo === 'cliente-tarea-vence' || tipo === 'cliente-seguimiento-hoy') return '/atencion-cliente/mis-tareas'
-  if (tipo === 'cliente-inactivo' || tipo === 'cliente-nuevo-asignado' || tipo === 'cliente-tarea-asignada') return '/atencion-cliente/clientes'
+  if (tipo === 'cliente-tarea-vence' || tipo === 'cliente-seguimiento-hoy') return '/atencion-cliente/clientes?tab=mi-agenda'
+  if (tipo === 'cliente-inactivo' || tipo === 'cliente-nuevo-asignado' || tipo === 'cliente-tarea-asignada') return '/atencion-cliente/clientes?tab=clientes'
   if (tipo === 'cliente-pago-por-vencer' || tipo === 'crm-recordatorio-pago' ||
       tipo === 'cliente-pago-confirmado' || tipo === 'cliente-fecha-importante') return '/crm-interno'
 
