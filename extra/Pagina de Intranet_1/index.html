@@ -573,6 +573,13 @@
         </div>
     </div>
 
+    <div id="pdfModal" class="modal-overlay">
+        <div class="modal-container modal-container--pdf">
+            <button class="modal-close-btn" onclick="closePdfModal()">&times;</button>
+            <iframe id="pdfModalFrame" class="pdf-modal-frame" src="" title="Ficha PDF"></iframe>
+        </div>
+    </div>
+
     <section class="talento-section">
         <div class="talento-container">
             <div class="talento-info">
@@ -2707,6 +2714,29 @@
             if (kbModalEl) {
                 kbModalEl.addEventListener('click', (event) => {
                     if (event.target === kbModalEl) closeKbModal();
+                });
+            }
+
+            window.openPdfModal = function (url) {
+                const modal = document.getElementById('pdfModal');
+                const frame = document.getElementById('pdfModalFrame');
+                frame.src = url;
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            };
+
+            window.closePdfModal = function () {
+                const modal = document.getElementById('pdfModal');
+                const frame = document.getElementById('pdfModalFrame');
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+                frame.src = '';
+            };
+
+            const pdfModalEl = document.getElementById('pdfModal');
+            if (pdfModalEl) {
+                pdfModalEl.addEventListener('click', (event) => {
+                    if (event.target === pdfModalEl) closePdfModal();
                 });
             }
 

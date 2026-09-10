@@ -164,11 +164,16 @@ export function mountSolBubbles(container) {
                         ${sol.bullets.map((b, i) => `<li data-i18n="sol.${sol.key}.f${i + 1}">${b}</li>`).join('')}
                     </ul>
                     <div class="sol-bubble-actions">
-                        <a href="${sol.pdf}" target="_blank" rel="noopener" class="sol-bubble-pdf" data-i18n="common.fichaPdf">Ficha PDF</a>
+                        <button type="button" class="sol-bubble-pdf" data-pdf-url="${sol.pdf}" data-i18n="common.fichaPdf">Ficha PDF</button>
                     </div>
                 </div>
             </div>
         `;
+        const pdfBtn = el.querySelector('.sol-bubble-pdf');
+        pdfBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (typeof window.openPdfModal === 'function') window.openPdfModal(sol.pdf);
+        });
         container.appendChild(el);
         return el;
     });
