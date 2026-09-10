@@ -2,7 +2,7 @@
    1. VARIABLES Y CONFIGURACIÓN BASE
    ========================================== */
 :root {
-  --azul-electrico: #0052FF;
+  --azul-electrico: #017EFD;
   --azul-oscuro: #0F2042;
   --verde-agua: #17C1A3;
   --gris-texto: #556075;
@@ -101,7 +101,7 @@ a {
 }
 
 .nav-link {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   color: #2D3748;
   padding: 12px 0;
@@ -190,6 +190,18 @@ html[data-theme="dark"] .nav-link {
   height: 100%;
   object-fit: contain;
   display: block;
+  /* Los PNG son blancos sobre transparente (pensados para fondo oscuro) —
+     en modo claro casi no se ven contra el fondo claro del footer, así
+     que se tiñen al azul de marca (#1E77F5) con el mismo truco de filtro
+     que usan los logos de Aliados: invert(1) los vuelve negros primero,
+     el resto de la cadena los tiñe al azul exacto. */
+  filter: invert(1) brightness(0) saturate(100%) invert(31%) sepia(94%) saturate(3207%) hue-rotate(210deg) brightness(99%) contrast(96%);
+}
+
+html[data-theme="dark"] .social-icon img {
+  /* En oscuro ya son blancos sobre el fondo oscuro del footer — se dejan
+     tal cual, sin filtro. */
+  filter: none;
 }
 
 .social-icon:hover {
@@ -232,6 +244,17 @@ html[data-theme="dark"] .nav-link {
   background: linear-gradient(90deg, #14A88E, var(--azul-oscuro));
 }
 
+.header-login-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.header-login-btn:hover {
+  transform: none;
+}
+
 .arrow {
   font-size: 18px;
   transition: transform 0.2s ease;
@@ -241,18 +264,19 @@ html[data-theme="dark"] .nav-link {
   transform: translateX(4px);
 }
 
-/* Botón "Demo" del header — outline discreto, sin gradiente ni animación de alerta */
+/* Botón "Demo" del header — modo claro: relleno blanco con borde azul.
+   Modo oscuro: relleno azul (color de marca) con borde blanco. */
 .demo-btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: transparent;
-  color: inherit;
+  background-color: #FFFFFF;
+  color: var(--azul-electrico);
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.02em;
   padding: 8px 16px;
-  border: 1.5px solid currentColor;
+  border: 1.5px solid var(--azul-electrico);
   border-radius: 50px;
   opacity: 0.85;
   transition: opacity 0.2s ease, background-color 0.2s ease;
@@ -261,7 +285,12 @@ html[data-theme="dark"] .nav-link {
 
 .demo-btn:hover {
   opacity: 1;
-  background-color: rgba(0, 82, 255, 0.08);
+}
+
+html[data-theme="dark"] .demo-btn {
+  background-color: var(--azul-oscuro);
+  color: #FFFFFF;
+  border-color: #FFFFFF;
 }
 
 .demo-btn-arrow {
@@ -363,7 +392,7 @@ button.demo-btn {
 }
 
 .section-title {
-  font-size: 36px;
+  font-size: 40px;
   font-weight: 700;
   color: var(--texto-principal);
   margin-bottom: 16px;
@@ -444,7 +473,8 @@ html[data-theme="dark"] .hero-bg-overlay {
    ~110-180px sobre el borde del hero) — lo suficientemente abajo para no
    tocar la mascota, y con margen de sobra para llegar a color sólido
    antes de que empiece a taparla pilares-section a los 90px del final. */
-.hero-bg-fade {
+.hero-bg-fade,
+.hero-bg-fade-bottom {
   position: absolute;
   left: 0;
   right: 0;
@@ -455,22 +485,33 @@ html[data-theme="dark"] .hero-bg-overlay {
   overflow: hidden;
 }
 
+/* .hero-bg-fade-bottom solo existe para el layout de teléfono (borde
+   inferior); en escritorio el borde inferior ya lo cubre .hero-bg-fade. */
+.hero-bg-fade-bottom {
+  display: none;
+}
+
 .hero-bg-fade,
 .hero-bg-fade::before,
-.hero-bg-fade::after {
+.hero-bg-fade::after,
+.hero-bg-fade-bottom,
+.hero-bg-fade-bottom::before,
+.hero-bg-fade-bottom::after {
   -webkit-backdrop-filter: blur(var(--fade-blur, 6px));
   backdrop-filter: blur(var(--fade-blur, 6px));
 }
 
 /* Capa 1: blur muy suave, empieza a revelarse casi desde arriba de la franja */
-.hero-bg-fade {
+.hero-bg-fade,
+.hero-bg-fade-bottom {
   --fade-blur: 6px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 22%, black 100%);
   mask-image: linear-gradient(to bottom, transparent 0%, black 22%, black 100%);
 }
 
 /* Capa 2: blur medio, se revela un poco más abajo, solapando la capa 1 */
-.hero-bg-fade::before {
+.hero-bg-fade::before,
+.hero-bg-fade-bottom::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -484,7 +525,8 @@ html[data-theme="dark"] .hero-bg-overlay {
    pilares-section empieza a taparla (al 50%, es decir a 90px del final).
    Del 38% al 100% ya es puro color plano, así que el tapado de pilares
    cae sobre una zona ya idéntica a su propio fondo: sin costura visible. */
-.hero-bg-fade::after {
+.hero-bg-fade::after,
+.hero-bg-fade-bottom::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -587,7 +629,7 @@ html[data-theme="dark"] .section-blobs .blob-3 {
 .aliados-section > *:not(.section-blobs):not(.aliados-circle),
 .servicios-section > *:not(.section-blobs):not(.servicios-circle),
 .portafolio-section > *:not(.section-blobs):not(.portafolio-circle),
-.qr-form-section > *:not(.section-blobs):not(.qr-form-circle) {
+.qr-form-section > *:not(.section-blobs):not(.qr-form-circle):not(.qr-form-waves) {
   position: relative;
   z-index: 1;
 }
@@ -596,6 +638,7 @@ html[data-theme="dark"] .section-blobs .blob-3 {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px;
+  padding-top: var(--header-overlap, 0px);
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -808,7 +851,7 @@ html[data-theme="dark"] .badge-item p {
    (4 tarjetas en cinta diagonal con foto de fondo)
    ========================================== */
 .impulso-section {
-  padding: 90px 24px 100px;
+  padding: 90px 24px 40px;
   background-color: var(--bg-superficie-alterna);
 }
 
@@ -823,7 +866,7 @@ html[data-theme="dark"] .badge-item p {
 }
 
 .impulso-header h2 {
-  font-size: 34px;
+  font-size: 40px;
   font-weight: 800;
   line-height: 1.25;
   color: var(--texto-principal);
@@ -842,8 +885,8 @@ html[data-theme="dark"] .badge-item p {
 .impulso-grid {
   max-width: 1400px;
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  display: flex;
+  align-items: stretch;
   gap: 0;
 }
 
@@ -851,6 +894,11 @@ html[data-theme="dark"] .badge-item p {
   position: relative;
   display: flex;
   flex-direction: column;
+  /* Ciclo automático (ver JS en index.html): la tarjeta activa crece y el
+     resto se reparte el espacio restante — flex-grow anima suave porque
+     el ancho real de cada .impulso-card-banner es 100% del flex item. */
+  flex: 1 1 0;
+  transition: flex-grow 0.6s cubic-bezier(0.65, 0, 0.35, 1);
   /* Se solapan levemente para que el corte diagonal de una tarjeta
      "encaje" visualmente con el de la siguiente, como una cinta continua */
   margin-left: -18px;
@@ -863,19 +911,22 @@ html[data-theme="dark"] .badge-item p {
   /* TiltedCard (React Bits, portado a JS+CSS vanilla): inclinación 3D con
      el mouse — ver el <script> con [data-tilt] en index.html. */
   perspective: 800px;
-  will-change: transform;
-  transition: transform 0.1s ease-out;
+  will-change: transform, flex-grow;
 }
 
 .impulso-card:first-child {
   margin-left: 0;
 }
 
+.impulso-card.is-active {
+  flex-grow: 2.6;
+}
+
 .impulso-card-banner {
   position: relative;
-  height: 220px;
+  height: 320px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   overflow: hidden;
   color: #fff;
@@ -890,76 +941,150 @@ html[data-theme="dark"] .badge-item p {
   transform: translateY(-4px);
 }
 
-/* Foto real de fondo por tarjeta, con tinte azul de marca (#1E77F5) para
-   mantener el número y el texto legibles encima y unificar el tono. */
+/* Foto real de fondo por tarjeta, sin tinte de color — se ve tal cual.
+   La legibilidad del número (arriba) y del texto (abajo) ya no depende de
+   un degradado sobre toda la imagen: el número lleva text-shadow y el
+   texto tiene su propio fondo con blur (.impulso-card-content). */
 .impulso-card--infra .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-infraestructura.png');
+  background-image: url('../assets/servicios/servicio-infraestructura.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--ciber .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-ciberseguridad.png');
+  background-image: url('../assets/servicios/servicio-ciberseguridad.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--digital .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-desarrollo.png');
+  background-image: url('../assets/servicios/servicio-desarrollo.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--soporte .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-soporte.png');
+  background-image: url('../assets/servicios/servicio-soporte.png');
   background-size: cover;
   background-position: center;
 }
 .impulso-card--consultoria .impulso-card-banner {
-  background-image: linear-gradient(180deg, rgba(30, 119, 245, 0.35) 0%, rgba(6, 15, 35, 0.85) 100%), url('../assets/servicios/servicio-consultoria.png');
+  background-image: url('../assets/servicios/servicio-consultoria.png');
   background-size: cover;
   background-position: center;
 }
 
+html[data-theme="dark"] .impulso-card--infra .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-infraestructura.png');
+}
+html[data-theme="dark"] .impulso-card--ciber .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-ciberseguridad.png');
+}
+html[data-theme="dark"] .impulso-card--digital .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-desarrollo.png');
+}
+html[data-theme="dark"] .impulso-card--soporte .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-soporte.png');
+}
+html[data-theme="dark"] .impulso-card--consultoria .impulso-card-banner {
+  background-image: url('../assets/servicios/servicio-consultoria.png');
+}
+
 .impulso-number {
-  position: absolute;
-  top: 16px;
-  left: 34px;
-  font-size: 32px;
+  display: block;
+  font-size: 40px;
   font-weight: 800;
   color: #1E77F5;
   letter-spacing: 0.02em;
-  z-index: 2;
+  margin-bottom: 2px;
+  /* Halo blanco reforzado para que nunca se pierda, sin importar qué tan
+     clara u oscura sea la foto justo detrás. */
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.95), 0 0 6px rgba(255, 255, 255, 0.95), 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
+/* Transición foto → texto sin corte: el fondo del bloque de contenido es
+   un degradado que arranca totalmente transparente (se funde con la foto,
+   sin línea de división) y se va haciendo sólido hacia abajo. El blur
+   acompaña la misma curva para que no se note un límite duro del blur.
+   Empieza a cubrir desde el 30% (más arriba que antes) para que el fundido
+   sea más largo y gradual. */
 .impulso-card-content {
-  padding: 18px 34px 0 34px;
+  position: relative;
+  z-index: 2;
+  /* El banner tiene un clip-path en paralelogramo (corte diagonal de 24px
+     en las esquinas inferior-izq/superior-der). Este bloque es rectangular
+     y va pegado al fondo (align-items:flex-end del banner), así que sin
+     este ensanche la cuña diagonal de la esquina inferior-izquierda queda
+     "vacía" de overlay y se ve un triángulo de la foto sin cubrir.
+     Se ensancha 30px por lado; el overflow:hidden del banner recorta el
+     sobrante, así no se nota que ya no mide exactamente 100%. */
+  width: calc(100% + 60px);
+  margin-left: -30px;
+  padding: 56px 52px 18px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(0deg, #000 30%, transparent 100%);
+  mask-image: linear-gradient(0deg, #000 30%, transparent 100%);
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.9) 30%, rgba(255, 255, 255, 0) 100%);
+  transition: opacity 0.3s ease;
 }
 
 .impulso-card-content h3 {
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 700;
-  color: var(--texto-principal);
-  margin-bottom: 6px;
+  color: #0B1224;
+  margin-bottom: 4px;
 }
 
 .impulso-card-content p {
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.5;
-  color: var(--texto-secundario);
+  color: #3A4356;
+  /* Solo la tarjeta activa (más ancha) tiene espacio cómodo para la
+     descripción completa sin partirse en muchas líneas. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+html[data-theme="dark"] .impulso-card-content {
+  background: linear-gradient(0deg, rgba(6, 15, 35, 0.92) 0%, rgba(6, 15, 35, 0.92) 30%, rgba(6, 15, 35, 0) 100%);
+}
+
+html[data-theme="dark"] .impulso-number {
+  /* En oscuro el fondo del overlay ya es azul-oscuro — el número azul se
+     perdía contra él. Blanco puro + halo azul de marca para que siga
+     resaltando y sin perder la identidad de color. */
+  color: #fff;
+  text-shadow: 0 0 14px rgba(30, 119, 245, 0.9), 0 0 6px rgba(30, 119, 245, 0.9), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="dark"] .impulso-card-content h3 {
+  color: #fff;
+}
+
+html[data-theme="dark"] .impulso-card-content p {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 @media (max-width: 992px) {
+  /* En pantallas chicas el ciclo de "una tarjeta grande" no cabe bien —
+     se apilan en 2 columnas, todas del mismo tamaño (sin is-active). */
   .impulso-grid {
+    display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 28px 0;
+    gap: 28px 16px;
   }
   .impulso-card {
     margin-left: 0;
+    flex: initial;
+  }
+  .impulso-card.is-active {
+    flex-grow: initial;
   }
   .impulso-card-banner {
+    height: 260px;
     clip-path: none;
     border-radius: 16px;
-  }
-  .impulso-card-content {
-    padding: 18px 6px 0 6px;
   }
   .impulso-number {
     left: 20px;
@@ -976,6 +1101,380 @@ html[data-theme="dark"] .badge-item p {
   }
   .impulso-desc {
     max-width: 100%;
+  }
+}
+
+/* ==========================================
+   SECCIÓN "SOLUCIONES QUE CONECTAN TU NEGOCIO"
+   (entre Servicios/Impulso y Nosotros — 3 puntos unidos por una curva SVG)
+   ========================================== */
+.soluciones-conectan-section {
+  padding: 90px 24px 170px;
+  background-color: var(--bg-superficie-alterna);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Envoltorio del carrusel de burbujas + la cinta de fondo que pasa "por
+   detrás" de ellas — ambos comparten el mismo centro, para que la cinta se
+   vea como una órbita que atraviesa las esferas, no una franja aparte
+   arriba de la sección. */
+.sol-bubbles-wrap {
+  position: relative;
+  /* Con .soluciones-conectan-container en align-items:start, esta columna
+     arranca a la altura del título — se empuja hacia abajo para que quede
+     por debajo del párrafo de la intro (que ya no se mueve, al no estar
+     centrado contra esta columna más alta). */
+  margin-top: 104px;
+}
+
+/* Cinta TextLoop (React Bits, portado a JS vanilla + GSAP) en forma de
+   onda, centrada detrás del carrusel de burbujas (z-index menor que
+   .sol-bubble) para que se lea como si pasara por detrás de las esferas.
+   Vive DENTRO de .sol-bubbles (no de .sol-bubbles-wrap) para centrarse
+   respecto a esos 380px fijos — el wrap crece con el detalle expandido de
+   la burbuja activa, así que centrar ahí la desplazaba hacia arriba.
+   A diferencia del shape "circle" (que se dimensiona por alto), la onda es
+   naturalmente más ancha que alta, así que aquí se dimensiona por ANCHO
+   (ocupa el mismo ancho que el carrusel) y la altura queda proporcional. */
+.soluciones-conectan-bg-loop.text-loop {
+  position: absolute;
+  /* left/width calculados por JS (ver mountTextLoop caller) para que el
+     contenedor llegue a los bordes reales de la pantalla mantieniendo
+     EXACTAMENTE el mismo ratio px/unidad-de-viewBox que el diseño
+     original (1200 unidades en ~820px) — así la cresta central no se
+     mueve ni la onda se reescala, solo aparecen más ciclos a los lados.
+     Los valores de abajo son el fallback antes de que el JS corra. */
+  left: var(--loop-left, 50%);
+  width: var(--loop-width, 100%);
+  top: 50%;
+  transform: var(--loop-transform, translate(-50%, -50%));
+  z-index: 0;
+  opacity: 0.09;
+  pointer-events: none;
+}
+
+.soluciones-conectan-bg-loop .text-loop-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+html[data-theme="dark"] .soluciones-conectan-bg-loop {
+  opacity: 0.09;
+}
+
+/* Logo fijo en el centro de la cresta, más grande que el contenedor del
+   carrusel (se desborda a propósito) — por encima de la cinta de texto
+   (z-index 0) pero por debajo de las burbujas (z-index 1-3), así queda
+   siempre visible sin importar cuál burbuja esté activa en el ciclo.
+   Misma opacidad que la cinta (.soluciones-conectan-bg-loop) para que
+   ambos elementos de fondo se sientan igual de sutiles/discretos. */
+.sol-bubbles-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 160%;
+  height: 160%;
+  object-fit: contain;
+  z-index: 0.5;
+  opacity: 0.09;
+  pointer-events: none;
+  /* Mismo tinte azul de marca que usan los logos de Aliados, en ambos
+     temas — nada de blanco. */
+  filter: brightness(0) saturate(100%) invert(31%) sepia(94%) saturate(3207%) hue-rotate(210deg) brightness(99%) contrast(96%);
+}
+
+.soluciones-conectan-container {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) 1fr;
+  /* "start" (no "center"): el texto de la intro se ancla arriba de su
+     columna en vez de centrarse verticalmente contra las burbujas (más
+     altas) — así el título/párrafo queda completo por encima de donde
+     pasa la cinta, sin que ambas columnas compitan por el mismo centro. */
+  align-items: start;
+  gap: 40px;
+}
+
+.soluciones-conectan-intro h2 {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--texto-principal);
+  margin-bottom: 14px;
+}
+
+.soluciones-conectan-intro p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  margin-bottom: 26px;
+  max-width: 320px;
+}
+
+/* ---------- TextLoop (React Bits, portado a JS vanilla + GSAP) ---------- */
+.text-loop {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.text-loop-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.text-loop-text {
+  user-select: none;
+}
+
+.text-loop-measure {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ---------- Ciclo de burbujas "Soluciones" (12 items, JS: sol-bubbles.js) ----------
+   Las 12 burbujas viven todas en el DOM a la vez; solo 3 son visibles según
+   su `data-pos` (-1/0/1 respecto a la protagonista), que sol-bubbles.js
+   recalcula cada tick del setInterval. El resto (pos ±2, ±3...) se oculta
+   con opacity/scale 0 pero sigue en el flujo (position: absolute), así el
+   cambio de protagonista es una transición CSS, no un re-render. */
+.sol-bubbles {
+  position: relative;
+  height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sol-bubble {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.5s ease, filter 0.5s ease;
+  pointer-events: none;
+}
+
+.sol-bubble[data-pos="0"] {
+  pointer-events: auto;
+}
+
+/* Protagonista: centrada, grande, al frente. Un poco más abajo del
+   centro exacto para no tapar la punta del logo de fondo. */
+.sol-bubble[data-pos="0"] {
+  transform: translate(-50%, calc(-50% + 40px)) scale(1);
+  opacity: 1;
+  z-index: 3;
+}
+
+/* Apoyo: una a cada lado, chica, semitransparente, ancladas a los
+   extremos BAJOS del arco de fondo (que sube hacia la protagonista al
+   centro) — por eso llevan un translateY positivo, a diferencia de la
+   protagonista que va centrada en el pico. */
+.sol-bubble[data-pos="-1"] {
+  transform: translate(calc(-50% - 280px), calc(-50% + 78px)) scale(0.95);
+  opacity: 0.55;
+  z-index: 2;
+}
+
+.sol-bubble[data-pos="1"] {
+  transform: translate(calc(-50% + 280px), calc(-50% + 78px)) scale(0.95);
+  opacity: 0.55;
+  z-index: 2;
+}
+
+/* Todo lo demás (pos ±2 en adelante): oculto, esperando su turno. */
+.sol-bubble:not([data-pos="0"]):not([data-pos="-1"]):not([data-pos="1"]) {
+  transform: translate(-50%, -50%) scale(0.3);
+  opacity: 0;
+  z-index: 1;
+}
+
+.sol-bubble-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sol-bubble-icon {
+  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--azul-electrico);
+  background: radial-gradient(circle at 32% 28%, #EAF1FF 0%, var(--bg-superficie-alterna) 70%);
+  box-shadow: 0 8px 20px rgba(0, 82, 255, 0.18);
+  transition: width 0.6s cubic-bezier(0.65, 0, 0.35, 1), height 0.6s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.4s ease;
+}
+
+.sol-bubble-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sol-bubble[data-pos="0"] .sol-bubble-icon {
+  width: 260px;
+  height: 260px;
+  box-shadow: 0 16px 36px rgba(0, 82, 255, 0.28);
+}
+
+html[data-theme="dark"] .sol-bubble-icon {
+  background: radial-gradient(circle at 32% 28%, #22345C 0%, var(--bg-superficie-alterna) 70%);
+}
+
+.sol-bubble-title {
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--texto-principal);
+  max-width: 140px;
+}
+
+.sol-bubble[data-pos="0"] .sol-bubble-title {
+  font-size: 19px;
+  max-width: 260px;
+}
+
+/* Detalle (descripción + bullets + acciones): solo existe visualmente en
+   la protagonista. En las de apoyo se colapsa a 0 altura para no empujar
+   el layout ni mostrarse "a medias". */
+.sol-bubble-detail {
+  max-width: 340px;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.5s ease, opacity 0.4s ease 0.05s;
+}
+
+.sol-bubble[data-pos="0"] .sol-bubble-detail {
+  max-height: 320px;
+  opacity: 1;
+  margin-top: 12px;
+}
+
+.sol-bubble-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  margin-bottom: 12px;
+}
+
+.sol-bubble-bullets {
+  list-style: none;
+  text-align: left;
+  margin-bottom: 16px;
+}
+
+.sol-bubble-bullets li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--texto-principal);
+}
+
+.sol-bubble-bullets li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--azul-electrico);
+}
+
+.sol-bubble-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+/* .sol-bubble-link ahora comparte .btn-primary/.btn-primary--hero (mismo
+   botón degradado que tenía el CTA general de la sección) — aquí solo se
+   ajusta el tamaño para que quepa cómodo dentro de la burbuja. */
+.sol-bubble-link {
+  padding: 10px 22px;
+  font-size: 13px;
+  color: var(--blanco);
+}
+
+.sol-bubble-link .arrow {
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.sol-bubble-link:hover .arrow {
+  transform: translateX(3px);
+}
+
+.sol-bubble-pdf {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 22px;
+  border-radius: 50px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blanco);
+  background-color: var(--azul-oscuro);
+  border: 1.5px solid var(--blanco);
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.sol-bubble-pdf:hover {
+  background-color: #16305F;
+  transform: translateY(-2px);
+}
+
+@media (max-width: 900px) {
+  .soluciones-conectan-container {
+    grid-template-columns: 1fr;
+  }
+  .soluciones-conectan-intro {
+    text-align: center;
+  }
+  .soluciones-conectan-intro p {
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .sol-bubbles {
+    height: 420px;
+  }
+  .sol-bubble[data-pos="-1"] {
+    transform: translate(calc(-50% - 120px), -80px) scale(0.5);
+  }
+  .sol-bubble[data-pos="1"] {
+    transform: translate(calc(-50% + 120px), -80px) scale(0.5);
+  }
+  .sol-bubble[data-pos="0"] .sol-bubble-icon {
+    width: 104px;
+    height: 104px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sol-bubble[data-pos="-1"],
+  .sol-bubble[data-pos="1"] {
+    opacity: 0;
   }
 }
 
@@ -1003,12 +1502,12 @@ html[data-theme="dark"] .badge-item p {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #1E77F5;
+  color: var(--verde-agua);
   margin-bottom: 14px;
 }
 
 .nosotros-intro h2 {
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 800;
   line-height: 1.25;
   color: var(--texto-principal);
@@ -1285,7 +1784,7 @@ html[data-theme="dark"] .soluciones-circle-4 {
 }
 
 .section-title-center {
-  font-size: 42px;
+  font-size: 40px;
   font-weight: 800;
   color: var(--texto-principal);
   margin-bottom: 16px;
@@ -1543,6 +2042,24 @@ html[data-theme="dark"] .soluciones-circle-4 {
   margin-bottom: 20px;
 }
 
+/* Variante para cuando el CTA vive dentro de la columna de texto de
+   "Soluciones que conectan tu negocio" (alineado a la izquierda, no
+   centrado como en su posición original). */
+.soluciones-cta--intro {
+  text-align: left;
+  margin-top: 141px;
+}
+
+.soluciones-cta--intro p {
+  max-width: 320px;
+}
+
+.soluciones-cta--intro .btn-primary {
+  width: auto;
+  font-size: 13px;
+  padding: 12px 26px;
+}
+
 /* ==========================================
    7. ESTILOS DE LA VENTANA EMERGENTE (MODAL)
    ========================================== */
@@ -1584,6 +2101,52 @@ html[data-theme="dark"] .soluciones-circle-4 {
 
 .modal-overlay.active .modal-container {
   transform: translateY(0);
+}
+
+/* Visor de PDF embebido (Fichas de Soluciones): mismo modal reutilizable,
+   pero más ancho/alto y sin padding propio para que el iframe llene el
+   espacio, en vez de abrir el PDF en una pestaña/URL aparte. El botón de
+   cerrar se saca del rectángulo del modal (queda arriba, fuera del área
+   del iframe) por dos razones: (1) un <iframe> siempre captura los clicks
+   dentro de su área, sin importar el z-index del hermano superpuesto, y
+   (2) el propio visor de PDF del navegador ya tiene sus botones (imprimir,
+   descargar, zoom) en la esquina superior derecha — superponer nuestro
+   botón ahí encima choca visualmente con esos íconos nativos. */
+.modal-container--pdf {
+  width: 88%;
+  max-width: 960px;
+  height: 85vh;
+  max-height: 860px;
+  padding: 0;
+  overflow: visible;
+}
+
+.modal-container--pdf .modal-close-btn {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 14px;
+  color: #fff;
+  background-color: rgba(15, 32, 66, 0.55);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-container--pdf .modal-close-btn:hover {
+  background-color: var(--azul-electrico);
+  color: #fff;
+}
+
+.pdf-modal-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background-color: #525659;
 }
 
 .modal-close-btn {
@@ -1797,8 +2360,13 @@ html[data-theme="dark"] .soluciones-circle-4 {
 }
 
 .aliados-loop {
-  max-width: 1200px;
-  margin: 0 auto;
+  /* Full-bleed: rompe el padding de .aliados-section para que el carrusel
+     llegue hasta el borde real de la ventana y el fade se funda ahí — si se
+     quedara limitado por el padding, esos px extra mostrarían el logo sin
+     degradado justo antes del corte de overflow:hidden de la sección. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   --logoloop-fadeColor: var(--bg-superficie-alterna);
 }
 
@@ -2083,209 +2651,251 @@ html[data-theme="dark"] .servicios-circle-4 {
   overflow: hidden;
 }
 
-.portafolio-circle {
-  position: absolute;
-  z-index: 0;
-  border-radius: 50%;
-  background: var(--azul-electrico);
-  opacity: 0.06;
-  animation: portafolioCircleFloat ease-in-out infinite;
-}
-
-html[data-theme="dark"] .portafolio-circle {
-  opacity: 0.14;
-}
-
-.portafolio-circle-1 {
-  width: 260px;
-  height: 260px;
-  top: 8%;
-  left: 6%;
-  animation-duration: 10s;
-}
-
-.portafolio-circle-2 {
-  width: 180px;
-  height: 180px;
-  bottom: 10%;
-  left: 12%;
-  background: var(--azul-oscuro);
-  animation-duration: 8s;
-  animation-delay: -3s;
-}
-
-html[data-theme="dark"] .portafolio-circle-2 {
-  background: var(--azul-electrico);
-}
-
-.portafolio-circle-3 {
-  width: 220px;
-  height: 220px;
-  top: 12%;
-  right: 8%;
-  animation-duration: 9s;
-  animation-delay: -5s;
-}
-
-.portafolio-circle-4 {
-  width: 150px;
-  height: 150px;
-  bottom: 6%;
-  right: 14%;
-  background: var(--azul-oscuro);
-  animation-duration: 7s;
-  animation-delay: -1.5s;
-}
-
-html[data-theme="dark"] .portafolio-circle-4 {
-  background: var(--azul-electrico);
-}
-
-@keyframes portafolioCircleFloat {
-  0%, 100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(14px, -18px);
-  }
-}
-
 .portafolio-container {
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.portafolio-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 30px;
-}
-
-.portafolio-card {
-  background-color: var(--bg-superficie);
-  border-radius: 24px;
-  border: 1px solid var(--borde);
-  box-shadow: 0 10px 30px rgba(15, 32, 66, 0.03);
-  overflow: hidden;
-  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+/* --- Layout de 2 columnas: texto + Carousel (React Bits, portado) --- */
+.portafolio-container--carousel {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  position: relative;
-  animation: servicioCardFloat 4.5s ease-in-out infinite;
-  animation-delay: calc(var(--portafolio-index, 0) * -0.9s);
-  will-change: transform;
+  align-items: center;
+  justify-content: space-between;
+  gap: 60px;
+  flex-wrap: wrap;
 }
 
-.portafolio-card:nth-child(1) { --portafolio-index: 0; }
-.portafolio-card:nth-child(2) { --portafolio-index: 1; }
-.portafolio-card:nth-child(3) { --portafolio-index: 2; }
-.portafolio-card:nth-child(4) { --portafolio-index: 3; }
-.portafolio-card:nth-child(5) { --portafolio-index: 4; }
-.portafolio-card:nth-child(6) { --portafolio-index: 5; }
-
-.portafolio-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: conic-gradient(from var(--glow-angle, 0deg), transparent 0%, transparent 65%, var(--azul-electrico) 85%, var(--azul-oscuro) 92%, transparent 100%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  opacity: 0.55;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  animation: servicioGlowSpin 3s linear infinite;
+.portafolio-info {
+  flex: 1 1 420px;
+  min-width: 280px;
 }
 
-.portafolio-card:hover {
-  transform: translateY(-10px);
-  border-color: var(--azul-electrico);
-  box-shadow: 0 15px 35px rgba(0, 82, 255, 0.08);
+.portafolio-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--azul-electrico);
+  margin-bottom: 14px;
 }
 
-.portafolio-card:hover::after {
-  opacity: 1;
+.portafolio-title-main {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--texto-principal);
+  margin-bottom: 18px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .portafolio-card,
-  .portafolio-card::after {
-    animation: none;
-  }
+.portafolio-desc-main {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  max-width: 420px;
+  margin-bottom: 28px;
 }
 
-.portafolio-img-container {
-  width: 100%;
-  height: 220px;
-  background-color: var(--fondo-claro);
-  overflow: hidden;
-  position: relative;
-}
-
-.portafolio-img-container img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.4s ease;
-}
-
-.portafolio-img-placeholder {
+.portafolio-carousel-arrow {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0052FF 0%, #001A66 100%);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1.5px solid var(--borde);
+  background-color: var(--bg-superficie);
+  color: var(--azul-electrico);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  box-shadow: 0 6px 18px rgba(15, 32, 66, 0.12);
 }
 
-.portafolio-img-placeholder.proyecto-2 {
-  background: linear-gradient(135deg, #0066FF 0%, #003D99 100%);
+.portafolio-carousel-arrow--prev {
+  left: -64px;
 }
 
-.portafolio-img-placeholder.proyecto-3 {
-  background: linear-gradient(135deg, #0040CC 0%, #000D33 100%);
+.portafolio-carousel-arrow--next {
+  right: -64px;
 }
 
-.portafolio-placeholder-icon {
-  font-size: 64px;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
-  transition: transform 0.4s ease;
+.portafolio-carousel-arrow:hover {
+  background-color: var(--azul-electrico);
+  border-color: var(--azul-electrico);
+  color: #FFFFFF;
+  transform: translateY(-50%) translateY(-2px);
 }
 
-.portafolio-card:hover .portafolio-placeholder-icon {
-  transform: scale(1.06);
+.portafolio-carousel-wrap {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  justify-content: center;
 }
 
-.portafolio-card:hover .portafolio-img-container img {
-  transform: scale(1.06);
+/* --- Componente Carousel (React Bits), estilos base --- */
+.carousel-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  padding: 16px;
+  height: 464px;
+  box-sizing: border-box;
 }
 
-.portafolio-content {
-  padding: 30px;
-  flex-grow: 1;
+.carousel-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.carousel-track {
+  display: flex;
+  height: 100%;
+}
+
+.carousel-item {
+  position: relative;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.carousel-indicators-container {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.carousel-indicators {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+}
+
+.carousel-indicator {
+  height: 8px;
+  width: 8px;
+  border: none;
+  padding: 0;
+  appearance: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background-color: var(--borde);
+  transition: background-color 150ms, transform 150ms;
+}
+
+.carousel-indicator:focus-visible {
+  outline: 2px solid var(--azul-electrico);
+  outline-offset: 2px;
+}
+
+.carousel-indicator.active {
+  background-color: var(--azul-electrico);
+  transform: scale(1.2);
+}
+
+/* --- Tarjeta de proyecto dentro del Carousel --- */
+.portafolio-carousel-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-superficie);
+  border: 1px solid var(--borde);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(15, 32, 66, 0.06);
+}
+
+.portafolio-carousel-media {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(135deg, var(--azul-electrico) 0%, var(--azul-oscuro) 100%);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.portafolio-carousel-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Difumina la unión entre la imagen y el texto en vez de dejar un borde/
+   línea dura: 3 capas de blur creciente hacia abajo (mismo patrón exacto
+   que .hero-bg-fade), y la capa final agrega el degradado de color que
+   termina 100% sólido en var(--bg-superficie) antes de llegar al texto. */
+.portafolio-carousel-media-fade,
+.portafolio-carousel-media-fade::before,
+.portafolio-carousel-media-fade::after {
+  -webkit-backdrop-filter: blur(var(--fade-blur, 6px));
+  backdrop-filter: blur(var(--fade-blur, 6px));
+}
+
+.portafolio-carousel-media-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 80px;
+  pointer-events: none;
+  --fade-blur: 1.5px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 35%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 35%, black 100%);
+}
+
+.portafolio-carousel-media-fade::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  --fade-blur: 4px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 25%, black 55%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 25%, black 55%, black 100%);
+}
+
+.portafolio-carousel-media-fade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  --fade-blur: 9px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 40%, black 70%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 40%, black 70%, black 100%);
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    transparent 35%,
+    var(--bg-superficie) 80%,
+    var(--bg-superficie) 100%);
+}
+
+.portafolio-carousel-media + .portafolio-carousel-content {
+  position: relative;
+  margin-top: -34px;
+  padding-top: 44px;
+}
+
+.portafolio-carousel-content {
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .portafolio-tag {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--azul-electrico);
-  background-color: rgba(0, 82, 255, 0.1);
-  padding: 5px 12px;
-  border-radius: 50px;
-  display: inline-block;
-  margin-bottom: 15px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  display: none;
 }
 
 .portafolio-title {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   color: var(--texto-principal);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .portafolio-desc {
@@ -2293,6 +2903,63 @@ html[data-theme="dark"] .portafolio-circle-4 {
   line-height: 1.6;
   color: var(--texto-secundario);
   margin-bottom: 0;
+  /* Recorta a 3 líneas; "Ver más" se muestra solo si el texto real excede
+     ese alto (medido por JS al montar la tarjeta). */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.portafolio-desc.is-expanded {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
+
+.portafolio-ver-mas {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--azul-electrico);
+  cursor: pointer;
+}
+
+.portafolio-ver-mas svg {
+  transition: transform 0.2s ease;
+}
+
+.portafolio-ver-mas.is-expanded svg {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 768px) {
+  .portafolio-container--carousel {
+    flex-direction: column;
+    text-align: center;
+  }
+  .portafolio-desc-main {
+    max-width: 100%;
+    margin: 0 auto 28px;
+  }
+  .portafolio-title-main {
+    font-size: 30px;
+  }
+  .portafolio-carousel-arrow--prev {
+    left: -16px;
+  }
+  .portafolio-carousel-arrow--next {
+    right: -16px;
+  }
 }
 
 /* ==========================================
@@ -2419,7 +3086,7 @@ html[data-theme="dark"] .vacantes-circle-2 {
 .vacante-card-banner {
   width: 100%;
   height: 90px;
-  background: linear-gradient(135deg, #0052FF 0%, #001A66 100%);
+  background: linear-gradient(135deg, #017EFD 0%, #001A66 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2668,6 +3335,190 @@ html[data-theme="dark"] .vacantes-circle-2 {
 }
 
 /* ==========================================
+   9.6. SECCIÓN "MÁS OPORTUNIDADES PARA CRECER JUNTOS"
+   (Stack de tarjetas Vacantes / ArdaWiki, React Bits "Stack" portado)
+   ========================================== */
+.talento-section {
+  padding: 100px 24px;
+  background-color: var(--bg-superficie-alterna);
+  position: relative;
+  overflow: hidden;
+}
+
+.talento-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 60px;
+  flex-wrap: wrap;
+}
+
+.talento-info {
+  flex: 1 1 420px;
+  min-width: 280px;
+}
+
+.talento-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--verde-agua);
+  margin-bottom: 14px;
+}
+
+.talento-title {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--texto-principal);
+  margin-bottom: 18px;
+}
+
+.talento-desc {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  max-width: 420px;
+}
+
+.talento-stack-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  /* El offset del Stack (la tarjeta de atrás se desplaza hacia la esquina
+     superior-derecha) descentra visualmente el conjunto respecto a este
+     contenedor — se compensa moviendo el wrap ligeramente para que el
+     "centro visual" del par de tarjetas caiga en el centro real. Un poco
+     más de margen a la derecha corre todo el bloque hacia la izquierda. */
+  padding: 9px 40px 0 13px;
+}
+
+.talento-stack.stack-container {
+  width: 340px;
+  height: 420px;
+}
+
+/* --- Componente Stack (React Bits), estilos base --- */
+.stack-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  perspective: 600px;
+}
+
+.card-rotate {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.card {
+  border-radius: 1.25rem;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  will-change: transform;
+}
+
+/* --- Tarjetas de contenido dentro del Stack (Vacantes / ArdaWiki) --- */
+.talento-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 32px 24px;
+  text-decoration: none;
+  background: linear-gradient(160deg, #FFFFFF 0%, #EAF1FB 100%);
+  border: 1.5px solid var(--verde-agua);
+  border-radius: 1.25rem;
+  box-sizing: border-box;
+  box-shadow: 0 20px 45px -15px rgba(15, 32, 66, 0.2);
+}
+
+html[data-theme="dark"] .talento-card {
+  background: linear-gradient(160deg, #0F2042 0%, #0A162E 100%);
+  box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.5);
+}
+
+/* Sin esto, arrastrar desde el texto/ícono (en vez del margen vacío de las
+   esquinas) dispara el drag NATIVO del navegador para el link/imagen, que
+   compite con el drag manual del Stack — se sentía como que "solo las
+   esquinas" respondían al arrastre. */
+.talento-card,
+.talento-card * {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.talento-card-icon {
+  color: var(--verde-agua);
+  opacity: 0.9;
+}
+
+.talento-card-icon svg {
+  width: 56px;
+  height: 56px;
+}
+
+.talento-card-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--verde-agua);
+}
+
+.talento-card-btn {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--azul-electrico);
+  color: #FFFFFF;
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 14px 30px;
+  border: none;
+  border-radius: 50px;
+  white-space: nowrap;
+  cursor: pointer;
+  /* El resto de la tarjeta es área de arrastre (Stack); este botón es la
+     única parte "clickeable" real, así que sí debe poder recibir el
+     puntero (el resto conserva pointer-events normal para el drag). */
+  position: relative;
+  z-index: 1;
+}
+
+.talento-card-btn:hover {
+  background-color: var(--azul-oscuro);
+}
+
+@media (max-width: 768px) {
+  .talento-container {
+    flex-direction: column;
+    text-align: center;
+  }
+  .talento-desc {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  .talento-title {
+    font-size: 30px;
+  }
+}
+
+/* ==========================================
    10. SECCIÓN CONTACTO (Fiel al código de origen)
    ========================================== */
 .qr-form-section {
@@ -2677,108 +3528,50 @@ html[data-theme="dark"] .vacantes-circle-2 {
   overflow: hidden;
 }
 
-.qr-form-circle {
+.qr-form-waves {
   position: absolute;
+  inset: 0;
   z-index: 0;
-  border-radius: 50%;
-  background: var(--azul-electrico);
-  opacity: 0.06;
-  animation: portafolioCircleFloat ease-in-out infinite;
-}
-
-html[data-theme="dark"] .qr-form-circle {
-  opacity: 0.14;
-}
-
-.qr-form-circle-1 {
-  width: 260px;
-  height: 260px;
-  top: 8%;
-  left: 6%;
-  animation-duration: 10s;
-}
-
-.qr-form-circle-2 {
-  width: 180px;
-  height: 180px;
-  bottom: 10%;
-  left: 12%;
-  background: var(--azul-oscuro);
-  animation-duration: 8s;
-  animation-delay: -3s;
-}
-
-html[data-theme="dark"] .qr-form-circle-2 {
-  background: var(--azul-electrico);
-}
-
-.qr-form-circle-3 {
-  width: 220px;
-  height: 220px;
-  top: 12%;
-  right: 8%;
-  animation-duration: 9s;
-  animation-delay: -5s;
-}
-
-.qr-form-circle-4 {
-  width: 150px;
-  height: 150px;
-  bottom: 6%;
-  right: 14%;
-  background: var(--azul-oscuro);
-  animation-duration: 7s;
-  animation-delay: -1.5s;
-}
-
-html[data-theme="dark"] .qr-form-circle-4 {
-  background: var(--azul-electrico);
+  pointer-events: none;
 }
 
 .qr-form-container {
   max-width: 1000px;
   margin: 0 auto;
-  background-color: var(--bg-superficie);
-  border-radius: 30px;
   padding: 50px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 50px;
-  box-shadow: 0 10px 40px rgba(15, 32, 66, 0.02);
   position: relative;
-}
-
-.qr-form-container::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: conic-gradient(from var(--glow-angle, 0deg), transparent 0%, transparent 65%, var(--azul-electrico) 85%, var(--azul-oscuro) 92%, transparent 100%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  opacity: 0.55;
-  pointer-events: none;
-  animation: servicioGlowSpin 3s linear infinite;
+  z-index: 1;
 }
 
 .qr-form-info {
   flex: 1.2;
 }
 
-.qr-display-card {
+.qr-form-title {
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.qr-display-wrap {
   flex: 0.8;
-  background-color: var(--bg-superficie-alterna);
-  border-radius: 24px;
-  padding: 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 15px;
+}
+
+.qr-display-card {
+  background-color: var(--bg-superficie-alterna);
+  border-radius: 24px;
+  padding: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   z-index: 0;
   animation: servicioCardFloat 4.5s ease-in-out infinite;
@@ -2817,8 +3610,8 @@ html[data-theme="dark"] .qr-form-circle-4 {
 
 .qr-frame {
   background-color: var(--bg-superficie);
-  padding: 15px;
-  border-radius: 16px;
+  padding: 8px;
+  border-radius: 12px;
   box-shadow: 0 4px 12px rgba(15, 32, 66, 0.04);
 }
 
@@ -2833,6 +3626,62 @@ html[data-theme="dark"] .qr-form-circle-4 {
   font-size: 13px;
   font-weight: 600;
   color: var(--texto-principal);
+}
+
+.qr-caption-top {
+  text-align: center;
+  max-width: 220px;
+  margin-top: -19px;
+}
+
+.qr-form-pointer {
+  position: absolute;
+  top: 50%;
+  left: 58%;
+  width: 280px;
+  height: 120px;
+  transform: translate(-72%, -60%);
+  z-index: 3;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.55));
+}
+
+.qr-form-pointer-line {
+  stroke-dasharray: var(--len, 300);
+  stroke-dashoffset: var(--len, 300);
+  animation: qrPointerDraw 2.4s ease-in-out infinite;
+}
+
+.qr-form-pointer-head {
+  stroke-dasharray: var(--head-len, 40);
+  stroke-dashoffset: var(--head-len, 40);
+  animation: qrPointerDrawHead 2.4s ease-in-out infinite;
+}
+
+@keyframes qrPointerDraw {
+  0% {
+    stroke-dashoffset: var(--len, 300);
+  }
+  55%, 100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes qrPointerDrawHead {
+  0%, 50% {
+    stroke-dashoffset: var(--head-len, 40);
+  }
+  75%, 100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qr-form-pointer-line,
+  .qr-form-pointer-head {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 
 /* ==========================================
@@ -2874,11 +3723,15 @@ html[data-theme="dark"] .qr-form-circle-4 {
   color: #fff;
 }
 
-.main-header:not(.is-scrolled) .lang-btn {
+/* Header flotando sobre el hero (sin scroll): en modo oscuro el texto
+   inactivo se aclara para verse sobre el fondo oscuro del hero; en modo
+   claro se deja el color normal (--texto-secundario) para que siga legible
+   sobre el fondo claro. */
+html[data-theme="dark"] .main-header:not(.is-scrolled) .lang-btn {
   color: rgba(255, 255, 255, 0.75);
 }
 
-.main-header:not(.is-scrolled) .lang-btn.active {
+html[data-theme="dark"] .main-header:not(.is-scrolled) .lang-btn.active {
   color: #fff;
 }
 
@@ -2892,7 +3745,7 @@ html[data-theme="dark"] .qr-form-circle-4 {
   border: 1px solid var(--borde);
   border-radius: 50%;
   cursor: pointer;
-  color: var(--texto-principal);
+  color: var(--azul-electrico);
   font-size: 17px;
   transition: all 0.2s ease;
 }
@@ -2902,15 +3755,15 @@ html[data-theme="dark"] .qr-form-circle-4 {
   color: var(--azul-electrico);
 }
 
-.main-header:not(.is-scrolled) .theme-toggle-btn {
+html[data-theme="dark"] .main-header:not(.is-scrolled) .theme-toggle-btn {
   background-color: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.25);
-  color: #FFFFFF;
+  color: var(--azul-electrico);
 }
 
-.main-header:not(.is-scrolled) .theme-toggle-btn:hover {
-  border-color: #FFFFFF;
-  color: #FFFFFF;
+html[data-theme="dark"] .main-header:not(.is-scrolled) .theme-toggle-btn:hover {
+  border-color: var(--azul-electrico);
+  color: var(--azul-electrico);
 }
 
 .theme-toggle-btn .icon-moon {
@@ -3038,7 +3891,7 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   padding: 22px 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
 }
@@ -3046,6 +3899,83 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
 .footer-copy {
   font-size: 13px;
   color: var(--texto-secundario);
+}
+
+.footer-legal-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.footer-legal-links a {
+  color: var(--texto-secundario);
+  transition: color 0.2s ease;
+}
+
+.footer-legal-links a:hover {
+  color: var(--azul-electrico);
+}
+
+.footer-legal-sep {
+  color: var(--borde);
+}
+
+/* Columna de newsletter (4ta columna del footer) */
+.footer-newsletter {
+  min-width: 260px;
+}
+
+.footer-newsletter-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--texto-secundario);
+  margin-bottom: 16px;
+  max-width: 260px;
+}
+
+.footer-newsletter-form {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-superficie);
+  border: 1px solid var(--borde);
+  border-radius: 50px;
+  padding: 4px 4px 4px 18px;
+  max-width: 300px;
+}
+
+.footer-newsletter-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--texto-principal);
+  outline: none;
+}
+
+.footer-newsletter-input::placeholder {
+  color: var(--texto-secundario);
+}
+
+.footer-newsletter-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--azul-electrico);
+  color: var(--blanco);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.footer-newsletter-btn:hover {
+  background-color: var(--azul-oscuro);
+  transform: translateX(2px);
 }
 
 .footer-bottom-controls {
@@ -3059,31 +3989,33 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
    ========================================== */
 .floating-mascot-btn {
   position: fixed;
-  right: 28px;
-  bottom: 28px;
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  background-color: var(--bg-superficie);
-  box-shadow: 0 10px 30px rgba(0, 82, 255, 0.25);
+  right: 20px;
+  bottom: 20px;
+  width: 120px;
+  height: 120px;
+  border-radius: 0;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 500;
+  overflow: visible;
   animation: floatMascotBtn 3.5s ease-in-out infinite;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  transition: transform 0.25s ease;
 }
 
 .floating-mascot-btn img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
+  object-fit: contain;
+  border-radius: 0;
 }
 
 .floating-mascot-btn:hover {
   transform: scale(1.08);
-  box-shadow: 0 14px 36px rgba(0, 82, 255, 0.35);
+  animation-play-state: paused;
 }
 
 @keyframes floatMascotBtn {
@@ -3091,16 +4023,26 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   50% { transform: translateY(-8px); }
 }
 
-.floating-mascot-btn:hover {
-  animation-play-state: paused;
-}
-
 @media (max-width: 600px) {
   .floating-mascot-btn {
-    width: 60px;
-    height: 60px;
-    right: 16px;
-    bottom: 16px;
+    width: 90px;
+    height: 90px;
+    right: 12px;
+    bottom: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* En pantallas angostas no hay espacio a la derecha del modal para el
+     botón de cerrar del PDF: se coloca arriba en su lugar. */
+  .modal-container--pdf {
+    width: 94%;
+  }
+  .modal-container--pdf .modal-close-btn {
+    top: -52px;
+    left: auto;
+    right: 0;
+    margin-left: 0;
   }
 }
 
@@ -3123,15 +4065,12 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   .header-container {
     padding: 10px 20px;
   }
-  .nav-menu {
-    gap: 22px;
-  }
 
   .hero-container {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
-    padding-top: 20px;
+    padding-top: max(60px, var(--header-overlap, 0px));
   }
   .hero-description {
     max-width: 100%;
@@ -3248,24 +4187,191 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   .postulacion-row {
     grid-template-columns: 1fr;
   }
+
+  /* En teléfono el texto ya no se superpone a la imagen: la imagen queda
+     como bloque propio arriba, acoplada al ancho de pantalla desde el borde
+     superior, y el texto pasa a flujo normal debajo. El degradado de
+     transición (.hero-bg-fade) se conserva para que el borde inferior de
+     la imagen se funda con el color de fondo de la sección; el overlay
+     lateral (.hero-bg-overlay) se desactiva porque es horizontal (pensado
+     para composición lado a lado con texto, no para una imagen sola). */
+  .hero-section {
+    padding-top: 0;
+    padding-bottom: 60px;
+    overflow: hidden;
+  }
+  .hero-bg-img {
+    position: static;
+    display: block;
+    width: 100%;
+    height: 78vh;
+    max-height: 480px;
+    /* La cara de la mascota está en el tercio medio-bajo de la imagen de
+       teléfono (no arriba): con un ancho de pantalla amplio y poca altura
+       object-fit:cover puede dejarla fuera del recorte si el ancla vertical
+       es muy alta. 72% mantiene la cara visible en el rango típico de
+       teléfonos y tablets angostas. */
+    object-position: center 72%;
+  }
+  .hero-bg-overlay {
+    display: none;
+  }
+  /* El degradado va en el borde SUPERIOR de la imagen (donde empieza,
+     justo bajo el header), no en el inferior — se ancla arriba de
+     .hero-section (que sigue siendo position:relative) en vez de usar el
+     flujo normal después de la imagen. Los mask-image y el gradiente de
+     color de las capas se invierten (to top en vez de to bottom) para que
+     el difuminado se revele hacia arriba. */
+  .hero-bg-fade {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    height: 36px;
+    margin-top: 0;
+    -webkit-mask-image: linear-gradient(to top, transparent 0%, black 22%, black 100%);
+    mask-image: linear-gradient(to top, transparent 0%, black 22%, black 100%);
+  }
+  .hero-bg-fade::before {
+    -webkit-mask-image: linear-gradient(to top, transparent 0%, transparent 8%, black 30%, black 100%);
+    mask-image: linear-gradient(to top, transparent 0%, transparent 8%, black 30%, black 100%);
+  }
+  .hero-bg-fade::after {
+    -webkit-mask-image: linear-gradient(to top, transparent 0%, transparent 12%, black 40%, black 100%);
+    mask-image: linear-gradient(to top, transparent 0%, transparent 12%, black 40%, black 100%);
+  }
+  /* Los blur() de las 3 capas (6/16/34px) están calibrados para una franja
+     de 180px (diseño de escritorio); a 36px esos mismos blurs son
+     desproporcionados y saturan contra el borde del overflow:hidden,
+     viéndose como una banda sólida en vez de una transición. Se escalan a
+     ~20% (misma proporción que 36/180) para que la sensación de "difuminado
+     progresivo" se mantenga en la franja más chica. */
+  .hero-bg-fade {
+    --fade-blur: 1.2px;
+  }
+  .hero-bg-fade::before {
+    --fade-blur: 3px;
+  }
+  /* El color final del degradado (antes --bg-superficie-alterna) es el
+     color de LA SIGUIENTE sección, pensado para cuando el fade cae muy
+     abajo en el diseño de escritorio. Aquí el fade queda justo debajo de
+     la imagen, todavía sobre el fondo propio de .hero-section (que en este
+     punto es ~blanco por su gradiente diagonal), así que debe fundirse
+     hacia ESE color — no hacia el de la sección siguiente, pero tampoco
+     "sin degradado" (eso deja un salto dsco de imagen nítida a nada). */
+  .hero-bg-fade::after {
+    --fade-blur: 7px;
+    /* --bg-body: el mismo color de fondo que usa toda la página (body),
+       no un blanco fijo aparte. */
+    background: linear-gradient(to top,
+      transparent 0%,
+      transparent 10%,
+      color-mix(in srgb, var(--bg-body) 75%, transparent) 40%,
+      var(--bg-body) 100%);
+  }
+  html[data-theme="dark"] .hero-bg-fade::after {
+    --fade-blur: 7px;
+    background: linear-gradient(to top,
+      transparent 0%,
+      transparent 10%,
+      rgba(6, 11, 24, 0.75) 40%,
+      #060B18 100%);
+  }
+
+  /* Segundo fade, borde INFERIOR de la imagen: en flujo normal justo
+     después de la imagen, con solape moderado hacia arriba (no tanto como
+     para comerse a la mascota, pero suficiente para que se note el
+     fundido). Transiciona hacia el fondo real de .hero-section en ese
+     punto (blanco/casi blanco), igual que hace .hero-bg-fade original en
+     escritorio pero recalibrado a esta franja más chica. */
+  .hero-bg-fade-bottom {
+    display: block;
+    position: relative;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    height: 36px;
+    margin-top: -26px;
+  }
+  .hero-bg-fade-bottom {
+    --fade-blur: 1.2px;
+  }
+  .hero-bg-fade-bottom::before {
+    --fade-blur: 3px;
+  }
+  .hero-bg-fade-bottom::after {
+    --fade-blur: 7px;
+    background: linear-gradient(to bottom,
+      transparent 0%,
+      transparent 10%,
+      color-mix(in srgb, var(--bg-body) 75%, transparent) 40%,
+      var(--bg-body) 100%);
+  }
+  html[data-theme="dark"] .hero-bg-fade-bottom::after {
+    --fade-blur: 7px;
+    background: linear-gradient(to bottom,
+      transparent 0%,
+      transparent 10%,
+      rgba(6, 11, 24, 0.75) 40%,
+      #060B18 100%);
+  }
+
+  .hero-container {
+    position: static;
+    min-height: 0;
+    padding: 32px 24px 0;
+  }
+  .hero-text-content {
+    text-align: center;
+  }
+  .hero-badges {
+    margin-left: 0;
+    align-items: center;
+  }
+
+  .header-container {
+    padding: 8px 12px;
+    column-gap: 6px;
+  }
+  .logo-img {
+    height: 32px;
+  }
+  .lang-btn {
+    padding: 5px 9px;
+    font-size: 12px;
+  }
+  .theme-toggle-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .header-login-btn {
+    padding: 7px 14px;
+    font-size: 12.5px;
+  }
+  .demo-btn {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+  .menu-toggle-btn {
+    width: 36px;
+    height: 36px;
+  }
 }
 
-/* ---- Tablet / nav colapsado (<=960px) ---- */
-@media (max-width: 960px) {
+/* ---- Tablet / nav colapsado (<=1320px) ----
+   El nav de escritorio conserva SIEMPRE su tamaño de letra original
+   (14px, definido en .nav-link más arriba) — no se comprime nunca. Por
+   debajo de este ancho ya no cabe en una sola línea a ese tamaño
+   sin volverlo ilegible: se colapsa a menú hamburguesa. */
+@media (max-width: 1320px) {
   .header-container {
-    flex-wrap: wrap;
+    grid-template-columns: auto 1fr;
     row-gap: 10px;
     padding: 10px 16px;
   }
   .logo-img {
-    height: 100px;
-    margin-top: -20px;
-    margin-bottom: -20px;
-  }
-  html[data-theme="dark"] .logo-img {
     height: 40px;
-    margin-top: 8px;
-    margin-bottom: 8px;
   }
   .menu-toggle-btn {
     display: flex;
@@ -3273,36 +4379,50 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
 
   .nav-menu {
     display: none;
-    width: 100%;
     order: 4;
-    grid-template-columns: repeat(2, auto);
-    justify-content: center;
-    column-gap: 24px;
+    grid-template-columns: 1fr;
+    justify-items: start;
     row-gap: 8px;
-    padding-top: 14px;
-    border-top: 1px solid var(--borde);
   }
   .nav-link {
-    font-size: 14px;
+    /* Adaptativo (tablet/móvil): entre 320px y 900px de viewport escala
+       suavemente de 13px a 15px, en vez de un valor fijo por breakpoint. */
+    font-size: clamp(13px, 12.3px + 0.35vw, 15px);
     padding: 6px 0;
-    justify-content: center;
+    justify-content: flex-start;
   }
   .header-controls {
-    order: 1;
-    margin-left: auto;
+    grid-column: 2;
+    justify-self: end;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 8px;
+    max-width: 100%;
+    /* Con varias filas (wrap) un borde separador de una sola fila ya no
+       tiene sentido: se ve como una línea vertical larga y descolocada. */
+    border-left: none;
+    padding-left: 0;
   }
 
   .main-header.menu-open .nav-menu {
     display: grid;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: max-content;
+    max-width: calc(100vw - 32px);
     background-color: var(--bg-superficie);
-    margin: 0 -16px;
-    padding: 14px 16px;
+    border-top: 1px solid var(--borde);
+    box-shadow: 0 12px 24px rgba(15, 32, 66, 0.08);
+    padding: 14px 20px;
   }
 
   .main-header.menu-open:not(.is-scrolled) .nav-link {
     color: var(--texto-principal);
   }
+}
 
+@media (max-width: 1360px) {
   .hero-section {
     padding-top: 30px;
     padding-bottom: 90px;
@@ -3365,10 +4485,38 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   }
 }
 
-/* ---- Móvil pequeño (<=380px) ---- */
-@media (max-width: 380px) {
+/* ---- Teléfono: tamaño de letra moderado en todas las secciones ----
+   Va DESPUÉS del bloque de 1360px a propósito: mismos selectores, ganan en
+   la cascada por orden de aparición sobre los font-size definidos ahí. */
+@media (max-width: 640px) {
   .hero-title {
     font-size: 26px;
+  }
+  .hero-eyebrow {
+    font-size: 12px;
+  }
+  .hero-description {
+    font-size: 14.5px;
+  }
+
+  .section-title,
+  .section-title-center,
+  .impulso-header h2,
+  .soluciones-conectan-intro h2,
+  .nosotros-intro h2 {
+    font-size: 22px;
+  }
+  .section-desc,
+  .section-desc-center {
+    font-size: 13.5px;
+  }
+}
+
+/* ---- Móvil pequeño (<=380px) ---- */
+
+@media (max-width: 380px) {
+  .hero-title {
+    font-size: 22px;
   }
   .badge-item {
     width: 100%;
@@ -3671,9 +4819,9 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
 .chat-header-avatar {
   width: 34px;
   height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 0;
+  object-fit: contain;
+  background-color: transparent;
 }
 
 .chat-header-info strong {
@@ -3811,7 +4959,7 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
   transform: translateY(-1px);
 }
 
-/* En modo oscuro, #0052FF sobre el fondo azul-oscuro del panel pierde contraste;
+/* En modo oscuro, #017EFD sobre el fondo azul-oscuro del panel pierde contraste;
    se usa un azul más claro para que el texto de los botones siga siendo legible. */
 html[data-theme="dark"] .chat-quick-reply-btn {
   background-color: rgba(91, 140, 255, 0.12);
@@ -4011,8 +5159,17 @@ html[data-theme="dark"] .chat-quick-reply-btn:hover {
   border: 1.5px solid var(--borde);
   background-color: var(--bg-superficie);
   color: var(--texto-principal);
-  font-size: 14.5px;
+  /* 16px mínimo: por debajo de eso, Safari/Chrome en iOS hacen zoom
+     automático de toda la página al enfocar el input (se percibe como si
+     la imagen del hero "se agrandara" al tocar el botón que abre el modal). */
+  font-size: 16px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+@media (min-width: 641px) {
+  .login-modal-input-wrap input {
+    font-size: 14.5px;
+  }
 }
 
 .login-modal-input-wrap input:focus {
@@ -4135,5 +5292,364 @@ html[data-theme="dark"] .chat-quick-reply-btn:hover {
   .social-icon:hover,
   .floating-mascot-btn:hover img {
     transform: none !important;
+  }
+}
+
+/* ==========================================
+   17. VISTAS DEDICADAS (Vacantes / ArdaWiki)
+   ========================================== */
+/* Página completa embebida dentro del home (sin router ni recarga): se
+   activa/desactiva por JS ocultando el resto de secciones del home. El
+   header y el footer del sitio quedan siempre visibles por fuera de este
+   bloque. Se adapta al tema claro/oscuro del sitio (mismas variables que
+   el resto de las secciones), no un fondo oscuro fijo. */
+.vista-dedicada {
+  background-color: var(--bg-superficie-alterna);
+  color: var(--texto-principal);
+  min-height: 60vh;
+}
+
+/* Mismo tratamiento visual que el hero principal (#inicio): imagen +
+   .hero-bg-overlay + .hero-bg-fade — por eso NO lleva overflow:hidden (el
+   fade lo necesita sin recortar, ver comentario junto a .hero-bg-fade más
+   arriba en este archivo). Usa las mismas variables de tema que
+   .hero-section para adaptarse a claro/oscuro igual que el hero principal. */
+.vista-dedicada-hero {
+  position: relative;
+  min-height: 320px;
+  display: flex;
+  align-items: flex-end;
+  background: linear-gradient(160deg, var(--bg-body) 0%, var(--bg-superficie-alterna) 55%, #ECF1F9 100%);
+}
+
+html[data-theme="dark"] .vista-dedicada-hero {
+  background: #060B18;
+}
+
+/* A diferencia del hero principal (altura más estable), aquí el alto real
+   de .vista-dedicada-hero varía según el largo del título/descripción —
+   con decimales de subpíxel en el layout, el -1px de .hero-bg-fade no
+   siempre alcanza a cubrir el borde real y se asoma una línea de 1px de
+   la imagen sin difuminar. Se extiende un poco más para tener margen.
+   También se reduce el blur de cada capa (la imagen de esta vista es más
+   angosta verticalmente que el hero principal, así que el mismo blur
+   pensado para 180px sobre una imagen más alta aquí cubre demasiado
+   rostro/contenido de la foto). */
+.vista-dedicada-hero .hero-bg-fade {
+  bottom: -3px;
+  height: 130px;
+}
+
+.vista-dedicada-hero .hero-bg-fade {
+  --fade-blur: 4px;
+}
+
+.vista-dedicada-hero .hero-bg-fade::before {
+  --fade-blur: 10px;
+}
+
+.vista-dedicada-hero .hero-bg-fade::after {
+  --fade-blur: 20px;
+}
+
+.vista-dedicada-hero-content {
+  position: relative;
+  /* Debe quedar POR ENCIMA de .hero-bg-fade (z-index:2) — si no, el
+     backdrop-filter:blur() del fade difumina el título en vez de solo la
+     franja inferior de la imagen (mismo z-index:3 que usa .hero-container
+     en el hero principal para lograr lo mismo). */
+  z-index: 3;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 110px 24px 48px;
+}
+
+.vista-dedicada-volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(15, 32, 66, 0.18);
+  color: var(--texto-principal);
+  font-family: 'Poppins', sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px 9px 12px;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  margin-bottom: 22px;
+}
+
+html[data-theme="dark"] .vista-dedicada-volver {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #F1F5F9;
+}
+
+.vista-dedicada-volver:hover {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(15, 32, 66, 0.32);
+}
+
+html[data-theme="dark"] .vista-dedicada-volver:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.vista-dedicada-volver svg {
+  flex-shrink: 0;
+}
+
+.vista-dedicada-breadcrumb {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--verde-agua);
+  margin-bottom: 10px;
+}
+
+.vista-dedicada-titulo {
+  font-size: 38px;
+  font-weight: 800;
+  color: var(--texto-principal);
+  margin-bottom: 14px;
+  max-width: 720px;
+}
+
+html[data-theme="dark"] .vista-dedicada-titulo {
+  color: #FFFFFF;
+}
+
+.vista-dedicada-titulo .highlight-blue {
+  color: var(--azul-electrico);
+}
+
+.vista-dedicada-desc {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  max-width: 560px;
+}
+
+html[data-theme="dark"] .vista-dedicada-desc {
+  color: #B8C4DA;
+}
+
+.vista-dedicada-body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px 100px;
+  position: relative;
+  z-index: 3;
+}
+
+/* El backdrop-filter:blur() de .hero-bg-fade deja una costura de 1-2px en
+   su propio borde (artefacto de renderizado del navegador, no una
+   cuestión de posición/color) por la que se asoma la imagen sin difuminar.
+   Se cubre con una franja sólida del mismo color que el fondo de la
+   sección, superpuesta sobre ese borde exacto — con z-index mayor que
+   .hero-bg-fade (2), si no queda tapada por él en vez de taparlo. */
+.vista-dedicada .vista-dedicada-body::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  /* .vista-dedicada-body está centrado con max-width:1200px — left/right:0
+     solo cubriría ese ancho, dejando sin tapar los márgenes laterales
+     donde la imagen/fade sí llegan hasta el borde real de la pantalla. */
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  height: 20px;
+  background: var(--bg-superficie-alterna);
+  z-index: 4;
+}
+
+/* Buscador de ArdaWiki reutilizado dentro de la vista dedicada: mismo
+   componente, pero adaptado al tema del sitio. */
+.vista-dedicada-body .kb-search-wrap {
+  margin-bottom: 32px;
+}
+
+.vista-dedicada-body .kb-search-pill {
+  background: var(--bg-superficie);
+  border: 1px solid var(--borde);
+}
+
+.vista-dedicada-body .kb-search-pill input {
+  color: var(--texto-principal);
+}
+
+.vista-dedicada-body .kb-search-pill input::placeholder {
+  color: var(--texto-secundario);
+}
+
+.vista-dedicada-body .kb-search-icon {
+  color: var(--texto-secundario);
+}
+
+/* --- Listado en filas horizontales --- */
+.filas-lista {
+  display: flex;
+  flex-direction: column;
+}
+
+.fila-item {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 26px 8px;
+  border-bottom: 1px solid var(--borde);
+  text-align: left;
+}
+
+.fila-item:last-child {
+  border-bottom: none;
+}
+
+.fila-icono {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(1, 126, 253, 0.16);
+  color: var(--azul-electrico);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html[data-theme="dark"] .fila-icono {
+  color: #F1F5F9;
+}
+
+.fila-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fila-titulo {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--texto-principal);
+  margin: 0;
+}
+
+.fila-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.fila-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--texto-secundario);
+}
+
+.fila-meta-item svg {
+  flex-shrink: 0;
+  color: var(--verde-agua);
+}
+
+.fila-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--texto-secundario);
+  margin: 0;
+  max-width: 640px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fila-accion {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--borde);
+  padding: 4px 0 4px 22px;
+  margin-left: 6px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--azul-electrico);
+  white-space: nowrap;
+  transition: color 0.2s ease, gap 0.2s ease;
+}
+
+html[data-theme="dark"] .fila-accion {
+  color: #5EB3FF;
+}
+
+.fila-accion:hover {
+  color: var(--azul-oscuro);
+  gap: 13px;
+}
+
+html[data-theme="dark"] .fila-accion:hover {
+  color: #8FCBFF;
+}
+
+.fila-accion svg {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.fila-accion:hover svg {
+  transform: translateX(3px);
+}
+
+@media (max-width: 860px) {
+  .vista-dedicada-hero-content {
+    padding: 100px 20px 36px;
+  }
+
+  .vista-dedicada-titulo {
+    font-size: 28px;
+  }
+
+  .vista-dedicada-body {
+    padding: 32px 20px 70px;
+  }
+
+  .fila-item {
+    flex-wrap: wrap;
+    padding: 22px 4px;
+  }
+
+  .fila-info {
+    flex-basis: calc(100% - 78px);
+  }
+
+  .fila-accion {
+    flex-basis: 100%;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    padding: 14px 0 0;
+    margin-left: 0;
+    margin-top: 6px;
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fila-accion,
+  .fila-accion svg,
+  .vista-dedicada-volver {
+    transition: none !important;
   }
 }

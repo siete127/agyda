@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="css/styles.css?v=20260829a">
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 
     <script>
         (function () {
@@ -33,16 +34,16 @@
     <header class="main-header">
         <div class="header-container">
 
-            <a href="https://ardabytec.vip/" class="logo">
+            <div class="logo">
                 <img src="assets/logos-empresa/logo1.png" alt="ARDABYTEC" class="logo-img" id="headerLogoImg">
-            </a>
+            </div>
 
             <nav class="nav-menu">
                 <a href="#inicio" class="nav-link active" data-i18n="nav.inicio">Inicio</a>
-                <a href="#nosotros" class="nav-link" data-i18n="nav.nosotros">Nosotros</a>
-                <a href="#soluciones" class="nav-link" data-i18n="nav.soluciones">Soluciones</a>
-                <a href="#aliados" class="nav-link" data-i18n="nav.aliados">Aliados</a>
                 <a href="#servicios" class="nav-link" data-i18n="nav.servicios">Servicios</a>
+                <a href="#soluciones-conectan" class="nav-link" data-i18n="nav.soluciones">Soluciones</a>
+                <a href="#nosotros" class="nav-link" data-i18n="nav.nosotros">Nosotros</a>
+                <a href="#aliados" class="nav-link" data-i18n="nav.aliados">Aliados</a>
                 <a href="#portafolio" class="nav-link" data-i18n="nav.portafolio">Portafolio</a>
                 <a href="#vacantes" class="nav-link" data-i18n="nav.vacantes">Vacantes</a>
                 <a href="#ardawiki" class="nav-link" data-i18n="nav.baseConocimiento">ArdaWiki</a>
@@ -54,7 +55,7 @@
                     <button type="button" class="lang-btn active" id="langEsBtn" data-lang="es">ES</button>
                     <button type="button" class="lang-btn" id="langEnBtn" data-lang="en">EN</button>
                 </div>
-                <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Cambiar tema">
+                <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Cambiar tema" data-i18n-aria-label="aria.cambiarTema">
                     <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="4"></circle>
                         <line x1="12" y1="2" x2="12" y2="4"></line>
@@ -70,31 +71,31 @@
                         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                     </svg>
                 </button>
-                <a href="#" class="nav-link" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
-                <button type="button" class="nav-link logout-btn" id="logoutBtn" style="display:none;">Cerrar sesión</button>
+                <a href="#" class="btn-primary btn-primary--hero header-login-btn" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
+                <button type="button" class="btn-primary btn-primary--hero header-login-btn logout-btn" id="logoutBtn" style="display:none;" data-i18n="nav.logout">Cerrar sesión</button>
                 <div class="demo-btn-wrap">
                     <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="true" aria-expanded="false">
-                        Probar demo
+                        <span data-i18n="nav.probarDemo">Probar demo</span>
                         <span class="demo-btn-arrow" aria-hidden="true">&rarr;</span>
                     </button>
                     <div class="demo-popover" id="demoPopover">
-                        <p class="demo-popover-title">Prueba AGYDA con estas credenciales</p>
+                        <p class="demo-popover-title" data-i18n="demo.titulo">Prueba AGYDA con estas credenciales</p>
                         <div class="demo-popover-cred">
-                            <span class="demo-popover-role">Administrador</span>
-                            <span class="demo-popover-line"><strong>Usuario:</strong> admindemo</span>
-                            <span class="demo-popover-line"><strong>Contraseña:</strong> AdminDemo2026</span>
+                            <span class="demo-popover-role" data-i18n="demo.administrador">Administrador</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.usuario">Usuario:</strong> admindemo</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.contrasena">Contraseña:</strong> AdminDemo2026</span>
                         </div>
                         <div class="demo-popover-cred">
-                            <span class="demo-popover-role">Agente</span>
-                            <span class="demo-popover-line"><strong>Usuario:</strong> agente</span>
-                            <span class="demo-popover-line"><strong>Contraseña:</strong> Demo2026</span>
+                            <span class="demo-popover-role" data-i18n="demo.agente">Agente</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.usuario">Usuario:</strong> agente</span>
+                            <span class="demo-popover-line"><strong data-i18n="demo.contrasena">Contraseña:</strong> Demo2026</span>
                         </div>
                         <a href="https://agyda.ardabytec.vip/login?tenant=demo" target="_blank" rel="noopener" class="demo-popover-go">
-                            Ir al login <span aria-hidden="true">&rarr;</span>
+                            <span data-i18n="demo.irAlLogin">Ir al login</span> <span aria-hidden="true">&rarr;</span>
                         </a>
                     </div>
                 </div>
-                <button type="button" class="menu-toggle-btn" id="menuToggleBtn" aria-label="Abrir menú" aria-expanded="false">
+                <button type="button" class="menu-toggle-btn" id="menuToggleBtn" aria-label="Abrir menú" data-i18n-aria-label="aria.abrirMenu" aria-expanded="false">
                     <span class="menu-toggle-bar"></span>
                     <span class="menu-toggle-bar"></span>
                     <span class="menu-toggle-bar"></span>
@@ -106,10 +107,11 @@
 
     <section id="inicio" class="hero-section">
         <img id="heroBgImg" src="assets/mascota-empresa/hero-mascota-escena.png"
-            alt="Mascota ArdabyTec en escena futurista con vista a la ciudad"
+            alt="Mascota ArdabyTec en escena futurista con vista a la ciudad" data-i18n-alt="alt.heroMascota"
             class="hero-bg-img" aria-hidden="true">
         <div class="hero-bg-overlay" aria-hidden="true"></div>
         <div class="hero-bg-fade" aria-hidden="true"></div>
+        <div class="hero-bg-fade-bottom" aria-hidden="true"></div>
 
         <div class="hero-container">
 
@@ -183,60 +185,83 @@
         </div>
     </section>
 
-    <section class="impulso-section">
+    <section id="servicios" class="impulso-section">
         <div class="impulso-header">
             <h2 data-i18n-html="impulso.title">Servicios que <br>impulsan <span class="highlight-blue">tu negocio</span></h2>
             <p class="impulso-desc" data-i18n="impulso.desc">Integramos tecnología, seguridad y estrategia para resolver hoy los retos de mañana.</p>
         </div>
 
-        <div class="impulso-grid">
+        <div class="impulso-grid" id="impulsoGrid">
             <div class="impulso-card impulso-card--infra" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">01</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card1.title">Infraestructura TI</h3>
-                    <p data-i18n="impulso.card1.desc">Diseño, implementación y soporte de infraestructura segura y escalable.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">01</span>
+                        <h3 data-i18n="impulso.card1.title">Infraestructura TI</h3>
+                        <p data-i18n="impulso.card1.desc">Diseño, implementación y soporte de infraestructura segura y escalable.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--ciber" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">02</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card2.title">Ciberseguridad</h3>
-                    <p data-i18n="impulso.card2.desc">Protege lo que impulsa tu negocio.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">02</span>
+                        <h3 data-i18n="impulso.card2.title">Ciberseguridad</h3>
+                        <p data-i18n="impulso.card2.desc">Protege lo que impulsa tu negocio.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--digital" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">03</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card3.title">Transformación digital</h3>
-                    <p data-i18n="impulso.card3.desc">Convierte tus procesos en oportunidades.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">03</span>
+                        <h3 data-i18n="impulso.card3.title">Transformación digital</h3>
+                        <p data-i18n="impulso.card3.desc">Convierte tus procesos en oportunidades.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--soporte" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">04</span>
-                </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card4.title">Soporte y mantenimiento</h3>
-                    <p data-i18n="impulso.card4.desc">Tu operación siempre en marcha.</p>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">04</span>
+                        <h3 data-i18n="impulso.card4.title">Soporte y mantenimiento</h3>
+                        <p data-i18n="impulso.card4.desc">Tu operación siempre en marcha.</p>
+                    </div>
                 </div>
             </div>
 
             <div class="impulso-card impulso-card--consultoria" data-tilt>
                 <div class="impulso-card-banner">
-                    <span class="impulso-number">05</span>
+                    <div class="impulso-card-content">
+                        <span class="impulso-number">05</span>
+                        <h3 data-i18n="impulso.card5.title">Consultoría TI</h3>
+                        <p data-i18n="impulso.card5.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
+                    </div>
                 </div>
-                <div class="impulso-card-content">
-                    <h3 data-i18n="impulso.card5.title">Consultoría TI</h3>
-                    <p data-i18n="impulso.card5.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="soluciones-conectan" class="soluciones-conectan-section">
+        <div class="soluciones-conectan-container">
+            <div class="soluciones-conectan-intro">
+                <h2 data-i18n-html="solConecta.title">Soluciones <br><span class="highlight-blue">que conectan</span><br>tu negocio</h2>
+                <p data-i18n="solConecta.desc">Tecnología, soporte y comunicación integrados para que tu operación nunca se detenga.</p>
+
+                <div class="soluciones-cta soluciones-cta--intro">
+                    <p data-i18n="soluciones.ctaText">¿Necesitas una arquitectura o desarrollo específico para tu empresa?</p>
+                    <a href="#contacto" class="btn-primary btn-primary--hero">
+                        <span data-i18n="soluciones.ctaBtn">Cotizar Solución Personalizada</span> <span class="arrow">&rarr;</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="sol-bubbles-wrap">
+                <div class="sol-bubbles" id="solBubbles" aria-live="polite">
+                    <div class="soluciones-conectan-bg-loop" id="solConectaBgLoop"></div>
+                    <img src="assets/logos-empresa/logo-ardabytec.png" alt="ArdaBytec" class="sol-bubbles-logo">
                 </div>
             </div>
         </div>
@@ -288,7 +313,7 @@
         <div class="nosotros-valores">
             <span class="nosotros-eyebrow" data-i18n="nosotros.valores.title">Nuestros valores</span>
             <div class="nosotros-valores-row">
-                <button type="button" class="valores-nav valores-nav--prev" id="valoresPrevBtn" aria-label="Anterior">
+                <button type="button" class="valores-nav valores-nav--prev" id="valoresPrevBtn" aria-label="Anterior" data-i18n-aria-label="aria.anterior">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </button>
 
@@ -339,299 +364,13 @@
                     </div>
                 </div>
 
-                <button type="button" class="valores-nav valores-nav--next" id="valoresNextBtn" aria-label="Siguiente">
+                <button type="button" class="valores-nav valores-nav--next" id="valoresNextBtn" aria-label="Siguiente" data-i18n-aria-label="aria.siguiente">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </button>
             </div>
         </div>
     </section>
 
-    <section id="soluciones" class="soluciones-section">
-        <div class="soluciones-circle soluciones-circle-1" aria-hidden="true"></div>
-        <div class="soluciones-circle soluciones-circle-2" aria-hidden="true"></div>
-        <div class="soluciones-circle soluciones-circle-3" aria-hidden="true"></div>
-        <div class="soluciones-circle soluciones-circle-4" aria-hidden="true"></div>
-        <div class="soluciones-header">
-            <span class="soluciones-badge" data-i18n="soluciones.badge">Ecosistema Tecnológico</span>
-            <h2 class="section-title-center" data-i18n-html="soluciones.title">Nuestras <span class="highlight-blue">Soluciones</span></h2>
-            <p class="section-desc-center" data-i18n="soluciones.desc">
-                Desarrollamos e implementamos herramientas robustas a la medida para automatizar tus procesos, potenciar
-                tus canales de comunicación y llevar el rendimiento de tu empresa al siguiente nivel.
-            </p>
-        </div>
-
-        <div class="soluciones-container">
-            <div class="soluciones-grid">
-
-                <!-- 1. Tarificador -->
-                <div class="solucion-card">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🪙</div>
-                        <h3 data-i18n="sol.tarificador.title">Tarificador</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.tarificador.desc">Controla, analiza y gestiona consumos telefónicos en tiempo real
-                            de tu PBX o Asterisk, transformándolos en decisiones estratégicas de negocio.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.tarificador.f1">Control de costos y presupuestos</li>
-                            <li data-i18n="sol.tarificador.f2">Monitoreo en tiempo real (CDR)</li>
-                            <li data-i18n="sol.tarificador.f3">Reportes y gráficos automatizados</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('tarificador')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Tarificador_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 2. Soporte Técnico -->
-                <div class="solucion-card">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🛠️</div>
-                        <h3 data-i18n="sol.soporte.title">Soporte Técnico</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.soporte.desc">Asistencia proactiva para mantener tu infraestructura TI
-                            operativa, segura y libre de interrupciones imprevistas.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.soporte.f1">Soporte 24/7 Remoto/En sitio</li>
-                            <li data-i18n="sol.soporte.f2">Mantenimiento preventivo</li>
-                            <li data-i18n="sol.soporte.f3">Optimización y escalabilidad</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('soporte')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Soporte_Tecnico_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 3. PBX Cloud -->
-                <div class="solucion-card">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">☁️</div>
-                        <h3 data-i18n="sol.pbx.title">PBX Cloud</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.pbx.desc">Telefonía empresarial de última generación en la nube. Conecta a
-                            tus colaboradores dondequiera que estén de manera centralizada.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.pbx.f1">Extensiones móviles/remotas</li>
-                            <li data-i18n="sol.pbx.f2">Cero costos de hardware físico</li>
-                            <li data-i18n="sol.pbx.f3">Administración centralizada</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('pbx')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/PBX_Cloud_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 4. Marcador de Call Center -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">📞</div>
-                        <h3 data-i18n="sol.marcador.title">Marcador de Call Center</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.marcador.desc">Sistemas de marcación predictiva, progresiva y manual que
-                            incrementan sustancialmente la productividad de tus agentes.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.marcador.f1">Marcación predictiva con IA</li>
-                            <li data-i18n="sol.marcador.f2">Integración inmediata con CRMs</li>
-                            <li data-i18n="sol.marcador.f3">Detección inteligente de contestadoras</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('marcador')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Marcador_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf"
-                            target="_blank" class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 5. Kiosko de Call Center -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🖥️</div>
-                        <h3 data-i18n="sol.kiosko.title">Kiosko de Call Center</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.kiosko.desc">Módulos interactivos personalizados para la gestión de turnos,
-                            monitoreo de colas y desempeño de agentes en tiempo real.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.kiosko.f1">Pantallas táctiles intuitivas</li>
-                            <li data-i18n="sol.kiosko.f2">Monitoreo de colas de atención</li>
-                            <li data-i18n="sol.kiosko.f3">Estadísticas de agentes en vivo</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('kiosko')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Kiosko_Call_Center_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 6. IVR's -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🤖</div>
-                        <h3 data-i18n="sol.ivr.title">IVR's</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.ivr.desc">Sistemas de Respuesta de Voz Interactiva multinivel que guían
-                            eficientemente al usuario final hacia el área indicada.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.ivr.f1">Reconocimiento de voz avanzado</li>
-                            <li data-i18n="sol.ivr.f2">Rutas de atención inteligentes</li>
-                            <li data-i18n="sol.ivr.f3">Atención automatizada 24/7</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('ivr')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/IVR_Ardaby_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 7. Intranet -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🏢</div>
-                        <h3 data-i18n="sol.intranet.title">Intranet</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.intranet.desc">Plataforma interna privada para centralizar la comunicación,
-                            almacenar documentos de forma segura y mejorar la colaboración.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.intranet.f1">Gestión documental centralizada</li>
-                            <li data-i18n="sol.intranet.f2">Directorio y noticias internas</li>
-                            <li data-i18n="sol.intranet.f3">Trámites y flujos de trabajo internos</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('intranet')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/INTRANET_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 8. Integraciones de APIs -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">🔗</div>
-                        <h3 data-i18n="sol.api.title">Integraciones de APIs</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.api.desc">Interconectamos tus sistemas de software actuales para asegurar
-                            que los datos fluyan de manera rápida, segura y automática.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.api.f1">Sincronización en tiempo real</li>
-                            <li data-i18n="sol.api.f2">Seguridad de datos en tránsito</li>
-                            <li data-i18n="sol.api.f3">Automatización de procesos entre plataformas</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('api')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Integraciones_APIs_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 9. ERP -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">📊</div>
-                        <h3 data-i18n="sol.erp.title">ERP</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.erp.desc">Planificación de recursos empresariales para el control integral
-                            de inventarios, finanzas, ventas y administración.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.erp.f1">Módulos de control a la medida</li>
-                            <li data-i18n="sol.erp.f2">Dashboard de métricas clave</li>
-                            <li data-i18n="sol.erp.f3">Automatización contable y operativa</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('erp')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/ERP_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 10. Envíos Masivos -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">💬</div>
-                        <h3 data-i18n="sol.envios.title">WhatsApp y SMS Masivos</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.envios.desc">Campañas de mensajería masiva escalables para notificaciones,
-                            cobranza o marketing directo a dispositivos móviles.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.envios.f1">API Oficial de WhatsApp Business</li>
-                            <li data-i18n="sol.envios.f2">Tasa de entrega garantizada</li>
-                            <li data-i18n="sol.envios.f3">Automatización con Chatbots avanzados</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('envios')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Envios_WhatsApp_SMS_Dossier_Carta_ArdabyTec_Explicado.pdf"
-                            target="_blank" class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 11. Desarrollo Web -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">💻</div>
-                        <h3 data-i18n="sol.web.title">Desarrollo Web</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.web.desc">Construcción de sitios web optimizados, e-commerce, portales
-                            transaccionales y landing pages rápidas y adaptables.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.web.f1">Diseño 100% responsivo y rápido</li>
-                            <li data-i18n="sol.web.f2">Optimización SEO integrada</li>
-                            <li data-i18n="sol.web.f3">Sistemas interactivos dinámicos</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('web')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/Desarrollo_Web_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-                <!-- 12. Asterisk -->
-                <div class="solucion-card solucion-extra">
-                    <div class="solucion-accent"></div>
-                    <div class="solucion-content">
-                        <div class="solucion-icon">⭐</div>
-                        <h3 data-i18n="sol.asterisk.title">Asterisk</h3>
-                        <p class="solucion-short-desc" data-i18n="sol.asterisk.desc">Diseño, configuración y puesta en marcha de servidores basados en
-                            Asterisk para telefonía IP con código abierto.</p>
-                        <ul class="solucion-features">
-                            <li data-i18n="sol.asterisk.f1">Personalización absoluta de dialplan</li>
-                            <li data-i18n="sol.asterisk.f2">Soporte y tuning de seguridad</li>
-                            <li data-i18n="sol.asterisk.f3">Grabaciones integradas e IVRs avanzados</li>
-                        </ul>
-                    </div>
-                    <div class="solucion-actions">
-                        <button class="btn-quick-view" onclick="openModal('asterisk')" data-i18n="common.saberMas">Saber más</button>
-                        <a href="assets/fichas/ASTERISK_Dossier_Carta_ArdabyTec_Explicado.pdf" target="_blank"
-                            class="btn-pdf-view" data-i18n="common.fichaPdf">Ficha PDF</a>
-                    </div>
-                </div>
-
-            </div>
-
-            <div class="soluciones-toggle-wrap">
-                <button type="button" class="btn-toggle-soluciones" id="toggleSolucionesBtn">
-                    <span data-i18n="soluciones.verMas">Ver más soluciones</span>
-                    <span class="toggle-arrow">&darr;</span>
-                </button>
-            </div>
-        </div>
-
-        <div class="soluciones-cta">
-            <p data-i18n="soluciones.ctaText">¿Necesitas una arquitectura o desarrollo específico para tu empresa?</p>
-            <a href="#contacto" class="btn-primary">
-                <span data-i18n="soluciones.ctaBtn">Cotizar Solución Personalizada</span> <span class="arrow">&rarr;</span>
-            </a>
-        </div>
-    </section>
 
     <!-- VENTANA MODAL FLOTANTE (ESTRUCTURA DINÁMICA ÚNICA) -->
     <div id="serviceModal" class="modal-overlay">
@@ -686,146 +425,25 @@
         <div class="aliados-loop" id="aliadosLoop" aria-hidden="false"></div>
     </section>
 
-    <section id="servicios" class="servicios-section">
-        <div class="servicios-circle servicios-circle-1" aria-hidden="true"></div>
-        <div class="servicios-circle servicios-circle-2" aria-hidden="true"></div>
-        <div class="servicios-circle servicios-circle-3" aria-hidden="true"></div>
-        <div class="servicios-circle servicios-circle-4" aria-hidden="true"></div>
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="servicios.title">Nuestros <span class="highlight-blue">servicios</span></h2>
-            <p class="section-desc-center" data-i18n="servicios.desc">
-                Ofrecemos soluciones integrales para optimizar y transformar tu infraestructura tecnológica.
-            </p>
-        </div>
-
-        <div class="servicios-grid">
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/soporte tecnico-Photoroom.png" alt="Soporte">
-                </div>
-                <h3 data-i18n="servicios.soporte.title">Soporte Técnico</h3>
-                <p data-i18n="servicios.soporte.desc">Atención inmediata y eficiente para mantener tu operación siempre activa.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/infraestructura Ti-Photoroom.png" alt="Infraestructura">
-                </div>
-                <h3 data-i18n="servicios.infra.title">Infraestructura IT</h3>
-                <p data-i18n="servicios.infra.desc">Diseñamos e implementamos infraestructuras seguras, escalables y confiables.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/ciberseguridad-Photoroom.png" alt="Ciberseguridad">
-                </div>
-                <h3 data-i18n="servicios.ciber.title">Ciberseguridad</h3>
-                <p data-i18n="servicios.ciber.desc">Protegemos tu información y sistemas con las mejores prácticas del mercado.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/desarrollo de software-Photoroom.png" alt="Desarrollo">
-                </div>
-                <h3 data-i18n="servicios.dev.title">Desarrollo de Software</h3>
-                <p data-i18n="servicios.dev.desc">Soluciones a la medida que impulsan la productividad de tu empresa.</p>
-            </div>
-
-            <div class="servicio-card">
-                <div class="servicio-icon-container">
-                    <img src="assets/iconos-de-servicio/consultoria Ti-Photoroom.png" alt="Consultoría">
-                </div>
-                <h3 data-i18n="servicios.consult.title">Consultoría IT</h3>
-                <p data-i18n="servicios.consult.desc">Te asesoramos para tomar decisiones tecnológicas inteligentes.</p>
-            </div>
-
-        </div>
-
-        <div class="servicios-footer-btn">
-            <a href="#contacto" class="btn-primary">
-                <span data-i18n="servicios.verTodos">Ver todos los servicios</span> <span class="arrow">&rarr;</span>
-            </a>
-        </div>
-    </section>
-
     <!-- ==========================================
        SECCIÓN PORTAFOLIO
        ========================================== -->
     <section id="portafolio" class="portafolio-section">
-        <div class="portafolio-circle portafolio-circle-1" aria-hidden="true"></div>
-        <div class="portafolio-circle portafolio-circle-2" aria-hidden="true"></div>
-        <div class="portafolio-circle portafolio-circle-3" aria-hidden="true"></div>
-        <div class="portafolio-circle portafolio-circle-4" aria-hidden="true"></div>
-
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="portafolio.title">Nuestro <span class="highlight-blue">Portafolio</span></h2>
-            <p class="section-desc-center" data-i18n="portafolio.desc">
-                Casos de éxito y proyectos destacados donde hemos implementado tecnología de alto impacto.
-            </p>
-        </div>
-
-        <div class="portafolio-container">
-            <div class="portafolio-grid">
-                
-                <!-- Proyecto 1 -->
-                <div class="portafolio-card">
-                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-1">
-                        <span class="portafolio-placeholder-icon">🛒</span>
-                    </div>
-                    <div class="portafolio-content">
-                        <span class="portafolio-tag" data-i18n="portafolio.tag1">Desarrollo Web</span>
-                        <h3 class="portafolio-title" data-i18n="portafolio.proj1.title">Plataforma E-commerce B2B</h3>
-                        <p class="portafolio-desc" data-i18n="portafolio.proj1.desc">Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.</p>
-                    </div>
-                </div>
-
-                <!-- Proyecto 2 -->
-                <div class="portafolio-card">
-                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-2">
-                        <span class="portafolio-placeholder-icon">☁️</span>
-                    </div>
-                    <div class="portafolio-content">
-                        <span class="portafolio-tag" data-i18n="portafolio.tag2">Call Center</span>
-                        <h3 class="portafolio-title" data-i18n="portafolio.proj2.title">Migración a PBX Cloud</h3>
-                        <p class="portafolio-desc" data-i18n="portafolio.proj2.desc">Implementación de telefonía virtual para 150 agentes remotos, reduciendo los costos operativos mensuales.</p>
-                    </div>
-                </div>
-
-                <!-- Proyecto 3 -->
-                <div class="portafolio-card">
-                    <div class="portafolio-img-container portafolio-img-placeholder proyecto-3">
-                        <span class="portafolio-placeholder-icon">🖥️</span>
-                    </div>
-                    <div class="portafolio-content">
-                        <span class="portafolio-tag" data-i18n="portafolio.tag3">Soporte IT</span>
-                        <h3 class="portafolio-title" data-i18n="portafolio.proj3.title">Renovación de Infraestructura</h3>
-                        <p class="portafolio-desc" data-i18n="portafolio.proj3.desc">Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.</p>
-                    </div>
-                </div>
-
+        <div class="portafolio-container portafolio-container--carousel">
+            <div class="portafolio-info">
+                <p class="portafolio-eyebrow" data-i18n="portafolio.eyebrow">Nuestro portafolio</p>
+                <h2 class="portafolio-title-main" data-i18n-html="portafolio.title">Casos de <span class="highlight-blue">éxito, proyectos destacados</span></h2>
+                <p class="portafolio-desc-main" data-i18n="portafolio.desc">Transformamos desafíos empresariales en soluciones tecnológicas que optimizan procesos, conectan equipos y generan resultados medibles.</p>
             </div>
-        </div>
-    </section>
-
-    <section id="vacantes" class="vacantes-section">
-        <div class="vacantes-circle vacantes-circle-1" aria-hidden="true"></div>
-        <div class="vacantes-circle vacantes-circle-2" aria-hidden="true"></div>
-
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="vacantes.title">Únete a <span class="highlight-blue">nuestro equipo</span></h2>
-            <p class="section-desc-center" data-i18n="vacantes.desc">
-                Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.
-            </p>
-        </div>
-
-        <div class="vacantes-container">
-            <div id="vacantesGrid" class="vacantes-grid">
-                <!-- Tarjetas inyectadas dinámicamente por JS desde /api/vacantes -->
+            <div class="portafolio-carousel-wrap">
+                <button type="button" class="portafolio-carousel-arrow portafolio-carousel-arrow--prev" id="portafolioPrevBtn" aria-label="Anterior" data-i18n-aria-label="aria.anterior">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <div class="portafolio-carousel" id="portafolioCarousel"></div>
+                <button type="button" class="portafolio-carousel-arrow portafolio-carousel-arrow--next" id="portafolioNextBtn" aria-label="Siguiente" data-i18n-aria-label="aria.siguiente">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
             </div>
-            <p id="vacantesEmpty" class="vacantes-empty" data-i18n="vacantes.empty" style="display:none;">
-                Por el momento no hay vacantes disponibles. ¡Vuelve pronto!
-            </p>
         </div>
     </section>
 
@@ -834,7 +452,7 @@
             <button class="modal-close-btn" onclick="closeVacanteModal()">&times;</button>
             <div class="modal-body">
                 <div class="modal-header-info">
-                    <span class="modal-top-icon">💼</span>
+                    <span id="vacModalIcon" class="modal-top-icon"></span>
                     <h2 id="vacModalTitulo">Título del puesto</h2>
                 </div>
                 <div class="modal-scroll-area">
@@ -934,43 +552,12 @@
         </div>
     </div>
 
-    <section id="ardawiki" class="vacantes-section">
-        <div class="vacantes-circle vacantes-circle-1" aria-hidden="true"></div>
-        <div class="vacantes-circle vacantes-circle-2" aria-hidden="true"></div>
-
-        <div class="servicios-header">
-            <h2 class="section-title-center" data-i18n-html="kb.title">Resuelve tu problema <span class="highlight-blue">por tu cuenta</span></h2>
-            <p class="section-desc-center" data-i18n="kb.desc">
-                Busca en nuestra ArdaWiki y encuentra la solución paso a paso, sin esperar a que un técnico te atienda.
-            </p>
-        </div>
-
-        <div class="vacantes-container">
-            <div class="kb-search-wrap">
-                <div class="kb-search-pill">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="kb-search-icon"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
-                    <input type="text" id="kbBuscarInput"
-                        data-i18n-placeholder="kb.buscarPlaceholder" placeholder="Ej: no puedo entrar a mi correo, impresora, contraseña...">
-                    <button type="button" class="kb-search-btn" id="kbBuscarBtn" aria-label="Buscar">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div id="kbGrid" class="vacantes-grid">
-                <!-- Tarjetas inyectadas dinámicamente por JS desde /api/kb/publicos -->
-            </div>
-            <p id="kbEmpty" class="vacantes-empty" data-i18n="kb.empty" style="display:none;">
-                No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.
-            </p>
-        </div>
-    </section>
-
     <div id="kbModal" class="modal-overlay">
         <div class="modal-container">
             <button class="modal-close-btn" onclick="closeKbModal()">&times;</button>
             <div class="modal-body">
                 <div class="modal-header-info">
-                    <span class="modal-top-icon">📖</span>
+                    <span id="kbModalIcon" class="modal-top-icon"></span>
                     <h2 id="kbModalTitulo">Título del artículo</h2>
                 </div>
                 <div class="modal-scroll-area">
@@ -986,30 +573,120 @@
         </div>
     </div>
 
+    <div id="pdfModal" class="modal-overlay">
+        <div class="modal-container modal-container--pdf">
+            <button class="modal-close-btn" onclick="closePdfModal()">&times;</button>
+            <iframe id="pdfModalFrame" class="pdf-modal-frame" src="" title="Ficha PDF"></iframe>
+        </div>
+    </div>
+
+    <section class="talento-section">
+        <div class="talento-container">
+            <div class="talento-info">
+                <p class="talento-eyebrow" data-i18n="talento.eyebrow">Talento y conocimiento</p>
+                <h2 class="talento-title" data-i18n-html="talento.title">Más oportunidades <br>para <span class="highlight-blue">crecer juntos</span></h2>
+                <p class="talento-desc" data-i18n="talento.desc">Explora nuestras vacantes y accede a contenido tecnológico.</p>
+            </div>
+            <div class="talento-stack-wrap">
+                <div class="talento-stack" id="talentoStack" aria-hidden="true"></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="vacantesDedicada" class="vista-dedicada" style="display:none;" aria-labelledby="vacantesDedicadaTitulo">
+        <div class="vista-dedicada-hero">
+            <img src="assets/mascota-empresa/hero-vacantes.png" alt="Equipo de ARDABYTEC colaborando en oficina" data-i18n-alt="alt.equipoOficina"
+                class="hero-bg-img" aria-hidden="true">
+            <div class="hero-bg-overlay" aria-hidden="true"></div>
+            <div class="hero-bg-fade" aria-hidden="true"></div>
+            <div class="vista-dedicada-hero-content">
+                <button type="button" class="vista-dedicada-volver" data-volver-dedicada>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    <span data-i18n="vacantes.volver">Volver al inicio</span>
+                </button>
+                <p class="vista-dedicada-breadcrumb" data-i18n="vacantes.breadcrumb">Talento ArdabyTec</p>
+                <h1 id="vacantesDedicadaTitulo" class="vista-dedicada-titulo" data-i18n-html="vacantes.title">Únete a <span class="highlight-blue">nuestro equipo</span></h1>
+                <p class="vista-dedicada-desc" data-i18n="vacantes.desc">Tu talento impulsa la tecnología que conecta negocios. Conoce nuestras vacantes y forma parte de un equipo que sigue creciendo.</p>
+            </div>
+        </div>
+        <div class="vista-dedicada-body">
+            <div id="vacantesFilas" class="filas-lista">
+                <!-- Filas inyectadas dinámicamente por JS desde /api/vacantes -->
+            </div>
+            <p id="vacantesFilasEmpty" class="vacantes-empty" data-i18n="vacantes.empty" style="display:none;">
+                Por el momento no hay vacantes disponibles. ¡Vuelve pronto!
+            </p>
+        </div>
+    </section>
+
+    <section id="ardawikiDedicada" class="vista-dedicada" style="display:none;" aria-labelledby="ardawikiDedicadaTitulo">
+        <div class="vista-dedicada-hero">
+            <img src="assets/mascota-empresa/hero-ardawiki.png" alt="Colaborador consultando artículos de ArdaWiki" data-i18n-alt="alt.colaboradorWiki"
+                class="hero-bg-img" aria-hidden="true">
+            <div class="hero-bg-overlay" aria-hidden="true"></div>
+            <div class="hero-bg-fade" aria-hidden="true"></div>
+            <div class="vista-dedicada-hero-content">
+                <button type="button" class="vista-dedicada-volver" data-volver-dedicada>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    <span data-i18n="vacantes.volver">Volver al inicio</span>
+                </button>
+                <p class="vista-dedicada-breadcrumb" data-i18n="kb.breadcrumb">ArdaWiki</p>
+                <h1 id="ardawikiDedicadaTitulo" class="vista-dedicada-titulo" data-i18n-html="kb.title">Encuentra la respuesta <span class="highlight-blue">que necesitas</span></h1>
+                <p class="vista-dedicada-desc" data-i18n="kb.desc">Explora nuestra base de conocimiento y encuentra guías, soluciones y buenas prácticas para resolver dudas.</p>
+            </div>
+        </div>
+        <div class="vista-dedicada-body">
+            <div class="kb-search-wrap">
+                <div class="kb-search-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="kb-search-icon"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+                    <input type="text" id="kbBuscarInputDedicada"
+                        data-i18n-placeholder="kb.buscarPlaceholder" placeholder="Ej: no puedo entrar a mi correo, impresora, contraseña...">
+                    <button type="button" class="kb-search-btn" id="kbBuscarBtnDedicada" aria-label="Buscar" data-i18n-aria-label="aria.buscar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="kbFilas" class="filas-lista">
+                <!-- Filas inyectadas dinámicamente por JS desde /api/kb/publicos -->
+            </div>
+            <p id="kbFilasEmpty" class="vacantes-empty" data-i18n="kb.empty" style="display:none;">
+                No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.
+            </p>
+        </div>
+    </section>
+
     <section id="contacto" class="qr-form-section">
-        <div class="qr-form-circle qr-form-circle-1" aria-hidden="true"></div>
-        <div class="qr-form-circle qr-form-circle-2" aria-hidden="true"></div>
-        <div class="qr-form-circle qr-form-circle-3" aria-hidden="true"></div>
-        <div class="qr-form-circle qr-form-circle-4" aria-hidden="true"></div>
+        <div class="qr-form-waves" id="qrFormWaves" aria-hidden="true"></div>
         <div class="qr-form-container">
 
             <div class="qr-form-info">
-                <h2 class="section-title" data-i18n-html="contacto.title">¿Listo para <span class="highlight-blue">empezar?</span></h2>
+                <h2 class="section-title qr-form-title" data-i18n-html="contacto.title">¿Listo para <span class="highlight-blue">transformar</span> tu negocio?</h2>
                 <p class="section-desc" data-i18n="contacto.desc">
-                    Escanea el código QR con la cámara de tu celular o haz clic en el botón para responder nuestro
-                    formulario y recibir una cotización personalizada.
+                    Cuéntanos sobre tu proyecto y recibe una propuesta personalizada.
                 </p>
-                <a href="contacto" class="btn-primary">
+                <a href="contacto" class="btn-primary btn-primary--hero">
                     <span data-i18n="contacto.cta">Ir al formulario</span> <span class="arrow">&rarr;</span>
                 </a>
             </div>
 
-            <div class="qr-display-card">
-                <div class="qr-frame">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=En%20desarrollo...%20Proximamente%20conectado."
-                        alt="Código QR temporal" class="qr-image">
+            <svg class="qr-form-pointer" viewBox="0 0 280 120" aria-hidden="true">
+                <path class="qr-form-pointer-line" d="M10 78
+                         C 26 58, 48 58, 50 76
+                         C 51 90, 34 92, 28 80
+                         C 20 65, 44 44, 74 42
+                         C 130 38, 200 46, 248 58"
+                      fill="none" stroke="#2dd4bf" stroke-width="4" stroke-linecap="round"/>
+                <path class="qr-form-pointer-head" d="M232 44 L256 58 L234 72" fill="none" stroke="#2dd4bf" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+
+            <div class="qr-display-wrap">
+                <span class="qr-caption qr-caption-top" data-i18n="contacto.qrCaption">Escanea con tu celular y cuéntanos tu proyecto</span>
+                <div class="qr-display-card">
+                    <div class="qr-frame">
+                        <img src="assets/qr/formulario-de-contacto.png"
+                            alt="Código QR del formulario de contacto" data-i18n-alt="alt.qrContacto" class="qr-image">
+                    </div>
                 </div>
-                <span class="qr-caption" data-i18n="contacto.qrCaption">Escanea con tu celular</span>
             </div>
         </div>
     </section>
@@ -1018,9 +695,6 @@
         <div class="footer-container">
             <div class="footer-brand">
                 <img src="assets/logos-empresa/logo1.png" alt="ARDABYTEC" class="footer-logo-img" id="footerLogoImg">
-                <p class="footer-tagline" data-i18n="footer.tagline">
-                    Soluciones tecnológicas a la medida de tu empresa. Innovación, confianza y resultados medibles.
-                </p>
                 <div class="footer-social">
                     <a target="_blank" href="https://www.facebook.com/ArdabyTec2021?locale=es_LA" class="social-icon" aria-label="Facebook">
                         <img src="assets/redes-sociales/facebook.png" alt="Facebook">
@@ -1038,9 +712,9 @@
                 <h4 class="footer-col-title" data-i18n="footer.navTitle">Navegación</h4>
                 <ul class="footer-links">
                     <li><a href="#" data-i18n="nav.inicio">Inicio</a></li>
-                    <li><a href="#nosotros" data-i18n="nav.nosotros">Nosotros</a></li>
-                    <li><a href="#soluciones" data-i18n="nav.soluciones">Soluciones</a></li>
                     <li><a href="#servicios" data-i18n="nav.servicios">Servicios</a></li>
+                    <li><a href="#soluciones-conectan" data-i18n="nav.soluciones">Soluciones</a></li>
+                    <li><a href="#nosotros" data-i18n="nav.nosotros">Nosotros</a></li>
                     <li><a href="#portafolio" data-i18n="nav.portafolio">Portafolio</a></li>
                     <li><a href="#vacantes" data-i18n="nav.vacantes">Vacantes</a></li>
                     <li><a href="#ardawiki" data-i18n="nav.baseConocimiento">ArdaWiki</a></li>
@@ -1055,15 +729,30 @@
                     <li><a href="contacto" target="_blank" data-i18n="contacto.cta">Ir al formulario</a></li>
                 </ul>
             </div>
+
+            <div class="footer-col footer-newsletter">
+                <p class="footer-newsletter-text" data-i18n="footer.newsletterText" style="display:none;">Recibe novedades y contenido sobre tecnología en tu correo</p>
+                <form class="footer-newsletter-form" id="footerNewsletterForm" style="display:none;">
+                    <input type="email" class="footer-newsletter-input" placeholder="Correo electrónico" data-i18n-placeholder="footer.newsletterPlaceholder" required>
+                    <button type="submit" class="footer-newsletter-btn" aria-label="Suscribirse" data-i18n-aria-label="aria.suscribirse">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </button>
+                </form>
+            </div>
         </div>
 
         <div class="footer-container footer-bottom">
             <span class="footer-copy">&copy; <span id="footerYear">2026</span> ARDABYTEC. <span data-i18n="footer.rights">Todos los derechos reservados.</span> · AGYDA v20.11.0</span>
+            <div class="footer-legal-links">
+                <a href="#" data-i18n="footer.terms">Términos y condiciones</a>
+                <span class="footer-legal-sep">|</span>
+                <a href="#" data-i18n="footer.privacy">Aviso de privacidad</a>
+            </div>
         </div>
     </footer>
 
-    <button type="button" id="chatToggleBtn" class="floating-mascot-btn" aria-label="Abrir chat">
-        <img src="assets/mascota-empresa/boton flotante mascota.png" alt="Mascota ARDABYTEC">
+    <button type="button" id="chatToggleBtn" class="floating-mascot-btn" aria-label="Abrir chat" data-i18n-aria-label="aria.abrirChat">
+        <img src="assets/mascota-empresa/boton flotante mascota.png" alt="Mascota ARDABYTEC" data-i18n-alt="alt.mascotaChat">
     </button>
 
     <div id="chatPanel" class="chat-panel" aria-hidden="true">
@@ -1075,7 +764,7 @@
                     <span class="chat-header-status" data-i18n="chat.status">En línea</span>
                 </div>
             </div>
-            <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Cerrar chat">&times;</button>
+            <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Cerrar chat" data-i18n-aria-label="aria.cerrarChat">&times;</button>
         </div>
 
         <div id="chatMessages" class="chat-messages"></div>
@@ -1084,7 +773,7 @@
 
         <form id="chatForm" class="chat-input-row" autocomplete="off">
             <input type="text" id="chatInput" placeholder="Escribe tu mensaje..." autocomplete="off">
-            <button type="submit" class="chat-send-btn" aria-label="Enviar">
+            <button type="submit" class="chat-send-btn" aria-label="Enviar" data-i18n-aria-label="aria.enviar">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             </button>
         </form>
@@ -1142,22 +831,6 @@
         menuToggleBtn.addEventListener('click', () => {
             const isOpen = mainHeader.classList.toggle('menu-open');
             menuToggleBtn.setAttribute('aria-expanded', String(isOpen));
-        });
-
-        // --- TOGGLE DE SOLUCIONES ADICIONALES (VER MÁS / VER MENOS) ---
-        const toggleSolucionesBtn = document.getElementById('toggleSolucionesBtn');
-        const solucionesGrid = document.querySelector('.soluciones-grid');
-
-        toggleSolucionesBtn.addEventListener('click', () => {
-            const isExpanded = solucionesGrid.classList.toggle('expanded');
-            toggleSolucionesBtn.classList.toggle('active', isExpanded);
-            const label = toggleSolucionesBtn.querySelector('[data-i18n]');
-            label.setAttribute('data-i18n', isExpanded ? 'soluciones.verMenos' : 'soluciones.verMas');
-            label.innerText = translations[currentLang][isExpanded ? 'soluciones.verMenos' : 'soluciones.verMas'];
-
-            if (!isExpanded) {
-                document.getElementById('soluciones').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
         });
 
         // --- BASE DE DATOS DE INFORMACIÓN DETALLADA PARA MODALES (ES/EN) ---
@@ -1650,6 +1323,12 @@
                 "nav.inicio": "Inicio", "nav.nosotros": "Nosotros", "nav.soluciones": "Soluciones",
                 "nav.aliados": "Aliados", "nav.servicios": "Servicios", "nav.contacto": "Contacto",
                 "nav.portafolio": "Portafolio", "nav.vacantes": "Vacantes", "nav.login": "Iniciar sesión",
+                "nav.logout": "Cerrar sesión", "nav.probarDemo": "Probar demo",
+                "demo.titulo": "Prueba AGYDA con estas credenciales",
+                "demo.administrador": "Administrador", "demo.agente": "Agente",
+                "demo.usuario": "Usuario:", "demo.contrasena": "Contraseña:",
+                "demo.irAlLogin": "Ir al login",
+                "vacantes.volver": "Volver al inicio",
                 "nav.baseConocimiento": "ArdaWiki",
 
                 "hero.eyebrow": "Soluciones que impulsan",
@@ -1680,6 +1359,10 @@
                 "impulso.card5.title": "Consultoría TI",
                 "impulso.card5.desc": "Te asesoramos para tomar decisiones tecnológicas inteligentes.",
 
+                "solConecta.title": 'Soluciones <br><span class="highlight-blue">que conectan</span><br>tu negocio',
+                "solConecta.desc": "Tecnología, soporte y comunicación integrados para que tu operación nunca se detenga.",
+                "solConecta.cta": "Conoce nuestras soluciones",
+
                 "nosotros.badge": "Quiénes somos",
                 "nosotros.title": 'Tecnología con propósito, <br>resultados <span class="highlight-blue">para personas</span>',
                 "nosotros.desc": "En <strong>ARDABYTEC</strong> Somos una firma de consultoría especializada en Tecnologías de la Información, con amplia experiencia en soluciones de Contact Center, desarrollo web, aplicaciones móviles y soporte técnico integral.",
@@ -1707,6 +1390,21 @@
                 "soluciones.verMenos": "Ver menos soluciones",
 
                 "common.saberMas": "Saber más", "common.fichaPdf": "Ficha PDF",
+
+                "aria.cambiarTema": "Cambiar tema",
+                "aria.abrirMenu": "Abrir menú",
+                "aria.anterior": "Anterior",
+                "aria.siguiente": "Siguiente",
+                "aria.buscar": "Buscar",
+                "aria.suscribirse": "Suscribirse",
+                "aria.abrirChat": "Abrir chat",
+                "aria.cerrarChat": "Cerrar chat",
+                "aria.enviar": "Enviar",
+                "alt.heroMascota": "Mascota ArdabyTec en escena futurista con vista a la ciudad",
+                "alt.equipoOficina": "Equipo de ARDABYTEC colaborando en oficina",
+                "alt.colaboradorWiki": "Colaborador consultando artículos de ArdaWiki",
+                "alt.qrContacto": "Código QR del formulario de contacto",
+                "alt.mascotaChat": "Mascota ARDABYTEC",
 
                 "sol.tarificador.title": "Tarificador",
                 "sol.tarificador.desc": "Controla, analiza y gestiona consumos telefónicos en tiempo real de tu PBX o Asterisk, transformándolos en decisiones estratégicas de negocio.",
@@ -1772,8 +1470,9 @@
                 "servicios.consult.title": "Consultoría IT", "servicios.consult.desc": "Te asesoramos para tomar decisiones tecnológicas inteligentes.",
                 "servicios.verTodos": "Ver todos los servicios",
                 
-                "portafolio.title": 'Nuestro <span class="highlight-blue">Portafolio</span>',
-                "portafolio.desc": "Casos de éxito y proyectos destacados donde hemos implementado tecnología de alto impacto.",
+                "portafolio.eyebrow": "Nuestro portafolio",
+                "portafolio.title": 'Casos de <span class="highlight-blue">éxito, proyectos destacados</span>',
+                "portafolio.desc": "Transformamos desafíos empresariales en soluciones tecnológicas que optimizan procesos, conectan equipos y generan resultados medibles.",
                 "portafolio.tag1": "Desarrollo Web",
                 "portafolio.proj1.title": "Plataforma E-commerce B2B",
                 "portafolio.proj1.desc": "Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.",
@@ -1783,18 +1482,30 @@
                 "portafolio.tag3": "Soporte IT",
                 "portafolio.proj3.title": "Renovación de Infraestructura",
                 "portafolio.proj3.desc": "Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.",
+                "portafolio.verMas": "Ver más",
+                "portafolio.verMenos": "Ver menos",
 
-                "contacto.title": '¿Listo para <span class="highlight-blue">empezar?</span>',
-                "contacto.desc": "Escanea el código QR con la cámara de tu celular o haz clic en el botón para responder nuestro formulario y recibir una cotización personalizada.",
+                "contacto.title": '¿Listo para <span class="highlight-blue">transformar</span> tu negocio?',
+                "contacto.desc": "Cuéntanos sobre tu proyecto y recibe una propuesta personalizada.",
                 "contacto.cta": "Ir al formulario",
-                "contacto.qrCaption": "Escanea con tu celular",
+                "contacto.qrCaption": "Escanea con tu celular y cuéntanos tu proyecto",
 
+                "talento.eyebrow": "Talento y conocimiento",
+                "talento.title": 'Más oportunidades <br>para <span class="highlight-blue">crecer juntos</span>',
+                "talento.desc": "Explora nuestras vacantes y accede a contenido tecnológico.",
+                "talento.cardVacantes": "Vacantes",
+                "talento.cardVacantesBtn": "Ver vacantes",
+                "talento.cardWiki": "ArdaWiki",
+                "talento.cardWikiBtn": "Visitar ArdaWiki",
+
+                "vacantes.breadcrumb": "Talento ArdabyTec",
                 "vacantes.title": 'Únete a <span class="highlight-blue">nuestro equipo</span>',
-                "vacantes.desc": "Conoce las oportunidades laborales disponibles en ARDABYTEC y postúlate hoy mismo.",
+                "vacantes.desc": "Tu talento impulsa la tecnología que conecta negocios. Conoce nuestras vacantes y forma parte de un equipo que sigue creciendo.",
                 "vacantes.empty": "Por el momento no hay vacantes disponibles. ¡Vuelve pronto!",
                 "vacantes.verDetalle": "Ver detalle y postular",
-                "kb.title": 'Resuelve tu problema <span class="highlight-blue">por tu cuenta</span>',
-                "kb.desc": "Busca en nuestra ArdaWiki y encuentra la solución paso a paso, sin esperar a que un técnico te atienda.",
+                "kb.breadcrumb": "ArdaWiki",
+                "kb.title": 'Encuentra la respuesta <span class="highlight-blue">que necesitas</span>',
+                "kb.desc": "Explora nuestra base de conocimiento y encuentra guías, soluciones y buenas prácticas para resolver dudas.",
                 "kb.buscarPlaceholder": "Ej: no puedo entrar a mi correo, impresora, contraseña...",
                 "kb.empty": "No encontramos artículos que coincidan con tu búsqueda. Intenta con otras palabras o contáctanos.",
                 "vacantes.modal.descripcion": "Descripción del puesto",
@@ -1810,6 +1521,10 @@
                 "footer.tagline": "Soluciones tecnológicas a la medida de tu empresa. Innovación, confianza y resultados medibles.",
                 "footer.navTitle": "Navegación", "footer.contactTitle": "Contacto",
                 "footer.rights": "Todos los derechos reservados.",
+                "footer.newsletterText": "Recibe novedades y contenido sobre tecnología en tu correo",
+                "footer.newsletterPlaceholder": "Correo electrónico",
+                "footer.terms": "Términos y condiciones",
+                "footer.privacy": "Aviso de privacidad",
 
                 "chat.title": "Asistente ARDABYTEC",
                 "chat.status": "En línea"
@@ -1818,6 +1533,12 @@
                 "nav.inicio": "Home", "nav.nosotros": "About", "nav.soluciones": "Solutions",
                 "nav.aliados": "Partners", "nav.servicios": "Services", "nav.contacto": "Contact",
                 "nav.portafolio": "Portfolio", "nav.vacantes": "Careers", "nav.login": "Login",
+                "nav.logout": "Log out", "nav.probarDemo": "Try demo",
+                "demo.titulo": "Try AGYDA with these credentials",
+                "demo.administrador": "Administrator", "demo.agente": "Agent",
+                "demo.usuario": "Username:", "demo.contrasena": "Password:",
+                "demo.irAlLogin": "Go to login",
+                "vacantes.volver": "Back to home",
                 "nav.baseConocimiento": "ArdaWiki",
 
                 "hero.eyebrow": "Solutions that drive you forward",
@@ -1848,6 +1569,10 @@
                 "impulso.card5.title": "IT Consulting",
                 "impulso.card5.desc": "We advise you in making smart technology decisions.",
 
+                "solConecta.title": 'Solutions <br><span class="highlight-blue">that connect</span><br>your business',
+                "solConecta.desc": "Technology, support and communication integrated so your operation never stops.",
+                "solConecta.cta": "Discover our solutions",
+
                 "nosotros.badge": "Who we are",
                 "nosotros.title": 'Technology with purpose, <br>results <span class="highlight-blue">for people</span>',
                 "nosotros.desc": "At <strong>ARDABYTEC</strong> we are a consulting firm specialized in Information Technology, with extensive experience in Contact Center solutions, web development, mobile applications and comprehensive technical support.",
@@ -1875,6 +1600,21 @@
                 "soluciones.verMenos": "View fewer solutions",
 
                 "common.saberMas": "Learn more", "common.fichaPdf": "PDF Sheet",
+
+                "aria.cambiarTema": "Toggle theme",
+                "aria.abrirMenu": "Open menu",
+                "aria.anterior": "Previous",
+                "aria.siguiente": "Next",
+                "aria.buscar": "Search",
+                "aria.suscribirse": "Subscribe",
+                "aria.abrirChat": "Open chat",
+                "aria.cerrarChat": "Close chat",
+                "aria.enviar": "Send",
+                "alt.heroMascota": "ArdabyTec mascot in a futuristic scene overlooking the city",
+                "alt.equipoOficina": "ARDABYTEC team collaborating in the office",
+                "alt.colaboradorWiki": "Team member consulting ArdaWiki articles",
+                "alt.qrContacto": "QR code for the contact form",
+                "alt.mascotaChat": "ARDABYTEC mascot",
 
                 "sol.tarificador.title": "Call Rating System",
                 "sol.tarificador.desc": "Monitor, analyze and manage real-time phone usage from your PBX or Asterisk, turning it into strategic business decisions.",
@@ -1940,8 +1680,9 @@
                 "servicios.consult.title": "IT Consulting", "servicios.consult.desc": "We advise you in making smart technology decisions.",
                 "servicios.verTodos": "See all services",
                 
-                "portafolio.title": 'Our <span class="highlight-blue">Portfolio</span>',
-                "portafolio.desc": "Success stories and featured projects where we have implemented high-impact technology.",
+                "portafolio.eyebrow": "Our portfolio",
+                "portafolio.title": 'Success <span class="highlight-blue">stories, featured projects</span>',
+                "portafolio.desc": "We turn business challenges into technology solutions that streamline processes, connect teams, and deliver measurable results.",
                 "portafolio.tag1": "Web Development",
                 "portafolio.proj1.title": "B2B E-commerce Platform",
                 "portafolio.proj1.desc": "Creation of a wholesale sales portal with real-time ERP integration, optimizing the supply chain.",
@@ -1951,18 +1692,30 @@
                 "portafolio.tag3": "IT Support",
                 "portafolio.proj3.title": "Infrastructure Renewal",
                 "portafolio.proj3.desc": "Design and update of local servers and structured network for a corporate client in the financial sector.",
+                "portafolio.verMas": "See more",
+                "portafolio.verMenos": "See less",
 
-                "contacto.title": 'Ready to <span class="highlight-blue">get started?</span>',
-                "contacto.desc": "Scan the QR code with your phone's camera or click the button to fill out our form and receive a personalized quote.",
+                "contacto.title": 'Ready to <span class="highlight-blue">transform</span> your business?',
+                "contacto.desc": "Tell us about your project and get a personalized proposal.",
                 "contacto.cta": "Go to the form",
-                "contacto.qrCaption": "Scan with your phone",
+                "contacto.qrCaption": "Scan with your phone and tell us about your project",
 
+                "talento.eyebrow": "Talent and knowledge",
+                "talento.title": 'More opportunities <br>to <span class="highlight-blue">grow together</span>',
+                "talento.desc": "Explore our job openings and access technology content.",
+                "talento.cardVacantes": "Careers",
+                "talento.cardVacantesBtn": "View openings",
+                "talento.cardWiki": "ArdaWiki",
+                "talento.cardWikiBtn": "Visit ArdaWiki",
+
+                "vacantes.breadcrumb": "ArdabyTec Talent",
                 "vacantes.title": 'Join <span class="highlight-blue">our team</span>',
-                "vacantes.desc": "Check out the current job openings at ARDABYTEC and apply today.",
+                "vacantes.desc": "Your talent drives the technology that connects businesses. Check out our openings and join a growing team.",
                 "vacantes.empty": "There are no open positions right now. Check back soon!",
                 "vacantes.verDetalle": "View details & apply",
-                "kb.title": 'Solve it <span class="highlight-blue">yourself</span>',
-                "kb.desc": "Search our ArdaWiki and find the solution step by step, no need to wait for a technician.",
+                "kb.breadcrumb": "ArdaWiki",
+                "kb.title": 'Find the answer <span class="highlight-blue">you need</span>',
+                "kb.desc": "Explore our knowledge base and find guides, solutions, and best practices to solve your issues.",
                 "kb.buscarPlaceholder": "E.g: can't log into my email, printer, password...",
                 "kb.empty": "We couldn't find any articles matching your search. Try different words or contact us.",
                 "vacantes.modal.descripcion": "Job description",
@@ -1978,6 +1731,10 @@
                 "footer.tagline": "Technology solutions built for your business. Innovation, trust and measurable results.",
                 "footer.navTitle": "Navigation", "footer.contactTitle": "Contact",
                 "footer.rights": "All rights reserved.",
+                "footer.newsletterText": "Get news and tech content straight to your inbox",
+                "footer.newsletterPlaceholder": "Email address",
+                "footer.terms": "Terms and conditions",
+                "footer.privacy": "Privacy notice",
 
                 "chat.title": "ARDABYTEC Assistant",
                 "chat.status": "Online"
@@ -1997,6 +1754,18 @@
             document.querySelectorAll('[data-i18n-html]').forEach(el => {
                 const key = el.getAttribute('data-i18n-html');
                 if (dict[key] !== undefined) el.innerHTML = dict[key];
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (dict[key] !== undefined) el.setAttribute('placeholder', dict[key]);
+            });
+            document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+                const key = el.getAttribute('data-i18n-aria-label');
+                if (dict[key] !== undefined) el.setAttribute('aria-label', dict[key]);
+            });
+            document.querySelectorAll('[data-i18n-alt]').forEach(el => {
+                const key = el.getAttribute('data-i18n-alt');
+                if (dict[key] !== undefined) el.setAttribute('alt', dict[key]);
             });
 
             const titleEl = document.querySelector('title[data-es]');
@@ -2036,26 +1805,31 @@
         const LOGO_DARK_SRC = 'assets/logos-empresa/logo1-modo-oscuro.png';
 
         function updateLogo(theme) {
-            // Sobre el hero (header flotando sin scroll) el logo siempre va en blanco,
-            // sin importar el tema, porque el fondo detrás es la escena oscura.
-            const mainHeaderEl = document.querySelector('.main-header');
-            const floatingOverHero = mainHeaderEl && !mainHeaderEl.classList.contains('is-scrolled');
-            const logoSrc = (theme === 'dark' || floatingOverHero) ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
+            const logoSrc = theme === 'dark' ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
             const headerLogo = document.getElementById('headerLogoImg');
             if (headerLogo) {
                 headerLogo.src = logoSrc;
             }
             const footerLogo = document.getElementById('footerLogoImg');
             if (footerLogo) {
-                footerLogo.src = theme === 'dark' ? LOGO_DARK_SRC : LOGO_LIGHT_SRC;
+                footerLogo.src = logoSrc;
             }
         }
 
         const HERO_BG_LIGHT_SRC = 'assets/mascota-empresa/hero-mascota-escena-claro.png';
         const HERO_BG_DARK_SRC = 'assets/mascota-empresa/hero-mascota-escena.png';
+        const HERO_BG_PHONE_LIGHT_SRC = 'assets/mascota-empresa/hero-mascota-telefono-claro.png';
+        const HERO_BG_PHONE_DARK_SRC = 'assets/mascota-empresa/hero-mascota-telefono.png';
+        const HERO_PHONE_BREAKPOINT = 640; // por debajo de este ancho, imagen específica de teléfono (no se agranda/recorta la de escritorio)
 
         function updateHeroImage(theme) {
-            const src = theme === 'dark' ? HERO_BG_DARK_SRC : HERO_BG_LIGHT_SRC;
+            const isPhone = window.innerWidth <= HERO_PHONE_BREAKPOINT;
+            let src;
+            if (isPhone) {
+                src = theme === 'dark' ? HERO_BG_PHONE_DARK_SRC : HERO_BG_PHONE_LIGHT_SRC;
+            } else {
+                src = theme === 'dark' ? HERO_BG_DARK_SRC : HERO_BG_LIGHT_SRC;
+            }
             const heroImg = document.getElementById('heroBgImg');
             if (heroImg) heroImg.src = src;
         }
@@ -2074,11 +1848,54 @@
         updateLogo(getCurrentTheme());
         updateHeroImage(getCurrentTheme());
 
+        // Recalcula solo al cruzar el breakpoint teléfono/escritorio, no en cada resize.
+        (function () {
+            let wasPhone = window.innerWidth <= HERO_PHONE_BREAKPOINT;
+            window.addEventListener('resize', () => {
+                const isPhone = window.innerWidth <= HERO_PHONE_BREAKPOINT;
+                if (isPhone !== wasPhone) {
+                    wasPhone = isPhone;
+                    updateHeroImage(getCurrentTheme());
+                }
+            });
+        })();
+
         // --- HEADER TRANSPARENTE SOBRE EL HERO, SÓLIDO AL HACER SCROLL ---
         (function () {
             const mainHeaderEl = document.querySelector('.main-header');
             const heroSectionEl = document.getElementById('inicio');
+            const heroContainerEl = document.querySelector('.hero-container');
             if (!mainHeaderEl || !heroSectionEl) return;
+
+            // El header flotando sobre el hero es "position: absolute" (no
+            // ocupa espacio en el flujo) y su altura varía mucho según el
+            // ancho (nav en una fila, nav colapsado en dos filas, logo
+            // agrandado en el breakpoint de menú hamburguesa...). Sin
+            // compensación el título del hero queda tapado por el header en
+            // esos anchos intermedios. Se mide la altura real del header y
+            // se aplica como padding-top extra del hero solo cuando hace falta.
+            const navMenuEl = document.querySelector('.nav-menu');
+            const updateHeroOverlap = () => {
+                if (!heroContainerEl) return;
+                if (mainHeaderEl.classList.contains('is-scrolled')) {
+                    heroContainerEl.style.setProperty('--header-overlap', '0px');
+                    return;
+                }
+                // Margen de tolerancia: .hero-section ya aporta 60px de
+                // padding-top propio, así que solo hace falta compensar lo
+                // que exceda eso. Con el menú desplegado no se resta margen,
+                // para no dejar el hero tapado. El panel del menú es
+                // "position: absolute" (ancho ajustado al contenido, no al
+                // header), así que su altura no cuenta en offsetHeight del
+                // header y hay que sumarla aparte.
+                const menuOpen = mainHeaderEl.classList.contains('menu-open');
+                let height = mainHeaderEl.offsetHeight;
+                if (menuOpen && navMenuEl) {
+                    height = Math.max(height, navMenuEl.getBoundingClientRect().bottom);
+                }
+                const overlap = Math.max(0, height - (menuOpen ? 0 : 40));
+                heroContainerEl.style.setProperty('--header-overlap', overlap + 'px');
+            };
 
             const applyScrollState = () => {
                 const heroBottom = heroSectionEl.getBoundingClientRect().bottom;
@@ -2092,11 +1909,25 @@
                     document.body.style.paddingTop = shouldBeScrolled ? mainHeaderEl.offsetHeight + 'px' : '';
                     updateLogo(getCurrentTheme());
                 }
+                updateHeroOverlap();
             };
 
             applyScrollState();
             window.addEventListener('scroll', applyScrollState, { passive: true });
             window.addEventListener('resize', applyScrollState);
+            if (window.ResizeObserver) {
+                new ResizeObserver(updateHeroOverlap).observe(mainHeaderEl);
+                // El panel del menú (position: absolute, ancho ajustado al
+                // contenido) no afecta offsetHeight del header, así que se
+                // observa aparte para recalcular el overlap al abrir/cerrar.
+                if (navMenuEl) new ResizeObserver(updateHeroOverlap).observe(navMenuEl);
+            }
+            const menuToggleBtnEl = document.getElementById('menuToggleBtn');
+            if (menuToggleBtnEl) {
+                menuToggleBtnEl.addEventListener('click', () => {
+                    requestAnimationFrame(updateHeroOverlap);
+                });
+            }
         })();
 
         document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
@@ -2259,7 +2090,10 @@
                 togglePwBtn.addEventListener('click', function () {
                     const showing = pwInput.type === 'text';
                     pwInput.type = showing ? 'password' : 'text';
-                    togglePwBtn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+                    const label = showing
+                        ? (currentLang === 'en' ? 'Show password' : 'Mostrar contraseña')
+                        : (currentLang === 'en' ? 'Hide password' : 'Ocultar contraseña');
+                    togglePwBtn.setAttribute('aria-label', label);
                 });
             }
 
@@ -2288,7 +2122,7 @@
 
                         if (res.ok && data.success) {
                             localStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
-                            loginModalStatus.innerText = 'Inicio de sesión correcto.';
+                            loginModalStatus.innerText = currentLang === 'en' ? 'Login successful.' : 'Inicio de sesión correcto.';
                             loginModalStatus.className = 'login-modal-status success';
 
                             setTimeout(function () {
@@ -2296,11 +2130,11 @@
                                 if (typeof window.renderSessionUI === 'function') window.renderSessionUI();
                             }, 600);
                         } else {
-                            loginModalStatus.innerText = data.message || 'Usuario o contraseña incorrectos.';
+                            loginModalStatus.innerText = data.message || (currentLang === 'en' ? 'Incorrect username or password.' : 'Usuario o contraseña incorrectos.');
                             loginModalStatus.className = 'login-modal-status error';
                         }
                     } catch (err) {
-                        loginModalStatus.innerText = 'Ocurrió un error de conexión. Intenta de nuevo más tarde.';
+                        loginModalStatus.innerText = currentLang === 'en' ? 'A connection error occurred. Please try again later.' : 'Ocurrió un error de conexión. Intenta de nuevo más tarde.';
                         loginModalStatus.className = 'login-modal-status error';
                     } finally {
                         loginModalSubmitBtn.disabled = false;
@@ -2366,6 +2200,114 @@
             }
         };
 
+        // --- MAPEO DE ÍCONOS SVG (sin emojis) ---
+        // Íconos inline estilo "line icon" (viewBox 24x24, stroke=currentColor),
+        // consistentes con el resto del sitio (ver header/nav y sol-bubbles.js).
+        // Se infiere el ícono a partir de palabras clave del título/categoría,
+        // porque la API no manda un campo de ícono.
+        const ICONS_SVG = {
+            maletin: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>',
+            telefono: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>',
+            monitor: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>',
+            grafica: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>',
+            persona: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
+            laptop: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>',
+            impresora: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>',
+            wifi: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>',
+            engranaje: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>',
+            documento: '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>',
+            ondas: '<svg xmlns="http://www/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-3 3.5-3 5 0s3.5 3 5 0 3.5-3 5 0 3.5 3 5 0"></path></svg>',
+            pin: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>',
+            flecha: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>',
+        };
+        // Corrige un typo de xmlns en el ícono "ondas" (fallback de ArdaWiki)
+        ICONS_SVG.ondas = ICONS_SVG.ondas.replace('http://www/2000/svg', 'http://www.w3.org/2000/svg');
+
+        function iconoVacantePorTexto(...campos) {
+            const texto = campos.filter(Boolean).join(' ').toLowerCase();
+            if (/telef[oó]nic|call\s*center|llamad/.test(texto)) return ICONS_SVG.telefono;
+            if (/t[eé]cnic|soporte/.test(texto)) return ICONS_SVG.monitor;
+            if (/comercial|ventas/.test(texto)) return ICONS_SVG.grafica;
+            return ICONS_SVG.maletin;
+        }
+
+        function iconoKbPorTexto(...campos) {
+            const texto = campos.filter(Boolean).join(' ').toLowerCase();
+            if (/cuenta|seguridad/.test(texto)) return ICONS_SVG.persona;
+            if (/software|aplicaci[oó]n/.test(texto)) return ICONS_SVG.laptop;
+            if (/hardware|impresora/.test(texto)) return ICONS_SVG.impresora;
+            if (/red|conectividad/.test(texto)) return ICONS_SVG.wifi;
+            if (/procedimiento|interno/.test(texto)) return ICONS_SVG.engranaje;
+            return ICONS_SVG.documento;
+        }
+
+        // --- VISTAS DEDICADAS (Vacantes / ArdaWiki) ---
+        // Muestra una sección tipo página completa dentro del mismo home, sin
+        // router ni recarga: se ocultan las secciones normales del home (el
+        // header y el footer NUNCA se ocultan) y se muestra el bloque
+        // `.vista-dedicada` correspondiente. "Volver" restaura todo.
+        (function () {
+            const HOME_SECTION_SELECTORS = [
+                '#inicio', '.pilares-section', '#nosotros', '#soluciones-conectan', '#aliados',
+                '#servicios', '#portafolio', '.talento-section', '#contacto'
+            ];
+
+            function homeSections() {
+                return HOME_SECTION_SELECTORS
+                    .map((sel) => document.querySelector(sel))
+                    .filter(Boolean);
+            }
+
+            function abrirVistaDedicada(id) {
+                const vista = document.getElementById(id);
+                if (!vista) return;
+                homeSections().forEach((el) => { el.dataset.prevDisplay = el.style.display; el.style.display = 'none'; });
+                document.querySelectorAll('.vista-dedicada').forEach((el) => { el.style.display = 'none'; });
+                vista.style.display = '';
+                // El título usa el mismo sistema de "split text" con
+                // IntersectionObserver que el resto del sitio (animación de
+                // scroll-reveal). Como esta sección estuvo display:none,
+                // el observer nunca disparó y el texto queda a medio
+                // revelar (translúcido/desalineado) hasta que el usuario
+                // haga scroll — se fuerza visible de una vez al abrir.
+                vista.querySelectorAll('[data-split]').forEach((el) => el.classList.add('is-split-visible'));
+                window.scrollTo({ top: 0, behavior: 'auto' });
+            }
+
+            window.cerrarVistaDedicada = function () {
+                document.querySelectorAll('.vista-dedicada').forEach((el) => { el.style.display = 'none'; });
+                homeSections().forEach((el) => { el.style.display = el.dataset.prevDisplay || ''; });
+                window.scrollTo({ top: 0, behavior: 'auto' });
+            };
+
+            window.abrirVacantesDedicada = () => abrirVistaDedicada('vacantesDedicada');
+            window.abrirArdawikiDedicada = () => abrirVistaDedicada('ardawikiDedicada');
+
+            document.querySelectorAll('[data-volver-dedicada]').forEach((btn) => {
+                btn.addEventListener('click', () => window.cerrarVistaDedicada());
+            });
+
+            // #vacantes y #ardawiki ahora solo existen "detrás" de sus
+            // vistas dedicadas (ocultas por homeSections() al abrir
+            // cualquiera de las dos) — cualquier link del sitio que
+            // apunte a esas anclas (nav, footer) debe abrir la vista
+            // dedicada correspondiente en vez de hacer scroll a una
+            // sección invisible, si no el link queda marcado "activo" sin
+            // que la vista realmente cambie.
+            document.querySelectorAll('a[href="#vacantes"]').forEach((link) => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    window.abrirVacantesDedicada();
+                });
+            });
+            document.querySelectorAll('a[href="#ardawiki"]').forEach((link) => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    window.abrirArdawikiDedicada();
+                });
+            });
+        })();
+
         // --- MÓDULO DE VACANTES ---
         (function () {
             const MODALIDAD_LABELS = {
@@ -2381,10 +2323,34 @@
                 return div.innerHTML;
             }
 
+            function filaVacanteHtml(v) {
+                const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[v.modalidad] || '';
+                const icono = iconoVacantePorTexto(v.titulo, v.categoria);
+                return `
+                    <div class="fila-item">
+                        <div class="fila-icono">${icono}</div>
+                        <div class="fila-info">
+                            <h3 class="fila-titulo">${escapeHtml(v.titulo)}</h3>
+                            <div class="fila-meta">
+                                ${v.ubicacion ? `<span class="fila-meta-item">${ICONS_SVG.pin} ${escapeHtml(v.ubicacion)}</span>` : ''}
+                                ${modalidadLabel ? `<span class="fila-meta-item">${ICONS_SVG.maletin} ${escapeHtml(modalidadLabel)}</span>` : ''}
+                            </div>
+                            <p class="fila-desc">${escapeHtml((v.descripcion || '').slice(0, 130))}${(v.descripcion || '').length > 130 ? '…' : ''}</p>
+                        </div>
+                        <button type="button" class="fila-accion" onclick="openVacanteModal(${v.id})">
+                            <span data-i18n="vacantes.verDetalle">Ver detalle y postular</span>
+                            ${ICONS_SVG.flecha}
+                        </button>
+                    </div>
+                `;
+            }
+
             async function cargarVacantes() {
                 const grid = document.getElementById('vacantesGrid');
                 const empty = document.getElementById('vacantesEmpty');
-                if (!grid) return;
+                const filas = document.getElementById('vacantesFilas');
+                const filasEmpty = document.getElementById('vacantesFilasEmpty');
+                if (!grid && !filas) return;
 
                 try {
                     const res = await fetch('/api/vacantes');
@@ -2393,29 +2359,39 @@
                     vacantesCache = vacantes;
 
                     if (!vacantes.length) {
-                        grid.innerHTML = '';
+                        if (grid) grid.innerHTML = '';
                         if (empty) empty.style.display = '';
+                        if (filas) filas.innerHTML = '';
+                        if (filasEmpty) filasEmpty.style.display = '';
                         return;
                     }
                     if (empty) empty.style.display = 'none';
+                    if (filasEmpty) filasEmpty.style.display = 'none';
 
-                    grid.innerHTML = vacantes.map(v => {
-                        const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[v.modalidad] || '';
-                        return `
-                            <div class="vacante-card">
-                                <div class="vacante-card-banner"><span class="vacante-card-banner-icon">💼</span></div>
-                                <div class="vacante-card-content">
-                                    <h3 class="vacante-title">${escapeHtml(v.titulo)}</h3>
-                                    <div class="vacante-meta">
-                                        ${v.ubicacion ? `<span class="vacante-badge">📍 ${escapeHtml(v.ubicacion)}</span>` : ''}
-                                        ${modalidadLabel ? `<span class="vacante-badge">💼 ${escapeHtml(modalidadLabel)}</span>` : ''}
+                    if (grid) {
+                        grid.innerHTML = vacantes.map(v => {
+                            const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[v.modalidad] || '';
+                            const icono = iconoVacantePorTexto(v.titulo, v.categoria);
+                            return `
+                                <div class="vacante-card">
+                                    <div class="vacante-card-banner"><span class="vacante-card-banner-icon">${icono}</span></div>
+                                    <div class="vacante-card-content">
+                                        <h3 class="vacante-title">${escapeHtml(v.titulo)}</h3>
+                                        <div class="vacante-meta">
+                                            ${v.ubicacion ? `<span class="vacante-badge">${ICONS_SVG.pin} ${escapeHtml(v.ubicacion)}</span>` : ''}
+                                            ${modalidadLabel ? `<span class="vacante-badge">${ICONS_SVG.maletin} ${escapeHtml(modalidadLabel)}</span>` : ''}
+                                        </div>
+                                        <p class="vacante-short-desc">${escapeHtml((v.descripcion || '').slice(0, 130))}${(v.descripcion || '').length > 130 ? '…' : ''}</p>
+                                        <button type="button" class="btn-quick-view" onclick="openVacanteModal(${v.id})" data-i18n="vacantes.verDetalle">Ver detalle y postular</button>
                                     </div>
-                                    <p class="vacante-short-desc">${escapeHtml((v.descripcion || '').slice(0, 130))}${(v.descripcion || '').length > 130 ? '…' : ''}</p>
-                                    <button type="button" class="btn-quick-view" onclick="openVacanteModal(${v.id})" data-i18n="vacantes.verDetalle">Ver detalle y postular</button>
                                 </div>
-                            </div>
-                        `;
-                    }).join('');
+                            `;
+                        }).join('');
+                    }
+
+                    if (filas) {
+                        filas.innerHTML = vacantes.map(filaVacanteHtml).join('');
+                    }
 
                     applyTranslations(currentLang);
                     if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
@@ -2423,6 +2399,7 @@
                 } catch (e) {
                     console.warn('No se pudieron cargar las vacantes:', e);
                     if (empty) empty.style.display = '';
+                    if (filasEmpty) filasEmpty.style.display = '';
                 }
             }
 
@@ -2432,6 +2409,9 @@
 
                 const modal = document.getElementById('vacanteModal');
                 modal.dataset.currentVacanteId = id;
+
+                const iconEl = document.getElementById('vacModalIcon');
+                if (iconEl) iconEl.innerHTML = iconoVacantePorTexto(vacante.titulo, vacante.categoria);
 
                 document.getElementById('vacModalTitulo').innerText = vacante.titulo || '';
                 document.getElementById('vacModalDescripcion').innerText = vacante.descripcion || '';
@@ -2445,20 +2425,20 @@
                 }
 
                 const ubicacionEl = document.getElementById('vacModalUbicacion');
-                ubicacionEl.innerText = vacante.ubicacion ? `📍 ${vacante.ubicacion}` : '';
+                ubicacionEl.innerHTML = vacante.ubicacion ? `${ICONS_SVG.pin} ${escapeHtml(vacante.ubicacion)}` : '';
                 ubicacionEl.style.display = vacante.ubicacion ? '' : 'none';
 
                 const modalidadEl = document.getElementById('vacModalModalidad');
                 const modalidadLabel = MODALIDAD_LABELS[currentLang]?.[vacante.modalidad] || '';
-                modalidadEl.innerText = modalidadLabel ? `💼 ${modalidadLabel}` : '';
+                modalidadEl.innerHTML = modalidadLabel ? `${ICONS_SVG.maletin} ${escapeHtml(modalidadLabel)}` : '';
                 modalidadEl.style.display = modalidadLabel ? '' : 'none';
 
                 const contratoEl = document.getElementById('vacModalContrato');
-                contratoEl.innerText = vacante.tipoContrato ? `📄 ${vacante.tipoContrato}` : '';
+                contratoEl.innerHTML = vacante.tipoContrato ? `${ICONS_SVG.documento} ${escapeHtml(vacante.tipoContrato)}` : '';
                 contratoEl.style.display = vacante.tipoContrato ? '' : 'none';
 
                 const salarioEl = document.getElementById('vacModalSalario');
-                salarioEl.innerText = vacante.salario ? `💰 ${vacante.salario}` : '';
+                salarioEl.innerHTML = vacante.salario ? `${ICONS_SVG.grafica} ${escapeHtml(vacante.salario)}` : '';
                 salarioEl.style.display = vacante.salario ? '' : 'none';
 
                 document.getElementById('postulacionForm').reset();
@@ -2504,27 +2484,29 @@
                     const cvInput = document.getElementById('postCv');
                     const file = cvInput.files[0];
 
+                    const postMsg = (es, en) => (currentLang === 'en' ? en : es);
+
                     statusEl.className = 'postulacion-status';
                     statusEl.innerText = '';
 
                     if (!file) {
-                        statusEl.innerText = 'Selecciona tu CV en formato PDF.';
+                        statusEl.innerText = postMsg('Selecciona tu CV en formato PDF.', 'Select your CV in PDF format.');
                         statusEl.className = 'postulacion-status error';
                         return;
                     }
                     if (file.type !== 'application/pdf') {
-                        statusEl.innerText = 'El archivo debe ser un PDF.';
+                        statusEl.innerText = postMsg('El archivo debe ser un PDF.', 'The file must be a PDF.');
                         statusEl.className = 'postulacion-status error';
                         return;
                     }
                     if (file.size > 5 * 1024 * 1024) {
-                        statusEl.innerText = 'El archivo no debe superar los 5MB.';
+                        statusEl.innerText = postMsg('El archivo no debe superar los 5MB.', 'The file must not exceed 5MB.');
                         statusEl.className = 'postulacion-status error';
                         return;
                     }
 
                     submitBtn.disabled = true;
-                    statusEl.innerText = 'Enviando postulación…';
+                    statusEl.innerText = postMsg('Enviando postulación…', 'Submitting application…');
 
                     try {
                         const base64 = await fileToBase64(file);
@@ -2535,7 +2517,7 @@
                         });
                         const uploadJson = await uploadRes.json();
                         if (!uploadRes.ok || !uploadJson.url) {
-                            throw new Error(uploadJson.message || 'No se pudo subir el CV');
+                            throw new Error(uploadJson.message || postMsg('No se pudo subir el CV', 'Could not upload the CV'));
                         }
 
                         const postRes = await fetch(`/api/vacantes/${vacanteId}/postulantes`, {
@@ -2551,15 +2533,15 @@
                         });
                         const postJson = await postRes.json();
                         if (!postRes.ok || !postJson.success) {
-                            throw new Error(postJson.message || 'No se pudo enviar la postulación');
+                            throw new Error(postJson.message || postMsg('No se pudo enviar la postulación', 'Could not submit the application'));
                         }
 
-                        statusEl.innerText = '¡Postulación enviada! Nos pondremos en contacto contigo pronto.';
+                        statusEl.innerText = postMsg('¡Postulación enviada! Nos pondremos en contacto contigo pronto.', 'Application sent! We will contact you soon.');
                         statusEl.className = 'postulacion-status success';
                         postulacionForm.reset();
                         setTimeout(closeVacanteModal, 2200);
                     } catch (err) {
-                        statusEl.innerText = err.message || 'Ocurrió un error al enviar tu postulación.';
+                        statusEl.innerText = err.message || postMsg('Ocurrió un error al enviar tu postulación.', 'An error occurred while submitting your application.');
                         statusEl.className = 'postulacion-status error';
                     } finally {
                         submitBtn.disabled = false;
@@ -2592,16 +2574,48 @@
                 return lineas.map((linea) => {
                     if (KB_IMG_LINE_REGEX.test(linea.trim())) {
                         const src = kbEscapeHtml(linea.trim());
-                        return `<img src="${src}" alt="Imagen del artículo" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
+                        const imgAlt = currentLang === 'en' ? 'Article image' : 'Imagen del artículo';
+                        return `<img src="${src}" alt="${imgAlt}" style="max-width:100%;border-radius:8px;margin:8px 0;">`;
                     }
                     return kbEscapeHtml(linea);
                 }).join('<br>');
             }
 
+            function kbResumenSinImagenes(a) {
+                return (a.contenido || '')
+                    .split('\n')
+                    .filter((linea) => !KB_IMG_LINE_REGEX.test(linea.trim()))
+                    .join('\n');
+            }
+
+            function filaKbHtml(a) {
+                const contenidoSinImagenes = kbResumenSinImagenes(a);
+                const resumen = contenidoSinImagenes.slice(0, 130);
+                const icono = iconoKbPorTexto(a.titulo, a.categoria);
+                return `
+                    <div class="fila-item">
+                        <div class="fila-icono">${icono}</div>
+                        <div class="fila-info">
+                            <h3 class="fila-titulo">${kbEscapeHtml(a.titulo)}</h3>
+                            <div class="fila-meta">
+                                ${a.categoria ? `<span class="fila-meta-item">${kbEscapeHtml(a.categoria)}</span>` : ''}
+                            </div>
+                            <p class="fila-desc">${kbEscapeHtml(resumen)}${contenidoSinImagenes.length > 130 ? '…' : ''}</p>
+                        </div>
+                        <button type="button" class="fila-accion" onclick="openKbModal(${a.id})">
+                            <span>${currentLang === 'en' ? 'Read solution' : 'Ver más'}</span>
+                            ${ICONS_SVG.flecha}
+                        </button>
+                    </div>
+                `;
+            }
+
             async function cargarKb(q) {
                 const grid = document.getElementById('kbGrid');
                 const empty = document.getElementById('kbEmpty');
-                if (!grid) return;
+                const filas = document.getElementById('kbFilas');
+                const filasEmpty = document.getElementById('kbFilasEmpty');
+                if (!grid && !filas) return;
 
                 try {
                     const url = q ? `/api/kb/publicos?q=${encodeURIComponent(q)}` : '/api/kb/publicos';
@@ -2611,40 +2625,48 @@
                     kbCache = articulos;
 
                     if (!articulos.length) {
-                        grid.innerHTML = '';
+                        if (grid) grid.innerHTML = '';
                         if (empty) empty.style.display = '';
+                        if (filas) filas.innerHTML = '';
+                        if (filasEmpty) filasEmpty.style.display = '';
                         return;
                     }
                     if (empty) empty.style.display = 'none';
+                    if (filasEmpty) filasEmpty.style.display = 'none';
 
-                    grid.innerHTML = articulos.map(a => {
-                        // El resumen de la tarjeta no debe mostrar links de imagen
-                        // crudos — se corta el texto antes de la primera línea que
-                        // sea solo una URL de imagen (ver kbRenderContenidoConImagenes).
-                        const contenidoSinImagenes = (a.contenido || '')
-                            .split('\n')
-                            .filter((linea) => !KB_IMG_LINE_REGEX.test(linea.trim()))
-                            .join('\n');
-                        const resumen = contenidoSinImagenes.slice(0, 130);
-                        return `
-                            <div class="vacante-card">
-                                <div class="vacante-card-banner"><span class="vacante-card-banner-icon">📖</span></div>
-                                <div class="vacante-card-content">
-                                    <h3 class="vacante-title">${kbEscapeHtml(a.titulo)}</h3>
-                                    <div class="vacante-meta">
-                                        ${a.categoria ? `<span class="vacante-badge">🏷️ ${kbEscapeHtml(a.categoria)}</span>` : ''}
+                    if (grid) {
+                        grid.innerHTML = articulos.map(a => {
+                            // El resumen de la tarjeta no debe mostrar links de imagen
+                            // crudos — se corta el texto antes de la primera línea que
+                            // sea solo una URL de imagen (ver kbRenderContenidoConImagenes).
+                            const contenidoSinImagenes = kbResumenSinImagenes(a);
+                            const resumen = contenidoSinImagenes.slice(0, 130);
+                            const icono = iconoKbPorTexto(a.titulo, a.categoria);
+                            return `
+                                <div class="vacante-card">
+                                    <div class="vacante-card-banner"><span class="vacante-card-banner-icon">${icono}</span></div>
+                                    <div class="vacante-card-content">
+                                        <h3 class="vacante-title">${kbEscapeHtml(a.titulo)}</h3>
+                                        <div class="vacante-meta">
+                                            ${a.categoria ? `<span class="vacante-badge">${kbEscapeHtml(a.categoria)}</span>` : ''}
+                                        </div>
+                                        <p class="vacante-short-desc">${kbEscapeHtml(resumen)}${contenidoSinImagenes.length > 130 ? '…' : ''}</p>
+                                        <button type="button" class="btn-quick-view" onclick="openKbModal(${a.id})">${currentLang === 'en' ? 'Read solution' : 'Ver solución'}</button>
                                     </div>
-                                    <p class="vacante-short-desc">${kbEscapeHtml(resumen)}${contenidoSinImagenes.length > 130 ? '…' : ''}</p>
-                                    <button type="button" class="btn-quick-view" onclick="openKbModal(${a.id})">${currentLang === 'en' ? 'Read solution' : 'Ver solución'}</button>
                                 </div>
-                            </div>
-                        `;
-                    }).join('');
+                            `;
+                        }).join('');
+                    }
+
+                    if (filas) {
+                        filas.innerHTML = articulos.map(filaKbHtml).join('');
+                    }
 
                     if (typeof window.reapplyTextSplits === 'function') window.reapplyTextSplits();
                 } catch (e) {
                     console.warn('No se pudo cargar ArdaWiki:', e);
                     if (empty) empty.style.display = '';
+                    if (filasEmpty) filasEmpty.style.display = '';
                 }
             }
 
@@ -2653,6 +2675,8 @@
                 if (!articulo) return;
 
                 const modal = document.getElementById('kbModal');
+                const iconEl = document.getElementById('kbModalIcon');
+                if (iconEl) iconEl.innerHTML = iconoKbPorTexto(articulo.titulo, articulo.categoria);
                 document.getElementById('kbModalTitulo').innerText = articulo.titulo || '';
                 // articulo.evidenciaUrl es el campo dedicado (ver ART_EVIDENCIA_URL);
                 // kbRenderContenidoConImagenes queda solo como compatibilidad con
@@ -2693,29 +2717,73 @@
                 });
             }
 
-            const kbInput = document.getElementById('kbBuscarInput');
-            if (kbInput) {
-                kbInput.addEventListener('input', () => {
-                    clearTimeout(kbDebounceTimer);
-                    kbDebounceTimer = setTimeout(() => cargarKb(kbInput.value.trim()), 350);
+            window.openPdfModal = function (url) {
+                const modal = document.getElementById('pdfModal');
+                const frame = document.getElementById('pdfModalFrame');
+                frame.src = url;
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            };
+
+            window.closePdfModal = function () {
+                const modal = document.getElementById('pdfModal');
+                const frame = document.getElementById('pdfModalFrame');
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+                frame.src = '';
+            };
+
+            const pdfModalEl = document.getElementById('pdfModal');
+            if (pdfModalEl) {
+                pdfModalEl.addEventListener('click', (event) => {
+                    if (event.target === pdfModalEl) closePdfModal();
                 });
-                kbInput.addEventListener('keydown', (e) => {
+            }
+
+            // El buscador existe dos veces en el DOM: la barra original de la
+            // sección #ardawiki del home y la copia dentro de la vista dedicada
+            // (#kbBuscarInputDedicada/#kbBuscarBtnDedicada). Ambas deben quedar
+            // sincronizadas y disparar la misma búsqueda.
+            const kbInput = document.getElementById('kbBuscarInput');
+            const kbInputDedicada = document.getElementById('kbBuscarInputDedicada');
+            const kbInputs = [kbInput, kbInputDedicada].filter(Boolean);
+
+            function valorBusquedaActual(origen) {
+                return origen ? origen.value.trim() : '';
+            }
+
+            function sincronizarInputs(valor, origen) {
+                kbInputs.forEach((inp) => { if (inp !== origen) inp.value = valor; });
+            }
+
+            kbInputs.forEach((inp) => {
+                inp.addEventListener('input', () => {
+                    clearTimeout(kbDebounceTimer);
+                    const valor = valorBusquedaActual(inp);
+                    sincronizarInputs(valor, inp);
+                    kbDebounceTimer = setTimeout(() => cargarKb(valor), 350);
+                });
+                inp.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         clearTimeout(kbDebounceTimer);
-                        cargarKb(kbInput.value.trim());
+                        const valor = valorBusquedaActual(inp);
+                        sincronizarInputs(valor, inp);
+                        cargarKb(valor);
                     }
                 });
-            }
+            });
 
             const kbBuscarBtn = document.getElementById('kbBuscarBtn');
-            if (kbBuscarBtn) {
-                kbBuscarBtn.addEventListener('click', () => {
+            const kbBuscarBtnDedicada = document.getElementById('kbBuscarBtnDedicada');
+            [kbBuscarBtn, kbBuscarBtnDedicada].filter(Boolean).forEach((btn, i) => {
+                btn.addEventListener('click', () => {
                     clearTimeout(kbDebounceTimer);
-                    cargarKb(kbInput ? kbInput.value.trim() : '');
+                    const origen = i === 0 ? kbInput : kbInputDedicada;
+                    cargarKb(valorBusquedaActual(origen));
                 });
-            }
+            });
 
-            window.refreshKbLang = () => cargarKb(kbInput ? kbInput.value.trim() : '');
+            window.refreshKbLang = () => cargarKb(valorBusquedaActual(kbInput || kbInputDedicada));
             cargarKb();
         })();
 
@@ -3994,6 +4062,46 @@
     </script>
 
     <script>
+        // --- SECCIÓN "Servicios que impulsan tu negocio": una tarjeta se
+        // agranda a la vez, de forma cíclica y automática (sin flechas ni
+        // puntos — las 5 siguen visibles, solo cambia cuál está expandida).
+        (function () {
+            const grid = document.getElementById('impulsoGrid');
+            if (!grid) return;
+            const cards = Array.from(grid.querySelectorAll('.impulso-card'));
+            if (!cards.length) return;
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                cards[0].classList.add('is-active');
+                return;
+            }
+
+            let index = 0;
+            const INTERVAL_MS = 3200;
+
+            function activar(i) {
+                cards.forEach((c) => c.classList.remove('is-active'));
+                cards[i].classList.add('is-active');
+            }
+            activar(index);
+
+            let timer = setInterval(() => {
+                index = (index + 1) % cards.length;
+                activar(index);
+            }, INTERVAL_MS);
+
+            // Pausa el ciclo mientras el usuario interactúa con las tarjetas
+            // (tilt/hover) para que no compita con su propio gesto.
+            grid.addEventListener('mouseenter', () => clearInterval(timer));
+            grid.addEventListener('mouseleave', () => {
+                timer = setInterval(() => {
+                    index = (index + 1) % cards.length;
+                    activar(index);
+                }, INTERVAL_MS);
+            });
+        })();
+    </script>
+
+    <script>
         // --- SECCIÓN "QUIÉNES SOMOS": acordeón "Ver más" ---
         (function () {
             const btn = document.getElementById('nosotrosVerMasBtn');
@@ -4119,6 +4227,278 @@
                 fadeOut: true,
                 pauseOnHover: true,
             });
+        }
+    </script>
+
+    <script type="module">
+        import { mountTextLoop } from './assets/effects/text-loop.js';
+
+        const solConectaLoopEl = document.getElementById('solConectaBgLoop');
+        if (solConectaLoopEl) {
+            const REF_VIEW_W = 1200; // viewBox original del diseño ya aprobado
+            const REF_CENTER_X = 600; // x de la cresta en ese viewBox (bajo la burbuja/logo)
+            let unmountLoop = null;
+
+            // La cresta (x=600 del viewBox original) debe seguir cayendo
+            // EXACTAMENTE en el centro real de .sol-bubbles en pantalla — no
+            // en el centro de la ventana, porque el layout de 2 columnas ya
+            // descentra .sol-bubbles respecto al viewport. Se calcula cuánto
+            // viewBox hace falta a la izquierda y a la derecha de esa cresta
+            // (en el MISMO ratio px/unidad del diseño original) para llegar
+            // a ambos bordes reales de la pantalla, de forma asimétrica.
+            function remountLoop() {
+                const bubblesEl = solConectaLoopEl.parentElement;
+                const bubblesRect = bubblesEl.getBoundingClientRect();
+                const refWidthPx = bubblesRect.width;
+                if (!refWidthPx) return;
+
+                const pxPerUnit = refWidthPx / REF_VIEW_W;
+                const bubblesCenterX = bubblesRect.left + bubblesRect.width / 2;
+
+                // Unidades de viewBox necesarias para cubrir desde la cresta
+                // hasta cada borde de la ventana, al mismo ratio px/unidad.
+                const unitsToLeftEdge = bubblesCenterX / pxPerUnit;
+                const unitsToRightEdge = (window.innerWidth - bubblesCenterX) / pxPerUnit;
+
+                const viewMinX = REF_CENTER_X - unitsToLeftEdge;
+                const viewMaxX = REF_CENTER_X + unitsToRightEdge;
+
+                // El contenedor pasa a ocupar el ancho completo de la
+                // ventana (0 a innerWidth) — ya no depende del ancho de
+                // .sol-bubbles, que solo se usó para medir el ratio.
+                solConectaLoopEl.style.setProperty('--loop-left', `${-bubblesRect.left}px`);
+                solConectaLoopEl.style.setProperty('--loop-width', `${window.innerWidth}px`);
+                solConectaLoopEl.style.setProperty('--loop-transform', 'translateY(-50%)');
+
+                if (unmountLoop) unmountLoop();
+                unmountLoop = mountTextLoop(solConectaLoopEl, {
+                    text: 'Tecnología • Soporte • Comunicación',
+                    shape: 'wave',
+                    curviness: 70,
+                    separator: '✦',
+                    speed: 55,
+                    fontSize: 58,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    uppercase: true,
+                    color: '#017EFD',
+                    ribbon: false,
+                    pauseOnHover: false,
+                    viewW: REF_VIEW_W,
+                    viewMinX,
+                    viewMaxX,
+                });
+            }
+
+            remountLoop();
+            window.addEventListener('resize', remountLoop);
+        }
+    </script>
+
+    <script type="module">
+        import { mountSolBubbles } from './assets/effects/sol-bubbles.js';
+
+        const solBubblesEl = document.getElementById('solBubbles');
+        if (solBubblesEl) {
+            mountSolBubbles(solBubblesEl);
+            if (typeof applyTranslations === 'function') applyTranslations(currentLang);
+        }
+    </script>
+
+    <script type="module">
+        import { mountGradientWaves } from './assets/effects/gradient-waves.js';
+
+        const wavesEl = document.getElementById('qrFormWaves');
+        if (wavesEl) {
+            const THEMES = {
+                light: { horizonColor: '#f4f9ff', waveColor: '#8fc2ff', crestColor: '#017EFD', brightness: 1.1, opacity: 0.9 },
+                dark: { horizonColor: '#050b1a', waveColor: '#0f2f5c', crestColor: '#3fa0ff', brightness: 1.0, opacity: 1.0 },
+            };
+
+            function currentTheme() {
+                return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+            }
+
+            const waves = mountGradientWaves(wavesEl, {
+                speed: 0.3,
+                amplitude: 1.3,
+                waveScale: 0.65,
+                waveRatio: 0.9,
+                swell: 18,
+                turbulence: 8,
+                tilt: 1.2,
+                zoom: 1.3,
+                height: 4.5,
+                fogDepth: 20,
+                grain: true,
+                grainIntensity: 0.04,
+                mouseInteraction: true,
+                ...THEMES[currentTheme()],
+            });
+
+            const themeObserver = new MutationObserver(() => {
+                waves.update(THEMES[currentTheme()]);
+            });
+            themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        }
+    </script>
+
+    <script type="module">
+        import { mountStack } from './assets/effects/stack.js';
+
+        const talentoStackEl = document.getElementById('talentoStack');
+        if (talentoStackEl) {
+            function buildCard({ icon, titleKey, titleFallback, btnKey, btnFallback, className, onActivate }) {
+                // La tarjeta ya NO es un link navegable en sí (antes toda su
+                // área hacía click-to-navigate, lo cual competía con el
+                // drag del Stack) — solo el botón interno abre la vista
+                // dedicada, el resto de la tarjeta es únicamente el área
+                // de arrastre.
+                const card = document.createElement('div');
+                card.className = `talento-card ${className}`;
+                card.innerHTML = `
+                    <div class="talento-card-icon">${icon}</div>
+                    <h3 class="talento-card-title" data-i18n="${titleKey}">${titleFallback}</h3>
+                    <button type="button" class="talento-card-btn" data-i18n="${btnKey}">${btnFallback}</button>
+                `;
+                if (typeof onActivate === 'function') {
+                    const btn = card.querySelector('.talento-card-btn');
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        onActivate();
+                    });
+                }
+                return card;
+            }
+
+            const ICON_VACANTES = '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>';
+            const ICON_WIKI = '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>';
+
+            const cardWiki = buildCard({
+                icon: ICON_WIKI,
+                titleKey: 'talento.cardWiki',
+                titleFallback: 'ArdaWiki',
+                btnKey: 'talento.cardWikiBtn',
+                btnFallback: 'Visitar ArdaWiki',
+                className: 'talento-card--wiki',
+                onActivate: () => { if (typeof window.abrirArdawikiDedicada === 'function') window.abrirArdawikiDedicada(); },
+            });
+            const cardVacantes = buildCard({
+                icon: ICON_VACANTES,
+                titleKey: 'talento.cardVacantes',
+                titleFallback: 'Vacantes',
+                btnKey: 'talento.cardVacantesBtn',
+                btnFallback: 'Ver vacantes →',
+                className: 'talento-card--vacantes',
+                onActivate: () => { if (typeof window.abrirVacantesDedicada === 'function') window.abrirVacantesDedicada(); },
+            });
+
+            mountStack(talentoStackEl, {
+                cards: [cardWiki, cardVacantes],
+                randomRotation: true,
+                sensitivity: 180,
+                sendToBackOnClick: false,
+                autoplay: true,
+                autoplayDelay: 3500,
+                pauseOnHover: true,
+            });
+
+            if (typeof applyTranslations === 'function') {
+                applyTranslations(currentLang);
+            }
+        }
+    </script>
+
+    <script type="module">
+        import { mountCarousel } from './assets/effects/carousel.js';
+
+        const carouselEl = document.getElementById('portafolioCarousel');
+        if (carouselEl) {
+            const IMG_BASE = 'assets/imagenes-complementarias/';
+            const PROYECTOS = [
+                { img: IMG_BASE + 'Plataforma B2B.png', tagKey: 'portafolio.tag1', tagFallback: 'Desarrollo Web', titleKey: 'portafolio.proj1.title', titleFallback: 'Plataforma E-commerce B2B', descKey: 'portafolio.proj1.desc', descFallback: 'Creación de un portal de ventas mayorista con integración a ERP en tiempo real, optimizando la cadena de suministro.' },
+                { img: IMG_BASE + 'Migración PBX Cloud.png', tagKey: 'portafolio.tag2', tagFallback: 'Call Center', titleKey: 'portafolio.proj2.title', titleFallback: 'Migración a PBX Cloud', descKey: 'portafolio.proj2.desc', descFallback: 'Implementación de telefonía virtual para 150 agentes remotos, reduciendo los costos operativos mensuales.' },
+                { img: IMG_BASE + 'Renovacion de infraestructura.png', tagKey: 'portafolio.tag3', tagFallback: 'Soporte IT', titleKey: 'portafolio.proj3.title', titleFallback: 'Renovación de Infraestructura', descKey: 'portafolio.proj3.desc', descFallback: 'Diseño y actualización de servidores locales y red estructurada para un corporativo del sector financiero.' },
+            ];
+
+            function buildProjectCard(p) {
+                // render() debe crear un NODO NUEVO en cada llamada — con
+                // loop:true el carrusel arma [último, ...items, primero],
+                // reutilizando el mismo objeto "item" en dos posiciones del
+                // riel; si render() devolviera siempre el mismo elemento
+                // cacheado, appendChild lo movería de una posición a otra
+                // en vez de duplicarlo, dejando una tarjeta vacía.
+                function render() {
+                    const el = document.createElement('div');
+                    el.className = 'portafolio-carousel-card';
+                    el.innerHTML = `
+                        <div class="portafolio-carousel-media">
+                            <img src="${p.img}" alt="${p.titleFallback}" loading="lazy">
+                            <div class="portafolio-carousel-media-fade" aria-hidden="true"></div>
+                        </div>
+                        <div class="portafolio-carousel-content">
+                            <span class="portafolio-tag" data-i18n="${p.tagKey}">${p.tagFallback}</span>
+                            <h3 class="portafolio-title" data-i18n="${p.titleKey}">${p.titleFallback}</h3>
+                            <p class="portafolio-desc" data-i18n="${p.descKey}">${p.descFallback}</p>
+                            <button type="button" class="portafolio-ver-mas">
+                                <span data-i18n="portafolio.verMas">Ver más</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                        </div>
+                    `;
+                    // "Ver más" solo se muestra si la descripción realmente se
+                    // recorta (más de 3 líneas) — se mide después de insertar
+                    // en el DOM, cuando el navegador ya calculó el layout real.
+                    const descEl = el.querySelector('.portafolio-desc');
+                    const verMasBtn = el.querySelector('.portafolio-ver-mas');
+                    verMasBtn.addEventListener('click', () => {
+                        const expanded = descEl.classList.toggle('is-expanded');
+                        verMasBtn.classList.toggle('is-expanded', expanded);
+                        verMasBtn.querySelector('span').textContent = expanded
+                            ? (currentLang === 'en' ? 'See less' : 'Ver menos')
+                            : (currentLang === 'en' ? 'See more' : 'Ver más');
+                    });
+                    requestAnimationFrame(() => {
+                        if (descEl.scrollHeight <= descEl.clientHeight + 1) {
+                            verMasBtn.style.display = 'none';
+                        }
+                    });
+                    return el;
+                }
+                return { render };
+            }
+
+            const carouselCtrl = mountCarousel(carouselEl, {
+                items: PROYECTOS.map(buildProjectCard),
+                baseWidth: 420,
+                autoplay: true,
+                autoplayDelay: 4000,
+                pauseOnHover: true,
+                loop: true,
+            });
+
+            document.getElementById('portafolioPrevBtn')?.addEventListener('click', () => carouselCtrl.prev());
+            document.getElementById('portafolioNextBtn')?.addEventListener('click', () => carouselCtrl.next());
+
+            if (typeof applyTranslations === 'function') {
+                applyTranslations(currentLang);
+            }
+        }
+    </script>
+
+    <script>
+        // El stroke-dasharray/dashoffset de la animación de "trazo dibujándose"
+        // debe coincidir EXACTO con la longitud real del path (no un número
+        // estimado a mano) o el trazo salta/se corta al reiniciar el loop.
+        const pointerLine = document.querySelector('.qr-form-pointer-line');
+        if (pointerLine) {
+            const len = Math.ceil(pointerLine.getTotalLength());
+            pointerLine.style.setProperty('--len', len);
+        }
+        const pointerHead = document.querySelector('.qr-form-pointer-head');
+        if (pointerHead) {
+            const headLen = Math.ceil(pointerHead.getTotalLength());
+            pointerHead.style.setProperty('--head-len', headLen);
         }
     </script>
 

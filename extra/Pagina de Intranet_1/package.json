@@ -12,5 +12,8 @@
     "express": "^4.22.2",
     "http-proxy-middleware": "^2.0.10",
     "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }
