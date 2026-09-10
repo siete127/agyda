@@ -3229,6 +3229,7 @@
             // --- Estado de la conversación ---
             let estado = 'explorar'; // explorar | pedir_nombre | pedir_contacto | pedir_empresa | pedir_presupuesto | confirmar | arbol_diagnostico
             let turnosSinLead = 0;
+            let interactuoRegistrado = false;  // Fase 3: evita re-contar el hito 'interactuo' del embudo
             let leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
             let chatIniciado = false;
             let arbolSesionToken = null; // token de CHATBOT_SESIONES mientras estado === 'arbol_diagnostico'
@@ -3252,7 +3253,7 @@
                     sessionStorage.setItem(CHAT_ESTADO_KEY, JSON.stringify({
                         estado, leadData, turnosSinLead, quickRepliesTipo, mensajes,
                         liveChatConversacionId, liveChatRatingConversacionId, liveChatRatingElegido,
-                        chatIniciado, panelAbierto: panel.classList.contains('active'),
+                        chatIniciado, interactuoRegistrado, panelAbierto: panel.classList.contains('active'),
                     }));
                 } catch (e) { /* almacenamiento no disponible (modo privado, cuota llena): sin persistencia, no rompe el chat */ }
             }
@@ -3369,6 +3370,7 @@
                     const json = await res.json().catch(() => ({}));
                     if (!res.ok || json.ok === false) throw new Error(json.mensaje || 'Error al enviar');
                     enviadoOk = true;
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'lead_enviado', sesionToken });
                     await botDice(() => t().enviado, 500);
                     try { sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ enviado: true })); } catch (e) {}
                 } catch (e) {
@@ -3554,6 +3556,7 @@
             // configurada, el visitante espera con posición visible; si no, cae a captura de lead.
             async function iniciarChatEnVivo(motivo, campania) {
                 setQuickReplies([]);
+                enviarTelemetria('/api/chatbot/evento', { tipo: 'escalo_humano', sesionToken });
                 await botDice(() => t().liveChatConectando, 300);
                 try {
                     const res = await fetch('/api/livechat/conversaciones', {
@@ -3623,6 +3626,7 @@
 
             async function iniciarArbolDiagnostico() {
                 setQuickReplies([]);
+                enviarTelemetria('/api/chatbot/evento', { tipo: 'abrio_arbol', sesionToken });
                 try {
                     const res = await fetch('/api/chatbot/arbol/sesiones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
                     const json = await res.json().catch(() => ({}));
@@ -3699,6 +3703,10 @@
             async function handleUserMessage(mensajeCrudo) {
                 const mensaje = String(mensajeCrudo || '').trim();
                 if (!mensaje) return;
+                if (!interactuoRegistrado) {
+                    interactuoRegistrado = true;
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'interactuo', sesionToken });
+                }
                 try {
                     await handleUserMessageInterno(mensaje);
                 } finally {
@@ -3861,6 +3869,7 @@
                 // iniciarChatEnVivoConDatos).
                 if (estado === 'pedir_nombre_livechat') {
                     leadData.nombre = mensaje.slice(0, 150);
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'dio_dato', sesionToken });
                     estado = 'pedir_contacto_livechat';
                     await botDice(() => t().pedirContacto(leadData.nombre), 450);
                     return;
@@ -3883,6 +3892,7 @@
 
                 if (estado === 'pedir_nombre') {
                     leadData.nombre = mensaje.slice(0, 150);
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'dio_dato', sesionToken });
                     estado = 'pedir_contacto';
                     await botDice(() => t().pedirContacto(leadData.nombre), 450);
                     return;
@@ -3977,6 +3987,7 @@
                 toggleBtn.setAttribute('aria-expanded', 'true');
                 if (!chatIniciado) {
                     chatIniciado = true;
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'abrio', sesionToken });
                     await cargarDiccionario();
                     await botDice(() => t().saludo, 350);
                     await mostrarMenuInicial();
@@ -4002,6 +4013,7 @@
                 estado = guardado.estado || 'explorar';
                 leadData = guardado.leadData || leadData;
                 turnosSinLead = guardado.turnosSinLead || 0;
+                interactuoRegistrado = !!guardado.interactuoRegistrado;
                 quickRepliesTipo = guardado.quickRepliesTipo || null;
                 liveChatConversacionId = guardado.liveChatConversacionId || null;
                 liveChatRatingConversacionId = guardado.liveChatRatingConversacionId || null;

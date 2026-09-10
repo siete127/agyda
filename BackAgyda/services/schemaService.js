@@ -6281,6 +6281,21 @@ BEGIN
   CREATE INDEX IX_CHATBOT_SIN_MATCH_PEND ON dbo.CHATBOT_SIN_MATCH(SNM_RESUELTO, SNM_VECES DESC);
 END
 
+-- Fase 3: eventos de sesión para el embudo de conversación. Filas pequeñas,
+-- 1 por hito. El widget los dispara fire-and-forget. Un mismo (token, tipo)
+-- puede repetirse; el embudo cuenta sesiones DISTINCT por tipo.
+IF OBJECT_ID('dbo.CHATBOT_EVENTOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_EVENTOS (
+    EVT_ID           INT IDENTITY(1,1) PRIMARY KEY,
+    EVT_SESION_TOKEN NVARCHAR(80)  NOT NULL,
+    EVT_TIPO         NVARCHAR(30)  NOT NULL,
+    EVT_FECHA        DATETIME      NOT NULL DEFAULT GETDATE()
+  );
+  CREATE INDEX IX_CHATBOT_EVENTOS_TIPO_FECHA ON dbo.CHATBOT_EVENTOS(EVT_TIPO, EVT_FECHA);
+  CREATE INDEX IX_CHATBOT_EVENTOS_SESION ON dbo.CHATBOT_EVENTOS(EVT_SESION_TOKEN);
+END
+
 -- Árbol de decisión básico (sin IA/NLU): nodos de pregunta con opciones que
 -- llevan a otro nodo, o a una acción terminal (resolver, escalar a chat, crear ticket).
 IF OBJECT_ID('dbo.CHATBOT_NODOS', 'U') IS NULL

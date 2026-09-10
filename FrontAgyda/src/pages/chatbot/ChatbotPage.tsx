@@ -643,9 +643,39 @@ function RendimientoCalidad() {
 
   const conFeedback = (data?.respuestas ?? []).filter((r) => r.noUtiles > 0)
   const sinMatch = data?.sinMatch ?? []
+  const embudo = data?.embudo ?? []
+  const embudoMax = Math.max(1, ...embudo.map((e) => e.sesiones))
 
   return (
     <>
+      {embudo.length > 0 && embudo[0].sesiones > 0 && (
+        <div className="card overflow-hidden">
+          <div className="border-b border-gray-100 px-4 py-2.5">
+            <p className="text-[0.78rem] font-bold text-gray-700">Embudo de conversación</p>
+            <p className="text-[0.68rem] text-gray-400">Sesiones distintas por hito, últimos 30 días</p>
+          </div>
+          <div className="space-y-2 px-4 py-3">
+            {embudo.map((e) => {
+              const pct = embudo[0].sesiones ? Math.round((e.sesiones / embudo[0].sesiones) * 100) : 0
+              return (
+                <div key={e.tipo} className="flex items-center gap-3">
+                  <span className="w-32 flex-shrink-0 text-[0.75rem] text-gray-600">{e.label}</span>
+                  <div className="h-4 flex-1 overflow-hidden rounded bg-gray-100">
+                    <div
+                      className="h-full rounded bg-brand/70"
+                      style={{ width: `${Math.max(2, (e.sesiones / embudoMax) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-20 flex-shrink-0 text-right text-[0.72rem] font-semibold text-gray-700">
+                    {e.sesiones} · {pct}%
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="card overflow-hidden">
           <div className="border-b border-gray-100 px-4 py-2.5">

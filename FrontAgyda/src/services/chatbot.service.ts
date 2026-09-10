@@ -56,14 +56,16 @@ export const chatbotService = {
     return (data?.data ?? data) as ChatbotConfig
   },
 
-  // ── Rendimiento (Fase 2) ──
+  // ── Rendimiento (Fases 2-3) ──
   async getRendimiento(): Promise<{
+    embudo: { tipo: string; label: string; sesiones: number }[]
     respuestas: { pk: number; id: string; titulo: string | null; categoria: string | null; activa: boolean; utiles: number; noUtiles: number }[]
     sinMatch: { id: number; texto: string; veces: number; ultimaFecha: string }[]
   }> {
     const { data } = await api.get('/chatbot/rendimiento')
     const d = data?.data ?? data
     return {
+      embudo: Array.isArray(d?.embudo) ? d.embudo : [],
       respuestas: Array.isArray(d?.respuestas) ? d.respuestas : [],
       sinMatch: Array.isArray(d?.sinMatch) ? d.sinMatch : [],
     }

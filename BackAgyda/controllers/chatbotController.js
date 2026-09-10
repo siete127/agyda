@@ -693,10 +693,46 @@ exports.postSinMatch = async (req, res) => {
   }
 };
 
-// Panel de Rendimiento: respuestas ordenadas por 👎, + preguntas sin match.
+// Hito del embudo (abrio | interactuo | dio_dato | lead_enviado | escalo_humano | abrio_arbol).
+const EVENTO_TIPOS = ['abrio', 'interactuo', 'dio_dato', 'lead_enviado', 'escalo_humano', 'abrio_arbol'];
+
+exports.postEvento = async (req, res) => {
+  try {
+    const tipo = String(req.body?.tipo || '');
+    const sesion = typeof req.body?.sesionToken === 'string' ? req.body.sesionToken.slice(0, 80) : null;
+    if (!EVENTO_TIPOS.includes(tipo) || !sesion) return res.json({ success: true });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('sesion', sql.NVarChar(80), sesion)
+      .input('tipo', sql.NVarChar(30), tipo)
+      .query('INSERT INTO dbo.CHATBOT_EVENTOS (EVT_SESION_TOKEN, EVT_TIPO) VALUES (@sesion, @tipo)');
+    res.json({ success: true });
+  } catch (error) {
+    console.warn('Evento del chatbot no registrado:', error.message);
+    res.json({ success: true });
+  }
+};
+
+// Panel de Rendimiento: embudo + respuestas ordenadas por 👎, + preguntas sin match.
 exports.getRendimiento = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
+
+    // Embudo: sesiones DISTINCT por hito en los últimos 30 días.
+    const embudoRows = await pool.request().query(`
+      SELECT EVT_TIPO as tipo, COUNT(DISTINCT EVT_SESION_TOKEN) as sesiones
+      FROM dbo.CHATBOT_EVENTOS
+      WHERE EVT_FECHA >= DATEADD(DAY, -30, GETDATE())
+      GROUP BY EVT_TIPO
+    `);
+    const porTipo = Object.fromEntries(embudoRows.recordset.map((r) => [r.tipo, r.sesiones]));
+    const embudo = [
+      { tipo: 'abrio', label: 'Abrieron el chat', sesiones: porTipo.abrio || 0 },
+      { tipo: 'interactuo', label: 'Interactuaron', sesiones: porTipo.interactuo || 0 },
+      { tipo: 'dio_dato', label: 'Dieron un dato', sesiones: porTipo.dio_dato || 0 },
+      { tipo: 'lead_enviado', label: 'Lead enviado', sesiones: porTipo.lead_enviado || 0 },
+    ];
 
     const respuestas = await pool.request().query(`
       SELECT
@@ -723,7 +759,7 @@ exports.getRendimiento = async (req, res) => {
       ORDER BY SNM_VECES DESC, SNM_ULTIMA_FECHA DESC
     `);
 
-    res.json({ success: true, data: { respuestas: respuestas.recordset, sinMatch: sinMatch.recordset } });
+    res.json({ success: true, data: { embudo, respuestas: respuestas.recordset, sinMatch: sinMatch.recordset } });
   } catch (error) {
     console.error('Error obteniendo rendimiento del chatbot:', error);
     res.status(500).json({ success: false, message: error.message });

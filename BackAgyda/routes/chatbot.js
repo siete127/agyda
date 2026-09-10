@@ -13,6 +13,7 @@ router.get('/config/publica', chatbotController.getConfigPublica);
 // Telemetría del widget (fire-and-forget, sin auth).
 router.post('/feedback', chatbotController.postFeedback);
 router.post('/sin-match', chatbotController.postSinMatch);
+router.post('/evento', chatbotController.postEvento);
 
 // Árbol de decisión — público (authenticateTokenOptional asocia el usuario si
 // está logueado, sin exigirlo: lo usan tanto el widget público como el interno).
