@@ -22,4 +22,30 @@ export const chatbotFlujoService = {
   async deleteConexion(id: number): Promise<void> {
     await api.delete(`/chatbot/flujo/conexiones/${id}`)
   },
+
+  // ── Crear / editar / borrar cajas desde el canvas (Camino A) ──
+  async createNodo(payload: {
+    tipo: 'respuesta' | 'etiqueta' | 'nodo_arbol'
+    texto: string; textoEn?: string | null
+    keywords?: string[]
+    tipoAccion?: string; campaniaId?: number | null
+    tipoNodo?: string
+    posX: number; posY: number
+  }): Promise<{ tipo: string; id: number }> {
+    const { data } = await api.post('/chatbot/flujo/nodos', payload)
+    return (data?.data ?? data) as { tipo: string; id: number }
+  },
+
+  async updateNodo(tipo: 'respuesta' | 'etiqueta' | 'nodo_arbol', id: number, cambios: {
+    texto?: string; textoEn?: string | null
+    keywords?: string[]
+    tipoAccion?: string; campaniaId?: number | null
+    tipoNodo?: string; activa?: boolean
+  }): Promise<void> {
+    await api.patch(`/chatbot/flujo/nodos/${tipo}/${id}`, cambios)
+  },
+
+  async deleteNodo(tipo: 'respuesta' | 'etiqueta' | 'nodo_arbol', id: number): Promise<void> {
+    await api.delete(`/chatbot/flujo/nodos/${tipo}/${id}`)
+  },
 }

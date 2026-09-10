@@ -1279,7 +1279,7 @@ export function ChatbotPage() {
             tab === 'mapa' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-500 hover:border-brand/40 hover:text-brand',
           )}
         >
-          <MapIcon className="h-3.5 w-3.5" /> Mapa completo
+          <MapIcon className="h-3.5 w-3.5" /> Constructor de flujo
         </button>
       </div>
 
@@ -1301,8 +1301,8 @@ export function ChatbotPage() {
       {tab === 'mapa' ? (
         <div className="space-y-3">
           <p className="text-xs text-gray-500">
-            Vista de auditoría: así se conectan las respuestas, el menú, el árbol y las campañas. Para editar el
-            contenido usa la pestaña Conversación.
+            El flujo completo del bot como un lienzo: crea nodos, edítalos con doble clic y conéctalos arrastrando.
+            Es el mismo contenido que las listas de Conversación.
           </p>
           <FlujoVisualTab />
         </div>

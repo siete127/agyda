@@ -188,3 +188,196 @@ exports.deleteConexion = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+/* ════════════════════════════════════════════════════════
+   CREAR / EDITAR / BORRAR CAJAS DESDE EL CANVAS (Camino A)
+   Cada "tipo" sigue viviendo en su tabla; estos endpoints
+   son la fachada para hacerlo sin salir del lienzo.
+════════════════════════════════════════════════════════ */
+
+function slugFlujo(texto) {
+  const base = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+  return base || 'nodo';
+}
+
+// POST /flujo/nodos  { tipo, texto, textoEn?, keywords?, tipoAccion?, campaniaId?, tipoNodo?, posX, posY }
+exports.createNodo = async (req, res) => {
+  try {
+    const { tipo, texto, textoEn, keywords, tipoAccion, campaniaId, tipoNodo, posX, posY } = req.body || {};
+    if (!TIPOS_NODO.includes(tipo)) {
+      return res.status(400).json({ success: false, message: 'Tipo de nodo inválido' });
+    }
+    if (!texto || !String(texto).trim()) {
+      return res.status(400).json({ success: false, message: 'El texto del nodo es requerido' });
+    }
+    const x = typeof posX === 'number' ? posX : 0;
+    const y = typeof posY === 'number' ? posY : 0;
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (tipo === 'respuesta') {
+      const kws = Array.isArray(keywords) && keywords.length ? keywords : [String(texto).trim().slice(0, 40)];
+      let idTec = slugFlujo(texto);
+      for (let n = 2; n <= 50; n += 1) {
+        const dupe = await pool.request().input('id', sql.NVarChar, idTec)
+          .query('SELECT 1 FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_ID = @id');
+        if (dupe.recordset.length === 0) break;
+        idTec = `${slugFlujo(texto)}_${n}`;
+      }
+      const ins = await pool.request()
+        .input('id', sql.NVarChar, idTec)
+        .input('titulo', sql.NVarChar, String(texto).trim().slice(0, 120))
+        .input('keywords', sql.NVarChar, JSON.stringify(kws))
+        .input('textoEs', sql.NVarChar, String(texto).trim())
+        .input('textoEn', sql.NVarChar, textoEn || null)
+        .input('x', sql.Float, x).input('y', sql.Float, y)
+        .query(`
+          INSERT INTO dbo.CHATBOT_RESPUESTAS (RESP_ID, RESP_TITULO, RESP_KEYWORDS, RESP_TEXTO_ES, RESP_TEXTO_EN, RESP_BOTONES, RESP_ACTIVA, RESP_POS_X, RESP_POS_Y)
+          OUTPUT INSERTED.RESP_PK as id
+          VALUES (@id, @titulo, @keywords, @textoEs, @textoEn, '[]', 1, @x, @y)
+        `);
+      return res.status(201).json({ success: true, data: { tipo, id: ins.recordset[0].id } });
+    }
+
+    if (tipo === 'etiqueta') {
+      const accion = TIPOS_DESTINO.includes(tipoAccion) || ['respuesta', 'escalar_campania', 'escalar_generico', 'arbol_diagnostico'].includes(tipoAccion)
+        ? tipoAccion : 'respuesta';
+      const ins = await pool.request()
+        .input('textoEs', sql.NVarChar, String(texto).trim().slice(0, 150))
+        .input('textoEn', sql.NVarChar, textoEn || null)
+        .input('tipo', sql.NVarChar, accion)
+        .input('campaniaId', sql.Int, accion === 'escalar_campania' && campaniaId ? Number(campaniaId) : null)
+        .input('x', sql.Float, x).input('y', sql.Float, y)
+        .query(`
+          INSERT INTO dbo.CHATBOT_ETIQUETAS_MENU (ETQ_TEXTO_ES, ETQ_TEXTO_EN, ETQ_TIPO, ETQ_CAMPANIA_ID, ETQ_ORDEN, ETQ_ACTIVA, ETQ_POS_X, ETQ_POS_Y)
+          OUTPUT INSERTED.ETQ_ID as id
+          VALUES (@textoEs, @textoEn, @tipo, @campaniaId, (SELECT ISNULL(MAX(ETQ_ORDEN),0)+1 FROM dbo.CHATBOT_ETIQUETAS_MENU), 1, @x, @y)
+        `);
+      return res.status(201).json({ success: true, data: { tipo, id: ins.recordset[0].id } });
+    }
+
+    // tipo === 'nodo_arbol'
+    const nodoTipo = ['pregunta', 'mensaje', 'escalar_chat', 'crear_ticket'].includes(tipoNodo) ? tipoNodo : 'pregunta';
+    let codigo = slugFlujo(texto);
+    for (let n = 2; n <= 50; n += 1) {
+      const dupe = await pool.request().input('c', sql.NVarChar, codigo)
+        .query('SELECT 1 FROM dbo.CHATBOT_NODOS WHERE NODO_CODIGO = @c');
+      if (dupe.recordset.length === 0) break;
+      codigo = `${slugFlujo(texto)}_${n}`;
+    }
+    const ins = await pool.request()
+      .input('codigo', sql.NVarChar, codigo)
+      .input('texto', sql.NVarChar, String(texto).trim())
+      .input('tipo', sql.NVarChar, nodoTipo)
+      .input('x', sql.Float, x).input('y', sql.Float, y)
+      .query(`
+        INSERT INTO dbo.CHATBOT_NODOS (NODO_CODIGO, NODO_TEXTO, NODO_TIPO, NODO_ACTIVO, NODO_POS_X, NODO_POS_Y)
+        OUTPUT INSERTED.NODO_ID as id
+        VALUES (@codigo, @texto, @tipo, 1, @x, @y)
+      `);
+    return res.status(201).json({ success: true, data: { tipo, id: ins.recordset[0].id } });
+  } catch (error) {
+    console.error('Error creando nodo del flujo del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PATCH /flujo/nodos/:tipo/:id  — edición inline del contenido de una caja.
+exports.updateNodo = async (req, res) => {
+  try {
+    const { tipo, id } = req.params;
+    const { texto, textoEn, keywords, tipoAccion, campaniaId, tipoNodo, activa } = req.body || {};
+    if (!TIPOS_NODO.includes(tipo)) {
+      return res.status(400).json({ success: false, message: 'Tipo de nodo inválido' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (tipo === 'respuesta') {
+      const sets = [];
+      const rq = pool.request().input('id', sql.Int, id);
+      if (texto != null) { sets.push('RESP_TEXTO_ES = @texto', 'RESP_TITULO = @titulo'); rq.input('texto', sql.NVarChar, String(texto)).input('titulo', sql.NVarChar, String(texto).trim().slice(0, 120)); }
+      if (textoEn !== undefined) { sets.push('RESP_TEXTO_EN = @textoEn'); rq.input('textoEn', sql.NVarChar, textoEn || null); }
+      if (Array.isArray(keywords)) { sets.push('RESP_KEYWORDS = @kw'); rq.input('kw', sql.NVarChar, JSON.stringify(keywords)); }
+      if (activa !== undefined) { sets.push('RESP_ACTIVA = @activa'); rq.input('activa', sql.Bit, activa !== false); }
+      if (!sets.length) return res.json({ success: true });
+      sets.push('RESP_FECHA_ACTUALIZACION = GETDATE()');
+      await rq.query(`UPDATE dbo.CHATBOT_RESPUESTAS SET ${sets.join(', ')} WHERE RESP_PK = @id`);
+      return res.json({ success: true });
+    }
+
+    if (tipo === 'etiqueta') {
+      const sets = [];
+      const rq = pool.request().input('id', sql.Int, id);
+      if (texto != null) { sets.push('ETQ_TEXTO_ES = @texto'); rq.input('texto', sql.NVarChar, String(texto).slice(0, 150)); }
+      if (textoEn !== undefined) { sets.push('ETQ_TEXTO_EN = @textoEn'); rq.input('textoEn', sql.NVarChar, textoEn || null); }
+      if (tipoAccion != null && ['respuesta', 'escalar_campania', 'escalar_generico', 'arbol_diagnostico'].includes(tipoAccion)) {
+        sets.push('ETQ_TIPO = @tipo'); rq.input('tipo', sql.NVarChar, tipoAccion);
+        sets.push('ETQ_CAMPANIA_ID = @camp');
+        rq.input('camp', sql.Int, tipoAccion === 'escalar_campania' && campaniaId ? Number(campaniaId) : null);
+      } else if (campaniaId !== undefined) {
+        sets.push('ETQ_CAMPANIA_ID = @camp'); rq.input('camp', sql.Int, campaniaId ? Number(campaniaId) : null);
+      }
+      if (activa !== undefined) { sets.push('ETQ_ACTIVA = @activa'); rq.input('activa', sql.Bit, activa !== false); }
+      if (!sets.length) return res.json({ success: true });
+      await rq.query(`UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ${sets.join(', ')} WHERE ETQ_ID = @id`);
+      return res.json({ success: true });
+    }
+
+    // nodo_arbol
+    const sets = [];
+    const rq = pool.request().input('id', sql.Int, id);
+    if (texto != null) { sets.push('NODO_TEXTO = @texto'); rq.input('texto', sql.NVarChar, String(texto)); }
+    if (tipoNodo != null && ['pregunta', 'mensaje', 'escalar_chat', 'crear_ticket'].includes(tipoNodo)) {
+      sets.push('NODO_TIPO = @tipo'); rq.input('tipo', sql.NVarChar, tipoNodo);
+    }
+    if (activa !== undefined) { sets.push('NODO_ACTIVO = @activa'); rq.input('activa', sql.Bit, activa !== false); }
+    if (!sets.length) return res.json({ success: true });
+    await rq.query(`UPDATE dbo.CHATBOT_NODOS SET ${sets.join(', ')} WHERE NODO_ID = @id`);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error editando nodo del flujo del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// DELETE /flujo/nodos/:tipo/:id — borra la caja y sus conexiones (salientes y
+// entrantes) del canvas. El nodo 'inicio' del árbol no se puede borrar.
+exports.deleteNodo = async (req, res) => {
+  try {
+    const { tipo, id } = req.params;
+    const info = TABLA_POR_TIPO[tipo];
+    if (!info) return res.status(400).json({ success: false, message: 'Tipo de nodo inválido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (tipo === 'nodo_arbol') {
+      const esInicio = await pool.request().input('id', sql.Int, id)
+        .query("SELECT 1 FROM dbo.CHATBOT_NODOS WHERE NODO_ID = @id AND NODO_CODIGO = 'inicio'");
+      if (esInicio.recordset.length) {
+        return res.status(400).json({ success: false, message: 'El nodo de inicio del árbol no se puede eliminar' });
+      }
+    }
+
+    // conexiones del canvas donde este nodo es origen o destino
+    await pool.request()
+      .input('tipo', sql.NVarChar, tipo).input('id', sql.Int, id)
+      .query(`DELETE FROM dbo.CHATBOT_FLUJO_CONEXIONES
+              WHERE (FCX_ORIGEN_TIPO = @tipo AND FCX_ORIGEN_ID = @id)
+                 OR (FCX_DESTINO_TIPO = @tipo AND FCX_DESTINO_ID = @id)`);
+
+    if (tipo === 'nodo_arbol') {
+      // opciones nativas del árbol que salen de o apuntan a este nodo
+      await pool.request().input('id', sql.Int, id)
+        .query('DELETE FROM dbo.CHATBOT_NODO_OPCIONES WHERE OPC_NODO_ID = @id OR OPC_NODO_DESTINO_ID = @id');
+    }
+
+    const del = await pool.request().input('id', sql.Int, id)
+      .query(`DELETE FROM ${info.tabla} OUTPUT DELETED.${info.idCol} as id WHERE ${info.idCol} = @id`);
+    if (del.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Nodo no encontrado' });
+    }
+    res.json({ success: true, message: 'Nodo eliminado' });
+  } catch (error) {
+    console.error('Error eliminando nodo del flujo del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
