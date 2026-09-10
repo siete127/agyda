@@ -43,9 +43,10 @@ function formatMoneda(valor: number | null) {
 }
 
 /* ── Formulario crear/editar respuesta ── */
-function RespuestaFormModal({ respuesta, categoriaInicial, onClose }: {
+function RespuestaFormModal({ respuesta, categoriaInicial, keywordsIniciales, onClose }: {
   respuesta?: RespuestaChatbot
   categoriaInicial?: string
+  keywordsIniciales?: string
   onClose: () => void
 }) {
   const qc = useQueryClient()
@@ -59,7 +60,7 @@ function RespuestaFormModal({ respuesta, categoriaInicial, onClose }: {
   const [form, setForm] = useState({
     titulo: respuesta?.titulo ?? '',
     categoria: respuesta?.categoria ?? categoriaInicial ?? '',
-    keywords: (respuesta?.keywords ?? []).join(', '),
+    keywords: respuesta?.keywords?.join(', ') ?? keywordsIniciales ?? '',
     textoEs: respuesta?.textoEs ?? '',
     textoEn: respuesta?.textoEn ?? '',
     botones: (respuesta?.botones ?? []).join(', '),
@@ -622,7 +623,102 @@ function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label
   )
 }
 
-/* ── Dashboard: métricas del diccionario + leads capturados desde el CRM ── */
+/* ── Respuestas que fallan + preguntas sin match (Fase 2) ── */
+function RendimientoCalidad() {
+  const qc = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const [crearDesde, setCrearDesde] = useState<{ texto: string; id: number } | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['chatbot-rendimiento'],
+    queryFn: () => chatbotService.getRendimiento(),
+  })
+
+  const resolver = useMutation({
+    mutationFn: (id: number) => chatbotService.resolverSinMatch(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['chatbot-rendimiento'] }) },
+  })
+
+  if (isLoading) return <div className="flex justify-center py-8"><Spinner size="sm" /></div>
+
+  const conFeedback = (data?.respuestas ?? []).filter((r) => r.noUtiles > 0)
+  const sinMatch = data?.sinMatch ?? []
+
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="card overflow-hidden">
+          <div className="border-b border-gray-100 px-4 py-2.5">
+            <p className="text-[0.78rem] font-bold text-gray-700">Respuestas que fallan</p>
+            <p className="text-[0.68rem] text-gray-400">Ordenadas por votos 👎 del visitante</p>
+          </div>
+          {conFeedback.length === 0 ? (
+            <p className="py-10 text-center text-[0.78rem] text-gray-400">Sin votos negativos todavía</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {conFeedback.map((r) => (
+                <div key={r.pk} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <p className="min-w-0 truncate text-[0.8rem] font-medium text-gray-700">{r.titulo || r.id}</p>
+                  <div className="flex flex-shrink-0 items-center gap-3 text-[0.72rem]">
+                    <span className="text-emerald-600">👍 {r.utiles}</span>
+                    <span className="font-bold text-red-500">👎 {r.noUtiles}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="border-b border-gray-100 px-4 py-2.5">
+            <p className="text-[0.78rem] font-bold text-gray-700">Preguntas sin respuesta</p>
+            <p className="text-[0.68rem] text-gray-400">Lo que la gente escribió y el bot no supo contestar</p>
+          </div>
+          {sinMatch.length === 0 ? (
+            <p className="py-10 text-center text-[0.78rem] text-gray-400">Sin preguntas pendientes 🎉</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {sinMatch.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-[0.8rem] text-gray-700">"{s.texto}"</p>
+                    <p className="text-[0.66rem] text-gray-400">{s.veces} vez{s.veces !== 1 ? 'ces' : ''}</p>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex flex-shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => setCrearDesde({ texto: s.texto, id: s.id })}
+                        className="rounded-lg border border-gray-200 px-2 py-1 text-[0.68rem] font-semibold text-brand hover:border-brand"
+                      >
+                        Crear respuesta
+                      </button>
+                      <button
+                        onClick={() => resolver.mutate(s.id)}
+                        title="Descartar"
+                        className="rounded-lg p-1 text-gray-300 hover:bg-gray-100 hover:text-gray-500"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {crearDesde && (
+        <RespuestaFormModal
+          keywordsIniciales={crearDesde.texto}
+          onClose={() => { resolver.mutate(crearDesde.id); setCrearDesde(null) }}
+        />
+      )}
+    </>
+  )
+}
+
+/* ── Rendimiento: métricas + calidad + leads capturados desde el CRM ── */
 function DashboardTab() {
   const { data: respuestas = [], isLoading: isLoadingRespuestas } = useQuery({
     queryKey: ['chatbot-respuestas'],
@@ -652,6 +748,8 @@ function DashboardTab() {
             <StatCard icon={Sparkles} label="Con señal de interés" value={respuestasConSenal} />
             <StatCard icon={Users} label="Leads capturados" value={leads.length} />
           </div>
+
+          <RendimientoCalidad />
 
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Leads generados por el chatbot</h3>

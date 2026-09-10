@@ -6250,6 +6250,37 @@ BEGIN
   );
 END
 
+-- Fase 2: telemetría de calidad del bot.
+-- Feedback 👍/👎 que el visitante deja bajo una respuesta enlatada.
+IF OBJECT_ID('dbo.CHATBOT_FEEDBACK', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_FEEDBACK (
+    FBK_ID           INT IDENTITY(1,1) PRIMARY KEY,
+    FBK_RESP_PK      INT           NOT NULL,
+    FBK_SESION_TOKEN NVARCHAR(80)  NULL,
+    FBK_UTIL         BIT           NOT NULL,
+    FBK_FECHA        DATETIME      NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_CHATBOT_FEEDBACK_RESP FOREIGN KEY (FBK_RESP_PK) REFERENCES dbo.CHATBOT_RESPUESTAS(RESP_PK) ON DELETE CASCADE
+  );
+  CREATE INDEX IX_CHATBOT_FEEDBACK_RESP ON dbo.CHATBOT_FEEDBACK(FBK_RESP_PK, FBK_UTIL);
+END
+
+-- Preguntas del visitante que NO hicieron match con ninguna respuesta —
+-- la lista de qué falta cubrir. UPSERT por texto normalizado.
+IF OBJECT_ID('dbo.CHATBOT_SIN_MATCH', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_SIN_MATCH (
+    SNM_ID            INT IDENTITY(1,1) PRIMARY KEY,
+    SNM_TEXTO_NORM    NVARCHAR(300)  NOT NULL,
+    SNM_TEXTO_EJEMPLO NVARCHAR(500)  NULL,
+    SNM_VECES         INT            NOT NULL DEFAULT (1),
+    SNM_ULTIMA_FECHA  DATETIME       NOT NULL DEFAULT GETDATE(),
+    SNM_RESUELTO      BIT            NOT NULL DEFAULT (0),
+    CONSTRAINT UQ_CHATBOT_SIN_MATCH_TEXTO UNIQUE (SNM_TEXTO_NORM)
+  );
+  CREATE INDEX IX_CHATBOT_SIN_MATCH_PEND ON dbo.CHATBOT_SIN_MATCH(SNM_RESUELTO, SNM_VECES DESC);
+END
+
 -- Árbol de decisión básico (sin IA/NLU): nodos de pregunta con opciones que
 -- llevan a otro nodo, o a una acción terminal (resolver, escalar a chat, crear ticket).
 IF OBJECT_ID('dbo.CHATBOT_NODOS', 'U') IS NULL

@@ -26,7 +26,7 @@ const SELECT_RESPUESTA = `
 // Genera un id técnico (slug) a partir del título — el usuario ya no lo escribe.
 // Colisiona -> se le agrega un sufijo numérico en createRespuesta.
 function slugify(texto) {
-  const sinAcentos = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const sinAcentos = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   return sinAcentos.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 70) || 'respuesta';
 }
 
@@ -623,6 +623,124 @@ exports.updateConfig = async (req, res) => {
     res.json({ success: true, data: await leerConfig(pool) });
   } catch (error) {
     console.error('Error guardando config del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ════════════════════════════════════════════════════════
+   FEEDBACK Y PREGUNTAS SIN MATCH (Fase 2)
+   Endpoints públicos que el widget dispara fire-and-forget —
+   nunca deben tumbar la conversación, por eso todos responden
+   200 aunque algo falle internamente.
+════════════════════════════════════════════════════════ */
+
+// El visitante toca 👍/👎 bajo una respuesta enlatada.
+exports.postFeedback = async (req, res) => {
+  try {
+    const respPk = parseInt(req.body?.respuestaPk, 10);
+    const util = req.body?.util === true || req.body?.util === 'true' || req.body?.util === 1;
+    const sesion = typeof req.body?.sesionToken === 'string' ? req.body.sesionToken.slice(0, 80) : null;
+    if (!Number.isFinite(respPk)) return res.json({ success: true });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('pk', sql.Int, respPk)
+      .input('sesion', sql.NVarChar(80), sesion)
+      .input('util', sql.Bit, util)
+      .query(`
+        IF EXISTS (SELECT 1 FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_PK = @pk)
+          INSERT INTO dbo.CHATBOT_FEEDBACK (FBK_RESP_PK, FBK_SESION_TOKEN, FBK_UTIL) VALUES (@pk, @sesion, @util);
+      `);
+    res.json({ success: true });
+  } catch (error) {
+    console.warn('Feedback del chatbot no registrado:', error.message);
+    res.json({ success: true });
+  }
+};
+
+// Pregunta que no hizo match con ninguna respuesta. UPSERT por texto normalizado
+// (minúsculas, sin acentos, sin signos, colapsando espacios).
+function normalizarPregunta(texto) {
+  return String(texto || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^\wñ\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
+}
+
+exports.postSinMatch = async (req, res) => {
+  try {
+    const textoEjemplo = typeof req.body?.texto === 'string' ? req.body.texto.trim().slice(0, 500) : '';
+    const norm = normalizarPregunta(textoEjemplo);
+    if (norm.length < 3) return res.json({ success: true });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('norm', sql.NVarChar(300), norm)
+      .input('ejemplo', sql.NVarChar(500), textoEjemplo)
+      .query(`
+        MERGE dbo.CHATBOT_SIN_MATCH AS t
+        USING (SELECT @norm AS n) AS s ON t.SNM_TEXTO_NORM = s.n
+        WHEN MATCHED THEN UPDATE SET SNM_VECES = SNM_VECES + 1, SNM_ULTIMA_FECHA = GETDATE()
+        WHEN NOT MATCHED THEN INSERT (SNM_TEXTO_NORM, SNM_TEXTO_EJEMPLO) VALUES (@norm, @ejemplo);
+      `);
+    res.json({ success: true });
+  } catch (error) {
+    console.warn('Pregunta sin match no registrada:', error.message);
+    res.json({ success: true });
+  }
+};
+
+// Panel de Rendimiento: respuestas ordenadas por 👎, + preguntas sin match.
+exports.getRendimiento = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const respuestas = await pool.request().query(`
+      SELECT
+        r.RESP_PK as pk,
+        r.RESP_ID as id,
+        r.RESP_TITULO as titulo,
+        r.RESP_CATEGORIA as categoria,
+        r.RESP_ACTIVA as activa,
+        SUM(CASE WHEN f.FBK_UTIL = 1 THEN 1 ELSE 0 END) as utiles,
+        SUM(CASE WHEN f.FBK_UTIL = 0 THEN 1 ELSE 0 END) as noUtiles
+      FROM dbo.CHATBOT_RESPUESTAS r
+      LEFT JOIN dbo.CHATBOT_FEEDBACK f ON f.FBK_RESP_PK = r.RESP_PK
+      GROUP BY r.RESP_PK, r.RESP_ID, r.RESP_TITULO, r.RESP_CATEGORIA, r.RESP_ACTIVA
+      HAVING SUM(CASE WHEN f.FBK_UTIL IS NOT NULL THEN 1 ELSE 0 END) > 0
+      ORDER BY noUtiles DESC, utiles ASC
+    `);
+
+    const sinMatch = await pool.request().query(`
+      SELECT TOP 50
+        SNM_ID as id, SNM_TEXTO_EJEMPLO as texto, SNM_VECES as veces,
+        CONVERT(NVARCHAR(19), SNM_ULTIMA_FECHA, 126) as ultimaFecha
+      FROM dbo.CHATBOT_SIN_MATCH
+      WHERE SNM_RESUELTO = 0
+      ORDER BY SNM_VECES DESC, SNM_ULTIMA_FECHA DESC
+    `);
+
+    res.json({ success: true, data: { respuestas: respuestas.recordset, sinMatch: sinMatch.recordset } });
+  } catch (error) {
+    console.error('Error obteniendo rendimiento del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Marca una pregunta sin match como resuelta (ya se le creó respuesta, o se descarta).
+exports.resolverSinMatch = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'id inválido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id)
+      .query('UPDATE dbo.CHATBOT_SIN_MATCH SET SNM_RESUELTO = 1 WHERE SNM_ID = @id');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error resolviendo pregunta sin match:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

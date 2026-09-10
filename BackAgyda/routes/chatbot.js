@@ -10,6 +10,9 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 router.get('/respuestas/publicas', chatbotController.getRespuestasPublicas);
 router.get('/etiquetas-menu/publicas', chatbotController.getEtiquetasMenuPublicas);
 router.get('/config/publica', chatbotController.getConfigPublica);
+// Telemetría del widget (fire-and-forget, sin auth).
+router.post('/feedback', chatbotController.postFeedback);
+router.post('/sin-match', chatbotController.postSinMatch);
 
 // Árbol de decisión — público (authenticateTokenOptional asocia el usuario si
 // está logueado, sin exigirlo: lo usan tanto el widget público como el interno).
@@ -32,6 +35,8 @@ router.get('/leads', authenticateToken, requireActionAccess('chatbot', 'ver'), c
 router.get('/categorias', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getCategorias);
 router.get('/config', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getConfig);
 router.put('/config', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.updateConfig);
+router.get('/rendimiento', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getRendimiento);
+router.patch('/sin-match/:id/resolver', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.resolverSinMatch);
 router.post('/respuestas', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'crear'), chatbotController.createRespuesta);
 router.put('/respuestas/:pk', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.updateRespuesta);
 router.patch('/respuestas/:pk/activa', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.toggleActiva);

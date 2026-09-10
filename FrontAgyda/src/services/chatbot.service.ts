@@ -56,6 +56,23 @@ export const chatbotService = {
     return (data?.data ?? data) as ChatbotConfig
   },
 
+  // ── Rendimiento (Fase 2) ──
+  async getRendimiento(): Promise<{
+    respuestas: { pk: number; id: string; titulo: string | null; categoria: string | null; activa: boolean; utiles: number; noUtiles: number }[]
+    sinMatch: { id: number; texto: string; veces: number; ultimaFecha: string }[]
+  }> {
+    const { data } = await api.get('/chatbot/rendimiento')
+    const d = data?.data ?? data
+    return {
+      respuestas: Array.isArray(d?.respuestas) ? d.respuestas : [],
+      sinMatch: Array.isArray(d?.sinMatch) ? d.sinMatch : [],
+    }
+  },
+
+  async resolverSinMatch(id: number): Promise<void> {
+    await api.patch(`/chatbot/sin-match/${id}/resolver`)
+  },
+
   // ── Etiquetas del menú inicial del widget ──
   async getEtiquetasMenu(): Promise<EtiquetaMenuChatbot[]> {
     const { data } = await api.get('/chatbot/etiquetas-menu')
