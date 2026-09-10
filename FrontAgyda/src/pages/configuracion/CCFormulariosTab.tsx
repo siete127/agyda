@@ -9,9 +9,10 @@ import toast from 'react-hot-toast'
 import { ccFormulariosService } from '@/services/ccFormularios.service'
 import { ccService } from '@/services/cc.service'
 import { Modal } from '@/components/ui/Modal'
+import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCFormulario, CCFormVersionCompleta, CCFormSeccion, CCFormCampo, CCFormTipoCampo,
-  CCFormAccionPost, CCFormAccionTipo,
+  CCFormAccionPost, CCFormAccionTipo, CCFormOpcion, CCFormBuscadorResultado,
 } from '@/types/ccFormularios.types'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
@@ -553,7 +554,7 @@ function VersionConstructor({ versionId, formularioId, onPublicada }: { versionI
         </div>
       )}
 
-      {version.secciones.map((s) => <SeccionCard key={s.id} seccion={s} editable={editable} onChanged={inval} />)}
+      {version.secciones.map((s) => <SeccionCard key={s.id} seccion={s} formularioId={formularioId} editable={editable} onChanged={inval} />)}
 
       {editable && version.estado === 'borrador' && (
         <button onClick={() => publicar.mutate()} disabled={publicar.isPending}
@@ -587,6 +588,22 @@ function PreviewFormularioModal({ isOpen, onClose, version, formularioId }: { is
   const todosLosCampos = version.secciones.flatMap((s) => s.campos)
   const camposCapturables = todosLosCampos.filter((c) => !['titulo', 'separador', 'buscador'].includes(c.tipo))
   const faltantes = camposCapturables.filter((c) => c.obligatorio && !valores[c.id] && valores[c.id] !== 0)
+
+  // Al elegir un resultado del campo 'buscador', vuelca sus datos tanto al
+  // bloque "Datos del registro" (arriba) como a los campos del formulario
+  // que parezcan nombre/teléfono — detectado por TIPO, no por código
+  // específico, para funcionar igual en cualquier formulario. El canal solo
+  // se llena si el resultado trae uno (los postulantes de Totis no tienen).
+  const usarResultadoBuscador = (r: CCFormBuscadorResultado) => {
+    if (r.clienteNombre) setClienteNombre(r.clienteNombre)
+    if (r.clienteTelefono) setClienteTelefono(r.clienteTelefono)
+    if (r.canalId) setCanalId(String(r.canalId))
+    const campoNombre = todosLosCampos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+      ?? todosLosCampos.find((c) => c.tipo === 'texto_corto')
+    const campoTelefono = todosLosCampos.find((c) => c.tipo === 'telefono')
+    if (campoNombre && r.clienteNombre) setValor(campoNombre.id, r.clienteNombre)
+    if (campoTelefono && r.clienteTelefono) setValor(campoTelefono.id, r.clienteTelefono)
+  }
 
   const guardar = useMutation({
     mutationFn: () => ccFormulariosService.guardarRespuestas(version.id, {
@@ -637,7 +654,7 @@ function PreviewFormularioModal({ isOpen, onClose, version, formularioId }: { is
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {s.campos.filter((c) => c.visible).map((c) => (
                 <div key={c.id} className={c.ancho === 'completo' || c.tipo === 'buscador' ? 'sm:col-span-2' : ''}>
-                  <PreviewCampo campo={c} formularioId={formularioId} valor={valores[c.id]} onChange={(v) => setValor(c.id, v)} />
+                  <PreviewCampo campo={c} formularioId={formularioId} valor={valores[c.id]} onChange={(v) => setValor(c.id, v)} onSeleccionarBuscador={usarResultadoBuscador} />
                 </div>
               ))}
             </div>
@@ -665,12 +682,76 @@ function PreviewFormularioModal({ isOpen, onClose, version, formularioId }: { is
 // siendo un caso aparte porque no guarda "una respuesta" — su valor final es
 // el CI_ID de la interacción que busca o crea, no algo que viva en
 // CCF_INTERACCION_FORM_RESPUESTAS.
-function PreviewCampo({ campo, formularioId, valor, onChange }: {
+// Lee campo.configJson.autocompletar (guardado por CampoForm) y calcula el
+// valor real correspondiente — 'fecha_actual' usa formato datetime-local
+// (yyyy-MM-ddTHH:mm) o date según el tipo del campo; 'usuario_actual' toma
+// el nombre de la sesión del navegador (useAuthStore), nunca algo que el
+// agente tenga que escribir.
+function valorAutocompletado(campo: CCFormCampo, nombreUsuario: string | null): string | null {
+  // 'usuario_agente' siempre se autocompleta con quien tiene la sesión
+  // abierta — no depende de configJson.autocompletar (a diferencia de
+  // texto_corto/fecha, donde SÍ es opcional) porque el propio tipo de campo
+  // ya implica esa intención; no tendría sentido dejarlo vacío para que el
+  // agente lo escriba a mano.
+  if (campo.tipo === 'usuario_agente') return nombreUsuario ?? ''
+
+  let cfg: any = {}
+  try { cfg = campo.configJson ? JSON.parse(campo.configJson) : {} } catch { /* ignorar JSON inválido */ }
+  if (cfg.autocompletar === 'fecha_actual') {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    if (campo.tipo === 'fecha') return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    if (campo.tipo === 'fecha_hora') return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+    return now.toLocaleString('es-MX')
+  }
+  if (cfg.autocompletar === 'usuario_actual') return nombreUsuario ?? ''
+  return null
+}
+
+// Hook compartido entre PreviewCampo (panel admin) y CampoPublico (VICIdial
+// sin sesión) — dispara la precarga de autocompletar UNA sola vez al montar
+// (si el campo aún no tiene valor) y resuelve el catálogo dinámico cuando
+// aplica. `getCatalogo` y `usuarioActual` son inyectados por cada renderer
+// porque difieren entre el contexto admin (useAuthStore) y el público
+// (query param ?agente=).
+function useCampoAuto(
+  campo: CCFormCampo,
+  valor: unknown,
+  onChange: (v: unknown) => void,
+  usuarioActual: string | null,
+  getCatalogo: (fuente: string) => Promise<CCFormOpcion[]>,
+) {
+  useEffect(() => {
+    if (valor !== undefined) return
+    const auto = valorAutocompletado(campo, usuarioActual)
+    if (auto !== null) onChange(auto)
+    // Solo al montar — si el agente borra el valor autocompletado a mano,
+    // no queremos que se lo volvamos a poner encima en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [opcionesDinamicas, setOpcionesDinamicas] = useState<CCFormOpcion[] | null>(null)
+  useEffect(() => {
+    if (campo.tipo !== 'catalogo' || !campo.catalogoFuente || campo.catalogoFuente === 'estatico') return
+    let cancelado = false
+    getCatalogo(campo.catalogoFuente).then((data) => { if (!cancelado) setOpcionesDinamicas(data) }).catch(() => {})
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campo.catalogoFuente])
+
+  return opcionesDinamicas
+}
+
+function PreviewCampo({ campo, formularioId, valor, onChange, onSeleccionarBuscador }: {
   campo: CCFormCampo; formularioId: number; valor: unknown; onChange: (v: unknown) => void
+  onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
 }) {
+  const nombreUsuario = useAuthStore((s) => s.user?.nombres ?? s.user?.usuario ?? null)
+  const opcionesDinamicas = useCampoAuto(campo, valor, onChange, nombreUsuario, (fuente) => ccFormulariosService.getOpcionesCatalogo(formularioId, fuente))
+
   if (campo.tipo === 'titulo') return <p className="pt-2 text-sm font-bold text-ink">{campo.etiqueta}</p>
   if (campo.tipo === 'separador') return <hr className="my-2 border-gray-200" />
-  if (campo.tipo === 'buscador') return <BuscadorCampoRuntime campo={campo} formularioId={formularioId} />
+  if (campo.tipo === 'buscador') return <BuscadorCampoRuntime campo={campo} formularioId={formularioId} onSeleccionar={onSeleccionarBuscador} />
 
   const etiqueta = (
     <span className={label}>
@@ -690,12 +771,15 @@ function PreviewCampo({ campo, formularioId, valor, onChange }: {
       </label>
     )
   }
-  if (['lista', 'radio'].includes(campo.tipo)) {
+  if (['lista', 'radio', 'catalogo'].includes(campo.tipo)) {
+    const opciones = campo.tipo === 'catalogo' && campo.catalogoFuente && campo.catalogoFuente !== 'estatico'
+      ? (opcionesDinamicas ?? [])
+      : campo.opciones
     return (
       <label>{etiqueta}
         <select className={field} value={(valor as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
-          <option value="">Selecciona…</option>
-          {campo.opciones.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+          <option value="">{opcionesDinamicas === null && campo.tipo === 'catalogo' && campo.catalogoFuente !== 'estatico' ? 'Cargando…' : 'Selecciona…'}</option>
+          {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
         </select>
       </label>
     )
@@ -798,7 +882,9 @@ function AccionesPostGuardadoModal({ isOpen, onClose, interaccionId, acciones }:
 // quien se busca, permite registrar un contacto nuevo — queda guardado como
 // una interacción real en CCO_INTERACCIONES para reportería. Es el único
 // tipo de campo con lógica propia (los demás son inputs planos).
-function BuscadorCampoRuntime({ campo, formularioId }: { campo: CCFormCampo; formularioId: number }) {
+function BuscadorCampoRuntime({ campo, formularioId, onSeleccionar }: {
+  campo: CCFormCampo; formularioId: number; onSeleccionar?: (r: CCFormBuscadorResultado) => void
+}) {
   const qc = useQueryClient()
   const [texto, setTexto] = useState('')
   // Debounce simple: busca sola 400ms después de que el agente deja de
@@ -806,6 +892,7 @@ function BuscadorCampoRuntime({ campo, formularioId }: { campo: CCFormCampo; for
   // tecla) — antes solo buscaba con Enter/clic en la lupa.
   const [buscar, setBuscar] = useState('')
   const [registrando, setRegistrando] = useState(false)
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null)
 
   useEffect(() => {
     const t = texto.trim()
@@ -849,20 +936,34 @@ function BuscadorCampoRuntime({ campo, formularioId }: { campo: CCFormCampo; for
 
       {isFetched && (
         <div className="mt-3 space-y-1.5">
-          {resultados.map((r) => (
-            <div key={`${r.origen}-${r.id}`} className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 px-3 py-2 text-[0.78rem]">
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="truncate font-semibold text-ink">{r.clienteNombre ?? '—'} <span className="font-normal text-ink-tertiary">· {r.clienteTelefono ?? '—'}</span></p>
-                  <span className={clsx('flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold',
-                    r.origen === 'postulante' ? 'bg-cyan-100 text-cyan-700' : 'bg-violet-100 text-violet-700')}>
-                    {r.origen === 'postulante' ? 'Postulante' : 'Interacción'}
-                  </span>
+          {resultados.map((r) => {
+            const claveResultado = `${r.origen}-${r.id}`
+            const yaSeleccionado = seleccionadoId === claveResultado
+            return (
+              <div key={claveResultado} className={clsx('flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[0.78rem]', yaSeleccionado ? 'border-emerald-200 bg-emerald-50' : 'border-gray-100')}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate font-semibold text-ink">{r.clienteNombre ?? '—'} <span className="font-normal text-ink-tertiary">· {r.clienteTelefono ?? '—'}</span></p>
+                    <span className={clsx('flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold',
+                      r.origen === 'postulante' ? 'bg-cyan-100 text-cyan-700' : 'bg-violet-100 text-violet-700')}>
+                      {r.origen === 'postulante' ? 'Postulante' : 'Interacción'}
+                    </span>
+                  </div>
+                  <p className="truncate text-[0.68rem] text-ink-tertiary">{r.canalNombre ?? '—'} · {r.tipificacionNombre ?? 'sin tipificar'} · {r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : ''}</p>
                 </div>
-                <p className="truncate text-[0.68rem] text-ink-tertiary">{r.canalNombre ?? '—'} · {r.tipificacionNombre ?? 'sin tipificar'} · {r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : ''}</p>
+                {onSeleccionar && (
+                  <button
+                    onClick={() => { onSeleccionar(r); setSeleccionadoId(claveResultado); toast.success('Datos aplicados al formulario') }}
+                    className={clsx(
+                      'flex flex-shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[0.72rem] font-semibold transition',
+                      yaSeleccionado ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-50 text-violet-700 hover:bg-violet-100',
+                    )}>
+                    {yaSeleccionado ? <Check className="h-3.5 w-3.5" /> : null} {yaSeleccionado ? 'Usado' : 'Seleccionar'}
+                  </button>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
           {!resultados.length && !registrando && (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2.5">
               <p className="text-[0.78rem] text-ink-tertiary">No se encontró ningún registro para "{buscar}".</p>
@@ -947,7 +1048,7 @@ function RegistrarInteraccionForm({ formularioId, nombreInicial, onDone, onCance
   )
 }
 
-function SeccionCard({ seccion, editable, onChanged }: { seccion: CCFormSeccion; editable: boolean; onChanged: () => void }) {
+function SeccionCard({ seccion, formularioId, editable, onChanged }: { seccion: CCFormSeccion; formularioId: number; editable: boolean; onChanged: () => void }) {
   const [colapsado, setColapsado] = useState(false)
   const [nuevoCampo, setNuevoCampo] = useState(false)
 
@@ -979,7 +1080,7 @@ function SeccionCard({ seccion, editable, onChanged }: { seccion: CCFormSeccion;
 
       {!colapsado && (
         <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-          {seccion.campos.map((c) => <CampoRow key={c.id} campo={c} editable={editable} onChanged={onChanged} />)}
+          {seccion.campos.map((c) => <CampoRow key={c.id} campo={c} formularioId={formularioId} editable={editable} onChanged={onChanged} />)}
           {editable && !nuevoCampo && (
             <button onClick={() => setNuevoCampo(true)} className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-xs font-semibold text-ink-tertiary transition hover:border-violet-300 hover:text-violet-600">
               <Plus className="h-3.5 w-3.5" /> Agregar campo
@@ -988,6 +1089,7 @@ function SeccionCard({ seccion, editable, onChanged }: { seccion: CCFormSeccion;
           {editable && nuevoCampo && (
             <CampoForm
               seccionId={seccion.id}
+              formularioId={formularioId}
               orden={seccion.campos.length}
               onDone={() => { setNuevoCampo(false); onChanged() }}
               onCancel={() => setNuevoCampo(false)}
@@ -999,7 +1101,7 @@ function SeccionCard({ seccion, editable, onChanged }: { seccion: CCFormSeccion;
   )
 }
 
-function CampoRow({ campo, editable, onChanged }: { campo: CCFormCampo; editable: boolean; onChanged: () => void }) {
+function CampoRow({ campo, formularioId, editable, onChanged }: { campo: CCFormCampo; formularioId: number; editable: boolean; onChanged: () => void }) {
   const [editando, setEditando] = useState(false)
   const eliminar = useMutation({
     mutationFn: () => ccFormulariosService.deleteCampo(campo.id),
@@ -1008,7 +1110,7 @@ function CampoRow({ campo, editable, onChanged }: { campo: CCFormCampo; editable
   })
 
   if (editando) {
-    return <CampoForm seccionId={campo.seccionId} orden={campo.orden} campoExistente={campo} onDone={() => { setEditando(false); onChanged() }} onCancel={() => setEditando(false)} />
+    return <CampoForm seccionId={campo.seccionId} formularioId={formularioId} orden={campo.orden} campoExistente={campo} onDone={() => { setEditando(false); onChanged() }} onCancel={() => setEditando(false)} />
   }
 
   return (
@@ -1034,8 +1136,22 @@ function CampoRow({ campo, editable, onChanged }: { campo: CCFormCampo; editable
 // como para "editar campo" (mismo cuerpo, ccFormulariosService.createCampo
 // vs updateCampo). Sin drag&drop en esta Entrega 1: el orden se asigna
 // secuencial al crear.
-function CampoForm({ seccionId, orden, campoExistente, onDone, onCancel }: {
-  seccionId: number; orden: number; campoExistente?: CCFormCampo; onDone: () => void; onCancel: () => void
+// Tipos de campo donde tiene sentido ofrecer autocompletado — el valor se
+// calcula en el renderer (PreviewCampo/CampoPublico) al montar el campo, no
+// aquí; esto solo guarda la intención en FC_CONFIG_JSON.autocompletar.
+const TIPOS_CON_AUTOCOMPLETAR: CCFormTipoCampo[] = ['fecha', 'fecha_hora', 'texto_corto']
+type Autocompletar = '' | 'fecha_actual' | 'usuario_actual'
+const AUTOCOMPLETAR_LABEL: Record<Exclude<Autocompletar, ''>, string> = {
+  fecha_actual: 'Fecha y hora actual (automático)',
+  usuario_actual: 'Usuario que tiene la sesión abierta (automático)',
+}
+const FUENTES_CATALOGO_LABEL: Record<string, string> = {
+  estatico: 'Opciones escritas a mano',
+  tipificaciones_campania: 'Tipificaciones de la campaña',
+}
+
+function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onCancel }: {
+  seccionId: number; formularioId: number; orden: number; campoExistente?: CCFormCampo; onDone: () => void; onCancel: () => void
 }) {
   const { data: tipos = [] } = useQuery({ queryKey: ['ccf-tipos-campo'], queryFn: () => ccFormulariosService.listTiposCampo() })
   const [codigo, setCodigo] = useState(campoExistente?.codigo ?? '')
@@ -1043,13 +1159,32 @@ function CampoForm({ seccionId, orden, campoExistente, onDone, onCancel }: {
   const [etiqueta, setEtiqueta] = useState(campoExistente?.etiqueta ?? '')
   const [obligatorio, setObligatorio] = useState(campoExistente?.obligatorio ?? false)
   const [opcionesTexto, setOpcionesTexto] = useState((campoExistente?.opciones ?? []).map((o) => o.etiqueta).join('\n'))
+  const configExistente = (() => { try { return campoExistente?.configJson ? JSON.parse(campoExistente.configJson) : {} } catch { return {} } })()
+  const [autocompletar, setAutocompletar] = useState<Autocompletar>(configExistente.autocompletar ?? '')
+  const [catalogoFuente, setCatalogoFuente] = useState(campoExistente?.catalogoFuente || 'estatico')
+
+  // Vista previa en vivo de las opciones que va a traer una fuente
+  // dinámica — se pide en cuanto el admin la elige, ANTES de guardar el
+  // campo, para que confirme qué va a ver el agente sin tener que
+  // guardar/reabrir a ciegas.
+  const { data: opcionesPreview = [], isFetching: cargandoPreview } = useQuery({
+    queryKey: ['ccf-catalogo-preview', formularioId, catalogoFuente],
+    queryFn: () => ccFormulariosService.getOpcionesCatalogo(formularioId, catalogoFuente),
+    enabled: tipo === 'catalogo' && catalogoFuente !== 'estatico',
+  })
 
   const guardar = useMutation({
     mutationFn: () => {
-      const opciones = TIPOS_CON_OPCIONES.includes(tipo)
-        ? opcionesTexto.split('\n').map((s) => s.trim()).filter(Boolean).map((v, i) => ({ valor: v, etiqueta: v, orden: i }))
-        : undefined
-      const body = { codigo, tipo, etiqueta, obligatorio, orden, opciones }
+      const opciones = tipo === 'catalogo'
+        ? (catalogoFuente === 'estatico' ? opcionesTexto.split('\n').map((s) => s.trim()).filter(Boolean).map((v, i) => ({ valor: v, etiqueta: v, orden: i })) : [])
+        : TIPOS_CON_OPCIONES.includes(tipo)
+          ? opcionesTexto.split('\n').map((s) => s.trim()).filter(Boolean).map((v, i) => ({ valor: v, etiqueta: v, orden: i }))
+          : undefined
+      const body: any = {
+        codigo, tipo, etiqueta, obligatorio, orden, opciones,
+        configJson: autocompletar ? { autocompletar } : {},
+      }
+      if (tipo === 'catalogo') body.catalogoFuente = catalogoFuente
       return campoExistente ? ccFormulariosService.updateCampo(campoExistente.id, body) : ccFormulariosService.createCampo(seccionId, body)
     },
     onSuccess: () => { onDone(); toast.success('Campo guardado') },
@@ -1072,7 +1207,48 @@ function CampoForm({ seccionId, orden, campoExistente, onDone, onCancel }: {
       <label><span className={label}>Etiqueta (lo que ve el agente)</span>
         <input className={field} value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} placeholder="ej. Nombre del cliente" /></label>
 
-      {TIPOS_CON_OPCIONES.includes(tipo) && (
+      {TIPOS_CON_AUTOCOMPLETAR.includes(tipo) && (
+        <label><span className={label}>Autocompletar con</span>
+          <select className={field} value={autocompletar} onChange={(e) => setAutocompletar(e.target.value as Autocompletar)}>
+            <option value="">Nada — el agente lo escribe</option>
+            {(Object.keys(AUTOCOMPLETAR_LABEL) as (keyof typeof AUTOCOMPLETAR_LABEL)[]).map((k) => (
+              <option key={k} value={k}>{AUTOCOMPLETAR_LABEL[k]}</option>
+            ))}
+          </select>
+          {autocompletar && <span className="mt-0.5 block text-[0.68rem] text-ink-tertiary">El agente puede corregirlo a mano si no marcas "Solo lectura".</span>}
+        </label>
+      )}
+
+      {tipo === 'catalogo' && (
+        <label><span className={label}>Fuente del catálogo</span>
+          <select className={field} value={catalogoFuente} onChange={(e) => setCatalogoFuente(e.target.value)}>
+            {Object.entries(FUENTES_CATALOGO_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          {catalogoFuente === 'tipificaciones_campania' && (
+            <>
+              <span className="mt-0.5 block text-[0.68rem] text-ink-tertiary">Se llena solo con las tipificaciones de la campaña asignada a este formulario — no necesitas escribir opciones.</span>
+              <div className="mt-2 rounded-lg border border-gray-200 bg-card p-2.5">
+                <p className="mb-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-ink-tertiary">Vista previa — lo que verá el agente</p>
+                {cargandoPreview && <p className="flex items-center gap-1.5 text-[0.72rem] text-ink-tertiary"><Loader2 className="h-3 w-3 animate-spin" /> Cargando tipificaciones…</p>}
+                {!cargandoPreview && !opcionesPreview.length && (
+                  <p className="text-[0.72rem] font-medium text-amber-600">Este formulario no tiene ninguna campaña asignada todavía, o esa campaña no tiene tipificaciones — asígnalo primero en la pestaña "Asignaciones".</p>
+                )}
+                {!cargandoPreview && !!opcionesPreview.length && (
+                  <ul className="space-y-1">
+                    {opcionesPreview.map((o) => (
+                      <li key={o.valor} className="flex items-center gap-1.5 text-[0.78rem] text-ink">
+                        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-violet-400" /> {o.etiqueta}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </label>
+      )}
+
+      {((tipo === 'catalogo' && catalogoFuente === 'estatico') || (tipo !== 'catalogo' && TIPOS_CON_OPCIONES.includes(tipo))) && (
         <label><span className={label}>Opciones (una por línea)</span>
           <textarea className={clsx(field, 'h-20')} value={opcionesTexto} onChange={(e) => setOpcionesTexto(e.target.value)} placeholder={'Sí\nNo'} /></label>
       )}

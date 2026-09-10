@@ -130,9 +130,19 @@ export interface LivechatAgenteEstado {
 
 export interface LivechatHistorialFiltros {
   agenteId?: number
+  campaniaId?: number
+  grupoId?: number
   fechaDesde?: string
   fechaHasta?: string
   texto?: string
+}
+
+export interface LivechatRatingAgente {
+  agenteId: number
+  agenteNombre: string | null
+  totalConversaciones: number
+  totalCalificadas: number
+  ratingPromedio: number | null
 }
 
 function pick(raw: Record<string, unknown>, ...keys: string[]): unknown {
@@ -173,6 +183,16 @@ export function parseLivechatConversacion(raw: Record<string, unknown>): Livecha
     campaniaId: pick(raw, 'campaniaId') != null ? Number(pick(raw, 'campaniaId')) : null,
     grupoId: pick(raw, 'grupoId') != null ? Number(pick(raw, 'grupoId')) : null,
     motivoCierreId: pick(raw, 'motivoCierreId') != null ? Number(pick(raw, 'motivoCierreId')) : null,
+  }
+}
+
+export function parseLivechatRatingAgente(raw: Record<string, unknown>): LivechatRatingAgente {
+  return {
+    agenteId: Number(pick(raw, 'agenteId') ?? 0),
+    agenteNombre: pick(raw, 'agenteNombre') ? String(pick(raw, 'agenteNombre')) : null,
+    totalConversaciones: Number(pick(raw, 'totalConversaciones') ?? 0),
+    totalCalificadas: Number(pick(raw, 'totalCalificadas') ?? 0),
+    ratingPromedio: pick(raw, 'ratingPromedio') != null ? Number(pick(raw, 'ratingPromedio')) : null,
   }
 }
 

@@ -58,6 +58,30 @@ export interface ReportePostulantes {
   sinTipificar: { total: number; masAntiguos: ReportePostulantesSinTipificar[] }
 }
 
+// ── Suite de reportes: listado de interacciones cerradas (buscador) ──
+export interface InteraccionItem {
+  id: number
+  clienteNombre: string | null
+  clienteTelefono: string | null
+  agenteId: number | null
+  agenteNombre: string | null
+  fechaInicio: string
+  fechaCierre: string | null
+  estado: string
+  canalNombre: string | null
+  campaniaNombre: string | null
+  tipificacionNombre: string | null
+}
+
+export interface InteraccionesFiltro {
+  texto?: string
+  agenteId?: number
+  tipificacionId?: number
+  campaniaId?: number
+  desde?: string
+  hasta?: string
+}
+
 // ── Suite de reportes: definiciones .rdl / .rdlc del catálogo ──
 import type { RdlDefinition } from '@/lib/rdl'
 

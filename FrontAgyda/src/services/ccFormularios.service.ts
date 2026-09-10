@@ -4,6 +4,7 @@ import type {
   CCFormCampoInput, CCFormTipoCampo, CCFormTipificacionesDelFormulario, CCFormInteraccionBuscada,
   CCFormBuscadorResultado, CCFormCanalDisponible, CCFormModo, CCFormPublicoDefinicion,
   CCFormAccionPost, CCFormAccionTipo, CCFormRespuestaInput, CCFormGuardarRespuestasResultado,
+  CCFormOpcion,
 } from '@/types/ccFormularios.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -70,6 +71,13 @@ export const ccFormulariosService = {
   listCanalesDisponibles: (formularioId: number) =>
     d<CCFormCanalDisponible[]>(api.get(`/contact-center/formularios/${formularioId}/canales-disponibles`)),
 
+  // Catálogo dinámico para un campo tipo 'catalogo' (ej. tipificaciones de
+  // la campaña) — usado en el constructor (previsualización) y en la
+  // atención real. Devuelve el mismo shape {valor, etiqueta} que las
+  // opciones estáticas para que el renderer no tenga que distinguir.
+  getOpcionesCatalogo: (formularioId: number, fuente: string) =>
+    d<CCFormOpcion[]>(api.get(`/contact-center/formularios/${formularioId}/opciones-catalogo`, { params: { fuente } })),
+
   // Interno/externo — la URL pública se arma en el frontend con
   // window.location.origin + esta ruta, el backend solo entrega el token.
   setModoFormulario: (formularioId: number, modo: CCFormModo) =>
@@ -112,4 +120,7 @@ export const ccFormularioPublicoService = {
     respuestas: CCFormRespuestaInput[]; clienteNombre?: string; clienteTelefono?: string; canalId?: number
     agenteId?: number | null; agenteNombre?: string | null
   }) => d<CCFormGuardarRespuestasResultado>(apiPublico.post(`/contact-center/formularios-publico/${token}/versiones/${versionId}/respuestas`, body)),
+
+  getOpcionesCatalogo: (token: string, fuente: string) =>
+    d<CCFormOpcion[]>(apiPublico.get(`/contact-center/formularios-publico/${token}/opciones-catalogo`, { params: { fuente } })),
 }

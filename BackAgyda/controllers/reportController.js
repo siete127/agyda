@@ -380,7 +380,7 @@ exports.getResumenGeneral = async (req, res) => {
       `).catch(() => ({ recordset: [] }));
     const quejasPorUser = Object.fromEntries(quejasResult.recordset.map((r) => [r.usuarioId, r.total]));
 
-    // 3. Pausas por tipo (statusId: 2=baño,3=comida,5=capacitación,6=permiso)
+    // 3. Pausas por tipo (statusId: 3=baño,2=comida,5=capacitación,6=permiso)
     const pausasResult = await pool.request()
       .input('fromDate', sql.NVarChar, fromDate)
       .input('toDate', sql.NVarChar, toDate)

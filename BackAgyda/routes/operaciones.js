@@ -15,6 +15,7 @@ router.get('/supervisores', auth.authenticateToken, controller.listSupervisores)
 router.post('/supervisores', auth.authenticateToken, controller.asignarSupervisor);
 router.delete('/supervisores/:id', auth.authenticateToken, controller.quitarSupervisor);
 router.get('/supervisores/mi-panel', auth.authenticateToken, controller.getMiPanel);
+router.get('/supervisores/historial-asignaciones', auth.authenticateToken, controller.getHistorialAsignaciones);
 router.get('/supervisores/productividad', auth.authenticateToken, controller.getProductividadDia);
 
 // Tiempos
@@ -33,6 +34,10 @@ router.delete('/metas/:id', auth.authenticateToken, controller.eliminarMeta);
 router.get('/reportes-diarios', auth.authenticateToken, controller.getReporteDiario);
 router.get('/reportes-postulantes', auth.authenticateToken, controller.getReportePostulantes);
 router.get('/reportes-postulantes/excel', auth.authenticateToken, controller.exportarReportePostulantes);
+
+// Interacciones cerradas — listado general con buscador (todas las campañas/canales)
+router.get('/interacciones', auth.authenticateToken, controller.listInteracciones);
+router.get('/interacciones/excel', auth.authenticateToken, controller.exportarInteracciones);
 
 // Suite de reportes — catálogo de definiciones .rdl / .rdlc de Reporting Services
 router.get('/suite-reportes/carpetas', auth.authenticateToken, controller.listRdlCarpetas);

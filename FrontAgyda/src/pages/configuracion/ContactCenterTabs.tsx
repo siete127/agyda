@@ -1386,7 +1386,7 @@ function AsignacionAgentesSkill({ grupoId, onChanged }: { grupoId: number; onCha
 // campaña, CC_CAMPANIAS_SUPERVISORES) o "skill" (un solo grupo, más granular,
 // CCO_GRUPO_SUPERVISORES) — ambas tablas comparten la misma forma de fila
 // { usuarioId, nombre }, así que la UI y el hook de mutación son idénticos.
-function AsignacionSupervisores({ nivel, id, onChanged }: { nivel: 'campania' | 'skill'; id: number; onChanged?: () => void }) {
+export function AsignacionSupervisores({ nivel, id, onChanged }: { nivel: 'campania' | 'skill'; id: number; onChanged?: () => void }) {
   const qc = useQueryClient()
   const queryKey = [nivel === 'campania' ? 'cc-supervisores-campania' : 'cc-supervisores-grupo', id]
   const { data: asignados = [] } = useQuery({

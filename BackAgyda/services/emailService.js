@@ -2108,6 +2108,114 @@ function _ofertaHtml(titulo, mensaje) {
   });
 }
 
+// Aviso de una solicitud creada por un visitante anónimo desde el formulario
+// público del sitio institucional (ver publicTicketController.js). Mismo
+// patrón que sendTicketNuevoGrupoEmail, pero con el contacto real del
+// visitante (no un usuario interno) y su propio módulo configurable
+// ('web_publica') para que el admin pueda elegir un grupo de destinatarios
+// distinto al de los tickets internos.
+async function sendSolicitudWebPublicaEmail({ ticketId, titulo, descripcion, contactoNombre, contactoEmail, contactoTelefono, tenantKey }) {
+  logger.debug('📧 [sendSolicitudWebPublicaEmail] Iniciando para ticket:', ticketId);
+
+  try {
+    if (!mailer) {
+      console.warn('⚠️ [sendSolicitudWebPublicaEmail] SMTP no configurado. Email simulado');
+      return;
+    }
+
+    const baseRoot = EMAIL_BASE_URL.replace(/\/$/, '').replace(/\/api$/, '');
+    const verUrl = `${baseRoot}/tickets`;
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Nueva solicitud web</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+  <table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f4f4f4;">
+    <tr>
+      <td align="center" style="padding:40px 0;">
+        <table role="presentation" style="width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#1565C0 0%,#0D47A1 100%);padding:24px 30px;border-radius:8px 8px 0 0;color:#fff;text-align:center;">
+              <h1 style="margin:0;font-size:22px;font-weight:600;">🌐 Nueva solicitud desde el sitio web #${ticketId}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:30px;">
+              <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Un visitante anónimo del sitio público envió una solicitud de soporte:</p>
+              <table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f8f9fa;border-radius:6px;margin:16px 0;">
+                <tr><td style="padding:18px;">
+                  <table role="presentation" style="width:100%;border-collapse:collapse;">
+                    <tr><td style="padding:6px 0;color:#666;font-size:13px;width:35%;"><strong>📌 Título:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${titulo}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>👤 Nombre:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${contactoNombre || '-'}</td></tr>
+                    ${contactoEmail ? `<tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>✉️ Correo:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${contactoEmail}</td></tr>` : ''}
+                    ${contactoTelefono ? `<tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>📞 Teléfono:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${contactoTelefono}</td></tr>` : ''}
+                    <tr><td style="padding:6px 0;color:#666;font-size:13px;vertical-align:top;"><strong>📝 Descripción:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;white-space:pre-wrap;">${descripcion || '-'}</td></tr>
+                  </table>
+                </td></tr>
+              </table>
+              <div style="margin:24px 0;text-align:center;">
+                <a href="${verUrl}" style="background:#1565C0;color:#fff;text-decoration:none;padding:12px 22px;border-radius:6px;font-weight:600;display:inline-block;">🌐 Ver en AGYDA</a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f9fa;padding:16px 24px;text-align:center;border-radius:0 0 8px 8px;border-top:1px solid #e0e0e0;">
+              <p style="margin:0;color:#999;font-size:11px;line-height:1.5;">AGYDA ArdaBytec • Este es un correo automático, por favor no responder.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    const text = `Nueva solicitud desde el sitio web #${ticketId}\nTítulo: ${titulo}\nNombre: ${contactoNombre || '-'}\n${contactoEmail ? `Correo: ${contactoEmail}\n` : ''}${contactoTelefono ? `Teléfono: ${contactoTelefono}\n` : ''}Descripción: ${descripcion || '-'}\n\nVer en AGYDA: ${verUrl}`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
+
+    const { getDestinatariosCorreo, getDestinatariosTelegram, getDestinatariosUsuarios } = require('../controllers/notificacionesCorreoController');
+    const destinatarios = await getDestinatariosCorreo('web_publica', tenantKey);
+
+    for (const rcpt of destinatarios) {
+      try {
+        await mailer.sendMail({
+          from: fromWithName,
+          sender: EMAIL_FROM,
+          replyTo: contactoEmail || EMAIL_FROM,
+          to: rcpt,
+          subject: `Nueva solicitud web #${ticketId} - ${titulo}`,
+          text,
+          html,
+        });
+      } catch (err) {
+        console.error(`❌ [sendSolicitudWebPublicaEmail] Error enviando a ${rcpt}:`, err?.message);
+      }
+    }
+
+    // Telegram — mismo aviso, texto plano.
+    const chatIds = await getDestinatariosTelegram('web_publica', tenantKey);
+    if (chatIds.length) {
+      const telegramService = require('./telegramService');
+      const texto = `🌐 <b>Nueva solicitud desde el sitio web #${ticketId}</b>\n\n📌 Título: ${titulo}\n👤 Nombre: ${contactoNombre || '-'}\n${contactoEmail ? `✉️ Correo: ${contactoEmail}\n` : ''}${contactoTelefono ? `📞 Teléfono: ${contactoTelefono}\n` : ''}\n🌐 Ver: ${verUrl}`;
+      await telegramService.sendToMany(chatIds, texto);
+    }
+
+    // Push del navegador — mismos destinatarios configurados para el módulo.
+    const pushService = require('./pushService');
+    const destinatariosPush = await getDestinatariosUsuarios('web_publica', tenantKey);
+    if (destinatariosPush.length) {
+      await pushService.enviarAVariosPorTenant(tenantKey, destinatariosPush.map((d) => d.id), {
+        titulo: `Nueva solicitud web #${ticketId}`,
+        cuerpo: `${contactoNombre || 'Un visitante'} envió: ${titulo}`,
+        url: '/tickets',
+        tag: `solicitud-web-${ticketId}`,
+      });
+    }
+  } catch (err) {
+    console.error('❌ [sendSolicitudWebPublicaEmail] Error general:', err);
+  }
+}
+
 module.exports = {
   initialize,
   sendPermisoEmail,
@@ -2140,5 +2248,6 @@ module.exports = {
   sendReporteIndicadoresEmail,
   sendTicketNotificacionEmail,
   sendTicketNuevoGrupoEmail,
+  sendSolicitudWebPublicaEmail,
   getTransporteActivo,
 };

@@ -6,7 +6,7 @@ import {
   FolderTree, FileBarChart, Folder, FolderOpen, ChevronRight, Upload, RefreshCw,
   Download, Trash2, Database, Table2, SlidersHorizontal, FileCode2, AlertTriangle,
   CheckCircle2, ClipboardList, Users, BarChart2, X, FolderPlus, Pencil, Shield,
-  Lock, Globe, Check, Wrench,
+  Lock, Globe, Check, Wrench, Search, Loader2,
 } from 'lucide-react'
 import { api, getApiError } from '@/lib/axios'
 import { reporteDiarioService } from '@/services/reporteDiario.service'
@@ -63,6 +63,7 @@ function useUsuarios() {
 // Reportes operativos "de fábrica" — siempre presentes, no vienen de un .rdl.
 const REPORTES_BASE = [
   { id: 'postulantes', carpeta: 'Operación', nombre: 'Reportería de postulantes', descripcion: 'Volumen, tipificación y fugas por rango de fechas.', icon: ClipboardList },
+  { id: 'interacciones', carpeta: 'Operación', nombre: 'Interacciones', descripcion: 'Buscador de interacciones cerradas — todas las campañas y canales.', icon: Search },
 ] as const
 
 type SeleccionBase = { tipo: 'base'; id: string }
@@ -331,6 +332,7 @@ export function SuiteReportesPage() {
         {/* ── Panel derecho: visor ── */}
         <main className="flex-1 overflow-y-auto bg-white p-5">
           {sel?.tipo === 'base' && sel.id === 'postulantes' && <ReportePostulantesView />}
+          {sel?.tipo === 'base' && sel.id === 'interacciones' && <InteraccionesView />}
 
           {sel?.tipo === 'builder' && (
             <ReportBuilder onGuardar={(def, origen) => setGuardarBuilderOpen({ def, origen })} />
@@ -910,6 +912,141 @@ function ReportePostulantesView() {
             )}
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+/* ══════════ Interacciones — buscador general (todas las campañas/canales) ══════════ */
+
+function InteraccionesView() {
+  const [texto, setTexto] = useState('')
+  const [textoBuscado, setTextoBuscado] = useState('')
+  const [agenteId, setAgenteId] = useState<number | ''>('')
+  const [tipificacionId, setTipificacionId] = useState<number | ''>('')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
+
+  const { data: agentes = [] } = useQuery({
+    queryKey: ['rb-catalogo-filtro', 'agente'],
+    queryFn: () => reporteDiarioService.builderCatalogoFiltro('agente'),
+    staleTime: 5 * 60_000,
+  })
+  const { data: tipificaciones = [] } = useQuery({
+    queryKey: ['rb-catalogo-filtro', 'tipificacion'],
+    queryFn: () => reporteDiarioService.builderCatalogoFiltro('tipificacion'),
+    staleTime: 5 * 60_000,
+  })
+
+  const filtro = {
+    texto: textoBuscado || undefined,
+    agenteId: agenteId || undefined,
+    tipificacionId: tipificacionId || undefined,
+    desde: desde || undefined,
+    hasta: hasta || undefined,
+  }
+
+  const { data: resultados = [], isLoading, isFetching } = useQuery({
+    queryKey: ['suite-reportes-interacciones', filtro],
+    queryFn: () => reporteDiarioService.listInteracciones(filtro),
+  })
+
+  const buscar = () => setTextoBuscado(texto.trim())
+  const hayFiltrosExtra = !!(agenteId || tipificacionId || desde || hasta)
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="flex items-center gap-2 text-base font-bold text-ink">
+          <Search className="h-4.5 w-4.5 text-brand" /> Interacciones
+        </h2>
+        <p className="text-xs text-gray-500">Interacciones cerradas de todas las campañas y canales — busca por nombre o teléfono del cliente.</p>
+      </div>
+
+      <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && buscar()}
+            className="field flex-1"
+            placeholder="Buscar por nombre o teléfono del cliente…"
+          />
+          <button
+            onClick={buscar}
+            disabled={isFetching}
+            className="flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:opacity-50"
+          >
+            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Buscar
+          </button>
+          <a
+            href={reporteDiarioService.interaccionesExcelUrl(filtro)}
+            className="flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-ink-secondary transition hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4" /> Excel
+          </a>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select className="field" value={agenteId} onChange={(e) => setAgenteId(e.target.value ? Number(e.target.value) : '')}>
+            <option value="">Todos los agentes</option>
+            {agentes.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+          </select>
+          <select className="field" value={tipificacionId} onChange={(e) => setTipificacionId(e.target.value ? Number(e.target.value) : '')}>
+            <option value="">Todas las tipificaciones</option>
+            {tipificaciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+          </select>
+          <span className="text-[0.72rem] text-ink-secondary">Cierre desde</span>
+          <input type="date" className="field" value={desde} onChange={(e) => setDesde(e.target.value)} max={hasta || undefined} />
+          <span className="text-[0.72rem] text-ink-secondary">hasta</span>
+          <input type="date" className="field" value={hasta} onChange={(e) => setHasta(e.target.value)} min={desde || undefined} />
+          {hayFiltrosExtra && (
+            <button
+              onClick={() => { setAgenteId(''); setTipificacionId(''); setDesde(''); setHasta('') }}
+              className="flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[0.7rem] font-semibold text-ink-tertiary hover:bg-gray-50"
+            >
+              <X className="h-3 w-3" /> Limpiar filtros
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="w-full text-left text-[0.78rem]">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50 text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+              <th className="px-3 py-2.5">Cliente</th>
+              <th className="px-3 py-2.5">Teléfono</th>
+              <th className="px-3 py-2.5">Campaña</th>
+              <th className="px-3 py-2.5">Canal</th>
+              <th className="px-3 py-2.5">Agente</th>
+              <th className="px-3 py-2.5">Tipificación</th>
+              <th className="px-3 py-2.5">Cierre</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={7} className="py-10"><div className="flex justify-center"><Spinner /></div></td></tr>
+            ) : resultados.length === 0 ? (
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-ink-tertiary">Sin resultados.</td></tr>
+            ) : (
+              resultados.map((r) => (
+                <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                  <td className="px-3 py-2 font-semibold text-ink">{r.clienteNombre ?? '—'}</td>
+                  <td className="px-3 py-2 text-ink-secondary">{r.clienteTelefono ?? '—'}</td>
+                  <td className="px-3 py-2 text-ink-secondary">{r.campaniaNombre ?? '—'}</td>
+                  <td className="px-3 py-2 text-ink-secondary">{r.canalNombre ?? '—'}</td>
+                  <td className="px-3 py-2 text-ink-secondary">{r.agenteNombre ?? '—'}</td>
+                  <td className="px-3 py-2 text-ink-secondary">{r.tipificacionNombre ?? '—'}</td>
+                  <td className="px-3 py-2 text-ink-tertiary">{r.fechaCierre ? new Date(r.fechaCierre).toLocaleString('es-MX') : '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      {resultados.length >= 300 && (
+        <p className="text-[0.72rem] text-amber-600">Mostrando los 300 resultados más recientes — afina el buscador o el rango de fechas para ver menos.</p>
       )}
     </div>
   )

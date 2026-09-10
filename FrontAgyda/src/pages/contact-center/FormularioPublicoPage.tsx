@@ -36,6 +36,17 @@ export default function FormularioPublicoPage() {
     queryFn: () => ccFormularioPublicoService.listCanalesDisponibles(token!),
     enabled: !!token,
   })
+  // Screen-pop: mismo espíritu que CRMPublicPage.tsx — VICIdial solo manda
+  // el teléfono del que llama (?cliente=), nunca su nombre. Buscamos ese
+  // teléfono en el histórico de la campaña (mismas fuentes que el campo
+  // 'buscador': postulantes + interacciones) para traer el nombre real si
+  // ya existe un registro previo con ese número.
+  const { data: matchCliente } = useQuery({
+    queryKey: ['ccf-publico-screenpop', token, cliente],
+    queryFn: () => ccFormularioPublicoService.buscar(token!, cliente),
+    enabled: !!token && !!cliente,
+    select: (rs) => rs[0] ?? null,
+  })
 
   const [valores, setValores] = useState<Record<number, unknown>>({})
   const [clienteNombre, setClienteNombre] = useState('')
@@ -44,8 +55,44 @@ export default function FormularioPublicoPage() {
 
   const setValor = (campoId: number, valor: unknown) => setValores((v) => ({ ...v, [campoId]: valor }))
 
+  // Precarga los campos "Nombre"/"Teléfono" del formulario en cuanto se
+  // resuelven la definición y (si aplica) el match del screen-pop — sin
+  // tocar la estructura del formulario: detecta el campo por TIPO
+  // (telefono / primer texto_corto), no por un código específico, para que
+  // funcione igual en cualquier formulario externo, no solo en este.
+  useEffect(() => {
+    if (!def) return
+    const campos = def.secciones.flatMap((s) => s.campos)
+    const campoTelefono = campos.find((c) => c.tipo === 'telefono')
+    const campoNombre = campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+      ?? campos.find((c) => c.tipo === 'texto_corto')
+
+    setValores((v) => {
+      const next = { ...v }
+      if (campoTelefono && next[campoTelefono.id] === undefined && cliente) next[campoTelefono.id] = cliente
+      if (campoNombre && next[campoNombre.id] === undefined && matchCliente?.clienteNombre) next[campoNombre.id] = matchCliente.clienteNombre
+      return next
+    })
+    if (matchCliente?.clienteNombre && !clienteNombre) setClienteNombre(matchCliente.clienteNombre)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [def, matchCliente, cliente])
+
   const camposCapturables = (def?.secciones.flatMap((s) => s.campos) ?? []).filter((c) => !['titulo', 'separador', 'buscador'].includes(c.tipo))
   const faltantes = camposCapturables.filter((c) => c.obligatorio && !valores[c.id] && valores[c.id] !== 0)
+
+  // Al elegir un resultado del campo 'buscador' (mismo criterio que el panel
+  // interno) — el canal no se vuelca aquí porque en modo externo no hay
+  // selector visible de canal: siempre se usa canales[0] al guardar.
+  const usarResultadoBuscador = (r: CCFormBuscadorResultado) => {
+    if (r.clienteNombre) setClienteNombre(r.clienteNombre)
+    if (r.clienteTelefono) setClienteTelefono(r.clienteTelefono)
+    const campos = def?.secciones.flatMap((s) => s.campos) ?? []
+    const campoNombre = campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+      ?? campos.find((c) => c.tipo === 'texto_corto')
+    const campoTelefono = campos.find((c) => c.tipo === 'telefono')
+    if (campoNombre && r.clienteNombre) setValor(campoNombre.id, r.clienteNombre)
+    if (campoTelefono && r.clienteTelefono) setValor(campoTelefono.id, r.clienteTelefono)
+  }
 
   const guardar = useMutation({
     mutationFn: () => ccFormularioPublicoService.guardarRespuestas(token!, def!.versionId, {
@@ -106,8 +153,8 @@ export default function FormularioPublicoPage() {
 
           <div className="space-y-5">
             {def.secciones.map((s) => (
-              <SeccionPublica key={s.id} seccion={s} token={token!} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
-                valores={valores} onChange={setValor} />
+              <SeccionPublica key={s.id} seccion={s} token={token!} formularioId={def.formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
+                valores={valores} onChange={setValor} onSeleccionarBuscador={usarResultadoBuscador} />
             ))}
           </div>
 
@@ -179,9 +226,10 @@ function AccionesPostGuardadoPantalla({ interaccionId, acciones }: { interaccion
   )
 }
 
-function SeccionPublica({ seccion, token, cliente, agenteId, agenteNombre, valores, onChange }: {
-  seccion: CCFormPublicoSeccion; token: string; cliente: string; agenteId: number | null; agenteNombre: string
+function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador }: {
+  seccion: CCFormPublicoSeccion; token: string; formularioId: number; cliente: string; agenteId: number | null; agenteNombre: string
   valores: Record<number, unknown>; onChange: (campoId: number, valor: unknown) => void
+  onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
 }) {
   return (
     <div>
@@ -190,8 +238,8 @@ function SeccionPublica({ seccion, token, cliente, agenteId, agenteNombre, valor
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {seccion.campos.map((c) => (
           <div key={c.id} className={c.ancho === 'completo' || c.tipo === 'buscador' ? 'sm:col-span-2' : ''}>
-            <CampoPublico campo={c} token={token} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
-              valor={valores[c.id]} onChange={(v) => onChange(c.id, v)} />
+            <CampoPublico campo={c} token={token} formularioId={formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
+              valor={valores[c.id]} onChange={(v) => onChange(c.id, v)} onSeleccionarBuscador={onSeleccionarBuscador} />
           </div>
         ))}
       </div>
@@ -199,14 +247,55 @@ function SeccionPublica({ seccion, token, cliente, agenteId, agenteNombre, valor
   )
 }
 
-function CampoPublico({ campo, token, cliente, agenteId, agenteNombre, valor, onChange }: {
-  campo: CCFormPublicoCampo; token: string; cliente: string; agenteId: number | null; agenteNombre: string
-  valor: unknown; onChange: (v: unknown) => void
+// Mismo criterio que valorAutocompletado en CCFormulariosTab.tsx (panel
+// admin) — duplicado a propósito porque son dos páginas sin relación de
+// import entre sí (una vive dentro del layout de AGYDA, otra es pública),
+// pero deben calcular el mismo valor para el mismo config.autocompletar.
+function valorAutocompletadoPublico(campo: CCFormPublicoCampo, agenteNombre: string): string | null {
+  // 'usuario_agente' siempre se autocompleta — en modo externo con el
+  // ?agente= que VICIdial manda en la URL (mismo criterio que
+  // valorAutocompletado en CCFormulariosTab.tsx para el panel interno).
+  if (campo.tipo === 'usuario_agente') return agenteNombre || ''
+
+  let cfg: any = {}
+  try { cfg = campo.configJson ? JSON.parse(campo.configJson) : {} } catch { /* ignorar JSON inválido */ }
+  if (cfg.autocompletar === 'fecha_actual') {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    if (campo.tipo === 'fecha') return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    if (campo.tipo === 'fecha_hora') return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+    return now.toLocaleString('es-MX')
+  }
+  // En modo externo "el usuario que tiene la sesión" es el agente de
+  // VICIdial identificado por ?agente= en la URL — no hay sesión de AGYDA.
+  if (cfg.autocompletar === 'usuario_actual') return agenteNombre || ''
+  return null
+}
+
+function CampoPublico({ campo, token, formularioId, cliente, agenteId, agenteNombre, valor, onChange, onSeleccionarBuscador }: {
+  campo: CCFormPublicoCampo; token: string; formularioId: number; cliente: string; agenteId: number | null; agenteNombre: string
+  valor: unknown; onChange: (v: unknown) => void; onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
 }) {
+  useEffect(() => {
+    if (valor !== undefined) return
+    const auto = valorAutocompletadoPublico(campo, agenteNombre)
+    if (auto !== null) onChange(auto)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [opcionesDinamicas, setOpcionesDinamicas] = useState<{ valor: string; etiqueta: string }[] | null>(null)
+  useEffect(() => {
+    if (campo.tipo !== 'catalogo' || !campo.catalogoFuente || campo.catalogoFuente === 'estatico') return
+    let cancelado = false
+    ccFormularioPublicoService.getOpcionesCatalogo(token, campo.catalogoFuente).then((data) => { if (!cancelado) setOpcionesDinamicas(data) }).catch(() => {})
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campo.catalogoFuente])
+
   if (campo.tipo === 'titulo') return <p className="pt-2 text-sm font-bold text-gray-900">{campo.etiqueta}</p>
   if (campo.tipo === 'separador') return <hr className="my-2 border-gray-200" />
   if (campo.tipo === 'buscador') {
-    return <BuscadorPublico campo={campo} token={token} clienteInicial={cliente} agenteId={agenteId} agenteNombre={agenteNombre} />
+    return <BuscadorPublico campo={campo} token={token} clienteInicial={cliente} agenteId={agenteId} agenteNombre={agenteNombre} onSeleccionar={onSeleccionarBuscador} />
   }
 
   const etiqueta = <span className={label}>{campo.etiqueta} {campo.obligatorio && <span className="text-red-500">*</span>}</span>
@@ -223,12 +312,15 @@ function CampoPublico({ campo, token, cliente, agenteId, agenteNombre, valor, on
       </label>
     )
   }
-  if (['lista', 'radio'].includes(campo.tipo)) {
+  if (['lista', 'radio', 'catalogo'].includes(campo.tipo)) {
+    const opciones = campo.tipo === 'catalogo' && campo.catalogoFuente && campo.catalogoFuente !== 'estatico'
+      ? (opcionesDinamicas ?? [])
+      : campo.opciones
     return (
       <label>{etiqueta}
         <select className={field} value={(valor as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
-          <option value="">Selecciona…</option>
-          {campo.opciones.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+          <option value="">{opcionesDinamicas === null && campo.tipo === 'catalogo' && campo.catalogoFuente !== 'estatico' ? 'Cargando…' : 'Selecciona…'}</option>
+          {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
         </select>
       </label>
     )
@@ -271,8 +363,9 @@ function CampoPublico({ campo, token, cliente, agenteId, agenteNombre, valor, on
 // Mismo comportamiento que BuscadorCampoRuntime del panel admin (buscar en
 // el histórico, registrar si no se encuentra), pero contra los endpoints
 // públicos y precargando el teléfono del query param ?cliente= de VICIdial.
-function BuscadorPublico({ campo, token, clienteInicial, agenteId, agenteNombre }: {
+function BuscadorPublico({ campo, token, clienteInicial, agenteId, agenteNombre, onSeleccionar }: {
   campo: CCFormPublicoCampo; token: string; clienteInicial: string; agenteId: number | null; agenteNombre: string
+  onSeleccionar?: (r: CCFormBuscadorResultado) => void
 }) {
   const qc = useQueryClient()
   const [texto, setTexto] = useState(clienteInicial)
@@ -280,6 +373,7 @@ function BuscadorPublico({ campo, token, clienteInicial, agenteId, agenteNombre 
   // caracteres) — antes solo buscaba con Enter/clic en la lupa.
   const [buscar, setBuscar] = useState('')
   const [registrando, setRegistrando] = useState(false)
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null)
 
   useEffect(() => {
     const t = texto.trim()
@@ -319,18 +413,34 @@ function BuscadorPublico({ campo, token, clienteInicial, agenteId, agenteNombre 
 
       {isFetched && (
         <div className="mt-3 space-y-1.5">
-          {resultados.map((r: CCFormBuscadorResultado) => (
-            <div key={`${r.origen}-${r.id}`} className="rounded-lg border border-gray-100 px-3 py-2 text-[0.78rem]">
-              <div className="flex items-center gap-1.5">
-                <p className="font-semibold text-gray-900">{r.clienteNombre ?? '—'} <span className="font-normal text-gray-400">· {r.clienteTelefono ?? '—'}</span></p>
-                <span className={clsx('flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold',
-                  r.origen === 'postulante' ? 'bg-cyan-100 text-cyan-700' : 'bg-violet-100 text-violet-700')}>
-                  {r.origen === 'postulante' ? 'Postulante' : 'Interacción'}
-                </span>
+          {resultados.map((r: CCFormBuscadorResultado) => {
+            const claveResultado = `${r.origen}-${r.id}`
+            const yaSeleccionado = seleccionadoId === claveResultado
+            return (
+              <div key={claveResultado} className={clsx('flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[0.78rem]', yaSeleccionado ? 'border-emerald-200 bg-emerald-50' : 'border-gray-100')}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate font-semibold text-gray-900">{r.clienteNombre ?? '—'} <span className="font-normal text-gray-400">· {r.clienteTelefono ?? '—'}</span></p>
+                    <span className={clsx('flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold',
+                      r.origen === 'postulante' ? 'bg-cyan-100 text-cyan-700' : 'bg-violet-100 text-violet-700')}>
+                      {r.origen === 'postulante' ? 'Postulante' : 'Interacción'}
+                    </span>
+                  </div>
+                  <p className="truncate text-[0.68rem] text-gray-400">{r.canalNombre ?? '—'} · {r.tipificacionNombre ?? 'sin tipificar'} · {r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : ''}</p>
+                </div>
+                {onSeleccionar && (
+                  <button
+                    onClick={() => { onSeleccionar(r); setSeleccionadoId(claveResultado); toast.success('Datos aplicados al formulario') }}
+                    className={clsx(
+                      'flex flex-shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[0.72rem] font-semibold transition',
+                      yaSeleccionado ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-50 text-violet-700 hover:bg-violet-100',
+                    )}>
+                    {yaSeleccionado ? <Check className="h-3.5 w-3.5" /> : null} {yaSeleccionado ? 'Usado' : 'Seleccionar'}
+                  </button>
+                )}
               </div>
-              <p className="text-[0.68rem] text-gray-400">{r.canalNombre ?? '—'} · {r.tipificacionNombre ?? 'sin tipificar'} · {r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : ''}</p>
-            </div>
-          ))}
+            )
+          })}
           {!resultados.length && !registrando && (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2.5">
               <p className="text-[0.78rem] text-gray-500">No se encontró ningún registro para "{buscar}".</p>

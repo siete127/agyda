@@ -356,7 +356,7 @@ export const router = createBrowserRouter([
             children: [{ path: '/webphone', element: wrap(<WebphonePage />) }],
           },
           {
-            element: <RoleRoute allowedRoles={['AD', 'CC']} />,
+            element: <RoleRoute allowedRoles={['AD', 'TI', 'CC']} />,
             children: [
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
               { element: <ModuleRoute moduleKey="contact-center" />, children: [
