@@ -2055,6 +2055,12 @@ BEGIN
   );
   CREATE INDEX IX_CRM_INT_OPO ON dbo.CRM_INTERACCIONES(INT_OPO_ID);
 END`,
+    // Dedup del lead del chatbot / formulario web: buscar contacto existente por
+    // correo o teléfono. Filtrados — no pesan sobre filas sin ese dato.
+    `IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CRM_CONTACTOS_CORREO' AND object_id = OBJECT_ID('dbo.CRM_CONTACTOS'))
+  CREATE INDEX IX_CRM_CONTACTOS_CORREO ON dbo.CRM_CONTACTOS(CONT_CORREO) WHERE CONT_CORREO IS NOT NULL;`,
+    `IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CRM_CONTACTOS_TELEFONO' AND object_id = OBJECT_ID('dbo.CRM_CONTACTOS'))
+  CREATE INDEX IX_CRM_CONTACTOS_TELEFONO ON dbo.CRM_CONTACTOS(CONT_TELEFONO) WHERE CONT_TELEFONO IS NOT NULL;`,
   ];
   for (const batch of batches) {
     try {

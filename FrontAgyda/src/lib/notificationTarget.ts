@@ -77,7 +77,7 @@ export function notificationTarget(n: NotificationItem): string | null {
 
   // Seguimiento activo a clientes
   if (tipo === 'cliente-tarea-vence' || tipo === 'cliente-seguimiento-hoy') return '/atencion-cliente/clientes?tab=mi-agenda'
-  if (tipo === 'cliente-inactivo' || tipo === 'cliente-nuevo-asignado' || tipo === 'cliente-tarea-asignada') return '/atencion-cliente/clientes?tab=clientes'
+  if (tipo === 'cliente-inactivo' || tipo === 'cliente-nuevo-asignado' || tipo === 'cliente-tarea-asignada' || tipo === 'cliente-contacto-web') return '/atencion-cliente/clientes?tab=clientes'
   if (tipo === 'cliente-pago-por-vencer' || tipo === 'crm-recordatorio-pago' ||
       tipo === 'cliente-pago-confirmado' || tipo === 'cliente-fecha-importante') return '/crm-interno'
 

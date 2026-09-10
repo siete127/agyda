@@ -3082,6 +3082,7 @@
                     pedirConfirmacion: (nombre, contacto, empresaCargo, presupuesto) => `Perfecto. Voy a compartir tus datos con nuestro equipo:\n\n👤 ${nombre}\n📞 ${contacto}${empresaCargo ? `\n🏢 ${empresaCargo}` : ''}${presupuesto ? `\n💰 ${presupuesto}` : ''}\n\n¿Está todo correcto? Escribe "sí" para confirmar o "no" para corregir.`,
                     enviando: 'Enviando tus datos...',
                     enviado: '¡Listo! Un asesor de ARDABYTEC te contactará muy pronto. Gracias por escribirnos. 🙌',
+                    enviadoConsulta: '¡Listo! Registré tu consulta. Un asesor de ARDABYTEC te contactará. Gracias por escribirnos. 🙌',
                     errorEnvio: 'Hubo un problema enviando tus datos. Por favor intenta de nuevo en unos minutos, o escríbenos directo a través del formulario de contacto.',
                     reiniciar: 'Sin problema, empecemos de nuevo. ¿A qué correo o teléfono te contactamos?',
                     placeholder: 'Escribe tu mensaje...',
@@ -3119,6 +3120,7 @@
                     pedirConfirmacion: (nombre, contacto, empresaCargo, presupuesto) => `Great. I\'ll share your details with our team:\n\n👤 ${nombre}\n📞 ${contacto}${empresaCargo ? `\n🏢 ${empresaCargo}` : ''}${presupuesto ? `\n💰 ${presupuesto}` : ''}\n\nIs everything correct? Type "yes" to confirm or "no" to fix it.`,
                     enviando: 'Sending your info...',
                     enviado: 'All set! An ARDABYTEC advisor will reach out soon. Thanks for writing to us. 🙌',
+                    enviadoConsulta: 'All set! I logged your question. An ARDABYTEC advisor will reach out. Thanks for writing to us. 🙌',
                     errorEnvio: 'There was a problem sending your info. Please try again in a few minutes, or reach us through the contact form.',
                     reiniciar: 'No problem, let\'s start again. What email or phone number should we reach you at?',
                     placeholder: 'Type your message...',
@@ -3401,7 +3403,10 @@
                     if (!res.ok || json.ok === false) throw new Error(json.mensaje || 'Error al enviar');
                     enviadoOk = true;
                     enviarTelemetria('/api/chatbot/evento', { tipo: 'lead_enviado', sesionToken });
-                    await botDice(() => t().enviado, 500);
+                    // Si el backend no creó oportunidad (era solo una consulta o
+                    // el contacto ya tenía una abierta), el mensaje lo refleja.
+                    const soloConsulta = json.creoOportunidad === false;
+                    await botDice(() => (soloConsulta ? t().enviadoConsulta : t().enviado), 500);
                     try { sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ enviado: true })); } catch (e) {}
                 } catch (e) {
                     await botDice(() => t().errorEnvio, 400);
