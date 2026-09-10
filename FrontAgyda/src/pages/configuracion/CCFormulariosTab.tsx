@@ -598,7 +598,12 @@ function PreviewFormularioModal({ isOpen, onClose, version, formularioId }: { is
     if (r.clienteNombre) setClienteNombre(r.clienteNombre)
     if (r.clienteTelefono) setClienteTelefono(r.clienteTelefono)
     if (r.canalId) setCanalId(String(r.canalId))
-    const campoNombre = todosLosCampos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+    // Si el formulario separa Apellido paterno/Apellido materno/Nombre(s) en
+    // campos independientes, no se reparte el nombre completo entre ellos
+    // (no hay forma confiable de saber dónde corta cada parte) — solo se
+    // precarga clienteNombre, que sí llega completo a CI_CLIENTE_NOMBRE.
+    const tieneNombreEstructurado = todosLosCampos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`))
+    const campoNombre = tieneNombreEstructurado ? undefined : todosLosCampos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
       ?? todosLosCampos.find((c) => c.tipo === 'texto_corto')
     const campoTelefono = todosLosCampos.find((c) => c.tipo === 'telefono')
     if (campoNombre && r.clienteNombre) setValor(campoNombre.id, r.clienteNombre)

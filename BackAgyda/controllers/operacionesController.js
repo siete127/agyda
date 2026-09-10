@@ -807,6 +807,7 @@ async function getReporteEjecutivoReclutamiento(req, res) {
         ON horario.FIR_INTERACCION_ID = i.CI_ID AND horario.FIR_CAMPO_ID = @fHorario
       WHERE i.CI_CAMPANIA_ID = @campania
         AND i.CI_FECHA_INICIO >= @desde AND i.CI_FECHA_INICIO < DATEADD(DAY, 1, @hasta)
+        AND ISNULL(t.CT_ACTIVO, 1) = 1
       ORDER BY i.CI_FECHA_INICIO DESC
     `);
 

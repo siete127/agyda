@@ -1523,9 +1523,29 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
   // autocompletar (nunca por código específico, para que aplique a
   // cualquier formulario).
   const campoTelefono = camposValidos.recordset.find((c) => c.tipo === 'telefono');
-  const campoNombre = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
-    ?? camposValidos.recordset.find((c) => c.tipo === 'texto_corto');
   const respuestaDe = (campo) => campo && respuestasValidas.find((r) => Number(r.campoId) === campo.id)?.valor;
+
+  // Nombre del cliente: si el formulario separa Apellido paterno/Apellido
+  // materno/Nombre(s) en campos independientes (caso de Reclutamiento Totis,
+  // 2026-09-10 — se necesitaba ese orden fijo para "Gestión por asesor" y
+  // demás reportes), se arma "Paterno Materno Nombre(s)" a partir de esos 3.
+  // Si no existen esos campos, cae al criterio viejo de un solo campo tipo
+  // texto_corto con "nombre"/"interesado" en código o etiqueta, para no
+  // romper formularios ya existentes que no separan el nombre así.
+  const campoApellidoPaterno = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /apellido.?paterno/i.test(`${c.codigo} ${c.etiqueta}`));
+  const campoApellidoMaterno = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`));
+  const campoNombrePila = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /^nombre(s)?$|nombre.?\(?s\)?$/i.test(`${c.codigo} ${c.etiqueta}`.trim()));
+  const nombreEstructurado = () => {
+    if (!campoApellidoPaterno && !campoApellidoMaterno && !campoNombrePila) return null;
+    const partes = [respuestaDe(campoApellidoPaterno), respuestaDe(campoApellidoMaterno), respuestaDe(campoNombrePila)]
+      .map((v) => String(v || '').trim()).filter(Boolean);
+    return partes.length ? partes.join(' ') : null;
+  };
+  const campoNombre = campoApellidoPaterno || campoApellidoMaterno || campoNombrePila
+    ? null
+    : camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+      ?? camposValidos.recordset.find((c) => c.tipo === 'texto_corto');
+  const nombreDeRespuestas = () => nombreEstructurado() ?? respuestaDe(campoNombre);
 
   // Detecta el campo tipo 'catalogo' cuya fuente es 'tipificaciones_campania'
   // — su respuesta guarda el CT_ID (ver getOpcionesCatalogoDinamico: opciones
@@ -1552,7 +1572,7 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
       // crearRegistroCampoBuscador, validado dentro de esta misma
       // transacción para que "interacción creada sin respuestas" nunca
       // quede como estado intermedio si algo falla después.
-      const clienteNombre = String(b.clienteNombre || respuestaDe(campoNombre) || '').trim();
+      const clienteNombre = String(b.clienteNombre || nombreDeRespuestas() || '').trim();
       const clienteTelefono = String(b.clienteTelefono || respuestaDe(campoTelefono) || '').trim();
       const canalId = Number(b.canalId);
       if (!canalId) { await tx.rollback(); return { error: [400, 'Falta el canal'] }; }
@@ -1616,7 +1636,7 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
         }
       }
 
-      const nombreNuevo = String(b.clienteNombre || respuestaDe(campoNombre) || '').trim();
+      const nombreNuevo = String(b.clienteNombre || nombreDeRespuestas() || '').trim();
       const telefonoNuevo = String(b.clienteTelefono || respuestaDe(campoTelefono) || '').trim();
       // Solo rellena lo que esté vacío — nunca pisa un nombre/teléfono que
       // ya tenga la interacción (p.ej. capturado directo en el Buscador).
