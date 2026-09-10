@@ -1,5 +1,8 @@
 # Plan — Reorganización de la configuración del Chatbot (UX/IA)
 
+> **Estado: las 4 fases implementadas.**
+> Commits locales: `1e15f80` (F1), `da0f4c8` (F2), `9bf4f31` (F3), `e35610c` (F4).
+
 ## Contexto
 
 Hoy `/chatbot` (y su gemelo en Configuración → Tecnología) expone **5 pestañas
