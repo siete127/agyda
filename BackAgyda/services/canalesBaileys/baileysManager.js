@@ -292,4 +292,65 @@ function getSesionesDeCanal(canalId) {
     .map(([, s]) => ({ usuarioId: s.usuarioId, estado: s.estado, numero: s.numero || null }));
 }
 
-module.exports = { iniciarSesion, enviarTexto, enviarMedia, getEstado, cerrarSesion, getSesionesDeCanal };
+// Llamado una vez al arrancar el backend (ver server.js, después de
+// databaseService.initialize()). Bug real encontrado 2026-09-10: las
+// sesiones de Baileys solo viven en memoria (el Map `sesiones` de arriba) —
+// las credenciales sí persisten en disco (useMultiFileAuthState), pero tras
+// cualquier reinicio del proceso (deploy, crash) CN_BAILEYS_ESTADO /
+// CAS_BAILEYS_ESTADO se quedan en 'conectado' en la BD (última foto antes de
+// morir el proceso) mientras que en memoria no hay ningún socket real
+// escuchando — los mensajes entrantes de WhatsApp dejan de generar
+// interacciones sin ningún error visible, hasta que alguien vuelve a abrir
+// Configuración y reconecta manualmente. iniciarSesion reutiliza las
+// credenciales de sesionDir(), así que esto reconecta solo (sin pedir QR de
+// nuevo) salvo que la sesión haya sido cerrada desde el teléfono.
+async function reconectarSesionesGuardadas() {
+  try {
+    const databaseServiceLocal = require('../databaseService');
+    const { listTenants } = require('../../config/tenants');
+    const tenantKeys = listTenants().map((t) => t.key);
+
+    for (const tenantKey of tenantKeys) {
+      let pool;
+      try {
+        pool = await databaseServiceLocal.getPool(tenantKey);
+      } catch (_) {
+        continue;
+      }
+
+      // Canales compartidos: una sesión por canal, estado en CCO_CANALES.
+      const compartidos = await pool.request().query(`
+        SELECT CN_ID id FROM dbo.CCO_CANALES
+        WHERE CN_TIPO = 'whatsapp_baileys' AND CN_HABILITADO = 1
+          AND ISNULL(CN_MODO_SESION, 'compartido') = 'compartido'
+          AND CN_BAILEYS_ESTADO IS NOT NULL AND CN_BAILEYS_ESTADO <> 'desconectado'
+      `);
+      for (const row of compartidos.recordset) {
+        iniciarSesion(row.id, tenantKey, null).catch((e) =>
+          logger.error(`[baileys] reconexión al arrancar falló (canal ${row.id}):`, e?.message || e));
+      }
+
+      // Canales individuales: una sesión por agente, estado en CCO_CANAL_AGENTE_SESION.
+      const individuales = await pool.request().query(`
+        SELECT s.CAS_CANAL_ID canalId, s.CAS_USUARIO_ID usuarioId
+        FROM dbo.CCO_CANAL_AGENTE_SESION s
+        JOIN dbo.CCO_CANALES c ON c.CN_ID = s.CAS_CANAL_ID
+        WHERE c.CN_TIPO = 'whatsapp_baileys' AND c.CN_HABILITADO = 1
+          AND c.CN_MODO_SESION = 'individual'
+          AND s.CAS_BAILEYS_ESTADO IS NOT NULL AND s.CAS_BAILEYS_ESTADO <> 'desconectado'
+      `);
+      for (const row of individuales.recordset) {
+        iniciarSesion(row.canalId, tenantKey, row.usuarioId).catch((e) =>
+          logger.error(`[baileys] reconexión al arrancar falló (canal ${row.canalId}, usuario ${row.usuarioId}):`, e?.message || e));
+      }
+
+      if (compartidos.recordset.length || individuales.recordset.length) {
+        logger.info(`✅ Baileys: reconectando ${compartidos.recordset.length} sesión(es) compartida(s) y ${individuales.recordset.length} individual(es) tras arranque (tenant ${tenantKey || 'default'})`);
+      }
+    }
+  } catch (e) {
+    logger.error('[baileys] reconectarSesionesGuardadas falló:', e?.message || e);
+  }
+}
+
+module.exports = { iniciarSesion, enviarTexto, enviarMedia, getEstado, cerrarSesion, getSesionesDeCanal, reconectarSesionesGuardadas };
