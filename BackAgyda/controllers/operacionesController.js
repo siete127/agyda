@@ -4,6 +4,7 @@ const sql = require('mssql');
 const XLSX = require('xlsx');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
+const { logAudit } = require('../services/auditService');
 const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
 const { RDL_DIR } = require('../middleware/rdlUpload');
 const reportBuilderCatalog = require('../services/reportBuilderCatalog');
@@ -115,8 +116,10 @@ async function getDashboard(req, res) {
 
 /* ── Supervisores: asignación a campañas + panel de agentes con estado en vivo ── */
 
-// Estados de pausa según USUARIO_TIEMPOS.status_id (mismo mapeo que reportController.js)
-const PAUSA_LABELS = { 2: 'baño', 3: 'comida', 5: 'capacitación', 6: 'permiso' };
+// Estados de pausa según USUARIO_TIEMPOS.status_id — mismo mapeo que el botón
+// real que usa el agente (PerfilMenu.tsx: statusId 3 = Baño, 2 = Comida) y
+// que socketService.js al cerrar la pausa de baño (status_id = 3).
+const PAUSA_LABELS = { 3: 'baño', 2: 'comida', 5: 'capacitación', 6: 'permiso' };
 
 async function listSupervisores(req, res) {
   try {
@@ -152,6 +155,15 @@ async function asignarSupervisor(req, res) {
       .input('campaniaId', sql.Int, campaniaId)
       .input('supervisorId', sql.Int, supervisorId)
       .query('INSERT INTO CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@campaniaId, @supervisorId)');
+    const info = await pool.request().input('c', sql.Int, campaniaId).input('u', sql.Int, supervisorId).query(`
+      SELECT (SELECT CM2_NOMBRE FROM CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
+             (SELECT NEUS_NOMBRES FROM NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'asignar-supervisor-campania',
+      entidadId: campaniaId,
+      detalle: { campaniaId, campaniaNombre: info.recordset[0]?.campaniaNombre, supervisorId, supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.status(201).json({ success: true });
   } catch (err) {
     logger.error('operacionesController.asignarSupervisor', err);
@@ -163,7 +175,17 @@ async function quitarSupervisor(req, res) {
   try {
     const { id } = req.params;
     const pool = await databaseService.getPool(req.user?.empresa);
+    const info = await pool.request().input('id', sql.Int, id).query(`
+      SELECT cs.CS_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre, cs.CS_SUPERVISOR_ID supervisorId, u.NEUS_NOMBRES supervisorNombre
+      FROM CC_CAMPANIAS_SUPERVISORES cs
+      LEFT JOIN CCO_CAMPANIAS c ON c.CM2_ID = cs.CS_CAMPANIA_ID
+      LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
+      WHERE cs.CS_ID = @id`);
     await pool.request().input('id', sql.Int, id).query('DELETE FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_ID = @id');
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-campania',
+      entidadId: id, detalle: info.recordset[0] ?? {}, ip: req.ip,
+    });
     res.json({ success: true });
   } catch (err) {
     logger.error('operacionesController.quitarSupervisor', err);
@@ -318,6 +340,31 @@ async function getProductividadDia(req, res) {
         GROUP BY neus_id, status_id
       `);
 
+    // Promedio diario de pausas de los 7 días previos a la fecha consultada
+    // (sin incluirla) — sirve de referencia para detectar si un agente se
+    // está pasando de lo que acostumbra, no de un límite fijo del sistema.
+    const historicoRs = await pool.request()
+      .input('fecha', sql.NVarChar, fecha)
+      .query(`
+        SELECT neus_id as agenteId, CAST(fecha_inicio AS date) as dia,
+               SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutosDia
+        FROM USUARIO_TIEMPOS
+        WHERE neus_id IN (${agenteIds.join(',')})
+          AND status_id IN (2,3,5,6)
+          AND CAST(fecha_inicio AS date) >= DATEADD(DAY, -7, CAST(@fecha AS date))
+          AND CAST(fecha_inicio AS date) < CAST(@fecha AS date)
+        GROUP BY neus_id, CAST(fecha_inicio AS date)
+      `);
+    const diasPorAgente = new Map();
+    for (const h of historicoRs.recordset) {
+      if (!diasPorAgente.has(h.agenteId)) diasPorAgente.set(h.agenteId, []);
+      diasPorAgente.get(h.agenteId).push(h.minutosDia);
+    }
+    const avgSemanalPorAgente = new Map();
+    for (const [id, dias] of diasPorAgente) {
+      avgSemanalPorAgente.set(id, Math.round(dias.reduce((a, b) => a + b, 0) / dias.length));
+    }
+
     // Estado ACTUAL (independiente del acumulado de arriba) — misma lógica que
     // getMiPanel: una fila sin fecha_fin es la pausa en curso ahora mismo.
     const pausaActivaRs = await pool.request().query(`
@@ -352,12 +399,13 @@ async function getProductividadDia(req, res) {
         estado,
         tipoPausa: pausaActiva ? (PAUSA_LABELS[pausaActiva.statusId] ?? 'pausa') : null,
         ultimaConexion: est?.ultimaConexion ?? null,
+        avgSemanalMin: avgSemanalPorAgente.get(id) ?? null,
       });
     }
     for (const p of pausasRs.recordset) {
       const row = porAgente.get(p.agenteId);
       if (!row) continue;
-      const key = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' }[p.statusId];
+      const key = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' }[p.statusId];
       if (key) row[key] = p.minutos;
       row.totalPausaMin += p.minutos;
     }
@@ -475,7 +523,7 @@ async function getMiResumenAsesor(req, res) {
     const primeraEntrada = sesiones.length > 0 ? sesiones[0].fechaInicio : null;
     const pausaActiva = sesiones.find((s) => [2, 3, 5, 6].includes(s.statusId) && !s.fechaFin);
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
-    const TIPO_KEYS = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' };
+    const TIPO_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
     for (const s of sesiones) {
       const key = TIPO_KEYS[s.statusId];
       if (key) minutosPorTipo[key] += s.minutos;
@@ -650,7 +698,7 @@ async function getReporteDiario(req, res) {
         WHERE CAST(fecha_inicio AS date) = @fecha AND status_id IN (2,3,5,6)
         GROUP BY status_id
       `);
-    const PAUSA_KEYS = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' };
+    const PAUSA_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
     for (const p of pausasPorTipoRs.recordset) {
       const key = PAUSA_KEYS[p.statusId];
@@ -799,30 +847,51 @@ async function getReportePostulantes(req, res) {
   }
 }
 
-// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — mismo
-// reporte de arriba, en un .xlsx de 3 hojas (mismo patrón que
-// ccConfigController.exportarTipificacionesCampania).
+// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — un
+// renglón por postulante registrado en el rango, con su tipificación más
+// reciente (mismo criterio que _queryReportePostulantes usa para "Por
+// tipificación" en pantalla — OUTER APPLY TOP 1 por fecha de tipificación,
+// filtrado por fecha de REGISTRO del postulante, no de tipificación — así
+// los totales del Excel cuadran con los de la pantalla).
 async function exportarReportePostulantes(req, res) {
   try {
     const { desde, hasta } = _rangoFechas(req);
     const pool = await databaseService.getPool(req.user?.empresa);
-    const { porCampania, porTipificacion, sinTipificar } = await _queryReportePostulantes(pool, desde, hasta);
+
+    const r = await pool.request()
+      .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+      .query(`
+        SELECT
+          cp.CP_NOMBRE postulante,
+          cp.CP_TELEFONO telefono,
+          ult.WLT_TIPIFICACION tipificacion,
+          ult.WLT_OBSERVACIONES observaciones,
+          ult.WLT_EXTENSION extension,
+          ult.WLT_FECHA fecha
+        FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+        OUTER APPLY (
+          SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_EXTENSION, wlt.WLT_FECHA
+          FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+          WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+             OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+          ORDER BY wlt.WLT_FECHA DESC
+        ) ult
+        WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+        ORDER BY cp.CP_FECHA_REGISTRO DESC`);
+
+    const filas = r.recordset.map((row) => ({
+      Postulante: row.postulante,
+      Teléfono: row.telefono,
+      Tipificación: row.tipificacion ? (TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion) : 'Sin tipificar',
+      Observaciones: row.observaciones || '',
+      Extensión: row.extension || '',
+      Fecha: row.fecha ? new Date(row.fecha).toLocaleString('es-MX') : '',
+    }));
 
     const wb = XLSX.utils.book_new();
-
-    const hojaCampania = porCampania.map((r) => ({
-      Fecha: r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX') : '',
-      Campaña: r.campania, Total: r.total,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaCampania.length ? hojaCampania : [{ Fecha: '', Campaña: '', Total: '' }]), 'Por campaña');
-
-    const hojaTip = porTipificacion.map((r) => ({ Tipificación: r.etiqueta, Total: r.total }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaTip.length ? hojaTip : [{ Tipificación: '', Total: '' }]), 'Por tipificación');
-
-    const hojaSinTip = sinTipificar.masAntiguos.map((r) => ({
-      Nombre: r.nombre, Teléfono: r.telefono, Campaña: r.campania, 'Días esperando': r.diasEsperando,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaSinTip.length ? hojaSinTip : [{ Nombre: '', Teléfono: '', Campaña: '', 'Días esperando': '' }]), 'Sin tipificar');
+    const ws = XLSX.utils.json_to_sheet(filas.length ? filas : [{ Postulante: '', Teléfono: '', Tipificación: '', Observaciones: '', Extensión: '', Fecha: '' }]);
+    ws['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 26 }, { wch: 50 }, { wch: 10 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tipificaciones');
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -996,6 +1065,33 @@ async function getKpis(req, res) {
   } catch (err) {
     logger.error('operacionesController.getKpis', err);
     res.status(500).json({ success: false, message: 'Error al obtener los KPIs' });
+  }
+}
+
+// GET /api/operaciones/supervisores/historial-asignaciones — quién asignó o
+// quitó a qué supervisor de qué campaña/skill y cuándo (INTRANET_AUDITORIA,
+// módulo 'supervisores'). Accesible a cualquier supervisor autenticado —
+// a diferencia de /api/auditoria (solo rol AD), esto es historial del propio
+// módulo, no auditoría general del sistema.
+async function getHistorialAsignaciones(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT TOP 100 AUDIT_ID as id, USUARIO_NOMBRE as usuarioNombre, ACCION as accion,
+             DETALLE as detalle, FECHA as fecha
+      FROM INTRANET_AUDITORIA
+      WHERE MODULO = 'supervisores'
+      ORDER BY FECHA DESC
+    `);
+    const data = rs.recordset.map((r) => {
+      let detalle = null;
+      try { detalle = r.detalle ? JSON.parse(r.detalle) : null; } catch { /* detalle no parseable, se omite */ }
+      return { id: r.id, usuarioNombre: r.usuarioNombre, accion: r.accion, detalle, fecha: r.fecha };
+    });
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('operacionesController.getHistorialAsignaciones', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el historial de asignaciones' });
   }
 }
 
@@ -1626,6 +1722,7 @@ module.exports = {
   listInteracciones,
   exportarInteracciones,
   getMiResumenAsesor,
+  getHistorialAsignaciones,
   listRdl,
   subirRdl,
   descargarRdl,

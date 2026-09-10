@@ -7,6 +7,7 @@ const metaClient = require('../services/canalesMeta/metaClient');
 const baileysManager = require('../services/canalesBaileys/baileysManager');
 const fcaManager = require('../services/canalesFca/fcaManager');
 const igPrivateManager = require('../services/canalesIgPrivate/igPrivateManager');
+const { logAudit } = require('../services/auditService');
 
 function esAdmin(req) {
   return ['AD', 'TI'].includes(String(req.user?.tipoUsuario || '').toUpperCase());
@@ -552,6 +553,15 @@ exports.asignarSupervisorACampania = async (req, res) => {
     await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.body?.usuarioId)
       .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u)
               INSERT INTO dbo.CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@c, @u);`);
+    const info = await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.body?.usuarioId).query(`
+      SELECT (SELECT CM2_NOMBRE FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'asignar-supervisor-campania',
+      entidadId: req.params.id,
+      detalle: { campaniaId: Number(req.params.id), campaniaNombre: info.recordset[0]?.campaniaNombre, supervisorId: req.body?.usuarioId, supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -559,8 +569,17 @@ exports.quitarSupervisorDeCampania = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    const info = await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.params.usuarioId).query(`
+      SELECT (SELECT CM2_NOMBRE FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
     await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.params.usuarioId)
       .query(`DELETE FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-campania',
+      entidadId: req.params.id,
+      detalle: { campaniaId: Number(req.params.id), campaniaNombre: info.recordset[0]?.campaniaNombre, supervisorId: Number(req.params.usuarioId), supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -670,6 +689,15 @@ exports.asignarSupervisorAGrupo = async (req, res) => {
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId)
       .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u)
               INSERT INTO dbo.CCO_GRUPO_SUPERVISORES (GS_GRUPO_ID, GS_SUPERVISOR_ID) VALUES (@g, @u);`);
+    const info = await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId).query(`
+      SELECT (SELECT CG_NOMBRE FROM dbo.CCO_GRUPOS WHERE CG_ID = @g) grupoNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'asignar-supervisor-skill',
+      entidadId: req.params.grupoId,
+      detalle: { grupoId: Number(req.params.grupoId), grupoNombre: info.recordset[0]?.grupoNombre, supervisorId: req.body?.usuarioId, supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -677,8 +705,17 @@ exports.quitarSupervisorDeGrupo = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    const info = await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId).query(`
+      SELECT (SELECT CG_NOMBRE FROM dbo.CCO_GRUPOS WHERE CG_ID = @g) grupoNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId)
       .query(`DELETE FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-skill',
+      entidadId: req.params.grupoId,
+      detalle: { grupoId: Number(req.params.grupoId), grupoNombre: info.recordset[0]?.grupoNombre, supervisorId: Number(req.params.usuarioId), supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };

@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios'
-import type { SupervisorAsignacion, PanelSupervisor, ProductividadAgente } from '@/types/supervisores.types'
+import type { SupervisorAsignacion, PanelSupervisor, ProductividadAgente, HistorialAsignacion } from '@/types/supervisores.types'
 
 export const supervisoresService = {
   async getAsignaciones(): Promise<SupervisorAsignacion[]> {
@@ -23,5 +23,10 @@ export const supervisoresService = {
   async getProductividad(fecha?: string): Promise<ProductividadAgente[]> {
     const { data } = await api.get('/operaciones/supervisores/productividad', { params: fecha ? { fecha } : {} })
     return (data?.data ?? []) as ProductividadAgente[]
+  },
+
+  async getHistorialAsignaciones(): Promise<HistorialAsignacion[]> {
+    const { data } = await api.get('/operaciones/supervisores/historial-asignaciones')
+    return (data?.data ?? []) as HistorialAsignacion[]
   },
 }

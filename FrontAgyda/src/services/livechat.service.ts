@@ -11,6 +11,7 @@ import {
   parseLivechatGrupoAgente,
   parseLivechatPlantilla,
   parseLivechatMotivoCierre,
+  parseLivechatRatingAgente,
   type LivechatConversacion,
   type LivechatMensaje,
   type LivechatMiEstado,
@@ -23,6 +24,7 @@ import {
   type LivechatGrupoAgente,
   type LivechatPlantilla,
   type LivechatMotivoCierre,
+  type LivechatRatingAgente,
 } from '@/types/livechat.types'
 
 export const livechatService = {
@@ -107,6 +109,12 @@ export const livechatService = {
     const { data } = await api.get('/livechat/historial', { params: filtros })
     const list = Array.isArray(data) ? data : (data?.data ?? [])
     return (list as Record<string, unknown>[]).map(parseLivechatConversacion)
+  },
+
+  async getHistorialRatingPorAgente(filtros: LivechatHistorialFiltros = {}): Promise<LivechatRatingAgente[]> {
+    const { data } = await api.get('/livechat/historial/rating-por-agente', { params: filtros })
+    const list = Array.isArray(data) ? data : (data?.data ?? [])
+    return (list as Record<string, unknown>[]).map(parseLivechatRatingAgente)
   },
 
   async exportHistorialCsv(filtros: LivechatHistorialFiltros = {}): Promise<void> {

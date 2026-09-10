@@ -15,6 +15,7 @@ router.get('/supervisores', auth.authenticateToken, controller.listSupervisores)
 router.post('/supervisores', auth.authenticateToken, controller.asignarSupervisor);
 router.delete('/supervisores/:id', auth.authenticateToken, controller.quitarSupervisor);
 router.get('/supervisores/mi-panel', auth.authenticateToken, controller.getMiPanel);
+router.get('/supervisores/historial-asignaciones', auth.authenticateToken, controller.getHistorialAsignaciones);
 router.get('/supervisores/productividad', auth.authenticateToken, controller.getProductividadDia);
 
 // Tiempos
