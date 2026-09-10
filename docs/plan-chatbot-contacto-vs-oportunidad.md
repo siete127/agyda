@@ -1,5 +1,9 @@
 # Plan — Chatbot: contacto vs. oportunidad, con flujo ramificado y sin duplicados
 
+> **Estado: Fases 1, 2 y 3 implementadas.**
+> Commits locales: `9b36996` (F1 dedup), `725b9e9` (F2 genera por nodo + F3
+> chips/selector en el constructor).
+
 ## El problema
 
 Hoy el chatbot mezcla dos cosas que son distintas:
