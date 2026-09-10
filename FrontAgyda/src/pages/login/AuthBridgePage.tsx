@@ -56,7 +56,7 @@ export function AuthBridgePage() {
       if (existente === token && isAuthenticated && user) {
         localStorage.setItem('auth_token', token)
         getSocket()
-        navigate(user.tipoUsuario === 'CL' ? '/tickets' : '/dashboard', { replace: true })
+        navigate(user.tipoUsuario === 'CL' ? '/portal-cliente' : '/dashboard', { replace: true })
         return
       }
     }
@@ -94,7 +94,7 @@ export function AuthBridgePage() {
         setUser(user, token)
         getSocket()
         if (user.tipoUsuario === 'CL') {
-          navigate('/tickets', { replace: true })
+          navigate('/portal-cliente', { replace: true })
         } else {
           navigate('/dashboard', { replace: true })
         }
