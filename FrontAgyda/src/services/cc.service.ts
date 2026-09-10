@@ -65,6 +65,12 @@ export const ccService = {
   estadoBaileys: (id: number, usuarioId?: number) =>
     api.get(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
   cerrarBaileys: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/cerrar`).then((r) => r.data),
+  // Extiende hacia atrás el historial de las conversaciones que YA existen
+  // en AGYDA para este canal — Baileys no permite traer chats completamente
+  // nuevos sin reconectar el socket (lo que dispara un conflicto del lado
+  // de WhatsApp), así que solo alarga conversaciones con al menos 1 mensaje.
+  importarHistorialBaileys: (id: number, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/importar-historial`).then((r) => r.data as { success: boolean; data: { chatsConsultados: number; mensajesInsertados: number; chatsConError: number; quedanMasPorRevisar: boolean } }),
 
   // ── Messenger vía FCA (no oficial, vinculación pegando appstate.json) ──
   vincularFca: (id: number, appState: string, usuarioId?: number) =>

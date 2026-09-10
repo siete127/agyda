@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
-  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft,
+  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft, History,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -134,20 +134,23 @@ export function CCCanalesTab() {
 
 function CanalCard({ canal, grupos, campanias, onChanged }: any) {
   const [form, setForm] = useState({
-    nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
+    nombre: canal.nombre, habilitado: canal.habilitado, autoAsignar: canal.autoAsignar ?? false,
+    grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
     modoSesion: canal.modoSesion ?? 'compartido',
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
   const dirty =
     form.nombre !== canal.nombre || form.habilitado !== canal.habilitado ||
+    form.autoAsignar !== (canal.autoAsignar ?? false) ||
     form.grupoId !== (canal.grupoId ?? '') || form.campaniaId !== (canal.campaniaId ?? '') ||
     form.modoSesion !== (canal.modoSesion ?? 'compartido') ||
     form.metaPageId !== (canal.metaPageId ?? '') || form.metaBusinessId !== (canal.metaBusinessId ?? '') ||
     form.verifyToken !== (canal.verifyToken ?? '') || !!form.accessToken || !!form.appSecret
 
   const resetForm = () => setForm({
-    nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
+    nombre: canal.nombre, habilitado: canal.habilitado, autoAsignar: canal.autoAsignar ?? false,
+    grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
     modoSesion: canal.modoSesion ?? 'compartido',
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
@@ -155,7 +158,7 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
 
   const guardar = useMutation({
     mutationFn: () => ccService.updateCanal(canal.id, {
-      nombre: form.nombre, habilitado: form.habilitado,
+      nombre: form.nombre, habilitado: form.habilitado, autoAsignar: form.autoAsignar,
       grupoId: form.grupoId || null, campaniaId: form.campaniaId || null,
       modoSesion: form.modoSesion,
       metaPageId: form.metaPageId, metaBusinessId: form.metaBusinessId, verifyToken: form.verifyToken,
@@ -210,6 +213,13 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
             <select className={field} value={form.campaniaId} onChange={(e) => setForm({ ...form, campaniaId: e.target.value })}>
               <option value="">—</option>{campanias.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select></label>
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-2.5 sm:col-span-2">
+            <span>
+              <span className="block text-xs font-semibold text-ink">Auto-asignar al agente disponible</span>
+              <span className="block text-[0.7rem] text-ink-tertiary">Apagado (recomendado): toda conversación nueva cae a Bandeja de espera y el agente la toma manualmente. Prendido: se asigna sola al agente menos ocupado, sin pasar por la bandeja.</span>
+            </span>
+            <Switch checked={form.autoAsignar} onChange={(v) => setForm({ ...form, autoAsignar: v })} />
+          </label>
           {esNoOficial && (
             <label className="block sm:col-span-2">
               <span className={label}>Modo de conexión</span>
@@ -320,6 +330,16 @@ function BaileysQRPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged
     onSuccess: () => { setEstado('desconectado'); setQrDataUrl(null); setNumero(null); toast.success('Sesión cerrada'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
   })
+  const importarHistorial = useMutation({
+    mutationFn: () => ccService.importarHistorialBaileys(canal.id, usuarioId),
+    onSuccess: (r) => {
+      const d = r.data
+      const extra = d.quedanMasPorRevisar ? ' — quedan más conversaciones, dale click de nuevo para seguir' : ''
+      toast.success(`${d.chatsConsultados} conversación(es) revisada(s), ${d.mensajesInsertados} mensaje(s) nuevo(s) agregado(s)${d.chatsConError ? `, ${d.chatsConError} sin respuesta` : ''}${extra}`)
+      onChanged()
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo importar el historial'),
+  })
 
   return (
     <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
@@ -352,10 +372,18 @@ function BaileysQRPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged
           </button>
         )}
         {estado === 'conectado' && (
-          <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
-            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
-            <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <button
+              onClick={() => importarHistorial.mutate()}
+              disabled={importarHistorial.isPending}
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-sm hover:bg-gray-50 disabled:opacity-50">
+              {importarHistorial.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />} Importar historial
+            </button>
+            <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
+              className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
+              <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -711,7 +739,11 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
   const delC = useMutation({ mutationFn: () => ccService.deleteCampania(campania.id), onSuccess: onChanged })
 
   return (
-    <button type="button" onClick={onAbrir} className={clsx(cardBare, 'block w-full text-left transition hover:border-violet-200')}>
+    <div
+      role="button" tabIndex={0} onClick={onAbrir}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir() } }}
+      className={clsx(cardBare, 'block w-full cursor-pointer text-left transition hover:border-violet-200')}
+    >
       <div className="flex items-center justify-between gap-3 px-5 py-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <p className="truncate text-sm font-bold uppercase tracking-wide text-ink">{campania.nombre}</p>
@@ -722,7 +754,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
           <span className="hidden items-center gap-1.5 sm:flex"><Plug className="h-3.5 w-3.5" /> {campania.canalesCount} Canales</span>
           <span className="hidden items-center gap-1.5 sm:flex"><Layers className="h-3.5 w-3.5" /> {campania.skillsCount} Skills</span>
           <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setMenuAbierto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50">
+            <button type="button" onClick={() => setMenuAbierto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50">
               <MoreVertical className="h-4 w-4" />
             </button>
             {menuAbierto && (
@@ -730,6 +762,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
                 <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
                 <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-card py-1 shadow-lg">
                   <button
+                    type="button"
                     onClick={() => { setMenuAbierto(false); delC.mutate() }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-red-500 hover:bg-red-50"
                   >
@@ -742,7 +775,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
           <ChevronRight className="h-4 w-4 flex-shrink-0" />
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 

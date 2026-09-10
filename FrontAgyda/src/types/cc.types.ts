@@ -62,6 +62,10 @@ export interface CCCanal {
   tipo: CCCanalTipo
   nombre: string
   habilitado: boolean
+  // Opt-in (default false): si está apagado, una conversación nueva se
+  // queda en Bandeja de espera hasta que un agente la tome manualmente en
+  // vez de asignarse sola al agente disponible menos ocupado.
+  autoAsignar: boolean
   grupoId: number | null
   campaniaId: number | null
   modoSesion: CCModoSesion

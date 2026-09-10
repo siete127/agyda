@@ -127,6 +127,58 @@ async function descargarMediaFn(_canal, _metaMediaId, _url, media) {
   return { buffer, mime: media.mime };
 }
 
+// Mensaje fromMe: el propio número vinculado lo envió. Dos orígenes posibles,
+// indistinguibles para WhatsApp (ambos "yo mismo enviando"):
+//  - Eco de un mensaje que YA se guardó al mandarlo desde el panel de AGYDA
+//    (ccInteraccionesController.enviarMensaje) — se descarta por
+//    MG_META_MSG_ID, que ese flujo guarda con el mismo prefijo "baileys_".
+//  - Un mensaje mandado desde el celular directo, por fuera del panel — se
+//    registra igual (MG_EMISOR='agente', sin MG_AGENTE_ID porque no hay
+//    sesión de ningún usuario del sistema detrás) para no perder la
+//    trazabilidad de la conversación. Solo aplica si ya hay una interacción
+//    abierta para ese cliente — un fromMe no abre una interacción nueva, no
+//    tiene sentido "atender" una conversación que el cliente no inició.
+async function ingestarMensajeAgenteDirecto(pool, tenantKey, canal, msg) {
+  const metaMsgId = msg.key.id ? `baileys_${msg.key.id}` : null;
+  if (metaMsgId) {
+    const dup = await pool.request().input('m', sql.NVarChar(120), metaMsgId)
+      .query(`SELECT TOP 1 MG_ID FROM dbo.CCO_MENSAJES WHERE MG_META_MSG_ID = @m`);
+    if (dup.recordset[0]) return;
+  }
+
+  const jid = msg.key.remoteJid || '';
+  if (!jid) return;
+  const abierta = await pool.request()
+    .input('canal', sql.Int, canal.CN_ID).input('ext', sql.NVarChar(80), jid)
+    .query(`SELECT TOP 1 CI_ID as id FROM dbo.CCO_INTERACCIONES
+            WHERE CI_CANAL_ID = @canal AND CI_CLIENTE_EXT_ID = @ext
+              AND CI_ESTADO IN ('en_cola','activa','pendiente_tipificacion')
+            ORDER BY CI_ID DESC`);
+  const it = abierta.recordset[0];
+  if (!it) return; // sin interacción abierta, no hay dónde registrarlo
+
+  const { texto, media } = parseMensajeEntrante(msg);
+  let mediaId = null;
+  if (media) {
+    try {
+      const { buffer, mime } = await descargarMediaFn(canal, null, null, media);
+      mediaId = await ccIngest.guardarMedia(pool, { interaccionId: it.id, buffer, mime: media.mime || mime, nombreOriginal: media.tipo });
+    } catch (e) {
+      logger.warn('[baileys] media de mensaje fromMe falló:', e?.message || e);
+    }
+  }
+
+  await pool.request()
+    .input('int', sql.Int, it.id)
+    .input('c', sql.NVarChar(sql.MAX), texto || null)
+    .input('media', sql.Int, mediaId)
+    .input('meta', sql.NVarChar(120), metaMsgId)
+    .query(`INSERT INTO dbo.CCO_MENSAJES (MG_INTERACCION_ID, MG_EMISOR, MG_CONTENIDO, MG_MEDIA_ID, MG_META_MSG_ID, MG_ESTADO_ENTREGA)
+            VALUES (@int, 'agente', @c, @media, @meta, 'enviado')`);
+
+  ccRouting.emitir(tenantKey, `cc:interaccion:${it.id}`, 'cc:mensaje', { interaccionId: it.id });
+}
+
 // usuarioId: presente solo si el canal está en modo 'individual' — se guarda
 // en la sesión para que todo lo demás (estado, número, ingesta de mensajes)
 // sepa a quién pertenece sin tener que volver a consultarlo.
@@ -134,7 +186,7 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
   const sessionKey = sessionKeyDe(canalId, usuarioId);
   if (sesiones[sessionKey]?.sock) return sesiones[sessionKey];
 
-  const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } =
+  const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, proto } =
     require('@whiskeysockets/baileys');
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir(sessionKey));
@@ -148,6 +200,11 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
     auth: state,
     printQRInTerminal: false,
     syncFullHistory: false,
+    // Explícito a propósito (el default de la librería ya cubre esto, pero
+    // sin ambigüedad): acepta la sincronización ON_DEMAND que dispara
+    // importarHistorial() vía fetchMessageHistory, solo rechaza FULL (que
+    // es la que causaba el conflict/replaced al reconectar el socket).
+    shouldSyncHistoryMessage: ({ syncType }) => syncType !== proto.HistorySync.HistorySyncType.FULL,
   });
   sesiones[sessionKey].sock = sock;
 
@@ -194,14 +251,24 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
     for (const msg of messages) {
-      // fromMe: mensajes que el propio número envió (desde el celular directo,
-      // no desde el panel de AGYDA) — no se ingestan como "cliente".
-      if (!msg.message || msg.key.fromMe) continue;
+      if (!msg.message) continue;
       try {
         const pool = await databaseService.getPool(tenantKey);
         const canalR = await pool.request().input('id', sql.Int, canalId).query('SELECT * FROM dbo.CCO_CANALES WHERE CN_ID = @id');
         const canal = canalR.recordset[0];
         if (!canal || !canal.CN_HABILITADO) continue;
+
+        // fromMe: mensaje enviado por el propio número vinculado — puede ser
+        // un eco del que el panel de AGYDA acaba de mandar (ya se guardó al
+        // enviarlo, ver ccInteraccionesController.enviarMensaje — se
+        // descarta aquí por MG_META_MSG_ID) o uno mandado desde el celular
+        // directo, por fuera del panel — ese si se registra, para no perder
+        // la trazabilidad de la conversación (bug real encontrado
+        // 2026-09-10: antes se descartaba todo fromMe sin distinguir).
+        if (msg.key.fromMe) {
+          await ingestarMensajeAgenteDirecto(pool, tenantKey, canal, msg);
+          continue;
+        }
 
         const { texto, media, nombreOriginal } = parseMensajeEntrante(msg);
         // El remitente puede llegar como número real (@s.whatsapp.net) o como
@@ -221,10 +288,30 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
         const numeroPuro = jid.split('@')[0] || jid;
         const clienteExtId = jid || numeroPuro;
 
+        // Cuando el remitente tiene oculto su número, WhatsApp manda un LID
+        // (identificador interno opaco) en vez del teléfono real — Baileys
+        // mantiene un mapeo LID↔teléfono local (sock.signalRepository) que
+        // SOLO tiene algo si ya vio esa relación antes (contacto guardado,
+        // notificación de perfil vinculado, etc.); no hace ninguna consulta
+        // nueva a WhatsApp para resolverlo, así que sigue quedando null la
+        // mayoría de las veces — es una mejora oportunista, no una garantía.
+        let telefonoResuelto = null;
+        if (esNumeroReal && /^\d{8,15}$/.test(numeroPuro)) {
+          telefonoResuelto = numeroPuro;
+        } else if (jid.endsWith('@lid')) {
+          try {
+            const pnJid = await sock.signalRepository?.lidMapping?.getPNForLID(jid);
+            const pnPuro = pnJid ? pnJid.split('@')[0]?.split(':')[0] : null;
+            if (pnPuro && /^\d{8,15}$/.test(pnPuro)) telefonoResuelto = pnPuro;
+          } catch (e) {
+            logger.debug('[baileys] getPNForLID no resolvió:', e?.message || e);
+          }
+        }
+
         await ccIngest.ingestarMensajeCliente(pool, tenantKey, canal, {
           clienteExtId,
           clienteNombre: msg.pushName || null,
-          clienteTelefono: esNumeroReal && /^\d{8,15}$/.test(numeroPuro) ? numeroPuro : null,
+          clienteTelefono: telefonoResuelto,
           metaMsgId: msg.key.id ? `baileys_${msg.key.id}` : null,
           texto,
           media: media ? { ...media, tipo: media.tipo, url: null } : null,
@@ -243,6 +330,144 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
   });
 
   return sesiones[sessionKey];
+}
+
+// Extiende hacia atrás el historial de las conversaciones que YA existen en
+// AGYDA para este canal (con al menos 1 mensaje) — apagado por default,
+// disparado a mano desde Configuración (botón "Importar historial").
+//
+// Limitación real de Baileys (investigado 2026-09-10, no es un bug propio):
+// NO existe forma de traer "todo el historial completo" de golpe sin
+// reconectar el socket con syncFullHistory:true, y reconectar así dispara
+// un stream error 'conflict/replaced' del lado de WhatsApp (dos sockets
+// reclamando el mismo device_id) — confirmado con logs reales y reportado
+// en issues abiertos de la librería (WhiskeySockets/Baileys #963, #2094,
+// #2110). El único mecanismo soportado y estable es
+// sock.fetchMessageHistory(count, oldestMsgKey, oldestMsgTimestamp), que
+// opera SOBRE EL SOCKET YA CONECTADO (nunca cierra/reabre nada) y pide
+// mensajes anteriores a uno que YA se tiene — por eso solo puede alargar
+// conversaciones existentes, no descubrir chats de los que nunca llegó un
+// mensaje en vivo.
+// maxChats/timeoutMs conservadores a propósito: el cliente HTTP del
+// frontend corta a los 30s (ver FrontAgyda/src/lib/axios.ts) — bug real
+// encontrado 2026-09-10, con muchas interacciones acumuladas el backend
+// seguía trabajando en segundo plano mucho después de que el navegador ya
+// había mostrado "No se pudo importar el historial" por timeout. Con
+// maxChats=3 y timeoutMs=8s el peor caso (~24s) siempre cabe dentro de esos
+// 30s — para canales con más de 3 conversaciones hay que darle click al
+// botón varias veces (cada corrida toma las siguientes que aún no se
+// intentaron exitosamente, vía CCO_MENSAJES ya insertados como ancla nueva).
+async function importarHistorial(canalId, tenantKey, usuarioId, { timeoutMs = 8_000, maxChats = 3 } = {}) {
+  const sessionKey = sessionKeyDe(canalId, usuarioId);
+  const s = sesiones[sessionKey];
+  if (!s?.sock || s.estado !== 'conectado') {
+    throw new Error('El canal debe estar conectado antes de importar el historial');
+  }
+
+  const pool = await databaseService.getPool(tenantKey);
+  const canalR = await pool.request().input('id', sql.Int, canalId).query('SELECT * FROM dbo.CCO_CANALES WHERE CN_ID = @id');
+  const canal = canalR.recordset[0];
+  if (!canal) throw new Error('Canal no encontrado');
+
+  // Un mensaje ancla por interacción: el más antiguo que ya tenemos, con su
+  // MG_META_MSG_ID real (sin el prefijo "baileys_" que se le agrega al
+  // guardar — ver ingestarMensajeCliente/enviarMensaje) para reconstruir la
+  // WAMessageKey que fetchMessageHistory exige.
+  const interacciones = await pool.request().input('canal', sql.Int, canal.CN_ID).query(`
+    SELECT TOP (${Number(maxChats) || 3}) i.CI_ID id, i.CI_CLIENTE_EXT_ID jid,
+           m.MG_META_MSG_ID metaMsgId, m.MG_EMISOR emisor, m.MG_FECHA fecha
+    FROM dbo.CCO_INTERACCIONES i
+    CROSS APPLY (
+      SELECT TOP 1 MG_META_MSG_ID, MG_EMISOR, MG_FECHA FROM dbo.CCO_MENSAJES
+      WHERE MG_INTERACCION_ID = i.CI_ID AND MG_META_MSG_ID LIKE 'baileys_%'
+      ORDER BY MG_FECHA ASC
+    ) m
+    WHERE i.CI_CANAL_ID = @canal AND i.CI_CLIENTE_EXT_ID IS NOT NULL
+    ORDER BY i.CI_ID DESC
+  `);
+
+  let chatsConsultados = 0;
+  let mensajesInsertados = 0;
+  const errores = [];
+
+  for (const it of interacciones.recordset) {
+    if (!it.metaMsgId || !it.jid) continue;
+    const oldestId = it.metaMsgId.replace(/^baileys_/, '');
+    const oldestMsgKey = { remoteJid: it.jid, fromMe: it.emisor === 'agente', id: oldestId };
+    const oldestMsgTimestamp = Math.floor(new Date(it.fecha).getTime() / 1000);
+
+    try {
+      const nuevos = await esperarHistorialDeChat(s.sock, it.jid, () =>
+        s.sock.fetchMessageHistory(50, oldestMsgKey, oldestMsgTimestamp), timeoutMs);
+      chatsConsultados++;
+
+      for (const msg of nuevos) {
+        const metaMsgId = msg.key?.id ? `baileys_${msg.key.id}` : null;
+        if (!metaMsgId) continue;
+        const dup = await pool.request().input('m', sql.NVarChar(120), metaMsgId)
+          .query('SELECT TOP 1 MG_ID FROM dbo.CCO_MENSAJES WHERE MG_META_MSG_ID = @m');
+        if (dup.recordset[0]) continue;
+
+        const { texto } = parseMensajeEntrante(msg);
+        if (!texto) continue; // historial de media sin descarga masiva por ahora — solo texto
+        const emisor = msg.key?.fromMe ? 'agente' : 'cliente';
+        const fecha = new Date(Number(msg.messageTimestamp || 0) * 1000);
+        await pool.request()
+          .input('int', sql.Int, it.id).input('em', sql.NVarChar(15), emisor)
+          .input('c', sql.NVarChar(sql.MAX), texto).input('meta', sql.NVarChar(120), metaMsgId)
+          .input('f', sql.DateTime, fecha)
+          .query(`INSERT INTO dbo.CCO_MENSAJES (MG_INTERACCION_ID, MG_EMISOR, MG_CONTENIDO, MG_META_MSG_ID, MG_FECHA)
+                  VALUES (@int, @em, @c, @meta, @f)`);
+        mensajesInsertados++;
+      }
+    } catch (e) {
+      logger.warn(`[baileys] fetchMessageHistory falló para ${it.jid}:`, e?.message || e);
+      errores.push(it.jid);
+    }
+  }
+
+  const totalConversaciones = await pool.request().input('canal', sql.Int, canal.CN_ID).query(`
+    SELECT COUNT(*) n FROM dbo.CCO_INTERACCIONES i
+    WHERE i.CI_CANAL_ID = @canal AND i.CI_CLIENTE_EXT_ID IS NOT NULL
+      AND EXISTS (SELECT 1 FROM dbo.CCO_MENSAJES WHERE MG_INTERACCION_ID = i.CI_ID AND MG_META_MSG_ID LIKE 'baileys_%')
+  `);
+  const totalPosibles = totalConversaciones.recordset[0]?.n || 0;
+
+  return {
+    chatsConsultados, mensajesInsertados, chatsConError: errores.length,
+    // Ayuda al frontend a avisar si conviene volver a darle click: solo se
+    // procesan `maxChats` conversaciones por corrida (ver comentario arriba
+    // de la firma de la función).
+    quedanMasPorRevisar: totalPosibles > chatsConsultados,
+  };
+}
+
+// fetchMessageHistory dispara la solicitud pero la respuesta llega async por
+// 'messaging-history.set' (con syncType on-demand) — hay que escuchar ese
+// evento y filtrar solo lo que corresponde a este jid, con timeout por si el
+// teléfono no contesta (issue conocido de Baileys: a veces no hay respuesta).
+function esperarHistorialDeChat(sock, jid, disparar, timeoutMs) {
+  return new Promise((resolve) => {
+    let resuelto = false;
+    const onHistory = ({ messages, syncType }) => {
+      if (resuelto) return;
+      const propios = (messages || []).filter((m) => m.key?.remoteJid === jid);
+      if (propios.length) {
+        resuelto = true;
+        clearTimeout(timer);
+        sock.ev.off('messaging-history.set', onHistory);
+        resolve(propios);
+      }
+    };
+    const timer = setTimeout(() => {
+      if (resuelto) return;
+      resuelto = true;
+      sock.ev.off('messaging-history.set', onHistory);
+      resolve([]); // sin respuesta — se cuenta como chat consultado sin mensajes nuevos
+    }, timeoutMs);
+    sock.ev.on('messaging-history.set', onHistory);
+    disparar().catch(() => { /* el error real ya lo maneja el caller */ });
+  });
 }
 
 async function enviarTexto(canalId, destinatarioExtId, texto, usuarioId) {
@@ -353,4 +578,4 @@ async function reconectarSesionesGuardadas() {
   }
 }
 
-module.exports = { iniciarSesion, enviarTexto, enviarMedia, getEstado, cerrarSesion, getSesionesDeCanal, reconectarSesionesGuardadas };
+module.exports = { iniciarSesion, enviarTexto, enviarMedia, getEstado, cerrarSesion, getSesionesDeCanal, reconectarSesionesGuardadas, importarHistorial };

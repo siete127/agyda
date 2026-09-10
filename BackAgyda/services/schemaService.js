@@ -6409,6 +6409,16 @@ BEGIN
   ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_MODO_SESION
     CHECK (CN_MODO_SESION IN ('compartido','individual'));
 END`,
+    // Auto-asignación al ACD (opt-in por canal, 2026-09-10): con esto en 0
+    // (default), una conversación nueva se queda en 'en_cola' esperando a
+    // que un agente la tome manualmente desde Bandeja de espera — antes
+    // ccRoutingService.rutearInteraccion SIEMPRE la asignaba de una vez al
+    // agente disponible menos ocupado, sin pasar por la cola visible.
+    // Default apagado a propósito: el equipo pidió que todo caiga en
+    // bandeja primero, y solo las campañas que de verdad necesiten
+    // reparto automático lo prendan explícitamente.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_AUTO_ASIGNAR') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_AUTO_ASIGNAR BIT NOT NULL DEFAULT (0);`,
     // Una fila por (canal, agente) cuando CN_MODO_SESION='individual' — mismo
     // shape de columnas de estado que ya vive en CCO_CANALES para cada tipo no
     // oficial (Baileys/FCA/IGP), pero aquí multiplicado por agente en vez de

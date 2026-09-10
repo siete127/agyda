@@ -89,6 +89,7 @@ exports.listCanales = async (req, res) => {
     const r = await p.request().query(`
       SELECT CN_ID id, CN_TIPO tipo, CN_NOMBRE nombre, CN_HABILITADO habilitado,
              CN_GRUPO_ID grupoId, CN_CAMPANIA_ID campaniaId, CN_MODO_SESION modoSesion,
+             CN_AUTO_ASIGNAR autoAsignar,
              CN_META_PAGE_ID metaPageId, CN_META_BUSINESS_ID metaBusinessId,
              CN_VERIFY_TOKEN verifyToken, CN_WEBHOOK_SUSCRITO webhookSuscrito,
              CASE WHEN CN_ACCESS_TOKEN IS NOT NULL AND LEN(CN_ACCESS_TOKEN) > 0 THEN 1 ELSE 0 END accessTokenConfigurado,
@@ -102,7 +103,7 @@ exports.listCanales = async (req, res) => {
     const tk = tenantKeyDe(req);
     res.json({ success: true, data: r.recordset.map((c) => ({
       ...c,
-      habilitado: !!c.habilitado, webhookSuscrito: !!c.webhookSuscrito,
+      habilitado: !!c.habilitado, autoAsignar: !!c.autoAsignar, webhookSuscrito: !!c.webhookSuscrito,
       accessTokenConfigurado: !!c.accessTokenConfigurado, appSecretConfigurado: !!c.appSecretConfigurado,
       webhookUrl: `${base}/api/cc/webhook/${tk}/${c.id}`,
     })) });
@@ -153,6 +154,7 @@ exports.updateCanal = async (req, res) => {
       .input('id', sql.Int, req.params.id)
       .input('nombre', sql.NVarChar(120), b.nombre ?? ex.CN_NOMBRE)
       .input('hab', sql.Bit, b.habilitado != null ? !!b.habilitado : !!ex.CN_HABILITADO)
+      .input('auto', sql.Bit, b.autoAsignar != null ? !!b.autoAsignar : !!ex.CN_AUTO_ASIGNAR)
       .input('grupo', sql.Int, b.grupoId != null ? b.grupoId : ex.CN_GRUPO_ID)
       .input('camp', sql.Int, b.campaniaId != null ? b.campaniaId : ex.CN_CAMPANIA_ID)
       .input('modo', sql.NVarChar(20), modoSesion)
@@ -162,7 +164,7 @@ exports.updateCanal = async (req, res) => {
       .input('sec', sql.NVarChar(200), appSecret || null)
       .input('vt', sql.NVarChar(100), b.verifyToken != null ? b.verifyToken : ex.CN_VERIFY_TOKEN)
       .query(`UPDATE dbo.CCO_CANALES SET
-        CN_NOMBRE=@nombre, CN_HABILITADO=@hab, CN_GRUPO_ID=@grupo, CN_CAMPANIA_ID=@camp, CN_MODO_SESION=@modo,
+        CN_NOMBRE=@nombre, CN_HABILITADO=@hab, CN_AUTO_ASIGNAR=@auto, CN_GRUPO_ID=@grupo, CN_CAMPANIA_ID=@camp, CN_MODO_SESION=@modo,
         CN_META_PAGE_ID=@page, CN_META_BUSINESS_ID=@biz, CN_ACCESS_TOKEN=@tok,
         CN_APP_SECRET=@sec, CN_VERIFY_TOKEN=@vt, CN_FECHA_ACTUALIZACION=GETDATE()
         WHERE CN_ID=@id`);
@@ -293,6 +295,23 @@ exports.cerrarBaileys = async (req, res) => {
     res.json({ success: true, message: 'Sesión cerrada' });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Trae los chats/mensajes previos a la vinculación (lo que el teléfono ya
+// tenía sincronizado) y los crea como interacciones cerradas en AGYDA —
+// operación pesada disparada a mano (no automática al vincular, ver
+// baileysManager.importarHistorial), solo un admin la puede ejecutar.
+exports.importarHistorialBaileys = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { usuarioId, error } = await resolverCanalYUsuario(p, req, 'whatsapp_baileys');
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+    const resultado = await baileysManager.importarHistorial(req.params.id, tenantKeyDe(req), usuarioId);
+    res.json({ success: true, data: resultado });
+  } catch (e) {
+    console.error('ccConfig.importarHistorialBaileys:', e.message);
+    res.status(500).json({ success: false, message: `No se pudo importar el historial: ${e.message}` });
   }
 };
 
