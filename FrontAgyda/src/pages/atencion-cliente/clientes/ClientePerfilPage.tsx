@@ -26,7 +26,7 @@ const SUB_DEFAULT: Record<'seguimiento' | 'casos-pagos', string> = {
   'casos-pagos': 'casos',
 }
 const SUB_VALIDAS: Record<'seguimiento' | 'casos-pagos', string[]> = {
-  seguimiento: ['bitacora', 'tareas', 'renovaciones', 'historial'],
+  seguimiento: ['bitacora', 'tareas', 'citas', 'renovaciones', 'historial'],
   'casos-pagos': ['casos', 'pagos', 'satisfaccion'],
 }
 
@@ -122,6 +122,7 @@ export function ClientePerfilPage() {
       {tab === 'seguimiento' && (
         <SeguimientoConsolidadoTab
           contactoId={cliente.id}
+          clienteNombre={cliente.nombre}
           sub={sub as SubSeguimiento}
           onSubChange={setSub}
         />

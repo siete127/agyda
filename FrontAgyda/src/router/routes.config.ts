@@ -120,6 +120,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/tecnologia/respaldos', label: 'Respaldos',   icon: 'HardDriveDownload',     moduleKey: 'tecnologia',       roles: ['AD','TI'],          showInSidebar: true,  description: 'Estado y calendario de respaldos' },
   { path: '/atencion-cliente', label: 'Atención al Cliente', icon: 'Headphones',       moduleKey: 'atencion-cliente', roles: ['AD','TI'],          showInSidebar: false },
   { path: '/atencion-cliente/casos',        label: 'Casos',        icon: 'Inbox',       moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Casos de clientes: consultas, aclaraciones, quejas e incidencias' },
+  { path: '/atencion-cliente/agenda',       label: 'Agenda',       icon: 'CalendarClock', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Agenda de citas y sesiones de tratamiento de clientes' },
   { path: '/atencion-cliente/seguimiento',  label: 'Seguimiento',  icon: 'ListChecks',   moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Casos abiertos que requieren seguimiento' }, // Fase 5: ahora lee de CASOS (worklist)
   { path: '/atencion-cliente/satisfaccion', label: 'Satisfacción', icon: 'Smile',        moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Encuestas y medición de satisfacción' },
   { path: '/atencion-cliente/retencion',    label: 'Retención',    icon: 'ShieldAlert',  moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Clientes en riesgo y acciones de retención' },
