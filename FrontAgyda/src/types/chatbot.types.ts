@@ -3,6 +3,7 @@ export interface RespuestaChatbot {
   id: string
   titulo: string | null
   categoria: string | null
+  genera: 'contacto' | 'oportunidad' | 'ninguno' | null
   keywords: string[]
   textoEs: string
   textoEn: string | null
@@ -93,6 +94,10 @@ export function parseRespuestaChatbot(raw: Record<string, unknown>): RespuestaCh
     id: String(pick(raw, 'id', 'Id', 'ID') ?? ''),
     titulo: pick(raw, 'titulo') ? String(pick(raw, 'titulo')) : null,
     categoria: pick(raw, 'categoria') ? String(pick(raw, 'categoria')) : null,
+    genera: ((): 'contacto' | 'oportunidad' | 'ninguno' | null => {
+      const g = pick(raw, 'genera')
+      return g === 'contacto' || g === 'oportunidad' || g === 'ninguno' ? g : null
+    })(),
     keywords: parseStringArray(pick(raw, 'keywords')),
     textoEs: String(pick(raw, 'textoEs', 'texto_es') ?? ''),
     textoEn: pick(raw, 'textoEn', 'texto_en') ? String(pick(raw, 'textoEn', 'texto_en')) : null,

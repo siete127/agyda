@@ -12,7 +12,7 @@ import { ccService } from '@/services/cc.service'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
 import { useIsAdmin } from '@/hooks/useAuth'
-import type { TipoNodoFlujo } from '@/types/chatbotFlujo.types'
+import type { TipoNodoFlujo, GeneraLead } from '@/types/chatbotFlujo.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -44,11 +44,13 @@ interface CajaData extends Record<string, unknown> {
   activa: boolean
   soloDestino?: boolean
   esEntrada?: boolean
+  genera?: GeneraLead | null
 }
 
 function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
-  const { tipo, titulo, subtitulo, activa, soloDestino, esEntrada } = data
+  const { tipo, titulo, subtitulo, activa, soloDestino, esEntrada, genera } = data
   const { icon: Icon, clases } = ESTILO_TIPO[tipo]
+  const puedeGenerar = tipo === 'respuesta' || tipo === 'etiqueta' || tipo === 'nodo_arbol'
   return (
     <div className={clsx(
       'min-w-[190px] max-w-[240px] rounded-xl border-2 bg-card px-3 py-2.5 shadow-sm transition-opacity',
@@ -65,6 +67,12 @@ function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
           <p className="text-xs font-semibold text-ink truncate">{titulo}</p>
           {subtitulo && <p className="text-[0.68rem] text-ink-tertiary truncate">{subtitulo}</p>}
           {esEntrada && <p className="mt-0.5 text-[0.6rem] font-semibold text-sky-500">entrada por texto</p>}
+          {puedeGenerar && genera === 'oportunidad' && (
+            <span className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[0.58rem] font-bold text-emerald-700">→ oportunidad</span>
+          )}
+          {puedeGenerar && genera === 'contacto' && (
+            <span className="mt-1 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[0.58rem] font-semibold text-gray-500">→ contacto</span>
+          )}
         </div>
       </div>
       <Handle type="source" position={Position.Right} className="!bg-brand !w-2 !h-2" />
@@ -84,7 +92,7 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
   modo: 'crear' | 'editar'
   tipo: TipoEditable
   nodoId?: number
-  valores?: { texto: string; keywords?: string[]; tipoAccion?: string; campaniaId?: number | null; tipoNodo?: string; activa?: boolean }
+  valores?: { texto: string; keywords?: string[]; tipoAccion?: string; campaniaId?: number | null; tipoNodo?: string; activa?: boolean; genera?: GeneraLead | null }
   onClose: () => void
   onGuardado: () => void
 }) {
@@ -93,6 +101,7 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
   const [tipoAccion, setTipoAccion] = useState(valores?.tipoAccion ?? 'respuesta')
   const [campaniaId, setCampaniaId] = useState<number | ''>(valores?.campaniaId ?? '')
   const [tipoNodo, setTipoNodo] = useState(valores?.tipoNodo ?? 'pregunta')
+  const [genera, setGenera] = useState<GeneraLead | ''>(valores?.genera ?? '')
 
   const { data: campanias = [] } = useQuery({
     queryKey: ['cc-campanias'],
@@ -102,6 +111,7 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
 
   const guardar = useMutation({
     mutationFn: async () => {
+      const generaVal = genera === '' ? null : genera
       if (modo === 'crear') {
         await chatbotFlujoService.createNodo({
           tipo, texto: texto.trim(), posX: 60 + Math.random() * 120, posY: 40 + Math.random() * 200,
@@ -109,6 +119,7 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
           tipoAccion: tipo === 'etiqueta' ? tipoAccion : undefined,
           campaniaId: tipo === 'etiqueta' && tipoAccion === 'escalar_campania' && campaniaId !== '' ? Number(campaniaId) : undefined,
           tipoNodo: tipo === 'nodo_arbol' ? tipoNodo : undefined,
+          genera: generaVal,
         })
       } else {
         await chatbotFlujoService.updateNodo(tipo, nodoId!, {
@@ -117,6 +128,7 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
           tipoAccion: tipo === 'etiqueta' ? tipoAccion : undefined,
           campaniaId: tipo === 'etiqueta' && tipoAccion === 'escalar_campania' ? (campaniaId !== '' ? Number(campaniaId) : null) : undefined,
           tipoNodo: tipo === 'nodo_arbol' ? tipoNodo : undefined,
+          genera: generaVal,
         })
       }
     },
@@ -200,6 +212,22 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
             </select>
           </div>
         )}
+
+        <div className="rounded-lg bg-gray-50 p-2.5">
+          <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">
+            Si el visitante deja sus datos aquí, el bot crea…
+          </label>
+          <select value={genera} onChange={(e) => setGenera(e.target.value as GeneraLead | '')} className="field text-sm">
+            <option value="">Sin especificar (solo contacto)</option>
+            <option value="contacto">Solo un contacto (dudas / info)</option>
+            <option value="oportunidad">Contacto + oportunidad de venta</option>
+            <option value="ninguno">Nada (no pedir datos)</option>
+          </select>
+          <p className="mt-1 text-[0.62rem] text-gray-400">
+            "Oportunidad" solo cuando el camino demuestra intención de compra. Un presupuesto dado en la
+            conversación también genera oportunidad.
+          </p>
+        </div>
       </div>
 
       <div className="flex justify-end gap-2 border-t border-gray-100 px-4 py-3">
@@ -279,19 +307,19 @@ function FlujoVisualCanvas() {
       id: `respuesta-${r.id}`,
       type: 'caja',
       position: r.posX != null && r.posY != null ? { x: r.posX, y: r.posY } : posicionPorDefecto('respuesta', i),
-      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada },
+      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada, genera: r.genera },
     }))
     flujo.etiquetas.forEach((e, i) => nodos.push({
       id: `etiqueta-${e.id}`,
       type: 'caja',
       position: e.posX != null && e.posY != null ? { x: e.posX, y: e.posY } : posicionPorDefecto('etiqueta', i),
-      data: { tipo: 'etiqueta', titulo: e.texto, subtitulo: TIPO_ETIQUETA_ACCION[e.tipoAccion] ?? 'Menú del widget', activa: e.activa },
+      data: { tipo: 'etiqueta', titulo: e.texto, subtitulo: TIPO_ETIQUETA_ACCION[e.tipoAccion] ?? 'Menú del widget', activa: e.activa, genera: e.genera },
     }))
     flujo.nodosArbol.forEach((n, i) => nodos.push({
       id: `nodo_arbol-${n.id}`,
       type: 'caja',
       position: n.posX != null && n.posY != null ? { x: n.posX, y: n.posY } : posicionPorDefecto('nodo_arbol', i),
-      data: { tipo: 'nodo_arbol', titulo: n.codigo, subtitulo: n.texto, activa: n.activa },
+      data: { tipo: 'nodo_arbol', titulo: n.codigo, subtitulo: n.texto, activa: n.activa, genera: n.genera },
     }))
     flujo.campanias.forEach((c, i) => nodos.push({
       id: `campania-${c.id}`,
@@ -394,13 +422,13 @@ function FlujoVisualCanvas() {
     if (tipo === 'campania') { toast('Las campañas se editan en Contact Center', { icon: 'ℹ️' }); return }
     if (tipo === 'respuesta') {
       const r = flujo.respuestas.find((x) => x.id === id)
-      if (r) setEditor({ modo: 'editar', tipo: 'respuesta', nodoId: id, valores: { texto: r.texto, keywords: [] } })
+      if (r) setEditor({ modo: 'editar', tipo: 'respuesta', nodoId: id, valores: { texto: r.texto, keywords: [], genera: r.genera } })
     } else if (tipo === 'etiqueta') {
       const e = flujo.etiquetas.find((x) => x.id === id)
-      if (e) setEditor({ modo: 'editar', tipo: 'etiqueta', nodoId: id, valores: { texto: e.texto, tipoAccion: e.tipoAccion, campaniaId: e.campaniaId } })
+      if (e) setEditor({ modo: 'editar', tipo: 'etiqueta', nodoId: id, valores: { texto: e.texto, tipoAccion: e.tipoAccion, campaniaId: e.campaniaId, genera: e.genera } })
     } else {
       const n = flujo.nodosArbol.find((x) => x.id === id)
-      if (n) setEditor({ modo: 'editar', tipo: 'nodo_arbol', nodoId: id, valores: { texto: n.texto, tipoNodo: n.tipoNodo } })
+      if (n) setEditor({ modo: 'editar', tipo: 'nodo_arbol', nodoId: id, valores: { texto: n.texto, tipoNodo: n.tipoNodo, genera: n.genera } })
     }
   }, [isAdmin, flujo])
 

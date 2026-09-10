@@ -30,6 +30,7 @@ export const chatbotFlujoService = {
     keywords?: string[]
     tipoAccion?: string; campaniaId?: number | null
     tipoNodo?: string
+    genera?: 'contacto' | 'oportunidad' | 'ninguno' | null
     posX: number; posY: number
   }): Promise<{ tipo: string; id: number }> {
     const { data } = await api.post('/chatbot/flujo/nodos', payload)
@@ -41,6 +42,7 @@ export const chatbotFlujoService = {
     keywords?: string[]
     tipoAccion?: string; campaniaId?: number | null
     tipoNodo?: string; activa?: boolean
+    genera?: 'contacto' | 'oportunidad' | 'ninguno' | null
   }): Promise<void> {
     await api.patch(`/chatbot/flujo/nodos/${tipo}/${id}`, cambios)
   },

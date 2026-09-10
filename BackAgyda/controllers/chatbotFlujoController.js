@@ -75,16 +75,16 @@ async function cargarFlujoCrudo(pool) {
   const [respuestas, etiquetas, nodosArbol, opcionesArbol, campanias, conexiones] = await Promise.all([
     pool.request().query(`
       SELECT RESP_PK as id, RESP_ID as codigo, RESP_TEXTO_ES as texto, RESP_BOTONES as botones,
-             RESP_KEYWORDS as keywords, RESP_SENAL_INTERES as senalInteres,
+             RESP_KEYWORDS as keywords, RESP_SENAL_INTERES as senalInteres, RESP_GENERA as genera,
              RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY
       FROM dbo.CHATBOT_RESPUESTAS ORDER BY RESP_PK`),
     pool.request().query(`
       SELECT ETQ_ID as id, ETQ_TEXTO_ES as texto, ETQ_TIPO as tipoAccion, ETQ_CAMPANIA_ID as campaniaId,
-             ETQ_ACTIVA as activa, ETQ_POS_X as posX, ETQ_POS_Y as posY
+             ETQ_GENERA as genera, ETQ_ACTIVA as activa, ETQ_POS_X as posX, ETQ_POS_Y as posY
       FROM dbo.CHATBOT_ETIQUETAS_MENU ORDER BY ETQ_ID`),
     pool.request().query(`
       SELECT NODO_ID as id, NODO_CODIGO as codigo, NODO_TEXTO as texto, NODO_TIPO as tipoNodo,
-             NODO_ACTIVO as activa, NODO_POS_X as posX, NODO_POS_Y as posY
+             NODO_GENERA as genera, NODO_ACTIVO as activa, NODO_POS_X as posX, NODO_POS_Y as posY
       FROM dbo.CHATBOT_NODOS ORDER BY NODO_ID`),
     pool.request().query(`
       SELECT OPC_ID as id, OPC_NODO_ID as nodoId, OPC_TEXTO_BOTON as texto, OPC_NODO_DESTINO_ID as nodoDestinoId
@@ -332,7 +332,7 @@ function slugFlujo(texto) {
 // POST /flujo/nodos  { tipo, texto, textoEn?, keywords?, tipoAccion?, campaniaId?, tipoNodo?, posX, posY }
 exports.createNodo = async (req, res) => {
   try {
-    const { tipo, texto, textoEn, keywords, tipoAccion, campaniaId, tipoNodo, posX, posY } = req.body || {};
+    const { tipo, texto, textoEn, keywords, tipoAccion, campaniaId, tipoNodo, genera, posX, posY } = req.body || {};
     if (!TIPOS_NODO.includes(tipo)) {
       return res.status(400).json({ success: false, message: 'Tipo de nodo inválido' });
     }
@@ -341,6 +341,7 @@ exports.createNodo = async (req, res) => {
     }
     const x = typeof posX === 'number' ? posX : 0;
     const y = typeof posY === 'number' ? posY : 0;
+    const generaVal = ['contacto', 'oportunidad', 'ninguno'].includes(genera) ? genera : null;
     const pool = await databaseService.getPool(req.user?.empresa);
 
     if (tipo === 'respuesta') {
@@ -358,11 +359,12 @@ exports.createNodo = async (req, res) => {
         .input('keywords', sql.NVarChar, JSON.stringify(kws))
         .input('textoEs', sql.NVarChar, String(texto).trim())
         .input('textoEn', sql.NVarChar, textoEn || null)
+        .input('genera', sql.NVarChar(15), generaVal)
         .input('x', sql.Float, x).input('y', sql.Float, y)
         .query(`
-          INSERT INTO dbo.CHATBOT_RESPUESTAS (RESP_ID, RESP_TITULO, RESP_KEYWORDS, RESP_TEXTO_ES, RESP_TEXTO_EN, RESP_BOTONES, RESP_ACTIVA, RESP_POS_X, RESP_POS_Y)
+          INSERT INTO dbo.CHATBOT_RESPUESTAS (RESP_ID, RESP_TITULO, RESP_KEYWORDS, RESP_TEXTO_ES, RESP_TEXTO_EN, RESP_BOTONES, RESP_GENERA, RESP_ACTIVA, RESP_POS_X, RESP_POS_Y)
           OUTPUT INSERTED.RESP_PK as id
-          VALUES (@id, @titulo, @keywords, @textoEs, @textoEn, '[]', 1, @x, @y)
+          VALUES (@id, @titulo, @keywords, @textoEs, @textoEn, '[]', @genera, 1, @x, @y)
         `);
       return res.status(201).json({ success: true, data: { tipo, id: ins.recordset[0].id } });
     }
@@ -375,11 +377,12 @@ exports.createNodo = async (req, res) => {
         .input('textoEn', sql.NVarChar, textoEn || null)
         .input('tipo', sql.NVarChar, accion)
         .input('campaniaId', sql.Int, accion === 'escalar_campania' && campaniaId ? Number(campaniaId) : null)
+        .input('genera', sql.NVarChar(15), generaVal)
         .input('x', sql.Float, x).input('y', sql.Float, y)
         .query(`
-          INSERT INTO dbo.CHATBOT_ETIQUETAS_MENU (ETQ_TEXTO_ES, ETQ_TEXTO_EN, ETQ_TIPO, ETQ_CAMPANIA_ID, ETQ_ORDEN, ETQ_ACTIVA, ETQ_POS_X, ETQ_POS_Y)
+          INSERT INTO dbo.CHATBOT_ETIQUETAS_MENU (ETQ_TEXTO_ES, ETQ_TEXTO_EN, ETQ_TIPO, ETQ_CAMPANIA_ID, ETQ_GENERA, ETQ_ORDEN, ETQ_ACTIVA, ETQ_POS_X, ETQ_POS_Y)
           OUTPUT INSERTED.ETQ_ID as id
-          VALUES (@textoEs, @textoEn, @tipo, @campaniaId, (SELECT ISNULL(MAX(ETQ_ORDEN),0)+1 FROM dbo.CHATBOT_ETIQUETAS_MENU), 1, @x, @y)
+          VALUES (@textoEs, @textoEn, @tipo, @campaniaId, @genera, (SELECT ISNULL(MAX(ETQ_ORDEN),0)+1 FROM dbo.CHATBOT_ETIQUETAS_MENU), 1, @x, @y)
         `);
       return res.status(201).json({ success: true, data: { tipo, id: ins.recordset[0].id } });
     }
@@ -397,11 +400,12 @@ exports.createNodo = async (req, res) => {
       .input('codigo', sql.NVarChar, codigo)
       .input('texto', sql.NVarChar, String(texto).trim())
       .input('tipo', sql.NVarChar, nodoTipo)
+      .input('genera', sql.NVarChar(15), generaVal)
       .input('x', sql.Float, x).input('y', sql.Float, y)
       .query(`
-        INSERT INTO dbo.CHATBOT_NODOS (NODO_CODIGO, NODO_TEXTO, NODO_TIPO, NODO_ACTIVO, NODO_POS_X, NODO_POS_Y)
+        INSERT INTO dbo.CHATBOT_NODOS (NODO_CODIGO, NODO_TEXTO, NODO_TIPO, NODO_GENERA, NODO_ACTIVO, NODO_POS_X, NODO_POS_Y)
         OUTPUT INSERTED.NODO_ID as id
-        VALUES (@codigo, @texto, @tipo, 1, @x, @y)
+        VALUES (@codigo, @texto, @tipo, @genera, 1, @x, @y)
       `);
     return res.status(201).json({ success: true, data: { tipo, id: ins.recordset[0].id } });
   } catch (error) {
@@ -414,10 +418,12 @@ exports.createNodo = async (req, res) => {
 exports.updateNodo = async (req, res) => {
   try {
     const { tipo, id } = req.params;
-    const { texto, textoEn, keywords, tipoAccion, campaniaId, tipoNodo, activa } = req.body || {};
+    const { texto, textoEn, keywords, tipoAccion, campaniaId, tipoNodo, activa, genera } = req.body || {};
     if (!TIPOS_NODO.includes(tipo)) {
       return res.status(400).json({ success: false, message: 'Tipo de nodo inválido' });
     }
+    const generaSet = ['contacto', 'oportunidad', 'ninguno'].includes(genera) || genera === null;
+    const generaVal = genera === null ? null : (['contacto', 'oportunidad', 'ninguno'].includes(genera) ? genera : null);
     const pool = await databaseService.getPool(req.user?.empresa);
 
     if (tipo === 'respuesta') {
@@ -427,6 +433,7 @@ exports.updateNodo = async (req, res) => {
       if (textoEn !== undefined) { sets.push('RESP_TEXTO_EN = @textoEn'); rq.input('textoEn', sql.NVarChar, textoEn || null); }
       if (Array.isArray(keywords)) { sets.push('RESP_KEYWORDS = @kw'); rq.input('kw', sql.NVarChar, JSON.stringify(keywords)); }
       if (activa !== undefined) { sets.push('RESP_ACTIVA = @activa'); rq.input('activa', sql.Bit, activa !== false); }
+      if (generaSet) { sets.push('RESP_GENERA = @genera'); rq.input('genera', sql.NVarChar(15), generaVal); }
       if (!sets.length) return res.json({ success: true });
       sets.push('RESP_FECHA_ACTUALIZACION = GETDATE()');
       await rq.query(`UPDATE dbo.CHATBOT_RESPUESTAS SET ${sets.join(', ')} WHERE RESP_PK = @id`);
@@ -446,6 +453,7 @@ exports.updateNodo = async (req, res) => {
         sets.push('ETQ_CAMPANIA_ID = @camp'); rq.input('camp', sql.Int, campaniaId ? Number(campaniaId) : null);
       }
       if (activa !== undefined) { sets.push('ETQ_ACTIVA = @activa'); rq.input('activa', sql.Bit, activa !== false); }
+      if (generaSet) { sets.push('ETQ_GENERA = @genera'); rq.input('genera', sql.NVarChar(15), generaVal); }
       if (!sets.length) return res.json({ success: true });
       await rq.query(`UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ${sets.join(', ')} WHERE ETQ_ID = @id`);
       return res.json({ success: true });
@@ -459,6 +467,7 @@ exports.updateNodo = async (req, res) => {
       sets.push('NODO_TIPO = @tipo'); rq.input('tipo', sql.NVarChar, tipoNodo);
     }
     if (activa !== undefined) { sets.push('NODO_ACTIVO = @activa'); rq.input('activa', sql.Bit, activa !== false); }
+    if (generaSet) { sets.push('NODO_GENERA = @genera'); rq.input('genera', sql.NVarChar(15), generaVal); }
     if (!sets.length) return res.json({ success: true });
     await rq.query(`UPDATE dbo.CHATBOT_NODOS SET ${sets.join(', ')} WHERE NODO_ID = @id`);
     return res.json({ success: true });

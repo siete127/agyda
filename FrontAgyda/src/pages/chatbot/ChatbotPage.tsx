@@ -65,6 +65,7 @@ function RespuestaFormModal({ respuesta, categoriaInicial, keywordsIniciales, on
     textoEn: respuesta?.textoEn ?? '',
     botones: (respuesta?.botones ?? []).join(', '),
     senalInteres: respuesta?.senalInteres ?? false,
+    genera: (respuesta?.genera ?? '') as '' | 'contacto' | 'oportunidad' | 'ninguno',
     orden: respuesta?.orden ?? 0,
   })
   const [nuevaCategoria, setNuevaCategoria] = useState('')
@@ -79,6 +80,7 @@ function RespuestaFormModal({ respuesta, categoriaInicial, keywordsIniciales, on
     textoEn: form.textoEn.trim() || null,
     botones: splitList(form.botones),
     senalInteres: form.senalInteres,
+    genera: form.genera || null,
     orden: Number(form.orden) || 0,
   })
 
@@ -203,6 +205,28 @@ function RespuestaFormModal({ respuesta, categoriaInicial, keywordsIniciales, on
             </label>
           </div>
         </div>
+
+        {form.senalInteres && (
+          <div className="rounded-lg bg-gray-50 p-2.5">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+              Al dejar sus datos aquí, el bot crea…
+            </label>
+            <select
+              value={form.genera}
+              onChange={(e) => setForm((f) => ({ ...f, genera: e.target.value as typeof f.genera }))}
+              className="field text-sm"
+            >
+              <option value="">Sin especificar (solo contacto)</option>
+              <option value="contacto">Solo un contacto (dudas / info)</option>
+              <option value="oportunidad">Contacto + oportunidad de venta</option>
+              <option value="ninguno">Nada (no pedir datos)</option>
+            </select>
+            <p className="mt-1 text-[0.66rem] text-gray-400">
+              "Oportunidad" solo cuando el visitante muestra intención de compra. Un presupuesto dado en la
+              conversación también genera oportunidad.
+            </p>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>

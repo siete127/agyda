@@ -3262,7 +3262,9 @@
             let estado = 'explorar'; // explorar | pedir_nombre | pedir_contacto | pedir_empresa | pedir_presupuesto | confirmar | arbol_diagnostico
             let turnosSinLead = 0;
             let interactuoRegistrado = false;  // Fase 3: evita re-contar el hito 'interactuo' del embudo
-            let leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
+            // generaOportunidad: se pone true si el visitante pasó por un nodo
+            // marcado 'oportunidad' o dio un presupuesto numérico (Fase 2).
+            let leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null, generaOportunidad: false };
             let chatIniciado = false;
             let arbolSesionToken = null; // token de CHATBOT_SESIONES mientras estado === 'arbol_diagnostico'
             let ultimoNodoArbol = null; // último nodo mostrado, para resolver el opcionId elegido
@@ -3391,6 +3393,7 @@
                         empresa: leadData.empresa || undefined,
                         cargo: leadData.cargo || undefined,
                         presupuesto: leadData.presupuestoValor != null ? leadData.presupuestoValor : undefined,
+                        generaOportunidad: leadData.generaOportunidad === true,
                         resumen: Array.from(messagesEl.querySelectorAll('.chat-bubble'))
                             .map(b => b.textContent).join(' | ').slice(0, 1500),
                     };
@@ -3415,7 +3418,7 @@
                 // Si el envío falló, se conserva leadData (nombre/contacto ya capturados) para no
                 // volver a pedirlos en el siguiente intento — solo se limpia tras un envío exitoso.
                 if (enviadoOk) {
-                    leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
+                    leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null, generaOportunidad: false };
                 }
                 await mostrarMenuInicial();
             }
@@ -3649,6 +3652,7 @@
             // como quick-replies (mismo widget visual, ruteo propio vía avanzarArbol).
             async function mostrarNodoArbol(nodo) {
                 ultimoNodoArbol = nodo;
+                if (nodo.genera === 'oportunidad') leadData.generaOportunidad = true;
                 addBubble(nodo.texto, 'bot');
                 if (nodo.opciones && nodo.opciones.length) {
                     setQuickReplies(nodo.opciones.map(o => o.texto), null);
@@ -3810,7 +3814,10 @@
             // conexiones de flujo, esas ganan.
             async function mostrarRespuesta(match) {
                 await botDice(() => (currentLang === 'en' && match.textoEn) ? match.textoEn : match.textoEs, 500);
-                if (match.senalInteres) {
+                // Si este nodo genera oportunidad, el lead que se capture después
+                // será oportunidad; 'contacto'/'ninguno' -> solo contacto.
+                if (match.genera === 'oportunidad') leadData.generaOportunidad = true;
+                if (match.senalInteres && match.genera !== 'ninguno') {
                     botonesFlujoActuales = [];
                     await iniciarCapturaLead(match.id);
                     return;
@@ -3978,6 +3985,8 @@
                     if (idx >= 0) {
                         leadData.presupuestoLabel = rangos[idx] === rangos[rangos.length - 1] ? '' : rangos[idx];
                         leadData.presupuestoValor = PRESUPUESTO_VALORES[idx];
+                        // Dar un rango de inversión concreto = intención comercial.
+                        if (leadData.presupuestoValor != null) leadData.generaOportunidad = true;
                     } else {
                         // Texto libre: se guarda como etiqueta pero sin valor numérico confiable.
                         leadData.presupuestoLabel = mensaje.slice(0, 100);

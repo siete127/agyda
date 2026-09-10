@@ -6244,6 +6244,25 @@ IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_CATEGORIA') IS NULL
 IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_TITULO') IS NULL
   ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_TITULO NVARCHAR(120) NULL;
 
+-- Fase 2 (contacto vs oportunidad): qué crea el bot cuando el visitante deja
+-- sus datos habiendo pasado por este nodo. 'contacto' (default) solo registra
+-- el contacto; 'oportunidad' además abre una oportunidad; NULL = hereda el
+-- comportamiento de RESP_SENAL_INTERES (contacto).
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_GENERA') IS NULL
+  ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_GENERA NVARCHAR(15) NULL;
+IF COL_LENGTH('dbo.CHATBOT_NODOS', 'NODO_GENERA') IS NULL
+  ALTER TABLE dbo.CHATBOT_NODOS ADD NODO_GENERA NVARCHAR(15) NULL;
+IF COL_LENGTH('dbo.CHATBOT_ETIQUETAS_MENU', 'ETQ_GENERA') IS NULL
+  ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD ETQ_GENERA NVARCHAR(15) NULL;
+
+-- Migración conservadora: las respuestas con señal de interés hoy generan
+-- oportunidad SIEMPRE. Se bajan todas a 'contacto' salvo que el admin ya las
+-- haya reclasificado. Nadie pierde captura, pero deja de crear oportunidades
+-- de gente que solo preguntó "quiénes somos". EXEC para resolución diferida
+-- del nombre de la columna recién agregada en este mismo batch.
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_GENERA') IS NOT NULL
+  EXEC('UPDATE dbo.CHATBOT_RESPUESTAS SET RESP_GENERA = ''contacto'' WHERE RESP_GENERA IS NULL AND RESP_SENAL_INTERES = 1');
+
 -- Config clave/valor del chatbot: saludo, reglas de escalamiento, rangos de
 -- presupuesto, horario. El widget público la lee de /api/chatbot/config/publica
 -- con fallback a los valores hardcodeados si falla.

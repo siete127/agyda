@@ -236,12 +236,13 @@ exports.recibirLeadChatbot = async (req, res) => {
       return res.status(400).json({ ok: false, mensaje: 'Nombre y al menos un contacto (email o teléfono) son requeridos.' });
     }
 
-    // Señal comercial: el widget lo manda explícito (Fase 2). Fallback: si dio
-    // un presupuesto numérico, es oportunidad; si no, por ahora también (para no
-    // regresar en captura hasta que el flujo esté ramificado).
+    // Señal comercial: el widget la manda explícita (pasó por un nodo marcado
+    // 'oportunidad' o dio un presupuesto). Un presupuesto numérico en el payload
+    // también cuenta, por si el widget es una versión vieja.
+    const presupuestoNum = Number(presupuesto);
     const generaOportunidad = req.body.generaOportunidad === true
       || req.body.generaOportunidad === 'true'
-      || (req.body.generaOportunidad == null && true);
+      || (Number.isFinite(presupuestoNum) && presupuestoNum > 0);
 
     const notasContacto = [
       '[chatbot-web]',

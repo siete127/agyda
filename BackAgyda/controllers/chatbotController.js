@@ -14,6 +14,7 @@ const SELECT_RESPUESTA = `
     RESP_TEXTO_EN as textoEn,
     RESP_BOTONES as botones,
     RESP_SENAL_INTERES as senalInteres,
+    RESP_GENERA as genera,
     RESP_ORDEN as orden,
     RESP_AUTOR_ID as autorId,
     RESP_AUTOR_NOMBRE as autorNombre,
@@ -22,6 +23,8 @@ const SELECT_RESPUESTA = `
     RESP_ACTIVA as activa
   FROM dbo.CHATBOT_RESPUESTAS
 `;
+
+const GENERA_VALIDOS = ['contacto', 'oportunidad', 'ninguno'];
 
 // Genera un id técnico (slug) a partir del título — el usuario ya no lo escribe.
 // Colisiona -> se le agrega un sufijo numérico en createRespuesta.
@@ -147,11 +150,12 @@ exports.getRespuestas = async (req, res) => {
 
 exports.createRespuesta = async (req, res) => {
   try {
-    const { id, titulo, categoria, keywords, textoEs, textoEn, botones, senalInteres, orden } = req.body;
+    const { id, titulo, categoria, keywords, textoEs, textoEn, botones, senalInteres, orden, genera } = req.body;
 
     if (!textoEs || !Array.isArray(keywords) || keywords.length === 0) {
       return res.status(400).json({ success: false, message: 'Faltan campos requeridos: textoEs, keywords (arreglo no vacío)' });
     }
+    const generaVal = GENERA_VALIDOS.includes(genera) ? genera : (senalInteres === true ? 'contacto' : null);
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
@@ -176,18 +180,19 @@ exports.createRespuesta = async (req, res) => {
       .input('textoEn', sql.NVarChar, textoEn || null)
       .input('botones', sql.NVarChar, JSON.stringify(Array.isArray(botones) ? botones : []))
       .input('senalInteres', sql.Bit, senalInteres === true)
+      .input('genera', sql.NVarChar(15), generaVal)
       .input('orden', sql.Int, Number.isFinite(orden) ? orden : 0)
       .input('autorId', sql.Int, req.user?.id || null)
       .input('autorNombre', sql.NVarChar, req.user?.nombre || null)
       .query(`
         INSERT INTO dbo.CHATBOT_RESPUESTAS (
           RESP_ID, RESP_TITULO, RESP_CATEGORIA, RESP_KEYWORDS, RESP_TEXTO_ES, RESP_TEXTO_EN, RESP_BOTONES,
-          RESP_SENAL_INTERES, RESP_ORDEN, RESP_AUTOR_ID, RESP_AUTOR_NOMBRE,
+          RESP_SENAL_INTERES, RESP_GENERA, RESP_ORDEN, RESP_AUTOR_ID, RESP_AUTOR_NOMBRE,
           RESP_FECHA_CREACION, RESP_ACTIVA
         )
         VALUES (
           @id, @titulo, @categoria, @keywords, @textoEs, @textoEn, @botones,
-          @senalInteres, @orden, @autorId, @autorNombre,
+          @senalInteres, @genera, @orden, @autorId, @autorNombre,
           GETDATE(), 1
         );
         SELECT SCOPE_IDENTITY() as pk;
@@ -217,11 +222,12 @@ exports.createRespuesta = async (req, res) => {
 exports.updateRespuesta = async (req, res) => {
   try {
     const { pk } = req.params;
-    const { id, titulo, categoria, keywords, textoEs, textoEn, botones, senalInteres, orden, activa } = req.body;
+    const { id, titulo, categoria, keywords, textoEs, textoEn, botones, senalInteres, orden, activa, genera } = req.body;
 
     if (!textoEs || !Array.isArray(keywords) || keywords.length === 0) {
       return res.status(400).json({ success: false, message: 'Faltan campos requeridos: textoEs, keywords (arreglo no vacío)' });
     }
+    const generaVal = GENERA_VALIDOS.includes(genera) ? genera : (genera === null ? null : undefined);
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
@@ -257,6 +263,8 @@ exports.updateRespuesta = async (req, res) => {
       .input('textoEn', sql.NVarChar, textoEn || null)
       .input('botones', sql.NVarChar, JSON.stringify(Array.isArray(botones) ? botones : []))
       .input('senalInteres', sql.Bit, senalInteres === true)
+      .input('genera', sql.NVarChar(15), generaVal === undefined ? null : generaVal)
+      .input('generaTocar', sql.Bit, generaVal !== undefined)
       .input('orden', sql.Int, Number.isFinite(orden) ? orden : 0)
       .input('activa', sql.Bit, activa !== false)
       .query(`
@@ -270,6 +278,7 @@ exports.updateRespuesta = async (req, res) => {
           RESP_TEXTO_EN = @textoEn,
           RESP_BOTONES = @botones,
           RESP_SENAL_INTERES = @senalInteres,
+          RESP_GENERA = CASE WHEN @generaTocar = 1 THEN @genera ELSE RESP_GENERA END,
           RESP_ORDEN = @orden,
           RESP_FECHA_ACTUALIZACION = GETDATE(),
           RESP_ACTIVA = @activa

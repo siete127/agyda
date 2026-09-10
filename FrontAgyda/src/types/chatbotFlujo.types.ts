@@ -1,5 +1,7 @@
 export type TipoNodoFlujo = 'respuesta' | 'etiqueta' | 'nodo_arbol' | 'campania' | 'captura_lead'
 
+export type GeneraLead = 'contacto' | 'oportunidad' | 'ninguno'
+
 export interface FlujoRespuesta {
   id: number
   codigo: string
@@ -7,6 +9,7 @@ export interface FlujoRespuesta {
   botones: string[]
   activa: boolean
   esEntrada?: boolean
+  genera: GeneraLead | null
   posX: number | null
   posY: number | null
 }
@@ -17,6 +20,7 @@ export interface FlujoEtiqueta {
   tipoAccion: string
   campaniaId: number | null
   activa: boolean
+  genera: GeneraLead | null
   posX: number | null
   posY: number | null
 }
@@ -27,6 +31,7 @@ export interface FlujoNodoArbol {
   texto: string
   tipoNodo: string
   activa: boolean
+  genera: GeneraLead | null
   posX: number | null
   posY: number | null
 }
@@ -79,6 +84,9 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
   const campanias = Array.isArray(raw.campanias) ? raw.campanias : []
   const conexiones = Array.isArray(raw.conexiones) ? raw.conexiones : []
 
+  const genera = (v: unknown): GeneraLead | null =>
+    v === 'contacto' || v === 'oportunidad' || v === 'ninguno' ? v : null
+
   return {
     capturaLead: parseBool(raw.capturaLead, false),
     automaticasPendientes: Number(raw.automaticasPendientes ?? 0),
@@ -89,6 +97,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       botones: Array.isArray(r.botones) ? (r.botones as string[]) : [],
       activa: parseBool(pick(r, 'activa'), true),
       esEntrada: parseBool(pick(r, 'esEntrada'), false),
+      genera: genera(pick(r, 'genera')),
       posX: pick(r, 'posX') != null ? Number(pick(r, 'posX')) : null,
       posY: pick(r, 'posY') != null ? Number(pick(r, 'posY')) : null,
     })),
@@ -98,6 +107,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       tipoAccion: String(pick(e, 'tipoAccion') ?? 'respuesta'),
       campaniaId: pick(e, 'campaniaId') != null ? Number(pick(e, 'campaniaId')) : null,
       activa: parseBool(pick(e, 'activa'), true),
+      genera: genera(pick(e, 'genera')),
       posX: pick(e, 'posX') != null ? Number(pick(e, 'posX')) : null,
       posY: pick(e, 'posY') != null ? Number(pick(e, 'posY')) : null,
     })),
@@ -107,6 +117,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       texto: String(pick(n, 'texto') ?? ''),
       tipoNodo: String(pick(n, 'tipoNodo') ?? 'pregunta'),
       activa: parseBool(pick(n, 'activa'), true),
+      genera: genera(pick(n, 'genera')),
       posX: pick(n, 'posX') != null ? Number(pick(n, 'posX')) : null,
       posY: pick(n, 'posY') != null ? Number(pick(n, 'posY')) : null,
     })),
