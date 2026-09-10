@@ -1152,14 +1152,116 @@ function ConversacionTab() {
   )
 }
 
+/* ════════════════════════════════════════════════════════
+   SECCIÓN 2 — ESCALAMIENTO (Fase 4)
+   Reglas de paso a un agente humano, hoy repartidas entre el
+   HTML del widget y el modal de etiquetas.
+════════════════════════════════════════════════════════ */
+
+function EscalamientoTab() {
+  const qc = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['chatbot-config'],
+    queryFn: () => chatbotService.getConfig(),
+  })
+  const [borrador, setBorrador] = useState<Partial<ChatbotConfig>>({})
+  const editado = Object.keys(borrador).length > 0
+
+  const guardar = useMutation({
+    mutationFn: () => chatbotService.updateConfig(borrador),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chatbot-config'] })
+      setBorrador({})
+      toast.success('Reglas de escalamiento actualizadas')
+    },
+    onError: () => toast.error('No se pudo guardar'),
+  })
+
+  if (isLoading || !config) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+  const val = (k: keyof ChatbotConfig) => borrador[k] ?? config[k]
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500">
+        Cuándo y cómo el bot ofrece pasar la conversación a un agente humano. El widget lee estos valores
+        al iniciar; si algo falla usa los valores por defecto.
+      </p>
+
+      <div className="card p-4 space-y-4">
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Ofrecer un agente después de…
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={val('turnosSinMatchParaEscalar')}
+              onChange={(e) => setBorrador((b) => ({ ...b, turnosSinMatchParaEscalar: e.target.value }))}
+              className="field w-20"
+              disabled={!isAdmin}
+            />
+            <span className="text-sm text-gray-500">respuestas seguidas sin entender al visitante</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Mensaje al ofrecer el agente — Español
+          </label>
+          <textarea
+            value={val('sugerenciaEscalarEs')}
+            onChange={(e) => setBorrador((b) => ({ ...b, sugerenciaEscalarEs: e.target.value }))}
+            rows={2}
+            className="field resize-none text-sm"
+            disabled={!isAdmin}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Mensaje al ofrecer el agente — Inglés
+          </label>
+          <textarea
+            value={val('sugerenciaEscalarEn')}
+            onChange={(e) => setBorrador((b) => ({ ...b, sugerenciaEscalarEn: e.target.value }))}
+            rows={2}
+            className="field resize-none text-sm"
+            disabled={!isAdmin}
+          />
+        </div>
+
+        {isAdmin && editado && (
+          <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+            <Button variant="ghost" size="sm" onClick={() => setBorrador({})}>Descartar</Button>
+            <Button size="sm" isLoading={guardar.isPending} onClick={() => guardar.mutate()}>Guardar</Button>
+          </div>
+        )}
+      </div>
+
+      <div className="card p-4">
+        <p className="text-[0.8rem] font-bold text-gray-700">Campañas de Chat en Vivo</p>
+        <p className="mt-1 text-[0.72rem] text-gray-500">
+          Las campañas que atienden el chat escalado se configuran al crear un botón de menú de tipo
+          "Escalar a campaña", en la pestaña Conversación → Menú inicial. El detalle (SLA, tipificaciones,
+          motivos de cierre) se afina en Configuración → Contact Center.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 const TABS = [
   { key: 'conversacion' as const, label: 'Conversación', icon: MessagesSquare },
+  { key: 'escalamiento' as const, label: 'Escalamiento', icon: Users },
   { key: 'rendimiento' as const, label: 'Rendimiento', icon: LayoutDashboard },
 ]
 
 /* ── Página principal ── */
 export function ChatbotPage() {
-  const [tab, setTab] = useState<'conversacion' | 'rendimiento' | 'mapa'>('conversacion')
+  const [tab, setTab] = useState<'conversacion' | 'escalamiento' | 'rendimiento' | 'mapa'>('conversacion')
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1206,6 +1308,8 @@ export function ChatbotPage() {
         </div>
       ) : tab === 'rendimiento' ? (
         <DashboardTab />
+      ) : tab === 'escalamiento' ? (
+        <EscalamientoTab />
       ) : (
         <ConversacionTab />
       )}

@@ -3138,8 +3138,38 @@
                 },
             };
 
+            // Config del bot que AGYDA controla (saludo, regla de escalamiento).
+            // Se rellena con cargarBotConfig(); hasta entonces valen los TEXTOS
+            // hardcodeados de abajo como fallback.
+            let botConfig = null;
+
             function t() {
-                return TEXTOS[currentLang] || TEXTOS.es;
+                const base = TEXTOS[currentLang] || TEXTOS.es;
+                if (!botConfig) return base;
+                const es = currentLang === 'en';
+                return {
+                    ...base,
+                    saludo: (es ? botConfig.saludoEn : botConfig.saludoEs) || base.saludo,
+                    liveChatSugerencia: (es ? botConfig.sugerenciaEscalarEn : botConfig.sugerenciaEscalarEs) || base.liveChatSugerencia,
+                };
+            }
+
+            // Nº de "no entendí" seguidos antes de ofrecer un agente (configurable).
+            function turnosParaEscalar() {
+                const n = parseInt(botConfig && botConfig.turnosSinMatchParaEscalar, 10);
+                return Number.isFinite(n) && n > 0 ? n : 3;
+            }
+
+            async function cargarBotConfig() {
+                if (botConfig) return;
+                try {
+                    const res = await fetch('/api/chatbot/config/publica');
+                    const json = await res.json();
+                    botConfig = json && json.data ? json.data : json;
+                } catch (e) {
+                    console.warn('No se pudo cargar la config del chatbot, se usan los textos por defecto:', e);
+                    botConfig = null;
+                }
             }
 
             let diccionario = [];
@@ -3971,7 +4001,7 @@
                     // el panel "Preguntas sin respuesta" de AGYDA.
                     enviarTelemetria('/api/chatbot/sin-match', { texto: mensaje });
                     await botDice(() => t().sinMatch, 450);
-                    if (turnosSinLead >= 3) {
+                    if (turnosSinLead >= turnosParaEscalar()) {
                         turnosSinLead = 0;
                         await botDice(() => t().liveChatSugerencia, 400);
                         setQuickReplies([t().sugerenciaHablarConAlguien], null);
@@ -3988,7 +4018,7 @@
                 if (!chatIniciado) {
                     chatIniciado = true;
                     enviarTelemetria('/api/chatbot/evento', { tipo: 'abrio', sesionToken });
-                    await cargarDiccionario();
+                    await Promise.all([cargarDiccionario(), cargarBotConfig()]);
                     await botDice(() => t().saludo, 350);
                     await mostrarMenuInicial();
                 }
@@ -4021,6 +4051,9 @@
                 chatIniciado = !!guardado.chatIniciado;
 
                 (guardado.mensajes || []).forEach(m => addBubble(m.texto, m.tipo));
+
+                // Config del bot: relevante si el visitante sigue conversando tras recargar.
+                cargarBotConfig();
 
                 if (quickRepliesTipo === 'menu') await mostrarMenuInicial();
                 else if (quickRepliesTipo === 'presupuesto') setQuickReplies(t().rangosPresupuesto, 'presupuesto');
