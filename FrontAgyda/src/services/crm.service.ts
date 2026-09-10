@@ -12,6 +12,32 @@ const norm = <T>(data: unknown, parse: (r: Record<string, unknown>) => T): T[] =
   return (arr as Record<string, unknown>[]).map(parse)
 }
 
+// Vista comercial de solo lectura que trae el expediente del cliente: sus
+// oportunidades del pipeline con las cotizaciones de cada una.
+export interface ExpedienteCotizacion {
+  id: number
+  opoId: number
+  folio: string | null
+  titulo: string | null
+  estatus: 'borrador' | 'enviada' | 'aprobada' | 'rechazada' | 'facturada'
+  total: number | null
+  semaforo: string | null
+  fecha: string | null
+  fechaVto: string | null
+}
+export interface ExpedienteOportunidad {
+  id: number
+  nombre: string
+  etapa: 'prospecto' | 'contactado' | 'propuesta' | 'negociacion' | 'ganado' | 'perdido'
+  valor: number | null
+  prioridad: 0 | 1 | 2 | 3
+  fecha: string | null
+  fechaCierre: string | null
+  proyectoId: number | null
+  asignadoNombre: string | null
+  cotizaciones: ExpedienteCotizacion[]
+}
+
 export const crmService = {
   // ── Contactos ──
   getContactos: async (q?: string): Promise<CRMContacto[]> => {
@@ -46,10 +72,17 @@ export const crmService = {
     const { data } = await api.put(`/crm/contactos/${id}/alta-cliente`, body)
     return data
   },
-  getExpediente: async (id: number): Promise<CRMContacto & { conteos: { documentos: number; pagos: number; encuestas: number } }> => {
+  getExpediente: async (id: number): Promise<CRMContacto & {
+    conteos: { documentos: number; pagos: number; encuestas: number; oportunidades: number }
+    oportunidades: ExpedienteOportunidad[]
+  }> => {
     const { data } = await api.get(`/crm/contactos/${id}/expediente`)
     const raw = data?.data ?? data
-    return { ...parseCRMContacto(raw), conteos: raw.conteos }
+    return {
+      ...parseCRMContacto(raw),
+      conteos: raw.conteos,
+      oportunidades: Array.isArray(raw.oportunidades) ? raw.oportunidades : [],
+    }
   },
 
   // ── Oportunidades ──

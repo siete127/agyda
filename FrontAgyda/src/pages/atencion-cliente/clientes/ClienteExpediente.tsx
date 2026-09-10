@@ -17,7 +17,7 @@ import { CasosPagosTab, type SubCasosPagos } from './components/CasosPagosTab'
 // Expediente de 4 pestañas:
 //   datos       → DatosGeneralesTab
 //   seguimiento → bitácora + tareas + citas + renovaciones + historial (sub-tabs)
-//   casos-pagos → casos del cliente + control de pagos + satisfacción (sub-tabs)
+//   casos-pagos → casos + control de pagos + satisfacción + comercial (sub-tabs)
 //   documentos  → DocumentosTab
 
 export type ExpedienteTab = 'datos' | 'seguimiento' | 'casos-pagos' | 'documentos'
@@ -29,7 +29,7 @@ export const EXPEDIENTE_SUB_DEFAULT: Record<'seguimiento' | 'casos-pagos', strin
 }
 export const EXPEDIENTE_SUB_VALIDAS: Record<'seguimiento' | 'casos-pagos', string[]> = {
   seguimiento: ['bitacora', 'tareas', 'citas', 'renovaciones', 'historial'],
-  'casos-pagos': ['casos', 'pagos', 'satisfaccion'],
+  'casos-pagos': ['casos', 'pagos', 'satisfaccion', 'comercial'],
 }
 
 export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact }: {
@@ -61,7 +61,7 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
   const TABS: TabItem<ExpedienteTab>[] = [
     { key: 'datos', label: 'Datos', icon: User },
     { key: 'seguimiento', label: 'Seguimiento', icon: History },
-    { key: 'casos-pagos', label: 'Casos y pagos', icon: Inbox },
+    { key: 'casos-pagos', label: 'Casos, pagos y ventas', icon: Inbox },
     { key: 'documentos', label: 'Documentos', icon: FileText, badge: cliente.conteos?.documentos },
   ]
 
@@ -115,6 +115,7 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
           sub={sub as SubCasosPagos}
           onSubChange={onSub}
           conteos={cliente.conteos}
+          oportunidades={cliente.oportunidades}
         />
       )}
       {tab === 'documentos' && <DocumentosTab contactoId={cliente.id} />}

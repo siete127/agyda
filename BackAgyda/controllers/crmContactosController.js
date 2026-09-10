@@ -205,10 +205,58 @@ exports.getExpediente = async (req, res) => {
         SELECT
           (SELECT COUNT(*) FROM CRM_DOCUMENTOS_CLIENTE WHERE DOC_CONTACTO_ID=@id AND DOC_ACTIVO=1) as documentos,
           (SELECT COUNT(*) FROM CRM_RECORDATORIOS_PAGO WHERE REC_CONTACTO_ID=@id AND REC_ACTIVO=1) as pagos,
-          (SELECT COUNT(*) FROM CRM_ENCUESTAS_ENVIADAS WHERE CES_CONTACTO_ID=@id) as encuestas
+          (SELECT COUNT(*) FROM CRM_ENCUESTAS_ENVIADAS WHERE CES_CONTACTO_ID=@id) as encuestas,
+          (SELECT COUNT(*) FROM CRM_OPORTUNIDADES WHERE OPO_CONTACTO_ID=@id AND OPO_ACTIVO=1) as oportunidades
       `);
 
-    res.json({ success: true, data: { ...contacto.recordset[0], conteos: conteos.recordset[0] } });
+    // Vista comercial (solo lectura) del cliente: sus oportunidades del pipeline
+    // + las cotizaciones de cada una. El expediente de Atención al Cliente las
+    // muestra para dar contexto de venta sin salir del módulo.
+    const opos = await pool.request()
+      .input('id', sql.Int, id)
+      .query(`
+        SELECT
+          o.OPO_ID          as id,
+          o.OPO_NOMBRE       as nombre,
+          o.OPO_ETAPA        as etapa,
+          o.OPO_VALOR        as valor,
+          o.OPO_PRIORIDAD    as prioridad,
+          CONVERT(NVARCHAR(19), o.OPO_FECHA, 126)        as fecha,
+          CONVERT(NVARCHAR(19), o.OPO_FECHA_CIERRE, 126) as fechaCierre,
+          o.OPO_PROYECTO_ID  as proyectoId,
+          u.NEUS_NOMBRES    as asignadoNombre
+        FROM CRM_OPORTUNIDADES o
+        LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = o.OPO_ASIGNADO_A
+        WHERE o.OPO_CONTACTO_ID = @id AND o.OPO_ACTIVO = 1
+        ORDER BY o.OPO_FECHA DESC
+      `);
+
+    let cotizaciones = { recordset: [] };
+    const opoIds = opos.recordset.map((o) => o.id);
+    if (opoIds.length) {
+      cotizaciones = await pool.request().query(`
+        SELECT
+          COT_ID       as id,
+          COT_OPO_ID   as opoId,
+          COT_FOLIO    as folio,
+          COT_TITULO   as titulo,
+          COT_ESTATUS  as estatus,
+          COT_TOTAL    as total,
+          COT_SEMAFORO as semaforo,
+          CONVERT(NVARCHAR(19), COT_FECHA, 126)     as fecha,
+          CONVERT(NVARCHAR(19), COT_FECHA_VTO, 126) as fechaVto
+        FROM CRM_COTIZACIONES
+        WHERE COT_OPO_ID IN (${opoIds.join(',')}) AND COT_ACTIVO = 1
+        ORDER BY COT_FECHA DESC
+      `);
+    }
+
+    const oportunidades = opos.recordset.map((o) => ({
+      ...o,
+      cotizaciones: cotizaciones.recordset.filter((c) => c.opoId === o.id),
+    }));
+
+    res.json({ success: true, data: { ...contacto.recordset[0], conteos: conteos.recordset[0], oportunidades } });
   } catch (e) {
     console.error('Error getExpediente CRM:', e);
     res.status(500).json({ success: false, message: e.message });
