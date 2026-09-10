@@ -6231,6 +6231,25 @@ BEGIN
   CREATE INDEX IX_CHATBOT_RESPUESTAS_ACTIVA ON dbo.CHATBOT_RESPUESTAS(RESP_ACTIVA, RESP_ORDEN);
 END
 
+-- Fase 1 reorg UX: agrupar las respuestas por categoría y darles un título
+-- legible (el id técnico deja de escribirse a mano, se autogenera del título).
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_CATEGORIA') IS NULL
+  ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_CATEGORIA NVARCHAR(60) NULL;
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_TITULO') IS NULL
+  ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_TITULO NVARCHAR(120) NULL;
+
+-- Config clave/valor del chatbot: saludo, reglas de escalamiento, rangos de
+-- presupuesto, horario. El widget público la lee de /api/chatbot/config/publica
+-- con fallback a los valores hardcodeados si falla.
+IF OBJECT_ID('dbo.CHATBOT_CONFIG', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_CONFIG (
+    CFG_CLAVE  NVARCHAR(60)  NOT NULL PRIMARY KEY,
+    CFG_VALOR  NVARCHAR(MAX) NULL,
+    CFG_FECHA  DATETIME      NOT NULL DEFAULT GETDATE()
+  );
+END
+
 -- Árbol de decisión básico (sin IA/NLU): nodos de pregunta con opciones que
 -- llevan a otro nodo, o a una acción terminal (resolver, escalar a chat, crear ticket).
 IF OBJECT_ID('dbo.CHATBOT_NODOS', 'U') IS NULL

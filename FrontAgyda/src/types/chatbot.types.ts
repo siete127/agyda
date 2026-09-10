@@ -1,6 +1,8 @@
 export interface RespuestaChatbot {
   pk: number
   id: string
+  titulo: string | null
+  categoria: string | null
   keywords: string[]
   textoEs: string
   textoEn: string | null
@@ -12,6 +14,15 @@ export interface RespuestaChatbot {
   fechaCreacion: string
   fechaActualizacion: string | null
   activa: boolean
+}
+
+// Config clave/valor del bot (saludo, reglas de escalamiento).
+export interface ChatbotConfig {
+  saludoEs: string
+  saludoEn: string
+  turnosSinMatchParaEscalar: string
+  sugerenciaEscalarEs: string
+  sugerenciaEscalarEn: string
 }
 
 export type TipoEtiquetaMenu = 'respuesta' | 'escalar_campania' | 'escalar_generico' | 'arbol_diagnostico'
@@ -80,6 +91,8 @@ export function parseRespuestaChatbot(raw: Record<string, unknown>): RespuestaCh
   return {
     pk: Number(pick(raw, 'pk', 'PK') ?? 0),
     id: String(pick(raw, 'id', 'Id', 'ID') ?? ''),
+    titulo: pick(raw, 'titulo') ? String(pick(raw, 'titulo')) : null,
+    categoria: pick(raw, 'categoria') ? String(pick(raw, 'categoria')) : null,
     keywords: parseStringArray(pick(raw, 'keywords')),
     textoEs: String(pick(raw, 'textoEs', 'texto_es') ?? ''),
     textoEn: pick(raw, 'textoEn', 'texto_en') ? String(pick(raw, 'textoEn', 'texto_en')) : null,

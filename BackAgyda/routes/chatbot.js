@@ -9,6 +9,7 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 // Lectura pública — la usa el widget de chat de la página pública para construir el diccionario.
 router.get('/respuestas/publicas', chatbotController.getRespuestasPublicas);
 router.get('/etiquetas-menu/publicas', chatbotController.getEtiquetasMenuPublicas);
+router.get('/config/publica', chatbotController.getConfigPublica);
 
 // Árbol de decisión — público (authenticateTokenOptional asocia el usuario si
 // está logueado, sin exigirlo: lo usan tanto el widget público como el interno).
@@ -28,6 +29,9 @@ router.delete('/arbol/opciones/:id', authenticateToken, requireActionAccess('con
 // Gestión — requiere sesión + permiso de acción sobre el módulo 'chatbot'.
 router.get('/respuestas', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getRespuestas);
 router.get('/leads', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getLeads);
+router.get('/categorias', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getCategorias);
+router.get('/config', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getConfig);
+router.put('/config', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.updateConfig);
 router.post('/respuestas', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'crear'), chatbotController.createRespuesta);
 router.put('/respuestas/:pk', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.updateRespuesta);
 router.patch('/respuestas/:pk/activa', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.toggleActiva);

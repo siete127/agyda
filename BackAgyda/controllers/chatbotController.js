@@ -7,6 +7,8 @@ const SELECT_RESPUESTA = `
   SELECT
     RESP_PK as pk,
     RESP_ID as id,
+    RESP_TITULO as titulo,
+    RESP_CATEGORIA as categoria,
     RESP_KEYWORDS as keywords,
     RESP_TEXTO_ES as textoEs,
     RESP_TEXTO_EN as textoEn,
@@ -20,6 +22,13 @@ const SELECT_RESPUESTA = `
     RESP_ACTIVA as activa
   FROM dbo.CHATBOT_RESPUESTAS
 `;
+
+// Genera un id técnico (slug) a partir del título — el usuario ya no lo escribe.
+// Colisiona -> se le agrega un sufijo numérico en createRespuesta.
+function slugify(texto) {
+  const sinAcentos = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return sinAcentos.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 70) || 'respuesta';
+}
 
 // Convierte el array JSON almacenado en texto a un array real; tolera strings sueltos o vacíos.
 function parseJsonArray(value) {
@@ -138,23 +147,30 @@ exports.getRespuestas = async (req, res) => {
 
 exports.createRespuesta = async (req, res) => {
   try {
-    const { id, keywords, textoEs, textoEn, botones, senalInteres, orden } = req.body;
+    const { id, titulo, categoria, keywords, textoEs, textoEn, botones, senalInteres, orden } = req.body;
 
-    if (!id || !textoEs || !Array.isArray(keywords) || keywords.length === 0) {
-      return res.status(400).json({ success: false, message: 'Faltan campos requeridos: id, textoEs, keywords (arreglo no vacío)' });
+    if (!textoEs || !Array.isArray(keywords) || keywords.length === 0) {
+      return res.status(400).json({ success: false, message: 'Faltan campos requeridos: textoEs, keywords (arreglo no vacío)' });
     }
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
-    const existing = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .query('SELECT RESP_PK FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_ID = @id');
-    if (existing.recordset.length > 0) {
-      return res.status(409).json({ success: false, message: `Ya existe una respuesta con el id "${id}"` });
+    // El id técnico ya no lo escribe el usuario: se autogenera del título (o del
+    // texto si no hay título). Si colisiona, se le agrega -2, -3…
+    const base = slugify(id || titulo || textoEs);
+    let idFinal = base;
+    for (let n = 2; n <= 50; n += 1) {
+      const dupe = await pool.request()
+        .input('id', sql.NVarChar, idFinal)
+        .query('SELECT RESP_PK FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_ID = @id');
+      if (dupe.recordset.length === 0) break;
+      idFinal = `${base}_${n}`;
     }
 
     const result = await pool.request()
-      .input('id', sql.NVarChar, id)
+      .input('id', sql.NVarChar, idFinal)
+      .input('titulo', sql.NVarChar, (titulo || '').trim().slice(0, 120) || null)
+      .input('categoria', sql.NVarChar, (categoria || '').trim().slice(0, 60) || null)
       .input('keywords', sql.NVarChar, JSON.stringify(keywords))
       .input('textoEs', sql.NVarChar, textoEs)
       .input('textoEn', sql.NVarChar, textoEn || null)
@@ -165,12 +181,12 @@ exports.createRespuesta = async (req, res) => {
       .input('autorNombre', sql.NVarChar, req.user?.nombre || null)
       .query(`
         INSERT INTO dbo.CHATBOT_RESPUESTAS (
-          RESP_ID, RESP_KEYWORDS, RESP_TEXTO_ES, RESP_TEXTO_EN, RESP_BOTONES,
+          RESP_ID, RESP_TITULO, RESP_CATEGORIA, RESP_KEYWORDS, RESP_TEXTO_ES, RESP_TEXTO_EN, RESP_BOTONES,
           RESP_SENAL_INTERES, RESP_ORDEN, RESP_AUTOR_ID, RESP_AUTOR_NOMBRE,
           RESP_FECHA_CREACION, RESP_ACTIVA
         )
         VALUES (
-          @id, @keywords, @textoEs, @textoEn, @botones,
+          @id, @titulo, @categoria, @keywords, @textoEs, @textoEn, @botones,
           @senalInteres, @orden, @autorId, @autorNombre,
           GETDATE(), 1
         );
@@ -190,7 +206,7 @@ exports.createRespuesta = async (req, res) => {
       console.warn('⚠️ No se pudo emitir chatbot:respuestaCreada:', e?.message || e);
     }
 
-    await logAudit(pool, { userId: req.user?.id || null, userName: req.user?.nombre || null, modulo: 'chatbot', accion: 'crear', entidadId: id, detalle: { id }, ip: req.ip });
+    await logAudit(pool, { userId: req.user?.id || null, userName: req.user?.nombre || null, modulo: 'chatbot', accion: 'crear', entidadId: idFinal, detalle: { id: idFinal }, ip: req.ip });
     res.status(201).json({ success: true, data });
   } catch (error) {
     console.error('Error creando respuesta del chatbot:', error);
@@ -201,32 +217,41 @@ exports.createRespuesta = async (req, res) => {
 exports.updateRespuesta = async (req, res) => {
   try {
     const { pk } = req.params;
-    const { id, keywords, textoEs, textoEn, botones, senalInteres, orden, activa } = req.body;
+    const { id, titulo, categoria, keywords, textoEs, textoEn, botones, senalInteres, orden, activa } = req.body;
 
-    if (!id || !textoEs || !Array.isArray(keywords) || keywords.length === 0) {
-      return res.status(400).json({ success: false, message: 'Faltan campos requeridos: id, textoEs, keywords (arreglo no vacío)' });
+    if (!textoEs || !Array.isArray(keywords) || keywords.length === 0) {
+      return res.status(400).json({ success: false, message: 'Faltan campos requeridos: textoEs, keywords (arreglo no vacío)' });
     }
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
     const existing = await pool.request()
       .input('pk', sql.Int, pk)
-      .query('SELECT RESP_PK FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_PK = @pk');
+      .query('SELECT RESP_PK, RESP_ID FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_PK = @pk');
     if (existing.recordset.length === 0) {
       return res.status(404).json({ success: false, message: 'Respuesta no encontrada' });
     }
 
-    const duplicada = await pool.request()
-      .input('pk', sql.Int, pk)
-      .input('id', sql.NVarChar, id)
-      .query('SELECT RESP_PK FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_ID = @id AND RESP_PK <> @pk');
-    if (duplicada.recordset.length > 0) {
-      return res.status(409).json({ success: false, message: `Ya existe otra respuesta con el id "${id}"` });
+    // El id técnico solo se toca si el cliente lo manda explícitamente (edición
+    // avanzada); si no, se conserva el que ya tenía. El slug nunca se re-deriva
+    // del título al editar — cambiar el id rompería enlaces del Flujo Visual.
+    const idFinal = id ? slugify(id) : existing.recordset[0].RESP_ID;
+
+    if (id) {
+      const duplicada = await pool.request()
+        .input('pk', sql.Int, pk)
+        .input('id', sql.NVarChar, idFinal)
+        .query('SELECT RESP_PK FROM dbo.CHATBOT_RESPUESTAS WHERE RESP_ID = @id AND RESP_PK <> @pk');
+      if (duplicada.recordset.length > 0) {
+        return res.status(409).json({ success: false, message: `Ya existe otra respuesta con el id "${idFinal}"` });
+      }
     }
 
     await pool.request()
       .input('pk', sql.Int, pk)
-      .input('id', sql.NVarChar, id)
+      .input('id', sql.NVarChar, idFinal)
+      .input('titulo', sql.NVarChar, (titulo || '').trim().slice(0, 120) || null)
+      .input('categoria', sql.NVarChar, (categoria || '').trim().slice(0, 60) || null)
       .input('keywords', sql.NVarChar, JSON.stringify(keywords))
       .input('textoEs', sql.NVarChar, textoEs)
       .input('textoEn', sql.NVarChar, textoEn || null)
@@ -238,6 +263,8 @@ exports.updateRespuesta = async (req, res) => {
         UPDATE dbo.CHATBOT_RESPUESTAS
         SET
           RESP_ID = @id,
+          RESP_TITULO = @titulo,
+          RESP_CATEGORIA = @categoria,
           RESP_KEYWORDS = @keywords,
           RESP_TEXTO_ES = @textoEs,
           RESP_TEXTO_EN = @textoEn,
@@ -259,7 +286,7 @@ exports.updateRespuesta = async (req, res) => {
       socketService.getIO(req.user?.empresa).emit('chatbot:respuestaActualizada', data);
     }
 
-    await logAudit(pool, { userId: req.user?.id || null, userName: req.user?.nombre || null, modulo: 'chatbot', accion: 'editar', entidadId: id, detalle: { id }, ip: req.ip });
+    await logAudit(pool, { userId: req.user?.id || null, userName: req.user?.nombre || null, modulo: 'chatbot', accion: 'editar', entidadId: idFinal, detalle: { id: idFinal }, ip: req.ip });
     res.json({ success: true, data });
   } catch (error) {
     console.error('Error actualizando respuesta del chatbot:', error);
@@ -504,6 +531,98 @@ exports.getLeads = async (req, res) => {
     res.json({ success: true, data: result.recordset });
   } catch (error) {
     console.error('Error obteniendo leads del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ════════════════════════════════════════════════════════
+   CATEGORÍAS Y CONFIG (Fase 1 reorg UX)
+════════════════════════════════════════════════════════ */
+
+// Lista de categorías en uso — para el selector del editor de respuestas.
+exports.getCategorias = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request().query(`
+      SELECT RESP_CATEGORIA as categoria, COUNT(*) as total
+      FROM dbo.CHATBOT_RESPUESTAS
+      WHERE RESP_CATEGORIA IS NOT NULL AND LTRIM(RTRIM(RESP_CATEGORIA)) <> ''
+      GROUP BY RESP_CATEGORIA
+      ORDER BY RESP_CATEGORIA
+    `);
+    res.json({ success: true, data: result.recordset });
+  } catch (error) {
+    console.error('Error obteniendo categorías del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Defaults de la config del bot — se usan tanto para responder /config/publica
+// cuando la tabla está vacía como de fallback en el widget.
+const CONFIG_DEFAULTS = {
+  saludoEs: '¡Hola! 👋 Soy el asistente virtual de ARDABYTEC. ¿En qué puedo ayudarte hoy?',
+  saludoEn: "Hi! 👋 I'm ARDABYTEC's virtual assistant. How can I help you today?",
+  turnosSinMatchParaEscalar: '3',
+  sugerenciaEscalarEs: 'Parece que no estoy resolviendo tu duda. ¿Quieres hablar con un agente?',
+  sugerenciaEscalarEn: "It seems I'm not solving your question. Would you like to talk to an agent?",
+};
+
+async function leerConfig(pool) {
+  const rows = await pool.request().query('SELECT CFG_CLAVE, CFG_VALOR FROM dbo.CHATBOT_CONFIG');
+  const cfg = { ...CONFIG_DEFAULTS };
+  for (const r of rows.recordset) {
+    if (r.CFG_VALOR != null) cfg[r.CFG_CLAVE] = r.CFG_VALOR;
+  }
+  return cfg;
+}
+
+// Lectura pública: el widget la consulta al iniciar. Nunca falla con 500 —
+// si algo sale mal devuelve los defaults, para no dejar el chat sin saludo.
+exports.getConfigPublica = async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const pool = await databaseService.getPool(req.user?.empresa);
+    res.json({ success: true, data: await leerConfig(pool) });
+  } catch (error) {
+    console.warn('Config pública del chatbot no disponible, se devuelven defaults:', error.message);
+    res.json({ success: true, data: CONFIG_DEFAULTS });
+  }
+};
+
+// Lectura administrativa (igual que la pública por ahora, separada para poder
+// agregar campos internos después sin exponerlos al widget).
+exports.getConfig = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    res.json({ success: true, data: await leerConfig(pool) });
+  } catch (error) {
+    console.error('Error obteniendo config del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Guarda un subconjunto de claves (merge, no reemplazo total).
+exports.updateConfig = async (req, res) => {
+  try {
+    const cambios = req.body && typeof req.body === 'object' ? req.body : {};
+    const clavesValidas = Object.keys(CONFIG_DEFAULTS);
+    const pool = await databaseService.getPool(req.user?.empresa);
+    for (const [clave, valor] of Object.entries(cambios)) {
+      if (!clavesValidas.includes(clave)) continue;
+      await pool.request()
+        .input('clave', sql.NVarChar(60), clave)
+        .input('valor', sql.NVarChar(sql.MAX), valor == null ? null : String(valor))
+        .query(`
+          MERGE dbo.CHATBOT_CONFIG AS t
+          USING (SELECT @clave AS c) AS s ON t.CFG_CLAVE = s.c
+          WHEN MATCHED THEN UPDATE SET CFG_VALOR = @valor, CFG_FECHA = GETDATE()
+          WHEN NOT MATCHED THEN INSERT (CFG_CLAVE, CFG_VALOR) VALUES (@clave, @valor);
+        `);
+    }
+    await logAudit(pool, { userId: req.user?.id || null, userName: req.user?.nombre || null, modulo: 'chatbot', accion: 'config', detalle: cambios, ip: req.ip });
+    res.json({ success: true, data: await leerConfig(pool) });
+  } catch (error) {
+    console.error('Error guardando config del chatbot:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

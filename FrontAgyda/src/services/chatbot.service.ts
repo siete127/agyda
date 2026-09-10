@@ -2,6 +2,7 @@ import { api } from '@/lib/axios'
 import {
   parseRespuestaChatbot, parseLeadChatbot, parseEtiquetaMenuChatbot,
   type RespuestaChatbot, type LeadChatbot, type EtiquetaMenuChatbot, type TipoEtiquetaMenu,
+  type ChatbotConfig,
 } from '@/types/chatbot.types'
 
 export const chatbotService = {
@@ -33,6 +34,26 @@ export const chatbotService = {
     const { data } = await api.get('/chatbot/leads')
     const list = Array.isArray(data) ? data : (data?.data ?? [])
     return (list as Record<string, unknown>[]).map(parseLeadChatbot)
+  },
+
+  // ── Categorías y config (Fase 1 reorg) ──
+  async getCategorias(): Promise<{ categoria: string; total: number }[]> {
+    const { data } = await api.get('/chatbot/categorias')
+    const list = Array.isArray(data) ? data : (data?.data ?? [])
+    return (list as Record<string, unknown>[]).map((r) => ({
+      categoria: String(r.categoria ?? ''),
+      total: Number(r.total ?? 0),
+    }))
+  },
+
+  async getConfig(): Promise<ChatbotConfig> {
+    const { data } = await api.get('/chatbot/config')
+    return (data?.data ?? data) as ChatbotConfig
+  },
+
+  async updateConfig(cambios: Partial<ChatbotConfig>): Promise<ChatbotConfig> {
+    const { data } = await api.put('/chatbot/config', cambios)
+    return (data?.data ?? data) as ChatbotConfig
   },
 
   // ── Etiquetas del menú inicial del widget ──
