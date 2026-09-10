@@ -6,6 +6,7 @@ export interface FlujoRespuesta {
   texto: string
   botones: string[]
   activa: boolean
+  esEntrada?: boolean
   posX: number | null
   posY: number | null
 }
@@ -53,6 +54,7 @@ export interface FlujoCompleto {
   nodosArbol: FlujoNodoArbol[]
   campanias: FlujoCampania[]
   capturaLead: boolean
+  automaticasPendientes: number
   conexiones: FlujoConexion[]
 }
 
@@ -79,12 +81,14 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
 
   return {
     capturaLead: parseBool(raw.capturaLead, false),
+    automaticasPendientes: Number(raw.automaticasPendientes ?? 0),
     respuestas: (respuestas as Record<string, unknown>[]).map((r) => ({
       id: Number(pick(r, 'id') ?? 0),
       codigo: String(pick(r, 'codigo') ?? ''),
       texto: String(pick(r, 'texto') ?? ''),
       botones: Array.isArray(r.botones) ? (r.botones as string[]) : [],
       activa: parseBool(pick(r, 'activa'), true),
+      esEntrada: parseBool(pick(r, 'esEntrada'), false),
       posX: pick(r, 'posX') != null ? Number(pick(r, 'posX')) : null,
       posY: pick(r, 'posY') != null ? Number(pick(r, 'posY')) : null,
     })),

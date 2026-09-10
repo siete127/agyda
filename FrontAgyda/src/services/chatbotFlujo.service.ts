@@ -48,4 +48,11 @@ export const chatbotFlujoService = {
   async deleteNodo(tipo: 'respuesta' | 'etiqueta' | 'nodo_arbol', id: number): Promise<void> {
     await api.delete(`/chatbot/flujo/nodos/${tipo}/${id}`)
   },
+
+  // Convierte las conexiones automáticas (derivadas) en conexiones reales que
+  // el admin puede editar y el widget obedece.
+  async materializar(): Promise<{ creadas: number; total: number }> {
+    const { data } = await api.post('/chatbot/flujo/materializar')
+    return (data?.data ?? data) as { creadas: number; total: number }
+  },
 }

@@ -43,10 +43,11 @@ interface CajaData extends Record<string, unknown> {
   subtitulo?: string
   activa: boolean
   soloDestino?: boolean
+  esEntrada?: boolean
 }
 
 function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
-  const { tipo, titulo, subtitulo, activa, soloDestino } = data
+  const { tipo, titulo, subtitulo, activa, soloDestino, esEntrada } = data
   const { icon: Icon, clases } = ESTILO_TIPO[tipo]
   return (
     <div className={clsx(
@@ -63,6 +64,7 @@ function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
         <div className="min-w-0">
           <p className="text-xs font-semibold text-ink truncate">{titulo}</p>
           {subtitulo && <p className="text-[0.68rem] text-ink-tertiary truncate">{subtitulo}</p>}
+          {esEntrada && <p className="mt-0.5 text-[0.6rem] font-semibold text-sky-500">entrada por texto</p>}
         </div>
       </div>
       <Handle type="source" position={Position.Right} className="!bg-brand !w-2 !h-2" />
@@ -264,6 +266,12 @@ function FlujoVisualCanvas() {
     },
   })
 
+  const materializar = useMutation({
+    mutationFn: () => chatbotFlujoService.materializar(),
+    onSuccess: (d) => { toast.success(`${d.creadas} conexión(es) fijada(s) — ahora las controla el bot`); invalidar() },
+    onError: () => toast.error('No se pudo fijar el flujo'),
+  })
+
   const initialNodes = useMemo<Node<CajaData>[]>(() => {
     if (!flujo) return []
     const nodos: Node<CajaData>[] = []
@@ -271,7 +279,7 @@ function FlujoVisualCanvas() {
       id: `respuesta-${r.id}`,
       type: 'caja',
       position: r.posX != null && r.posY != null ? { x: r.posX, y: r.posY } : posicionPorDefecto('respuesta', i),
-      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa },
+      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada },
     }))
     flujo.etiquetas.forEach((e, i) => nodos.push({
       id: `etiqueta-${e.id}`,
@@ -436,6 +444,16 @@ function FlujoVisualCanvas() {
             <Trash2 className="h-3.5 w-3.5" /> Eliminar nodo
           </button>
         )}
+        {isAdmin && flujo && flujo.automaticasPendientes > 0 && (
+          <button
+            onClick={() => { if (window.confirm(`Fijar ${flujo.automaticasPendientes} conexión(es) automática(s) como reales. A partir de ahí las editas y las borras aquí, y el bot las obedece. ¿Continuar?`)) materializar.mutate() }}
+            disabled={materializar.isPending}
+            className="flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/10 disabled:opacity-50"
+          >
+            {materializar.isPending ? <Spinner size="sm" /> : <Sparkles className="h-3.5 w-3.5" />}
+            Fijar flujo ({flujo.automaticasPendientes})
+          </button>
+        )}
         <span className="text-[0.7rem] text-ink-tertiary">
           {isAdmin ? 'Doble clic en una caja para editar su contenido · arrastra un punto al otro para conectar' : 'Solo un administrador puede editar el flujo.'}
         </span>
@@ -494,11 +512,11 @@ function FlujoVisualCanvas() {
       <div className="flex items-start gap-2 rounded-xl bg-brand/5 border border-brand/10 px-3.5 py-2.5">
         <Info size={15} className="text-brand shrink-0 mt-0.5" />
         <p className="text-xs text-ink-secondary leading-relaxed">
-          Este es el mismo contenido que las listas de la pestaña Conversación — editarlo aquí lo cambia allá y
-          en el widget. Las líneas <b>punteadas grises</b> son el flujo que el bot ya sigue por convención
-          (una etiqueta va a su campaña, un botón matchea otra respuesta, "señal de interés" dispara la captura
-          de lead); crea una conexión manual sobre el mismo par para fijarla. Los enlaces violeta son el Árbol de
-          Diagnóstico; las cajas verdes se administran en Contact Center.
+          Editar aquí cambia el contenido en la pestaña Conversación y en el widget. Las líneas <b>punteadas
+          grises</b> son el flujo que el bot ya sigue por convención — usa <b>"Fijar flujo"</b> para convertirlas
+          en conexiones reales que puedas editar y borrar. Las respuestas marcadas <b>"entrada por texto"</b> no
+          necesitan flecha de entrada: el visitante llega a ellas escribiendo una de sus palabras clave. Los
+          enlaces violeta son el Árbol de Diagnóstico; las cajas verdes se administran en Contact Center.
         </p>
       </div>
 

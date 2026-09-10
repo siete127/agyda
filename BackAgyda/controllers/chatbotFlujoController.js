@@ -14,6 +14,105 @@ function parseJsonArray(value) {
   }
 }
 
+const normFlujo = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+// Deriva las conexiones que el widget hoy sigue por convención (sin leer
+// CHATBOT_FLUJO_CONEXIONES): etiqueta -> su campaña / al nodo inicio del árbol /
+// a la respuesta que matchea su texto; RESP_BOTONES (texto libre) -> la
+// respuesta que matchea por keyword; RESP_SENAL_INTERES -> captura de lead.
+// `manualPairs` = pares origen->destino ya fijados a mano, que ganan.
+function derivarConexionesAutomaticas({ respsData, etiquetas, nodoInicio, manualPairs }) {
+  const matchRespuesta = (texto) => {
+    const tn = normFlujo(texto);
+    if (!tn) return null;
+    let mejor = null; let mejorLen = 0;
+    for (const r of respsData) {
+      for (const kw of r.keywords) {
+        const kn = normFlujo(kw);
+        if (kn && tn.includes(kn) && kn.length > mejorLen) { mejorLen = kn.length; mejor = r; }
+      }
+    }
+    return mejor;
+  };
+
+  const auto = [];
+  const push = (origenTipo, origenId, destinoTipo, destinoId, etiqueta) => {
+    if (destinoId == null) return;
+    const key = `${origenTipo}:${origenId}->${destinoTipo}:${destinoId}`;
+    if (manualPairs.has(key)) return;
+    auto.push({
+      id: `auto-${auto.length}-${key}`,
+      origenTipo, origenId, destinoTipo, destinoId,
+      etiqueta: etiqueta || null,
+      esAutomatica: true,
+    });
+  };
+
+  for (const e of etiquetas) {
+    if (e.tipoAccion === 'escalar_campania' && e.campaniaId != null) {
+      push('etiqueta', e.id, 'campania', e.campaniaId);
+    } else if (e.tipoAccion === 'arbol_diagnostico' && nodoInicio) {
+      push('etiqueta', e.id, 'nodo_arbol', nodoInicio.id);
+    } else if (e.tipoAccion === 'respuesta') {
+      const r = matchRespuesta(e.texto);
+      if (r) push('etiqueta', e.id, 'respuesta', r.id);
+    }
+  }
+
+  for (const r of respsData) {
+    if (r.senalInteres) push('respuesta', r.id, 'captura_lead', 0, 'pide datos de contacto');
+    for (const bt of r.botones) {
+      const destino = matchRespuesta(bt);
+      if (destino && destino.id !== r.id) push('respuesta', r.id, 'respuesta', destino.id, bt);
+    }
+  }
+
+  return auto;
+}
+
+// Carga cruda de todo lo que el canvas y la derivación necesitan.
+async function cargarFlujoCrudo(pool) {
+  const [respuestas, etiquetas, nodosArbol, opcionesArbol, campanias, conexiones] = await Promise.all([
+    pool.request().query(`
+      SELECT RESP_PK as id, RESP_ID as codigo, RESP_TEXTO_ES as texto, RESP_BOTONES as botones,
+             RESP_KEYWORDS as keywords, RESP_SENAL_INTERES as senalInteres,
+             RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY
+      FROM dbo.CHATBOT_RESPUESTAS ORDER BY RESP_PK`),
+    pool.request().query(`
+      SELECT ETQ_ID as id, ETQ_TEXTO_ES as texto, ETQ_TIPO as tipoAccion, ETQ_CAMPANIA_ID as campaniaId,
+             ETQ_ACTIVA as activa, ETQ_POS_X as posX, ETQ_POS_Y as posY
+      FROM dbo.CHATBOT_ETIQUETAS_MENU ORDER BY ETQ_ID`),
+    pool.request().query(`
+      SELECT NODO_ID as id, NODO_CODIGO as codigo, NODO_TEXTO as texto, NODO_TIPO as tipoNodo,
+             NODO_ACTIVO as activa, NODO_POS_X as posX, NODO_POS_Y as posY
+      FROM dbo.CHATBOT_NODOS ORDER BY NODO_ID`),
+    pool.request().query(`
+      SELECT OPC_ID as id, OPC_NODO_ID as nodoId, OPC_TEXTO_BOTON as texto, OPC_NODO_DESTINO_ID as nodoDestinoId
+      FROM dbo.CHATBOT_NODO_OPCIONES`),
+    pool.request().query(`
+      SELECT CM2_ID as id, CM2_NOMBRE as texto, CM2_ACTIVO as activa
+      FROM dbo.CCO_CAMPANIAS WHERE CM2_ACTIVO = 1 ORDER BY CM2_NOMBRE`),
+    pool.request().query(`
+      SELECT FCX_ID as id, FCX_ORIGEN_TIPO as origenTipo, FCX_ORIGEN_ID as origenId,
+             FCX_DESTINO_TIPO as destinoTipo, FCX_DESTINO_ID as destinoId, FCX_ETIQUETA as etiqueta
+      FROM dbo.CHATBOT_FLUJO_CONEXIONES`),
+  ]);
+
+  const respsData = respuestas.recordset.map((r) => ({
+    ...r, botones: parseJsonArray(r.botones), keywords: parseJsonArray(r.keywords),
+  }));
+
+  return {
+    respsData,
+    etiquetas: etiquetas.recordset,
+    nodosArbol: nodosArbol.recordset,
+    opcionesArbol: opcionesArbol.recordset,
+    campanias: campanias.recordset,
+    conexiones: conexiones.recordset,
+    nodoInicio: nodosArbol.recordset.find((n) => n.codigo === 'inicio') || null,
+  };
+}
+
 // Vista combinada de todo lo que puede aparecer como caja en el canvas: las
 // respuestas del diccionario, las etiquetas del menú del widget, los nodos
 // del árbol de diagnóstico, y las campañas de Chat en Vivo (solo lectura,
@@ -22,137 +121,94 @@ function parseJsonArray(value) {
 exports.getFlujo = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
+    const crudo = await cargarFlujoCrudo(pool);
 
-    const respuestas = await pool.request().query(`
-      SELECT RESP_PK as id, RESP_ID as codigo, RESP_TEXTO_ES as texto, RESP_BOTONES as botones,
-             RESP_KEYWORDS as keywords, RESP_SENAL_INTERES as senalInteres,
-             RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY
-      FROM dbo.CHATBOT_RESPUESTAS ORDER BY RESP_PK
-    `);
-    const etiquetas = await pool.request().query(`
-      SELECT ETQ_ID as id, ETQ_TEXTO_ES as texto, ETQ_TIPO as tipoAccion, ETQ_CAMPANIA_ID as campaniaId,
-             ETQ_ACTIVA as activa, ETQ_POS_X as posX, ETQ_POS_Y as posY
-      FROM dbo.CHATBOT_ETIQUETAS_MENU ORDER BY ETQ_ID
-    `);
-    const nodosArbol = await pool.request().query(`
-      SELECT NODO_ID as id, NODO_CODIGO as codigo, NODO_TEXTO as texto, NODO_TIPO as tipoNodo,
-             NODO_ACTIVO as activa, NODO_POS_X as posX, NODO_POS_Y as posY
-      FROM dbo.CHATBOT_NODOS ORDER BY NODO_ID
-    `);
-    const opcionesArbol = await pool.request().query(`
-      SELECT OPC_ID as id, OPC_NODO_ID as nodoId, OPC_TEXTO_BOTON as texto, OPC_NODO_DESTINO_ID as nodoDestinoId
-      FROM dbo.CHATBOT_NODO_OPCIONES
-    `);
-    // Campañas de Omnicanal (CCO_*) — destino terminal de "escalar_campania"
-    // desde que el widget web pasó a atenderse ahí (ver ccWebPublicaController).
-    const campanias = await pool.request().query(`
-      SELECT CM2_ID as id, CM2_NOMBRE as texto, CM2_ACTIVO as activa
-      FROM dbo.CCO_CAMPANIAS WHERE CM2_ACTIVO = 1 ORDER BY CM2_NOMBRE
-    `);
-    const conexiones = await pool.request().query(`
-      SELECT FCX_ID as id, FCX_ORIGEN_TIPO as origenTipo, FCX_ORIGEN_ID as origenId,
-             FCX_DESTINO_TIPO as destinoTipo, FCX_DESTINO_ID as destinoId, FCX_ETIQUETA as etiqueta
-      FROM dbo.CHATBOT_FLUJO_CONEXIONES
-    `);
-
-    // Las opciones del árbol ya son "conexiones" nativas de esa tabla — se
-    // exponen homologadas junto a CHATBOT_FLUJO_CONEXIONES para que el canvas
-    // dibuje una sola flecha por cada una, sin duplicar el dato en la tabla nueva.
-    const conexionesDesdeArbol = opcionesArbol.recordset
+    // Opciones del árbol = conexiones nativas de esa tabla, homologadas.
+    const conexionesDesdeArbol = crudo.opcionesArbol
       .filter((o) => o.nodoDestinoId != null)
       .map((o) => ({
         id: `opcion-${o.id}`,
-        origenTipo: 'nodo_arbol',
-        origenId: o.nodoId,
-        destinoTipo: 'nodo_arbol',
-        destinoId: o.nodoDestinoId,
-        etiqueta: o.texto,
-        esOpcionArbol: true,
+        origenTipo: 'nodo_arbol', origenId: o.nodoId,
+        destinoTipo: 'nodo_arbol', destinoId: o.nodoDestinoId,
+        etiqueta: o.texto, esOpcionArbol: true,
       }));
 
-    // ── Conexiones AUTOMÁTICAS ──────────────────────────────────────────────
-    // El widget hoy no lee CHATBOT_FLUJO_CONEXIONES: enruta por convención
-    // (una etiqueta va a su campaña / al árbol / a la respuesta que matchea su
-    // texto; el texto libre de RESP_BOTONES matchea otra respuesta por keyword;
-    // senalInteres dispara la captura de lead). Se derivan aquí para que el
-    // lienzo muestre el flujo real. Son de solo lectura (id string "auto-…");
-    // una conexión manual con el mismo par (origen→destino) la reemplaza.
-    const respsData = respuestas.recordset.map((r) => ({
-      ...r,
-      botones: parseJsonArray(r.botones),
-      keywords: parseJsonArray(r.keywords),
-    }));
-
-    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
-    // Mismo criterio que buscarRespuesta del widget: gana la keyword contenida más larga.
-    const matchRespuesta = (texto) => {
-      const tn = norm(texto);
-      if (!tn) return null;
-      let mejor = null; let mejorLen = 0;
-      for (const r of respsData) {
-        for (const kw of r.keywords) {
-          const kn = norm(kw);
-          if (kn && tn.includes(kn) && kn.length > mejorLen) { mejorLen = kn.length; mejor = r; }
-        }
-      }
-      return mejor;
-    };
-
-    const nodoInicio = nodosArbol.recordset.find((n) => n.codigo === 'inicio');
     const manualPairs = new Set(
-      conexiones.recordset.map((c) => `${c.origenTipo}:${c.origenId}->${c.destinoTipo}:${c.destinoId}`),
+      crudo.conexiones.map((c) => `${c.origenTipo}:${c.origenId}->${c.destinoTipo}:${c.destinoId}`),
     );
-    const auto = [];
-    const pushAuto = (origenTipo, origenId, destinoTipo, destinoId, etiqueta) => {
-      if (destinoId == null) return;
-      const key = `${origenTipo}:${origenId}->${destinoTipo}:${destinoId}`;
-      if (manualPairs.has(key)) return; // el admin ya la fijó a mano
-      auto.push({
-        id: `auto-${auto.length}-${key}`,
-        origenTipo, origenId, destinoTipo, destinoId,
-        etiqueta: etiqueta || null,
-        esAutomatica: true,
-      });
-    };
+    const auto = derivarConexionesAutomaticas({
+      respsData: crudo.respsData,
+      etiquetas: crudo.etiquetas,
+      nodoInicio: crudo.nodoInicio,
+      manualPairs,
+    });
 
-    // Etiqueta del menú -> su destino real
-    for (const e of etiquetas.recordset) {
-      if (e.tipoAccion === 'escalar_campania' && e.campaniaId != null) {
-        pushAuto('etiqueta', e.id, 'campania', e.campaniaId);
-      } else if (e.tipoAccion === 'arbol_diagnostico' && nodoInicio) {
-        pushAuto('etiqueta', e.id, 'nodo_arbol', nodoInicio.id);
-      } else if (e.tipoAccion === 'respuesta') {
-        const r = matchRespuesta(e.texto);
-        if (r) pushAuto('etiqueta', e.id, 'respuesta', r.id);
-      }
+    // Respuestas que ningún nodo alcanza — no es un error: son puntos de
+    // entrada (el visitante llega escribiendo una de sus palabras clave).
+    const alcanzadas = new Set();
+    for (const c of [...crudo.conexiones, ...auto]) {
+      if (c.destinoTipo === 'respuesta') alcanzadas.add(c.destinoId);
     }
-
-    // Respuesta -> respuesta (por el texto libre de sus botones) o -> captura de lead
-    for (const r of respsData) {
-      if (r.senalInteres) {
-        pushAuto('respuesta', r.id, 'captura_lead', 0, 'pide datos de contacto');
-      }
-      for (const bt of r.botones) {
-        const destino = matchRespuesta(bt);
-        if (destino && destino.id !== r.id) pushAuto('respuesta', r.id, 'respuesta', destino.id, bt);
-      }
-    }
-
-    const hayCapturaLead = auto.some((c) => c.destinoTipo === 'captura_lead');
 
     res.json({
       success: true,
       data: {
-        respuestas: respsData.map(({ keywords, ...r }) => r), // keywords no se exponen al canvas
-        etiquetas: etiquetas.recordset,
-        nodosArbol: nodosArbol.recordset,
-        campanias: campanias.recordset,
-        capturaLead: hayCapturaLead,
-        conexiones: [...conexiones.recordset, ...conexionesDesdeArbol, ...auto],
+        respuestas: crudo.respsData.map(({ keywords, ...r }) => ({
+          ...r,
+          esEntrada: !alcanzadas.has(r.id),
+        })),
+        etiquetas: crudo.etiquetas,
+        nodosArbol: crudo.nodosArbol,
+        campanias: crudo.campanias,
+        capturaLead: auto.some((c) => c.destinoTipo === 'captura_lead'),
+        automaticasPendientes: auto.filter((c) => c.destinoTipo !== 'captura_lead').length,
+        conexiones: [...crudo.conexiones, ...conexionesDesdeArbol, ...auto],
       },
     });
   } catch (error) {
     console.error('Error obteniendo el flujo visual del chatbot:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /flujo/materializar — persiste las conexiones automáticas en
+// CHATBOT_FLUJO_CONEXIONES para que el admin las pueda editar/borrar y el
+// widget las obedezca. Idempotente (la UNIQUE evita duplicados). No persiste
+// las de captura de lead (el CHECK de FCX_DESTINO_TIPO no la permite y además
+// es una propiedad de la respuesta, no un enlace).
+exports.materializarFlujo = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const crudo = await cargarFlujoCrudo(pool);
+    const manualPairs = new Set(
+      crudo.conexiones.map((c) => `${c.origenTipo}:${c.origenId}->${c.destinoTipo}:${c.destinoId}`),
+    );
+    const auto = derivarConexionesAutomaticas({
+      respsData: crudo.respsData, etiquetas: crudo.etiquetas, nodoInicio: crudo.nodoInicio, manualPairs,
+    }).filter((c) => ['respuesta', 'etiqueta', 'nodo_arbol', 'campania'].includes(c.destinoTipo));
+
+    let creadas = 0;
+    for (const c of auto) {
+      const r = await pool.request()
+        .input('ot', sql.NVarChar(20), c.origenTipo)
+        .input('oi', sql.Int, c.origenId)
+        .input('dt', sql.NVarChar(20), c.destinoTipo)
+        .input('di', sql.Int, c.destinoId)
+        .input('et', sql.NVarChar(150), c.etiqueta ? String(c.etiqueta).slice(0, 150) : null)
+        .query(`
+          IF NOT EXISTS (
+            SELECT 1 FROM dbo.CHATBOT_FLUJO_CONEXIONES
+            WHERE FCX_ORIGEN_TIPO=@ot AND FCX_ORIGEN_ID=@oi AND FCX_DESTINO_TIPO=@dt AND FCX_DESTINO_ID=@di
+          )
+          INSERT INTO dbo.CHATBOT_FLUJO_CONEXIONES (FCX_ORIGEN_TIPO, FCX_ORIGEN_ID, FCX_DESTINO_TIPO, FCX_DESTINO_ID, FCX_ETIQUETA)
+          VALUES (@ot, @oi, @dt, @di, @et);
+          SELECT @@ROWCOUNT as n;
+        `);
+      creadas += r.recordset[0].n;
+    }
+    res.json({ success: true, data: { creadas, total: auto.length } });
+  } catch (error) {
+    console.error('Error materializando el flujo del chatbot:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

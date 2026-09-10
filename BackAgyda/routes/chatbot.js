@@ -56,6 +56,7 @@ router.put('/flujo/posicion/:tipo/:id', authenticateToken, verificarRol(['AD']),
 router.post('/flujo/conexiones', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.createConexion);
 router.delete('/flujo/conexiones/:id', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.deleteConexion);
 // Crear / editar / borrar cajas sin salir del lienzo (Camino A).
+router.post('/flujo/materializar', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.materializarFlujo);
 router.post('/flujo/nodos', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'crear'), chatbotFlujoController.createNodo);
 router.patch('/flujo/nodos/:tipo/:id', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.updateNodo);
 router.delete('/flujo/nodos/:tipo/:id', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'eliminar'), chatbotFlujoController.deleteNodo);

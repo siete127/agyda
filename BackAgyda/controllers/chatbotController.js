@@ -393,7 +393,28 @@ exports.getEtiquetasMenuPublicas = async (req, res) => {
       WHERE e.ETQ_ACTIVA = 1
       ORDER BY e.ETQ_ORDEN ASC, e.ETQ_ID ASC
     `);
-    res.json({ success: true, data: result.recordset });
+
+    // Si el admin fijó en el constructor de flujo un destino explícito para la
+    // etiqueta (CHATBOT_FLUJO_CONEXIONES con FCX_ORIGEN_TIPO='etiqueta'), ese
+    // gana sobre la resolución por texto que hace el widget. Se adjunta como
+    // destinoRespuestaPk / destinoNodoArbolId para que el widget vaya directo.
+    const cx = await pool.request().query(`
+      SELECT FCX_ORIGEN_ID as etqId, FCX_DESTINO_TIPO as dt, FCX_DESTINO_ID as di
+      FROM dbo.CHATBOT_FLUJO_CONEXIONES
+      WHERE FCX_ORIGEN_TIPO = 'etiqueta'
+    `);
+    const porEtq = new Map();
+    for (const c of cx.recordset) {
+      if (!porEtq.has(c.etqId)) porEtq.set(c.etqId, c);
+    }
+    const data = result.recordset.map((e) => {
+      const c = porEtq.get(e.id);
+      if (!c) return e;
+      if (c.dt === 'respuesta') return { ...e, destinoRespuestaPk: c.di };
+      if (c.dt === 'nodo_arbol') return { ...e, destinoNodoArbolId: c.di };
+      return e;
+    });
+    res.json({ success: true, data });
   } catch (error) {
     console.error('Error obteniendo etiquetas del menú del chatbot:', error);
     res.status(500).json({ success: false, message: error.message });

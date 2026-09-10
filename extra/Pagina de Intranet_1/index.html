@@ -3841,7 +3841,17 @@
                 // fijo, así el admin puede renombrar/reordenar sin romper el despacho.
                 if (estado === 'explorar') {
                     const etiqueta = resolverEtiquetaPorTexto(mensaje);
-                    if (etiqueta && await ejecutarAccionBoton({ accion: etiqueta.tipo, campaniaToken: etiqueta.campaniaToken, grupoId: etiqueta.grupoId }, textoEtiqueta(etiqueta))) return;
+                    if (etiqueta) {
+                        // Destino fijado en el Constructor de flujo -> gana sobre
+                        // la resolución por texto.
+                        if (etiqueta.destinoRespuestaPk) {
+                            await cargarDiccionario();
+                            const destino = diccionario.find((r) => r.pk === etiqueta.destinoRespuestaPk);
+                            if (destino) { await mostrarRespuesta(destino); return; }
+                        }
+                        if (etiqueta.destinoNodoArbolId) { await iniciarArbolDiagnostico(); return; }
+                        if (await ejecutarAccionBoton({ accion: etiqueta.tipo, campaniaToken: etiqueta.campaniaToken, grupoId: etiqueta.grupoId }, textoEtiqueta(etiqueta))) return;
+                    }
                     // tipo === 'respuesta' sin conexión de flujo real: cae al buscador
                     // de diccionario de abajo, igual que un botón de siempre.
                 }
