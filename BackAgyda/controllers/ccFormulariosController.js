@@ -1594,20 +1594,38 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
                 OUTPUT INSERTED.CI_ID id
                 VALUES (@canal, @tipo, @nombre, @tel, @camp, @agenteId, @agenteNombre, 'cerrada', @tip, GETDATE(), GETDATE())`);
       interaccionId = ins.recordset[0].id;
-    } else if (tipificacionIdDetectada) {
-      // Reabrir/re-guardar sobre una interacción existente: revalidar contra
-      // la campaña real de ESA interacción (no la del canal recién resuelto,
-      // que aquí no aplica) antes de actualizar CI_TIPIFICACION_ID.
+    } else {
+      // Reabrir/re-guardar sobre una interacción existente (creada antes por
+      // el Buscador o un guardado previo). Dos sincronizaciones independientes,
+      // cada una solo si aplica — antes solo corría la de tipificación (y solo
+      // si tipificacionIdDetectada), así que nombre/teléfono capturados en un
+      // guardado posterior al alta nunca llegaban a CI_CLIENTE_NOMBRE/TELEFONO,
+      // aunque sí quedaran en CCF_INTERACCION_FORM_RESPUESTAS — bug real
+      // encontrado 2026-09-10: Suite de Reportes lee CI_CLIENTE_TELEFONO
+      // directo, así que esas interacciones aparecían sin teléfono.
       const actual = await new sql.Request(tx).input('id', sql.Int, interaccionId)
-        .query('SELECT CI_CAMPANIA_ID campaniaId FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
-      const campaniaIdActual = actual.recordset[0]?.campaniaId;
-      if (campaniaIdActual) {
-        const tip = await new sql.Request(tx).input('id', sql.Int, tipificacionIdDetectada).input('c', sql.Int, campaniaIdActual)
+        .query('SELECT CI_CAMPANIA_ID campaniaId, CI_CLIENTE_NOMBRE nombre, CI_CLIENTE_TELEFONO telefono FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
+      const actualRow = actual.recordset[0];
+
+      if (tipificacionIdDetectada && actualRow?.campaniaId) {
+        const tip = await new sql.Request(tx).input('id', sql.Int, tipificacionIdDetectada).input('c', sql.Int, actualRow.campaniaId)
           .query(`SELECT 1 x FROM dbo.CCO_TIPIFICACIONES WHERE CT_ID = @id AND CT_ACTIVO = 1 AND (CT_CAMPANIA_ID = @c OR CT_CAMPANIA_ID IS NULL)`);
         if (tip.recordset.length) {
           await new sql.Request(tx).input('id', sql.Int, interaccionId).input('tip', sql.Int, tipificacionIdDetectada)
             .query('UPDATE dbo.CCO_INTERACCIONES SET CI_TIPIFICACION_ID = @tip WHERE CI_ID = @id');
         }
+      }
+
+      const nombreNuevo = String(b.clienteNombre || respuestaDe(campoNombre) || '').trim();
+      const telefonoNuevo = String(b.clienteTelefono || respuestaDe(campoTelefono) || '').trim();
+      // Solo rellena lo que esté vacío — nunca pisa un nombre/teléfono que
+      // ya tenga la interacción (p.ej. capturado directo en el Buscador).
+      if (actualRow && (!actualRow.nombre && nombreNuevo) || (!actualRow?.telefono && telefonoNuevo)) {
+        await new sql.Request(tx)
+          .input('id', sql.Int, interaccionId)
+          .input('nombre', sql.NVarChar(160), (!actualRow.nombre && nombreNuevo) ? nombreNuevo : actualRow.nombre)
+          .input('tel', sql.NVarChar(40), (!actualRow.telefono && telefonoNuevo) ? telefonoNuevo : actualRow.telefono)
+          .query('UPDATE dbo.CCO_INTERACCIONES SET CI_CLIENTE_NOMBRE = @nombre, CI_CLIENTE_TELEFONO = @tel WHERE CI_ID = @id');
       }
     }
 
