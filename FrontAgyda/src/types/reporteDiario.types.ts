@@ -91,6 +91,9 @@ export interface ReporteEjecutivoReclutamiento {
     gestionPorAsesor: { agente: string; cantidad: number }[]
     agendaPorFechaAsistencia: { fecha: string; cantidad: number }[]
   }
+  // Interacciones sin Canal de contacto identificado (nunca pasaron por el
+  // formulario completo) — se listan para poder abrirlas y tipificarlas.
+  sinGestionar: { id: number; clienteNombre: string | null; fechaInicio: string }[]
 }
 
 // ── Suite de reportes: listado de interacciones cerradas (buscador) ──

@@ -816,14 +816,19 @@ async function getReporteEjecutivoReclutamiento(req, res) {
     const conHorario = filas.filter((f) => f.horario).length;
     const conCanal = filas.filter((f) => f.canal).length;
 
+    const SIN_CANAL = 'Sin gestionar';
     const porEstatus = new Map();
     const porCanal = new Map();
     const porAgente = new Map();
     const porFechaAsistencia = new Map();
+    // IDs de interacción sin canal identificado — para poder abrir cada una
+    // desde el reporte (ver conversación + tipificar) sin salir a buscarla.
+    const sinGestionarIds = [];
     for (const f of filas) {
       porEstatus.set(f.estatus, (porEstatus.get(f.estatus) ?? 0) + 1);
-      const canalKey = f.canal || '(sin canal)';
+      const canalKey = f.canal || SIN_CANAL;
       porCanal.set(canalKey, (porCanal.get(canalKey) ?? 0) + 1);
+      if (!f.canal) sinGestionarIds.push({ id: f.id, clienteNombre: f.clienteNombre, fechaInicio: f.fechaInicio });
       const agenteKey = f.agenteNombre || '(sin asesor)';
       porAgente.set(agenteKey, (porAgente.get(agenteKey) ?? 0) + 1);
       if (f.fechaAsistencia) {
@@ -873,6 +878,7 @@ async function getReporteEjecutivoReclutamiento(req, res) {
           gestionPorAsesor: Array.from(porAgente.entries()).map(([agente, cantidad]) => ({ agente, cantidad })).sort((a, b) => b.cantidad - a.cantidad),
           agendaPorFechaAsistencia: Array.from(porFechaAsistencia.entries()).map(([fecha, cantidad]) => ({ fecha, cantidad })).sort((a, b) => a.fecha.localeCompare(b.fecha)),
         },
+        sinGestionar: sinGestionarIds,
       },
     });
   } catch (err) {

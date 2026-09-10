@@ -11,6 +11,7 @@ import {
 import { api, getApiError } from '@/lib/axios'
 import { reporteDiarioService } from '@/services/reporteDiario.service'
 import { ccService } from '@/services/cc.service'
+import { CCChatPanel } from '@/pages/contact-center/CCChatPanel'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -810,9 +811,11 @@ function colorDeEstatus(estatus: string) {
 }
 
 function ReporteEjecutivoReclutamientoView() {
+  const qc = useQueryClient()
   const [desde, setDesde] = useState(hace30Dias())
   const [hasta, setHasta] = useState(hoy())
   const [campaniaId, setCampaniaId] = useState<number | ''>('')
+  const [interaccionAbierta, setInteraccionAbierta] = useState<number | null>(null)
 
   const { data: campanias = [] } = useQuery({
     queryKey: ['suite-reporte-ejecutivo-campanias'],
@@ -955,7 +958,42 @@ function ReporteEjecutivoReclutamientoView() {
               )}
             </div>
           </div>
+
+          {data.sinGestionar.length > 0 && (
+            <div className="card p-4">
+              <h3 className="mb-1 text-sm font-bold text-ink">Sin gestionar ({data.sinGestionar.length})</h3>
+              <p className="mb-3 text-xs text-ink-tertiary">Llegaron al canal pero nunca se completó el formulario — sin Canal de contacto identificado. Ábrelas para ver la conversación y tipificarlas.</p>
+              <div className="max-h-72 space-y-1.5 overflow-y-auto">
+                {data.sinGestionar.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setInteraccionAbierta(s.id)}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2 text-left text-sm transition hover:border-brand/30 hover:bg-brand/[0.02]"
+                  >
+                    <span className="truncate font-medium text-ink">{s.clienteNombre || 'Sin nombre'}</span>
+                    <span className="flex-shrink-0 text-[0.68rem] text-ink-tertiary">
+                      {new Date(s.fechaInicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · Ver y tipificar
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </>
+      )}
+
+      {interaccionAbierta != null && (
+        <Modal isOpen onClose={() => setInteraccionAbierta(null)} title="Conversación" size="lg">
+          <div className="h-[65vh]">
+            <CCChatPanel
+              interaccionId={interaccionAbierta}
+              onClosed={() => {
+                setInteraccionAbierta(null)
+                qc.invalidateQueries({ queryKey: ['suite-reporte-ejecutivo-reclutamiento'] })
+              }}
+            />
+          </div>
+        </Modal>
       )}
     </div>
   )
