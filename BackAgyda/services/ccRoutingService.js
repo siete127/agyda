@@ -106,11 +106,19 @@ async function asignarInteraccion(pool, tenantKey, interaccion, agente) {
 // Intenta asignar UNA interacción entrante (recién creada, aún en_cola).
 async function rutearInteraccion(pool, tenantKey, interaccionId) {
   const r = await pool.request().input('id', sql.Int, interaccionId).query(`
-    SELECT CI_ID as id, CI_TIPO as tipo, CI_GRUPO_ID as grupoId, CI_CAMPANIA_ID as campaniaId,
-           CI_CLIENTE_NOMBRE as clienteNombre, CI_ESTADO as estado
-    FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id`);
+    SELECT i.CI_ID as id, i.CI_TIPO as tipo, i.CI_GRUPO_ID as grupoId, i.CI_CAMPANIA_ID as campaniaId,
+           i.CI_CLIENTE_NOMBRE as clienteNombre, i.CI_ESTADO as estado,
+           ISNULL(cn.CN_AUTO_ASIGNAR, 0) as autoAsignar
+    FROM dbo.CCO_INTERACCIONES i
+    LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+    WHERE i.CI_ID = @id`);
   const it = r.recordset[0];
   if (!it || it.estado !== 'en_cola') return null;
+  // Auto-asignación es opt-in por canal (default apagado, 2026-09-10): sin
+  // esto, TODA conversación nueva caía directo con el agente menos ocupado,
+  // sin pasar por Bandeja de espera — el equipo quiere que los agentes
+  // tomen manualmente, salvo que el canal la tenga prendida a propósito.
+  if (!it.autoAsignar) return null;
 
   const cfg = await getConfig(pool);
   const agente = await buscarAgenteDisponible(pool, {
@@ -131,12 +139,14 @@ async function intentarAsignarSiguienteEnCola(pool, tenantKey = DEFAULT_TENANT) 
   // varias interacciones en cola pueden ir a distintos grupos: iterar la cola FIFO
   // y para cada una buscar agente de su grupo hasta que no haya más asignables.
   const cola = await pool.request().query(`
-    SELECT CI_ID as id, CI_TIPO as tipo, CI_GRUPO_ID as grupoId, CI_CAMPANIA_ID as campaniaId,
-           CI_CLIENTE_NOMBRE as clienteNombre
-    FROM dbo.CCO_INTERACCIONES
-    WHERE CI_ESTADO = 'en_cola'
-    ORDER BY CI_TICKET ASC, CI_ID ASC`);
+    SELECT i.CI_ID as id, i.CI_TIPO as tipo, i.CI_GRUPO_ID as grupoId, i.CI_CAMPANIA_ID as campaniaId,
+           i.CI_CLIENTE_NOMBRE as clienteNombre, ISNULL(cn.CN_AUTO_ASIGNAR, 0) as autoAsignar
+    FROM dbo.CCO_INTERACCIONES i
+    LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+    WHERE i.CI_ESTADO = 'en_cola'
+    ORDER BY i.CI_TICKET ASC, i.CI_ID ASC`);
   for (const it of cola.recordset) {
+    if (!it.autoAsignar) continue; // mismo criterio que rutearInteraccion — opt-in por canal
     const agente = await buscarAgenteDisponible(pool, {
       grupoId: it.grupoId, campaniaId: it.campaniaId,
       maxGlobal: cfg.CF_MAX_INTERACCIONES_POR_AGENTE || 4,

@@ -188,7 +188,13 @@ exports.enviarMensaje = async (req, res) => {
     if (tipoCanal !== 'test') {
       try {
         const resp = await enviarTextoCanal(it, it.clienteExtId, String(contenido));
-        metaMsgId = resp?.messages?.[0]?.id || resp?.message_id || null;
+        const idCrudo = resp?.messages?.[0]?.id || resp?.message_id || null;
+        // Mismo prefijo que baileysManager usa al ingestar el eco fromMe de
+        // este mismo mensaje (ver messages.upsert) — sin este prefijo la
+        // deduplicación por MG_META_MSG_ID nunca hacía match y el mensaje
+        // que el agente mandó desde el panel se insertaba una SEGUNDA vez
+        // al llegar su eco por el socket de WhatsApp.
+        metaMsgId = idCrudo && tipoCanal.includes('baileys') ? `baileys_${idCrudo}` : idCrudo;
       } catch (e) {
         errorEnvio = e.message;
       }
