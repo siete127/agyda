@@ -186,6 +186,12 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
             <TipoIcono className="h-4.5 w-4.5" />
           </div>
           <p className="truncate font-bold text-ink">{CANAL_LABEL[canal.tipo as CCCanalTipo]} — {canal.nombre}</p>
+          {canal.modoAsignacion === 'manual' && (
+            <span className="flex-shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[0.62rem] font-bold text-amber-700">Manual</span>
+          )}
+          {canal.modoAsignacion === 'auto' && (
+            <span className="flex-shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[0.62rem] font-semibold text-blue-600">Auto</span>
+          )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-3">
           <label className="flex items-center gap-2 text-xs font-medium text-ink-tertiary">
@@ -733,6 +739,12 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
         <div className="flex min-w-0 items-center gap-2.5">
           <p className="truncate text-sm font-bold uppercase tracking-wide text-ink">{campania.nombre}</p>
           <span className="flex-shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[0.65rem] font-semibold text-emerald-700">Activa</span>
+          {campania.modoAsignacion === 'manual' && (
+            <span className="flex-shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[0.62rem] font-bold text-amber-700">Manual</span>
+          )}
+          {campania.modoAsignacion === 'auto' && (
+            <span className="flex-shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[0.62rem] font-semibold text-blue-600">Auto</span>
+          )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-4 text-[0.72rem] text-ink-tertiary">
           <span className="hidden items-center gap-1.5 sm:flex"><Users className="h-3.5 w-3.5" /> {campania.agentesCount} Agentes</span>
