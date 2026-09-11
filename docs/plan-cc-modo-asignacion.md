@@ -201,13 +201,13 @@ El botón "tomar" de la bandeja ya llama `ccService.tomar` → funciona.
 
 ## Fases
 
-| Fase | Entregable | Riesgo |
-|---|---|---|
-| **1** | Schema + `modoAsignacionEfectivo` + guard en el ruteo. Sin UI todavía: se prueba poniendo el modo a mano en BD. El default `auto` mantiene todo igual. | Bajo — aditivo, default no cambia nada |
-| **2** | Los 3 selectores de config (canal, campaña, global) + endpoints. | Bajo |
-| **3** | Broadcast `cc:nueva_en_cola` + rótulo en la bandeja + badges. | Bajo |
+| Fase | Entregable | Riesgo | Estado |
+|---|---|---|---|
+| **1** | Schema + `modoAsignacionEfectivo` + guard en el ruteo. Sin UI todavía: se prueba poniendo el modo a mano en BD. El default `auto` mantiene todo igual. | Bajo — aditivo, default no cambia nada | ✅ `988f81b` |
+| **2** | Los 3 selectores de config (canal, campaña, global) + endpoints. | Bajo | ✅ `4010558` |
+| **3** | Broadcast `cc:nueva_en_cola` + rótulo en la bandeja + badges. | Bajo | ✅ `b8b3caf` |
 
-Fase 1 sola ya da el comportamiento; 2 y 3 son la UX.
+Fase 1 sola ya da el comportamiento; 2 y 3 son la UX. **Plan completo.**
 
 ---
 
