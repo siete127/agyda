@@ -247,7 +247,12 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
 
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const debeReconectar = statusCode !== DisconnectReason.loggedOut;
+      // timedOut (408) = nadie escaneó el QR a tiempo, no una caída de red —
+      // seguir reintentando aquí solo genera un QR nuevo cada ~3s para que
+      // vuelva a expirar sin que haya un humano mirando la pantalla (bug
+      // real: un canal nunca vinculado quedaba en loop infinito). Se corta
+      // el auto-retry y se espera a que alguien pulse "Generar QR" de nuevo.
+      const debeReconectar = statusCode !== DisconnectReason.loggedOut && statusCode !== DisconnectReason.timedOut;
       await setEstado(sessionKey, 'desconectado');
       emitirEstado(sessionKey);
       logger.warn(`⚠️ Baileys desconectado — sesión ${sessionKey} (statusCode=${statusCode}, reconectar=${debeReconectar})`);
@@ -255,7 +260,8 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
       if (debeReconectar) {
         setTimeout(() => iniciarSesion(canalId, tenantKey, usuarioId).catch((e) => logger.error('[baileys] reconexión falló:', e?.message || e)), 3000);
       } else {
-        // Sesión cerrada desde el teléfono: hay que volver a escanear QR desde cero.
+        // Sesión cerrada desde el teléfono, o QR nunca escaneado a tiempo:
+        // hay que volver a escanear QR desde cero.
         fs.rmSync(sessionDir(sessionKey), { recursive: true, force: true });
       }
     }
