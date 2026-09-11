@@ -10,6 +10,7 @@ export interface FlujoRespuesta {
   activa: boolean
   esEntrada?: boolean
   genera: GeneraLead | null
+  categoria: string | null
   posX: number | null
   posY: number | null
 }
@@ -98,6 +99,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       activa: parseBool(pick(r, 'activa'), true),
       esEntrada: parseBool(pick(r, 'esEntrada'), false),
       genera: genera(pick(r, 'genera')),
+      categoria: pick(r, 'categoria') != null ? String(pick(r, 'categoria')) : null,
       posX: pick(r, 'posX') != null ? Number(pick(r, 'posX')) : null,
       posY: pick(r, 'posY') != null ? Number(pick(r, 'posY')) : null,
     })),

@@ -1,12 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
-  ReactFlow, Background, Controls, MiniMap, Handle, Position,
+  ReactFlow, Background, Controls, MiniMap, Handle, Position, useReactFlow,
   useNodesState, useEdgesState, addEdge, ReactFlowProvider,
   type Node, type Edge, type Connection, type NodeProps, type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessageCircle, Megaphone, Users, Workflow, Radio, Info, Plus, Trash2, X, ChevronDown, Sparkles } from 'lucide-react'
+import {
+  MessageCircle, Megaphone, Users, Workflow, Radio, Info, Plus, Trash2, X, ChevronDown,
+  Sparkles, Search, Layers,
+} from 'lucide-react'
 import { chatbotFlujoService } from '@/services/chatbotFlujo.service'
 import { ccService } from '@/services/cc.service'
 import { Spinner } from '@/components/ui/Spinner'
@@ -15,6 +18,20 @@ import { useIsAdmin } from '@/hooks/useAuth'
 import type { TipoNodoFlujo, GeneraLead } from '@/types/chatbotFlujo.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
+
+// Mismo criterio de normalización/"sin categoría" que la pestaña Conversación
+// (ChatbotPage.tsx) — acentos fuera para que la búsqueda no dependa de tildes.
+function normaliza(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+const SIN_CATEGORIA = '__sin__'
+
+// Paleta fija por índice para las franjas de categoría del canvas — solo
+// decorativa, no se persiste ni se relaciona con ESTILO_TIPO.
+const COLOR_SWIMLANE = [
+  'rgba(56,189,248,.07)', 'rgba(167,139,250,.07)', 'rgba(52,211,153,.07)',
+  'rgba(251,191,36,.07)', 'rgba(244,114,182,.07)', 'rgba(148,163,184,.07)',
+]
 
 // Cada tipo de caja tiene su propio color/ícono para distinguirse de un
 // vistazo en el lienzo — mismo criterio que ya usa "Menú del Widget".
@@ -45,6 +62,7 @@ interface CajaData extends Record<string, unknown> {
   soloDestino?: boolean
   esEntrada?: boolean
   genera?: GeneraLead | null
+  categoria?: string | null
 }
 
 function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
@@ -80,11 +98,63 @@ function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
   )
 }
 
-const nodeTypes: NodeTypes = { caja: CajaNodo }
+// Franja de fondo decorativa de una categoría — no interactiva, siempre
+// detrás (zIndex -1), solo pinta el rótulo en la esquina.
+function SwimlaneNodo({ data }: NodeProps<Node<CajaData>>) {
+  return (
+    <div className="h-full w-full rounded-2xl border border-dashed border-ink-tertiary/15">
+      <p className="px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-wide text-ink-tertiary/60">
+        {data.titulo}
+      </p>
+    </div>
+  )
+}
+
+const nodeTypes: NodeTypes = { caja: CajaNodo, swimlane: SwimlaneNodo }
 
 function posicionPorDefecto(tipo: TipoNodoFlujo, indice: number) {
   const columnaBase: Record<TipoNodoFlujo, number> = { respuesta: 0, etiqueta: 360, nodo_arbol: 720, campania: 1080, captura_lead: 1080 }
   return { x: columnaBase[tipo], y: indice * 110 }
+}
+
+// Grid por categoría para respuestas sin posición guardada: antes se
+// apilaban todas en una sola columna infinita (184 cajas sueltas una debajo
+// de otra); ahora cada categoría arranca en su propia banda horizontal y
+// llena varias columnas antes de bajar de fila, como el resto del canvas.
+const RESP_COLS_POR_CATEGORIA = 3
+const RESP_COL_W = 260
+const RESP_ROW_H = 110
+const RESP_CAT_GAP = 60
+
+function posicionesRespuestasPorCategoria(respuestas: { id: number; categoria: string | null; posX: number | null; posY: number | null }[]) {
+  const porCat = new Map<string, typeof respuestas>()
+  for (const r of respuestas) {
+    const cat = r.categoria?.trim() || SIN_CATEGORIA
+    if (!porCat.has(cat)) porCat.set(cat, [])
+    porCat.get(cat)!.push(r)
+  }
+  const categorias = [...porCat.keys()].sort((a, b) => {
+    if (a === SIN_CATEGORIA) return 1
+    if (b === SIN_CATEGORIA) return -1
+    return a.localeCompare(b)
+  })
+
+  const posiciones = new Map<number, { x: number; y: number }>()
+  let yBanda = 0
+  for (const cat of categorias) {
+    const items = porCat.get(cat)!
+    let sinPos = 0
+    for (const r of items) {
+      if (r.posX != null && r.posY != null) continue
+      const fila = Math.floor(sinPos / RESP_COLS_POR_CATEGORIA)
+      const col = sinPos % RESP_COLS_POR_CATEGORIA
+      posiciones.set(r.id, { x: col * RESP_COL_W, y: yBanda + fila * RESP_ROW_H })
+      sinPos += 1
+    }
+    const filas = Math.max(1, Math.ceil(sinPos / RESP_COLS_POR_CATEGORIA))
+    yBanda += filas * RESP_ROW_H + RESP_CAT_GAP
+  }
+  return posiciones
 }
 
 // ── Panel lateral: crea o edita el contenido de una caja ──
@@ -243,7 +313,11 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
 function FlujoVisualCanvas() {
   const qc = useQueryClient()
   const isAdmin = useIsAdmin()
+  const { fitView } = useReactFlow()
   const [menuCrear, setMenuCrear] = useState(false)
+  const [leyendaAbierta, setLeyendaAbierta] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
+  const [resultadosAbiertos, setResultadosAbiertos] = useState(false)
   const [editor, setEditor] = useState<
     | { modo: 'crear'; tipo: TipoEditable }
     | { modo: 'editar'; tipo: TipoEditable; nodoId: number; valores: NonNullable<Parameters<typeof NodoEditorPanel>[0]['valores']> }
@@ -300,14 +374,51 @@ function FlujoVisualCanvas() {
     onError: () => toast.error('No se pudo fijar el flujo'),
   })
 
+  // Franjas de fondo por categoría: un rectángulo decorativo (no
+  // interactivo, no se guarda) detrás de las respuestas de cada categoría,
+  // para que 184+ cajas sueltas se lean como grupos en vez de una nube.
+  const swimlanes = useMemo(() => {
+    if (!flujo) return [] as { categoria: string; x: number; y: number; w: number; h: number; color: string }[]
+    const posiciones = posicionesRespuestasPorCategoria(flujo.respuestas)
+    const porCat = new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>()
+    flujo.respuestas.forEach((r) => {
+      const cat = r.categoria?.trim() || SIN_CATEGORIA
+      const pos = r.posX != null && r.posY != null ? { x: r.posX, y: r.posY } : posiciones.get(r.id)
+      if (!pos) return
+      const box = porCat.get(cat) ?? { minX: pos.x, minY: pos.y, maxX: pos.x, maxY: pos.y }
+      box.minX = Math.min(box.minX, pos.x); box.minY = Math.min(box.minY, pos.y)
+      box.maxX = Math.max(box.maxX, pos.x); box.maxY = Math.max(box.maxY, pos.y)
+      porCat.set(cat, box)
+    })
+    return [...porCat.entries()].map(([categoria, box], i) => ({
+      categoria,
+      x: box.minX - 24, y: box.minY - 36,
+      w: (box.maxX - box.minX) + 216, h: (box.maxY - box.minY) + 96,
+      color: COLOR_SWIMLANE[i % COLOR_SWIMLANE.length],
+    }))
+  }, [flujo])
+
   const initialNodes = useMemo<Node<CajaData>[]>(() => {
     if (!flujo) return []
     const nodos: Node<CajaData>[] = []
-    flujo.respuestas.forEach((r, i) => nodos.push({
+    const posicionesResp = posicionesRespuestasPorCategoria(flujo.respuestas)
+    swimlanes.forEach((lane) => nodos.push({
+      id: `swimlane-${lane.categoria}`,
+      type: 'swimlane',
+      position: { x: lane.x, y: lane.y },
+      data: {
+        tipo: 'respuesta', titulo: lane.categoria === SIN_CATEGORIA ? 'Sin categoría' : lane.categoria,
+        activa: true, soloDestino: true,
+      } as CajaData,
+      style: { width: lane.w, height: lane.h, background: lane.color },
+      draggable: false, selectable: false, connectable: false,
+      zIndex: -1,
+    }))
+    flujo.respuestas.forEach((r) => nodos.push({
       id: `respuesta-${r.id}`,
       type: 'caja',
-      position: r.posX != null && r.posY != null ? { x: r.posX, y: r.posY } : posicionPorDefecto('respuesta', i),
-      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada, genera: r.genera },
+      position: r.posX != null && r.posY != null ? { x: r.posX, y: r.posY } : (posicionesResp.get(r.id) ?? { x: 0, y: 0 }),
+      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada, genera: r.genera, categoria: r.categoria },
     }))
     flujo.etiquetas.forEach((e, i) => nodos.push({
       id: `etiqueta-${e.id}`,
@@ -338,7 +449,7 @@ function FlujoVisualCanvas() {
       })
     }
     return nodos
-  }, [flujo])
+  }, [flujo, swimlanes])
 
   const initialEdges = useMemo<Edge[]>(() => {
     if (!flujo) return []
@@ -392,9 +503,12 @@ function FlujoVisualCanvas() {
   }, [isAdmin, setEdges, crearConexion])
 
   const onNodeDragStop = useCallback((_: unknown, node: Node<CajaData>) => {
-    if (!isAdmin || node.data.tipo === 'campania') return
+    if (!isAdmin || node.data.tipo === 'campania' || node.id.startsWith('swimlane-')) return
     const [tipo, idStr] = node.id.split('-')
-    guardarPosicion.mutate({ tipo: tipo as Exclude<TipoNodoFlujo, 'campania'>, id: Number(idStr), posX: node.position.x, posY: node.position.y })
+    guardarPosicion.mutate(
+      { tipo: tipo as Exclude<TipoNodoFlujo, 'campania'>, id: Number(idStr), posX: node.position.x, posY: node.position.y },
+      { onError: () => toast.error('No se pudo guardar la posición') },
+    )
   }, [isAdmin, guardarPosicion])
 
   const onEdgesDelete = useCallback((deleted: Edge[]) => {
@@ -406,13 +520,14 @@ function FlujoVisualCanvas() {
   }, [isAdmin, eliminarConexion])
 
   const onNodeClick = useCallback((_: unknown, node: Node<CajaData>) => {
+    if (node.id.startsWith('swimlane-')) return
     if (node.data.tipo === 'captura_lead') { setSeleccion(null); return }
     const [tipo, idStr] = node.id.split('-')
     setSeleccion({ tipo: tipo as TipoNodoFlujo, id: Number(idStr) })
   }, [])
 
   const onNodeDoubleClick = useCallback((_: unknown, node: Node<CajaData>) => {
-    if (!isAdmin || !flujo) return
+    if (!isAdmin || !flujo || node.id.startsWith('swimlane-')) return
     if (node.data.tipo === 'captura_lead') {
       toast('Se dispara sola con las respuestas marcadas "señal de interés"', { icon: 'ℹ️' })
       return
@@ -431,6 +546,29 @@ function FlujoVisualCanvas() {
       if (n) setEditor({ modo: 'editar', tipo: 'nodo_arbol', nodoId: id, valores: { texto: n.texto, tipoNodo: n.tipoNodo, genera: n.genera } })
     }
   }, [isAdmin, flujo])
+
+  // Buscador: filtra por título/subtítulo/categoría entre las cajas reales
+  // (no swimlanes) — con 200+ nodos, encontrar uno a ojo en el lienzo es
+  // impráctico sin esto.
+  const resultadosBusqueda = useMemo(() => {
+    const q = normaliza(busqueda.trim())
+    if (!q) return []
+    return nodes
+      .filter((n) => n.type === 'caja')
+      .filter((n) => {
+        const d = n.data as CajaData
+        return normaliza(`${d.titulo} ${d.subtitulo ?? ''} ${d.categoria ?? ''}`).includes(q)
+      })
+      .slice(0, 30)
+  }, [nodes, busqueda])
+
+  const irANodo = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeId })))
+    fitView({ nodes: [{ id: nodeId }], duration: 400, padding: 0.6, maxZoom: 1.2 })
+    const [tipo, idStr] = nodeId.split('-')
+    if (tipo !== 'campania' && tipo !== 'captura_lead') setSeleccion({ tipo: tipo as TipoNodoFlujo, id: Number(idStr) })
+    setResultadosAbiertos(false)
+  }, [setNodes, fitView])
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
 
@@ -482,27 +620,73 @@ function FlujoVisualCanvas() {
             Fijar flujo ({flujo.automaticasPendientes})
           </button>
         )}
-        <span className="text-[0.7rem] text-ink-tertiary">
-          {isAdmin ? 'Doble clic en una caja para editar su contenido · arrastra un punto al otro para conectar' : 'Solo un administrador puede editar el flujo.'}
-        </span>
+        <div className="relative ml-auto">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <input
+              value={busqueda}
+              onChange={(e) => { setBusqueda(e.target.value); setResultadosAbiertos(true) }}
+              onFocus={() => setResultadosAbiertos(true)}
+              placeholder="Buscar nodo…"
+              className="w-48 rounded-lg border border-gray-200 bg-card py-1.5 pl-8 pr-2 text-xs outline-none focus:border-brand sm:w-60"
+            />
+          </div>
+          {resultadosAbiertos && busqueda.trim() && (
+            <div className="absolute right-0 top-full z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-xl border border-gray-200 bg-card py-1 shadow-lg">
+              {resultadosBusqueda.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-gray-400">Sin resultados</p>
+              ) : resultadosBusqueda.map((n) => {
+                const d = n.data as CajaData
+                const { icon: Icon, clases } = ESTILO_TIPO[d.tipo]
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => irANodo(n.id)}
+                    className="flex w-full items-start gap-2 px-3 py-1.5 text-left hover:bg-gray-50"
+                  >
+                    <span className={clsx('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded', clases)}><Icon className="h-3 w-3" /></span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-gray-700">{d.titulo}</span>
+                      {d.subtitulo && <span className="block truncate text-[0.66rem] text-gray-400">{d.subtitulo}</span>}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setLeyendaAbierta((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-gray-50"
+          >
+            <Layers className="h-3.5 w-3.5" /> Leyenda
+          </button>
+          {leyendaAbierta && (
+            <div className="absolute right-0 top-full z-20 mt-1 w-64 space-y-2 rounded-xl border border-gray-200 bg-card p-3 shadow-lg">
+              {(['respuesta', 'etiqueta', 'nodo_arbol', 'campania', 'captura_lead'] as TipoNodoFlujo[]).map((t) => {
+                const { icon: Icon, clases } = ESTILO_TIPO[t]
+                const label = t === 'respuesta' ? 'Respuesta' : t === 'etiqueta' ? 'Botón de menú' : t === 'nodo_arbol' ? 'Nodo del árbol' : t === 'campania' ? 'Campaña' : 'Captura de lead'
+                return (
+                  <div key={t} className="flex items-center gap-1.5 text-[0.72rem] text-ink-secondary">
+                    <span className={clsx('flex h-4 w-4 items-center justify-center rounded', clases)}><Icon className="h-2.5 w-2.5" /></span>
+                    {label}
+                  </div>
+                )
+              })}
+              <div className="flex items-center gap-1.5 text-[0.72rem] text-ink-secondary"><span className="inline-block h-0 w-5 border-t-2 border-dashed border-slate-400" /> conexión automática</div>
+              <div className="flex items-center gap-1.5 text-[0.72rem] text-ink-secondary"><span className="inline-block h-0 w-5 border-t-2 border-brand" /> conexión manual</div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-[0.7rem] text-ink-tertiary">
-        {(['respuesta', 'etiqueta', 'nodo_arbol', 'campania', 'captura_lead'] as TipoNodoFlujo[]).map((t) => {
-          const { icon: Icon, clases } = ESTILO_TIPO[t]
-          const label = t === 'respuesta' ? 'Respuesta' : t === 'etiqueta' ? 'Botón de menú' : t === 'nodo_arbol' ? 'Nodo del árbol' : t === 'campania' ? 'Campaña' : 'Captura de lead'
-          return (
-            <span key={t} className="flex items-center gap-1">
-              <span className={clsx('flex h-4 w-4 items-center justify-center rounded', clases)}><Icon className="h-2.5 w-2.5" /></span>
-              {label}
-            </span>
-          )
-        })}
-        <span className="flex items-center gap-1"><span className="inline-block h-0 w-5 border-t-2 border-dashed border-slate-400" /> conexión automática</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-0 w-5 border-t-2 border-brand" /> conexión manual</span>
-      </div>
+      <p className="text-[0.7rem] text-ink-tertiary">
+        {isAdmin ? 'Doble clic en una caja para editar su contenido · arrastra un punto al otro para conectar' : 'Solo un administrador puede editar el flujo.'}
+      </p>
 
-      <div className="relative h-[65vh] rounded-2xl border border-surface-border overflow-hidden bg-surface">
+      <div className="relative h-[65vh] rounded-2xl border border-surface-border overflow-hidden bg-surface"
+        onClick={() => { if (resultadosAbiertos) setResultadosAbiertos(false); if (leyendaAbierta) setLeyendaAbierta(false) }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -522,7 +706,10 @@ function FlujoVisualCanvas() {
         >
           <Background gap={18} />
           <Controls showInteractive={false} />
-          <MiniMap pannable zoomable className="!bg-card" />
+          <MiniMap
+            pannable zoomable className="!bg-card"
+            nodeColor={(n) => (n.id.startsWith('swimlane-') ? 'transparent' : '#94a3b8')}
+          />
         </ReactFlow>
 
         {editor && (

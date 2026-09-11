@@ -76,7 +76,7 @@ async function cargarFlujoCrudo(pool) {
     pool.request().query(`
       SELECT RESP_PK as id, RESP_ID as codigo, RESP_TEXTO_ES as texto, RESP_BOTONES as botones,
              RESP_KEYWORDS as keywords, RESP_SENAL_INTERES as senalInteres, RESP_GENERA as genera,
-             RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY
+             RESP_CATEGORIA as categoria, RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY
       FROM dbo.CHATBOT_RESPUESTAS ORDER BY RESP_PK`),
     pool.request().query(`
       SELECT ETQ_ID as id, ETQ_TEXTO_ES as texto, ETQ_TIPO as tipoAccion, ETQ_CAMPANIA_ID as campaniaId,
