@@ -293,6 +293,16 @@ socketService.initialize(server);
     } catch (err) {
       logger.error('❌ Error inicializando BD:', err.message);
     }
+
+    // Las sesiones de WhatsApp (Baileys) solo viven en memoria del proceso —
+    // tras cualquier reinicio del backend, la BD sigue diciendo 'conectado'
+    // pero no hay socket real escuchando hasta reconectar. Ver
+    // baileysManager.reconectarSesionesGuardadas para el detalle del bug.
+    try {
+      await require('./services/canalesBaileys/baileysManager').reconectarSesionesGuardadas();
+    } catch (err) {
+      logger.error('❌ Error reconectando sesiones de Baileys:', err.message);
+    }
   }
 
   // El transporte de correo se inicializa después de la BD para poder leer

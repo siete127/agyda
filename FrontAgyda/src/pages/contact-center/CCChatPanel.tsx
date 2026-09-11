@@ -22,6 +22,7 @@ export function CCChatPanel({ interaccionId, onClosed }: { interaccionId: number
   const qc = useQueryClient()
   const [texto, setTexto] = useState('')
   const [cerrando, setCerrando] = useState(false)
+  const [retipificando, setRetipificando] = useState(false)
   const [transfiriendo, setTransfiriendo] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -89,10 +90,16 @@ export function CCChatPanel({ interaccionId, onClosed }: { interaccionId: number
             </button>
           </div>
         )}
+        {cerrada && (
+          <button onClick={() => setRetipificando((v) => !v)} className="flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1 text-[0.7rem] font-semibold text-white hover:bg-violet-700">
+            <CheckCircle2 className="h-3 w-3" /> Tipificar
+          </button>
+        )}
       </div>
 
       {transfiriendo && <TransferirPopover interaccionId={interaccionId} onDone={() => { setTransfiriendo(false); onClosed() }} />}
       {cerrando && <CerrarPopover inter={inter} onDone={() => { setCerrando(false); onClosed() }} />}
+      {retipificando && <RetipificarPopover inter={inter} onDone={() => { setRetipificando(false); onClosed() }} />}
 
       <div className="flex-1 space-y-2 overflow-y-auto bg-gray-50/40 p-4">
         {(inter.mensajes || []).map((m) => (
@@ -218,6 +225,34 @@ function CerrarPopover({ inter, onDone }: { inter: CCInteraccion; onDone: () => 
       <button onClick={() => m.mutate()} disabled={m.isPending}
         className="w-full rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
         {m.isPending ? 'Cerrando…' : 'Confirmar cierre'}
+      </button>
+    </div>
+  )
+}
+
+// Corrige/agrega la tipificación de una interacción YA cerrada (p.ej.
+// creada por una migración de datos, sin motivo de cierre aplicable) — usa
+// retipificar en vez de cerrar, que exige la interacción activa.
+function RetipificarPopover({ inter, onDone }: { inter: CCInteraccion; onDone: () => void }) {
+  const { data: tipificaciones = [] } = useQuery({ queryKey: ['cc-tip', inter.campaniaId], queryFn: () => ccService.getTipificaciones(inter.campaniaId) })
+  const [tipId, setTipId] = useState<number | ''>('')
+  const [comentario, setComentario] = useState('')
+  const m = useMutation({
+    mutationFn: () => ccService.retipificar(inter.id, { tipificacionId: Number(tipId), comentario: comentario || undefined }),
+    onSuccess: () => { toast.success('Tipificación actualizada'); onDone() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo tipificar'),
+  })
+  const field = 'w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm outline-none focus:border-violet-500'
+  return (
+    <div className="space-y-2 border-b border-gray-200 bg-gray-50 p-3">
+      <select className={field} value={tipId} onChange={(e) => setTipId(e.target.value ? Number(e.target.value) : '')}>
+        <option value="">Tipificación…</option>
+        {tipificaciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+      </select>
+      <input className={field} placeholder="Comentario (opcional)" value={comentario} onChange={(e) => setComentario(e.target.value)} />
+      <button onClick={() => m.mutate()} disabled={m.isPending || !tipId}
+        className="w-full rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50">
+        {m.isPending ? 'Guardando…' : 'Guardar tipificación'}
       </button>
     </div>
   )

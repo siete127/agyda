@@ -64,7 +64,12 @@ export default function FormularioPublicoPage() {
     if (!def) return
     const campos = def.secciones.flatMap((s) => s.campos)
     const campoTelefono = campos.find((c) => c.tipo === 'telefono')
-    const campoNombre = campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+    // Si el formulario separa Apellido paterno/Apellido materno/Nombre(s) en
+    // campos independientes, no se reparte el nombre completo entre ellos
+    // (no hay forma confiable de saber dónde corta cada parte) — solo se
+    // precarga clienteNombre, que sí llega completo a CI_CLIENTE_NOMBRE.
+    const tieneNombreEstructurado = campos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`))
+    const campoNombre = tieneNombreEstructurado ? undefined : campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
       ?? campos.find((c) => c.tipo === 'texto_corto')
 
     setValores((v) => {
@@ -87,7 +92,8 @@ export default function FormularioPublicoPage() {
     if (r.clienteNombre) setClienteNombre(r.clienteNombre)
     if (r.clienteTelefono) setClienteTelefono(r.clienteTelefono)
     const campos = def?.secciones.flatMap((s) => s.campos) ?? []
-    const campoNombre = campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+    const tieneNombreEstructurado = campos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`))
+    const campoNombre = tieneNombreEstructurado ? undefined : campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
       ?? campos.find((c) => c.tipo === 'texto_corto')
     const campoTelefono = campos.find((c) => c.tipo === 'telefono')
     if (campoNombre && r.clienteNombre) setValor(campoNombre.id, r.clienteNombre)

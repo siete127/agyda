@@ -1523,9 +1523,29 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
   // autocompletar (nunca por código específico, para que aplique a
   // cualquier formulario).
   const campoTelefono = camposValidos.recordset.find((c) => c.tipo === 'telefono');
-  const campoNombre = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
-    ?? camposValidos.recordset.find((c) => c.tipo === 'texto_corto');
   const respuestaDe = (campo) => campo && respuestasValidas.find((r) => Number(r.campoId) === campo.id)?.valor;
+
+  // Nombre del cliente: si el formulario separa Apellido paterno/Apellido
+  // materno/Nombre(s) en campos independientes (caso de Reclutamiento Totis,
+  // 2026-09-10 — se necesitaba ese orden fijo para "Gestión por asesor" y
+  // demás reportes), se arma "Paterno Materno Nombre(s)" a partir de esos 3.
+  // Si no existen esos campos, cae al criterio viejo de un solo campo tipo
+  // texto_corto con "nombre"/"interesado" en código o etiqueta, para no
+  // romper formularios ya existentes que no separan el nombre así.
+  const campoApellidoPaterno = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /apellido.?paterno/i.test(`${c.codigo} ${c.etiqueta}`));
+  const campoApellidoMaterno = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`));
+  const campoNombrePila = camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /^nombre(s)?$|nombre.?\(?s\)?$/i.test(`${c.codigo} ${c.etiqueta}`.trim()));
+  const nombreEstructurado = () => {
+    if (!campoApellidoPaterno && !campoApellidoMaterno && !campoNombrePila) return null;
+    const partes = [respuestaDe(campoApellidoPaterno), respuestaDe(campoApellidoMaterno), respuestaDe(campoNombrePila)]
+      .map((v) => String(v || '').trim()).filter(Boolean);
+    return partes.length ? partes.join(' ') : null;
+  };
+  const campoNombre = campoApellidoPaterno || campoApellidoMaterno || campoNombrePila
+    ? null
+    : camposValidos.recordset.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+      ?? camposValidos.recordset.find((c) => c.tipo === 'texto_corto');
+  const nombreDeRespuestas = () => nombreEstructurado() ?? respuestaDe(campoNombre);
 
   // Detecta el campo tipo 'catalogo' cuya fuente es 'tipificaciones_campania'
   // — su respuesta guarda el CT_ID (ver getOpcionesCatalogoDinamico: opciones
@@ -1552,7 +1572,7 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
       // crearRegistroCampoBuscador, validado dentro de esta misma
       // transacción para que "interacción creada sin respuestas" nunca
       // quede como estado intermedio si algo falla después.
-      const clienteNombre = String(b.clienteNombre || respuestaDe(campoNombre) || '').trim();
+      const clienteNombre = String(b.clienteNombre || nombreDeRespuestas() || '').trim();
       const clienteTelefono = String(b.clienteTelefono || respuestaDe(campoTelefono) || '').trim();
       const canalId = Number(b.canalId);
       if (!canalId) { await tx.rollback(); return { error: [400, 'Falta el canal'] }; }
@@ -1594,20 +1614,38 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
                 OUTPUT INSERTED.CI_ID id
                 VALUES (@canal, @tipo, @nombre, @tel, @camp, @agenteId, @agenteNombre, 'cerrada', @tip, GETDATE(), GETDATE())`);
       interaccionId = ins.recordset[0].id;
-    } else if (tipificacionIdDetectada) {
-      // Reabrir/re-guardar sobre una interacción existente: revalidar contra
-      // la campaña real de ESA interacción (no la del canal recién resuelto,
-      // que aquí no aplica) antes de actualizar CI_TIPIFICACION_ID.
+    } else {
+      // Reabrir/re-guardar sobre una interacción existente (creada antes por
+      // el Buscador o un guardado previo). Dos sincronizaciones independientes,
+      // cada una solo si aplica — antes solo corría la de tipificación (y solo
+      // si tipificacionIdDetectada), así que nombre/teléfono capturados en un
+      // guardado posterior al alta nunca llegaban a CI_CLIENTE_NOMBRE/TELEFONO,
+      // aunque sí quedaran en CCF_INTERACCION_FORM_RESPUESTAS — bug real
+      // encontrado 2026-09-10: Suite de Reportes lee CI_CLIENTE_TELEFONO
+      // directo, así que esas interacciones aparecían sin teléfono.
       const actual = await new sql.Request(tx).input('id', sql.Int, interaccionId)
-        .query('SELECT CI_CAMPANIA_ID campaniaId FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
-      const campaniaIdActual = actual.recordset[0]?.campaniaId;
-      if (campaniaIdActual) {
-        const tip = await new sql.Request(tx).input('id', sql.Int, tipificacionIdDetectada).input('c', sql.Int, campaniaIdActual)
+        .query('SELECT CI_CAMPANIA_ID campaniaId, CI_CLIENTE_NOMBRE nombre, CI_CLIENTE_TELEFONO telefono FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
+      const actualRow = actual.recordset[0];
+
+      if (tipificacionIdDetectada && actualRow?.campaniaId) {
+        const tip = await new sql.Request(tx).input('id', sql.Int, tipificacionIdDetectada).input('c', sql.Int, actualRow.campaniaId)
           .query(`SELECT 1 x FROM dbo.CCO_TIPIFICACIONES WHERE CT_ID = @id AND CT_ACTIVO = 1 AND (CT_CAMPANIA_ID = @c OR CT_CAMPANIA_ID IS NULL)`);
         if (tip.recordset.length) {
           await new sql.Request(tx).input('id', sql.Int, interaccionId).input('tip', sql.Int, tipificacionIdDetectada)
             .query('UPDATE dbo.CCO_INTERACCIONES SET CI_TIPIFICACION_ID = @tip WHERE CI_ID = @id');
         }
+      }
+
+      const nombreNuevo = String(b.clienteNombre || nombreDeRespuestas() || '').trim();
+      const telefonoNuevo = String(b.clienteTelefono || respuestaDe(campoTelefono) || '').trim();
+      // Solo rellena lo que esté vacío — nunca pisa un nombre/teléfono que
+      // ya tenga la interacción (p.ej. capturado directo en el Buscador).
+      if (actualRow && (!actualRow.nombre && nombreNuevo) || (!actualRow?.telefono && telefonoNuevo)) {
+        await new sql.Request(tx)
+          .input('id', sql.Int, interaccionId)
+          .input('nombre', sql.NVarChar(160), (!actualRow.nombre && nombreNuevo) ? nombreNuevo : actualRow.nombre)
+          .input('tel', sql.NVarChar(40), (!actualRow.telefono && telefonoNuevo) ? telefonoNuevo : actualRow.telefono)
+          .query('UPDATE dbo.CCO_INTERACCIONES SET CI_CLIENTE_NOMBRE = @nombre, CI_CLIENTE_TELEFONO = @tel WHERE CI_ID = @id');
       }
     }
 

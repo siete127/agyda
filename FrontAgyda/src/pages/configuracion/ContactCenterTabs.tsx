@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
-  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft,
+  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft, History,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -343,6 +343,16 @@ function BaileysQRPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged
     onSuccess: () => { setEstado('desconectado'); setQrDataUrl(null); setNumero(null); toast.success('Sesión cerrada'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
   })
+  const importarHistorial = useMutation({
+    mutationFn: () => ccService.importarHistorialBaileys(canal.id, usuarioId),
+    onSuccess: (r) => {
+      const d = r.data
+      const extra = d.quedanMasPorRevisar ? ' — quedan más conversaciones, dale click de nuevo para seguir' : ''
+      toast.success(`${d.chatsConsultados} conversación(es) revisada(s), ${d.mensajesInsertados} mensaje(s) nuevo(s) agregado(s)${d.chatsConError ? `, ${d.chatsConError} sin respuesta` : ''}${extra}`)
+      onChanged()
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo importar el historial'),
+  })
 
   return (
     <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
@@ -375,10 +385,18 @@ function BaileysQRPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged
           </button>
         )}
         {estado === 'conectado' && (
-          <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
-            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
-            <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <button
+              onClick={() => importarHistorial.mutate()}
+              disabled={importarHistorial.isPending}
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-sm hover:bg-gray-50 disabled:opacity-50">
+              {importarHistorial.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />} Importar historial
+            </button>
+            <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
+              className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
+              <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -734,7 +752,11 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
   const delC = useMutation({ mutationFn: () => ccService.deleteCampania(campania.id), onSuccess: onChanged })
 
   return (
-    <button type="button" onClick={onAbrir} className={clsx(cardBare, 'block w-full text-left transition hover:border-violet-200')}>
+    <div
+      role="button" tabIndex={0} onClick={onAbrir}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir() } }}
+      className={clsx(cardBare, 'block w-full cursor-pointer text-left transition hover:border-violet-200')}
+    >
       <div className="flex items-center justify-between gap-3 px-5 py-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <p className="truncate text-sm font-bold uppercase tracking-wide text-ink">{campania.nombre}</p>
@@ -751,7 +773,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
           <span className="hidden items-center gap-1.5 sm:flex"><Plug className="h-3.5 w-3.5" /> {campania.canalesCount} Canales</span>
           <span className="hidden items-center gap-1.5 sm:flex"><Layers className="h-3.5 w-3.5" /> {campania.skillsCount} Skills</span>
           <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setMenuAbierto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50">
+            <button type="button" onClick={() => setMenuAbierto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50">
               <MoreVertical className="h-4 w-4" />
             </button>
             {menuAbierto && (
@@ -759,6 +781,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
                 <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
                 <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-card py-1 shadow-lg">
                   <button
+                    type="button"
                     onClick={() => { setMenuAbierto(false); delC.mutate() }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-red-500 hover:bg-red-50"
                   >
@@ -771,7 +794,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
           <ChevronRight className="h-4 w-4 flex-shrink-0" />
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 

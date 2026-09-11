@@ -58,6 +58,44 @@ export interface ReportePostulantes {
   sinTipificar: { total: number; masAntiguos: ReportePostulantesSinTipificar[] }
 }
 
+// ── Reporte Ejecutivo de Reclutamiento — réplica del Excel de control de
+// postulantes por campaña, leído de CCO_INTERACCIONES + respuestas del
+// Formulario de Atención asignado (Canal de contacto, Fecha de asistencia,
+// Horario) y CI_TIPIFICACION_ID (Estatus actual).
+export interface ReporteEjecutivoEmbudoItem {
+  estatus: string
+  cantidad: number
+  porcentaje: number
+}
+export interface ReporteEjecutivoReclutamiento {
+  desde: string
+  hasta: string
+  campaniaId: number
+  indicadores: {
+    totalPostulantes: number
+    conFechaAsistencia: number
+    conHorario: number
+    conCanalIdentificado: number
+  }
+  embudo: ReporteEjecutivoEmbudoItem[]
+  kpisConversion: {
+    citasSobreTotal: number
+    confirmadasSobreCitas: number
+    asistenciaRegistrada: number
+    contratacionSobreTotal: number
+    descarteMasNoInteres: number
+  }
+  graficos: {
+    distribucionPorEstatus: { estatus: string; cantidad: number }[]
+    origenPorCanal: { canal: string; cantidad: number }[]
+    gestionPorAsesor: { agente: string; cantidad: number }[]
+    agendaPorFechaAsistencia: { fecha: string; cantidad: number }[]
+  }
+  // Interacciones sin Canal de contacto identificado (nunca pasaron por el
+  // formulario completo) — se listan para poder abrirlas y tipificarlas.
+  sinGestionar: { id: number; clienteNombre: string | null; fechaInicio: string }[]
+}
+
 // ── Suite de reportes: listado de interacciones cerradas (buscador) ──
 export interface InteraccionItem {
   id: number

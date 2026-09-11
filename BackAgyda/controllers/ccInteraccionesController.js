@@ -204,7 +204,13 @@ exports.enviarMensaje = async (req, res) => {
     if (tipoCanal !== 'test') {
       try {
         const resp = await enviarTextoCanal(it, it.clienteExtId, String(contenido));
-        metaMsgId = resp?.messages?.[0]?.id || resp?.message_id || null;
+        const idCrudo = resp?.messages?.[0]?.id || resp?.message_id || null;
+        // Mismo prefijo que baileysManager usa al ingestar el eco fromMe de
+        // este mismo mensaje (ver messages.upsert) — sin este prefijo la
+        // deduplicación por MG_META_MSG_ID nunca hacía match y el mensaje
+        // que el agente mandó desde el panel se insertaba una SEGUNDA vez
+        // al llegar su eco por el socket de WhatsApp.
+        metaMsgId = idCrudo && tipoCanal.includes('baileys') ? `baileys_${idCrudo}` : idCrudo;
       } catch (e) {
         errorEnvio = e.message;
       }
@@ -323,6 +329,42 @@ exports.cerrar = async (req, res) => {
   } catch (e) {
     console.error('cc.cerrar:', e.message);
     res.status(500).json({ success: false, message: 'Error al cerrar la interacción' });
+  }
+};
+
+// Corrige/agrega la tipificación de una interacción YA cerrada, sin
+// reabrirla ni exigir motivo de cierre — para casos como "Sin gestionar"
+// del Reporte Ejecutivo de Reclutamiento: interacciones creadas ya cerradas
+// (p.ej. por una migración de datos) a las que nunca se les asignó estatus.
+// exports.cerrar exige CI_ESTADO != 'cerrada', así que no sirve aquí.
+exports.retipificar = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { tipificacionId, comentario } = req.body || {};
+    const r = await p.request().input('id', sql.Int, req.params.id)
+      .query('SELECT CI_ESTADO estado, CI_CAMPANIA_ID campaniaId FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
+    const it = r.recordset[0];
+    if (!it) return res.status(404).json({ success: false, message: 'No encontrada' });
+    if (it.estado !== 'cerrada') return res.status(400).json({ success: false, message: 'Solo se puede retipificar una interacción ya cerrada' });
+
+    const tip = await p.request().input('c', sql.Int, it.campaniaId || null)
+      .query(`SELECT CT_ID id, CT_REQUIERE_COMENTARIO req FROM dbo.CCO_TIPIFICACIONES
+              WHERE CT_ACTIVO = 1 AND (CT_CAMPANIA_ID = @c OR CT_CAMPANIA_ID IS NULL)`);
+    const t = tip.recordset.find((x) => x.id === Number(tipificacionId));
+    if (!t) return res.status(400).json({ success: false, message: 'Selecciona una tipificación válida' });
+    if (t.req && !String(comentario || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Esta tipificación requiere un comentario' });
+    }
+
+    await p.request()
+      .input('id', sql.Int, req.params.id)
+      .input('tip', sql.Int, Number(tipificacionId))
+      .input('com', sql.NVarChar(sql.MAX), comentario || null)
+      .query(`UPDATE dbo.CCO_INTERACCIONES SET CI_TIPIFICACION_ID = @tip, CI_COMENTARIO_CIERRE = @com WHERE CI_ID = @id`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('cc.retipificar:', e.message);
+    res.status(500).json({ success: false, message: 'Error al tipificar la interacción' });
   }
 };
 

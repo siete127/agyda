@@ -7122,12 +7122,13 @@ CREATE TABLE dbo.CCO_CONFIG (
 );`,
     `IF OBJECT_ID('dbo.CCO_CONFIG', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CCO_CONFIG)
 INSERT INTO dbo.CCO_CONFIG (CF_MSG_BIENVENIDA) VALUES (N'Hola, en un momento te atendemos.');`,
-    // Modo de asignación (cascada canal -> campaña -> global). Default 'auto'
-    // = comportamiento actual (el sistema asigna a un agente disponible).
-    // 'manual' = la conversación queda en cola visible para todos los agentes
-    // de la campaña y ellos la jalan.
+    // Modo de asignación (cascada canal -> campaña -> global). Default
+    // 'manual' (2026-09-11, alineado con lo que pidió el equipo): toda
+    // conversación nueva cae a Bandeja de espera y el agente la jala a
+    // mano; solo las campañas/canales que de verdad necesiten reparto
+    // automático lo prenden explícitamente con 'auto'.
     `IF COL_LENGTH('dbo.CCO_CONFIG', 'CF_MODO_ASIGNACION') IS NULL
-  ALTER TABLE dbo.CCO_CONFIG ADD CF_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CF_MODO_ASIGNACION DEFAULT 'auto';`,
+  ALTER TABLE dbo.CCO_CONFIG ADD CF_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CF_MODO_ASIGNACION DEFAULT 'manual';`,
     `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_MODO_ASIGNACION') IS NULL
   ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CM2_MODO_ASIGNACION DEFAULT 'global';`,
     `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_MODO_ASIGNACION') IS NULL

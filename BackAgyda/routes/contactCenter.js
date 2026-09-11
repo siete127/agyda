@@ -34,6 +34,7 @@ router.post('/interacciones/:id/tomar', authenticateToken, requireActionAccess(M
 router.post('/interacciones/:id/mensajes', authenticateToken, requireActionAccess(M, 'atender'), inter.enviarMensaje);
 router.post('/interacciones/:id/media', authenticateToken, requireActionAccess(M, 'atender'), uploadCcMedia.single('archivo'), inter.subirMedia);
 router.post('/interacciones/:id/cerrar', authenticateToken, requireActionAccess(M, 'atender'), inter.cerrar);
+router.post('/interacciones/:id/retipificar', authenticateToken, requireActionAccess(M, 'atender'), inter.retipificar);
 router.post('/interacciones/:id/transferir', authenticateToken, requireActionAccess(M, 'atender'), inter.transferir);
 router.get('/interacciones/:id/agentes-transferibles', authenticateToken, requireActionAccess(M, 'atender'), inter.getAgentesTransferibles);
 
@@ -70,9 +71,11 @@ router.post('/canales/:id/suscribir', authenticateToken, requireActionAccess(M, 
 router.post('/canales/:id/baileys/iniciar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.iniciarBaileys);
 router.get('/canales/:id/baileys/estado', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.estadoBaileys);
 router.post('/canales/:id/baileys/cerrar', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.cerrarBaileys);
+router.post('/canales/:id/baileys/importar-historial', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.importarHistorialBaileys);
 router.post('/canales/:id/baileys/agente/:usuarioId/iniciar', authenticateToken, requireActionAccess(M, 'atender'), cfg.iniciarBaileys);
 router.get('/canales/:id/baileys/agente/:usuarioId/estado', authenticateToken, requireActionAccess(M, 'atender'), cfg.estadoBaileys);
 router.post('/canales/:id/baileys/agente/:usuarioId/cerrar', authenticateToken, requireActionAccess(M, 'atender'), cfg.cerrarBaileys);
+router.post('/canales/:id/baileys/agente/:usuarioId/importar-historial', authenticateToken, requireActionAccess(M, 'atender'), cfg.importarHistorialBaileys);
 
 // Messenger vía FCA (no oficial) — vinculación pegando un appstate.json en vez de tokens de Meta.
 router.post('/canales/:id/fca/vincular', authenticateToken, requireActionAccess(M, 'configurar-canales'), cfg.vincularFca);

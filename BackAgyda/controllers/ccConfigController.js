@@ -310,6 +310,23 @@ exports.cerrarBaileys = async (req, res) => {
   }
 };
 
+// Trae los chats/mensajes previos a la vinculación (lo que el teléfono ya
+// tenía sincronizado) y los crea como interacciones cerradas en AGYDA —
+// operación pesada disparada a mano (no automática al vincular, ver
+// baileysManager.importarHistorial), solo un admin la puede ejecutar.
+exports.importarHistorialBaileys = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { usuarioId, error } = await resolverCanalYUsuario(p, req, 'whatsapp_baileys');
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+    const resultado = await baileysManager.importarHistorial(req.params.id, tenantKeyDe(req), usuarioId);
+    res.json({ success: true, data: resultado });
+  } catch (e) {
+    console.error('ccConfig.importarHistorialBaileys:', e.message);
+    res.status(500).json({ success: false, message: `No se pudo importar el historial: ${e.message}` });
+  }
+};
+
 // ── Messenger vía FCA (no oficial) ─────────────────────────────────────
 // A diferencia de Baileys, aquí la vinculación es pegar un appstate.json
 // (cookies de sesión de una cuenta personal de Facebook, extraídas fuera de

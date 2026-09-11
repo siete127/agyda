@@ -751,6 +751,143 @@ function _rangoFechas(req) {
   return { desde, hasta };
 }
 
+/* ── Reporte Ejecutivo de Reclutamiento: réplica del Excel de control de
+   postulantes (embudo, KPIs de conversión, gráficos por canal/asesor/fecha
+   de asistencia) para la campaña de un Formulario de Atención específico.
+   Fuente de datos: CCO_INTERACCIONES (una fila = un postulante gestionado)
+   + sus respuestas de formulario (CCF_INTERACCION_FORM_RESPUESTAS) para
+   Canal de contacto, Fecha de asistencia y Horario — campos que solo viven
+   ahí, no en CCO_INTERACCIONES. La etapa del embudo SÍ vive en
+   CI_TIPIFICACION_ID (el campo "Estatus actual" del formulario se refleja
+   ahí automáticamente — ver ccFormulariosController._guardarRespuestasCore,
+   fix 2026-09-09), así que no hace falta leerla de las respuestas. */
+
+// IDs de campo del formulario "Reclutamiento Totis Prueba" (FR_ID=3, versión
+// publicada FV_ID=2) confirmados directo en BD — no hay forma genérica de
+// resolverlos por etiqueta sin arriesgar falsos positivos entre formularios
+// distintos, así que se referencian explícitos aquí.
+const RECLUTAMIENTO_CAMPO_ID = {
+  fechaAsistencia: 5,
+  horario: 6,
+  canalContacto: 10,
+};
+
+async function getReporteEjecutivoReclutamiento(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    const campaniaId = req.query.campaniaId ? Number(req.query.campaniaId) : null;
+    if (!campaniaId) return res.status(400).json({ success: false, message: 'Falta campaniaId' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rq = pool.request()
+      .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+      .input('campania', sql.Int, campaniaId)
+      .input('fCanal', sql.Int, RECLUTAMIENTO_CAMPO_ID.canalContacto)
+      .input('fAsistencia', sql.Int, RECLUTAMIENTO_CAMPO_ID.fechaAsistencia)
+      .input('fHorario', sql.Int, RECLUTAMIENTO_CAMPO_ID.horario);
+
+    const r = await rq.query(`
+      SELECT
+        i.CI_ID id,
+        i.CI_CLIENTE_NOMBRE clienteNombre,
+        i.CI_CLIENTE_TELEFONO clienteTelefono,
+        i.CI_FECHA_INICIO fechaInicio,
+        i.CI_AGENTE_NOMBRE agenteNombre,
+        ISNULL(t.CT_NOMBRE, '(sin estatus)') estatus,
+        canal.FIR_VALOR_TEXTO canal,
+        asistencia.FIR_VALOR_FECHA fechaAsistencia,
+        horario.FIR_VALOR_TEXTO horario
+      FROM dbo.CCO_INTERACCIONES i
+      LEFT JOIN dbo.CCO_TIPIFICACIONES t ON t.CT_ID = i.CI_TIPIFICACION_ID
+      LEFT JOIN dbo.CCF_INTERACCION_FORM_RESPUESTAS canal
+        ON canal.FIR_INTERACCION_ID = i.CI_ID AND canal.FIR_CAMPO_ID = @fCanal
+      LEFT JOIN dbo.CCF_INTERACCION_FORM_RESPUESTAS asistencia
+        ON asistencia.FIR_INTERACCION_ID = i.CI_ID AND asistencia.FIR_CAMPO_ID = @fAsistencia
+      LEFT JOIN dbo.CCF_INTERACCION_FORM_RESPUESTAS horario
+        ON horario.FIR_INTERACCION_ID = i.CI_ID AND horario.FIR_CAMPO_ID = @fHorario
+      WHERE i.CI_CAMPANIA_ID = @campania
+        AND i.CI_FECHA_INICIO >= @desde AND i.CI_FECHA_INICIO < DATEADD(DAY, 1, @hasta)
+        AND ISNULL(t.CT_ACTIVO, 1) = 1
+      ORDER BY i.CI_FECHA_INICIO DESC
+    `);
+
+    const filas = r.recordset;
+    const total = filas.length;
+    const conFechaAsistencia = filas.filter((f) => f.fechaAsistencia).length;
+    const conHorario = filas.filter((f) => f.horario).length;
+    const conCanal = filas.filter((f) => f.canal).length;
+
+    const SIN_CANAL = 'Sin gestionar';
+    const porEstatus = new Map();
+    const porCanal = new Map();
+    const porAgente = new Map();
+    const porFechaAsistencia = new Map();
+    // IDs de interacción sin canal identificado — para poder abrir cada una
+    // desde el reporte (ver conversación + tipificar) sin salir a buscarla.
+    const sinGestionarIds = [];
+    for (const f of filas) {
+      porEstatus.set(f.estatus, (porEstatus.get(f.estatus) ?? 0) + 1);
+      const canalKey = f.canal || SIN_CANAL;
+      porCanal.set(canalKey, (porCanal.get(canalKey) ?? 0) + 1);
+      if (!f.canal) sinGestionarIds.push({ id: f.id, clienteNombre: f.clienteNombre, fechaInicio: f.fechaInicio });
+      const agenteKey = f.agenteNombre || '(sin asesor)';
+      porAgente.set(agenteKey, (porAgente.get(agenteKey) ?? 0) + 1);
+      if (f.fechaAsistencia) {
+        const dia = new Date(f.fechaAsistencia).toISOString().slice(0, 10);
+        porFechaAsistencia.set(dia, (porFechaAsistencia.get(dia) ?? 0) + 1);
+      }
+    }
+
+    // KPIs de conversión — mismas etapas que el Excel: Cita Agendada, Cita
+    // Confirmada, Asistió, Contratado, No asistió, No interesado, Descartado.
+    // Los nombres de CCO_TIPIFICACIONES son texto libre por campaña, así que
+    // se buscan por coincidencia parcial insensible a mayúsculas, no por ID fijo.
+    const contarEstatus = (patron) => filas.filter((f) => f.estatus.toLowerCase().includes(patron)).length;
+    const citas = contarEstatus('cita agendada');
+    const confirmadas = contarEstatus('cita confirmada');
+    const asistieron = contarEstatus('asisti'); // cubre "Asistió"
+    const contratados = contarEstatus('contratado');
+    const noAsistieron = contarEstatus('no asisti');
+    const noInteresados = contarEstatus('no interesado');
+    const descartados = contarEstatus('descartado');
+
+    const pct = (num, den) => (den > 0 ? Number(((num / den) * 100).toFixed(1)) : 0);
+
+    res.json({
+      success: true,
+      data: {
+        desde, hasta, campaniaId,
+        indicadores: {
+          totalPostulantes: total,
+          conFechaAsistencia,
+          conHorario,
+          conCanalIdentificado: conCanal,
+        },
+        embudo: Array.from(porEstatus.entries()).map(([estatus, cantidad]) => ({
+          estatus, cantidad, porcentaje: pct(cantidad, total),
+        })).sort((a, b) => b.cantidad - a.cantidad),
+        kpisConversion: {
+          citasSobreTotal: pct(citas, total),
+          confirmadasSobreCitas: pct(confirmadas, citas),
+          asistenciaRegistrada: pct(asistieron, total),
+          contratacionSobreTotal: pct(contratados, total),
+          descarteMasNoInteres: pct(descartados + noInteresados, total),
+        },
+        graficos: {
+          distribucionPorEstatus: Array.from(porEstatus.entries()).map(([estatus, cantidad]) => ({ estatus, cantidad })),
+          origenPorCanal: Array.from(porCanal.entries()).map(([canal, cantidad]) => ({ canal, cantidad })).sort((a, b) => b.cantidad - a.cantidad),
+          gestionPorAsesor: Array.from(porAgente.entries()).map(([agente, cantidad]) => ({ agente, cantidad })).sort((a, b) => b.cantidad - a.cantidad),
+          agendaPorFechaAsistencia: Array.from(porFechaAsistencia.entries()).map(([fecha, cantidad]) => ({ fecha, cantidad })).sort((a, b) => a.fecha.localeCompare(b.fecha)),
+        },
+        sinGestionar: sinGestionarIds,
+      },
+    });
+  } catch (err) {
+    logger.error('operacionesController.getReporteEjecutivoReclutamiento', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el reporte ejecutivo de reclutamiento' });
+  }
+}
+
 async function _queryReportePostulantes(pool, desde, hasta) {
   const porCampaniaRs = await pool.request()
     .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
@@ -1719,6 +1856,7 @@ module.exports = {
   getReporteDiario,
   getReportePostulantes,
   exportarReportePostulantes,
+  getReporteEjecutivoReclutamiento,
   listInteracciones,
   exportarInteracciones,
   getMiResumenAsesor,
