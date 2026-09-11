@@ -183,6 +183,13 @@ async function ingestarMensajeAgenteDirecto(pool, tenantKey, canal, msg) {
 // en la sesión para que todo lo demás (estado, número, ingesta de mensajes)
 // sepa a quién pertenece sin tener que volver a consultarlo.
 async function iniciarSesion(canalId, tenantKey, usuarioId) {
+  // Ver comentario en server.js junto a BAILEYS_DISABLE_AUTORECONNECT: este
+  // proceso comparte BD y carpeta de credenciales con otro (prod/QA corriendo
+  // el mismo código) — abrir una sesión aquí competiría por la conexión real
+  // de WhatsApp con el otro proceso y corrompería el estado en BD.
+  if (process.env.BAILEYS_DISABLE_AUTORECONNECT === '1') {
+    throw new Error('Este proceso tiene deshabilitada la conexión a WhatsApp (BAILEYS_DISABLE_AUTORECONNECT=1) — usa el otro entorno para vincular/gestionar canales de WhatsApp.');
+  }
   const sessionKey = sessionKeyDe(canalId, usuarioId);
   const existente = sesiones[sessionKey];
   if (existente?.sock) {
