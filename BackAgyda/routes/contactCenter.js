@@ -109,12 +109,15 @@ router.get('/campanias/:id/postulantes', authenticateToken, requireActionAccess(
 router.get('/campanias/:id/tipificaciones-excel', authenticateToken, requireActionAccess(M, 'ver'), cfg.exportarTipificacionesCampania);
 
 // ── Gestión de postulantes (transversal a campañas asignadas al agente) ──
-router.get('/postulantes', authenticateToken, requireActionAccess(M, 'ver'), cfg.listPostulantesGestion);
-router.post('/postulantes', authenticateToken, requireActionAccess(M, 'atender'), cfg.crearPostulanteManual);
-router.get('/postulantes/campanias', authenticateToken, requireActionAccess(M, 'ver'), cfg.listCampaniasParaPostulante);
-router.post('/postulantes/:id/tipificacion', authenticateToken, requireActionAccess(M, 'atender'), cfg.tipificarPostulante);
-router.get('/postulantes/:id/notas', authenticateToken, requireActionAccess(M, 'ver'), cfg.listNotasPostulante);
-router.post('/postulantes/:id/notas', authenticateToken, requireActionAccess(M, 'atender'), cfg.crearNotaPostulante);
+// Módulo propio 'postulantes' (separado de 'contact-center') con sus propias
+// acciones granulares, otorgable independientemente en Permisos.
+const MP = 'postulantes';
+router.get('/postulantes', authenticateToken, requireActionAccess(MP, 'ver'), cfg.listPostulantesGestion);
+router.post('/postulantes', authenticateToken, requireActionAccess(MP, 'crear'), cfg.crearPostulanteManual);
+router.get('/postulantes/campanias', authenticateToken, requireActionAccess(MP, 'ver'), cfg.listCampaniasParaPostulante);
+router.post('/postulantes/:id/tipificacion', authenticateToken, requireActionAccess(MP, 'tipificar'), cfg.tipificarPostulante);
+router.get('/postulantes/:id/notas', authenticateToken, requireActionAccess(MP, 'notas'), cfg.listNotasPostulante);
+router.post('/postulantes/:id/notas', authenticateToken, requireActionAccess(MP, 'notas'), cfg.crearNotaPostulante);
 router.get('/campanias/:id/supervisores', authenticateToken, requireActionAccess(M, 'ver'), cfg.getSupervisoresDeCampania);
 router.post('/campanias/:id/supervisores', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.asignarSupervisorACampania);
 router.delete('/campanias/:id/supervisores/:usuarioId', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.quitarSupervisorDeCampania);

@@ -17,7 +17,7 @@ function notifyAccesosUpdated(usuarioId, tenantKey) {
 // Nota: el módulo 'quejas' se retiró en la Fase 9 del rediseño de Atención al
 // Cliente (Quejas vive ahora en 'atencion-cliente' → Casos). Se dejó de listar
 // aquí; los accesos existentes se migraron por backfill.
-const ALL_MODULES = ['noticias','tickets','proyectos','vacaciones','asistencia-personal','calendario','reglamento','drive','organigrama','musica','webphone','clientes','crm','encuestas','reports','usuarios','vacaciones-admin','staff-ti','activos','vacantes','chatbot','livechat','contact-center','mensajeria','asistencia','nomina','accesos','auditoria','expedientes','gastos','mi-area','evaluacion','configuracion','direccion-general','calidad','marketing','legal','finanzas','ventas-area','operaciones','tecnologia','atencion-cliente','rh-area','capacitacion','incapacidades','evaluacion-desempeno'];
+const ALL_MODULES = ['noticias','tickets','proyectos','vacaciones','asistencia-personal','calendario','reglamento','drive','organigrama','musica','webphone','clientes','crm','encuestas','reports','usuarios','vacaciones-admin','staff-ti','activos','vacantes','chatbot','livechat','contact-center','postulantes','mensajeria','asistencia','nomina','accesos','auditoria','expedientes','gastos','mi-area','evaluacion','configuracion','direccion-general','calidad','marketing','legal','finanzas','ventas-area','operaciones','tecnologia','atencion-cliente','rh-area','capacitacion','incapacidades','evaluacion-desempeno'];
 const DEFAULT_MODULES_BY_ROLE = {
   ad:  ALL_MODULES,  // AD normal: todos los módulos (pero respeta restricciones del admin)
   cc:  ['noticias','tickets','vacaciones','calendario','reglamento','musica','evaluacion','asistencia-personal','webphone','mensajeria'],
@@ -54,6 +54,7 @@ const MODULOS_DISPONIBLES = [
   { key: 'chatbot',     nombre: 'Chatbot',             descripcion: 'Diccionario de respuestas del chatbot de la página web' },
   { key: 'livechat',    nombre: 'Chat en Vivo',        descripcion: 'Atención en vivo a visitantes de la página web' },
   { key: 'contact-center', nombre: 'Contact Center',   descripcion: 'Atención omnicanal (WhatsApp, Messenger, Instagram) — bandeja de interacciones, skills y campañas' },
+  { key: 'postulantes', nombre: 'Postulantes',         descripcion: 'Gestión de postulantes de campañas: búsqueda, tipificación y notas de seguimiento' },
   { key: 'email-marketing', nombre: 'Email Marketing', descripcion: 'Campañas de correo masivo sobre los contactos del CRM' },
   { key: 'mensajeria',  nombre: 'Mensajería',          descripcion: 'Chat interno entre usuarios, grupos y canales' },
   { key: 'asistencia',  nombre: 'Mi Asistencia',       descripcion: 'Registro y consulta de asistencia' },
@@ -134,6 +135,12 @@ const ACCIONES_POR_MODULO = {
     { key: 'asignar-agentes',     nombre: 'Asignar agentes',        descripcion: 'Asignar campañas y skills a los agentes' },
     { key: 'supervision',         nombre: 'Supervisión',            descripcion: 'Ver interacciones de todos los agentes, métricas e historial completo' },
     { key: 'notificar-correo',    nombre: 'Notificar por correo',   descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+  ],
+  postulantes: [
+    { key: 'ver',         nombre: 'Ver postulantes',       descripcion: 'Buscar y consultar postulantes de las campañas asignadas (o todas, si es gestor/admin)' },
+    { key: 'crear',       nombre: 'Crear postulante',      descripcion: 'Dar de alta un postulante manualmente' },
+    { key: 'tipificar',   nombre: 'Cambiar tipificación',  descripcion: 'Registrar o actualizar el estatus/tipificación de un postulante' },
+    { key: 'notas',       nombre: 'Gestionar notas',       descripcion: 'Ver y agregar notas de seguimiento a un postulante' },
   ],
   'email-marketing': [
     { key: 'ver',            nombre: 'Ver plantillas y campañas', descripcion: 'Consultar plantillas, campañas y sus reportes de envío' },

@@ -373,6 +373,8 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
               { element: <ModuleRoute moduleKey="contact-center" />, children: [
                 { path: '/contact-center', element: wrap(<ContactCenterPage />) },
+              ] },
+              { element: <ModuleRoute moduleKey="postulantes" />, children: [
                 { path: '/contact-center/postulantes', element: wrap(<PostulantesPage />) },
               ] },
             ],
