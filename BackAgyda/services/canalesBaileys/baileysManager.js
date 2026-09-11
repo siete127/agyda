@@ -184,7 +184,20 @@ async function ingestarMensajeAgenteDirecto(pool, tenantKey, canal, msg) {
 // sepa a quién pertenece sin tener que volver a consultarlo.
 async function iniciarSesion(canalId, tenantKey, usuarioId) {
   const sessionKey = sessionKeyDe(canalId, usuarioId);
-  if (sesiones[sessionKey]?.sock) return sesiones[sessionKey];
+  const existente = sesiones[sessionKey];
+  if (existente?.sock) {
+    // Ya conectado: nada que hacer, reutilizar tal cual.
+    if (existente.estado === 'conectado') return existente;
+    // Sigue en 'esperando_qr' (o similar) — el QR en memoria puede llevar
+    // minutos y haber caducado del lado de WhatsApp ("vínculo no válido" al
+    // escanear). Quitar los listeners ANTES de cerrar (si no, su propio
+    // 'connection.update' con close dispararía el auto-reintento de abajo,
+    // compitiendo con la sesión nueva que este mismo flujo está por crear) y
+    // caer al código de abajo, que arma un socket nuevo con un QR fresco.
+    try { existente.sock.ev.removeAllListeners(); } catch (_) { /* no-op */ }
+    try { existente.sock.end(undefined); } catch (_) { /* ya pudo estar cerrado */ }
+    delete sesiones[sessionKey];
+  }
 
   const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, proto } =
     require('@whiskeysockets/baileys');
