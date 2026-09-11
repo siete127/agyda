@@ -5,6 +5,7 @@ const FormularioPublicoPage = lazy(() => import('@/pages/contact-center/Formular
 import { AppLayout } from '@/layouts/AppLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { VentasLayout } from '@/layouts/VentasLayout'
+import { PortalClienteLayout } from '@/layouts/PortalClienteLayout'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RoleRoute } from './RoleRoute'
 import { ModuleRoute } from './ModuleRoute'
@@ -15,10 +16,12 @@ import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
 import { Spinner } from '@/components/ui/Spinner'
 import { useAuthStore } from '@/stores/auth.store'
 
-// Redirige a /tickets si el usuario es CL (cliente externo)
+// Redirige a /portal-cliente si el usuario es CL (cliente externo) — ese
+// panel es independiente de AppLayout/dashboard interno (ver
+// layouts/PortalClienteLayout.tsx).
 function CLRedirect({ children }: { children: React.ReactNode }) {
   const tipoUsuario = useAuthStore((s) => s.user?.tipoUsuario?.toUpperCase())
-  if (tipoUsuario === 'CL') return <Navigate to="/tickets" replace />
+  if (tipoUsuario === 'CL') return <Navigate to="/portal-cliente" replace />
   return <>{children}</>
 }
 
@@ -28,6 +31,7 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 ) => lazy(() => fn().then((m) => ({ default: m[name] })))
 
 // Páginas lazy — cada una genera su propio chunk
+const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/PortalClientePrincipalPage'), 'PortalClientePrincipalPage')
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
 const KbPage          = lz(() => import('@/pages/kb/KbPage'),                  'KbPage')
@@ -200,6 +204,16 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
+
+      // ── Portal de Cliente (rol CL) — layout propio, independiente del
+      // panel interno (AppLayout). Comparte login/auth/backend con el
+      // resto de AGYDA, pero ni el sidebar ni las páginas se reutilizan. ──
+      {
+        element: <PortalClienteLayout />,
+        children: [
+          { path: '/portal-cliente', element: wrap(<PortalClientePrincipalPage />) },
+        ],
+      },
 
       // ── Intranet (con sidebar + topbar normales) ─────────────────────
       {

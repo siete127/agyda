@@ -669,7 +669,7 @@
                 </a>
             </div>
 
-            <svg class="qr-form-pointer" viewBox="0 0 280 120" aria-hidden="true">
+            <svg class="qr-form-pointer" viewBox="0 0 260 120" aria-hidden="true">
                 <path class="qr-form-pointer-line" d="M10 78
                          C 26 58, 48 58, 50 76
                          C 51 90, 34 92, 28 80
@@ -2258,10 +2258,22 @@
                     .filter(Boolean);
             }
 
+            // Si ya estamos dentro de una vista dedicada (p. ej. el usuario
+            // pasa de Vacantes a ArdaWiki por el nav sin volver al home
+            // primero), las secciones del home ya están en display:none —
+            // sin esta bandera, ese segundo "guardado" de prevDisplay
+            // sobreescribiría el valor original ('') con 'none', y
+            // "Volver al inicio" dejaría todo oculto para siempre.
+            let dentroDeVistaDedicada = false;
+
             function abrirVistaDedicada(id) {
                 const vista = document.getElementById(id);
                 if (!vista) return;
-                homeSections().forEach((el) => { el.dataset.prevDisplay = el.style.display; el.style.display = 'none'; });
+                if (!dentroDeVistaDedicada) {
+                    homeSections().forEach((el) => { el.dataset.prevDisplay = el.style.display; });
+                    dentroDeVistaDedicada = true;
+                }
+                homeSections().forEach((el) => { el.style.display = 'none'; });
                 document.querySelectorAll('.vista-dedicada').forEach((el) => { el.style.display = 'none'; });
                 vista.style.display = '';
                 // El título usa el mismo sistema de "split text" con
@@ -2277,6 +2289,7 @@
             window.cerrarVistaDedicada = function () {
                 document.querySelectorAll('.vista-dedicada').forEach((el) => { el.style.display = 'none'; });
                 homeSections().forEach((el) => { el.style.display = el.dataset.prevDisplay || ''; });
+                dentroDeVistaDedicada = false;
                 window.scrollTo({ top: 0, behavior: 'auto' });
             };
 
@@ -2304,6 +2317,21 @@
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
                     window.abrirArdawikiDedicada();
+                });
+            });
+
+            // Cualquier OTRO link del nav/footer que apunte a una sección
+            // normal del home (#servicios, #soluciones-conectan, etc.)
+            // debe cerrar primero la vista dedicada si está abierta — si
+            // no, el navegador intenta saltar a una sección que sigue en
+            // display:none (posición de scroll inexistente) y el click
+            // no hace nada visible: el usuario queda "atrapado" dentro de
+            // Vacantes/ArdaWiki sin poder navegar al resto del sitio.
+            document.querySelectorAll('a[href^="#"]').forEach((link) => {
+                const href = link.getAttribute('href');
+                if (href === '#vacantes' || href === '#ardawiki' || href === '#') return;
+                link.addEventListener('click', () => {
+                    if (dentroDeVistaDedicada) window.cerrarVistaDedicada();
                 });
             });
         })();
@@ -4292,7 +4320,7 @@
             // Clona los primeros N items al final (N = visibles a la vez) para
             // poder deslizar "hacia adelante" sin fin — al llegar a los clones,
             // salta sin transición de vuelta al set real equivalente.
-            const VISIBLE = () => (window.innerWidth <= 700 ? 2 : 4);
+            const VISIBLE = () => (window.innerWidth <= 480 ? 1 : window.innerWidth <= 700 ? 2 : 4);
             Array.from(track.children).slice(0, VISIBLE()).forEach((el) => {
                 track.appendChild(el.cloneNode(true));
             });
@@ -4626,9 +4654,18 @@
                 return { render };
             }
 
+            // baseWidth se fija como width inline en px del carrusel — un
+            // valor fijo (420) desborda el contenedor en pantallas más
+            // angostas (móvil), cortando la tarjeta por el borde derecho.
+            // Se calcula en base al ancho real disponible del wrap, con
+            // 420px como techo (el diseño de escritorio/tablet).
+            const carouselWrapEl = carouselEl.closest('.portafolio-carousel-wrap') || carouselEl.parentElement;
+            const availableWidth = carouselWrapEl.clientWidth || window.innerWidth;
+            const carouselBaseWidth = Math.max(260, Math.min(420, availableWidth));
+
             const carouselCtrl = mountCarousel(carouselEl, {
                 items: PROYECTOS.map(buildProjectCard),
-                baseWidth: 420,
+                baseWidth: carouselBaseWidth,
                 autoplay: true,
                 autoplayDelay: 4000,
                 pauseOnHover: true,
