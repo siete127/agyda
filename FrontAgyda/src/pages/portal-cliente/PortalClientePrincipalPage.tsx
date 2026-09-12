@@ -116,8 +116,8 @@ function ProyectoCard() {
         <ProgressGauge
           value={PROYECTO_EJEMPLO.avance}
           size={132}
-          strokeWidth={5}
-          segments={36}
+          strokeWidth={9}
+          segments={24}
           trackColor="rgba(255,255,255,0.15)"
           progressColor="#5eead4"
           tooltip={`${PROYECTO_EJEMPLO.avance}% completado`}
