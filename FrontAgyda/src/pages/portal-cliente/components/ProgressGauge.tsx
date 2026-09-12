@@ -10,6 +10,7 @@ interface ProgressGaugeProps {
   label?: string
   tooltip?: string
   segments?: number
+  textColor?: string
 }
 
 function hexToRgb(hex: string) {
@@ -43,6 +44,7 @@ export function ProgressGauge({
   label,
   tooltip,
   segments = 24,
+  textColor = 'white',
 }: ProgressGaugeProps) {
   const [hover, setHover] = useState(false)
   const animated = useCountUp(value)
@@ -90,7 +92,7 @@ export function ProgressGauge({
         })}
       </svg>
       <div className="absolute inset-x-0 top-1/2 flex -translate-y-1 flex-col items-center">
-        <span className="text-3xl font-extrabold text-ink">{animated}%</span>
+        <span className="text-3xl font-extrabold" style={{ color: textColor }}>{animated}%</span>
         {label && <span className="text-[10px] font-semibold text-ink-tertiary">{label}</span>}
       </div>
 

@@ -46,10 +46,10 @@ function NavItemRow({ item }: { item: NavItem }) {
   const theme = useThemeStore((s) => s.theme)
   const isDark = resolveTheme(theme) === 'dark'
   // Color de fondo "detrás" de la pestaña activa (el mismo que pinta las
-  // esquinas cóncavas, ver comentario más abajo) — blanco en claro, un
-  // azul-gris oscuro propio en oscuro (no negro puro, para no chocar tan
-  // fuerte contra el resto del panel oscuro).
-  const activeBg = isDark ? '#111a2e' : '#ffffff'
+  // esquinas cóncavas, ver comentario más abajo) — debe coincidir EXACTO con
+  // el bg-surface real del <main> del dashboard (ver PortalClienteLayout),
+  // si no la unión se ve con un borde/tono distinto en vez de continua.
+  const activeBg = isDark ? 'rgb(15, 19, 27)' : 'rgb(247, 249, 252)'
 
   // Efecto "pestaña" (referencia eProduct): el ítem activo pierde el
   // border-radius del lado derecho y se extiende con un margen negativo
