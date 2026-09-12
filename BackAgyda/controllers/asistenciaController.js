@@ -30,16 +30,18 @@ const HORARIOS_FALLBACK = {
 // Cache en memoria para no consultar la BD en cada marca de entrada
 let horariosCacheTs = 0;
 let horariosCache = null;
+let horariosEspCache = null;
 
 async function getHorariosPorRol(pool) {
   if (horariosCache && Date.now() - horariosCacheTs < 60_000) return horariosCache;
   try {
     const r = await pool.request().query(
-      `SELECT ROL, HORA_ENTRADA, HORA_SALIDA, TOLERANCIA_MINUTOS, DIA_INICIO, DIA_FIN FROM ASISTENCIA_HORARIOS WHERE ACTIVO = 1`
+      `SELECT ID, ROL, HORA_ENTRADA, HORA_SALIDA, TOLERANCIA_MINUTOS, DIA_INICIO, DIA_FIN FROM ASISTENCIA_HORARIOS WHERE ACTIVO = 1`
     );
     const map = { ...HORARIOS_FALLBACK };
     for (const row of r.recordset) {
       map[row.ROL] = {
+        id:         row.ID,
         entrada:    row.HORA_ENTRADA,
         salida:     row.HORA_SALIDA,
         tolerancia: row.TOLERANCIA_MINUTOS ?? 5,
@@ -47,7 +49,22 @@ async function getHorariosPorRol(pool) {
         diaFin:     row.DIA_FIN ?? 5,
       };
     }
+    // Excepciones por día de semana (ej. sábado con horario reducido) — indexadas
+    // por HORARIO_ID (no por ROL directamente, porque así está la tabla) para
+    // que getHorarioEfectivo las resuelva sin otro roundtrip a BD.
+    const esp = await pool.request().query(
+      `SELECT HORARIO_ID, DIA_SEMANA, HORA_ENTRADA, TOLERANCIA_MINUTOS FROM ASISTENCIA_HORARIOS_ESP WHERE ACTIVO = 1`
+    );
+    const espMap = {};
+    for (const row of esp.recordset) {
+      if (!espMap[row.HORARIO_ID]) espMap[row.HORARIO_ID] = {};
+      espMap[row.HORARIO_ID][row.DIA_SEMANA] = {
+        entrada:    row.HORA_ENTRADA,
+        tolerancia: row.TOLERANCIA_MINUTOS ?? 5,
+      };
+    }
     horariosCache = map;
+    horariosEspCache = espMap;
     horariosCacheTs = Date.now();
     return map;
   } catch {
@@ -56,7 +73,26 @@ async function getHorariosPorRol(pool) {
   }
 }
 
-function invalidarCacheHorarios() { horariosCache = null; horariosCacheTs = 0; }
+function invalidarCacheHorarios() { horariosCache = null; horariosEspCache = null; horariosCacheTs = 0; }
+
+// Resuelve la hora de entrada/tolerancia que aplica REALMENTE para un rol en
+// una fecha dada — el horario especial del día de la semana (ej. sábado con
+// entrada más temprano) si existe, si no el horario general del rol. Debe
+// llamarse siempre DESPUÉS de getHorariosPorRol (mismo request), porque
+// depende del cache de especiales que esa función llena.
+// fechaStr: 'YYYY-MM-DD'. Día de semana en JS Date.getUTCDay(): 0=domingo
+// ... 6=sábado — misma convención que el resto del archivo usa vía
+// DATEPART(WEEKDAY, fecha) - 1 en SQL Server con @@DATEFIRST=7.
+function getHorarioEfectivo(horarios, rol, fechaStr) {
+  const general = horarios[rol] || HORARIOS_FALLBACK.AD;
+  const horarioId = general.id;
+  const diaSemana = new Date(`${fechaStr}T00:00:00Z`).getUTCDay();
+  const especial = horarioId != null ? horariosEspCache?.[horarioId]?.[diaSemana] : null;
+  if (especial) {
+    return { entrada: especial.entrada, tolerancia: especial.tolerancia ?? general.tolerancia ?? 5 };
+  }
+  return { entrada: general.entrada, tolerancia: general.tolerancia ?? 5 };
+}
 
 // GET /api/asistencia/horarios — lista los horarios configurados (AD/TI)
 exports.getHorarios = async (req, res) => {
@@ -253,14 +289,18 @@ exports.marcarEntrada = async (req, res) => {
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
-    // Obtener horario desde BD (con fallback al hardcoded)
+    // Obtener horario desde BD (con fallback al hardcoded) — respeta el
+    // horario especial del día de la semana (ej. sábado) si existe, ver
+    // getHorarioEfectivo.
     const horarios = await getHorariosPorRol(pool);
     const horarioRol = horarios[rol];
     if (!horarioRol) {
       return res.status(400).json({ success: false, message: `No hay horario configurado para el rol ${rol}` });
     }
-    const horaLimite = horarioRol.entrada;
-    const toleranciaUsar = horarioRol.tolerancia ?? TOLERANCIA_MINUTOS;
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    const efectivo = getHorarioEfectivo(horarios, rol, hoyStr);
+    const horaLimite = efectivo.entrada;
+    const toleranciaUsar = efectivo.tolerancia ?? TOLERANCIA_MINUTOS;
 
     const existente = await pool.request()
       .input('neusId', sql.Int, neusId)
@@ -1551,9 +1591,6 @@ exports.uploadBiometrico = async (req, res) => {
       }
 
       const neusId = user.NEUS_ID;
-      const reglaRol = horarios[rolActual] || HORARIOS_FALLBACK.AD;
-      const horaEsperada = (reglaRol.entrada || '09:00:00').slice(0, 5);
-      const toleranciaRol = reglaRol.tolerancia ?? 5;
 
       // Iterar sobre las fechas detectadas
       for (let fi = 0; fi < fechas.length; fi++) {
@@ -1567,11 +1604,17 @@ exports.uploadBiometrico = async (req, res) => {
 
         if (!horaEntrada) continue; // Sin registro de entrada ese día
 
+        const fechaStr = fechaInfo.dateStr;
+        // Horario efectivo de ESTE día (general o especial, ej. sábado con
+        // entrada más temprano) — resuelto por fecha, no fijo por rol, porque
+        // cada columna del Excel puede caer en un día distinto de la semana.
+        const { entrada: horaEsperadaFull, tolerancia: toleranciaRol } = getHorarioEfectivo(horarios, rolActual, fechaStr);
+        const horaEsperada = (horaEsperadaFull || '09:00:00').slice(0, 5);
+
         // Calcular retardo contra la regla vigente del área (ASISTENCIA_HORARIOS)
         const minRet = minutosRetardo(horaEntrada, horaEsperada);
         const esRetardo = minRet > toleranciaRol;
 
-        const fechaStr = fechaInfo.dateStr;
         // Pasar como string y convertir dentro de SQL Server para evitar
         // que Node.js interprete la hora como UTC y desplace 6 horas al guardarse
         const horaEntradaStr = `${fechaStr} ${horaEntrada}`;
@@ -1744,10 +1787,12 @@ exports.syncBiotime = async (req, res) => {
       const punchHora = punch_time.slice(11, 19) || punch_time.slice(11);
 
       const rol = usuario ? (usuario.NEUS_TIPOUSUARIO || 'CC') : 'CC';
-      const reglaRol = horarios[rol] || HORARIOS_FALLBACK.AD;
-      const horaEsperada = (reglaRol.entrada || '09:00:00').slice(0, 5);
+      // Horario efectivo de ESTE día (general o especial, ej. sábado) — no
+      // el horario general fijo del rol, ver getHorarioEfectivo.
+      const { entrada: horaEsperadaFull, tolerancia: toleranciaEfectiva } = getHorarioEfectivo(horarios, rol, punchDate);
+      const horaEsperada = (horaEsperadaFull || '09:00:00').slice(0, 5);
       const minRet = minutosRetardo(punchHora, horaEsperada);
-      const esRetardo = minRet > (reglaRol.tolerancia ?? 5);
+      const esRetardo = minRet > toleranciaEfectiva;
       const horaEntradaStr = `${punchDate} ${punchHora}`;
       const horaEsperadaStr = `${punchDate} ${horaEsperada}:00`;
 
