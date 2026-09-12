@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from '@/stores/auth.store'
 import { useThemeStore, resolveTheme } from '@/stores/theme.store'
 import { ProgressGauge } from '@/pages/portal-cliente/components/ProgressGauge'
+import { MiniLineChart } from '@/pages/portal-cliente/components/MiniLineChart'
 import { CountUp } from '@/pages/portal-cliente/components/CountUp'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 
@@ -31,6 +32,7 @@ const CAMPANA_EJEMPLO = {
   alcance: 2000,
   interacciones: 1320,
   conversiones: 86,
+  tendencia: [140, 165, 158, 190, 210, 205, 240],
 }
 
 const REUNION_EJEMPLO = {
@@ -184,7 +186,11 @@ function CampanaCard() {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-surface-border pt-4 text-center">
+      <div className="mt-4">
+        <MiniLineChart data={CAMPANA_EJEMPLO.tendencia} height={56} color="#19b6bc" />
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-surface-border pt-4 text-center">
         <div>
           <CountUp end={CAMPANA_EJEMPLO.alcance} className="text-base font-bold text-ink" />
           <p className="text-[11px] text-ink-tertiary">Alcance</p>
