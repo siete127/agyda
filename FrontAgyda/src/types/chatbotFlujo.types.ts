@@ -7,6 +7,7 @@ export interface FlujoRespuesta {
   codigo: string
   texto: string
   botones: string[]
+  keywords: string[]
   activa: boolean
   esEntrada?: boolean
   genera: GeneraLead | null
@@ -96,6 +97,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       codigo: String(pick(r, 'codigo') ?? ''),
       texto: String(pick(r, 'texto') ?? ''),
       botones: Array.isArray(r.botones) ? (r.botones as string[]) : [],
+      keywords: Array.isArray(r.keywords) ? (r.keywords as string[]) : [],
       activa: parseBool(pick(r, 'activa'), true),
       esEntrada: parseBool(pick(r, 'esEntrada'), false),
       genera: genera(pick(r, 'genera')),

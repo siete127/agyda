@@ -153,7 +153,7 @@ exports.getFlujo = async (req, res) => {
     res.json({
       success: true,
       data: {
-        respuestas: crudo.respsData.map(({ keywords, ...r }) => ({
+        respuestas: crudo.respsData.map((r) => ({
           ...r,
           esEntrada: !alcanzadas.has(r.id),
         })),

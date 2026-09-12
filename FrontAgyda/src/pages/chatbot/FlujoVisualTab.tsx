@@ -14,9 +14,10 @@ import { chatbotFlujoService } from '@/services/chatbotFlujo.service'
 import { ccService } from '@/services/cc.service'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useIsAdmin } from '@/hooks/useAuth'
-import type { TipoNodoFlujo, GeneraLead } from '@/types/chatbotFlujo.types'
+import type { TipoNodoFlujo, GeneraLead, FlujoCompleto } from '@/types/chatbotFlujo.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -158,6 +159,26 @@ function posicionesRespuestasPorCategoria(respuestas: { id: number; categoria: s
   return posiciones
 }
 
+// Mini-preview de cómo se ve el texto como burbuja del bot en el widget
+// público — mismos colores/radios que extra/Pagina de Intranet_1/css/styles.css
+// (.chat-bubble-bot), hardcodeados aquí porque ese CSS no se importa en el
+// panel de administración.
+function PreviewBurbujaBot({ texto }: { texto: string }) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: '#EEF2F6' }}>
+      <p className="mb-1.5 text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">
+        Así se ve en el widget
+      </p>
+      <div
+        className="max-w-[82%] whitespace-pre-wrap rounded-2xl border px-3.5 py-2.5 text-[13.5px] leading-relaxed"
+        style={{ background: '#fff', color: '#0A2540', borderColor: '#E2E8F0', borderBottomLeftRadius: 4 }}
+      >
+        {texto.trim() || <span className="text-gray-300">La respuesta aparecerá aquí…</span>}
+      </div>
+    </div>
+  )
+}
+
 // ── Panel lateral: crea o edita el contenido de una caja ──
 function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
   modo: 'crear' | 'editar'
@@ -245,6 +266,8 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
           />
         </div>
 
+        {tipo === 'respuesta' && <PreviewBurbujaBot texto={texto} />}
+
         {tipo === 'respuesta' && (
           <div>
             <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Palabras clave (coma)</label>
@@ -311,6 +334,100 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
   )
 }
 
+// Mismo algoritmo que el widget público (extra/Pagina de Intranet_1/index.html
+// → buscarRespuesta): la keyword contenida más larga gana. Client-side, sin
+// telemetría ni round-trip — solo para previsualizar sin salir del editor.
+function buscarRespuestaSimulada(mensaje: string, respuestas: { id: number; codigo: string; texto: string; keywords: string[]; activa: boolean }[]) {
+  const textoNorm = normaliza(mensaje)
+  let mejor: typeof respuestas[number] | null = null
+  let mejorPuntaje = 0
+  for (const r of respuestas) {
+    if (!r.activa) continue
+    for (const kw of r.keywords) {
+      const kwNorm = normaliza(kw)
+      if (kwNorm && textoNorm.includes(kwNorm) && kwNorm.length > mejorPuntaje) {
+        mejorPuntaje = kwNorm.length
+        mejor = r
+      }
+    }
+  }
+  return mejor
+}
+
+interface MensajeProbador { de: 'yo' | 'bot'; texto: string; nodeId?: string }
+
+// Modo "Probar flujo": chat simulado dentro del editor — escribe un mensaje y
+// ve qué respuesta dispararía en el widget real, sin salir del canvas ni
+// generar telemetría. Usa los mismos datos ya cargados de `flujo`.
+function PanelProbarFlujo({ flujo, onIrANodo, onClose }: {
+  flujo: FlujoCompleto
+  onIrANodo: (nodeId: string) => void
+  onClose: () => void
+}) {
+  const [historial, setHistorial] = useState<MensajeProbador[]>([
+    { de: 'bot', texto: 'Escribe como si fueras un visitante — te muestro qué respuesta dispararía.' },
+  ])
+  const [entrada, setEntrada] = useState('')
+
+  const enviar = () => {
+    const texto = entrada.trim()
+    if (!texto) return
+    const match = buscarRespuestaSimulada(texto, flujo.respuestas)
+    setHistorial((h) => [
+      ...h,
+      { de: 'yo', texto },
+      match
+        ? { de: 'bot', texto: match.texto, nodeId: `respuesta-${match.id}` }
+        : { de: 'bot', texto: '(sin match — el bot no encontró ninguna palabra clave en este mensaje)' },
+    ])
+    setEntrada('')
+  }
+
+  return (
+    <div className="absolute right-3 top-3 bottom-3 z-10 flex w-80 flex-col rounded-2xl border border-gray-200 bg-card shadow-xl">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <p className="flex items-center gap-2 text-sm font-bold text-gray-800">
+          <Sparkles className="h-4 w-4 text-brand" /> Probar flujo
+        </p>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3" style={{ background: '#EEF2F6' }}>
+        {historial.map((m, i) => (
+          <div key={i} className={clsx('flex flex-col', m.de === 'yo' ? 'items-end' : 'items-start')}>
+            <div
+              className="max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed"
+              style={m.de === 'yo'
+                ? { background: 'linear-gradient(135deg,#017EFD 0%,#0040CC 100%)', color: '#fff', borderBottomRightRadius: 4 }
+                : { background: '#fff', color: '#0A2540', border: '1px solid #E2E8F0', borderBottomLeftRadius: 4 }}
+            >
+              {m.texto}
+            </div>
+            {m.nodeId && (
+              <button
+                onClick={() => onIrANodo(m.nodeId!)}
+                className="mt-1 text-[0.65rem] font-semibold text-brand hover:underline"
+              >
+                Ver este nodo en el lienzo →
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 border-t border-gray-100 px-3 py-2.5">
+        <input
+          value={entrada}
+          onChange={(e) => setEntrada(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') enviar() }}
+          placeholder="Escribe un mensaje…"
+          className="field flex-1 text-sm"
+          autoFocus
+        />
+        <Button size="sm" onClick={enviar} disabled={!entrada.trim()}>Enviar</Button>
+      </div>
+    </div>
+  )
+}
+
 function FlujoVisualCanvas() {
   const qc = useQueryClient()
   const isAdmin = useIsAdmin()
@@ -327,6 +444,7 @@ function FlujoVisualCanvas() {
   const [seleccion, setSeleccion] = useState<{ tipo: TipoNodoFlujo; id: number } | null>(null)
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [confirmarMaterializar, setConfirmarMaterializar] = useState(false)
+  const [probando, setProbando] = useState(false)
 
   const { data: flujo, isLoading } = useQuery({
     queryKey: ['chatbot-flujo'],
@@ -644,6 +762,7 @@ function FlujoVisualCanvas() {
     const [tipo, idStr] = node.id.split('-')
     const id = Number(idStr)
     if (tipo === 'campania') { toast('Las campañas se editan en Contact Center', { icon: 'ℹ️' }); return }
+    setProbando(false)
     if (tipo === 'respuesta') {
       const r = flujo.respuestas.find((x) => x.id === id)
       if (r) setEditor({ modo: 'editar', tipo: 'respuesta', nodoId: id, valores: { texto: r.texto, keywords: [], genera: r.genera } })
@@ -655,6 +774,28 @@ function FlujoVisualCanvas() {
       if (n) setEditor({ modo: 'editar', tipo: 'nodo_arbol', nodoId: id, valores: { texto: n.texto, tipoNodo: n.tipoNodo, genera: n.genera } })
     }
   }, [isAdmin, flujo])
+
+  // Título legible por nodeId ("respuesta-12" -> "precios_cotizacion") — lo
+  // usa el detalle de "Fijar flujo" para mostrar origen -> destino con
+  // nombres en vez de solo el conteo.
+  const tituloPorNodeId = useMemo(() => {
+    const m = new Map<string, string>()
+    nodes.forEach((n) => { if (n.type === 'caja') m.set(n.id, (n.data as CajaData).titulo) })
+    return m
+  }, [nodes])
+
+  // Detalle de "Fijar flujo": qué conexiones automáticas concretas se van a
+  // volver reales — antes solo se veía el conteo en el window.confirm.
+  const pendientesDetalle = useMemo(() => {
+    if (!flujo) return []
+    return flujo.conexiones
+      .filter((c) => c.esAutomatica && c.destinoTipo !== 'captura_lead')
+      .map((c) => ({
+        origen: tituloPorNodeId.get(`${c.origenTipo}-${c.origenId}`) ?? `${c.origenTipo} #${c.origenId}`,
+        destino: tituloPorNodeId.get(`${c.destinoTipo}-${c.destinoId}`) ?? `${c.destinoTipo} #${c.destinoId}`,
+        etiqueta: c.etiqueta,
+      }))
+  }, [flujo, tituloPorNodeId])
 
   // Buscador: filtra por título/subtítulo/categoría entre las cajas reales
   // (no swimlanes) — con 200+ nodos, encontrar uno a ojo en el lienzo es
@@ -700,7 +841,7 @@ function FlujoVisualCanvas() {
                 ]).map(({ tipo, label, desc }) => (
                   <button
                     key={tipo}
-                    onClick={() => { setEditor({ modo: 'crear', tipo }); setMenuCrear(false) }}
+                    onClick={() => { setEditor({ modo: 'crear', tipo }); setMenuCrear(false); setProbando(false) }}
                     className="flex w-full flex-col items-start px-3 py-1.5 text-left hover:bg-gray-50"
                   >
                     <span className="text-[0.8rem] font-semibold text-gray-700">{label}</span>
@@ -727,6 +868,17 @@ function FlujoVisualCanvas() {
           >
             {materializar.isPending ? <Spinner size="sm" /> : <Sparkles className="h-3.5 w-3.5" />}
             Fijar flujo ({flujo.automaticasPendientes})
+          </button>
+        )}
+        {flujo && (
+          <button
+            onClick={() => { setProbando((v) => !v); setEditor(null) }}
+            className={clsx(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold',
+              probando ? 'border-brand bg-brand text-white' : 'border-gray-200 text-ink-secondary hover:bg-gray-50',
+            )}
+          >
+            <Sparkles className="h-3.5 w-3.5" /> Probar flujo
           </button>
         )}
         <div className="relative ml-auto">
@@ -831,6 +983,9 @@ function FlujoVisualCanvas() {
             onGuardado={() => { setEditor(null); invalidar() }}
           />
         )}
+        {!editor && probando && flujo && (
+          <PanelProbarFlujo flujo={flujo} onIrANodo={irANodo} onClose={() => setProbando(false)} />
+        )}
       </div>
 
       <div className="flex items-start gap-2 rounded-xl bg-brand/5 border border-brand/10 px-3.5 py-2.5">
@@ -865,16 +1020,34 @@ function FlujoVisualCanvas() {
         isPending={eliminarNodo.isPending}
       />
 
-      <ConfirmDialog
-        isOpen={confirmarMaterializar}
-        onClose={() => setConfirmarMaterializar(false)}
-        onConfirm={() => materializar.mutate()}
-        title="Fijar flujo"
-        message={flujo ? `Fijar ${flujo.automaticasPendientes} conexión(es) automática(s) como reales. A partir de ahí las editas y las borras aquí, y el bot las obedece. ¿Continuar?` : ''}
-        confirmLabel="Fijar flujo"
-        variant="warning"
-        isPending={materializar.isPending}
-      />
+      <Modal isOpen={confirmarMaterializar} onClose={() => setConfirmarMaterializar(false)} title="Fijar flujo" size="sm">
+        <div className="space-y-3">
+          <p className="text-sm text-ink-secondary leading-relaxed">
+            Estas {pendientesDetalle.length} conexión(es) automática(s) se van a fijar como reales.
+            A partir de ahí las editas y las borras aquí, y el bot las obedece.
+          </p>
+          <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-lg bg-gray-50 p-2.5">
+            {pendientesDetalle.map((c, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-xs text-ink-secondary">
+                <span className="truncate font-medium">{c.origen}</span>
+                <ChevronDown className="h-3 w-3 shrink-0 -rotate-90 text-ink-tertiary" />
+                <span className="truncate font-medium">{c.destino}</span>
+                {c.etiqueta && <span className="shrink-0 text-ink-tertiary">· {c.etiqueta}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmarMaterializar(false)} disabled={materializar.isPending}>Cancelar</Button>
+            <Button
+              isLoading={materializar.isPending}
+              onClick={() => { materializar.mutate(); setConfirmarMaterializar(false) }}
+              className="bg-yellow-500 hover:bg-yellow-600 border-yellow-500"
+            >
+              Fijar flujo
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
