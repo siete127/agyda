@@ -14,6 +14,8 @@ export interface FlujoRespuesta {
   categoria: string | null
   posX: number | null
   posY: number | null
+  /** Última vez editado desde el Constructor de flujo (o desde Conversación). */
+  fechaActualizacion: string | null
 }
 
 export interface FlujoEtiqueta {
@@ -23,8 +25,11 @@ export interface FlujoEtiqueta {
   campaniaId: number | null
   activa: boolean
   genera: GeneraLead | null
+  /** true si escala a una campaña que ya no existe/está desactivada. */
+  roto?: boolean
   posX: number | null
   posY: number | null
+  fechaActualizacion: string | null
 }
 
 export interface FlujoNodoArbol {
@@ -36,6 +41,7 @@ export interface FlujoNodoArbol {
   genera: GeneraLead | null
   posX: number | null
   posY: number | null
+  fechaActualizacion: string | null
 }
 
 export interface FlujoCampania {
@@ -104,6 +110,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       categoria: pick(r, 'categoria') != null ? String(pick(r, 'categoria')) : null,
       posX: pick(r, 'posX') != null ? Number(pick(r, 'posX')) : null,
       posY: pick(r, 'posY') != null ? Number(pick(r, 'posY')) : null,
+      fechaActualizacion: pick(r, 'fechaActualizacion') != null ? String(pick(r, 'fechaActualizacion')) : null,
     })),
     etiquetas: (etiquetas as Record<string, unknown>[]).map((e) => ({
       id: Number(pick(e, 'id') ?? 0),
@@ -112,8 +119,10 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       campaniaId: pick(e, 'campaniaId') != null ? Number(pick(e, 'campaniaId')) : null,
       activa: parseBool(pick(e, 'activa'), true),
       genera: genera(pick(e, 'genera')),
+      roto: parseBool(pick(e, 'roto'), false),
       posX: pick(e, 'posX') != null ? Number(pick(e, 'posX')) : null,
       posY: pick(e, 'posY') != null ? Number(pick(e, 'posY')) : null,
+      fechaActualizacion: pick(e, 'fechaActualizacion') != null ? String(pick(e, 'fechaActualizacion')) : null,
     })),
     nodosArbol: (nodosArbol as Record<string, unknown>[]).map((n) => ({
       id: Number(pick(n, 'id') ?? 0),
@@ -124,6 +133,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       genera: genera(pick(n, 'genera')),
       posX: pick(n, 'posX') != null ? Number(pick(n, 'posX')) : null,
       posY: pick(n, 'posY') != null ? Number(pick(n, 'posY')) : null,
+      fechaActualizacion: pick(n, 'fechaActualizacion') != null ? String(pick(n, 'fechaActualizacion')) : null,
     })),
     campanias: (campanias as Record<string, unknown>[]).map((c) => ({
       id: Number(pick(c, 'id') ?? 0),

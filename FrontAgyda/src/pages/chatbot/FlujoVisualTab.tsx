@@ -6,9 +6,10 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import {
   MessageCircle, Megaphone, Users, Workflow, Radio, Info, Plus, Trash2, X, ChevronDown,
-  Sparkles, Search, Layers, Pencil,
+  Sparkles, Search, Layers, Pencil, ExternalLink, AlertTriangle,
 } from 'lucide-react'
 import { chatbotFlujoService } from '@/services/chatbotFlujo.service'
 import { ccService } from '@/services/cc.service'
@@ -28,6 +29,22 @@ function normaliza(s: string): string {
 }
 const SIN_CATEGORIA = '__sin__'
 
+// "editado hace 3 días" para el tooltip de fecha de edición — Intl nativo,
+// sin librería nueva. Sin "quién" (las tablas de etiqueta/nodo_arbol no
+// tienen columna de autor; agregarla es una migración más grande).
+const RTF = new Intl.RelativeTimeFormat('es', { numeric: 'auto' })
+function formatoRelativo(fechaIso: string): string {
+  const ms = new Date(fechaIso).getTime() - Date.now()
+  const dias = Math.round(ms / 86_400_000)
+  if (Math.abs(dias) < 1) {
+    const horas = Math.round(ms / 3_600_000)
+    if (Math.abs(horas) < 1) return RTF.format(Math.round(ms / 60_000), 'minute')
+    return RTF.format(horas, 'hour')
+  }
+  if (Math.abs(dias) < 30) return RTF.format(dias, 'day')
+  return RTF.format(Math.round(dias / 30), 'month')
+}
+
 // Paleta fija por índice para las franjas de categoría del canvas — solo
 // decorativa, no se persiste ni se relaciona con ESTILO_TIPO.
 const COLOR_SWIMLANE = [
@@ -37,10 +54,13 @@ const COLOR_SWIMLANE = [
 
 // Cada tipo de caja tiene su propio color/ícono para distinguirse de un
 // vistazo en el lienzo — mismo criterio que ya usa "Menú del Widget".
+// nodo_arbol usa fuchsia (no violet): sky-700 y violet-700 caen casi en el
+// mismo matiz frío y se confunden en cajas pequeñas — fuchsia se distingue
+// mucho mejor de sky a simple vista, sin depender solo del ícono.
 const ESTILO_TIPO: Record<TipoNodoFlujo, { icon: React.ElementType; clases: string }> = {
   respuesta: { icon: MessageCircle, clases: 'border-sky-400 bg-sky-500/10 text-sky-700' },
   etiqueta: { icon: Radio, clases: 'border-brand bg-brand/10 text-brand' },
-  nodo_arbol: { icon: Workflow, clases: 'border-violet-400 bg-violet-500/10 text-violet-700' },
+  nodo_arbol: { icon: Workflow, clases: 'border-fuchsia-400 bg-fuchsia-500/10 text-fuchsia-700' },
   campania: { icon: Megaphone, clases: 'border-emerald-400 bg-emerald-500/10 text-emerald-700' },
   captura_lead: { icon: Sparkles, clases: 'border-amber-400 bg-amber-500/10 text-amber-700' },
 }
@@ -66,6 +86,11 @@ interface CajaData extends Record<string, unknown> {
   genera?: GeneraLead | null
   categoria?: string | null
   puedeEditar?: boolean
+  /** Etiqueta que escala a una campaña ya eliminada/desactivada. */
+  roto?: boolean
+  /** genera === 'oportunidad' pero ningún camino llega a captura_lead. */
+  sinCapturaAlcanzable?: boolean
+  fechaActualizacion?: string | null
 }
 
 // Callback estable para el botón de lápiz de CajaNodo — vía contexto en vez
@@ -76,17 +101,20 @@ interface CajaData extends Record<string, unknown> {
 const EditarNodoContext = createContext<(nodeId: string) => void>(() => {})
 
 function CajaNodo({ id, data, selected }: NodeProps<Node<CajaData>>) {
-  const { tipo, titulo, subtitulo, activa, soloDestino, esEntrada, genera, puedeEditar } = data
+  const { tipo, titulo, subtitulo, activa, soloDestino, esEntrada, genera, puedeEditar, roto, sinCapturaAlcanzable, fechaActualizacion } = data
   const onEditar = useContext(EditarNodoContext)
   const { icon: Icon, clases } = ESTILO_TIPO[tipo]
   const puedeGenerar = tipo === 'respuesta' || tipo === 'etiqueta' || tipo === 'nodo_arbol'
   return (
-    <div className={clsx(
-      'relative min-w-[190px] max-w-[240px] rounded-xl border-2 bg-card px-3 py-2.5 shadow-sm transition-opacity',
-      clases.split(' ')[0],
-      selected && 'ring-2 ring-brand ring-offset-1',
-      !activa && 'opacity-50',
-    )}>
+    <div
+      title={fechaActualizacion ? `Editado ${formatoRelativo(fechaActualizacion)}` : undefined}
+      className={clsx(
+        'relative min-w-[190px] max-w-[240px] rounded-xl border-2 bg-card px-3 py-2.5 shadow-sm transition-opacity',
+        roto ? 'border-red-400' : clases.split(' ')[0],
+        selected && 'ring-2 ring-brand ring-offset-1',
+        !activa && 'opacity-50',
+      )}
+    >
       {!soloDestino && <Handle type="target" position={Position.Left} className="!bg-ink-tertiary !w-2 !h-2" />}
       {selected && puedeEditar && (
         <button
@@ -105,8 +133,18 @@ function CajaNodo({ id, data, selected }: NodeProps<Node<CajaData>>) {
           <p className="text-xs font-semibold text-ink truncate">{titulo}</p>
           {subtitulo && <p className="text-[0.68rem] text-ink-tertiary truncate">{subtitulo}</p>}
           {esEntrada && <p className="mt-0.5 text-[0.6rem] font-semibold text-sky-500">entrada por texto</p>}
+          {roto && (
+            <span className="mt-1 flex items-center gap-1 text-[0.6rem] font-bold text-red-600">
+              <AlertTriangle className="h-2.5 w-2.5" /> destino eliminado
+            </span>
+          )}
           {puedeGenerar && genera === 'oportunidad' && (
-            <span className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[0.58rem] font-bold text-emerald-700">→ oportunidad</span>
+            <span
+              className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[0.58rem] font-bold text-emerald-700"
+              title={sinCapturaAlcanzable ? 'Marcado como oportunidad, pero ningún camino desde aquí llega a la captura de datos' : undefined}
+            >
+              → oportunidad{sinCapturaAlcanzable && ' ⚠'}
+            </span>
           )}
           {puedeGenerar && genera === 'contacto' && (
             <span className="mt-1 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[0.58rem] font-semibold text-gray-500">→ contacto</span>
@@ -308,6 +346,14 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
                   <option value="">Elegir…</option>
                   {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
+                {campaniaId !== '' && (
+                  <Link
+                    to="/configuracion"
+                    className="mt-1.5 inline-flex items-center gap-1 text-[0.68rem] font-semibold text-brand hover:underline"
+                  >
+                    Ver en Contact Center <ExternalLink className="h-3 w-3" />
+                  </Link>
+                )}
               </div>
             )}
           </>
@@ -595,6 +641,46 @@ function FlujoVisualCanvas() {
     onError: () => toast.error('No se pudo fijar el flujo'),
   })
 
+  // Nodos marcados "→ oportunidad" desde los que NO hay ningún camino (BFS,
+  // incluidas las conexiones automáticas) hasta captura_lead — el flag se
+  // puso pero el bot nunca pediría los datos en ese camino: falsa promesa de
+  // negocio. Solo aplica a respuesta/etiqueta/nodo_arbol (no captura_lead ni
+  // campania, que no tienen ese campo).
+  const oportunidadSinCaptura = useMemo(() => {
+    if (!flujo || !flujo.capturaLead) return new Set<string>()
+    const adyacentes = new Map<string, string[]>()
+    for (const c of flujo.conexiones) {
+      const from = `${c.origenTipo}-${c.origenId}`
+      const to = c.destinoTipo === 'captura_lead' ? CAPTURA_LEAD_NODE_ID : `${c.destinoTipo}-${c.destinoId}`
+      if (!adyacentes.has(from)) adyacentes.set(from, [])
+      adyacentes.get(from)!.push(to)
+    }
+    const alcanzaCaptura = (inicio: string) => {
+      const visitados = new Set([inicio])
+      const cola = [inicio]
+      while (cola.length) {
+        const actual = cola.shift()!
+        if (actual === CAPTURA_LEAD_NODE_ID) return true
+        for (const siguiente of adyacentes.get(actual) ?? []) {
+          if (!visitados.has(siguiente)) { visitados.add(siguiente); cola.push(siguiente) }
+        }
+      }
+      return false
+    }
+    const sinCaptura = new Set<string>()
+    const revisar = (tipo: TipoNodoFlujo, items: { id: number; genera?: GeneraLead | null }[]) => {
+      for (const it of items) {
+        if (it.genera !== 'oportunidad') continue
+        const nodeId = `${tipo}-${it.id}`
+        if (!alcanzaCaptura(nodeId)) sinCaptura.add(nodeId)
+      }
+    }
+    revisar('respuesta', flujo.respuestas)
+    revisar('etiqueta', flujo.etiquetas)
+    revisar('nodo_arbol', flujo.nodosArbol)
+    return sinCaptura
+  }, [flujo])
+
   // Franjas de fondo por categoría: un rectángulo decorativo (no
   // interactivo, no se guarda) detrás de las respuestas de cada categoría,
   // para que 184+ cajas sueltas se lean como grupos en vez de una nube.
@@ -639,19 +725,31 @@ function FlujoVisualCanvas() {
       id: `respuesta-${r.id}`,
       type: 'caja',
       position: r.posX != null && r.posY != null ? { x: r.posX, y: r.posY } : (posicionesResp.get(r.id) ?? { x: 0, y: 0 }),
-      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada, genera: r.genera, categoria: r.categoria, puedeEditar: isAdmin },
+      data: {
+        tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada,
+        genera: r.genera, categoria: r.categoria, puedeEditar: isAdmin, fechaActualizacion: r.fechaActualizacion,
+        sinCapturaAlcanzable: oportunidadSinCaptura.has(`respuesta-${r.id}`),
+      },
     }))
     flujo.etiquetas.forEach((e, i) => nodos.push({
       id: `etiqueta-${e.id}`,
       type: 'caja',
       position: e.posX != null && e.posY != null ? { x: e.posX, y: e.posY } : posicionPorDefecto('etiqueta', i),
-      data: { tipo: 'etiqueta', titulo: e.texto, subtitulo: TIPO_ETIQUETA_ACCION[e.tipoAccion] ?? 'Menú del widget', activa: e.activa, genera: e.genera, puedeEditar: isAdmin },
+      data: {
+        tipo: 'etiqueta', titulo: e.texto, subtitulo: TIPO_ETIQUETA_ACCION[e.tipoAccion] ?? 'Menú del widget',
+        activa: e.activa, genera: e.genera, puedeEditar: isAdmin, roto: e.roto, fechaActualizacion: e.fechaActualizacion,
+        sinCapturaAlcanzable: oportunidadSinCaptura.has(`etiqueta-${e.id}`),
+      },
     }))
     flujo.nodosArbol.forEach((n, i) => nodos.push({
       id: `nodo_arbol-${n.id}`,
       type: 'caja',
       position: n.posX != null && n.posY != null ? { x: n.posX, y: n.posY } : posicionPorDefecto('nodo_arbol', i),
-      data: { tipo: 'nodo_arbol', titulo: n.codigo, subtitulo: n.texto, activa: n.activa, genera: n.genera, puedeEditar: isAdmin },
+      data: {
+        tipo: 'nodo_arbol', titulo: n.codigo, subtitulo: n.texto, activa: n.activa, genera: n.genera,
+        puedeEditar: isAdmin, fechaActualizacion: n.fechaActualizacion,
+        sinCapturaAlcanzable: oportunidadSinCaptura.has(`nodo_arbol-${n.id}`),
+      },
     }))
     flujo.campanias.forEach((c, i) => nodos.push({
       id: `campania-${c.id}`,
@@ -670,7 +768,7 @@ function FlujoVisualCanvas() {
       })
     }
     return nodos
-  }, [flujo, swimlanes, isAdmin])
+  }, [flujo, swimlanes, isAdmin, oportunidadSinCaptura])
 
   const initialEdges = useMemo<Edge[]>(() => {
     if (!flujo) return []
@@ -685,9 +783,10 @@ function FlujoVisualCanvas() {
         label: c.etiqueta || undefined,
         animated: c.esOpcionArbol,
         deletable: !c.esOpcionArbol && !c.esAutomatica,
-        // opciones del árbol = violeta animado · automáticas = gris punteado · manuales = azul sólido
+        // opciones del árbol = fuchsia animado (mismo tono que ESTILO_TIPO.nodo_arbol)
+        // · automáticas = gris punteado · manuales = azul sólido
         style: c.esOpcionArbol
-          ? { stroke: 'rgb(167 139 250)' }
+          ? { stroke: 'rgb(232 121 249)' }
           : c.esAutomatica
             ? { stroke: 'rgb(148 163 184)', strokeDasharray: '5 4' }
             : undefined,
@@ -1057,7 +1156,7 @@ function FlujoVisualCanvas() {
           grises</b> son el flujo que el bot ya sigue por convención — usa <b>"Fijar flujo"</b> para convertirlas
           en conexiones reales que puedas editar y borrar. Las respuestas marcadas <b>"entrada por texto"</b> no
           necesitan flecha de entrada: el visitante llega a ellas escribiendo una de sus palabras clave. Los
-          enlaces violeta son el Árbol de Diagnóstico; las cajas verdes se administran en Contact Center.
+          enlaces fucsia son el Árbol de Diagnóstico; las cajas verdes se administran en Contact Center.
         </p>
       </div>
 

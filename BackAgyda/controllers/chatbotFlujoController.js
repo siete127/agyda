@@ -76,15 +76,18 @@ async function cargarFlujoCrudo(pool) {
     pool.request().query(`
       SELECT RESP_PK as id, RESP_ID as codigo, RESP_TEXTO_ES as texto, RESP_BOTONES as botones,
              RESP_KEYWORDS as keywords, RESP_SENAL_INTERES as senalInteres, RESP_GENERA as genera,
-             RESP_CATEGORIA as categoria, RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY
+             RESP_CATEGORIA as categoria, RESP_ACTIVA as activa, RESP_POS_X as posX, RESP_POS_Y as posY,
+             RESP_FECHA_ACTUALIZACION as fechaActualizacion
       FROM dbo.CHATBOT_RESPUESTAS ORDER BY RESP_PK`),
     pool.request().query(`
       SELECT ETQ_ID as id, ETQ_TEXTO_ES as texto, ETQ_TIPO as tipoAccion, ETQ_CAMPANIA_ID as campaniaId,
-             ETQ_GENERA as genera, ETQ_ACTIVA as activa, ETQ_POS_X as posX, ETQ_POS_Y as posY
+             ETQ_GENERA as genera, ETQ_ACTIVA as activa, ETQ_POS_X as posX, ETQ_POS_Y as posY,
+             ETQ_FECHA_ACTUALIZACION as fechaActualizacion
       FROM dbo.CHATBOT_ETIQUETAS_MENU ORDER BY ETQ_ID`),
     pool.request().query(`
       SELECT NODO_ID as id, NODO_CODIGO as codigo, NODO_TEXTO as texto, NODO_TIPO as tipoNodo,
-             NODO_GENERA as genera, NODO_ACTIVO as activa, NODO_POS_X as posX, NODO_POS_Y as posY
+             NODO_GENERA as genera, NODO_ACTIVO as activa, NODO_POS_X as posX, NODO_POS_Y as posY,
+             NODO_FECHA_ACTUALIZACION as fechaActualizacion
       FROM dbo.CHATBOT_NODOS ORDER BY NODO_ID`),
     pool.request().query(`
       SELECT OPC_ID as id, OPC_NODO_ID as nodoId, OPC_TEXTO_BOTON as texto, OPC_NODO_DESTINO_ID as nodoDestinoId
@@ -150,6 +153,11 @@ exports.getFlujo = async (req, res) => {
       if (c.destinoTipo === 'respuesta') alcanzadas.add(c.destinoId);
     }
 
+    // Etiqueta que escala a una campaña ya eliminada/desactivada — crudo.campanias
+    // solo trae las CM2_ACTIVO=1, así que un campaniaId ausente ahí es un enlace
+    // roto: el widget la mostraría pero no tendría a dónde escalar de verdad.
+    const campaniasIds = new Set(crudo.campanias.map((c) => c.id));
+
     res.json({
       success: true,
       data: {
@@ -157,7 +165,10 @@ exports.getFlujo = async (req, res) => {
           ...r,
           esEntrada: !alcanzadas.has(r.id),
         })),
-        etiquetas: crudo.etiquetas,
+        etiquetas: crudo.etiquetas.map((e) => ({
+          ...e,
+          roto: e.tipoAccion === 'escalar_campania' && e.campaniaId != null && !campaniasIds.has(e.campaniaId),
+        })),
         nodosArbol: crudo.nodosArbol,
         campanias: crudo.campanias,
         capturaLead: auto.some((c) => c.destinoTipo === 'captura_lead'),
@@ -455,6 +466,7 @@ exports.updateNodo = async (req, res) => {
       if (activa !== undefined) { sets.push('ETQ_ACTIVA = @activa'); rq.input('activa', sql.Bit, activa !== false); }
       if (generaSet) { sets.push('ETQ_GENERA = @genera'); rq.input('genera', sql.NVarChar(15), generaVal); }
       if (!sets.length) return res.json({ success: true });
+      sets.push('ETQ_FECHA_ACTUALIZACION = GETDATE()');
       await rq.query(`UPDATE dbo.CHATBOT_ETIQUETAS_MENU SET ${sets.join(', ')} WHERE ETQ_ID = @id`);
       return res.json({ success: true });
     }
@@ -469,6 +481,7 @@ exports.updateNodo = async (req, res) => {
     if (activa !== undefined) { sets.push('NODO_ACTIVO = @activa'); rq.input('activa', sql.Bit, activa !== false); }
     if (generaSet) { sets.push('NODO_GENERA = @genera'); rq.input('genera', sql.NVarChar(15), generaVal); }
     if (!sets.length) return res.json({ success: true });
+    sets.push('NODO_FECHA_ACTUALIZACION = GETDATE()');
     await rq.query(`UPDATE dbo.CHATBOT_NODOS SET ${sets.join(', ')} WHERE NODO_ID = @id`);
     return res.json({ success: true });
   } catch (error) {

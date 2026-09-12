@@ -6255,6 +6255,14 @@ IF COL_LENGTH('dbo.CHATBOT_NODOS', 'NODO_GENERA') IS NULL
 IF COL_LENGTH('dbo.CHATBOT_ETIQUETAS_MENU', 'ETQ_GENERA') IS NULL
   ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD ETQ_GENERA NVARCHAR(15) NULL;
 
+-- Fecha de última edición desde el Constructor de flujo — CHATBOT_RESPUESTAS
+-- ya tenía RESP_FECHA_ACTUALIZACION; se completa para etiqueta/nodo_arbol.
+-- NULL = nunca editado desde ahí (no se retroalimenta con datos viejos).
+IF COL_LENGTH('dbo.CHATBOT_ETIQUETAS_MENU', 'ETQ_FECHA_ACTUALIZACION') IS NULL
+  ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD ETQ_FECHA_ACTUALIZACION DATETIME NULL;
+IF COL_LENGTH('dbo.CHATBOT_NODOS', 'NODO_FECHA_ACTUALIZACION') IS NULL
+  ALTER TABLE dbo.CHATBOT_NODOS ADD NODO_FECHA_ACTUALIZACION DATETIME NULL;
+
 -- Migración conservadora: las respuestas con señal de interés hoy generan
 -- oportunidad SIEMPRE. Se bajan todas a 'contacto' salvo que el admin ya las
 -- haya reclasificado. Nadie pierde captura, pero deja de crear oportunidades
