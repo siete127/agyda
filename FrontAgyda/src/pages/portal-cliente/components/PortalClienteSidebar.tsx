@@ -90,17 +90,17 @@ function NavItemRow({ item }: { item: NavItem }) {
                    El resultado visual es la curva invertida donde la
                    pestaña se junta con el sidebar. */}
                 <span
-                  className="pointer-events-none absolute -top-6 right-0 h-6 w-6"
+                  className="pointer-events-none absolute -top-8 right-4 h-8 w-8"
                   style={{
-                    backgroundColor: activeBg,
-                    backgroundImage: `radial-gradient(circle at 0 0, #0a2f71 24px, transparent 24px)`,
+                    backgroundColor: '#0a2f71',
+                    backgroundImage: `radial-gradient(circle at 0 0, transparent 32px, ${activeBg} 32px)`,
                   }}
                 />
                 <span
-                  className="pointer-events-none absolute -bottom-6 right-0 h-6 w-6"
+                  className="pointer-events-none absolute -bottom-8 right-4 h-8 w-8"
                   style={{
-                    backgroundColor: activeBg,
-                    backgroundImage: `radial-gradient(circle at 0 100%, #0a2f71 24px, transparent 24px)`,
+                    backgroundColor: '#0a2f71',
+                    backgroundImage: `radial-gradient(circle at 0 100%, transparent 32px, ${activeBg} 32px)`,
                   }}
                 />
               </>
