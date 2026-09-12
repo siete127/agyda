@@ -13,21 +13,6 @@ interface ProgressGaugeProps {
   textColor?: string
 }
 
-function hexToRgb(hex: string) {
-  const clean = hex.replace('#', '')
-  const bigint = parseInt(clean, 16)
-  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 }
-}
-
-function mixColor(from: string, to: string, t: number) {
-  const a = hexToRgb(from)
-  const b = hexToRgb(to)
-  const r = Math.round(a.r + (b.r - a.r) * t)
-  const g = Math.round(a.g + (b.g - a.g) * t)
-  const bl = Math.round(a.b + (b.b - a.b) * t)
-  return `rgb(${r}, ${g}, ${bl})`
-}
-
 /**
  * Medio anillo de progreso hecho de barras discretas (estilo "Customers
  * Volume" de Ultraleads) en vez de un trazo continuo — muchas barras
@@ -79,23 +64,6 @@ export function ProgressGauge({
             <stop offset="100%" stopColor={progressColor} />
           </linearGradient>
         </defs>
-        {Array.from({ length: segments }).map((_, i) => {
-          const start = i * step
-          const end = start + barLength
-          const isLit = i < litCount
-          const borderColor = isLit ? mixColor('#0a2f71', progressColor, i / Math.max(segments - 1, 1)) : trackColor
-          return (
-            <path
-              key={`border-${i}`}
-              d={arcPath(start, end)}
-              fill="none"
-              stroke={borderColor}
-              strokeWidth={strokeWidth + 2}
-              strokeLinecap="butt"
-              style={{ transition: 'stroke 0.3s ease-out' }}
-            />
-          )
-        })}
         {Array.from({ length: segments }).map((_, i) => {
           const start = i * step
           const end = start + barLength
