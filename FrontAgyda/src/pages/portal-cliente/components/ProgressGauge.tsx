@@ -73,17 +73,39 @@ export function ProgressGauge({
       onMouseLeave={() => setHover(false)}
     >
       <svg width={size} height={size / 2 + strokeWidth} viewBox={`0 0 ${size} ${size / 2 + strokeWidth}`}>
+        <defs>
+          <linearGradient id="gauge-bar-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#5eead4" />
+            <stop offset="100%" stopColor={progressColor} />
+          </linearGradient>
+        </defs>
         {Array.from({ length: segments }).map((_, i) => {
           const start = i * step
           const end = start + barLength
           const isLit = i < litCount
-          const color = isLit ? mixColor('#5eead4', progressColor, i / Math.max(segments - 1, 1)) : trackColor
+          const borderColor = isLit ? mixColor('#0a2f71', progressColor, i / Math.max(segments - 1, 1)) : trackColor
+          return (
+            <path
+              key={`border-${i}`}
+              d={arcPath(start, end)}
+              fill="none"
+              stroke={borderColor}
+              strokeWidth={strokeWidth + 2}
+              strokeLinecap="butt"
+              style={{ transition: 'stroke 0.3s ease-out' }}
+            />
+          )
+        })}
+        {Array.from({ length: segments }).map((_, i) => {
+          const start = i * step
+          const end = start + barLength
+          const isLit = i < litCount
           return (
             <path
               key={i}
               d={arcPath(start, end)}
               fill="none"
-              stroke={color}
+              stroke={isLit ? 'url(#gauge-bar-gradient)' : trackColor}
               strokeWidth={strokeWidth}
               strokeLinecap="butt"
               style={{ transition: 'stroke 0.3s ease-out' }}

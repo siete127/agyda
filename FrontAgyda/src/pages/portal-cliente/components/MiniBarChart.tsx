@@ -30,15 +30,17 @@ export function MiniBarChart({
       {data.map((d, i) => {
         const barHeight = Math.max((d.value / max) * (height - 22), 4)
         const isHighlight = i === highlightIndex
+        const base = isHighlight ? highlightColor : color
         return (
           <div key={d.label} className="flex flex-1 flex-col items-center gap-1.5">
             <div className="flex w-full flex-1 items-end justify-center">
               <div
-                className="w-full max-w-[18px] rounded-full transition-all duration-500 ease-out"
+                className="w-full max-w-[22px] rounded-md border transition-all duration-500 ease-out"
                 style={{
                   height: barHeight,
-                  backgroundColor: isHighlight ? highlightColor : color,
-                  opacity: isHighlight ? 1 : 0.35,
+                  background: `linear-gradient(180deg, ${base} 0%, ${base}66 100%)`,
+                  borderColor: base,
+                  opacity: isHighlight ? 1 : 0.45,
                 }}
               />
             </div>
