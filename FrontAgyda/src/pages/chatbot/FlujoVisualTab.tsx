@@ -14,6 +14,7 @@ import { chatbotFlujoService } from '@/services/chatbotFlujo.service'
 import { ccService } from '@/services/cc.service'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useIsAdmin } from '@/hooks/useAuth'
 import type { TipoNodoFlujo, GeneraLead } from '@/types/chatbotFlujo.types'
 import { clsx } from 'clsx'
@@ -324,18 +325,55 @@ function FlujoVisualCanvas() {
     | null
   >(null)
   const [seleccion, setSeleccion] = useState<{ tipo: TipoNodoFlujo; id: number } | null>(null)
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false)
+  const [confirmarMaterializar, setConfirmarMaterializar] = useState(false)
 
   const { data: flujo, isLoading } = useQuery({
     queryKey: ['chatbot-flujo'],
     queryFn: () => chatbotFlujoService.getFlujo(),
   })
 
-  const invalidar = () => {
+  const invalidar = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['chatbot-flujo'] })
     qc.invalidateQueries({ queryKey: ['chatbot-respuestas'] })
     qc.invalidateQueries({ queryKey: ['chatbot-etiquetas-menu'] })
     qc.invalidateQueries({ queryKey: ['chatbot-nodos'] })
-  }
+  }, [qc])
+
+  // Snapshot del nodo (contenido + conexiones manuales donde participa) justo
+  // antes de borrarlo — lo que "Deshacer" necesita para recrearlo. Las
+  // conexiones automáticas (esAutomatica) no se capturan: se vuelven a
+  // derivar solas en cuanto el nodo reaparece.
+  const capturarSnapshotNodo = useCallback((tipo: TipoEditable, id: number) => {
+    if (!flujo) return null
+    const conexiones = flujo.conexiones
+      .filter((c) => !c.esAutomatica && !c.esOpcionArbol)
+      .filter((c) => (c.origenTipo === tipo && c.origenId === id) || (c.destinoTipo === tipo && c.destinoId === id))
+      .map((c) => ({ origenTipo: c.origenTipo, origenId: c.origenId, destinoTipo: c.destinoTipo, destinoId: c.destinoId, etiqueta: c.etiqueta }))
+
+    if (tipo === 'respuesta') {
+      const r = flujo.respuestas.find((x) => x.id === id)
+      if (!r) return null
+      return {
+        tipo, idViejo: id, conexiones,
+        payload: { tipo: 'respuesta' as const, texto: r.texto, genera: r.genera, posX: r.posX ?? 0, posY: r.posY ?? 0 },
+      }
+    }
+    if (tipo === 'etiqueta') {
+      const e = flujo.etiquetas.find((x) => x.id === id)
+      if (!e) return null
+      return {
+        tipo, idViejo: id, conexiones,
+        payload: { tipo: 'etiqueta' as const, texto: e.texto, tipoAccion: e.tipoAccion, campaniaId: e.campaniaId, genera: e.genera, posX: e.posX ?? 0, posY: e.posY ?? 0 },
+      }
+    }
+    const n = flujo.nodosArbol.find((x) => x.id === id)
+    if (!n) return null
+    return {
+      tipo, idViejo: id, conexiones,
+      payload: { tipo: 'nodo_arbol' as const, texto: n.texto, tipoNodo: n.tipoNodo, genera: n.genera, posX: n.posX ?? 0, posY: n.posY ?? 0 },
+    }
+  }, [flujo])
 
   const guardarPosicion = useMutation({
     mutationFn: ({ tipo, id, posX, posY }: { tipo: Exclude<TipoNodoFlujo, 'campania'>; id: number; posX: number; posY: number }) =>
@@ -359,9 +397,55 @@ function FlujoVisualCanvas() {
     onError: () => toast.error('No se pudo eliminar la conexión'),
   })
 
+  // Deshacer un nodo eliminado no puede "revivir" el mismo ID — recrea una
+  // caja nueva con el mismo contenido y vuelve a tender sus conexiones
+  // (capturadas del `flujo` justo antes de borrar). No es un historial
+  // completo: cubre el caso más costoso de un error de un clic.
+  const rehacerNodo = useCallback(async (snapshot: {
+    tipo: TipoEditable
+    payload: Parameters<typeof chatbotFlujoService.createNodo>[0]
+    conexiones: { origenTipo: TipoNodoFlujo; origenId: number; destinoTipo: TipoNodoFlujo; destinoId: number; etiqueta: string | null }[]
+    idViejo: number
+  }) => {
+    try {
+      const creado = await chatbotFlujoService.createNodo(snapshot.payload)
+      await Promise.all(snapshot.conexiones.map((c) => chatbotFlujoService.createConexion({
+        origenTipo: (c.origenId === snapshot.idViejo && c.origenTipo === snapshot.tipo ? snapshot.tipo : c.origenTipo) as Exclude<TipoNodoFlujo, 'campania'>,
+        origenId: c.origenId === snapshot.idViejo ? creado.id : c.origenId,
+        destinoTipo: c.destinoId === snapshot.idViejo ? snapshot.tipo : c.destinoTipo,
+        destinoId: c.destinoId === snapshot.idViejo ? creado.id : c.destinoId,
+        etiqueta: c.etiqueta || undefined,
+      }).catch(() => {})))
+      toast.success('Nodo restaurado')
+      invalidar()
+    } catch {
+      toast.error('No se pudo restaurar el nodo')
+    }
+  }, [invalidar])
+
   const eliminarNodo = useMutation({
-    mutationFn: ({ tipo, id }: { tipo: TipoEditable; id: number }) => chatbotFlujoService.deleteNodo(tipo, id),
-    onSuccess: () => { toast.success('Nodo eliminado'); setSeleccion(null); invalidar() },
+    mutationFn: ({ tipo, id }: { tipo: TipoEditable; id: number; snapshot: ReturnType<typeof capturarSnapshotNodo> }) =>
+      chatbotFlujoService.deleteNodo(tipo, id),
+    onSuccess: (_data, variables) => {
+      setSeleccion(null)
+      invalidar()
+      if (variables.snapshot) {
+        const snapshot = variables.snapshot
+        toast.success((t) => (
+          <span className="flex items-center gap-3">
+            Nodo eliminado
+            <button
+              onClick={() => { toast.dismiss(t.id); rehacerNodo(snapshot) }}
+              className="rounded-md bg-ink px-2 py-1 text-[0.7rem] font-bold text-white hover:bg-ink/80"
+            >
+              Deshacer
+            </button>
+          </span>
+        ), { duration: 6000 })
+      } else {
+        toast.success('Nodo eliminado')
+      }
+    },
     onError: (err: unknown) => {
       const m = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
       toast.error(m || 'No se pudo eliminar el nodo')
@@ -512,12 +596,37 @@ function FlujoVisualCanvas() {
   }, [isAdmin, guardarPosicion])
 
   const onEdgesDelete = useCallback((deleted: Edge[]) => {
-    if (!isAdmin) return
+    if (!isAdmin || !flujo) return
     deleted.forEach((e) => {
       const id = Number(e.id)
-      if (Number.isFinite(id)) eliminarConexion.mutate(id)
+      if (!Number.isFinite(id)) return
+      const c = flujo.conexiones.find((x) => String(x.id) === e.id)
+      eliminarConexion.mutate(id, {
+        onSuccess: () => {
+          if (!c) { toast.success('Conexión eliminada'); return }
+          toast.success((t) => (
+            <span className="flex items-center gap-3">
+              Conexión eliminada
+              <button
+                onClick={() => {
+                  toast.dismiss(t.id)
+                  chatbotFlujoService.createConexion({
+                    origenTipo: c.origenTipo as Exclude<TipoNodoFlujo, 'campania'>,
+                    origenId: c.origenId, destinoTipo: c.destinoTipo, destinoId: c.destinoId,
+                    etiqueta: c.etiqueta || undefined,
+                  }).then(() => { toast.success('Conexión restaurada'); invalidar() })
+                    .catch(() => toast.error('No se pudo restaurar la conexión'))
+                }}
+                className="rounded-md bg-ink px-2 py-1 text-[0.7rem] font-bold text-white hover:bg-ink/80"
+              >
+                Deshacer
+              </button>
+            </span>
+          ), { duration: 6000 })
+        },
+      })
     })
-  }, [isAdmin, eliminarConexion])
+  }, [isAdmin, flujo, eliminarConexion, invalidar])
 
   const onNodeClick = useCallback((_: unknown, node: Node<CajaData>) => {
     if (node.id.startsWith('swimlane-')) return
@@ -604,7 +713,7 @@ function FlujoVisualCanvas() {
         )}
         {isAdmin && selEditable && (
           <button
-            onClick={() => { if (window.confirm('¿Eliminar este nodo y sus conexiones?')) eliminarNodo.mutate({ tipo: seleccion.tipo as TipoEditable, id: seleccion.id }) }}
+            onClick={() => setConfirmarEliminar(true)}
             className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
           >
             <Trash2 className="h-3.5 w-3.5" /> Eliminar nodo
@@ -612,7 +721,7 @@ function FlujoVisualCanvas() {
         )}
         {isAdmin && flujo && flujo.automaticasPendientes > 0 && (
           <button
-            onClick={() => { if (window.confirm(`Fijar ${flujo.automaticasPendientes} conexión(es) automática(s) como reales. A partir de ahí las editas y las borras aquí, y el bot las obedece. ¿Continuar?`)) materializar.mutate() }}
+            onClick={() => setConfirmarMaterializar(true)}
             disabled={materializar.isPending}
             className="flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/10 disabled:opacity-50"
           >
@@ -740,6 +849,32 @@ function FlujoVisualCanvas() {
           <Users size={12} /> Solo un administrador puede crear, mover o conectar nodos.
         </p>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmarEliminar}
+        onClose={() => setConfirmarEliminar(false)}
+        onConfirm={() => {
+          if (!seleccion) return
+          const tipo = seleccion.tipo as TipoEditable
+          eliminarNodo.mutate({ tipo, id: seleccion.id, snapshot: capturarSnapshotNodo(tipo, seleccion.id) })
+        }}
+        title="Eliminar nodo"
+        message="¿Eliminar este nodo y sus conexiones? Podrás deshacerlo justo después de confirmar."
+        confirmLabel="Eliminar"
+        variant="danger"
+        isPending={eliminarNodo.isPending}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmarMaterializar}
+        onClose={() => setConfirmarMaterializar(false)}
+        onConfirm={() => materializar.mutate()}
+        title="Fijar flujo"
+        message={flujo ? `Fijar ${flujo.automaticasPendientes} conexión(es) automática(s) como reales. A partir de ahí las editas y las borras aquí, y el bot las obedece. ¿Continuar?` : ''}
+        confirmLabel="Fijar flujo"
+        variant="warning"
+        isPending={materializar.isPending}
+      />
     </div>
   )
 }
