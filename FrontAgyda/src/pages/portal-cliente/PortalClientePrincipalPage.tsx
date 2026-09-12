@@ -171,8 +171,8 @@ function CampanaCard() {
     <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
       <CardHeader icon={<Megaphone className="h-4 w-4 text-brand" />} title="Mis campañas" cta="Ver todas" />
       <div className="flex items-center gap-3">
-        <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-lg font-black italic text-white">
-          Totis
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
+          <Megaphone className="h-6 w-6" />
         </div>
         <div className="flex-1">
           <p className="text-sm font-bold text-ink">{CAMPANA_EJEMPLO.nombre}</p>
@@ -207,7 +207,7 @@ function ReunionCard() {
     <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
       <CardHeader icon={<Calendar className="h-4 w-4 text-brand" />} title="Próxima reunión" cta="Ver todas" />
       <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#19b6bc]/10 text-[#19b6bc]">
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-500">
           <Calendar className="h-6 w-6" />
         </div>
         <div className="flex-1">
@@ -308,10 +308,12 @@ function LoImportanteDelDia() {
             type="button"
             className="flex aspect-square flex-col items-start justify-between gap-2 rounded-2xl border border-surface-border bg-card p-4 text-left shadow-card hover:bg-surface"
           >
-            <span className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
-              <s.icon className="h-5 w-5" />
+            <span className="flex items-center gap-2">
+              <span className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
+                <s.icon className="h-5 w-5" />
+              </span>
+              <CountUp end={s.valor} className="text-3xl font-bold text-ink" />
             </span>
-            <CountUp end={s.valor} className="text-3xl font-bold text-ink" />
             <span className="flex items-center gap-0.5 whitespace-nowrap text-[11px] leading-tight text-ink-tertiary">
               {s.label}
               <ChevronRight className="h-3 w-3" />
