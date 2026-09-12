@@ -183,8 +183,28 @@ async function ingestarMensajeAgenteDirecto(pool, tenantKey, canal, msg) {
 // en la sesión para que todo lo demás (estado, número, ingesta de mensajes)
 // sepa a quién pertenece sin tener que volver a consultarlo.
 async function iniciarSesion(canalId, tenantKey, usuarioId) {
+  // Ver comentario en server.js junto a BAILEYS_DISABLE_AUTORECONNECT: este
+  // proceso comparte BD y carpeta de credenciales con otro (prod/QA corriendo
+  // el mismo código) — abrir una sesión aquí competiría por la conexión real
+  // de WhatsApp con el otro proceso y corrompería el estado en BD.
+  if (process.env.BAILEYS_DISABLE_AUTORECONNECT === '1') {
+    throw new Error('Este proceso tiene deshabilitada la conexión a WhatsApp (BAILEYS_DISABLE_AUTORECONNECT=1) — usa el otro entorno para vincular/gestionar canales de WhatsApp.');
+  }
   const sessionKey = sessionKeyDe(canalId, usuarioId);
-  if (sesiones[sessionKey]?.sock) return sesiones[sessionKey];
+  const existente = sesiones[sessionKey];
+  if (existente?.sock) {
+    // Ya conectado: nada que hacer, reutilizar tal cual.
+    if (existente.estado === 'conectado') return existente;
+    // Sigue en 'esperando_qr' (o similar) — el QR en memoria puede llevar
+    // minutos y haber caducado del lado de WhatsApp ("vínculo no válido" al
+    // escanear). Quitar los listeners ANTES de cerrar (si no, su propio
+    // 'connection.update' con close dispararía el auto-reintento de abajo,
+    // compitiendo con la sesión nueva que este mismo flujo está por crear) y
+    // caer al código de abajo, que arma un socket nuevo con un QR fresco.
+    try { existente.sock.ev.removeAllListeners(); } catch (_) { /* no-op */ }
+    try { existente.sock.end(undefined); } catch (_) { /* ya pudo estar cerrado */ }
+    delete sesiones[sessionKey];
+  }
 
   const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, proto } =
     require('@whiskeysockets/baileys');
@@ -234,7 +254,12 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
 
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const debeReconectar = statusCode !== DisconnectReason.loggedOut;
+      // timedOut (408) = nadie escaneó el QR a tiempo, no una caída de red —
+      // seguir reintentando aquí solo genera un QR nuevo cada ~3s para que
+      // vuelva a expirar sin que haya un humano mirando la pantalla (bug
+      // real: un canal nunca vinculado quedaba en loop infinito). Se corta
+      // el auto-retry y se espera a que alguien pulse "Generar QR" de nuevo.
+      const debeReconectar = statusCode !== DisconnectReason.loggedOut && statusCode !== DisconnectReason.timedOut;
       await setEstado(sessionKey, 'desconectado');
       emitirEstado(sessionKey);
       logger.warn(`⚠️ Baileys desconectado — sesión ${sessionKey} (statusCode=${statusCode}, reconectar=${debeReconectar})`);
@@ -242,7 +267,8 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
       if (debeReconectar) {
         setTimeout(() => iniciarSesion(canalId, tenantKey, usuarioId).catch((e) => logger.error('[baileys] reconexión falló:', e?.message || e)), 3000);
       } else {
-        // Sesión cerrada desde el teléfono: hay que volver a escanear QR desde cero.
+        // Sesión cerrada desde el teléfono, o QR nunca escaneado a tiempo:
+        // hay que volver a escanear QR desde cero.
         fs.rmSync(sessionDir(sessionKey), { recursive: true, force: true });
       }
     }
@@ -529,6 +555,17 @@ function getSesionesDeCanal(canalId) {
 // Configuración y reconecta manualmente. iniciarSesion reutiliza las
 // credenciales de sesionDir(), así que esto reconecta solo (sin pedir QR de
 // nuevo) salvo que la sesión haya sido cerrada desde el teléfono.
+// Una sesión tiene credenciales reales (login ya completado con WhatsApp) si
+// su carpeta trae creds.json — las carpetas que solo llegaron a
+// 'esperando_qr' sin que nadie escaneara nunca no tienen ese archivo.
+function tieneCredencialesGuardadas(sessionKey) {
+  try {
+    return fs.existsSync(path.join(sessionDir(sessionKey), 'creds.json'));
+  } catch (_) {
+    return false;
+  }
+}
+
 async function reconectarSesionesGuardadas() {
   try {
     const databaseServiceLocal = require('../databaseService');
@@ -544,13 +581,19 @@ async function reconectarSesionesGuardadas() {
       }
 
       // Canales compartidos: una sesión por canal, estado en CCO_CANALES.
+      // No se filtra por CN_BAILEYS_ESTADO — ese valor puede haber quedado
+      // desactualizado (p.ej. 'desconectado' de un reinicio previo) aunque
+      // las credenciales en disco sigan siendo válidas; lo que de verdad
+      // decide si vale la pena reconectar es si existe creds.json.
       const compartidos = await pool.request().query(`
         SELECT CN_ID id FROM dbo.CCO_CANALES
         WHERE CN_TIPO = 'whatsapp_baileys' AND CN_HABILITADO = 1
           AND ISNULL(CN_MODO_SESION, 'compartido') = 'compartido'
-          AND CN_BAILEYS_ESTADO IS NOT NULL AND CN_BAILEYS_ESTADO <> 'desconectado'
       `);
+      let nCompartidos = 0;
       for (const row of compartidos.recordset) {
+        if (!tieneCredencialesGuardadas(sessionKeyDe(row.id, null))) continue;
+        nCompartidos++;
         iniciarSesion(row.id, tenantKey, null).catch((e) =>
           logger.error(`[baileys] reconexión al arrancar falló (canal ${row.id}):`, e?.message || e));
       }
@@ -562,15 +605,17 @@ async function reconectarSesionesGuardadas() {
         JOIN dbo.CCO_CANALES c ON c.CN_ID = s.CAS_CANAL_ID
         WHERE c.CN_TIPO = 'whatsapp_baileys' AND c.CN_HABILITADO = 1
           AND c.CN_MODO_SESION = 'individual'
-          AND s.CAS_BAILEYS_ESTADO IS NOT NULL AND s.CAS_BAILEYS_ESTADO <> 'desconectado'
       `);
+      let nIndividuales = 0;
       for (const row of individuales.recordset) {
+        if (!tieneCredencialesGuardadas(sessionKeyDe(row.canalId, row.usuarioId))) continue;
+        nIndividuales++;
         iniciarSesion(row.canalId, tenantKey, row.usuarioId).catch((e) =>
           logger.error(`[baileys] reconexión al arrancar falló (canal ${row.canalId}, usuario ${row.usuarioId}):`, e?.message || e));
       }
 
-      if (compartidos.recordset.length || individuales.recordset.length) {
-        logger.info(`✅ Baileys: reconectando ${compartidos.recordset.length} sesión(es) compartida(s) y ${individuales.recordset.length} individual(es) tras arranque (tenant ${tenantKey || 'default'})`);
+      if (nCompartidos || nIndividuales) {
+        logger.info(`✅ Baileys: reconectando ${nCompartidos} sesión(es) compartida(s) y ${nIndividuales} individual(es) tras arranque (tenant ${tenantKey || 'default'})`);
       }
     }
   } catch (e) {
