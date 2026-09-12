@@ -332,8 +332,8 @@ function LoImportanteDelDia() {
             className="flex aspect-square flex-col items-start justify-between gap-2 rounded-2xl border border-surface-border bg-card p-4 text-left shadow-card hover:bg-surface"
           >
             <span className="flex items-center gap-2">
-              <span className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
-                <s.icon className="h-5 w-5" />
+              <span className={clsx('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
+                <s.icon className="h-6 w-6" />
               </span>
               <CountUp end={s.valor} className="text-3xl font-bold text-ink" />
             </span>
