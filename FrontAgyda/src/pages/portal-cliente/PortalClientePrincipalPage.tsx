@@ -115,7 +115,9 @@ function ProyectoCard() {
         </div>
         <ProgressGauge
           value={PROYECTO_EJEMPLO.avance}
-          size={84}
+          size={132}
+          strokeWidth={5}
+          segments={36}
           trackColor="rgba(255,255,255,0.15)"
           progressColor="#5eead4"
           tooltip={`${PROYECTO_EJEMPLO.avance}% completado`}
