@@ -17,7 +17,7 @@ interface MiniBarChartProps {
  * SVG puro, sin librería de gráficos. Una barra puede destacarse con un
  * color distinto (ej. el mes actual), igual que en la referencia. Cada
  * barra muestra su valor arriba, y opcionalmente se dibuja una línea
- * punteada gris con la meta para poder comparar alcance real vs. objetivo.
+ * punteada gris ("Alcance mensual") para comparar el real vs. esa referencia.
  */
 export function MiniBarChart({
   data,
@@ -34,8 +34,8 @@ export function MiniBarChart({
   return (
     <div>
       {goal !== undefined && (
-        <p className="mb-1.5 text-[10px] font-semibold text-ink-tertiary">
-          Meta mensual: <span className="text-ink-secondary">{goal.toLocaleString('es-MX')}</span>
+        <p className="mb-2 text-[10px] font-semibold text-ink-tertiary">
+          Alcance mensual: <span className="text-ink-secondary">{goal.toLocaleString('es-MX')}</span>
         </p>
       )}
       <div className="relative flex items-end justify-between gap-2" style={{ height }}>

@@ -29,17 +29,17 @@ const CAMPANA_EJEMPLO = {
   cliente: 'Totis',
   estatus: 'Activa',
   periodo: '01 sep - 30 sep 2026',
-  alcance: 2000,
-  interacciones: 1320,
-  entrevistas: 86,
+  alcance: 460,
+  interacciones: 320,
+  entrevistas: 22,
   alcancePorMes: [
-    { label: 'May', value: 1200 },
-    { label: 'Jun', value: 1450 },
-    { label: 'Jul', value: 1380 },
-    { label: 'Ago', value: 1600 },
-    { label: 'Sep', value: 2000 },
+    { label: 'May', value: 320 },
+    { label: 'Jun', value: 380 },
+    { label: 'Jul', value: 290 },
+    { label: 'Ago', value: 410 },
+    { label: 'Sep', value: 460 },
   ],
-  metaAlcanceMensual: 1800,
+  metaAlcanceMensual: 400,
 }
 
 const REUNION_EJEMPLO = {
@@ -196,8 +196,7 @@ function CampanaCard() {
         </div>
       </div>
 
-      <p className="mt-4 text-[11px] font-semibold text-ink-tertiary">Alcance por mes (personas)</p>
-      <div className="mt-2">
+      <div className="mt-4">
         <MiniBarChart
           data={CAMPANA_EJEMPLO.alcancePorMes}
           highlightIndex={CAMPANA_EJEMPLO.alcancePorMes.length - 1}
