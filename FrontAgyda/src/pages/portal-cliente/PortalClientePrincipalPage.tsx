@@ -39,6 +39,7 @@ const CAMPANA_EJEMPLO = {
     { label: 'Ago', value: 1600 },
     { label: 'Sep', value: 2000 },
   ],
+  metaAlcanceMensual: 1800,
 }
 
 const REUNION_EJEMPLO = {
@@ -195,7 +196,7 @@ function CampanaCard() {
         </div>
       </div>
 
-      <p className="mt-4 text-[11px] font-semibold text-ink-tertiary">Alcance por mes</p>
+      <p className="mt-4 text-[11px] font-semibold text-ink-tertiary">Alcance por mes (personas)</p>
       <div className="mt-2">
         <MiniBarChart
           data={CAMPANA_EJEMPLO.alcancePorMes}
@@ -203,6 +204,7 @@ function CampanaCard() {
           color={isDark ? '#134559' : '#bef2f2'}
           highlightColor="#19b6bc"
           height={90}
+          goal={CAMPANA_EJEMPLO.metaAlcanceMensual}
         />
       </div>
 

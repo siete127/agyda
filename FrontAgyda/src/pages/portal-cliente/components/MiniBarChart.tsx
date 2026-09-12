@@ -9,12 +9,15 @@ interface MiniBarChartProps {
   color?: string
   highlightColor?: string
   height?: number
+  goal?: number
 }
 
 /**
  * Gráfica de barras verticales (estilo "Statistics" con barras Mon-Sun) —
  * SVG puro, sin librería de gráficos. Una barra puede destacarse con un
- * color distinto (ej. el mes actual), igual que en la referencia.
+ * color distinto (ej. el mes actual), igual que en la referencia. Cada
+ * barra muestra su valor arriba, y opcionalmente se dibuja una línea
+ * punteada gris con la meta para poder comparar alcance real vs. objetivo.
  */
 export function MiniBarChart({
   data,
@@ -22,32 +25,53 @@ export function MiniBarChart({
   color = '#19b6bc',
   highlightColor = '#0a2f71',
   height = 90,
+  goal,
 }: MiniBarChartProps) {
-  const max = Math.max(...data.map((d) => d.value))
+  const max = Math.max(...data.map((d) => d.value), goal ?? 0)
+  const chartHeight = height - 22
+  const goalY = goal !== undefined ? chartHeight - (goal / max) * chartHeight : null
 
   return (
-    <div className="flex items-end justify-between gap-2" style={{ height }}>
-      {data.map((d, i) => {
-        const barHeight = Math.max((d.value / max) * (height - 22), 4)
-        const isHighlight = i === highlightIndex
-        const base = isHighlight ? highlightColor : color
-        return (
-          <div key={d.label} className="flex flex-1 flex-col items-center gap-1.5">
-            <div className="flex w-full flex-1 items-end justify-center">
-              <div
-                className="w-full max-w-[22px] rounded-md border transition-all duration-500 ease-out"
-                style={{
-                  height: barHeight,
-                  background: `linear-gradient(180deg, ${base} 0%, ${base}66 100%)`,
-                  borderColor: base,
-                  opacity: isHighlight ? 1 : 0.45,
-                }}
-              />
+    <div>
+      {goal !== undefined && (
+        <p className="mb-1.5 text-[10px] font-semibold text-ink-tertiary">
+          Meta mensual: <span className="text-ink-secondary">{goal.toLocaleString('es-MX')}</span>
+        </p>
+      )}
+      <div className="relative flex items-end justify-between gap-2" style={{ height }}>
+        {goalY !== null && (
+          <div
+            className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-ink-tertiary/40"
+            style={{ top: goalY }}
+          />
+        )}
+        {data.map((d, i) => {
+          const barHeight = Math.max((d.value / max) * chartHeight, 4)
+          const isHighlight = i === highlightIndex
+          const base = isHighlight ? highlightColor : color
+          return (
+            <div key={d.label} className="flex flex-1 flex-col items-center gap-1.5">
+              <div className="flex w-full flex-1 flex-col items-center justify-end">
+                <span
+                  className="mb-1 text-[10px] font-bold"
+                  style={{ color: isHighlight ? highlightColor : 'rgb(var(--ink-tertiary))' }}
+                >
+                  {d.value.toLocaleString('es-MX')}
+                </span>
+                <div
+                  className="w-full max-w-[22px] rounded-md transition-all duration-500 ease-out"
+                  style={{
+                    height: barHeight,
+                    background: `linear-gradient(180deg, ${base} 0%, ${base}66 100%)`,
+                    opacity: isHighlight ? 1 : 0.45,
+                  }}
+                />
+              </div>
+              <span className="text-[10px] font-semibold text-ink-tertiary">{d.label}</span>
             </div>
-            <span className="text-[10px] font-semibold text-ink-tertiary">{d.label}</span>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
