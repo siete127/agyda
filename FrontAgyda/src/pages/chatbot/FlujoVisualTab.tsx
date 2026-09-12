@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap, Handle, Position, useReactFlow,
   useNodesState, useEdgesState, addEdge, ReactFlowProvider,
@@ -8,7 +8,7 @@ import '@xyflow/react/dist/style.css'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   MessageCircle, Megaphone, Users, Workflow, Radio, Info, Plus, Trash2, X, ChevronDown,
-  Sparkles, Search, Layers,
+  Sparkles, Search, Layers, Pencil,
 } from 'lucide-react'
 import { chatbotFlujoService } from '@/services/chatbotFlujo.service'
 import { ccService } from '@/services/cc.service'
@@ -65,20 +65,38 @@ interface CajaData extends Record<string, unknown> {
   esEntrada?: boolean
   genera?: GeneraLead | null
   categoria?: string | null
+  puedeEditar?: boolean
 }
 
-function CajaNodo({ data, selected }: NodeProps<Node<CajaData>>) {
-  const { tipo, titulo, subtitulo, activa, soloDestino, esEntrada, genera } = data
+// Callback estable para el botón de lápiz de CajaNodo — vía contexto en vez
+// de guardarlo en `data` de cada nodo: `initialNodes` se recalcula con
+// useMemo durante el render, y pasar ahí una función que envuelve un ref
+// (necesaria por el orden de declaración de abrirEditorDeNodo) dispara la
+// regla react-hooks/refs. El contexto evita ese camino por completo.
+const EditarNodoContext = createContext<(nodeId: string) => void>(() => {})
+
+function CajaNodo({ id, data, selected }: NodeProps<Node<CajaData>>) {
+  const { tipo, titulo, subtitulo, activa, soloDestino, esEntrada, genera, puedeEditar } = data
+  const onEditar = useContext(EditarNodoContext)
   const { icon: Icon, clases } = ESTILO_TIPO[tipo]
   const puedeGenerar = tipo === 'respuesta' || tipo === 'etiqueta' || tipo === 'nodo_arbol'
   return (
     <div className={clsx(
-      'min-w-[190px] max-w-[240px] rounded-xl border-2 bg-card px-3 py-2.5 shadow-sm transition-opacity',
+      'relative min-w-[190px] max-w-[240px] rounded-xl border-2 bg-card px-3 py-2.5 shadow-sm transition-opacity',
       clases.split(' ')[0],
       selected && 'ring-2 ring-brand ring-offset-1',
       !activa && 'opacity-50',
     )}>
       {!soloDestino && <Handle type="target" position={Position.Left} className="!bg-ink-tertiary !w-2 !h-2" />}
+      {selected && puedeEditar && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onEditar(id) }}
+          title="Editar contenido"
+          className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border border-brand bg-card text-brand shadow-sm hover:bg-brand hover:text-white"
+        >
+          <Pencil className="h-2.5 w-2.5" />
+        </button>
+      )}
       <div className="flex items-start gap-2">
         <span className={clsx('flex h-6 w-6 shrink-0 items-center justify-center rounded-lg', clases)}>
           <Icon className="h-3.5 w-3.5" />
@@ -241,7 +259,7 @@ function NodoEditorPanel({ modo, tipo, nodoId, valores, onClose, onGuardado }: {
   const tituloTipo = tipo === 'respuesta' ? 'Respuesta' : tipo === 'etiqueta' ? 'Botón de menú' : 'Pregunta del árbol'
 
   return (
-    <div className="absolute right-3 top-3 bottom-3 z-10 flex w-80 flex-col rounded-2xl border border-gray-200 bg-card shadow-xl">
+    <div className="flex w-80 shrink-0 flex-col rounded-2xl border border-gray-200 bg-card shadow-xl">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className={clsx('flex h-6 w-6 items-center justify-center rounded-lg', ESTILO_TIPO[tipo].clases)}>
@@ -384,7 +402,7 @@ function PanelProbarFlujo({ flujo, onIrANodo, onClose }: {
   }
 
   return (
-    <div className="absolute right-3 top-3 bottom-3 z-10 flex w-80 flex-col rounded-2xl border border-gray-200 bg-card shadow-xl">
+    <div className="flex w-80 shrink-0 flex-col rounded-2xl border border-gray-200 bg-card shadow-xl">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <p className="flex items-center gap-2 text-sm font-bold text-gray-800">
           <Sparkles className="h-4 w-4 text-brand" /> Probar flujo
@@ -442,6 +460,7 @@ function FlujoVisualCanvas() {
     | null
   >(null)
   const [seleccion, setSeleccion] = useState<{ tipo: TipoNodoFlujo; id: number } | null>(null)
+  const [seleccionMultiple, setSeleccionMultiple] = useState<{ tipo: TipoEditable; id: number }[]>([])
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [confirmarMaterializar, setConfirmarMaterializar] = useState(false)
   const [probando, setProbando] = useState(false)
@@ -620,19 +639,19 @@ function FlujoVisualCanvas() {
       id: `respuesta-${r.id}`,
       type: 'caja',
       position: r.posX != null && r.posY != null ? { x: r.posX, y: r.posY } : (posicionesResp.get(r.id) ?? { x: 0, y: 0 }),
-      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada, genera: r.genera, categoria: r.categoria },
+      data: { tipo: 'respuesta', titulo: r.codigo, subtitulo: r.texto, activa: r.activa, esEntrada: r.esEntrada, genera: r.genera, categoria: r.categoria, puedeEditar: isAdmin },
     }))
     flujo.etiquetas.forEach((e, i) => nodos.push({
       id: `etiqueta-${e.id}`,
       type: 'caja',
       position: e.posX != null && e.posY != null ? { x: e.posX, y: e.posY } : posicionPorDefecto('etiqueta', i),
-      data: { tipo: 'etiqueta', titulo: e.texto, subtitulo: TIPO_ETIQUETA_ACCION[e.tipoAccion] ?? 'Menú del widget', activa: e.activa, genera: e.genera },
+      data: { tipo: 'etiqueta', titulo: e.texto, subtitulo: TIPO_ETIQUETA_ACCION[e.tipoAccion] ?? 'Menú del widget', activa: e.activa, genera: e.genera, puedeEditar: isAdmin },
     }))
     flujo.nodosArbol.forEach((n, i) => nodos.push({
       id: `nodo_arbol-${n.id}`,
       type: 'caja',
       position: n.posX != null && n.posY != null ? { x: n.posX, y: n.posY } : posicionPorDefecto('nodo_arbol', i),
-      data: { tipo: 'nodo_arbol', titulo: n.codigo, subtitulo: n.texto, activa: n.activa, genera: n.genera },
+      data: { tipo: 'nodo_arbol', titulo: n.codigo, subtitulo: n.texto, activa: n.activa, genera: n.genera, puedeEditar: isAdmin },
     }))
     flujo.campanias.forEach((c, i) => nodos.push({
       id: `campania-${c.id}`,
@@ -651,7 +670,7 @@ function FlujoVisualCanvas() {
       })
     }
     return nodos
-  }, [flujo, swimlanes])
+  }, [flujo, swimlanes, isAdmin])
 
   const initialEdges = useMemo<Edge[]>(() => {
     if (!flujo) return []
@@ -704,13 +723,21 @@ function FlujoVisualCanvas() {
     })
   }, [isAdmin, setEdges, crearConexion])
 
-  const onNodeDragStop = useCallback((_: unknown, node: Node<CajaData>) => {
-    if (!isAdmin || node.data.tipo === 'campania' || node.id.startsWith('swimlane-')) return
-    const [tipo, idStr] = node.id.split('-')
-    guardarPosicion.mutate(
-      { tipo: tipo as Exclude<TipoNodoFlujo, 'campania'>, id: Number(idStr), posX: node.position.x, posY: node.position.y },
-      { onError: () => toast.error('No se pudo guardar la posición') },
-    )
+  // El 3er parámetro trae TODOS los nodos movidos en el arrastre — con una
+  // selección múltiple activa, xyflow mueve el grupo entero y aquí llegan
+  // todos juntos; antes solo se guardaba la posición del nodo bajo el cursor
+  // y el resto de la selección "olvidaba" su nueva posición al refrescar.
+  const onNodeDragStop = useCallback((_: unknown, __: Node<CajaData>, movidos: Node<CajaData>[]) => {
+    if (!isAdmin) return
+    movidos
+      .filter((n) => n.data.tipo !== 'campania' && !n.id.startsWith('swimlane-'))
+      .forEach((n) => {
+        const [tipo, idStr] = n.id.split('-')
+        guardarPosicion.mutate(
+          { tipo: tipo as Exclude<TipoNodoFlujo, 'campania'>, id: Number(idStr), posX: n.position.x, posY: n.position.y },
+          { onError: () => toast.error('No se pudo guardar la posición') },
+        )
+      })
   }, [isAdmin, guardarPosicion])
 
   const onEdgesDelete = useCallback((deleted: Edge[]) => {
@@ -753,13 +780,29 @@ function FlujoVisualCanvas() {
     setSeleccion({ tipo: tipo as TipoNodoFlujo, id: Number(idStr) })
   }, [])
 
-  const onNodeDoubleClick = useCallback((_: unknown, node: Node<CajaData>) => {
-    if (!isAdmin || !flujo || node.id.startsWith('swimlane-')) return
-    if (node.data.tipo === 'captura_lead') {
+  // Selección múltiple (shift/rectángulo, gratis en xyflow) — se usa solo
+  // para el borrado en lote; con 1 o 0 nodos seleccionados queda vacío y
+  // manda la selección simple de arriba.
+  const onSelectionChange = useCallback(({ nodes: seleccionados }: { nodes: Node<CajaData>[] }) => {
+    const editables = seleccionados.filter((n): n is Node<CajaData> & { id: string } =>
+      !n.id.startsWith('swimlane-') && n.data.tipo !== 'campania' && n.data.tipo !== 'captura_lead')
+    if (editables.length < 2) { setSeleccionMultiple([]); return }
+    setSeleccionMultiple(editables.map((n) => {
+      const [tipo, idStr] = n.id.split('-')
+      return { tipo: tipo as TipoEditable, id: Number(idStr) }
+    }))
+  }, [])
+
+  // Lógica compartida por el doble clic y el botón de lápiz visible en la
+  // caja seleccionada (CajaNodo) — antes solo el doble clic la disparaba,
+  // sin ninguna pista visual de que existía.
+  const abrirEditorDeNodo = useCallback((nodeId: string) => {
+    if (!isAdmin || !flujo || nodeId.startsWith('swimlane-')) return
+    const [tipo, idStr] = nodeId.split('-')
+    if (tipo === 'captura_lead') {
       toast('Se dispara sola con las respuestas marcadas "señal de interés"', { icon: 'ℹ️' })
       return
     }
-    const [tipo, idStr] = node.id.split('-')
     const id = Number(idStr)
     if (tipo === 'campania') { toast('Las campañas se editan en Contact Center', { icon: 'ℹ️' }); return }
     setProbando(false)
@@ -774,6 +817,10 @@ function FlujoVisualCanvas() {
       if (n) setEditor({ modo: 'editar', tipo: 'nodo_arbol', nodoId: id, valores: { texto: n.texto, tipoNodo: n.tipoNodo, genera: n.genera } })
     }
   }, [isAdmin, flujo])
+
+  const onNodeDoubleClick = useCallback((_: unknown, node: Node<CajaData>) => {
+    abrirEditorDeNodo(node.id)
+  }, [abrirEditorDeNodo])
 
   // Título legible por nodeId ("respuesta-12" -> "precios_cotizacion") — lo
   // usa el detalle de "Fijar flujo" para mostrar origen -> destino con
@@ -852,7 +899,15 @@ function FlujoVisualCanvas() {
             )}
           </div>
         )}
-        {isAdmin && selEditable && (
+        {isAdmin && seleccionMultiple.length >= 2 && (
+          <button
+            onClick={() => setConfirmarEliminar(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Eliminar {seleccionMultiple.length} nodos
+          </button>
+        )}
+        {isAdmin && seleccionMultiple.length < 2 && selEditable && (
           <button
             onClick={() => setConfirmarEliminar(true)}
             className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
@@ -946,33 +1001,40 @@ function FlujoVisualCanvas() {
         {isAdmin ? 'Doble clic en una caja para editar su contenido · arrastra un punto al otro para conectar' : 'Solo un administrador puede editar el flujo.'}
       </p>
 
-      <div className="relative h-[65vh] rounded-2xl border border-surface-border overflow-hidden bg-surface"
-        onClick={() => { if (resultadosAbiertos) setResultadosAbiertos(false); if (leyendaAbierta) setLeyendaAbierta(false) }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeDragStop={onNodeDragStop}
-          onEdgesDelete={onEdgesDelete}
-          onNodeClick={onNodeClick}
-          onNodeDoubleClick={onNodeDoubleClick}
-          nodeTypes={nodeTypes}
-          nodesDraggable={isAdmin}
-          nodesConnectable={isAdmin}
-          elementsSelectable
-          fitView
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background gap={18} />
-          <Controls showInteractive={false} />
-          <MiniMap
-            pannable zoomable className="!bg-card"
-            nodeColor={(n) => (n.id.startsWith('swimlane-') ? 'transparent' : '#94a3b8')}
-          />
-        </ReactFlow>
+      <div className="flex h-[65vh] gap-3">
+        <div className="relative min-w-0 flex-1 rounded-2xl border border-surface-border overflow-hidden bg-surface"
+          onClick={() => { if (resultadosAbiertos) setResultadosAbiertos(false); if (leyendaAbierta) setLeyendaAbierta(false) }}>
+          <EditarNodoContext.Provider value={abrirEditorDeNodo}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeDragStop={onNodeDragStop}
+              onEdgesDelete={onEdgesDelete}
+              onNodeClick={onNodeClick}
+              onNodeDoubleClick={onNodeDoubleClick}
+              onSelectionChange={onSelectionChange}
+              nodeTypes={nodeTypes}
+              nodesDraggable={isAdmin}
+              nodesConnectable={isAdmin}
+              elementsSelectable
+              fitView
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background gap={18} />
+              <Controls showInteractive={false} />
+              <MiniMap
+                pannable zoomable className="!bg-card"
+                nodeColor={(n) => (n.id.startsWith('swimlane-') ? 'transparent' : '#94a3b8')}
+              />
+            </ReactFlow>
+          </EditarNodoContext.Provider>
+        </div>
 
+        {/* Panel lateral: comprime el lienzo en vez de taparlo (antes era
+            absolute sobre el canvas y podía ocultar el nodo que se editaba). */}
         {editor && (
           <NodoEditorPanel
             modo={editor.modo}
@@ -1009,12 +1071,21 @@ function FlujoVisualCanvas() {
         isOpen={confirmarEliminar}
         onClose={() => setConfirmarEliminar(false)}
         onConfirm={() => {
+          if (seleccionMultiple.length >= 2) {
+            seleccionMultiple.forEach(({ tipo, id }) => {
+              eliminarNodo.mutate({ tipo, id, snapshot: capturarSnapshotNodo(tipo, id) })
+            })
+            setSeleccionMultiple([])
+            return
+          }
           if (!seleccion) return
           const tipo = seleccion.tipo as TipoEditable
           eliminarNodo.mutate({ tipo, id: seleccion.id, snapshot: capturarSnapshotNodo(tipo, seleccion.id) })
         }}
-        title="Eliminar nodo"
-        message="¿Eliminar este nodo y sus conexiones? Podrás deshacerlo justo después de confirmar."
+        title={seleccionMultiple.length >= 2 ? `Eliminar ${seleccionMultiple.length} nodos` : 'Eliminar nodo'}
+        message={seleccionMultiple.length >= 2
+          ? `¿Eliminar estos ${seleccionMultiple.length} nodos y sus conexiones? Cada uno se podrá deshacer por separado justo después de confirmar.`
+          : '¿Eliminar este nodo y sus conexiones? Podrás deshacerlo justo después de confirmar.'}
         confirmLabel="Eliminar"
         variant="danger"
         isPending={eliminarNodo.isPending}
