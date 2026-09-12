@@ -3179,10 +3179,18 @@
                 const base = TEXTOS[currentLang] || TEXTOS.es;
                 if (!botConfig) return base;
                 const es = currentLang === 'en';
+                const esReal = currentLang === 'es';
                 return {
                     ...base,
                     saludo: (es ? botConfig.saludoEn : botConfig.saludoEs) || base.saludo,
                     liveChatSugerencia: (es ? botConfig.sugerenciaEscalarEn : botConfig.sugerenciaEscalarEs) || base.liveChatSugerencia,
+                    // Fase 6 (Constructor de flujo, "Captura de lead"): antes fijos en
+                    // TEXTOS.pedirNombre/pedirContacto, ahora editables desde AGYDA.
+                    pedirNombre: (esReal ? botConfig.pedirNombreEs : botConfig.pedirNombreEn) || base.pedirNombre,
+                    pedirContacto: (nombre) => {
+                        const plantilla = (esReal ? botConfig.pedirContactoEs : botConfig.pedirContactoEn) || null;
+                        return plantilla ? plantilla.replace('{nombre}', nombre) : base.pedirContacto(nombre);
+                    },
                 };
             }
 

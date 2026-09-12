@@ -12,6 +12,7 @@ import {
   Sparkles, Search, Layers, Pencil, ExternalLink, AlertTriangle,
 } from 'lucide-react'
 import { chatbotFlujoService } from '@/services/chatbotFlujo.service'
+import { chatbotService } from '@/services/chatbot.service'
 import { ccService } from '@/services/cc.service'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
@@ -19,6 +20,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useIsAdmin } from '@/hooks/useAuth'
 import type { TipoNodoFlujo, GeneraLead, FlujoCompleto } from '@/types/chatbotFlujo.types'
+import type { ChatbotConfig } from '@/types/chatbot.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -492,6 +494,81 @@ function PanelProbarFlujo({ flujo, onIrANodo, onClose }: {
   )
 }
 
+// Editor del nodo "Captura de lead" — Fase 6: el copy vivía fijo en el
+// widget (TEXTOS.pedirNombre/pedirContacto); ahora son claves de
+// CHATBOT_CONFIG editables aquí, mismas que usa chatbotService.getConfig()
+// en la pestaña Escalamiento. {nombre} en "pedirContacto" lo sustituye el
+// widget por el nombre que ya dio el visitante.
+function PanelCapturaLead({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['chatbot-config'],
+    queryFn: () => chatbotService.getConfig(),
+  })
+  const [borrador, setBorrador] = useState<Partial<ChatbotConfig>>({})
+  const val = (k: keyof ChatbotConfig) => borrador[k] ?? config?.[k] ?? ''
+
+  const guardar = useMutation({
+    mutationFn: () => chatbotService.updateConfig(borrador),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chatbot-config'] })
+      toast.success('Captura de lead actualizada')
+      onClose()
+    },
+    onError: () => toast.error('No se pudo guardar'),
+  })
+
+  return (
+    <div className="flex w-80 shrink-0 flex-col rounded-2xl border border-gray-200 bg-card shadow-xl">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className={clsx('flex h-6 w-6 items-center justify-center rounded-lg', ESTILO_TIPO.captura_lead.clases)}>
+            <Sparkles className="h-3.5 w-3.5" />
+          </span>
+          <p className="text-sm font-bold text-gray-800">Captura de lead</p>
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
+      </div>
+
+      {isLoading || !config ? (
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+      ) : (
+        <>
+          <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <p className="text-[0.68rem] text-gray-400 leading-relaxed">
+              Se dispara sola con las respuestas/etiquetas/nodos marcados "→ oportunidad" o "→ contacto".
+              Este texto es lo que el bot pregunta primero.
+            </p>
+            <div>
+              <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Pide el nombre (ES)</label>
+              <textarea value={val('pedirNombreEs')} onChange={(e) => setBorrador((b) => ({ ...b, pedirNombreEs: e.target.value }))} rows={2} className="field resize-none text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Pide el nombre (EN)</label>
+              <textarea value={val('pedirNombreEn')} onChange={(e) => setBorrador((b) => ({ ...b, pedirNombreEn: e.target.value }))} rows={2} className="field resize-none text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Pide el contacto (ES)</label>
+              <textarea value={val('pedirContactoEs')} onChange={(e) => setBorrador((b) => ({ ...b, pedirContactoEs: e.target.value }))} rows={2} className="field resize-none text-sm" />
+              <p className="mt-1 text-[0.62rem] text-gray-400">Usa <code>{'{nombre}'}</code> donde quieras insertar el nombre que ya dio.</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Pide el contacto (EN)</label>
+              <textarea value={val('pedirContactoEn')} onChange={(e) => setBorrador((b) => ({ ...b, pedirContactoEn: e.target.value }))} rows={2} className="field resize-none text-sm" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-gray-100 px-4 py-3">
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
+            <Button size="sm" isLoading={guardar.isPending} disabled={Object.keys(borrador).length === 0} onClick={() => guardar.mutate()}>
+              Guardar
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function FlujoVisualCanvas() {
   const qc = useQueryClient()
   const isAdmin = useIsAdmin()
@@ -510,6 +587,7 @@ function FlujoVisualCanvas() {
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [confirmarMaterializar, setConfirmarMaterializar] = useState(false)
   const [probando, setProbando] = useState(false)
+  const [editorCaptura, setEditorCaptura] = useState(false)
 
   const { data: flujo, isLoading } = useQuery({
     queryKey: ['chatbot-flujo'],
@@ -764,7 +842,12 @@ function FlujoVisualCanvas() {
         type: 'caja',
         position: { x: 1080, y: -140 },
         data: { tipo: 'captura_lead', titulo: 'Captura de lead', subtitulo: 'pide nombre y contacto', activa: true, soloDestino: true },
-        draggable: false,
+        // Nota (Fase 6): draggable:false parecía inofensivo, pero xyflow solo
+        // instala su manejador de mouse (useDrag/XYDrag) en nodos draggable —
+        // con draggable:false el navegador nunca ve el 2º clic como parte de
+        // la misma interacción y onNodeDoubleClick jamás se dispara. Se deja
+        // arrastrable (su posición no se persiste vía guardarPosicion, ver
+        // más abajo, pero al menos el doble clic para editar funciona).
       })
     }
     return nodos
@@ -829,7 +912,7 @@ function FlujoVisualCanvas() {
   const onNodeDragStop = useCallback((_: unknown, __: Node<CajaData>, movidos: Node<CajaData>[]) => {
     if (!isAdmin) return
     movidos
-      .filter((n) => n.data.tipo !== 'campania' && !n.id.startsWith('swimlane-'))
+      .filter((n) => n.data.tipo !== 'campania' && n.data.tipo !== 'captura_lead' && !n.id.startsWith('swimlane-'))
       .forEach((n) => {
         const [tipo, idStr] = n.id.split('-')
         guardarPosicion.mutate(
@@ -899,12 +982,15 @@ function FlujoVisualCanvas() {
     if (!isAdmin || !flujo || nodeId.startsWith('swimlane-')) return
     const [tipo, idStr] = nodeId.split('-')
     if (tipo === 'captura_lead') {
-      toast('Se dispara sola con las respuestas marcadas "señal de interés"', { icon: 'ℹ️' })
+      setProbando(false)
+      setEditor(null)
+      setEditorCaptura(true)
       return
     }
     const id = Number(idStr)
     if (tipo === 'campania') { toast('Las campañas se editan en Contact Center', { icon: 'ℹ️' }); return }
     setProbando(false)
+    setEditorCaptura(false)
     if (tipo === 'respuesta') {
       const r = flujo.respuestas.find((x) => x.id === id)
       if (r) setEditor({ modo: 'editar', tipo: 'respuesta', nodoId: id, valores: { texto: r.texto, keywords: [], genera: r.genera } })
@@ -987,7 +1073,7 @@ function FlujoVisualCanvas() {
                 ]).map(({ tipo, label, desc }) => (
                   <button
                     key={tipo}
-                    onClick={() => { setEditor({ modo: 'crear', tipo }); setMenuCrear(false); setProbando(false) }}
+                    onClick={() => { setEditor({ modo: 'crear', tipo }); setMenuCrear(false); setProbando(false); setEditorCaptura(false) }}
                     className="flex w-full flex-col items-start px-3 py-1.5 text-left hover:bg-gray-50"
                   >
                     <span className="text-[0.8rem] font-semibold text-gray-700">{label}</span>
@@ -1026,7 +1112,7 @@ function FlujoVisualCanvas() {
         )}
         {flujo && (
           <button
-            onClick={() => { setProbando((v) => !v); setEditor(null) }}
+            onClick={() => { setProbando((v) => !v); setEditor(null); setEditorCaptura(false) }}
             className={clsx(
               'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold',
               probando ? 'border-brand bg-brand text-white' : 'border-gray-200 text-ink-secondary hover:bg-gray-50',
@@ -1146,6 +1232,9 @@ function FlujoVisualCanvas() {
         )}
         {!editor && probando && flujo && (
           <PanelProbarFlujo flujo={flujo} onIrANodo={irANodo} onClose={() => setProbando(false)} />
+        )}
+        {!editor && !probando && editorCaptura && (
+          <PanelCapturaLead onClose={() => setEditorCaptura(false)} />
         )}
       </div>
 

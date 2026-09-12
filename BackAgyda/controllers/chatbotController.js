@@ -595,6 +595,13 @@ const CONFIG_DEFAULTS = {
   turnosSinMatchParaEscalar: '3',
   sugerenciaEscalarEs: 'Parece que no estoy resolviendo tu duda. ¿Quieres hablar con un agente?',
   sugerenciaEscalarEn: "It seems I'm not solving your question. Would you like to talk to an agent?",
+  // Fase 6 (Constructor de flujo, nodo "Captura de lead"): antes vivían fijas
+  // en el widget (TEXTOS.pedirNombre/pedirContacto). pedirContactoEs/En usa
+  // {nombre} como placeholder — el widget lo sustituye por leadData.nombre.
+  pedirNombreEs: '¡Con gusto! Para ponerte en contacto con nuestro equipo, ¿me compartes tu nombre completo?',
+  pedirNombreEn: 'Sure! To connect you with our team, could you share your full name?',
+  pedirContactoEs: 'Gracias, {nombre}. ¿A qué correo o teléfono te contactamos?',
+  pedirContactoEn: 'Thanks, {nombre}. What email or phone number should we reach you at?',
 };
 
 async function leerConfig(pool) {
