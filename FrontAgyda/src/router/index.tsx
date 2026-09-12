@@ -30,6 +30,7 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 
 // Páginas lazy — cada una genera su propio chunk
 const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/PortalClientePrincipalPage'), 'PortalClientePrincipalPage')
+import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
 const KbPage          = lz(() => import('@/pages/kb/KbPage'),                  'KbPage')
@@ -208,6 +209,12 @@ export const router = createBrowserRouter([
         element: <PortalClienteLayout />,
         children: [
           { path: '/portal-cliente', element: wrap(<PortalClientePrincipalPage />) },
+          { path: '/portal-cliente/reuniones', element: wrap(<ProximamentePage titulo="Reuniones" />) },
+          { path: '/portal-cliente/reuniones/historial', element: wrap(<ProximamentePage titulo="Historial de reuniones" />) },
+          { path: '/portal-cliente/atencion', element: wrap(<ProximamentePage titulo="Atención" />) },
+          { path: '/portal-cliente/atencion/nueva', element: wrap(<ProximamentePage titulo="Nueva solicitud" />) },
+          { path: '/portal-cliente/canales', element: wrap(<ProximamentePage titulo="Canales" />) },
+          { path: '/portal-cliente/facturas', element: wrap(<ProximamentePage titulo="Facturas" />) },
         ],
       },
 
