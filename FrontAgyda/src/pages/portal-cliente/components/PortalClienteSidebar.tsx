@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
-  Home, Calendar, Headphones, Megaphone, Settings, HelpCircle, LogOut,
+  Home, Calendar, Headphones, Megaphone, Receipt, Settings, HelpCircle, LogOut,
   ChevronRight,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
+import { useThemeStore, resolveTheme } from '@/stores/theme.store'
 
 interface NavItem {
   label: string
@@ -36,44 +37,86 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Mis campañas', to: '/portal-cliente/canales' },
     ],
   },
+  { label: 'Facturas', to: '/portal-cliente/facturas', icon: <Receipt className="h-5 w-5" /> },
 ]
 
 function NavItemRow({ item }: { item: NavItem }) {
   const [open, setOpen] = useState(false)
   const hasChildren = !!item.children?.length
+  const theme = useThemeStore((s) => s.theme)
+  const isDark = resolveTheme(theme) === 'dark'
+  // Color de fondo "detrás" de la pestaña activa (el mismo que pinta las
+  // esquinas cóncavas, ver comentario más abajo) — blanco en claro, un
+  // azul-gris oscuro propio en oscuro (no negro puro, para no chocar tan
+  // fuerte contra el resto del panel oscuro).
+  const activeBg = isDark ? '#111a2e' : '#ffffff'
 
-  // El degradado del ítem activo (#19b6bc → #00537f) es un valor de marca
-  // específico del portal de cliente, sin token en tailwind.config.ts — se
-  // aplica inline en vez de agregar una utilidad de una sola vez.
-  const activeGradient = { background: 'linear-gradient(135deg, #19b6bc 0%, #00537f 100%)' }
-
+  // Efecto "pestaña" (referencia eProduct): el ítem activo pierde el
+  // border-radius del lado derecho y se extiende con un margen negativo
+  // más allá del padding del <nav> (que ahora solo tiene padding
+  // izquierdo), como si sobresaliera del borde del sidebar — en vez de
+  // quedar contenido dentro del mismo margen que los ítems inactivos.
+  // Las "esquinas cóncavas" arriba/abajo son el truco clásico de 2 círculos
+  // del color de fondo general posicionados en las esquinas rectas de la
+  // pestaña — al superponerse, "muerden" la esquina y crean la curva
+  // invertida donde la pestaña conecta con el sidebar azul.
   if (!hasChildren) {
     return (
       <NavLink
         to={item.to}
         end
-        style={({ isActive }) => (isActive ? activeGradient : undefined)}
+        style={({ isActive }) =>
+          isActive ? { backgroundColor: activeBg, color: '#19b6bc' } : undefined
+        }
         className={({ isActive }) =>
           clsx(
-            'flex items-center gap-3 rounded-full px-4 py-3.5 text-sm font-semibold transition-colors',
+            'relative flex items-center gap-3 py-3.5 pl-4 text-sm font-semibold transition-colors',
             isActive
-              ? 'text-white shadow-md'
-              : 'text-white/70 hover:bg-white/10 hover:text-white'
+              ? '-mr-4 rounded-l-full pr-6 shadow-md'
+              : 'mr-4 rounded-full pr-4 text-white/70 hover:bg-white/10 hover:text-white'
           )
         }
       >
-        {item.icon}
-        <span>{item.label}</span>
+        {({ isActive }) => (
+          <>
+            {item.icon}
+            <span>{item.label}</span>
+            {isActive && (
+              <>
+                {/* Esquina cóncava: cuadrado del color de la pestaña
+                   (activeBg) de base, con un cuarto de círculo del azul
+                   del sidebar "mordiendo" desde la esquina que toca a la
+                   pestaña (radial-gradient con el punto duro justo ahí).
+                   El resultado visual es la curva invertida donde la
+                   pestaña se junta con el sidebar. */}
+                <span
+                  className="pointer-events-none absolute -top-4 right-0 h-4 w-4"
+                  style={{
+                    backgroundColor: activeBg,
+                    backgroundImage: `radial-gradient(circle at 0 0, #0a2f71 16px, transparent 16px)`,
+                  }}
+                />
+                <span
+                  className="pointer-events-none absolute -bottom-4 right-0 h-4 w-4"
+                  style={{
+                    backgroundColor: activeBg,
+                    backgroundImage: `radial-gradient(circle at 0 100%, #0a2f71 16px, transparent 16px)`,
+                  }}
+                />
+              </>
+            )}
+          </>
+        )}
       </NavLink>
     )
   }
 
   return (
-    <div>
+    <div className="mr-4">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-full px-4 py-3.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        className="flex w-full items-center gap-3 rounded-full py-3.5 pl-4 pr-4 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
       >
         {item.icon}
         <span className="flex-1 text-left">{item.label}</span>
@@ -86,7 +129,9 @@ function NavItemRow({ item }: { item: NavItem }) {
               key={child.to}
               to={child.to}
               end
-              style={({ isActive }) => (isActive ? activeGradient : undefined)}
+              style={({ isActive }) =>
+                isActive ? { background: 'linear-gradient(135deg, #19b6bc 0%, #00537f 100%)' } : undefined
+              }
               className={({ isActive }) =>
                 clsx(
                   'rounded-full px-3 py-2 text-sm transition-colors',
@@ -107,14 +152,14 @@ export function PortalClienteSidebar() {
   const clearSession = useAuthStore((s) => s.clearSession)
 
   return (
-    <aside className="flex w-[260px] flex-shrink-0 flex-col bg-[#0a2f71] px-4 py-6">
+    <aside className="flex w-[260px] flex-shrink-0 flex-col overflow-hidden bg-[#0a2f71] py-6 pl-4">
       <nav className="flex flex-1 flex-col gap-2.5">
         {NAV_ITEMS.map((item) => (
           <NavItemRow key={item.to} item={item} />
         ))}
       </nav>
 
-      <div className="mt-4 flex flex-col gap-2.5 border-t border-white/10 pt-4">
+      <div className="mr-4 mt-4 flex flex-col gap-2.5 border-t border-white/10 pt-4">
         <NavLink
           to="/portal-cliente/configuracion"
           className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
