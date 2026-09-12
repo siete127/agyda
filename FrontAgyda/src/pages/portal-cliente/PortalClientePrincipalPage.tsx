@@ -329,7 +329,7 @@ function LoImportanteDelDia() {
           <button
             key={s.label}
             type="button"
-            className="flex aspect-square flex-col items-start justify-between gap-2 rounded-2xl border border-surface-border bg-card p-4 text-left shadow-card hover:bg-surface"
+            className="flex aspect-square flex-col items-start justify-center gap-2 rounded-2xl border border-surface-border bg-card p-4 text-left shadow-card hover:bg-surface"
           >
             <span className="flex items-center gap-2">
               <span className={clsx('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
