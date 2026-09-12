@@ -115,9 +115,9 @@ function ProyectoCard() {
         </div>
         <ProgressGauge
           value={PROYECTO_EJEMPLO.avance}
-          size={132}
-          strokeWidth={9}
-          segments={24}
+          size={172}
+          strokeWidth={13}
+          segments={20}
           trackColor="rgba(255,255,255,0.15)"
           progressColor="#5eead4"
           tooltip={`${PROYECTO_EJEMPLO.avance}% completado`}
@@ -306,14 +306,12 @@ function LoImportanteDelDia() {
           <button
             key={s.label}
             type="button"
-            className="flex flex-col items-start gap-2 rounded-2xl border border-surface-border bg-card p-3 text-left shadow-card hover:bg-surface"
+            className="flex aspect-square flex-col items-start justify-between gap-2 rounded-2xl border border-surface-border bg-card p-4 text-left shadow-card hover:bg-surface"
           >
-            <span className="flex items-center gap-2">
-              <span className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
-                <s.icon className="h-4 w-4" />
-              </span>
-              <CountUp end={s.valor} className="text-xl font-bold text-ink" />
+            <span className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
+              <s.icon className="h-5 w-5" />
             </span>
+            <CountUp end={s.valor} className="text-3xl font-bold text-ink" />
             <span className="flex items-center gap-0.5 whitespace-nowrap text-[11px] leading-tight text-ink-tertiary">
               {s.label}
               <ChevronRight className="h-3 w-3" />

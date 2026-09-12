@@ -90,7 +90,7 @@ export function ProgressGauge({
         })}
       </svg>
       <div className="absolute inset-x-0 top-1/2 flex -translate-y-1 flex-col items-center">
-        <span className="text-lg font-extrabold text-ink">{animated}%</span>
+        <span className="text-3xl font-extrabold text-ink">{animated}%</span>
         {label && <span className="text-[10px] font-semibold text-ink-tertiary">{label}</span>}
       </div>
 
