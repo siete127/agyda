@@ -158,7 +158,7 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
 
   if (!rect) return null
 
-  const cornerSize = 32
+  const cornerSize = 48
 
   return (
     <span
