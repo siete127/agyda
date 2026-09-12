@@ -183,7 +183,7 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
           height: cornerSize,
           width: cornerSize,
           backgroundColor: '#0a2f71',
-          backgroundImage: `radial-gradient(circle at 0 0, transparent ${cornerSize}px, ${bg} ${cornerSize}px)`,
+          backgroundImage: `radial-gradient(circle at 0 0, transparent ${cornerSize - 0.75}px, ${bg} ${cornerSize}px)`,
         }}
       />
       <span
@@ -193,7 +193,7 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
           height: cornerSize,
           width: cornerSize,
           backgroundColor: '#0a2f71',
-          backgroundImage: `radial-gradient(circle at 0 100%, transparent ${cornerSize}px, ${bg} ${cornerSize}px)`,
+          backgroundImage: `radial-gradient(circle at 0 100%, transparent ${cornerSize - 0.75}px, ${bg} ${cornerSize}px)`,
         }}
       />
     </span>
