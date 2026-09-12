@@ -83,3 +83,71 @@ export const ESTADO_AGENTE_LABELS: Record<EstadoAgente, string> = {
   no_disponible: 'No disponible',
   desconectado: 'Desconectado',
 }
+
+export type AlarmaTipo = 'agente_pausa' | 'skill_cola'
+export type AlarmaEstado = 'en_alarma' | 'atendida' | 'fin_alarma'
+export type AlarmaObjetoTipo = 'agente' | 'skill'
+
+export const ALARMA_TIPO_LABELS: Record<AlarmaTipo, string> = {
+  agente_pausa: 'Agente en pausa prolongada',
+  skill_cola: 'Chats en cola sin asignar',
+}
+
+export interface AlarmaInstancia {
+  id: number
+  alarmaId: number
+  alarmaNombre: string
+  tipo: AlarmaTipo
+  objetoTipo: AlarmaObjetoTipo
+  objetoId: number
+  objetoNombre: string | null
+  estado: AlarmaEstado
+  fechaInicio: string
+  fechaAtendida: string | null
+  atendidaPor: number | null
+  comentario: string | null
+}
+
+export type NotificacionTipo = 'informativa' | 'obligatoria'
+export type NotificacionAlcance = 'agente' | 'skill' | 'campania' | 'todos'
+
+export const NOTIFICACION_ALCANCE_LABELS: Record<NotificacionAlcance, string> = {
+  agente: 'Un agente',
+  skill: 'Un skill',
+  campania: 'Una campaña',
+  todos: 'Todos',
+}
+
+export interface NotificacionPendiente {
+  id: number
+  tipo: NotificacionTipo
+  mensaje: string
+  autorNombre: string | null
+  fecha: string
+}
+
+export interface NotificacionEnviada extends NotificacionPendiente {
+  alcance: NotificacionAlcance
+  alcanceId: number | null
+}
+
+export interface ComparadorAgente {
+  agenteId: number
+  nombre: string
+  pausaMin: number
+  chatsCerrados: number
+  tiempoRespuestaProm: number | null
+}
+
+export interface ComparadorCampania {
+  campaniaId: number
+  nombre: string
+  agentes: number
+  pausaMin: number
+  chatsCerrados: number
+}
+
+export interface ComparadorData {
+  agentes: ComparadorAgente[]
+  campanias: ComparadorCampania[]
+}

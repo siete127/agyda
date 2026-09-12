@@ -417,6 +417,110 @@ async function getProductividadDia(req, res) {
   }
 }
 
+// GET /api/operaciones/supervisores/comparador?fecha=YYYY-MM-DD — Fase 2,
+// punto 3.4 del plan basado en PSUP: comparar agentes/campañas ENTRE SÍ (no
+// solo un agente contra su propio histórico, que es lo que ya hace
+// getProductividadDia). Reutiliza las mismas fuentes que Panel en
+// vivo/Productividad (USUARIO_TIEMPOS para pausas, CCO_INTERACCIONES para
+// chats) para no duplicar lógica, agregando por agente y por campaña.
+async function getComparador(req, res) {
+  try {
+    const uid = req.user?.id;
+    const tipoUsuario = (req.user?.tipoUsuario || '').toString().toUpperCase();
+    const esAdmin = ['AD', 'TI'].includes(tipoUsuario);
+    const fecha = (req.query.fecha || new Date().toISOString().slice(0, 10)).toString();
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const campaniasReq = pool.request();
+    let campaniasWhere = '';
+    if (!esAdmin) {
+      campaniasWhere = `WHERE CS_SUPERVISOR_ID = @uid`;
+      campaniasReq.input('uid', sql.Int, uid);
+    }
+    const campaniaIdsRs = await campaniasReq.query(
+      esAdmin
+        ? 'SELECT CM2_ID as id, CM2_NOMBRE as nombre FROM CCO_CAMPANIAS'
+        : `SELECT DISTINCT c.CM2_ID as id, c.CM2_NOMBRE as nombre
+           FROM CCO_CAMPANIAS c
+           JOIN CC_CAMPANIAS_SUPERVISORES cs ON cs.CS_CAMPANIA_ID = c.CM2_ID ${campaniasWhere.replace('CS_SUPERVISOR_ID', 'cs.CS_SUPERVISOR_ID')}`
+    );
+    const campanias = campaniaIdsRs.recordset;
+    const campaniaIds = campanias.map((c) => c.id);
+    if (campaniaIds.length === 0) return res.json({ success: true, data: { agentes: [], campanias: [] } });
+
+    const agentesRs = await pool.request().query(`
+      SELECT DISTINCT ga.CGA_USUARIO_ID as agenteId, g.CG_CAMPANIA_ID as campaniaId
+      FROM CCO_GRUPO_AGENTES ga
+      INNER JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
+      WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
+    `);
+    const agenteIds = [...new Set(agentesRs.recordset.map((a) => a.agenteId))];
+    if (agenteIds.length === 0) return res.json({ success: true, data: { agentes: [], campanias: [] } });
+    // Un agente puede estar en skills de varias campañas asignadas al mismo
+    // supervisor — para el comparador por campaña se cuenta bajo cada una.
+    const campaniasPorAgente = new Map();
+    for (const a of agentesRs.recordset) {
+      if (!campaniasPorAgente.has(a.agenteId)) campaniasPorAgente.set(a.agenteId, []);
+      campaniasPorAgente.get(a.agenteId).push(a.campaniaId);
+    }
+
+    const nombresRs = await pool.request().query(`SELECT NEUS_ID as id, NEUS_NOMBRES as nombre FROM NEUS_USUARIOS WHERE NEUS_ID IN (${agenteIds.join(',')})`);
+    const nombrePorId = new Map(nombresRs.recordset.map((u) => [u.id, u.nombre]));
+
+    const pausasRs = await pool.request().input('fecha', sql.NVarChar, fecha).query(`
+      SELECT neus_id as agenteId, SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutos
+      FROM USUARIO_TIEMPOS
+      WHERE neus_id IN (${agenteIds.join(',')}) AND status_id IN (2,3,5,6) AND CAST(fecha_inicio AS date) = @fecha
+      GROUP BY neus_id
+    `);
+    const pausaPorAgente = new Map(pausasRs.recordset.map((p) => [p.agenteId, p.minutos]));
+
+    // Chats cerrados el día + tiempo promedio a primera respuesta (minutos),
+    // por agente — mismas columnas que ya usa ccInteraccionesController.
+    const chatsRs = await pool.request().input('fecha', sql.NVarChar, fecha).query(`
+      SELECT CI_AGENTE_ID as agenteId,
+             COUNT(*) as cerrados,
+             AVG(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL
+                      THEN DATEDIFF(SECOND, CI_FECHA_INICIO, CI_FECHA_PRIMER_RESPUESTA) END) as segRespuestaProm
+      FROM CCO_INTERACCIONES
+      WHERE CI_AGENTE_ID IN (${agenteIds.join(',')}) AND CI_ESTADO = 'cerrada' AND CAST(CI_FECHA_CIERRE AS date) = @fecha
+      GROUP BY CI_AGENTE_ID
+    `);
+    const chatsPorAgente = new Map(chatsRs.recordset.map((c) => [c.agenteId, c]));
+
+    const agentes = agenteIds.map((id) => {
+      const chat = chatsPorAgente.get(id);
+      return {
+        agenteId: id,
+        nombre: nombrePorId.get(id) ?? '',
+        pausaMin: pausaPorAgente.get(id) ?? 0,
+        chatsCerrados: chat?.cerrados ?? 0,
+        tiempoRespuestaProm: chat?.segRespuestaProm != null ? Math.round(chat.segRespuestaProm) : null,
+      };
+    });
+
+    // Agregado por campaña: suma de sus agentes (un agente en 2 campañas
+    // asignadas cuenta en ambas, a propósito — son vistas distintas).
+    const porCampania = new Map(campaniaIds.map((id) => [id, { campaniaId: id, agentes: 0, pausaMin: 0, chatsCerrados: 0 }]));
+    for (const a of agentes) {
+      for (const campId of campaniasPorAgente.get(a.agenteId) ?? []) {
+        const row = porCampania.get(campId);
+        if (!row) continue;
+        row.agentes += 1;
+        row.pausaMin += a.pausaMin;
+        row.chatsCerrados += a.chatsCerrados;
+      }
+    }
+    const nombrePorCampania = new Map(campanias.map((c) => [c.id, c.nombre]));
+    const resultCampanias = Array.from(porCampania.values()).map((c) => ({ ...c, nombre: nombrePorCampania.get(c.campaniaId) ?? '' }));
+
+    res.json({ success: true, data: { agentes, campanias: resultCampanias } });
+  } catch (err) {
+    logger.error('operacionesController.getComparador', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el comparador' });
+  }
+}
+
 /* ── Tiempos: bitácora detallada de sesiones/pausas por agente (auditoría, no resumen) ── */
 
 // GET /api/operaciones/tiempos?agenteId=&fecha=YYYY-MM-DD — historial fila por fila de
@@ -1847,6 +1951,7 @@ module.exports = {
   quitarSupervisor,
   getMiPanel,
   getProductividadDia,
+  getComparador,
   getTiemposAgente,
   getMisAgentes,
   getKpis,

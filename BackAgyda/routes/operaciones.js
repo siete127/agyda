@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/operacionesController');
+const supervisorAlarmas = require('../controllers/supervisorAlarmasController'); // registra el cron de alarmas al require
+const supervisorNotificaciones = require('../controllers/supervisorNotificacionesController');
+const supervisorAccionesRemotas = require('../controllers/supervisorAccionesRemotasController');
+const supervisorVistas = require('../controllers/supervisorVistasController');
 const auth = require('../middleware/auth');
 const { uploadRdl } = require('../middleware/rdlUpload');
 
@@ -17,6 +21,29 @@ router.delete('/supervisores/:id', auth.authenticateToken, controller.quitarSupe
 router.get('/supervisores/mi-panel', auth.authenticateToken, controller.getMiPanel);
 router.get('/supervisores/historial-asignaciones', auth.authenticateToken, controller.getHistorialAsignaciones);
 router.get('/supervisores/productividad', auth.authenticateToken, controller.getProductividadDia);
+router.get('/supervisores/comparador', auth.authenticateToken, controller.getComparador);
+router.get('/supervisores/alarmas', auth.authenticateToken, supervisorAlarmas.listInstancias);
+router.post('/supervisores/alarmas/:id/atender', auth.authenticateToken, supervisorAlarmas.atenderInstancia);
+
+// Notificaciones a agentes (Fase 2, 3.3) — cualquier usuario autenticado
+// puede consultar/cerrar SUS pendientes; crear y ver el historial de
+// enviadas se restringe por dentro del controlador (AD/TI o supervisor de
+// la campaña/skill/agente destino).
+router.get('/supervisores/notificaciones', auth.authenticateToken, supervisorNotificaciones.listEnviadas);
+router.post('/supervisores/notificaciones', auth.authenticateToken, supervisorNotificaciones.crear);
+router.get('/supervisores/notificaciones/pendientes', auth.authenticateToken, supervisorNotificaciones.pendientes);
+router.post('/supervisores/notificaciones/:id/cerrar', auth.authenticateToken, supervisorNotificaciones.cerrar);
+
+// Acciones remotas sobre la sesión del agente (Fase 3, 3.7) — el permiso
+// puntual (¿es agente de una campaña asignada a este supervisor?) se valida
+// dentro del controlador, reutilizando el mismo chequeo de notificaciones.
+router.post('/supervisores/agentes/:id/desconectar', auth.authenticateToken, supervisorAccionesRemotas.desconectar);
+router.post('/supervisores/agentes/:id/refrescar', auth.authenticateToken, supervisorAccionesRemotas.refrescar);
+
+// Vistas guardadas / columnas visibles (Fase 3, 3.6) — preferencia personal
+// del usuario autenticado, sin restricción de rol.
+router.get('/supervisores/vistas/:tabla', auth.authenticateToken, supervisorVistas.get);
+router.put('/supervisores/vistas/:tabla', auth.authenticateToken, supervisorVistas.guardar);
 
 // Tiempos
 router.get('/tiempos', auth.authenticateToken, controller.getTiemposAgente);

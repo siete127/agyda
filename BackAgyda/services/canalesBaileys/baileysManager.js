@@ -235,14 +235,28 @@ async function iniciarSesion(canalId, tenantKey, usuarioId) {
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const debeReconectar = statusCode !== DisconnectReason.loggedOut;
-      await setEstado(sessionKey, 'desconectado');
-      emitirEstado(sessionKey);
       logger.warn(`⚠️ Baileys desconectado — sesión ${sessionKey} (statusCode=${statusCode}, reconectar=${debeReconectar})`);
       sesiones[sessionKey].sock = null;
       if (debeReconectar) {
-        setTimeout(() => iniciarSesion(canalId, tenantKey, usuarioId).catch((e) => logger.error('[baileys] reconexión falló:', e?.message || e)), 3000);
+        // Bug real encontrado 2026-09-11: WhatsApp cierra y reabre el
+        // WebSocket periódicamente por mantenimiento de red (normal, no es
+        // un logout) — Baileys se reconecta solo en 3s con las mismas
+        // credenciales. Antes se marcaba 'desconectado' en BD de inmediato,
+        // así que si el usuario recargaba la página justo en esa ventana
+        // veía "Desconectado" y tenía que volver a darle "Generar QR"
+        // (que en realidad no pedía QR, solo forzaba la reconexión que ya
+        // iba a pasar sola). Ahora el estado en BD se queda como estaba
+        // (normalmente 'conectado') durante el reintento — solo se
+        // actualiza si la reconexión de verdad falla o cambia de estado.
+        setTimeout(() => iniciarSesion(canalId, tenantKey, usuarioId).catch(async (e) => {
+          logger.error('[baileys] reconexión falló:', e?.message || e);
+          await setEstado(sessionKey, 'desconectado');
+          emitirEstado(sessionKey);
+        }), 3000);
       } else {
         // Sesión cerrada desde el teléfono: hay que volver a escanear QR desde cero.
+        await setEstado(sessionKey, 'desconectado');
+        emitirEstado(sessionKey);
         fs.rmSync(sessionDir(sessionKey), { recursive: true, force: true });
       }
     }

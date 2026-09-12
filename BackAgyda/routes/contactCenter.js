@@ -38,6 +38,12 @@ router.post('/interacciones/:id/retipificar', authenticateToken, requireActionAc
 router.post('/interacciones/:id/transferir', authenticateToken, requireActionAccess(M, 'atender'), inter.transferir);
 router.get('/interacciones/:id/agentes-transferibles', authenticateToken, requireActionAccess(M, 'atender'), inter.getAgentesTransferibles);
 
+// ── Intervención de supervisor (Fase 1, 3.1) — susurrar y tomar el chat de
+// otro agente. Requieren el permiso 'supervision', y además validan por
+// dentro que la interacción sea de una campaña asignada a ese supervisor.
+router.post('/interacciones/:id/susurrar', authenticateToken, requireActionAccess(M, 'supervision'), inter.susurrar);
+router.post('/interacciones/:id/tomar-supervisor', authenticateToken, requireActionAccess(M, 'supervision'), inter.tomarSupervisor);
+
 // ── Estado del agente ──────────────────────────────────────────────────
 router.post('/mi-estado', authenticateToken, requireActionAccess(M, 'atender'), inter.setDisponible);
 router.get('/mi-estado', authenticateToken, requireActionAccess(M, 'ver'), inter.getMiEstado);

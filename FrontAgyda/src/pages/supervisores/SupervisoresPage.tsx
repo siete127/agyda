@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactElement } from 'react'
+import { useMemo, useState, useEffect, type ReactElement } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import {
   Users, UserCheck, Clock, BarChart3, Plus, Trash2, Coffee, History,
   ChevronRight, ChevronLeft, Layers, MessageCircle, Circle, PowerOff, MinusCircle,
+  AlertTriangle, CheckCircle2, Megaphone, RefreshCw, LogOut,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { supervisoresService } from '@/services/supervisores.service'
@@ -15,12 +16,18 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { Avatar } from '@/components/ui/Avatar'
-import { TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente, type ProductividadAgente } from '@/types/supervisores.types'
+import {
+  TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente, type ProductividadAgente,
+  NOTIFICACION_ALCANCE_LABELS, type NotificacionTipo, type NotificacionAlcance,
+} from '@/types/supervisores.types'
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
 import { AsignacionSupervisores } from '@/pages/configuracion/ContactCenterTabs'
-import { Eye } from 'lucide-react'
+import { Eye, Radio, LogIn } from 'lucide-react'
 import type { CCMensaje } from '@/types/cc.types'
+import { getSocket } from '@/lib/socket'
+import { useColumnasVisibles } from '@/hooks/useColumnasVisibles'
+import { SelectorColumnas } from '@/components/ui/SelectorColumnas'
 
 interface Usuario { id: number; nombre: string; tipoUsuario: string }
 
@@ -73,17 +80,51 @@ function ChatRow({ chat, onClick }: { chat: CCInteraccion; onClick: () => void }
   )
 }
 
-/* ── Modal: ver la conversación completa, solo lectura — sin input ni acciones
-   de escribir/editar/eliminar. El supervisor solo observa lo que ya se dijo. ── */
+/* ── Modal: ver la conversación en vivo (Fase 1, 3.1 del plan basado en
+   PSUP): el supervisor observa, y ahora también puede Susurrar (mensaje al
+   agente, invisible para el cliente) o Tomar el chat (se hace cargo él
+   mismo). No hay forma de escribirle al cliente directamente — solo de las
+   dos formas de arriba, igual que Monitoreo/Coaching de PSUP. ── */
 function VerConversacionModal({ interaccionId, onClose }: { interaccionId: number; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [susurro, setSusurro] = useState('')
   const { data: inter, isLoading } = useQuery({
     queryKey: ['cc-inter-detalle-supervisor', interaccionId],
     queryFn: () => ccService.getInteraccion(interaccionId),
     refetchInterval: 5000,
   })
 
+  useEffect(() => {
+    const s = getSocket()
+    s.emit('join_interaccion', { interaccionId })
+    const refetch = () => qc.invalidateQueries({ queryKey: ['cc-inter-detalle-supervisor', interaccionId] })
+    s.on('cc:mensaje', refetch)
+    s.on('cc:interaccion_tomada', refetch)
+    s.on('cc:interaccion_cerrada', refetch)
+    return () => {
+      s.off('cc:mensaje', refetch)
+      s.off('cc:interaccion_tomada', refetch)
+      s.off('cc:interaccion_cerrada', refetch)
+      s.emit('leave_interaccion', { interaccionId })
+    }
+  }, [interaccionId, qc])
+
+  const susurrar = useMutation({
+    mutationFn: (contenido: string) => ccService.susurrar(interaccionId, contenido),
+    onSuccess: () => { setSusurro(''); toast.success('Susurro enviado al agente') },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo enviar el susurro'),
+  })
+
+  const tomarChat = useMutation({
+    mutationFn: () => ccService.tomarSupervisor(interaccionId),
+    onSuccess: () => { toast.success('Ahora atiendes tú este chat'); qc.invalidateQueries({ queryKey: ['cc-inter-detalle-supervisor', interaccionId] }) },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo tomar el chat'),
+  })
+
+  const puedeIntervenir = inter?.estado === 'activa'
+
   return (
-    <Modal isOpen onClose={onClose} title="Ver conversación (solo lectura)" size="lg">
+    <Modal isOpen onClose={onClose} title="Chat en vivo — supervisión" size="lg">
       {isLoading || !inter ? (
         <div className="flex justify-center py-14"><Spinner /></div>
       ) : (
@@ -98,9 +139,15 @@ function VerConversacionModal({ interaccionId, onClose }: { interaccionId: numbe
                 {inter.canalNombre ?? inter.tipo}{inter.grupoNombre ? ` · ${inter.grupoNombre}` : ''}{inter.agenteNombre ? ` · Atiende: ${inter.agenteNombre}` : ''}
               </p>
             </div>
-            <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[0.65rem] font-semibold text-amber-700">
-              <Eye className="h-3 w-3" /> Solo lectura
-            </span>
+            {puedeIntervenir ? (
+              <Button size="sm" variant="secondary" onClick={() => tomarChat.mutate()} disabled={tomarChat.isPending}>
+                <LogIn className="h-3.5 w-3.5" /> Tomar el chat
+              </Button>
+            ) : (
+              <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[0.65rem] font-semibold text-amber-700">
+                <Eye className="h-3 w-3" /> Solo lectura
+              </span>
+            )}
           </div>
 
           <div className="flex-1 space-y-2 overflow-y-auto bg-gray-50/40 p-3">
@@ -138,6 +185,22 @@ function VerConversacionModal({ interaccionId, onClose }: { interaccionId: numbe
               ))
             )}
           </div>
+
+          {puedeIntervenir && (
+            <div className="flex items-center gap-2 border-t border-gray-100 pt-3">
+              <Radio className="h-4 w-4 flex-shrink-0 text-violet-500" />
+              <input
+                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
+                placeholder="Susurrar al agente (el cliente no lo ve)…"
+                value={susurro}
+                onChange={(e) => setSusurro(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && susurro.trim()) susurrar.mutate(susurro.trim()) }}
+              />
+              <Button size="sm" onClick={() => susurrar.mutate(susurro.trim())} disabled={!susurro.trim() || susurrar.isPending}>
+                Enviar
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Modal>
@@ -167,6 +230,45 @@ function AgenteRow({ agente, chatsActivos, expandido, onClick }: { agente: Agent
       <span className={clsx('flex-shrink-0 h-2 w-2 rounded-full', estilo.dot)} />
       <ChevronRight className={clsx('h-4 w-4 flex-shrink-0 text-gray-300 transition-transform', expandido && 'rotate-90')} />
     </button>
+  )
+}
+
+/* ── Acciones remotas sobre la sesión del agente (Fase 3, 3.7) — versión
+   reducida del "resetear PAD"/"desloguear agente" del manual de PSUP,
+   adaptada a que aquí es una app web: forzar refresh o cerrar la sesión. ── */
+function AccionesRemotasAgente({ agenteId }: { agenteId: number }) {
+  const [confirmando, setConfirmando] = useState(false)
+
+  const refrescar = useMutation({
+    mutationFn: () => supervisoresService.refrescarAgente(agenteId),
+    onSuccess: () => toast.success('Se pidió actualizar la pantalla del agente'),
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo enviar la acción'),
+  })
+  const desconectar = useMutation({
+    mutationFn: () => supervisoresService.desconectarAgente(agenteId),
+    onSuccess: () => { toast.success('Se cerró la sesión del agente'); setConfirmando(false) },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo enviar la acción'),
+  })
+
+  if (confirmando) {
+    return (
+      <div className="flex flex-shrink-0 items-center gap-1.5">
+        <span className="text-xs text-gray-500">¿Cerrar su sesión?</span>
+        <Button size="sm" variant="danger" onClick={() => desconectar.mutate()} disabled={desconectar.isPending}>Sí, cerrar</Button>
+        <Button size="sm" variant="ghost" onClick={() => setConfirmando(false)}>Cancelar</Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-shrink-0 items-center gap-1.5">
+      <Button size="sm" variant="secondary" onClick={() => refrescar.mutate()} disabled={refrescar.isPending} title="Forzar que su pantalla se actualice">
+        <RefreshCw className="h-3.5 w-3.5" /> Refrescar
+      </Button>
+      <Button size="sm" variant="danger" onClick={() => setConfirmando(true)} title="Cerrar su sesión de inmediato">
+        <LogOut className="h-3.5 w-3.5" /> Desconectar
+      </Button>
+    </div>
   )
 }
 
@@ -343,6 +445,7 @@ function PanelEnVivoTab() {
                 <p className="text-sm font-semibold text-gray-900 truncate">{agenteSeleccionado.nombre}</p>
                 <p className="text-xs text-gray-500">{estadoTexto(agenteSeleccionado)}</p>
               </div>
+              <AccionesRemotasAgente agenteId={agenteSeleccionado.agenteId} />
             </div>
             <div className="p-3 space-y-1.5">
               {chatsDelAgente.length === 0 ? (
@@ -532,9 +635,20 @@ function ComparativoSemanal({ p }: { p: ProductividadAgente }) {
   )
 }
 
+const COLUMNAS_PRODUCTIVIDAD = [
+  { key: 'estado', label: 'Estado' },
+  { key: 'banio', label: 'Baño' },
+  { key: 'comida', label: 'Comida' },
+  { key: 'capacitacion', label: 'Capacitación' },
+  { key: 'permiso', label: 'Permiso' },
+  { key: 'totalPausaMin', label: 'Total pausas' },
+  { key: 'avgSemanal', label: 'Vs. promedio semanal' },
+]
+
 function ProductividadTab() {
   const [fecha, setFecha] = useState(hoyISO())
   const esHoy = fecha === hoyISO()
+  const { visibles, toggle, esVisible } = useColumnasVisibles('productividad', COLUMNAS_PRODUCTIVIDAD)
 
   const { data: productividad = [], isLoading } = useQuery({
     queryKey: ['supervisores-productividad', fecha],
@@ -563,6 +677,9 @@ function ProductividadTab() {
             Volver a hoy
           </button>
         )}
+        <div className="ml-auto">
+          <SelectorColumnas columnas={COLUMNAS_PRODUCTIVIDAD} visibles={visibles} onToggle={toggle} />
+        </div>
       </div>
 
       {isLoading ? (
@@ -581,13 +698,13 @@ function ProductividadTab() {
               <thead>
                 <tr className="border-b border-gray-100 text-left text-gray-500">
                   <th className="px-4 py-2.5 font-semibold">Agente</th>
-                  <th className="px-4 py-2.5 font-semibold">Estado</th>
-                  <th className="px-4 py-2.5 font-semibold">Baño</th>
-                  <th className="px-4 py-2.5 font-semibold">Comida</th>
-                  <th className="px-4 py-2.5 font-semibold">Capacitación</th>
-                  <th className="px-4 py-2.5 font-semibold">Permiso</th>
-                  <th className="px-4 py-2.5 font-semibold">Total pausas</th>
-                  <th className="px-4 py-2.5 font-semibold">Vs. promedio semanal</th>
+                  {esVisible('estado') && <th className="px-4 py-2.5 font-semibold">Estado</th>}
+                  {esVisible('banio') && <th className="px-4 py-2.5 font-semibold">Baño</th>}
+                  {esVisible('comida') && <th className="px-4 py-2.5 font-semibold">Comida</th>}
+                  {esVisible('capacitacion') && <th className="px-4 py-2.5 font-semibold">Capacitación</th>}
+                  {esVisible('permiso') && <th className="px-4 py-2.5 font-semibold">Permiso</th>}
+                  {esVisible('totalPausaMin') && <th className="px-4 py-2.5 font-semibold">Total pausas</th>}
+                  {esVisible('avgSemanal') && <th className="px-4 py-2.5 font-semibold">Vs. promedio semanal</th>}
                 </tr>
               </thead>
               <tbody>
@@ -608,21 +725,23 @@ function ProductividadTab() {
                   return (
                     <tr key={p.agenteId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                       <td className="px-4 py-2.5 font-medium text-gray-900">{p.nombre}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={clsx(
-                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.68rem] font-semibold',
-                          BADGE_COLOR[p.estado],
-                        )}>
-                          <span className={clsx('h-1.5 w-1.5 rounded-full', DOT_COLOR[p.estado])} />
-                          {enPausa ? (TIPO_PAUSA_LABELS[p.tipoPausa ?? ''] ?? p.tipoPausa) : ESTADO_AGENTE_LABELS[p.estado]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.banio} min</td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.comida} min</td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.capacitacion} min</td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.permiso} min</td>
-                      <td className="px-4 py-2.5 font-semibold text-gray-900">{p.totalPausaMin} min</td>
-                      <td className="px-4 py-2.5"><ComparativoSemanal p={p} /></td>
+                      {esVisible('estado') && (
+                        <td className="px-4 py-2.5">
+                          <span className={clsx(
+                            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.68rem] font-semibold',
+                            BADGE_COLOR[p.estado],
+                          )}>
+                            <span className={clsx('h-1.5 w-1.5 rounded-full', DOT_COLOR[p.estado])} />
+                            {enPausa ? (TIPO_PAUSA_LABELS[p.tipoPausa ?? ''] ?? p.tipoPausa) : ESTADO_AGENTE_LABELS[p.estado]}
+                          </span>
+                        </td>
+                      )}
+                      {esVisible('banio') && <td className="px-4 py-2.5 text-gray-600">{p.banio} min</td>}
+                      {esVisible('comida') && <td className="px-4 py-2.5 text-gray-600">{p.comida} min</td>}
+                      {esVisible('capacitacion') && <td className="px-4 py-2.5 text-gray-600">{p.capacitacion} min</td>}
+                      {esVisible('permiso') && <td className="px-4 py-2.5 text-gray-600">{p.permiso} min</td>}
+                      {esVisible('totalPausaMin') && <td className="px-4 py-2.5 font-semibold text-gray-900">{p.totalPausaMin} min</td>}
+                      {esVisible('avgSemanal') && <td className="px-4 py-2.5"><ComparativoSemanal p={p} /></td>}
                     </tr>
                   )
                 })}
@@ -914,6 +1033,341 @@ function AsignarPorSkillPanel() {
   )
 }
 
+/* ── Tab: Alarmas — instancias activas (en_alarma/atendida) de las alarmas
+   configuradas (Fase 1 del plan de evolución basado en PSUP de Mitrol):
+   agente en pausa prolongada, skill con chats en cola sin asignar. ── */
+function AlarmasTab() {
+  const qc = useQueryClient()
+  const [comentarios, setComentarios] = useState<Record<number, string>>({})
+
+  const { data: instancias = [], isLoading } = useQuery({
+    queryKey: ['supervisores-alarmas'],
+    queryFn: () => supervisoresService.getAlarmas(),
+    refetchInterval: 15_000,
+  })
+
+  const atender = useMutation({
+    mutationFn: ({ id, comentario }: { id: number; comentario?: string }) => supervisoresService.atenderAlarma(id, comentario),
+    onSuccess: () => { toast.success('Alarma atendida'); qc.invalidateQueries({ queryKey: ['supervisores-alarmas'] }) },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo atender la alarma'),
+  })
+
+  if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+  if (instancias.length === 0) {
+    return (
+      <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
+        <CheckCircle2 className="h-8 w-8" />
+        <p className="text-sm">Sin alarmas activas — todo en orden</p>
+      </div>
+    )
+  }
+
+  const enAlarma = instancias.filter((i) => i.estado === 'en_alarma')
+  const atendidas = instancias.filter((i) => i.estado === 'atendida')
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="divide-y divide-gray-100">
+        {[...enAlarma, ...atendidas].map((inst) => (
+          <div key={inst.id} className="flex items-start gap-3 px-4 py-3.5">
+            <div className={clsx('mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg',
+              inst.estado === 'en_alarma' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600')}>
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-gray-900">{inst.alarmaNombre}</p>
+                <span className={clsx('rounded-full px-2 py-0.5 text-[0.65rem] font-semibold',
+                  inst.estado === 'en_alarma' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700')}>
+                  {inst.estado === 'en_alarma' ? 'En alarma' : 'Atendida'}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {inst.objetoTipo === 'agente' ? 'Agente' : 'Skill'}: <span className="font-medium text-gray-700">{inst.objetoNombre ?? `#${inst.objetoId}`}</span>
+                {' · '}Desde {new Date(inst.fechaInicio).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+              </p>
+              {inst.comentario && <p className="mt-1 rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs text-gray-600">{inst.comentario}</p>}
+              {inst.estado === 'en_alarma' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    className="flex-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs outline-none focus:border-brand"
+                    placeholder="Comentario (opcional)"
+                    value={comentarios[inst.id] ?? ''}
+                    onChange={(e) => setComentarios((v) => ({ ...v, [inst.id]: e.target.value }))}
+                  />
+                  <Button size="sm" onClick={() => atender.mutate({ id: inst.id, comentario: comentarios[inst.id] })} disabled={atender.isPending}>
+                    Atender
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── Tab: Notificaciones a agentes (Fase 2, 3.3 del plan basado en PSUP) —
+   informativa (toast que se cierra solo) u obligatoria (bloquea la pantalla
+   del agente hasta que la cierra), dirigida a un agente, un skill, una
+   campaña o todos. ── */
+function NotificacionesTab() {
+  const qc = useQueryClient()
+  const [tipo, setTipo] = useState<NotificacionTipo>('informativa')
+  const [alcance, setAlcance] = useState<NotificacionAlcance>('agente')
+  const [alcanceId, setAlcanceId] = useState<number | ''>('')
+  const [mensaje, setMensaje] = useState('')
+
+  const { data: panel } = useQuery({
+    queryKey: ['supervisores-mi-panel'],
+    queryFn: () => supervisoresService.getMiPanel(),
+  })
+  const { data: enviadas = [], isLoading } = useQuery({
+    queryKey: ['supervisores-notificaciones-enviadas'],
+    queryFn: () => supervisoresService.getNotificacionesEnviadas(),
+  })
+
+  const enviar = useMutation({
+    mutationFn: () => supervisoresService.crearNotificacion({
+      tipo, alcance, alcanceId: alcance === 'todos' ? undefined : Number(alcanceId), mensaje: mensaje.trim(),
+    }),
+    onSuccess: () => {
+      toast.success('Notificación enviada')
+      setMensaje('')
+      setAlcanceId('')
+      qc.invalidateQueries({ queryKey: ['supervisores-notificaciones-enviadas'] })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo enviar la notificación'),
+  })
+
+  const agentesUnicos = useMemo(() => {
+    const vistos = new Set<number>()
+    return (panel?.agentes ?? []).filter((a) => (vistos.has(a.agenteId) ? false : (vistos.add(a.agenteId), true)))
+  }, [panel?.agentes])
+
+  const puedeEnviar = mensaje.trim().length > 0 && (alcance === 'todos' || alcanceId !== '')
+
+  return (
+    <div className="space-y-4">
+      <div className="card space-y-3 p-4">
+        <div className="flex flex-wrap gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-500">Tipo</label>
+            <select value={tipo} onChange={(e) => setTipo(e.target.value as NotificacionTipo)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand">
+              <option value="informativa">Informativa (no bloquea)</option>
+              <option value="obligatoria">Obligatoria (bloquea hasta cerrarla)</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-500">Enviar a</label>
+            <select
+              value={alcance}
+              onChange={(e) => { setAlcance(e.target.value as NotificacionAlcance); setAlcanceId('') }}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
+            >
+              {(Object.keys(NOTIFICACION_ALCANCE_LABELS) as NotificacionAlcance[]).map((a) => (
+                <option key={a} value={a}>{NOTIFICACION_ALCANCE_LABELS[a]}</option>
+              ))}
+            </select>
+          </div>
+          {alcance === 'agente' && (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-500">Agente</label>
+              <select value={alcanceId} onChange={(e) => setAlcanceId(e.target.value ? Number(e.target.value) : '')} className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand">
+                <option value="">Selecciona...</option>
+                {agentesUnicos.map((a) => <option key={a.agenteId} value={a.agenteId}>{a.nombre}</option>)}
+              </select>
+            </div>
+          )}
+          {alcance === 'skill' && (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-500">Skill</label>
+              <select value={alcanceId} onChange={(e) => setAlcanceId(e.target.value ? Number(e.target.value) : '')} className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand">
+                <option value="">Selecciona...</option>
+                {(panel?.grupos ?? []).map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+            </div>
+          )}
+          {alcance === 'campania' && (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-500">Campaña</label>
+              <select value={alcanceId} onChange={(e) => setAlcanceId(e.target.value ? Number(e.target.value) : '')} className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand">
+                <option value="">Selecciona...</option>
+                {(panel?.campanias ?? []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+        <textarea
+          value={mensaje}
+          onChange={(e) => setMensaje(e.target.value)}
+          placeholder="Escribe el mensaje para los agentes..."
+          rows={3}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
+        />
+        <div className="flex justify-end">
+          <Button onClick={() => enviar.mutate()} disabled={!puedeEnviar || enviar.isPending}>
+            <Megaphone className="h-4 w-4" /> Enviar notificación
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Enviadas</h3>
+        {isLoading ? (
+          <div className="flex justify-center py-8"><Spinner /></div>
+        ) : enviadas.length === 0 ? (
+          <div className="card flex flex-col items-center gap-2 py-10 text-gray-400">
+            <Megaphone className="h-6 w-6" />
+            <p className="text-sm">Todavía no has enviado notificaciones</p>
+          </div>
+        ) : (
+          <div className="card divide-y divide-gray-100 overflow-hidden">
+            {enviadas.map((n) => (
+              <div key={n.id} className="flex items-start gap-3 px-4 py-3">
+                <div className={clsx('mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg',
+                  n.tipo === 'obligatoria' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600')}>
+                  <Megaphone className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-gray-800">{n.mensaje}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {NOTIFICACION_ALCANCE_LABELS[n.alcance]} · {n.tipo === 'obligatoria' ? 'Obligatoria' : 'Informativa'} · {new Date(n.fecha).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Tab: Comparador entre agentes/campañas (Fase 2, 3.4 del plan basado en
+   PSUP) — a diferencia de Productividad (un agente vs su propio histórico),
+   aquí se ordenan varios agentes o campañas lado a lado por la misma
+   métrica, para ver quién destaca o quién necesita atención. ── */
+function fmtSegundos(seg: number | null) {
+  if (seg == null) return '—'
+  if (seg < 60) return `${seg}s`
+  return `${Math.floor(seg / 60)}m ${seg % 60}s`
+}
+
+type ComparadorVista = 'agentes' | 'campanias'
+type OrdenCampo = 'pausaMin' | 'chatsCerrados' | 'tiempoRespuestaProm' | 'agentes'
+
+const COLUMNAS_COMPARADOR_AGENTES = [
+  { key: 'chatsCerrados', label: 'Chats cerrados hoy' },
+  { key: 'pausaMin', label: 'Minutos en pausa' },
+  { key: 'tiempoRespuestaProm', label: '1ra respuesta prom.' },
+]
+const COLUMNAS_COMPARADOR_CAMPANIAS = [
+  { key: 'agentes', label: 'Agentes' },
+  { key: 'chatsCerrados', label: 'Chats cerrados hoy' },
+  { key: 'pausaMin', label: 'Minutos en pausa' },
+]
+
+function ComparadorTab() {
+  const [vista, setVista] = useState<ComparadorVista>('agentes')
+  const [orden, setOrden] = useState<OrdenCampo>('chatsCerrados')
+  const [asc, setAsc] = useState(false)
+  const columnasDisponibles = vista === 'agentes' ? COLUMNAS_COMPARADOR_AGENTES : COLUMNAS_COMPARADOR_CAMPANIAS
+  const { visibles, toggle, esVisible } = useColumnasVisibles(
+    vista === 'agentes' ? 'comparador_agentes' : 'comparador_campanias',
+    columnasDisponibles,
+  )
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['supervisores-comparador'],
+    queryFn: () => supervisoresService.getComparador(),
+    refetchInterval: 30_000,
+  })
+
+  const filas = useMemo(() => {
+    const base = vista === 'agentes' ? (data?.agentes ?? []) : (data?.campanias ?? [])
+    return [...base].sort((a: any, b: any) => {
+      const va = a[orden] ?? -1
+      const vb = b[orden] ?? -1
+      return asc ? va - vb : vb - va
+    })
+  }, [data, vista, orden, asc])
+
+  const cambiarOrden = (campo: OrdenCampo) => {
+    if (orden === campo) setAsc((v) => !v)
+    else { setOrden(campo); setAsc(false) }
+  }
+
+  const Encabezado = ({ campo, children }: { campo: OrdenCampo; children: ReactElement | string }) => (
+    <th
+      onClick={() => cambiarOrden(campo)}
+      className="cursor-pointer select-none px-3 py-2 text-right text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400 hover:text-gray-600"
+    >
+      {children} {orden === campo ? (asc ? '▲' : '▼') : ''}
+    </th>
+  )
+
+  if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+        <button
+          onClick={() => setVista('agentes')}
+          className={clsx('rounded-md px-3 py-1.5 text-xs font-semibold transition-colors', vista === 'agentes' ? 'bg-white text-brand shadow-sm' : 'text-gray-500')}
+        >
+          Por agente
+        </button>
+        <button
+          onClick={() => setVista('campanias')}
+          className={clsx('rounded-md px-3 py-1.5 text-xs font-semibold transition-colors', vista === 'campanias' ? 'bg-white text-brand shadow-sm' : 'text-gray-500')}
+        >
+          Por campaña
+        </button>
+        <div className="ml-auto">
+          <SelectorColumnas columnas={columnasDisponibles} visibles={visibles} onToggle={toggle} />
+        </div>
+      </div>
+
+      {filas.length === 0 ? (
+        <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
+          <BarChart3 className="h-8 w-8" />
+          <p className="text-sm">Sin datos para comparar hoy</p>
+        </div>
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">
+                  {vista === 'agentes' ? 'Agente' : 'Campaña'}
+                </th>
+                {vista === 'campanias' && esVisible('agentes') && <Encabezado campo="agentes">Agentes</Encabezado>}
+                {esVisible('chatsCerrados') && <Encabezado campo="chatsCerrados">Chats cerrados hoy</Encabezado>}
+                {esVisible('pausaMin') && <Encabezado campo="pausaMin">Minutos en pausa</Encabezado>}
+                {vista === 'agentes' && esVisible('tiempoRespuestaProm') && <Encabezado campo="tiempoRespuestaProm">1ra respuesta prom.</Encabezado>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 font-mono tabular-nums">
+              {filas.map((f: any) => (
+                <tr key={f.agenteId ?? f.campaniaId} className="hover:bg-gray-50/60">
+                  <td className="px-3 py-2 font-sans font-medium text-gray-800">{f.nombre || `#${f.agenteId ?? f.campaniaId}`}</td>
+                  {vista === 'campanias' && esVisible('agentes') && <td className="px-3 py-2 text-right text-gray-600">{f.agentes}</td>}
+                  {esVisible('chatsCerrados') && <td className="px-3 py-2 text-right text-gray-600">{f.chatsCerrados}</td>}
+                  {esVisible('pausaMin') && <td className="px-3 py-2 text-right text-gray-600">{f.pausaMin} min</td>}
+                  {vista === 'agentes' && esVisible('tiempoRespuestaProm') && <td className="px-3 py-2 text-right text-gray-600">{fmtSegundos(f.tiempoRespuestaProm)}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Historial de quién asignó/quitó a qué supervisor y cuándo ── */
 function HistorialAsignacionesPanel() {
   const { data: historial = [], isLoading } = useQuery({
@@ -1056,9 +1510,15 @@ export function SupervisoresPage() {
   const isAdmin = useIsADorTI()
   const [searchParams] = useSearchParams()
   const tabInicial = searchParams.get('tab')
-  const [tab, setTab] = useState<'panel' | 'productividad' | 'estatus' | 'historial' | 'administrar'>(
-    tabInicial === 'productividad' || tabInicial === 'estatus' || tabInicial === 'historial' || tabInicial === 'administrar' ? tabInicial : 'panel',
+  const [tab, setTab] = useState<'panel' | 'productividad' | 'comparador' | 'estatus' | 'alarmas' | 'notificaciones' | 'historial' | 'administrar'>(
+    tabInicial === 'productividad' || tabInicial === 'comparador' || tabInicial === 'estatus' || tabInicial === 'alarmas' || tabInicial === 'notificaciones' || tabInicial === 'historial' || tabInicial === 'administrar' ? tabInicial : 'panel',
   )
+  const { data: alarmas = [] } = useQuery({
+    queryKey: ['supervisores-alarmas'],
+    queryFn: () => supervisoresService.getAlarmas(),
+    refetchInterval: 15_000,
+  })
+  const alarmasActivas = alarmas.filter((a) => a.estado === 'en_alarma').length
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1083,10 +1543,33 @@ export function SupervisoresPage() {
           <BarChart3 className="h-3.5 w-3.5" /> Productividad
         </button>
         <button
+          onClick={() => setTab('comparador')}
+          className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'comparador' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
+        >
+          <Layers className="h-3.5 w-3.5" /> Comparador
+        </button>
+        <button
           onClick={() => setTab('estatus')}
           className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'estatus' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
         >
           <Circle className="h-3.5 w-3.5" /> Estatus
+        </button>
+        <button
+          onClick={() => setTab('alarmas')}
+          className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'alarmas' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> Alarmas
+          {alarmasActivas > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[0.65rem] font-bold text-white">
+              {alarmasActivas}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('notificaciones')}
+          className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors', tab === 'notificaciones' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700')}
+        >
+          <Megaphone className="h-3.5 w-3.5" /> Notificaciones
         </button>
         {isAdmin && (
           <button
@@ -1108,7 +1591,10 @@ export function SupervisoresPage() {
 
       {tab === 'panel' && <PanelEnVivoTab />}
       {tab === 'productividad' && <ProductividadTab />}
+      {tab === 'comparador' && <ComparadorTab />}
       {tab === 'estatus' && <EstatusTab />}
+      {tab === 'alarmas' && <AlarmasTab />}
+      {tab === 'notificaciones' && <NotificacionesTab />}
       {/* Solo admins: no existe "mi propio historial" en Supervisores, así
           que siempre ve el historial completo de todos los agentes (puedeSupervisar=true). */}
       {tab === 'historial' && isAdmin && <HistorialConversacionesPanel puedeSupervisar />}

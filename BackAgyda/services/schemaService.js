@@ -5462,6 +5462,10 @@ async function ensureAllSchemas(pool) {
   await ensureLivechatSchema(pool);
   await ensureLivechatCampanasSchema(pool);
   await ensureContactCenterSchema(pool);
+  await ensureSupervisorAlarmasSchema(pool);
+  await ensureSupervisorSusurrosSchema(pool);
+  await ensureSupervisorNotificacionesSchema(pool);
+  await ensureSupervisorVistasSchema(pool);
   await ensureWebphoneTipificacionesSchema(pool);
   await ensurePostulanteNotasSchema(pool);
   await ensureFormulariosAtencionSchema(pool);
@@ -7191,6 +7195,166 @@ CREATE INDEX IX_CCO_CP_CAMPANIA ON dbo.CCO_CAMPANIA_POSTULANTES(CP_CAMPANIA_ID);
     catch (err) { console.warn('⚠️ Contact Center schema:', err.message); }
   }
   logger.info('✅ Esquema de Contact Center omnicanal asegurado');
+}
+
+// Alarmas del módulo Supervisor (/operaciones/supervisores) — Fase 1 del
+// plan de evolución basado en PSUP de Mitrol: CSA_ALARMAS define umbrales
+// configurables por tipo (agente/skill), CSA_ALARMA_INSTANCIAS es el estado
+// vivo de cada objeto evaluado (agente o skill/grupo) contra esa alarma. Se
+// evalúan con el mismo cron que ya corre para Contact Center
+// (ccCronController) — mismo patrón: 'en_alarma' -> 'atendida' (con
+// comentario) -> 'fin_alarma' (la condición dejó de cumplirse, se cierra sola).
+function ensureSupervisorAlarmasSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_ALARMAS (
+  CSA_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSA_NOMBRE NVARCHAR(120) NOT NULL,
+  CSA_TIPO NVARCHAR(20) NOT NULL, -- 'agente_pausa' | 'skill_cola'
+  CSA_UMBRAL_MINUTOS INT NOT NULL,
+  CSA_ACTIVA BIT NOT NULL DEFAULT (1),
+  CSA_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT CK_CSA_TIPO CHECK (CSA_TIPO IN ('agente_pausa','skill_cola'))
+);`,
+    // Semilla de las dos alarmas del plan (Fase 1) si la tabla quedó vacía —
+    // umbral por default editable después, no hay UI de alta todavía.
+    `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CSA_ALARMAS)
+INSERT INTO dbo.CSA_ALARMAS (CSA_NOMBRE, CSA_TIPO, CSA_UMBRAL_MINUTOS) VALUES
+  (N'Agente en pausa prolongada', 'agente_pausa', 20),
+  (N'Chats en cola sin asignar', 'skill_cola', 5);`,
+    `IF OBJECT_ID('dbo.CSA_ALARMA_INSTANCIAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_ALARMA_INSTANCIAS (
+  CSI_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSI_ALARMA_ID INT NOT NULL,
+  CSI_OBJETO_TIPO NVARCHAR(20) NOT NULL, -- 'agente' | 'skill'
+  CSI_OBJETO_ID INT NOT NULL, -- NEUS_ID del agente, o CG_ID del skill
+  CSI_OBJETO_NOMBRE NVARCHAR(160) NULL, -- snapshot para no hacer join en el listado
+  CSI_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('en_alarma'), -- 'en_alarma' | 'atendida' | 'fin_alarma'
+  CSI_FECHA_INICIO DATETIME NOT NULL DEFAULT GETDATE(),
+  CSI_FECHA_ATENDIDA DATETIME NULL,
+  CSI_ATENDIDA_POR INT NULL,
+  CSI_COMENTARIO NVARCHAR(500) NULL,
+  CSI_FECHA_FIN DATETIME NULL,
+  CONSTRAINT FK_CSI_ALARMA FOREIGN KEY (CSI_ALARMA_ID) REFERENCES dbo.CSA_ALARMAS(CSA_ID),
+  CONSTRAINT CK_CSI_ESTADO CHECK (CSI_ESTADO IN ('en_alarma','atendida','fin_alarma'))
+);`,
+    `IF OBJECT_ID('dbo.CSA_ALARMA_INSTANCIAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CSI_ABIERTAS')
+CREATE INDEX IX_CSI_ABIERTAS ON dbo.CSA_ALARMA_INSTANCIAS(CSI_ALARMA_ID, CSI_OBJETO_TIPO, CSI_OBJETO_ID, CSI_ESTADO);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Alarmas de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Alarmas del Supervisor asegurado');
+  })();
+}
+
+// Susurros (Coaching) del supervisor hacia el agente durante un chat en vivo
+// — Fase 1, punto 3.1 del plan de evolución del Supervisor. Se guardan
+// separados de CCO_MENSAJES a propósito: esa tabla solo admite emisor
+// 'cliente'|'agente'|'sistema' porque ES la conversación real con el
+// cliente, y un susurro NUNCA debe poder mezclarse ahí ni llegar al cliente
+// por error. Se entregan en vivo por Socket.IO (sala cc:susurro:{id}).
+function ensureSupervisorSusurrosSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_SUSURROS', 'U') IS NULL
+CREATE TABLE dbo.CSA_SUSURROS (
+  CSU_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSU_INTERACCION_ID INT NOT NULL,
+  CSU_SUPERVISOR_ID INT NOT NULL,
+  CSU_SUPERVISOR_NOMBRE NVARCHAR(160) NULL,
+  CSU_CONTENIDO NVARCHAR(1000) NOT NULL,
+  CSU_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CSU_INTERACCION FOREIGN KEY (CSU_INTERACCION_ID) REFERENCES dbo.CCO_INTERACCIONES(CI_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CSA_SUSURROS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CSU_INTERACCION')
+CREATE INDEX IX_CSU_INTERACCION ON dbo.CSA_SUSURROS(CSU_INTERACCION_ID, CSU_FECHA);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Susurros de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Susurros del Supervisor asegurado');
+  })();
+}
+
+// Notificaciones del supervisor a agentes — Fase 2, punto 3.3 del plan de
+// evolución basado en PSUP. Dos tipos: 'informativa' (el agente la puede
+// cerrar cuando quiera) y 'obligatoria' (bloquea su pantalla hasta que la
+// cierra — como las notificaciones "obligatorias" del manual de Mitrol).
+// El alcance decide a quién llega: 'agente' (un NEUS_ID puntual), 'skill'
+// (CG_ID, resuelto contra CCO_GRUPO_AGENTES activos), 'campania' (CM2_ID,
+// resuelto contra los grupos de esa campaña) o 'todos'. CSA_NOTIFICACION_
+// LECTURAS guarda quién ya la cerró — así un agente que se conecta después
+// de enviada la ve pendiente igual (no depende solo del push por socket).
+function ensureSupervisorNotificacionesSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_NOTIFICACIONES', 'U') IS NULL
+CREATE TABLE dbo.CSA_NOTIFICACIONES (
+  CSN_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSN_TIPO NVARCHAR(20) NOT NULL, -- 'informativa' | 'obligatoria'
+  CSN_ALCANCE NVARCHAR(20) NOT NULL, -- 'agente' | 'skill' | 'campania' | 'todos'
+  CSN_ALCANCE_ID INT NULL, -- NEUS_ID/CG_ID/CM2_ID según CSN_ALCANCE; NULL si 'todos'
+  CSN_MENSAJE NVARCHAR(1000) NOT NULL,
+  CSN_AUTOR_ID INT NOT NULL,
+  CSN_AUTOR_NOMBRE NVARCHAR(160) NULL,
+  CSN_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CSN_FECHA_VENCIMIENTO DATETIME NULL, -- opcional: deja de mostrarse sola después de esta fecha
+  CONSTRAINT CK_CSN_TIPO CHECK (CSN_TIPO IN ('informativa','obligatoria')),
+  CONSTRAINT CK_CSN_ALCANCE CHECK (CSN_ALCANCE IN ('agente','skill','campania','todos'))
+);`,
+    `IF OBJECT_ID('dbo.CSA_NOTIFICACION_LECTURAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_NOTIFICACION_LECTURAS (
+  CSNL_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSNL_NOTIFICACION_ID INT NOT NULL,
+  CSNL_USUARIO_ID INT NOT NULL,
+  CSNL_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CSNL_NOTIF FOREIGN KEY (CSNL_NOTIFICACION_ID) REFERENCES dbo.CSA_NOTIFICACIONES(CSN_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CSNL_NOTIF_USUARIO UNIQUE (CSNL_NOTIFICACION_ID, CSNL_USUARIO_ID)
+);`,
+    `IF OBJECT_ID('dbo.CSA_NOTIFICACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CSN_FECHA')
+CREATE INDEX IX_CSN_FECHA ON dbo.CSA_NOTIFICACIONES(CSN_FECHA_CREACION);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Notificaciones de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Notificaciones del Supervisor asegurado');
+  })();
+}
+
+// Vistas guardadas / personalización de columnas — Fase 3, punto 3.6 del
+// plan basado en PSUP. Alcance acotado: qué columnas se ven en las tablas
+// del módulo Supervisor (Productividad, Comparador), guardado por usuario y
+// por tabla — no reordenamiento ni filtros complejos, esas tablas tienen
+// columnas fijas en el código y reescribirlas a un motor dinámico completo
+// no lo justifica este punto. Una fila por (usuario, tabla); CSV_COLUMNAS es
+// JSON con el array de claves de columna visibles.
+function ensureSupervisorVistasSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_VISTAS_COLUMNAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_VISTAS_COLUMNAS (
+  CSV_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSV_USUARIO_ID INT NOT NULL,
+  CSV_TABLA NVARCHAR(40) NOT NULL, -- 'productividad' | 'comparador_agentes' | 'comparador_campanias'
+  CSV_COLUMNAS NVARCHAR(1000) NOT NULL, -- JSON array de claves de columna visibles
+  CSV_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT UQ_CSV_USUARIO_TABLA UNIQUE (CSV_USUARIO_ID, CSV_TABLA)
+);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Vistas de columnas de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Vistas guardadas del Supervisor asegurado');
+  })();
 }
 
 // Tipificación de llamadas del Webphone (pantalla-llamada, el "Web Form" que
