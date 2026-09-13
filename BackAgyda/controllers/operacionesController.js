@@ -521,6 +521,106 @@ async function getComparador(req, res) {
   }
 }
 
+// Umbral de "Nivel de Servicio" (SLA) para primera respuesta de chat, en
+// segundos — mismo concepto que el manual PSUP de Mitrol. Fijo por ahora;
+// si más adelante se necesita por campaña, se movería a CCO_CAMPANIAS.
+const SLA_UMBRAL_SEGUNDOS = 120;
+
+// GET /api/operaciones/supervisores/historico-sla?dias=7|30&campaniaId= —
+// Fase 3, punto 3.5 del plan basado en PSUP: línea de tiempo de cómo
+// evolucionan las métricas de chat día a día (no solo "hoy", como
+// getProductividadDia/getComparador). Reutiliza CCO_INTERACCIONES agregando
+// por día en vez de por agente/campaña, con el mismo alcance de campañas del
+// supervisor que ya usan las demás pestañas.
+async function getHistoricoSla(req, res) {
+  try {
+    const uid = req.user?.id;
+    const tipoUsuario = (req.user?.tipoUsuario || '').toString().toUpperCase();
+    const esAdmin = ['AD', 'TI'].includes(tipoUsuario);
+    const dias = [7, 30].includes(Number(req.query.dias)) ? Number(req.query.dias) : 7;
+    const campaniaIdFiltro = req.query.campaniaId ? Number(req.query.campaniaId) : null;
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const campaniasReq = pool.request();
+    let campaniasWhere = '';
+    if (!esAdmin) {
+      campaniasWhere = `WHERE CS_SUPERVISOR_ID = @uid`;
+      campaniasReq.input('uid', sql.Int, uid);
+    }
+    const campaniaIdsRs = await campaniasReq.query(
+      esAdmin
+        ? 'SELECT CM2_ID as id, CM2_NOMBRE as nombre FROM CCO_CAMPANIAS'
+        : `SELECT DISTINCT c.CM2_ID as id, c.CM2_NOMBRE as nombre
+           FROM CCO_CAMPANIAS c
+           JOIN CC_CAMPANIAS_SUPERVISORES cs ON cs.CS_CAMPANIA_ID = c.CM2_ID ${campaniasWhere.replace('CS_SUPERVISOR_ID', 'cs.CS_SUPERVISOR_ID')}`
+    );
+    const campanias = campaniaIdsRs.recordset;
+    let campaniaIds = campanias.map((c) => c.id);
+    if (campaniaIdFiltro) campaniaIds = campaniaIds.filter((id) => id === campaniaIdFiltro);
+    if (campaniaIds.length === 0) return res.json({ success: true, data: { campanias, serie: [] } });
+
+    const agentesRs = await pool.request().query(`
+      SELECT DISTINCT ga.CGA_USUARIO_ID as agenteId
+      FROM CCO_GRUPO_AGENTES ga
+      INNER JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
+      WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
+    `);
+    const agenteIds = [...new Set(agentesRs.recordset.map((a) => a.agenteId))];
+    if (agenteIds.length === 0) return res.json({ success: true, data: { campanias, serie: [] } });
+
+    // Un día por fila: volumen de chats cerrados, promedio de segundos a
+    // primera respuesta, y % de esos chats dentro del umbral de SLA.
+    const serieRs = await pool.request()
+      .input('dias', sql.Int, dias)
+      .input('umbral', sql.Int, SLA_UMBRAL_SEGUNDOS)
+      .query(`
+        SELECT CAST(CI_FECHA_CIERRE AS date) as dia,
+               COUNT(*) as chatsCerrados,
+               AVG(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL
+                        THEN DATEDIFF(SECOND, CI_FECHA_INICIO, CI_FECHA_PRIMER_RESPUESTA) END) as segRespuestaProm,
+               100.0 * SUM(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL
+                                 AND DATEDIFF(SECOND, CI_FECHA_INICIO, CI_FECHA_PRIMER_RESPUESTA) <= @umbral
+                            THEN 1 ELSE 0 END)
+               / NULLIF(SUM(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL THEN 1 ELSE 0 END), 0) as pctDentroSla
+        FROM CCO_INTERACCIONES
+        WHERE CI_AGENTE_ID IN (${agenteIds.join(',')})
+          AND CI_ESTADO = 'cerrada'
+          AND CAST(CI_FECHA_CIERRE AS date) >= DATEADD(DAY, -(@dias - 1), CAST(GETDATE() AS date))
+          AND CAST(CI_FECHA_CIERRE AS date) <= CAST(GETDATE() AS date)
+        GROUP BY CAST(CI_FECHA_CIERRE AS date)
+      `);
+    const porDia = new Map(serieRs.recordset.map((r) => [
+      r.dia.toISOString().slice(0, 10),
+      {
+        chatsCerrados: r.chatsCerrados,
+        segRespuestaProm: r.segRespuestaProm != null ? Math.round(r.segRespuestaProm) : null,
+        pctDentroSla: r.pctDentroSla != null ? Math.round(r.pctDentroSla * 10) / 10 : null,
+      },
+    ]));
+
+    // Rellena los días sin chats con ceros/null en vez de omitirlos, para que
+    // la línea de tiempo no salte fechas.
+    const serie = [];
+    for (let i = dias - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dia = d.toISOString().slice(0, 10);
+      const datos = porDia.get(dia);
+      serie.push({
+        dia,
+        chatsCerrados: datos?.chatsCerrados ?? 0,
+        segRespuestaProm: datos?.segRespuestaProm ?? null,
+        pctDentroSla: datos?.pctDentroSla ?? null,
+      });
+    }
+
+    res.json({ success: true, data: { campanias, serie } });
+  } catch (err) {
+    logger.error('operacionesController.getHistoricoSla', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el histórico de SLA' });
+  }
+}
+
 /* ── Tiempos: bitácora detallada de sesiones/pausas por agente (auditoría, no resumen) ── */
 
 // GET /api/operaciones/tiempos?agenteId=&fecha=YYYY-MM-DD — historial fila por fila de
@@ -1952,6 +2052,7 @@ module.exports = {
   getMiPanel,
   getProductividadDia,
   getComparador,
+  getHistoricoSla,
   getTiemposAgente,
   getMisAgentes,
   getKpis,

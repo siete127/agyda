@@ -2,6 +2,7 @@ import { api } from '@/lib/axios'
 import type {
   SupervisorAsignacion, PanelSupervisor, ProductividadAgente, HistorialAsignacion, AlarmaInstancia,
   NotificacionTipo, NotificacionAlcance, NotificacionPendiente, NotificacionEnviada, ComparadorData,
+  HistoricoSlaData,
 } from '@/types/supervisores.types'
 
 export const supervisoresService = {
@@ -63,6 +64,13 @@ export const supervisoresService = {
   async getComparador(fecha?: string): Promise<ComparadorData> {
     const { data } = await api.get('/operaciones/supervisores/comparador', { params: fecha ? { fecha } : {} })
     return data?.data ?? { agentes: [], campanias: [] }
+  },
+
+  async getHistoricoSla(dias: 7 | 30, campaniaId?: number): Promise<HistoricoSlaData> {
+    const { data } = await api.get('/operaciones/supervisores/historico-sla', {
+      params: { dias, ...(campaniaId ? { campaniaId } : {}) },
+    })
+    return data?.data ?? { campanias: [], serie: [] }
   },
 
   async desconectarAgente(agenteId: number): Promise<void> {

@@ -151,3 +151,22 @@ export interface ComparadorData {
   agentes: ComparadorAgente[]
   campanias: ComparadorCampania[]
 }
+
+export interface HistoricoSlaCampania {
+  id: number
+  nombre: string
+}
+
+export interface HistoricoSlaPunto {
+  dia: string
+  chatsCerrados: number
+  segRespuestaProm: number | null
+  // % de chats con primera respuesta dentro del umbral de Nivel de Servicio
+  // (2 min) — null si ese día no hubo chats con primera respuesta registrada.
+  pctDentroSla: number | null
+}
+
+export interface HistoricoSlaData {
+  campanias: HistoricoSlaCampania[]
+  serie: HistoricoSlaPunto[]
+}

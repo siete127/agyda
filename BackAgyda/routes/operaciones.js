@@ -22,6 +22,7 @@ router.get('/supervisores/mi-panel', auth.authenticateToken, controller.getMiPan
 router.get('/supervisores/historial-asignaciones', auth.authenticateToken, controller.getHistorialAsignaciones);
 router.get('/supervisores/productividad', auth.authenticateToken, controller.getProductividadDia);
 router.get('/supervisores/comparador', auth.authenticateToken, controller.getComparador);
+router.get('/supervisores/historico-sla', auth.authenticateToken, controller.getHistoricoSla);
 router.get('/supervisores/alarmas', auth.authenticateToken, supervisorAlarmas.listInstancias);
 router.post('/supervisores/alarmas/:id/atender', auth.authenticateToken, supervisorAlarmas.atenderInstancia);
 
