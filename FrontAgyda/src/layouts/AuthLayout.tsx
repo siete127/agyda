@@ -2,8 +2,8 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth.store'
 import Particles from '@/components/effects/Particles'
 import GlowCursor from '@/components/effects/GlowCursor'
-
-const FONDO_VIDEO_SRC = '/fondo-login.mp4'
+import { GlobeBackground } from '@/components/effects/GlobeBackground'
+import { Ardabito } from '@/components/effects/Ardabito'
 
 export function AuthLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -13,20 +13,21 @@ export function AuthLayout() {
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0D1B3E]">
-      <video
-        src={FONDO_VIDEO_SRC}
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="auto"
-        style={{ willChange: 'transform', transform: 'translateZ(0)' }}
-        className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-contain [@media(min-width:1024px)_and_(min-height:855px)]:block"
-        onError={(e) => {
-          e.currentTarget.style.display = 'none'
-        }}
-      />
-      <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
+      {/* Globo 3D — solo en pantallas grandes, mismo breakpoint que tenía el
+         video de fondo anterior. */}
+      <div className="pointer-events-none absolute inset-0 z-0 hidden [@media(min-width:1024px)_and_(min-height:855px)]:block">
+        <GlobeBackground className="absolute inset-0 h-full w-full" rotationSpeed={0.08} />
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
+
+      {/* Ardabito — delante del globo (y de su overlay), esquina inferior
+         derecha del panel. */}
+      <div className="pointer-events-none absolute inset-0 z-[5] hidden [@media(min-width:1024px)_and_(min-height:855px)]:block">
+        <div className="absolute bottom-[2%] right-[3%] w-[190px]">
+          <Ardabito />
+        </div>
+      </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
         <Particles
