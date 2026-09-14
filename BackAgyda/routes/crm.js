@@ -22,13 +22,17 @@ const crmEncuestasSeguimiento = require('../controllers/crmEncuestasSeguimientoC
 const crmEncuestasSeguimientoCron = require('../controllers/crmEncuestasSeguimientoCronController');
 const crmProyecto = require('../controllers/crmProyectoController');
 const { uploadCrmDocumento } = require('../middleware/crmDocumentoUpload');
+const { leadFormRateLimit } = require('../middleware/publicFormRateLimit');
 
 // ── Lead desde página de marketing (público, sin auth) ─────────────────────
-router.post('/lead-marketing', crmLeadMarketing.recibirLeadMarketing);
-router.post('/lead-chatbot', crmLeadMarketing.recibirLeadChatbot);
+// Con rate limit: cada envío real SIEMPRE crea contacto + oportunidad (ver
+// crmLeadMarketingController), así que sin límite un script/bot que golpee
+// estas rutas en loop infla el pipeline con registros falsos.
+router.post('/lead-marketing', leadFormRateLimit, crmLeadMarketing.recibirLeadMarketing);
+router.post('/lead-chatbot', leadFormRateLimit, crmLeadMarketing.recibirLeadChatbot);
 // Alias del formulario de contacto de "Pagina de Intranet_1" — mismo payload
 // que lead-marketing (nombreCompleto, empresa, giroEmpresa, email, telefono, mensaje).
-router.post('/contacto', crmLeadMarketing.recibirLeadMarketing);
+router.post('/contacto', leadFormRateLimit, crmLeadMarketing.recibirLeadMarketing);
 
 // ��─ Contactos ──────────────────────────────────────────
 router.get('/contactos',        authenticateToken, crmContactos.getAll);
