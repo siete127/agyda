@@ -16,7 +16,7 @@ export function AuthLayout() {
       {/* Globo 3D — solo en pantallas grandes, mismo breakpoint que tenía el
          video de fondo anterior. */}
       <div className="pointer-events-none absolute inset-y-0 left-0 z-0 hidden w-[55%] [@media(min-width:1024px)_and_(min-height:855px)]:block">
-        <GlobeBackground className="absolute inset-0 h-full w-full" rotationSpeed={0.08} cameraDistance={7} />
+        <GlobeBackground className="absolute inset-0 h-full w-full" rotationSpeed={0.08} cameraDistance={6.3} />
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
