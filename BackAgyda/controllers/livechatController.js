@@ -770,7 +770,14 @@ exports.getMisConversaciones = async (req, res) => {
 
     let where = '(LC_AGENTE_ID = @agenteId)';
     if (estado === 'esperando') {
-      where = `(LC_ESTADO = 'esperando' AND LC_AGENTE_ID IS NULL)`;
+      // Solo la cola de los skills a los que el agente sigue asignado HOY —
+      // mismo bug/fix que ccInteraccionesController.list (2026-09-11): antes
+      // mostraba TODA la cola global sin importar campaña/skill.
+      where = `(LC_ESTADO = 'esperando' AND LC_AGENTE_ID IS NULL
+        AND (LC_GRUPO_ID IS NULL OR EXISTS (
+          SELECT 1 FROM dbo.LIVECHAT_GRUPO_AGENTES lga
+          WHERE lga.LGA_GRUPO_ID = LC_GRUPO_ID AND lga.LGA_USUARIO_ID = @agenteId AND lga.LGA_ACTIVO = 1
+        )))`;
     } else if (estado) {
       where = '(LC_AGENTE_ID = @agenteId AND LC_ESTADO = @estado)';
     }

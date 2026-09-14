@@ -537,6 +537,32 @@ function initialize(server) {
       }
     });
 
+    // Contact Center omnicanal: sala por interacción, usada por
+    // ccRoutingService.emitir/ccInteraccionesController vía getIO(tenantKey)
+    // .to(`cc:interaccion:${id}`) — ese helper prefija `tenant:{tenantKey}:`,
+    // así que el join debe usar el mismo prefijo o el evento no llega a
+    // nadie (bug real encontrado 2026-09-12: esta sala nunca tuvo joins,
+    // por eso 'cc:mensaje' y demás dependían 100% del polling del frontend).
+    socket.on('join_interaccion', (payload) => {
+      try {
+        const interaccionId = Number(payload?.interaccionId);
+        if (!interaccionId) return;
+        socket.join(`tenant:${tenantKey}:cc:interaccion:${interaccionId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en join_interaccion:', e?.message || e);
+      }
+    });
+
+    socket.on('leave_interaccion', (payload) => {
+      try {
+        const interaccionId = Number(payload?.interaccionId);
+        if (!interaccionId) return;
+        socket.leave(`tenant:${tenantKey}:cc:interaccion:${interaccionId}`);
+      } catch (e) {
+        logger.warn('⚠️ Error en leave_interaccion:', e?.message || e);
+      }
+    });
+
     socket.on('join_livechat_conversation', (payload) => {
       try {
         const conversacionId = Number(payload?.conversacionId);

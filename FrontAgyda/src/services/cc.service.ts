@@ -48,6 +48,10 @@ export const ccService = {
   historial: (filtros: Record<string, string | number>) => d<CCInteraccion[]>(api.get('/contact-center/historial', { params: filtros })),
   metricas: () => d<CCMetricas>(api.get('/contact-center/metricas')),
   runCron: () => api.post('/contact-center/cron/run').then((r) => r.data),
+  susurrar: (id: number, contenido: string) =>
+    api.post(`/contact-center/interacciones/${id}/susurrar`, { contenido }).then((r) => r.data),
+  tomarSupervisor: (id: number) =>
+    api.post(`/contact-center/interacciones/${id}/tomar-supervisor`).then((r) => r.data),
 
   // ── Config: canales ──
   getCanales: () => d<CCCanal[]>(api.get('/contact-center/canales')),

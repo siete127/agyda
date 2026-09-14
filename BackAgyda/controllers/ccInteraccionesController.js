@@ -90,7 +90,17 @@ exports.list = async (req, res) => {
     let where = '';
     const rq = p.request().input('uid', sql.Int, uid);
     if (estado === 'en_cola') {
-      where = `WHERE i.CI_ESTADO = 'en_cola'`;
+      // Bandeja de espera: solo la cola de los skills a los que el agente
+      // sigue asignado HOY — bug real encontrado 2026-09-11, antes mostraba
+      // TODA la cola global (de cualquier campaña/skill), así que un agente
+      // veía conversaciones de campañas de las que ya lo habían quitado.
+      // Interacciones sin skill (CI_GRUPO_ID NULL) siguen siendo visibles
+      // para todos, como ya era el comportamiento para esas.
+      where = `WHERE i.CI_ESTADO = 'en_cola'
+        AND (i.CI_GRUPO_ID IS NULL OR EXISTS (
+          SELECT 1 FROM dbo.CCO_GRUPO_AGENTES ga
+          WHERE ga.CGA_GRUPO_ID = i.CI_GRUPO_ID AND ga.CGA_USUARIO_ID = @uid AND ga.CGA_ACTIVO = 1
+        ))`;
     } else if (estado) {
       rq.input('e', sql.NVarChar(24), estado);
       where = `WHERE i.CI_AGENTE_ID = @uid AND i.CI_ESTADO = @e`;
@@ -518,10 +528,104 @@ exports.getAgentesTransferibles = async (req, res) => {
 };
 
 // ── Supervisión / historial / métricas ─────────────────────────────────
+// Verifica que la interacción pertenezca a una campaña asignada al
+// supervisor autenticado (AD/TI no tienen restricción). Fase 1, punto 3.1
+// del plan — usado por susurrar/tomarSupervisor, las dos acciones nuevas
+// donde el supervisor SÍ cambia algo del chat de otro agente (a diferencia
+// de sólo observar, que ya está cubierto por el filtro de supervisionActivas).
+async function puedeSupervisarInteraccion(p, req, interaccionId) {
+  const tipoUsuario = (req.user?.tipoUsuario || '').toString().toUpperCase();
+  if (['AD', 'TI'].includes(tipoUsuario)) return true;
+  const uid = usuarioIdDe(req);
+  const r = await p.request().input('id', sql.Int, interaccionId).input('uid', sql.Int, uid).query(`
+    SELECT 1 FROM dbo.CCO_INTERACCIONES i
+    WHERE i.CI_ID = @id AND i.CI_CAMPANIA_ID IN (
+      SELECT CS_CAMPANIA_ID FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_SUPERVISOR_ID = @uid
+    )`);
+  return !!r.recordset[0];
+}
+
+// POST /interacciones/:id/susurrar — mensaje del supervisor al agente,
+// entregado en vivo por socket a la sala cc:interaccion:{id} (evento
+// 'cc:susurro'). Nunca toca CCO_MENSAJES: el cliente jamás debe verlo.
+exports.susurrar = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const interaccionId = Number(req.params.id);
+    const contenido = (req.body?.contenido || '').toString().trim();
+    if (!contenido) return res.status(400).json({ success: false, message: 'El mensaje no puede estar vacío' });
+    if (!(await puedeSupervisarInteraccion(p, req, interaccionId))) {
+      return res.status(403).json({ success: false, message: 'No tienes esta interacción asignada' });
+    }
+    const uid = usuarioIdDe(req);
+    const nombre = req.user?.nombres || req.user?.nombre || String(uid);
+    await p.request()
+      .input('int', sql.Int, interaccionId).input('sup', sql.Int, uid)
+      .input('n', sql.NVarChar(160), nombre).input('c', sql.NVarChar(1000), contenido)
+      .query(`INSERT INTO dbo.CSA_SUSURROS (CSU_INTERACCION_ID, CSU_SUPERVISOR_ID, CSU_SUPERVISOR_NOMBRE, CSU_CONTENIDO)
+              VALUES (@int, @sup, @n, @c)`);
+    ccRouting.emitir(tenantKeyDe(req), `cc:interaccion:${interaccionId}`, 'cc:susurro', {
+      interaccionId, contenido, supervisorNombre: nombre,
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('cc.susurrar:', e.message);
+    res.status(500).json({ success: false, message: 'Error al enviar el susurro' });
+  }
+};
+
+// POST /interacciones/:id/tomar-supervisor — el supervisor se hace cargo
+// directo del chat, desplazando al agente actual (a diferencia de
+// exports.tomar, que es para que un agente tome algo de SU propia cola y
+// rechaza si ya la tiene otro agente). Se avisa al agente saliente por el
+// mismo evento 'cc:interaccion_tomada' que ya escucha CCChatPanel.
+exports.tomarSupervisor = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const interaccionId = Number(req.params.id);
+    if (!(await puedeSupervisarInteraccion(p, req, interaccionId))) {
+      return res.status(403).json({ success: false, message: 'No tienes esta interacción asignada' });
+    }
+    const cur = await p.request().input('id', sql.Int, interaccionId)
+      .query('SELECT CI_ESTADO estado FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id');
+    if (!cur.recordset[0]) return res.status(404).json({ success: false, message: 'No encontrada' });
+
+    const uid = usuarioIdDe(req);
+    const nombre = req.user?.nombres || req.user?.nombre || String(uid);
+    await p.request()
+      .input('id', sql.Int, interaccionId).input('uid', sql.Int, uid).input('n', sql.NVarChar(160), nombre)
+      .query(`UPDATE dbo.CCO_INTERACCIONES
+              SET CI_AGENTE_ID = @uid, CI_AGENTE_NOMBRE = @n, CI_ESTADO = 'activa',
+                  CI_FECHA_PRIMER_RESPUESTA = ISNULL(CI_FECHA_PRIMER_RESPUESTA, GETDATE())
+              WHERE CI_ID = @id`);
+    await p.request().input('u', sql.Int, uid).query(`MERGE dbo.CCO_AGENTE_ESTADO AS t
+      USING (SELECT @u u) s ON t.CAE_USUARIO_ID = s.u
+      WHEN MATCHED THEN UPDATE SET CAE_INTERACCIONES_ACTIVAS = CAE_INTERACCIONES_ACTIVAS + 1
+      WHEN NOT MATCHED THEN INSERT (CAE_USUARIO_ID, CAE_ONLINE, CAE_DISPONIBLE, CAE_INTERACCIONES_ACTIVAS) VALUES (@u, 1, 1, 1);`);
+    ccRouting.emitir(tenantKeyDe(req), `cc:interaccion:${interaccionId}`, 'cc:interaccion_tomada', { interaccionId });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('cc.tomarSupervisor:', e.message);
+    res.status(500).json({ success: false, message: 'Error al tomar la interacción' });
+  }
+};
+
 exports.supervisionActivas = async (req, res) => {
   try {
     const p = await pool(req);
-    const r = await p.request().query(`${SELECT_INT} WHERE i.CI_ESTADO IN ('en_cola','activa','pendiente_tipificacion') ORDER BY i.CI_FECHA_INICIO ASC`);
+    const tipoUsuario = (req.user?.tipoUsuario || '').toString().toUpperCase();
+    const esAdmin = ['AD', 'TI'].includes(tipoUsuario);
+    const rq = p.request();
+    // Un supervisor (no AD/TI) solo debe ver interacciones de campañas que
+    // tiene asignadas en CC_CAMPANIAS_SUPERVISORES — antes este endpoint
+    // devolvía TODA la cola/activas sin filtrar (bug real encontrado
+    // 2026-09-12, mismo patrón que ccInteraccionesController.list).
+    let filtroCampania = '';
+    if (!esAdmin) {
+      rq.input('uid', sql.Int, usuarioIdDe(req));
+      filtroCampania = `AND i.CI_CAMPANIA_ID IN (SELECT CS_CAMPANIA_ID FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_SUPERVISOR_ID = @uid)`;
+    }
+    const r = await rq.query(`${SELECT_INT} WHERE i.CI_ESTADO IN ('en_cola','activa','pendiente_tipificacion') ${filtroCampania} ORDER BY i.CI_FECHA_INICIO ASC`);
     res.json({ success: true, data: r.recordset });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Error' });

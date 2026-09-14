@@ -40,11 +40,25 @@ export function CCChatPanel({ interaccionId, onClosed }: { interaccionId: number
 
   useEffect(() => {
     const s = getSocket()
-    s.emit('join_livechat_conversation', { conversacionId: `cc-${interaccionId}` })
+    // Bug real encontrado 2026-09-12: esto se unía a `livechat:cc-{id}`, una
+    // sala que nadie del lado de Contact Center emite jamás (ccRouting.emitir
+    // usa la sala `cc:interaccion:{id}`) — el chat vivía 100% del polling de
+    // 5s. `join_interaccion` es la sala correcta, ver socketService.js.
+    s.emit('join_interaccion', { interaccionId })
     const h = () => qc.invalidateQueries({ queryKey: ['cc-inter-detalle', interaccionId] })
     s.on('cc:mensaje', h)
     s.on('cc:interaccion_cerrada', h)
-    return () => { s.off('cc:mensaje', h); s.off('cc:interaccion_cerrada', h) }
+    const onSusurro = (payload: { interaccionId: number; contenido: string; supervisorNombre: string | null }) => {
+      if (payload.interaccionId !== interaccionId) return
+      toast(`🤫 ${payload.supervisorNombre ?? 'Supervisor'}: ${payload.contenido}`, { duration: 8000 })
+    }
+    s.on('cc:susurro', onSusurro)
+    return () => {
+      s.off('cc:mensaje', h)
+      s.off('cc:interaccion_cerrada', h)
+      s.off('cc:susurro', onSusurro)
+      s.emit('leave_interaccion', { interaccionId })
+    }
   }, [interaccionId, qc])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [inter?.mensajes?.length])
