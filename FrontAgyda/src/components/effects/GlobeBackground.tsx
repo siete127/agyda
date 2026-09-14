@@ -132,15 +132,17 @@ function makeArcCurve(start: LatLng, end: LatLng) {
 }
 
 function CoreSphere() {
-  // depthWrite=false: esta esfera es semitransparente y va DETRÁS de los
-  // puntos de tierra (radio ligeramente menor). Con depthWrite en true
-  // (el bug real) escribía profundidad en todo el hemisferio frontal y
-  // tapaba los puntos que deberían verse ahí, dejando solo visible el
-  // contorno/silueta — el efecto de "anillo vacío por el centro".
+  // Esfera completamente OPACA (sin transparent/opacity) — es el "planeta"
+  // en sí, no debe dejar ver nada detrás. El culling de los puntos de
+  // tierra en el hemisferio trasero ya no depende de esto: LandDots
+  // descarta esos puntos en su propio shader (dot product contra la
+  // cámara), así que esta esfera puede ser opaca sin volver a producir
+  // el bug del "anillo vacío" que causaba el depthWrite en una esfera
+  // transparente.
   return (
     <mesh renderOrder={0}>
       <sphereGeometry args={[RADIUS, 48, 48]} />
-      <meshBasicMaterial color="#06152d" transparent opacity={0.62} depthWrite={false} />
+      <meshBasicMaterial color="#06152d" />
     </mesh>
   )
 }
