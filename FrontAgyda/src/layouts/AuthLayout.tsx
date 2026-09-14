@@ -16,7 +16,7 @@ export function AuthLayout() {
       {/* Globo 3D — solo en pantallas grandes, mismo breakpoint que tenía el
          video de fondo anterior. */}
       <div className="pointer-events-none absolute inset-0 z-0 hidden [@media(min-width:1024px)_and_(min-height:855px)]:block">
-        <GlobeBackground className="absolute inset-0 h-full w-full" rotationSpeed={0.08} />
+        <GlobeBackground className="absolute inset-0 h-full w-full" rotationSpeed={0.08} cameraDistance={9} />
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
@@ -24,7 +24,7 @@ export function AuthLayout() {
       {/* Ardabito — delante del globo (y de su overlay), superpuesto sobre
          el propio globo en vez de aislado en una esquina. */}
       <div className="pointer-events-none absolute inset-0 z-[5] hidden [@media(min-width:1024px)_and_(min-height:855px)]:block">
-        <div className="absolute bottom-[8%] left-[28%] w-[190px] -translate-x-1/2">
+        <div className="absolute bottom-0 left-[26%] w-[360px] -translate-x-1/2">
           <Ardabito />
         </div>
       </div>
