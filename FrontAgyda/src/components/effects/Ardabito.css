@@ -64,9 +64,19 @@
   animation: ardabito-pata-saludo 3s ease-in-out infinite;
 }
 
+/* Cross-fade del parpadeo — cambiar opacity con transition en vez de
+   reemplazar el src del <img> de golpe, para que el cierre de ojos se vea
+   como un parpadeo suave y no como un "flash" instantáneo. */
+.ardabito-parpadeo {
+  transition: opacity 180ms ease-in-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ardabito-cabeza,
   .ardabito-pata {
     animation: none;
+  }
+  .ardabito-parpadeo {
+    transition: none;
   }
 }

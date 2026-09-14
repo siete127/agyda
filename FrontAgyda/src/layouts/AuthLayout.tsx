@@ -12,7 +12,7 @@ export function AuthLayout() {
   if (isInitialized && isAuthenticated) return <Navigate to="/dashboard" replace />
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0D1B3E]">
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#07142E]">
       {/* Globo 3D — solo en pantallas grandes, mismo breakpoint que tenía el
          video de fondo anterior. Ancla por altura (no por %) para que nunca
          se recorte verticalmente sin importar la relación de aspecto de la
@@ -24,7 +24,7 @@ export function AuthLayout() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#07142E]/80 via-[#091A3A]/55 to-[#091A3A]/85" />
 
       {/* Ardabito — delante del globo (y de su overlay), superpuesto sobre
          el propio globo. Ancho en vw (con piso/techo en px) para que escale
@@ -40,7 +40,7 @@ export function AuthLayout() {
 
       <div className="pointer-events-none absolute inset-0 z-10">
         <Particles
-          particleColors={['#22D3EE', '#5B8DEF', '#ffffff']}
+          particleColors={['#8FC7E8']}
           particleCount={220}
           particleSpread={12}
           speed={0.08}

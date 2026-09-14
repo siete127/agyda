@@ -133,7 +133,7 @@ function CoreSphere() {
   return (
     <mesh renderOrder={0}>
       <sphereGeometry args={[RADIUS, 48, 48]} />
-      <meshBasicMaterial color="#071c4a" />
+      <meshBasicMaterial color="#081B38" />
     </mesh>
   )
 }
@@ -304,7 +304,7 @@ function LandDots({ onReady }: { onReady?: (data: LandData) => void }) {
         depthWrite: false,
         depthTest: true,
         uniforms: {
-          uColor: { value: new THREE.Color('#32d6ff') },
+          uColor: { value: new THREE.Color('#168DD1') },
           uSize: { value: 2.35 * Math.min(gl.getPixelRatio(), 1.15) },
         },
         vertexShader: `
@@ -387,11 +387,11 @@ function Marker({ position, phase }: { position: THREE.Vector3; phase: number })
     <group ref={group}>
       <mesh ref={core} renderOrder={8}>
         <circleGeometry args={[0.029, 20]} />
-        <meshBasicMaterial color="#b9f4ff" transparent opacity={0.95} depthWrite={false} />
+        <meshBasicMaterial color="#79E5FF" transparent opacity={0.95} depthWrite={false} />
       </mesh>
       <mesh ref={ring} position={[0, 0, -0.001]} renderOrder={7}>
         <ringGeometry args={[0.040, 0.054, 28]} />
-        <meshBasicMaterial color="#30d6ff" transparent opacity={0.35} depthWrite={false} />
+        <meshBasicMaterial color="#22B8F0" transparent opacity={0.35} depthWrite={false} />
       </mesh>
     </group>
   )
@@ -432,7 +432,7 @@ function AnimatedArc({
         blending: THREE.AdditiveBlending,
         uniforms: {
           uProgress: { value: delay },
-          uColor: { value: new THREE.Color('#62ddff') },
+          uColor: { value: new THREE.Color('#42D9FF') },
         },
         vertexShader: `
           varying vec2 vUv;
@@ -499,7 +499,7 @@ function AnimatedArc({
   return (
     <group>
       <mesh geometry={baseGeometry} renderOrder={5}>
-        <meshBasicMaterial color="#2cccf4" transparent opacity={0.24} depthWrite={false} />
+        <meshBasicMaterial color="#159BD7" transparent opacity={0.24} depthWrite={false} />
       </mesh>
 
       {/* Pulsos por conexión para que la red se perciba activa y con flujo continuo. */}

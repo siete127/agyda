@@ -100,9 +100,47 @@ function Pieza({ pieza, className, src }: { pieza: PiezaSpec; className?: string
 }
 
 /**
+ * Cabeza con parpadeo suave: dos <img> superpuestas (ojos abiertos/cerrados)
+ * con cross-fade de opacidad — cambiar el src directo reemplaza la imagen de
+ * golpe (0ms), lo que se veía como un parpadeo brusco tipo flash en vez de
+ * un cierre de ojos natural.
+ */
+function CabezaConParpadeo({ ojosCerrados }: { ojosCerrados: boolean }) {
+  const pieza = PIEZAS.cabeza
+  const sharedStyle = {
+    left: `${pieza.leftPct}%`,
+    top: `${pieza.topPct}%`,
+    width: `${pieza.widthPct}%`,
+    transformOrigin: `${pieza.originX * 100}% ${pieza.originY * 100}%`,
+    '--tx': `${-pieza.originX * 100}%`,
+    '--ty': `${-pieza.originY * 100}%`,
+  } as React.CSSProperties
+
+  return (
+    <>
+      <img
+        src={CABEZA_OJOS_ABIERTOS}
+        alt=""
+        draggable={false}
+        className="ardabito-pieza ardabito-cabeza ardabito-parpadeo"
+        style={{ ...sharedStyle, zIndex: pieza.z, opacity: ojosCerrados ? 0 : 1 }}
+      />
+      <img
+        src={CABEZA_OJOS_CERRADOS}
+        alt=""
+        draggable={false}
+        className="ardabito-pieza ardabito-cabeza ardabito-parpadeo"
+        style={{ ...sharedStyle, zIndex: pieza.z + 1, opacity: ojosCerrados ? 1 : 0 }}
+      />
+    </>
+  )
+}
+
+/**
  * Parpadeo natural: ojos abiertos la mayor parte del tiempo, con cierres
- * breves (~140ms) en intervalos aleatorios (2.5-6s) — evita el patrón
- * mecánico de un parpadeo a intervalo fijo.
+ * más pausados (~420ms, con cross-fade CSS de por medio) en intervalos
+ * aleatorios (3-7s) — evita tanto el patrón mecánico de intervalo fijo
+ * como el "flash" brusco de un parpadeo demasiado corto/instantáneo.
  */
 function useParpadeo() {
   const [ojosCerrados, setOjosCerrados] = useState(false)
@@ -112,13 +150,13 @@ function useParpadeo() {
     let abrirTimeout: ReturnType<typeof setTimeout>
 
     function programarSiguienteParpadeo() {
-      const espera = 2500 + Math.random() * 3500
+      const espera = 3000 + Math.random() * 4000
       cerrarTimeout = setTimeout(() => {
         setOjosCerrados(true)
         abrirTimeout = setTimeout(() => {
           setOjosCerrados(false)
           programarSiguienteParpadeo()
-        }, 140)
+        }, 420)
       }, espera)
     }
 
@@ -144,11 +182,7 @@ export function Ardabito({ className }: ArdabitoProps) {
       <Pieza pieza={PIEZAS.cola} />
       <Pieza pieza={PIEZAS.pataSaludo} className="ardabito-pata" />
       <Pieza pieza={PIEZAS.cuerpo} />
-      <Pieza
-        pieza={PIEZAS.cabeza}
-        className="ardabito-cabeza"
-        src={ojosCerrados ? CABEZA_OJOS_CERRADOS : CABEZA_OJOS_ABIERTOS}
-      />
+      <CabezaConParpadeo ojosCerrados={ojosCerrados} />
     </div>
   )
 }
