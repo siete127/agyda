@@ -58,11 +58,13 @@ export const crmService = {
   },
 
   // ── Clientes (Atención al Cliente, sobre CRM_CONTACTOS) ──
-  // Sin filtro esCliente: muestra TODOS los contactos del CRM compartido con
-  // Ventas — los que aún no tienen alta formal se distinguen en la UI y se
-  // completan al editar su ficha (crmContactosController.altaCliente).
+  // conSeguimiento=1: solo contactos que ya "entraron" al radar de Atención
+  // al Cliente — cliente dado de alta o con una oportunidad ya convertida a
+  // proyecto (ver crmContactosController.getAll). Antes traía TODO el CRM
+  // sin filtrar, incluidos contactos sueltos del formulario web que nunca
+  // pasaron por el flujo de alta/generar-proyecto.
   getClientes: async (q?: string): Promise<CRMContacto[]> => {
-    const { data } = await api.get('/crm/contactos', { params: { ...(q ? { q } : {}) } })
+    const { data } = await api.get('/crm/contactos', { params: { conSeguimiento: '1', ...(q ? { q } : {}) } })
     return norm(data?.data ?? data, parseCRMContacto)
   },
   altaCliente: async (id: number, body: {

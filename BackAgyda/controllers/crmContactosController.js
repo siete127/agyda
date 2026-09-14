@@ -24,12 +24,25 @@ exports.getAll = async (req, res) => {
     const pool = await databaseService.getPool(req.user?.empresa);
     const q = req.query.q ? `%${req.query.q}%` : null;
     const esCliente = req.query.esCliente;
+    // conSeguimiento=1: solo contactos que ya "entraron" formalmente al
+    // radar de Atención al Cliente — cliente dado de alta (CONT_ES_CLIENTE=1)
+    // o con al menos una oportunidad convertida a proyecto (OPO_PROYECTO_ID).
+    // Sin esto, un contacto suelto del formulario web (sin alta ni proyecto)
+    // no tiene por qué aparecer en el módulo de Seguimiento de clientes —
+    // solo en el Pipeline de Ventas hasta que alguien lo convierta.
+    const conSeguimiento = req.query.conSeguimiento === '1' || req.query.conSeguimiento === 'true';
     let query = `
       SELECT ${CONTACTO_SELECT_FIELDS}
       FROM CRM_CONTACTOS
       WHERE CONT_ACTIVO = 1`;
     if (q) query += ` AND (CONT_NOMBRE LIKE @q OR CONT_EMPRESA LIKE @q OR CONT_CORREO LIKE @q)`;
     if (esCliente !== undefined) query += ` AND CONT_ES_CLIENTE = @esCliente`;
+    if (conSeguimiento) {
+      query += ` AND (CONT_ES_CLIENTE = 1 OR EXISTS (
+        SELECT 1 FROM CRM_OPORTUNIDADES o
+        WHERE o.OPO_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND o.OPO_PROYECTO_ID IS NOT NULL
+      ))`;
+    }
     query += ` ORDER BY CONT_NOMBRE`;
     const req2 = pool.request();
     if (q) req2.input('q', sql.NVarChar, q);
