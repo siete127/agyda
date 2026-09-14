@@ -15,6 +15,8 @@ type LandData = { all: Float32Array; interior: Float32Array }
 const CITIES: Record<string, LatLng> = {
   // Norteamérica — repartidas, no amontonadas en un solo país
   cdmx: { lat: 19.4326, lng: -99.1332 },
+  guadalajara: { lat: 20.6597, lng: -103.3496 },
+  puebla: { lat: 19.0414, lng: -98.2063 },
   chihuahua: { lat: 28.6329, lng: -106.0691 },
   dallas: { lat: 32.7767, lng: -96.7970 },
   denver: { lat: 39.7392, lng: -104.9903 },
@@ -58,9 +60,11 @@ const CITIES: Record<string, LatLng> = {
 }
 
 const ARCS: ArcDef[] = [
-  // Norteamérica
-  { start: CITIES.cdmx, end: CITIES.chihuahua, delay: 0.00, speed: 0.30 },
-  { start: CITIES.chihuahua, end: CITIES.denver, delay: 0.06, speed: 0.29 },
+  // Norteamérica / centro de México
+  { start: CITIES.cdmx, end: CITIES.guadalajara, delay: 0.00, speed: 0.35 },
+  { start: CITIES.cdmx, end: CITIES.puebla, delay: 0.03, speed: 0.36 },
+  { start: CITIES.guadalajara, end: CITIES.chihuahua, delay: 0.06, speed: 0.29 },
+  { start: CITIES.chihuahua, end: CITIES.denver, delay: 0.09, speed: 0.29 },
   { start: CITIES.dallas, end: CITIES.denver, delay: 0.12, speed: 0.33 },
   { start: CITIES.denver, end: CITIES.winnipeg, delay: 0.18, speed: 0.28 },
   { start: CITIES.cdmx, end: CITIES.dallas, delay: 0.24, speed: 0.31 },
@@ -136,7 +140,7 @@ function CoreSphere() {
   return (
     <mesh renderOrder={0}>
       <sphereGeometry args={[RADIUS, 48, 48]} />
-      <meshBasicMaterial color="#06152d" transparent opacity={0.30} depthWrite={false} />
+      <meshBasicMaterial color="#06152d" transparent opacity={0.62} depthWrite={false} />
     </mesh>
   )
 }
@@ -561,7 +565,7 @@ function GlobeScene({ rotationSpeed, reducedMotion }: { rotationSpeed: number; r
     const entries = Object.entries(snappedCities)
 
     const priority = [
-      'cdmx', 'chihuahua', 'dallas', 'denver', 'winnipeg',
+      'cdmx', 'guadalajara', 'puebla', 'chihuahua', 'dallas', 'denver', 'winnipeg',
       'brasilia', 'santaCruz', 'manaus',
       'madrid', 'paris', 'moscow',
       'cairo', 'lusaka', 'kinshasa', 'bamako',
