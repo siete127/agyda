@@ -298,10 +298,22 @@ socketService.initialize(server);
     // tras cualquier reinicio del backend, la BD sigue diciendo 'conectado'
     // pero no hay socket real escuchando hasta reconectar. Ver
     // baileysManager.reconectarSesionesGuardadas para el detalle del bug.
-    try {
-      await require('./services/canalesBaileys/baileysManager').reconectarSesionesGuardadas();
-    } catch (err) {
-      logger.error('❌ Error reconectando sesiones de Baileys:', err.message);
+    //
+    // BAILEYS_DISABLE_AUTORECONNECT=1 (usado en .env.qa): back-agyda-qa corre
+    // el mismo código contra la MISMA base de datos y la MISMA carpeta de
+    // credenciales en disco que producción (BackAgyda/baileys_sessions/) —
+    // si ambos procesos reconectan el mismo canal, compiten por la sesión de
+    // WhatsApp (WhatsApp solo permite una conexión activa a la vez) y cada
+    // uno pisa CN_BAILEYS_ESTADO con lo que ve en su propia memoria, dejando
+    // el estado real oscilando sin control entre 'conectado'/'esperando_qr'.
+    if (process.env.BAILEYS_DISABLE_AUTORECONNECT === '1') {
+      logger.warn('⚠️ Baileys: auto-reconexión deshabilitada en este proceso (BAILEYS_DISABLE_AUTORECONNECT=1)');
+    } else {
+      try {
+        await require('./services/canalesBaileys/baileysManager').reconectarSesionesGuardadas();
+      } catch (err) {
+        logger.error('❌ Error reconectando sesiones de Baileys:', err.message);
+      }
     }
   }
 

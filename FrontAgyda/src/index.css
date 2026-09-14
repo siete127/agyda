@@ -378,3 +378,21 @@
   :root:not([data-theme="light"]) .recharts-cartesian-axis-tick-line { stroke: rgb(var(--surface-border)) !important; }
 }
 
+/* ── Controls/MiniMap de @xyflow/react (Constructor de flujo del chatbot) ──
+   La librería expone variables --xy-* pensadas justo para esto — no hace
+   falta !important ni pelear con sus clases, solo redefinir sus tokens con
+   los nuestros. Van fuera de @layer por el mismo motivo que recharts. */
+.react-flow__controls-button {
+  --xy-controls-button-background-color-default: rgb(var(--card));
+  --xy-controls-button-background-color-hover-default: rgb(var(--color-brand-light));
+  --xy-controls-button-border-color-default: rgb(var(--surface-border));
+  --xy-controls-button-color-default: rgb(var(--ink-secondary));
+  --xy-controls-button-color-hover-default: rgb(var(--color-brand));
+}
+.react-flow__controls { --xy-controls-box-shadow-default: 0 1px 4px rgb(0 0 0 / 0.08); }
+.react-flow__minimap { --xy-minimap-background-color-default: rgb(var(--card)); }
+.react-flow__minimap-mask {
+  --xy-minimap-mask-background-color-default: rgb(var(--ink) / 0.06);
+  --xy-minimap-mask-stroke-color-default: rgb(var(--color-brand) / 0.4);
+}
+

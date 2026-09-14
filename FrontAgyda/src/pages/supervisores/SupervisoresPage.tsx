@@ -724,8 +724,11 @@ function HistoricoSlaTab() {
 
   const serie = data?.serie ?? []
   const campanias = data?.campanias ?? []
-  const fmtDia = (iso: string) => {
-    const [, m, d] = iso.split('-')
+  // Acepta ReactNode (no solo string) porque XAxis.tickFormatter y
+  // Tooltip.labelFormatter de recharts tipan su parámetro como ReactNode —
+  // en este dataset siempre llega el string 'YYYY-MM-DD' de verdad.
+  const fmtDia = (iso: React.ReactNode) => {
+    const [, m, d] = String(iso).split('-')
     return `${d}/${m}`
   }
 
@@ -823,7 +826,7 @@ function HistoricoSlaTab() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                     <XAxis dataKey="dia" tickFormatter={fmtDia} tick={{ fontSize: 10 }} />
                     <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                    <Tooltip labelFormatter={fmtDia} formatter={(v: number) => [`${v}%`, 'Dentro de SLA']} />
+                    <Tooltip labelFormatter={fmtDia} formatter={(v) => [`${v}%`, 'Dentro de SLA']} />
                     <Area type="monotone" dataKey="pctDentroSla" name="% dentro de SLA" stroke="#1B4FD8" strokeWidth={2} fill="url(#slaFill)" dot={{ r: 3 }} connectNulls />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -840,7 +843,7 @@ function HistoricoSlaTab() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                     <XAxis dataKey="dia" tickFormatter={fmtDia} tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip labelFormatter={fmtDia} formatter={(v: number) => [fmtSegundos(v), '1ra respuesta']} />
+                    <Tooltip labelFormatter={fmtDia} formatter={(v) => [fmtSegundos(Number(v)), '1ra respuesta']} />
                     <Line type="monotone" dataKey="segRespuestaProm" name="1ra respuesta (seg)" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>

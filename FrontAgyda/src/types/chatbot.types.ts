@@ -24,6 +24,11 @@ export interface ChatbotConfig {
   turnosSinMatchParaEscalar: string
   sugerenciaEscalarEs: string
   sugerenciaEscalarEn: string
+  /** Nodo "Captura de lead" del Constructor de flujo — {nombre} en pedirContacto*. */
+  pedirNombreEs: string
+  pedirNombreEn: string
+  pedirContactoEs: string
+  pedirContactoEn: string
 }
 
 export type TipoEtiquetaMenu = 'respuesta' | 'escalar_campania' | 'escalar_generico' | 'arbol_diagnostico'
