@@ -21,10 +21,10 @@ export function AuthLayout() {
 
       <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
 
-      {/* Ardabito — delante del globo (y de su overlay), esquina inferior
-         derecha del panel. */}
+      {/* Ardabito — delante del globo (y de su overlay), superpuesto sobre
+         el propio globo en vez de aislado en una esquina. */}
       <div className="pointer-events-none absolute inset-0 z-[5] hidden [@media(min-width:1024px)_and_(min-height:855px)]:block">
-        <div className="absolute bottom-[2%] right-[3%] w-[190px]">
+        <div className="absolute bottom-[8%] left-[28%] w-[190px] -translate-x-1/2">
           <Ardabito />
         </div>
       </div>
