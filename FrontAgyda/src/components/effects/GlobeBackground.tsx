@@ -142,7 +142,7 @@ function CoreSphere() {
   return (
     <mesh renderOrder={0}>
       <sphereGeometry args={[RADIUS, 48, 48]} />
-      <meshBasicMaterial color="#06152d" />
+      <meshBasicMaterial color="#0f2a52" />
     </mesh>
   )
 }

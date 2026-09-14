@@ -71,16 +71,9 @@ export function AuthLayout() {
         />
       </div>
 
-      <div className="absolute left-6 top-6 z-30 flex items-center gap-3 lg:left-10 lg:top-10">
-        <img
-          src="/Logo_AGYDA.png"
-          alt="AGYDA"
-          className="h-14 w-auto lg:h-16"
-        />
-        <div className="leading-tight">
-          <p className="text-base font-bold text-white tracking-wide lg:text-lg">AGYDA</p>
-          <p className="text-[0.7rem] text-blue-200/60 lg:text-xs">Soluciones en tecnología</p>
-        </div>
+      <div className="absolute left-6 top-6 z-30 leading-tight lg:left-10 lg:top-10">
+        <p className="text-base font-bold text-white tracking-wide lg:text-lg">AGYDA</p>
+        <p className="text-[0.7rem] text-blue-200/60 lg:text-xs">Soluciones de tecnología</p>
       </div>
 
       <div className="relative z-30 flex flex-1 flex-col items-center justify-center px-6 py-10 lg:items-end lg:pr-[8%]">
