@@ -28,8 +28,11 @@ export function AuthLayout() {
 
       {/* Ardabito — delante del globo (y de su overlay), superpuesto sobre
          el propio globo. Ancho en vw (con piso/techo en px) para que escale
-         con el tamaño real de pantalla en vez de quedar fijo. */}
-      <div className="pointer-events-none absolute inset-0 z-[5] hidden [@media(min-width:1024px)_and_(min-height:855px)]:block">
+         con el tamaño real de pantalla en vez de quedar fijo. Su propio
+         breakpoint (solo min-width, sin min-height) es más permisivo que el
+         del globo — antes compartían la misma condición y Ardabito
+         desaparecía de golpe junto con el globo en pantallas de menor alto. */}
+      <div className="pointer-events-none absolute inset-0 z-[5] hidden lg:block">
         <div className="absolute bottom-0 left-[48%] w-[min(34vw,620px)] min-w-[360px] -translate-x-1/2">
           <Ardabito />
         </div>

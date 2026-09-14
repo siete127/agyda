@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import './Ardabito.css'
 
 /**
@@ -73,10 +74,13 @@ const PIEZAS: Record<'cola' | 'pataSaludo' | 'cuerpo' | 'cabeza', PiezaSpec> = {
   },
 }
 
-function Pieza({ pieza, className }: { pieza: PiezaSpec; className?: string }) {
+const CABEZA_OJOS_ABIERTOS = '/ardabito/cabeza-ardabito.png'
+const CABEZA_OJOS_CERRADOS = '/ardabito/cabeza-ardabito-ojos-cerrados.png'
+
+function Pieza({ pieza, className, src }: { pieza: PiezaSpec; className?: string; src?: string }) {
   return (
     <img
-      src={pieza.src}
+      src={src ?? pieza.src}
       alt=""
       draggable={false}
       className={`ardabito-pieza ${className ?? ''}`}
@@ -95,17 +99,56 @@ function Pieza({ pieza, className }: { pieza: PiezaSpec; className?: string }) {
   )
 }
 
+/**
+ * Parpadeo natural: ojos abiertos la mayor parte del tiempo, con cierres
+ * breves (~140ms) en intervalos aleatorios (2.5-6s) — evita el patrón
+ * mecánico de un parpadeo a intervalo fijo.
+ */
+function useParpadeo() {
+  const [ojosCerrados, setOjosCerrados] = useState(false)
+
+  useEffect(() => {
+    let cerrarTimeout: ReturnType<typeof setTimeout>
+    let abrirTimeout: ReturnType<typeof setTimeout>
+
+    function programarSiguienteParpadeo() {
+      const espera = 2500 + Math.random() * 3500
+      cerrarTimeout = setTimeout(() => {
+        setOjosCerrados(true)
+        abrirTimeout = setTimeout(() => {
+          setOjosCerrados(false)
+          programarSiguienteParpadeo()
+        }, 140)
+      }, espera)
+    }
+
+    programarSiguienteParpadeo()
+    return () => {
+      clearTimeout(cerrarTimeout)
+      clearTimeout(abrirTimeout)
+    }
+  }, [])
+
+  return ojosCerrados
+}
+
 interface ArdabitoProps {
   className?: string
 }
 
 export function Ardabito({ className }: ArdabitoProps) {
+  const ojosCerrados = useParpadeo()
+
   return (
     <div className={`ardabito-root ${className ?? ''}`}>
       <Pieza pieza={PIEZAS.cola} />
       <Pieza pieza={PIEZAS.pataSaludo} className="ardabito-pata" />
       <Pieza pieza={PIEZAS.cuerpo} />
-      <Pieza pieza={PIEZAS.cabeza} className="ardabito-cabeza" />
+      <Pieza
+        pieza={PIEZAS.cabeza}
+        className="ardabito-cabeza"
+        src={ojosCerrados ? CABEZA_OJOS_CERRADOS : CABEZA_OJOS_ABIERTOS}
+      />
     </div>
   )
 }

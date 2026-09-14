@@ -122,15 +122,6 @@ function latLngToVector3(lat: number, lng: number, r = RADIUS) {
   )
 }
 
-function makeArcCurve(start: LatLng, end: LatLng) {
-  const a = latLngToVector3(start.lat, start.lng, RADIUS * 1.008)
-  const b = latLngToVector3(end.lat, end.lng, RADIUS * 1.008)
-  const angle = a.angleTo(b)
-  const altitude = THREE.MathUtils.lerp(0.16, 0.66, THREE.MathUtils.clamp(angle / Math.PI, 0, 1))
-  const mid = a.clone().add(b).normalize().multiplyScalar(RADIUS + altitude)
-  return new THREE.QuadraticBezierCurve3(a, mid, b)
-}
-
 function CoreSphere() {
   // Esfera completamente OPACA (sin transparent/opacity) — es el "planeta"
   // en sí, no debe dejar ver nada detrás. El culling de los puntos de
@@ -142,7 +133,7 @@ function CoreSphere() {
   return (
     <mesh renderOrder={0}>
       <sphereGeometry args={[RADIUS, 48, 48]} />
-      <meshBasicMaterial color="#0f2a52" />
+      <meshBasicMaterial color="#071c4a" />
     </mesh>
   )
 }

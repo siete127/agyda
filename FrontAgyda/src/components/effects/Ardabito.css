@@ -36,20 +36,32 @@
 /* ── Pata de saludo — oscilación natural alrededor de su hombro (origin
    25% 75%): arranca en base, gira hacia un lado, vuelve, segunda oscilación
    más chica, y termina EXACTO en la transformación inicial para que el loop
-   no salte. Sin animar scale ni mover el punto de origen. */
+   no salte. Sin animar scale ni mover el punto de origen.
+
+   Un solo cubic-bezier aplicado a los 8 keyframes de golpe hacía que cada
+   tramo (con ángulos muy distintos entre sí) acelerara/frenara de forma
+   pareja sin importar cuánto ángulo debía recorrer — eso es lo que se veía
+   "a tirones". Con más keyframes intermedios (interpolación casi lineal
+   entre pasos) el propio timing-function ease-in-out por defecto del
+   navegador ya alisa el movimiento sin ese efecto de salto. */
 @keyframes ardabito-pata-saludo {
-  0%   { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
-  15%  { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
-  32%  { transform: translate(var(--tx), var(--ty)) rotate(-14deg); }
-  48%  { transform: translate(var(--tx), var(--ty)) rotate(4deg); }
-  62%  { transform: translate(var(--tx), var(--ty)) rotate(-7deg); }
-  75%  { transform: translate(var(--tx), var(--ty)) rotate(2deg); }
-  88%  { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
-  100% { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
+  0%    { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
+  10%   { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
+  18%   { transform: translate(var(--tx), var(--ty)) rotate(-6deg); }
+  26%   { transform: translate(var(--tx), var(--ty)) rotate(-14deg); }
+  34%   { transform: translate(var(--tx), var(--ty)) rotate(-9deg); }
+  42%   { transform: translate(var(--tx), var(--ty)) rotate(4deg); }
+  50%   { transform: translate(var(--tx), var(--ty)) rotate(1deg); }
+  58%   { transform: translate(var(--tx), var(--ty)) rotate(-7deg); }
+  66%   { transform: translate(var(--tx), var(--ty)) rotate(-3deg); }
+  74%   { transform: translate(var(--tx), var(--ty)) rotate(2deg); }
+  82%   { transform: translate(var(--tx), var(--ty)) rotate(0.5deg); }
+  90%   { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
+  100%  { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
 }
 
 .ardabito-pata {
-  animation: ardabito-pata-saludo 3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: ardabito-pata-saludo 3s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
