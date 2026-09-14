@@ -14,17 +14,23 @@ export function AuthLayout() {
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0D1B3E]">
       {/* Globo 3D — solo en pantallas grandes, mismo breakpoint que tenía el
-         video de fondo anterior. */}
+         video de fondo anterior. Ancla por altura (no por %) para que nunca
+         se recorte verticalmente sin importar la relación de aspecto de la
+         pantalla: el contenedor es siempre cuadrado según el alto real
+         disponible, centrado en la mitad izquierda. */}
       <div className="pointer-events-none absolute inset-y-0 left-0 z-0 hidden w-[55%] [@media(min-width:1024px)_and_(min-height:855px)]:block">
-        <GlobeBackground className="absolute inset-0 h-full w-full" rotationSpeed={0.08} cameraDistance={6.3} />
+        <div className="absolute left-1/2 top-1/2 aspect-square h-[92vh] max-h-full -translate-x-1/2 -translate-y-1/2">
+          <GlobeBackground className="h-full w-full" rotationSpeed={0.08} cameraDistance={6.3} />
+        </div>
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
 
       {/* Ardabito — delante del globo (y de su overlay), superpuesto sobre
-         el propio globo en vez de aislado en una esquina. */}
+         el propio globo. Ancho en vw (con piso/techo en px) para que escale
+         con el tamaño real de pantalla en vez de quedar fijo. */}
       <div className="pointer-events-none absolute inset-0 z-[5] hidden [@media(min-width:1024px)_and_(min-height:855px)]:block">
-        <div className="absolute bottom-0 left-[48%] w-[420px] -translate-x-1/2">
+        <div className="absolute bottom-0 left-[48%] w-[min(34vw,620px)] min-w-[360px] -translate-x-1/2">
           <Ardabito />
         </div>
       </div>

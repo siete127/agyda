@@ -316,15 +316,28 @@ function LandDots({ onReady }: { onReady?: (data: LandData) => void }) {
         },
         vertexShader: `
           uniform float uSize;
+          varying float vVisible;
           void main() {
+            // "Back-face culling" manual para puntos: un point no tiene
+            // normal real como una cara, así que se usa la posición local
+            // (normalizada, ya que están sobre una esfera) como su normal.
+            // Si mira en contra de la cámara (dot < 0) es la cara trasera
+            // del globo — se oculta en el fragment shader, no aquí, para
+            // no romper el pipeline de puntos con gl_PointSize = 0.
+            vec3 normal = normalize(position);
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vec3 viewDir = normalize(-mvPosition.xyz);
+            vec3 normalView = normalize(mat3(modelViewMatrix) * normal);
+            vVisible = dot(normalView, viewDir);
             gl_Position = projectionMatrix * mvPosition;
             gl_PointSize = uSize * (4.45 / max(2.95, -mvPosition.z));
           }
         `,
         fragmentShader: `
           uniform vec3 uColor;
+          varying float vVisible;
           void main() {
+            if (vVisible < 0.02) discard;
             vec2 p = gl_PointCoord - vec2(0.5);
             float d = length(p);
             if (d > 0.5) discard;
