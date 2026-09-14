@@ -108,6 +108,18 @@ export interface AlarmaInstancia {
   comentario: string | null
 }
 
+// Configuración de una alarma (umbral y campaña) — distinta de las
+// instancias de arriba, que son disparos concretos de esa configuración.
+export interface AlarmaConfig {
+  id: number
+  nombre: string
+  tipo: AlarmaTipo
+  umbralMinutos: number
+  campaniaId: number | null
+  campaniaNombre: string | null
+  activa: boolean
+}
+
 export type NotificacionTipo = 'informativa' | 'obligatoria'
 export type NotificacionAlcance = 'agente' | 'skill' | 'campania' | 'todos'
 

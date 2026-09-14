@@ -7212,16 +7212,23 @@ CREATE TABLE dbo.CSA_ALARMAS (
   CSA_NOMBRE NVARCHAR(120) NOT NULL,
   CSA_TIPO NVARCHAR(20) NOT NULL, -- 'agente_pausa' | 'skill_cola'
   CSA_UMBRAL_MINUTOS INT NOT NULL,
+  CSA_CAMPANIA_ID INT NULL, -- NULL = alarma global (aplica a toda campaña sin una propia de este tipo)
   CSA_ACTIVA BIT NOT NULL DEFAULT (1),
   CSA_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
   CONSTRAINT CK_CSA_TIPO CHECK (CSA_TIPO IN ('agente_pausa','skill_cola'))
 );`,
-    // Semilla de las dos alarmas del plan (Fase 1) si la tabla quedó vacía —
-    // umbral por default editable después, no hay UI de alta todavía.
+    // Migración para BDs creadas antes de que existiera personalización por
+    // campaña — agrega la columna si la tabla ya existía sin ella.
+    `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CSA_ALARMAS') AND name = 'CSA_CAMPANIA_ID')
+ALTER TABLE dbo.CSA_ALARMAS ADD CSA_CAMPANIA_ID INT NULL;`,
+    // Semilla de las dos alarmas globales del plan (Fase 1) si la tabla
+    // quedó vacía — un supervisor puede después crear una específica de
+    // campaña que las sobreescribe (ver resolución en evaluarAlarma).
     `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CSA_ALARMAS)
-INSERT INTO dbo.CSA_ALARMAS (CSA_NOMBRE, CSA_TIPO, CSA_UMBRAL_MINUTOS) VALUES
-  (N'Agente en pausa prolongada', 'agente_pausa', 20),
-  (N'Chats en cola sin asignar', 'skill_cola', 5);`,
+INSERT INTO dbo.CSA_ALARMAS (CSA_NOMBRE, CSA_TIPO, CSA_UMBRAL_MINUTOS, CSA_CAMPANIA_ID) VALUES
+  (N'Agente en pausa prolongada', 'agente_pausa', 20, NULL),
+  (N'Chats en cola sin asignar', 'skill_cola', 5, NULL);`,
     `IF OBJECT_ID('dbo.CSA_ALARMA_INSTANCIAS', 'U') IS NULL
 CREATE TABLE dbo.CSA_ALARMA_INSTANCIAS (
   CSI_ID INT IDENTITY(1,1) PRIMARY KEY,
