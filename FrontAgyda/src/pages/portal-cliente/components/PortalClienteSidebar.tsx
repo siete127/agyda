@@ -124,7 +124,7 @@ function NavItemRow({ item, itemRef, isSectionActive }: NavItemRowProps) {
  * arriba abiertos/cerrados, y se anima con transición CSS al cambiar de
  * ruta en vez de aparecer/desaparecer de golpe.
  */
-function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLElement>; activeEl: HTMLElement | null }) {
+function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLElement | null>; activeEl: HTMLElement | null }) {
   const [rect, setRect] = useState<{ top: number; height: number; right: number } | null>(null)
   const theme = useThemeStore((s) => s.theme)
   const isDark = resolveTheme(theme) === 'dark'
