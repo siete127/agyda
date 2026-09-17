@@ -13,13 +13,14 @@ export function AuthLayout() {
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#07142E]">
-      {/* Globo 3D — solo en pantallas grandes, mismo breakpoint que tenía el
-         video de fondo anterior. Ancla por altura (no por %) para que nunca
-         se recorte verticalmente sin importar la relación de aspecto de la
-         pantalla: el contenedor es siempre cuadrado según el alto real
-         disponible, centrado en la mitad izquierda. */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-0 hidden w-[55%] [@media(min-width:1024px)_and_(min-height:855px)]:block">
-        <div className="absolute left-1/2 top-1/2 aspect-square h-[92vh] max-h-full -translate-x-1/2 -translate-y-1/2">
+      {/* Globo 3D — visible desde tablet en adelante (md+); en teléfono
+         queda oculto y solo se ve el card de login. El tamaño usa
+         min(vh, vw) en vez de solo vh: así el cuadrado del globo siempre
+         cabe tanto en alto como en ancho sin importar la resolución real de
+         la pantalla (una laptop de 15" con poca altura de viewport, una
+         tablet en vertical, etc.) — nunca desaparece, solo se achica. */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-0 hidden w-[55%] md:block">
+        <div className="absolute left-1/2 top-1/2 aspect-square h-[min(85vh,48vw)] max-h-full -translate-x-1/2 -translate-y-1/2">
           <GlobeBackground className="h-full w-full" rotationSpeed={0.08} cameraDistance={6.3} />
         </div>
       </div>
@@ -27,13 +28,12 @@ export function AuthLayout() {
       <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#07142E]/80 via-[#091A3A]/55 to-[#091A3A]/85" />
 
       {/* Ardabito — delante del globo (y de su overlay), superpuesto sobre
-         el propio globo. Ancho en vw (con piso/techo en px) para que escale
-         con el tamaño real de pantalla en vez de quedar fijo. Su propio
-         breakpoint (solo min-width, sin min-height) es más permisivo que el
-         del globo — antes compartían la misma condición y Ardabito
-         desaparecía de golpe junto con el globo en pantallas de menor alto. */}
-      <div className="pointer-events-none absolute inset-0 z-[5] hidden lg:block">
-        <div className="absolute bottom-0 left-[48%] w-[min(34vw,620px)] min-w-[360px] -translate-x-1/2">
+         el propio globo. Mismo breakpoint que el globo (md+) para que
+         aparezcan/desaparezcan juntos. Ancho en min(vw,vh) para que también
+         se achique en pantallas bajas de altura y no solo angostas, con un
+         piso menor que antes para no desbordar en tablets angostas. */}
+      <div className="pointer-events-none absolute inset-0 z-[5] hidden md:block">
+        <div className="absolute bottom-4 left-[calc(48%-57px)] w-[min(50vw,62vh,840px)] min-w-[300px] -translate-x-1/2 md:bottom-5 lg:bottom-7">
           <Ardabito />
         </div>
       </div>
@@ -74,12 +74,12 @@ export function AuthLayout() {
         />
       </div>
 
-      <div className="absolute left-6 top-6 z-30 leading-tight lg:left-10 lg:top-10">
-        <p className="text-base font-bold text-white tracking-wide lg:text-lg">AGYDA</p>
-        <p className="text-[0.7rem] text-blue-200/60 lg:text-xs">Soluciones de tecnología</p>
+      <div className="absolute left-6 top-6 z-30 leading-tight md:left-10 md:top-10">
+        <p className="text-base font-bold text-white tracking-wide md:text-lg">AGYDA</p>
+        <p className="text-[0.7rem] text-blue-200/60 md:text-xs">Soluciones de tecnología</p>
       </div>
 
-      <div className="relative z-30 flex flex-1 flex-col items-center justify-center px-6 py-10 lg:items-end lg:pr-[8%]">
+      <div className="relative z-30 flex flex-1 flex-col items-center justify-center px-6 py-10 md:items-end md:pr-[8%]">
         <div className="w-full max-w-[400px] animate-slide-up">
           <Outlet />
         </div>

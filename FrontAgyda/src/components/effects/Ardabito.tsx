@@ -77,13 +77,24 @@ const PIEZAS: Record<'cola' | 'pataSaludo' | 'cuerpo' | 'cabeza', PiezaSpec> = {
 const CABEZA_OJOS_ABIERTOS = '/ardabito/cabeza-ardabito.png'
 const CABEZA_OJOS_CERRADOS = '/ardabito/cabeza-ardabito-ojos-cerrados.png'
 
-function Pieza({ pieza, className, src }: { pieza: PiezaSpec; className?: string; src?: string }) {
+function Pieza({
+  pieza,
+  className,
+  src,
+  onAnimationEnd,
+}: {
+  pieza: PiezaSpec
+  className?: string
+  src?: string
+  onAnimationEnd?: () => void
+}) {
   return (
     <img
       src={src ?? pieza.src}
       alt=""
       draggable={false}
       className={`ardabito-pieza ${className ?? ''}`}
+      onAnimationEnd={onAnimationEnd}
       style={
         {
           left: `${pieza.leftPct}%`,
@@ -105,7 +116,15 @@ function Pieza({ pieza, className, src }: { pieza: PiezaSpec; className?: string
  * golpe (0ms), lo que se veía como un parpadeo brusco tipo flash en vez de
  * un cierre de ojos natural.
  */
-function CabezaConParpadeo({ ojosCerrados }: { ojosCerrados: boolean }) {
+function CabezaConParpadeo({
+  ojosCerrados,
+  transitionMs,
+  easing,
+}: {
+  ojosCerrados: boolean
+  transitionMs: number
+  easing: string
+}) {
   const pieza = PIEZAS.cabeza
   const sharedStyle = {
     left: `${pieza.leftPct}%`,
@@ -114,6 +133,8 @@ function CabezaConParpadeo({ ojosCerrados }: { ojosCerrados: boolean }) {
     transformOrigin: `${pieza.originX * 100}% ${pieza.originY * 100}%`,
     '--tx': `${-pieza.originX * 100}%`,
     '--ty': `${-pieza.originY * 100}%`,
+    transitionDuration: `${transitionMs}ms`,
+    transitionTimingFunction: easing,
   } as React.CSSProperties
 
   return (
@@ -136,38 +157,99 @@ function CabezaConParpadeo({ ojosCerrados }: { ojosCerrados: boolean }) {
   )
 }
 
+function rango(min: number, max: number) {
+  return min + Math.random() * (max - min)
+}
+
 /**
- * Parpadeo natural: ojos abiertos la mayor parte del tiempo, con cierres
- * más pausados (~420ms, con cross-fade CSS de por medio) en intervalos
- * aleatorios (3-7s) — evita tanto el patrón mecánico de intervalo fijo
- * como el "flash" brusco de un parpadeo demasiado corto/instantáneo.
+ * Saludo en ráfagas: la pata anima UNA vuelta completa (rotate 0→0, ver
+ * @keyframes ardabito-pata-saludo) y se detiene en reposo — no en loop
+ * infinito. Al terminar, la mayoría de las veces descansa unos segundos
+ * antes de volver a saludar; a veces saluda una segunda vez seguida.
+ * Un loop que nunca para es lo que se leía como mecánico/"trabado" — un
+ * personaje real no saluda sin parar.
+ */
+function useSaludo() {
+  const [animKey, setAnimKey] = useState(0)
+  const [activa, setActiva] = useState(true)
+
+  function onFin() {
+    const saludaOtraVez = Math.random() < 0.3
+    if (saludaOtraVez) {
+      setAnimKey((k) => k + 1)
+      return
+    }
+    setActiva(false)
+    setTimeout(() => {
+      setAnimKey((k) => k + 1)
+      setActiva(true)
+    }, rango(4000, 9000))
+  }
+
+  return { animKey, activa, onFin }
+}
+
+/** Curva de aceleración del cierre: arranca lento y acelera (como un párpado
+ *  cayendo por su propio peso), no una velocidad constante. */
+const EASING_CIERRE = 'cubic-bezier(0.55, 0, 1, 0.45)'
+/** Curva de la apertura: arranca rápido y frena al final — lo opuesto del
+ *  cierre. Usar la misma curva para ambas fases es lo que se sentía mecánico. */
+const EASING_APERTURA = 'cubic-bezier(0, 0.55, 0.45, 1)'
+
+/**
+ * Parpadeo natural: ojos abiertos la mayor parte del tiempo. Cada parpadeo
+ * varía un poco en duración (nunca exactamente igual al anterior) y usa
+ * curvas de aceleración distintas para cerrar y abrir. De vez en cuando
+ * (~1 de cada 6) ocurre un segundo parpadeo rápido justo después del
+ * primero, como pasa de verdad — un patrón perfectamente regular es lo que
+ * se lee como "forzado" o de animación en loop.
  */
 function useParpadeo() {
   const [ojosCerrados, setOjosCerrados] = useState(false)
+  const [transitionMs, setTransitionMs] = useState(90)
+  const [easing, setEasing] = useState(EASING_CIERRE)
 
   useEffect(() => {
-    let cerrarTimeout: ReturnType<typeof setTimeout>
-    let abrirTimeout: ReturnType<typeof setTimeout>
+    const timeouts: ReturnType<typeof setTimeout>[] = []
+    const espera = (fn: () => void, ms: number) => {
+      timeouts.push(setTimeout(fn, ms))
+    }
+
+    function unParpadeo(alTerminar: () => void) {
+      const cierreMs = rango(110, 150)
+      const holdMs = rango(90, 150)
+      const aperturaMs = rango(190, 250)
+
+      setTransitionMs(cierreMs)
+      setEasing(EASING_CIERRE)
+      setOjosCerrados(true)
+
+      espera(() => {
+        setTransitionMs(aperturaMs)
+        setEasing(EASING_APERTURA)
+        setOjosCerrados(false)
+        espera(alTerminar, aperturaMs)
+      }, cierreMs + holdMs)
+    }
 
     function programarSiguienteParpadeo() {
-      const espera = 3000 + Math.random() * 4000
-      cerrarTimeout = setTimeout(() => {
-        setOjosCerrados(true)
-        abrirTimeout = setTimeout(() => {
-          setOjosCerrados(false)
-          programarSiguienteParpadeo()
-        }, 420)
-      }, espera)
+      espera(() => {
+        unParpadeo(() => {
+          const esDoble = Math.random() < 1 / 6
+          if (esDoble) {
+            espera(() => unParpadeo(programarSiguienteParpadeo), rango(150, 260))
+          } else {
+            programarSiguienteParpadeo()
+          }
+        })
+      }, rango(3000, 7000))
     }
 
     programarSiguienteParpadeo()
-    return () => {
-      clearTimeout(cerrarTimeout)
-      clearTimeout(abrirTimeout)
-    }
+    return () => timeouts.forEach(clearTimeout)
   }, [])
 
-  return ojosCerrados
+  return { ojosCerrados, transitionMs, easing }
 }
 
 interface ArdabitoProps {
@@ -175,14 +257,21 @@ interface ArdabitoProps {
 }
 
 export function Ardabito({ className }: ArdabitoProps) {
-  const ojosCerrados = useParpadeo()
+  const { ojosCerrados, transitionMs, easing } = useParpadeo()
+  const { animKey, activa, onFin } = useSaludo()
 
   return (
     <div className={`ardabito-root ${className ?? ''}`}>
+      <div className="ardabito-sombra" />
       <Pieza pieza={PIEZAS.cola} />
-      <Pieza pieza={PIEZAS.pataSaludo} className="ardabito-pata" />
+      <Pieza
+        key={animKey}
+        pieza={PIEZAS.pataSaludo}
+        className={activa ? 'ardabito-pata' : ''}
+        onAnimationEnd={onFin}
+      />
       <Pieza pieza={PIEZAS.cuerpo} />
-      <CabezaConParpadeo ojosCerrados={ojosCerrados} />
+      <CabezaConParpadeo ojosCerrados={ojosCerrados} transitionMs={transitionMs} easing={easing} />
     </div>
   )
 }

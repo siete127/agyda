@@ -7,6 +7,29 @@
   pointer-events: none;
 }
 
+/* Sombra de contacto — elipse difuminada bajo donde se apoya (patas/cola),
+   para que el personaje se sienta apoyado y no "flotando". Una sombra
+   negra no se distingue sobre el fondo azul marino ya oscuro, así que en
+   vez de oscurecer usamos un resplandor celeste (mismo tono que el resto
+   de acentos de la pantalla de login) apoyado justo bajo las patas. */
+.ardabito-sombra {
+  position: absolute;
+  left: 52%;
+  top: 90%;
+  width: 62%;
+  height: 8%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(103, 232, 249, 0.55) 0%,
+    rgba(103, 232, 249, 0.25) 45%,
+    rgba(103, 232, 249, 0) 75%
+  );
+  filter: blur(3px);
+  z-index: 0;
+}
+
 .ardabito-pieza {
   position: absolute;
   height: auto;
@@ -17,58 +40,59 @@
   transform: translate(var(--tx), var(--ty));
 }
 
-/* ── Cabeza — idle: 90 frames @60fps (~1.5s), 0/22/45/68/90 → 0/24.4/50/75.6/100%.
-   El desplazamiento Y de Rive (386.5→385.5→386.5→387.5→386.5, ±1px sobre un
-   artboard de 800) es sutil por diseño — se expresa como fracción del propio
-   ancho de la pieza para que escale junto con el grupo responsive. */
+/* ── Cabeza — idle tipo respiración: un ciclo simétrico único (sube-baja)
+   cada 1.5s en loop exacto se lee como un metrónomo/robot. Acá el timeline
+   no es simétrico (los picos no caen a distancias iguales ni con la misma
+   curva de ida y vuelta) y el período es más lento — se parece más a una
+   respiración real que a un tic mecánico. */
 @keyframes ardabito-cabeza-idle {
-  0%    { transform: translate(var(--tx), var(--ty)) translateY(0)       rotate(0deg); }
-  24.4% { transform: translate(var(--tx), var(--ty)) translateY(-0.15%)  rotate(-0.7deg); }
-  50%   { transform: translate(var(--tx), var(--ty)) translateY(0)       rotate(0deg); }
-  75.6% { transform: translate(var(--tx), var(--ty)) translateY(0.15%)   rotate(0.7deg); }
-  100%  { transform: translate(var(--tx), var(--ty)) translateY(0)       rotate(0deg); }
+  0%    { transform: translate(var(--tx), var(--ty)) translateY(0)      rotate(0deg); }
+  16%   { transform: translate(var(--tx), var(--ty)) translateY(-0.08%) rotate(-0.3deg); }
+  34%   { transform: translate(var(--tx), var(--ty)) translateY(-0.19%) rotate(-0.65deg); }
+  48%   { transform: translate(var(--tx), var(--ty)) translateY(-0.05%) rotate(-0.15deg); }
+  63%   { transform: translate(var(--tx), var(--ty)) translateY(0.1%)   rotate(0.35deg); }
+  80%   { transform: translate(var(--tx), var(--ty)) translateY(0.18%)  rotate(0.6deg); }
+  92%   { transform: translate(var(--tx), var(--ty)) translateY(0.06%)  rotate(0.2deg); }
+  100%  { transform: translate(var(--tx), var(--ty)) translateY(0)      rotate(0deg); }
 }
 
 .ardabito-cabeza {
-  animation: ardabito-cabeza-idle 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: ardabito-cabeza-idle 4.6s ease-in-out infinite;
 }
 
-/* ── Pata de saludo — oscilación natural alrededor de su hombro (origin
-   25% 75%): arranca en base, gira hacia un lado, vuelve, segunda oscilación
-   más chica, y termina EXACTO en la transformación inicial para que el loop
-   no salte. Sin animar scale ni mover el punto de origen.
-
-   Un solo cubic-bezier aplicado a los 8 keyframes de golpe hacía que cada
-   tramo (con ángulos muy distintos entre sí) acelerara/frenara de forma
-   pareja sin importar cuánto ángulo debía recorrer — eso es lo que se veía
-   "a tirones". Con más keyframes intermedios (interpolación casi lineal
-   entre pasos) el propio timing-function ease-in-out por defecto del
-   navegador ya alisa el movimiento sin ese efecto de salto. */
+/* ── Pata de saludo — oscilación amortiguada alrededor de su hombro (origin
+   25% 75%), como un péndulo que se va frenando: un primer swing amplio y
+   cada vuelta siguiente es ~la mitad de la anterior, siempre alternando de
+   lado, hasta asentarse exacto en la transformación inicial (para que un
+   segundo saludo en ráfaga no salte). Los ángulos anteriores rebotaban sin
+   un patrón consistente (-6→-14→-9→4→1→-7→-3→2) — eso es lo que se veía
+   "a tirones"/nervioso en vez de un saludo. Una decadencia pareja y
+   predecible es lo que lee como natural. */
 @keyframes ardabito-pata-saludo {
   0%    { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
-  10%   { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
-  18%   { transform: translate(var(--tx), var(--ty)) rotate(-6deg); }
-  26%   { transform: translate(var(--tx), var(--ty)) rotate(-14deg); }
-  34%   { transform: translate(var(--tx), var(--ty)) rotate(-9deg); }
-  42%   { transform: translate(var(--tx), var(--ty)) rotate(4deg); }
-  50%   { transform: translate(var(--tx), var(--ty)) rotate(1deg); }
-  58%   { transform: translate(var(--tx), var(--ty)) rotate(-7deg); }
-  66%   { transform: translate(var(--tx), var(--ty)) rotate(-3deg); }
-  74%   { transform: translate(var(--tx), var(--ty)) rotate(2deg); }
-  82%   { transform: translate(var(--tx), var(--ty)) rotate(0.5deg); }
-  90%   { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
+  9%    { transform: translate(var(--tx), var(--ty)) rotate(-5deg); }
+  21%   { transform: translate(var(--tx), var(--ty)) rotate(18deg); }
+  33%   { transform: translate(var(--tx), var(--ty)) rotate(-12deg); }
+  45%   { transform: translate(var(--tx), var(--ty)) rotate(9deg); }
+  57%   { transform: translate(var(--tx), var(--ty)) rotate(-6deg); }
+  69%   { transform: translate(var(--tx), var(--ty)) rotate(3.5deg); }
+  81%   { transform: translate(var(--tx), var(--ty)) rotate(-1.5deg); }
+  92%   { transform: translate(var(--tx), var(--ty)) rotate(0.5deg); }
   100%  { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
 }
 
 .ardabito-pata {
-  animation: ardabito-pata-saludo 3s ease-in-out infinite;
+  animation: ardabito-pata-saludo 1.9s cubic-bezier(0.37, 0, 0.63, 1) 1;
 }
 
 /* Cross-fade del parpadeo — cambiar opacity con transition en vez de
    reemplazar el src del <img> de golpe, para que el cierre de ojos se vea
-   como un parpadeo suave y no como un "flash" instantáneo. */
+   como un parpadeo suave y no como un "flash" instantáneo. Duración y curva
+   de aceleración son asimétricas (cierre rápido y acelerado, apertura más
+   lenta y desacelerada) y las fija el componente vía estilo inline, ya que
+   varían por parpadeo — acá solo queda declarada la propiedad a animar. */
 .ardabito-parpadeo {
-  transition: opacity 180ms ease-in-out;
+  transition-property: opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
