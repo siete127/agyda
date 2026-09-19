@@ -283,7 +283,16 @@ export function PortalClienteSidebar() {
   const activeItem = NAV_ITEMS.find((item) => isItemActive(item, location.pathname))
 
   useEffect(() => {
-    setActiveEl(activeItem ? itemRefs.current.get(activeItem.to) ?? null : null)
+    // Un item padre con submenú comparte su `to` con su primer hijo (ej.
+    // "Reuniones" y "Próximas reuniones" son la misma ruta) — si el padre
+    // también recibiera el pill claro del indicador, quedaría encimado con
+    // el degradado propio que ya pinta el hijo activo dentro del submenú
+    // (dos "activos" distintos superpuestos, con la esquina cóncava
+    // cortando feo sobre el degradado). El indicador solo debe marcar
+    // destinos simples sin hijos — las secciones expandibles ya muestran
+    // su propio hijo activo con el degradado interno.
+    const hasChildren = !!activeItem?.children?.length
+    setActiveEl(activeItem && !hasChildren ? itemRefs.current.get(activeItem.to) ?? null : null)
   }, [activeItem, location.pathname])
 
   return (
