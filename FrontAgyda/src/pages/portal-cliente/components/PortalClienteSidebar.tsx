@@ -229,6 +229,7 @@ function SlidingIndicator({
   if (!rect) return null
 
   const cornerSize = 48
+  const cornerOverlap = 1
 
   return (
     <span
@@ -243,11 +244,20 @@ function SlidingIndicator({
       }}
     >
       {/* Esquinas cóncavas — ver cornerClipPath arriba. Ocultas (fade) mientras
-         el indicador está en movimiento; ver comentario de `settled`. */}
+         el indicador está en movimiento; ver comentario de `settled`. El
+         pixel de solape (`overlap`) evita una línea fina visible en la
+         costura: la pieza de esquina (recortada con clip-path, con su
+         propio antialiasing en el borde curvo) y el cuerpo del indicador
+         (un rectángulo simple) son DOS elementos separados que el navegador
+         rasteriza de forma independiente — aunque matemáticamente coincidan
+         exacto, el redondeo a subpíxel de cada uno por separado deja un
+         hilo del fondo real del sidebar asomando entre ambos. Adelantar la
+         esquina 1px hacia adentro del cuerpo (mismo color `bg`, así que el
+         solape es invisible) cierra ese hueco. */}
       <span
         className="pointer-events-none absolute right-0"
         style={{
-          top: -cornerSize,
+          top: -cornerSize + cornerOverlap,
           height: cornerSize,
           width: cornerSize,
           backgroundColor: bg,
@@ -259,7 +269,7 @@ function SlidingIndicator({
       <span
         className="pointer-events-none absolute right-0"
         style={{
-          bottom: -cornerSize,
+          bottom: -cornerSize + cornerOverlap,
           height: cornerSize,
           width: cornerSize,
           backgroundColor: bg,
@@ -298,7 +308,13 @@ export function PortalClienteSidebar() {
   }, [activeItem, location.pathname])
 
   return (
-    <aside className="flex w-[260px] flex-shrink-0 flex-col overflow-hidden bg-[#0a2f71] py-6 pl-4">
+    // pt-14 (no py-6 parejo): la esquina cóncava del indicador necesita 48px
+    // libres arriba del primer item para completar su curva antes de toparse
+    // con el overflow-hidden — con solo 24px (py-6) quedaba cortada a la
+    // mitad en "Principal". Abajo sobra espacio de sobra (el bloque de
+    // Configuración/Ayuda/Cerrar sesión debajo del <nav>), así que ese lado
+    // no necesita más que el pb-6 original.
+    <aside className="flex w-[260px] flex-shrink-0 flex-col overflow-hidden bg-[#0a2f71] pb-6 pt-14 pl-4">
       <nav ref={navRef} className="relative flex flex-1 flex-col gap-2.5">
         <SlidingIndicator navRef={navRef} activeEl={activeEl} collapsibleRefs={collapsibleRefs} />
         {NAV_ITEMS.map((item) => (
