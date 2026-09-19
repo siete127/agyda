@@ -118,6 +118,21 @@ function NavItemRow({ item, itemRef, isSectionActive }: NavItemRowProps) {
 }
 
 /**
+ * Clip-path de la esquina cóncava para un span cuadrado (size × size) —
+ * "muerde" el cuarto de círculo pegado a la esquina que toca la pestaña,
+ * dejando visible (rellenado con `bg`) solo la porción más alejada de esa
+ * esquina. A diferencia del radial-gradient usado antes, lo que queda
+ * FUERA del path es transparente de verdad (no una capa pintada con el
+ * color del sidebar) — así no depende de conocer/igualar ese color: el
+ * fondo real detrás se ve solo, sea cual sea, sin acoplar nada.
+ */
+function cornerClipPath(size: number, position: 'top' | 'bottom') {
+  return position === 'top'
+    ? `path('M ${size} 0 A ${size} ${size} 0 0 1 0 ${size} L ${size} ${size} Z')`
+    : `path('M 0 0 A ${size} ${size} 0 0 1 ${size} ${size} L ${size} 0 Z')`
+}
+
+/**
  * Indicador deslizante: un único <span> absoluto (no uno por ítem) cuya
  * posición/alto se mide con refs del elemento activo real vía
  * getBoundingClientRect — así funciona sin importar cuántos ítems haya
@@ -172,18 +187,15 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
         transition: 'top 350ms cubic-bezier(0.4, 0, 0.2, 1), height 350ms cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      {/* Esquinas cóncavas: cuadrado de base azul (color del sidebar) con
-         un cuarto de círculo del color de la pestaña "creciendo" desde la
-         esquina opuesta — el resultado es la curva invertida donde la
-         pestaña blanca se junta con el azul del sidebar arriba/abajo. */}
+      {/* Esquinas cóncavas — ver cornerClipPath arriba. */}
       <span
         className="pointer-events-none absolute right-0"
         style={{
           top: -cornerSize,
           height: cornerSize,
           width: cornerSize,
-          backgroundColor: '#0a2f71',
-          backgroundImage: `radial-gradient(circle at 0 0, transparent ${cornerSize - 0.75}px, ${bg} ${cornerSize}px)`,
+          backgroundColor: bg,
+          clipPath: cornerClipPath(cornerSize, 'top'),
         }}
       />
       <span
@@ -192,8 +204,8 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
           bottom: -cornerSize,
           height: cornerSize,
           width: cornerSize,
-          backgroundColor: '#0a2f71',
-          backgroundImage: `radial-gradient(circle at 0 100%, transparent ${cornerSize - 0.75}px, ${bg} ${cornerSize}px)`,
+          backgroundColor: bg,
+          clipPath: cornerClipPath(cornerSize, 'bottom'),
         }}
       />
     </span>
