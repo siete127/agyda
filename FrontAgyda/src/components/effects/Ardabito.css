@@ -85,22 +85,9 @@
   animation: ardabito-pata-saludo 1.9s cubic-bezier(0.37, 0, 0.63, 1) 1;
 }
 
-/* Cross-fade del parpadeo — cambiar opacity con transition en vez de
-   reemplazar el src del <img> de golpe, para que el cierre de ojos se vea
-   como un parpadeo suave y no como un "flash" instantáneo. Duración y curva
-   de aceleración son asimétricas (cierre rápido y acelerado, apertura más
-   lenta y desacelerada) y las fija el componente vía estilo inline, ya que
-   varían por parpadeo — acá solo queda declarada la propiedad a animar. */
-.ardabito-parpadeo {
-  transition-property: opacity;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ardabito-cabeza,
   .ardabito-pata {
     animation: none;
-  }
-  .ardabito-parpadeo {
-    transition: none;
   }
 }

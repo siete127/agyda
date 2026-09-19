@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './Ardabito.css'
 
 /**
@@ -74,23 +74,18 @@ const PIEZAS: Record<'cola' | 'pataSaludo' | 'cuerpo' | 'cabeza', PiezaSpec> = {
   },
 }
 
-const CABEZA_OJOS_ABIERTOS = '/ardabito/cabeza-ardabito.png'
-const CABEZA_OJOS_CERRADOS = '/ardabito/cabeza-ardabito-ojos-cerrados.png'
-
 function Pieza({
   pieza,
   className,
-  src,
   onAnimationEnd,
 }: {
   pieza: PiezaSpec
   className?: string
-  src?: string
   onAnimationEnd?: () => void
 }) {
   return (
     <img
-      src={src ?? pieza.src}
+      src={pieza.src}
       alt=""
       draggable={false}
       className={`ardabito-pieza ${className ?? ''}`}
@@ -107,53 +102,6 @@ function Pieza({
         } as React.CSSProperties
       }
     />
-  )
-}
-
-/**
- * Cabeza con parpadeo suave: dos <img> superpuestas (ojos abiertos/cerrados)
- * con cross-fade de opacidad — cambiar el src directo reemplaza la imagen de
- * golpe (0ms), lo que se veía como un parpadeo brusco tipo flash en vez de
- * un cierre de ojos natural.
- */
-function CabezaConParpadeo({
-  ojosCerrados,
-  transitionMs,
-  easing,
-}: {
-  ojosCerrados: boolean
-  transitionMs: number
-  easing: string
-}) {
-  const pieza = PIEZAS.cabeza
-  const sharedStyle = {
-    left: `${pieza.leftPct}%`,
-    top: `${pieza.topPct}%`,
-    width: `${pieza.widthPct}%`,
-    transformOrigin: `${pieza.originX * 100}% ${pieza.originY * 100}%`,
-    '--tx': `${-pieza.originX * 100}%`,
-    '--ty': `${-pieza.originY * 100}%`,
-    transitionDuration: `${transitionMs}ms`,
-    transitionTimingFunction: easing,
-  } as React.CSSProperties
-
-  return (
-    <>
-      <img
-        src={CABEZA_OJOS_ABIERTOS}
-        alt=""
-        draggable={false}
-        className="ardabito-pieza ardabito-cabeza ardabito-parpadeo"
-        style={{ ...sharedStyle, zIndex: pieza.z, opacity: ojosCerrados ? 0 : 1 }}
-      />
-      <img
-        src={CABEZA_OJOS_CERRADOS}
-        alt=""
-        draggable={false}
-        className="ardabito-pieza ardabito-cabeza ardabito-parpadeo"
-        style={{ ...sharedStyle, zIndex: pieza.z + 1, opacity: ojosCerrados ? 1 : 0 }}
-      />
-    </>
   )
 }
 
@@ -189,75 +137,11 @@ function useSaludo() {
   return { animKey, activa, onFin }
 }
 
-/** Curva de aceleración del cierre: arranca lento y acelera (como un párpado
- *  cayendo por su propio peso), no una velocidad constante. */
-const EASING_CIERRE = 'cubic-bezier(0.55, 0, 1, 0.45)'
-/** Curva de la apertura: arranca rápido y frena al final — lo opuesto del
- *  cierre. Usar la misma curva para ambas fases es lo que se sentía mecánico. */
-const EASING_APERTURA = 'cubic-bezier(0, 0.55, 0.45, 1)'
-
-/**
- * Parpadeo natural: ojos abiertos la mayor parte del tiempo. Cada parpadeo
- * varía un poco en duración (nunca exactamente igual al anterior) y usa
- * curvas de aceleración distintas para cerrar y abrir. De vez en cuando
- * (~1 de cada 6) ocurre un segundo parpadeo rápido justo después del
- * primero, como pasa de verdad — un patrón perfectamente regular es lo que
- * se lee como "forzado" o de animación en loop.
- */
-function useParpadeo() {
-  const [ojosCerrados, setOjosCerrados] = useState(false)
-  const [transitionMs, setTransitionMs] = useState(90)
-  const [easing, setEasing] = useState(EASING_CIERRE)
-
-  useEffect(() => {
-    const timeouts: ReturnType<typeof setTimeout>[] = []
-    const espera = (fn: () => void, ms: number) => {
-      timeouts.push(setTimeout(fn, ms))
-    }
-
-    function unParpadeo(alTerminar: () => void) {
-      const cierreMs = rango(110, 150)
-      const holdMs = rango(90, 150)
-      const aperturaMs = rango(190, 250)
-
-      setTransitionMs(cierreMs)
-      setEasing(EASING_CIERRE)
-      setOjosCerrados(true)
-
-      espera(() => {
-        setTransitionMs(aperturaMs)
-        setEasing(EASING_APERTURA)
-        setOjosCerrados(false)
-        espera(alTerminar, aperturaMs)
-      }, cierreMs + holdMs)
-    }
-
-    function programarSiguienteParpadeo() {
-      espera(() => {
-        unParpadeo(() => {
-          const esDoble = Math.random() < 1 / 6
-          if (esDoble) {
-            espera(() => unParpadeo(programarSiguienteParpadeo), rango(150, 260))
-          } else {
-            programarSiguienteParpadeo()
-          }
-        })
-      }, rango(3000, 7000))
-    }
-
-    programarSiguienteParpadeo()
-    return () => timeouts.forEach(clearTimeout)
-  }, [])
-
-  return { ojosCerrados, transitionMs, easing }
-}
-
 interface ArdabitoProps {
   className?: string
 }
 
 export function Ardabito({ className }: ArdabitoProps) {
-  const { ojosCerrados, transitionMs, easing } = useParpadeo()
   const { animKey, activa, onFin } = useSaludo()
 
   return (
@@ -271,7 +155,7 @@ export function Ardabito({ className }: ArdabitoProps) {
         onAnimationEnd={onFin}
       />
       <Pieza pieza={PIEZAS.cuerpo} />
-      <CabezaConParpadeo ojosCerrados={ojosCerrados} transitionMs={transitionMs} easing={easing} />
+      <Pieza pieza={PIEZAS.cabeza} className="ardabito-cabeza" />
     </div>
   )
 }
