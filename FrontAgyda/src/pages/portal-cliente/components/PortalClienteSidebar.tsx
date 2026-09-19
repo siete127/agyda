@@ -50,9 +50,10 @@ interface NavItemRowProps {
   itemRef: (el: HTMLElement | null) => void
   isSectionActive: boolean
   wrapperRef?: (el: HTMLElement | null) => void
+  childRef?: (to: string, el: HTMLElement | null) => void
 }
 
-function NavItemRow({ item, itemRef, isSectionActive, wrapperRef }: NavItemRowProps) {
+function NavItemRow({ item, itemRef, isSectionActive, wrapperRef, childRef }: NavItemRowProps) {
   const [open, setOpen] = useState(isSectionActive)
   const hasChildren = !!item.children?.length
 
@@ -80,7 +81,6 @@ function NavItemRow({ item, itemRef, isSectionActive, wrapperRef }: NavItemRowPr
   return (
     <div className="relative z-10 mr-4" ref={wrapperRef}>
       <button
-        ref={itemRef as React.Ref<HTMLButtonElement>}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
@@ -102,19 +102,19 @@ function NavItemRow({ item, itemRef, isSectionActive, wrapperRef }: NavItemRowPr
         style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">
-          <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l border-white/10 pl-4">
+          <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l border-white/10 pl-3">
             {item.children!.map((child) => (
               <NavLink
                 key={child.to}
+                ref={(el) => childRef?.(child.to, el)}
                 to={child.to}
                 end
-                style={({ isActive }) =>
-                  isActive ? { background: 'linear-gradient(135deg, #19b6bc 0%, #00537f 100%)' } : undefined
-                }
                 className={({ isActive }) =>
                   clsx(
-                    'rounded-full px-3 py-2 text-sm transition-colors',
-                    isActive ? 'font-semibold text-white' : 'text-white/60 hover:text-white'
+                    'relative z-10 py-2 pl-3 text-sm transition-colors',
+                    isActive
+                      ? '-mr-4 rounded-l-full pr-6 font-semibold text-[#19b6bc]'
+                      : 'mr-4 rounded-full pr-3 text-white/60 hover:bg-white/10 hover:text-white'
                   )
                 }
               >
@@ -283,16 +283,18 @@ export function PortalClienteSidebar() {
   const activeItem = NAV_ITEMS.find((item) => isItemActive(item, location.pathname))
 
   useEffect(() => {
+    if (!activeItem) {
+      setActiveEl(null)
+      return
+    }
     // Un item padre con submenú comparte su `to` con su primer hijo (ej.
-    // "Reuniones" y "Próximas reuniones" son la misma ruta) — si el padre
-    // también recibiera el pill claro del indicador, quedaría encimado con
-    // el degradado propio que ya pinta el hijo activo dentro del submenú
-    // (dos "activos" distintos superpuestos, con la esquina cóncava
-    // cortando feo sobre el degradado). El indicador solo debe marcar
-    // destinos simples sin hijos — las secciones expandibles ya muestran
-    // su propio hijo activo con el degradado interno.
-    const hasChildren = !!activeItem?.children?.length
-    setActiveEl(activeItem && !hasChildren ? itemRefs.current.get(activeItem.to) ?? null : null)
+    // "Reuniones" y "Próximas reuniones" son la misma ruta) — el indicador
+    // debe apuntar siempre al HIJO real cuando hay uno activo (mismo diseño
+    // que "Principal", pero sobre la fila del hijo), nunca a la fila del
+    // padre — si no, quedan dos "activos" superpuestos.
+    const activeChild = activeItem.children?.find((c) => c.to === location.pathname)
+    const key = activeChild ? activeChild.to : activeItem.to
+    setActiveEl(itemRefs.current.get(key) ?? null)
   }, [activeItem, location.pathname])
 
   return (
@@ -315,6 +317,10 @@ export function PortalClienteSidebar() {
                   }
                 : undefined
             }
+            childRef={(to, el) => {
+              if (el) itemRefs.current.set(to, el)
+              else itemRefs.current.delete(to)
+            }}
           />
         ))}
       </nav>
