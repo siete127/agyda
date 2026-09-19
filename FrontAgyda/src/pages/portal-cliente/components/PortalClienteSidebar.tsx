@@ -49,9 +49,10 @@ interface NavItemRowProps {
   item: NavItem
   itemRef: (el: HTMLElement | null) => void
   isSectionActive: boolean
+  wrapperRef?: (el: HTMLElement | null) => void
 }
 
-function NavItemRow({ item, itemRef, isSectionActive }: NavItemRowProps) {
+function NavItemRow({ item, itemRef, isSectionActive, wrapperRef }: NavItemRowProps) {
   const [open, setOpen] = useState(isSectionActive)
   const hasChildren = !!item.children?.length
 
@@ -77,7 +78,7 @@ function NavItemRow({ item, itemRef, isSectionActive }: NavItemRowProps) {
   }
 
   return (
-    <div className="relative z-10 mr-4">
+    <div className="relative z-10 mr-4" ref={wrapperRef}>
       <button
         ref={itemRef as React.Ref<HTMLButtonElement>}
         type="button"
@@ -91,28 +92,38 @@ function NavItemRow({ item, itemRef, isSectionActive }: NavItemRowProps) {
         <span className="flex-1 text-left">{item.label}</span>
         <ChevronRight className={clsx('h-4 w-4 transition-transform', open && 'rotate-90')} />
       </button>
-      {open && (
-        <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l border-white/10 pl-4">
-          {item.children!.map((child) => (
-            <NavLink
-              key={child.to}
-              to={child.to}
-              end
-              style={({ isActive }) =>
-                isActive ? { background: 'linear-gradient(135deg, #19b6bc 0%, #00537f 100%)' } : undefined
-              }
-              className={({ isActive }) =>
-                clsx(
-                  'rounded-full px-3 py-2 text-sm transition-colors',
-                  isActive ? 'font-semibold text-white' : 'text-white/60 hover:text-white'
-                )
-              }
-            >
-              {child.label}
-            </NavLink>
-          ))}
+      {/* Despliegue animado con la técnica grid-template-rows 0fr→1fr: el
+         submenú siempre está montado (no se agrega/quita del DOM de golpe),
+         así que su alto real crece/decrece de forma suave en vez de saltar
+         instantáneo. El overflow-hidden interior es imprescindible — sin él
+         el contenido no se puede "clipear" mientras la fila crece desde 0. */}
+      <div
+        className="grid transition-[grid-template-rows] duration-300 ease-out"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden">
+          <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l border-white/10 pl-4">
+            {item.children!.map((child) => (
+              <NavLink
+                key={child.to}
+                to={child.to}
+                end
+                style={({ isActive }) =>
+                  isActive ? { background: 'linear-gradient(135deg, #19b6bc 0%, #00537f 100%)' } : undefined
+                }
+                className={({ isActive }) =>
+                  clsx(
+                    'rounded-full px-3 py-2 text-sm transition-colors',
+                    isActive ? 'font-semibold text-white' : 'text-white/60 hover:text-white'
+                  )
+                }
+              >
+                {child.label}
+              </NavLink>
+            ))}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -139,8 +150,24 @@ function cornerClipPath(size: number, position: 'top' | 'bottom') {
  * arriba abiertos/cerrados, y se anima con transición CSS al cambiar de
  * ruta en vez de aparecer/desaparecer de golpe.
  */
-function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLElement>; activeEl: HTMLElement | null }) {
+function SlidingIndicator({
+  navRef,
+  activeEl,
+  collapsibleRefs,
+}: {
+  navRef: React.RefObject<HTMLElement>
+  activeEl: HTMLElement | null
+  collapsibleRefs: React.RefObject<Set<HTMLElement>>
+}) {
   const [rect, setRect] = useState<{ top: number; height: number; right: number } | null>(null)
+  // Mientras el indicador se desliza (cambio de ruta, o un hermano que
+  // despliega/colapsa su submenú y lo empuja), las esquinas cóncavas de
+  // tamaño fijo (48px) dejan de coincidir con una sola fila — se ven como
+  // un bloque claro deforme atravesando varios ítems. Se ocultan con un
+  // fade mientras `rect` sigue cambiando y solo reaparecen cuando se
+  // asienta, una vez transcurrida la transición de top/height (350ms).
+  const [settled, setSettled] = useState(true)
+  const settleTimer = useRef<number>()
   const theme = useThemeStore((s) => s.theme)
   const isDark = resolveTheme(theme) === 'dark'
   // Debe coincidir EXACTO con el bg-surface real del <main> del dashboard
@@ -168,8 +195,36 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
     }
     measure()
     window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [activeEl, navRef])
+
+    // Si OTRO ítem (arriba del activo) despliega/colapsa su submenú, el
+    // ítem activo se corre hacia abajo/arriba — pero como ni `activeEl` ni
+    // `navRef` cambian de identidad en ese caso, este efecto no se volvía a
+    // ejecutar y el indicador quedaba "flotando" en su posición vieja (un
+    // parche de color desprendido). Observar el <nav> no sirve: usa
+    // `flex-1`, así que SU PROPIO tamaño nunca cambia aunque el contenido
+    // interno se desplace (queda con espacio libre debajo cuando el menú
+    // está corto). Lo que sí cambia de alto es cada wrapper con submenú
+    // (la animación grid-template-rows), así que se observan esos wrappers
+    // directamente — el callback se dispara en cada frame de esa
+    // transición, lo que además mantiene el indicador sincronizado en
+    // tiempo real mientras el submenú se despliega/colapsa.
+    const resizeObserver = new ResizeObserver(measure)
+    if (navRef.current) resizeObserver.observe(navRef.current)
+    collapsibleRefs.current?.forEach((el) => resizeObserver.observe(el))
+
+    return () => {
+      window.removeEventListener('resize', measure)
+      resizeObserver.disconnect()
+    }
+  }, [activeEl, navRef, collapsibleRefs])
+
+  useEffect(() => {
+    if (!rect) return
+    setSettled(false)
+    window.clearTimeout(settleTimer.current)
+    settleTimer.current = window.setTimeout(() => setSettled(true), 360)
+    return () => window.clearTimeout(settleTimer.current)
+  }, [rect?.top, rect?.height])
 
   if (!rect) return null
 
@@ -187,7 +242,8 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
         transition: 'top 350ms cubic-bezier(0.4, 0, 0.2, 1), height 350ms cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      {/* Esquinas cóncavas — ver cornerClipPath arriba. */}
+      {/* Esquinas cóncavas — ver cornerClipPath arriba. Ocultas (fade) mientras
+         el indicador está en movimiento; ver comentario de `settled`. */}
       <span
         className="pointer-events-none absolute right-0"
         style={{
@@ -196,6 +252,8 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
           width: cornerSize,
           backgroundColor: bg,
           clipPath: cornerClipPath(cornerSize, 'top'),
+          opacity: settled ? 1 : 0,
+          transition: 'opacity 150ms ease-out',
         }}
       />
       <span
@@ -206,6 +264,8 @@ function SlidingIndicator({ navRef, activeEl }: { navRef: React.RefObject<HTMLEl
           width: cornerSize,
           backgroundColor: bg,
           clipPath: cornerClipPath(cornerSize, 'bottom'),
+          opacity: settled ? 1 : 0,
+          transition: 'opacity 150ms ease-out',
         }}
       />
     </span>
@@ -217,6 +277,7 @@ export function PortalClienteSidebar() {
   const location = useLocation()
   const navRef = useRef<HTMLElement>(null)
   const itemRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const collapsibleRefs = useRef<Set<HTMLElement>>(new Set())
   const [activeEl, setActiveEl] = useState<HTMLElement | null>(null)
 
   const activeItem = NAV_ITEMS.find((item) => isItemActive(item, location.pathname))
@@ -228,7 +289,7 @@ export function PortalClienteSidebar() {
   return (
     <aside className="flex w-[260px] flex-shrink-0 flex-col overflow-hidden bg-[#0a2f71] py-6 pl-4">
       <nav ref={navRef} className="relative flex flex-1 flex-col gap-2.5">
-        <SlidingIndicator navRef={navRef} activeEl={activeEl} />
+        <SlidingIndicator navRef={navRef} activeEl={activeEl} collapsibleRefs={collapsibleRefs} />
         {NAV_ITEMS.map((item) => (
           <NavItemRow
             key={item.to}
@@ -238,6 +299,13 @@ export function PortalClienteSidebar() {
               if (el) itemRefs.current.set(item.to, el)
               else itemRefs.current.delete(item.to)
             }}
+            wrapperRef={
+              item.children?.length
+                ? (el) => {
+                    if (el) collapsibleRefs.current.add(el)
+                  }
+                : undefined
+            }
           />
         ))}
       </nav>
