@@ -132,25 +132,13 @@ function HeaderReuniones() {
         </div>
       </div>
 
-      <div className="flex flex-col items-end gap-3">
-        <button
-          type="button"
-          className="flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-opacity hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva reunión
-        </button>
-
-        {/* Tarjeta decorativa con la cita — reemplaza la foto de la
-           referencia por un degradado, no hay ningún asset real disponible. */}
-        <div className="relative flex h-20 w-64 items-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-800 to-[#0a2f71] px-4 shadow-card">
-          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-[#19b6bc]/20 blur-xl" />
-          <div className="pointer-events-none absolute -bottom-8 right-8 h-16 w-16 rounded-full bg-white/10 blur-lg" />
-          <p className="relative text-right text-xs italic leading-snug text-white/90">
-            &ldquo;Las mejores decisiones nacen de buenas conversaciones.&rdquo;
-          </p>
-        </div>
-      </div>
+      <button
+        type="button"
+        className="flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-opacity hover:opacity-90"
+      >
+        <Plus className="h-4 w-4" />
+        Nueva reunión
+      </button>
     </div>
   )
 }
