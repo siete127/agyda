@@ -53,12 +53,7 @@ export function PortalClienteSidebar({ className }: { className?: string }) {
         {!collapsed && <span>Contraer</span>}
       </button>
 
-      {/* Sin flex-1: el nav toma solo el alto de su contenido, así que
-         Configuración/Ayuda/Cerrar sesión quedan justo debajo, no pegados
-         al borde inferior del sidebar. overflow-y-auto + min-h-0 es por si
-         algún día hay más ítems de los que entran — el nav se desplaza
-         internamente en vez de empujar el footer fuera de vista. */}
-      <nav className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
+      <nav className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}

@@ -26,7 +26,15 @@ export function PortalClienteHeader() {
   const themeLabel = theme === 'dark' ? 'Tema: oscuro' : theme === 'light' ? 'Tema: claro' : 'Tema: automático'
 
   return (
-    <header className="flex h-[72px] flex-shrink-0 items-center gap-6 border-b border-surface-border bg-card px-8">
+    // bg-surface (no bg-card): mismo tono que el fondo del dashboard, tanto
+    // en claro como en oscuro — el header se funde con el contenido en vez
+    // de leerse como una barra aparte. Sin border-b, pero con una sombra
+    // propia constante (relative + z-10): sin ella, al hacer scroll el
+    // borde superior de la primera tarjeta del contenido (que sí tiene su
+    // propia sombra) queda pegado justo debajo del header y se ve como una
+    // línea que aparece de la nada — con la sombra del header siempre
+    // presente, el borde se ve igual esté o no el contenido scrolleado.
+    <header className="relative z-10 flex h-[72px] flex-shrink-0 items-center gap-6 bg-surface px-8 shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
       <div className="flex flex-shrink-0 items-center gap-3">
         <img src="/Logo_AGYDA.png" alt="AGYDA" className="h-9 w-auto" />
         <div className="leading-tight">
@@ -37,13 +45,18 @@ export function PortalClienteHeader() {
         </div>
       </div>
 
-      <div className="relative max-w-xl flex-1">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
-        <input
-          type="text"
-          placeholder="Buscar proyectos, campañas, reuniones..."
-          className="w-full rounded-xl border border-surface-border bg-surface py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-tertiary focus:border-brand focus:bg-card focus:outline-none focus:ring-2 focus:ring-brand/20"
-        />
+      {/* flex-1 + justify-center: centra la barra en el espacio disponible
+         entre el logo y los íconos de la derecha (no queda pegada al logo
+         como con un simple flex-1 sin centrar). */}
+      <div className="flex flex-1 justify-center">
+        <div className="relative w-full max-w-xl">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#0a2f71]" />
+          <input
+            type="text"
+            placeholder="Buscar proyectos, campañas, reuniones..."
+            className="w-full rounded-full border border-[#0a2f71] bg-card py-2.5 pl-11 pr-4 text-sm text-ink placeholder:text-ink-tertiary focus:border-[#0a2f71] focus:outline-none focus:ring-2 focus:ring-[#0a2f71]/20"
+          />
+        </div>
       </div>
 
       <div className="ml-auto flex flex-shrink-0 items-center gap-2">
@@ -52,14 +65,14 @@ export function PortalClienteHeader() {
           onClick={cycleTheme}
           title={`${themeLabel} · clic para cambiar`}
           aria-label={themeLabel}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-surface hover:text-ink-secondary"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-card hover:text-ink-secondary"
         >
           <ThemeIcon className="h-5 w-5" />
         </button>
         <button
           type="button"
           aria-label="Notificaciones"
-          className="relative flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-surface hover:text-ink-secondary"
+          className="relative flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-card hover:text-ink-secondary"
         >
           <Bell className="h-5 w-5" />
           <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
@@ -69,7 +82,7 @@ export function PortalClienteHeader() {
         <button
           type="button"
           aria-label="Mensajes"
-          className="relative flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-surface hover:text-ink-secondary"
+          className="relative flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-card hover:text-ink-secondary"
         >
           <MessageSquare className="h-5 w-5" />
           <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
@@ -79,7 +92,7 @@ export function PortalClienteHeader() {
         <button
           type="button"
           aria-label="Ayuda"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-surface hover:text-ink-secondary"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-ink-tertiary hover:bg-card hover:text-ink-secondary"
         >
           <HelpCircle className="h-5 w-5" />
         </button>
@@ -88,7 +101,7 @@ export function PortalClienteHeader() {
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 hover:bg-surface"
+            className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 hover:bg-card"
           >
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0a2f71] text-sm font-bold text-white">
               {getInitials(user?.nombres)}
