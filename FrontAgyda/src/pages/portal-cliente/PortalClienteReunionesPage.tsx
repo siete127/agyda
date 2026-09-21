@@ -557,13 +557,18 @@ export function PortalClienteReunionesPage() {
       </div>
 
       {tab === 'Próximas' && (
-        <Reveal index={0} className="flex flex-col gap-5">
-          <BarraFiltros busqueda={busqueda} onBusqueda={setBusqueda} />
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1fr_320px]">
-            <ListaReuniones reuniones={reunionesFiltradas} seleccionadaId={seleccionadaId} onSeleccionar={setSeleccionadaId} />
-            <DetalleReunion r={seleccionada} />
-            <VistaCalendario />
+        <Reveal index={0} className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_320px]">
+          {/* El buscador y los filtros quedan acotados al ancho de la lista
+             + el detalle (no se estiran también sobre el calendario, que es
+             una columna aparte al costado). */}
+          <div className="flex flex-col gap-5">
+            <BarraFiltros busqueda={busqueda} onBusqueda={setBusqueda} />
+            <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+              <ListaReuniones reuniones={reunionesFiltradas} seleccionadaId={seleccionadaId} onSeleccionar={setSeleccionadaId} />
+              <DetalleReunion r={seleccionada} />
+            </div>
           </div>
+          <VistaCalendario />
         </Reveal>
       )}
 
