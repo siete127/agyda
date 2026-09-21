@@ -230,6 +230,11 @@ function SlidingIndicator({
 
   const cornerSize = 48
   const cornerOverlap = 1
+  // Diámetro del "tapón" redondo que cubre la punta afilada donde termina
+  // el clip-path cóncavo (la curva se afina hasta un vértice agudo — ver
+  // cornerClipPath). Un pequeño círculo del mismo color, centrado justo en
+  // esa punta, la redondea sin alterar el resto de la curva.
+  const capSize = 8
 
   return (
     <span
@@ -276,6 +281,35 @@ function SlidingIndicator({
           clipPath: cornerClipPath(cornerSize, 'bottom'),
           opacity: settled ? 1 : 0,
           transition: 'opacity 150ms ease-out',
+        }}
+      />
+      {/* Tapón redondo sobre la punta de cada esquina — ver comentario de
+         `capSize`. Va FUERA de los <span> con clip-path (serían recortados
+         si fueran hijos de esos), como hermanos al mismo nivel. */}
+      <span
+        className="pointer-events-none absolute rounded-full"
+        style={{
+          width: capSize,
+          height: capSize,
+          top: -cornerSize + cornerOverlap,
+          right: 0,
+          backgroundColor: bg,
+          opacity: settled ? 1 : 0,
+          transition: 'opacity 150ms ease-out',
+          transform: 'translate(50%, -50%)',
+        }}
+      />
+      <span
+        className="pointer-events-none absolute rounded-full"
+        style={{
+          width: capSize,
+          height: capSize,
+          bottom: -cornerSize + cornerOverlap,
+          right: 0,
+          backgroundColor: bg,
+          opacity: settled ? 1 : 0,
+          transition: 'opacity 150ms ease-out',
+          transform: 'translate(50%, 50%)',
         }}
       />
     </span>
