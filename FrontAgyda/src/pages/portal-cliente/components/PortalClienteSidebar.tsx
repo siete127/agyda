@@ -237,6 +237,14 @@ export function PortalClienteSidebar() {
             className={({ isActive }) =>
               clsx(
                 'relative z-10 flex items-center gap-3 py-3.5 pl-4 text-sm font-semibold transition-colors',
+                // El foco de teclado por defecto dibuja el contorno pegado a
+                // la forma REAL del <NavLink> (redondeado solo a la
+                // izquierda cuando está activo) — se ve como un corte
+                // cuadrado justo donde la curva cóncava (una capa decorativa
+                // aparte) debería verse redondeada. Se reemplaza por un
+                // anillo propio y, solo durante el foco, se fuerza
+                // completamente redondo (sin tocar la forma normal/asimétrica).
+                'outline-none focus-visible:rounded-full focus-visible:ring-2 focus-visible:ring-white/60',
                 isActive
                   ? '-mr-4 rounded-l-full pr-6 text-[#19b6bc]'
                   : 'mr-4 rounded-full pr-4 text-white/70 hover:bg-white/10 hover:text-white'
@@ -252,14 +260,14 @@ export function PortalClienteSidebar() {
       <div className="mr-4 mt-4 flex flex-col gap-2.5 border-t border-white/10 pt-4">
         <NavLink
           to="/portal-cliente/configuracion"
-          className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60"
         >
           <Settings className="h-5 w-5" />
           Configuración
         </NavLink>
         <NavLink
           to="/portal-cliente/ayuda"
-          className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60"
         >
           <HelpCircle className="h-5 w-5" />
           Ayuda y soporte
@@ -267,7 +275,7 @@ export function PortalClienteSidebar() {
         <button
           type="button"
           onClick={() => clearSession()}
-          className="flex items-center gap-3 rounded-full px-4 py-3 text-left text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex items-center gap-3 rounded-full px-4 py-3 text-left text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60"
         >
           <LogOut className="h-5 w-5" />
           Cerrar sesión
