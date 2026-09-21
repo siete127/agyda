@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Home, Calendar, Headphones, Megaphone, Receipt, Settings, HelpCircle, LogOut,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
-import { useThemeStore, resolveTheme } from '@/stores/theme.store'
 
 interface NavItem {
   label: string
@@ -14,271 +14,96 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Principal', to: '/portal-cliente', icon: <Home className="h-5 w-5" /> },
-  { label: 'Reuniones', to: '/portal-cliente/reuniones', icon: <Calendar className="h-5 w-5" /> },
-  { label: 'Atención', to: '/portal-cliente/atencion', icon: <Headphones className="h-5 w-5" /> },
-  { label: 'Canales', to: '/portal-cliente/canales', icon: <Megaphone className="h-5 w-5" /> },
-  { label: 'Facturas', to: '/portal-cliente/facturas', icon: <Receipt className="h-5 w-5" /> },
+  { label: 'Principal', to: '/portal-cliente', icon: <Home className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Reuniones', to: '/portal-cliente/reuniones', icon: <Calendar className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Atención', to: '/portal-cliente/atencion', icon: <Headphones className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Canales', to: '/portal-cliente/canales', icon: <Megaphone className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Facturas', to: '/portal-cliente/facturas', icon: <Receipt className="h-5 w-5 flex-shrink-0" /> },
 ]
 
-function isItemActive(item: NavItem, pathname: string) {
-  // "Principal" es la raíz del portal ('/portal-cliente') — con startsWith
-  // a secas coincidiría como prefijo de TODAS las demás rutas del portal
-  // (ej. '/portal-cliente/reuniones'), quedando "activo" siempre. Solo él
-  // necesita coincidencia exacta; los demás sí matchean sub-rutas propias.
-  if (item.to === '/portal-cliente') return pathname === item.to
-  return pathname === item.to || pathname.startsWith(`${item.to}/`)
-}
-
-/**
- * Clip-path de la esquina cóncava para un span cuadrado (size × size) —
- * "muerde" el cuarto de círculo pegado a la esquina que toca la pestaña,
- * dejando visible (rellenado con `bg`) solo la porción más alejada de esa
- * esquina. A diferencia del radial-gradient usado antes, lo que queda
- * FUERA del path es transparente de verdad (no una capa pintada con el
- * color del sidebar) — así no depende de conocer/igualar ese color: el
- * fondo real detrás se ve solo, sea cual sea, sin acoplar nada.
- */
-function cornerClipPath(size: number, position: 'top' | 'bottom') {
-  return position === 'top'
-    ? `path('M ${size} 0 A ${size} ${size} 0 0 1 0 ${size} L ${size} ${size} Z')`
-    : `path('M 0 0 A ${size} ${size} 0 0 1 ${size} ${size} L ${size} 0 Z')`
-}
-
-/**
- * Indicador deslizante: un único <span> absoluto (no uno por ítem) cuya
- * posición/alto se mide con refs del elemento activo real vía
- * getBoundingClientRect — así funciona sin importar el orden/cantidad de
- * ítems, y se anima con transición CSS al cambiar de ruta en vez de
- * aparecer/desaparecer de golpe.
- */
-function SlidingIndicator({
-  navRef,
-  activeEl,
-}: {
-  navRef: React.RefObject<HTMLElement>
-  activeEl: HTMLElement | null
-}) {
-  const [rect, setRect] = useState<{ top: number; height: number; right: number } | null>(null)
-  // Mientras el indicador se desliza (cambio de ruta), las esquinas cóncavas
-  // de tamaño fijo dejan de coincidir con una sola fila — se ven como un
-  // bloque claro deforme atravesando varios ítems. Se ocultan con un fade
-  // mientras `rect` sigue cambiando y solo reaparecen cuando se asienta,
-  // una vez transcurrida la transición de top/height (350ms).
-  const [settled, setSettled] = useState(true)
-  const settleTimer = useRef<number | undefined>(undefined)
-  const theme = useThemeStore((s) => s.theme)
-  const isDark = resolveTheme(theme) === 'dark'
-  // Debe coincidir EXACTO con el bg-surface real del <main> del dashboard
-  // (ver PortalClienteLayout) para que la unión entre pestaña y contenido
-  // se vea continua en vez de un borde/tono distinto.
-  const bg = isDark ? 'rgb(15, 19, 27)' : 'rgb(247, 249, 252)'
-
-  useLayoutEffect(() => {
-    function measure() {
-      if (!activeEl || !navRef.current) {
-        setRect(null)
-        return
-      }
-      const navBox = navRef.current.getBoundingClientRect()
-      const itemBox = activeEl.getBoundingClientRect()
-      // El item activo real (NavLink con -mr-4/pr-6) se extiende más allá
-      // del borde derecho del <nav> — el indicador debe llegar exactamente
-      // hasta ahí (no usar un valor fijo tipo "right-4"), si no queda más
-      // angosto que el texto/ícono y se ve "despegado" del contenido real.
-      setRect({
-        top: itemBox.top - navBox.top,
-        height: itemBox.height,
-        right: navBox.right - itemBox.right,
-      })
-    }
-    measure()
-    window.addEventListener('resize', measure)
-
-    const resizeObserver = new ResizeObserver(measure)
-    if (navRef.current) resizeObserver.observe(navRef.current)
-
-    return () => {
-      window.removeEventListener('resize', measure)
-      resizeObserver.disconnect()
-    }
-  }, [activeEl, navRef])
-
-  useEffect(() => {
-    if (!rect) return
-    setSettled(false)
-    window.clearTimeout(settleTimer.current)
-    settleTimer.current = window.setTimeout(() => setSettled(true), 360)
-    return () => window.clearTimeout(settleTimer.current)
-  }, [rect?.top, rect?.height])
-
-  if (!rect) return null
-
-  const cornerSize = 48
-  const cornerOverlap = 1
-  // Diámetro del "tapón" redondo que cubre la punta afilada donde termina
-  // el clip-path cóncavo (la curva se afina hasta un vértice agudo — ver
-  // cornerClipPath). Un pequeño círculo del mismo color, centrado justo en
-  // esa punta, la redondea sin alterar el resto de la curva.
-  const capSize = 8
-
-  return (
-    <span
-      className="pointer-events-none absolute z-0 rounded-l-full"
-      style={{
-        top: rect.top,
-        height: rect.height,
-        left: 0,
-        right: rect.right,
-        backgroundColor: bg,
-        transition: 'top 350ms cubic-bezier(0.4, 0, 0.2, 1), height 350ms cubic-bezier(0.4, 0, 0.2, 1)',
-      }}
-    >
-      {/* Esquinas cóncavas — ver cornerClipPath arriba. Ocultas (fade) mientras
-         el indicador está en movimiento; ver comentario de `settled`. El
-         pixel de solape (`overlap`) evita una línea fina visible en la
-         costura: la pieza de esquina (recortada con clip-path, con su
-         propio antialiasing en el borde curvo) y el cuerpo del indicador
-         (un rectángulo simple) son DOS elementos separados que el navegador
-         rasteriza de forma independiente — aunque matemáticamente coincidan
-         exacto, el redondeo a subpíxel de cada uno por separado deja un
-         hilo del fondo real del sidebar asomando entre ambos. Adelantar la
-         esquina 1px hacia adentro del cuerpo (mismo color `bg`, así que el
-         solape es invisible) cierra ese hueco. */}
-      <span
-        className="pointer-events-none absolute right-0"
-        style={{
-          top: -cornerSize + cornerOverlap,
-          height: cornerSize,
-          width: cornerSize,
-          backgroundColor: bg,
-          clipPath: cornerClipPath(cornerSize, 'top'),
-          opacity: settled ? 1 : 0,
-          transition: 'opacity 150ms ease-out',
-        }}
-      />
-      <span
-        className="pointer-events-none absolute right-0"
-        style={{
-          bottom: -cornerSize + cornerOverlap,
-          height: cornerSize,
-          width: cornerSize,
-          backgroundColor: bg,
-          clipPath: cornerClipPath(cornerSize, 'bottom'),
-          opacity: settled ? 1 : 0,
-          transition: 'opacity 150ms ease-out',
-        }}
-      />
-      {/* Tapón redondo sobre la punta de cada esquina — ver comentario de
-         `capSize`. Va FUERA de los <span> con clip-path (serían recortados
-         si fueran hijos de esos), como hermanos al mismo nivel. */}
-      <span
-        className="pointer-events-none absolute rounded-full"
-        style={{
-          width: capSize,
-          height: capSize,
-          top: -cornerSize + cornerOverlap,
-          right: 0,
-          backgroundColor: bg,
-          opacity: settled ? 1 : 0,
-          transition: 'opacity 150ms ease-out',
-          transform: 'translate(50%, -50%)',
-        }}
-      />
-      <span
-        className="pointer-events-none absolute rounded-full"
-        style={{
-          width: capSize,
-          height: capSize,
-          bottom: -cornerSize + cornerOverlap,
-          right: 0,
-          backgroundColor: bg,
-          opacity: settled ? 1 : 0,
-          transition: 'opacity 150ms ease-out',
-          transform: 'translate(50%, 50%)',
-        }}
-      />
-    </span>
-  )
-}
+// Pill activo: degradado sólido, igual para todos los ítems (nav y footer).
+const ACTIVE_PILL = 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md'
+const INACTIVE_PILL = 'text-white/70 hover:bg-white/10 hover:text-white'
 
 export function PortalClienteSidebar() {
   const clearSession = useAuthStore((s) => s.clearSession)
-  const location = useLocation()
-  const navRef = useRef<HTMLElement>(null)
-  const itemRefs = useRef<Map<string, HTMLElement>>(new Map())
-  const [activeEl, setActiveEl] = useState<HTMLElement | null>(null)
-
-  const activeItem = NAV_ITEMS.find((item) => isItemActive(item, location.pathname))
-
-  useEffect(() => {
-    setActiveEl(activeItem ? itemRefs.current.get(activeItem.to) ?? null : null)
-  }, [activeItem, location.pathname])
+  const [collapsed, setCollapsed] = useState(false)
 
   return (
-    // pt-14 (no py-6 parejo): la esquina cóncava del indicador necesita 48px
-    // libres arriba del primer item para completar su curva antes de toparse
-    // con el overflow-hidden — con solo 24px (py-6) quedaba cortada a la
-    // mitad en "Principal". Abajo sobra espacio de sobra (el bloque de
-    // Configuración/Ayuda/Cerrar sesión debajo del <nav>), así que ese lado
-    // no necesita más que el pb-6 original.
-    <aside className="flex w-[260px] flex-shrink-0 flex-col overflow-hidden bg-[#0a2f71] pb-6 pt-14 pl-4">
-      <nav ref={navRef} className="relative flex flex-1 flex-col gap-2.5">
-        <SlidingIndicator navRef={navRef} activeEl={activeEl} />
+    <aside
+      className={clsx(
+        'flex flex-shrink-0 flex-col overflow-hidden bg-[#0a2f71] py-6 transition-[width] duration-300',
+        collapsed ? 'w-20 px-3' : 'w-[260px] px-4'
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}
+        className={clsx(
+          'mb-4 flex items-center gap-2 rounded-full py-2 text-sm font-semibold text-white/60 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60',
+          collapsed ? 'justify-center px-0' : 'px-3'
+        )}
+      >
+        {collapsed ? <PanelLeftOpen className="h-5 w-5 flex-shrink-0" /> : <PanelLeftClose className="h-5 w-5 flex-shrink-0" />}
+        {!collapsed && <span>Contraer</span>}
+      </button>
+
+      <nav className="flex flex-1 flex-col gap-2.5">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
-            ref={(el) => {
-              if (el) itemRefs.current.set(item.to, el)
-              else itemRefs.current.delete(item.to)
-            }}
             to={item.to}
             end
+            title={collapsed ? item.label : undefined}
             className={({ isActive }) =>
               clsx(
-                'relative z-10 flex items-center gap-3 py-3.5 pl-4 text-sm font-semibold transition-colors',
-                // El foco de teclado por defecto dibuja el contorno pegado a
-                // la forma REAL del <NavLink> (redondeado solo a la
-                // izquierda cuando está activo) — se ve como un corte
-                // cuadrado justo donde la curva cóncava (una capa decorativa
-                // aparte) debería verse redondeada. Se reemplaza por un
-                // anillo propio y, solo durante el foco, se fuerza
-                // completamente redondo (sin tocar la forma normal/asimétrica).
-                'outline-none focus-visible:rounded-full focus-visible:ring-2 focus-visible:ring-white/60',
-                isActive
-                  ? '-mr-4 rounded-l-full pr-6 text-[#19b6bc]'
-                  : 'mr-4 rounded-full pr-4 text-white/70 hover:bg-white/10 hover:text-white'
+                'flex items-center gap-3 rounded-full py-3.5 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-white/60',
+                collapsed ? 'justify-center px-0' : 'px-4',
+                isActive ? ACTIVE_PILL : INACTIVE_PILL
               )
             }
           >
             {item.icon}
-            <span>{item.label}</span>
+            {!collapsed && <span>{item.label}</span>}
           </NavLink>
         ))}
       </nav>
 
-      <div className="mr-4 mt-4 flex flex-col gap-2.5 border-t border-white/10 pt-4">
+      <div className={clsx('mt-4 flex flex-col gap-2.5 border-t border-white/10 pt-4', collapsed ? 'px-0' : '')}>
         <NavLink
           to="/portal-cliente/configuracion"
-          className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60"
+          title={collapsed ? 'Configuración' : undefined}
+          className={clsx(
+            'flex items-center gap-3 rounded-full py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60',
+            collapsed ? 'justify-center px-0' : 'px-4'
+          )}
         >
-          <Settings className="h-5 w-5" />
-          Configuración
+          <Settings className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && 'Configuración'}
         </NavLink>
         <NavLink
           to="/portal-cliente/ayuda"
-          className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60"
+          title={collapsed ? 'Ayuda y soporte' : undefined}
+          className={clsx(
+            'flex items-center gap-3 rounded-full py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60',
+            collapsed ? 'justify-center px-0' : 'px-4'
+          )}
         >
-          <HelpCircle className="h-5 w-5" />
-          Ayuda y soporte
+          <HelpCircle className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && 'Ayuda y soporte'}
         </NavLink>
         <button
           type="button"
           onClick={() => clearSession()}
-          className="flex items-center gap-3 rounded-full px-4 py-3 text-left text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60"
+          title={collapsed ? 'Cerrar sesión' : undefined}
+          className={clsx(
+            'flex items-center gap-3 rounded-full py-3 text-left text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60',
+            collapsed ? 'justify-center px-0' : 'px-4'
+          )}
         >
-          <LogOut className="h-5 w-5" />
-          Cerrar sesión
+          <LogOut className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && 'Cerrar sesión'}
         </button>
       </div>
     </aside>
