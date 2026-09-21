@@ -25,15 +25,19 @@ const NAV_ITEMS: NavItem[] = [
 const ACTIVE_PILL = 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md'
 const INACTIVE_PILL = 'text-white/70 hover:bg-white/10 hover:text-white'
 
-export function PortalClienteSidebar() {
+export function PortalClienteSidebar({ className }: { className?: string }) {
   const clearSession = useAuthStore((s) => s.clearSession)
   const [collapsed, setCollapsed] = useState(false)
 
   return (
     <aside
       className={clsx(
-        'flex flex-shrink-0 flex-col overflow-hidden bg-[#0a2f71] py-6 transition-[width] duration-300',
-        collapsed ? 'w-20 px-3' : 'w-[260px] px-4'
+        // "Flotante": separado de los bordes de la ventana (my-4 ml-4) y
+        // con esquinas redondeadas + sombra propia, en vez de pegado a la
+        // izquierda ocupando toda la altura de la pantalla.
+        'my-4 ml-4 flex flex-shrink-0 flex-col overflow-hidden rounded-3xl bg-[#0a2f71] py-6 shadow-2xl shadow-black/30 transition-[width] duration-300',
+        collapsed ? 'w-20 px-3' : 'w-[260px] px-4',
+        className
       )}
     >
       <button
@@ -49,7 +53,12 @@ export function PortalClienteSidebar() {
         {!collapsed && <span>Contraer</span>}
       </button>
 
-      <nav className="flex flex-1 flex-col gap-2.5">
+      {/* Sin flex-1: el nav toma solo el alto de su contenido, así que
+         Configuración/Ayuda/Cerrar sesión quedan justo debajo, no pegados
+         al borde inferior del sidebar. overflow-y-auto + min-h-0 es por si
+         algún día hay más ítems de los que entran — el nav se desplaza
+         internamente en vez de empujar el footer fuera de vista. */}
+      <nav className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
@@ -70,7 +79,7 @@ export function PortalClienteSidebar() {
         ))}
       </nav>
 
-      <div className={clsx('mt-4 flex flex-col gap-2.5 border-t border-white/10 pt-4', collapsed ? 'px-0' : '')}>
+      <div className={clsx('mt-4 flex flex-shrink-0 flex-col gap-2.5 border-t border-white/10 pt-4', collapsed ? 'px-0' : '')}>
         <NavLink
           to="/portal-cliente/configuracion"
           title={collapsed ? 'Configuración' : undefined}
