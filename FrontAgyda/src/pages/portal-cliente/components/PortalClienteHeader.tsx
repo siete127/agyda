@@ -27,14 +27,8 @@ export function PortalClienteHeader() {
 
   return (
     // bg-surface (no bg-card): mismo tono que el fondo del dashboard, tanto
-    // en claro como en oscuro — el header se funde con el contenido en vez
-    // de leerse como una barra aparte. Sin border-b, pero con una sombra
-    // propia constante (relative + z-10): sin ella, al hacer scroll el
-    // borde superior de la primera tarjeta del contenido (que sí tiene su
-    // propia sombra) queda pegado justo debajo del header y se ve como una
-    // línea que aparece de la nada — con la sombra del header siempre
-    // presente, el borde se ve igual esté o no el contenido scrolleado.
-    <header className="relative z-10 flex h-[72px] flex-shrink-0 items-center gap-6 bg-surface px-8 shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
+    // en claro como en oscuro — el header se funde con el contenido.
+    <header className="relative z-10 flex h-[72px] flex-shrink-0 items-center gap-6 bg-surface px-8">
       <div className="flex flex-shrink-0 items-center gap-3">
         <img src="/Logo_AGYDA.png" alt="AGYDA" className="h-9 w-auto" />
         <div className="leading-tight">

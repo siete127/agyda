@@ -47,7 +47,19 @@ export function PortalClienteLayout() {
         )}
       >
         <PortalClienteHeader />
-        <main className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+        {/* El header y el <main> comparten el mismo bg-surface a propósito
+           (se ven como una sola pieza) — pero cualquier tarjeta del
+           contenido (con su propio borde/sombra) que scrollee hasta quedar
+           pegada al borde inferior del header se ve como una línea que
+           "aparece" ahí. Esta máscara (sticky, mismo tono, se desvanece a
+           transparente) tapa esos primeros px del scroll sin agregarle
+           ninguna sombra o borde al header — todo se sigue viendo parejo,
+           el contenido simplemente se desvanece antes de llegar al límite. */}
+        <main className="relative min-h-0 flex-1 overflow-y-auto px-8 py-6">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none sticky top-0 z-10 -mx-8 -mt-6 h-6 bg-gradient-to-b from-surface to-transparent"
+          />
           <Outlet />
         </main>
       </div>
