@@ -1,61 +1,111 @@
 import { useState } from 'react'
 import { clsx } from 'clsx'
 import {
-  Calendar, ChevronRight, ChevronLeft, Clock, Plus, Video, CalendarPlus,
-  CalendarClock, History, Settings, Lightbulb, Quote, MoreVertical, Search,
+  Calendar, ChevronRight, ChevronLeft, ChevronDown, Clock, Plus, Video,
+  Pencil, RefreshCcw, XCircle, MoreVertical, Search, Filter, CalendarClock,
+  FileText, StickyNote,
 } from 'lucide-react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 
 // --- Datos de ejemplo — reemplazar por datos reales del backend cuando el
 // panel se conecte al endpoint de reuniones. ---
 
-const PROXIMA_REUNION = {
-  dia: 'Jue', numero: 17, mes: 'Sep',
-  titulo: 'Revisión de avances',
-  hora: '10:00 a.m. - 11:00 a.m.',
-  plataforma: 'Google Meet',
-  con: 'Equipo AGYDA',
-  equipo: ['A', 'M', 'R'],
-  extra: 2,
+interface Participante {
+  nombre: string
+  rol?: string
 }
 
 interface Reunion {
+  id: string
   dia: string
   numero: number
   mes: string
-  hora: string
   titulo: string
+  proyecto: string
+  tipo: string
+  hora: string
   plataforma: string
+  estatus: 'Confirmada' | 'En espera'
   equipo: string[]
   extra?: number
-  accion: 'unirme' | 'detalles'
+  descripcion: string
+  recordatorio: string
+  participantes: Participante[]
+  documentos: number
+  notas: number
 }
 
 const REUNIONES: Reunion[] = [
-  { dia: 'Jue', numero: 17, mes: 'Sep', hora: '10:00 a.m. - 11:00 a.m.', titulo: 'Revisión de avances', plataforma: 'Google Meet', equipo: ['A', 'M', 'R'], extra: 2, accion: 'unirme' },
-  { dia: 'Vie', numero: 18, mes: 'Sep', hora: '02:00 p.m. - 03:00 p.m.', titulo: 'Planeación Q4', plataforma: 'Microsoft Teams', equipo: ['C', 'L'], accion: 'detalles' },
-  { dia: 'Lun', numero: 21, mes: 'Sep', hora: '11:00 a.m. - 12:00 p.m.', titulo: 'Revisión de campaña', plataforma: 'Google Meet', equipo: ['A', 'M'], accion: 'detalles' },
-  { dia: 'Mié', numero: 23, mes: 'Sep', hora: '04:00 p.m. - 05:00 p.m.', titulo: 'Seguimiento de proyecto', plataforma: 'Zoom', equipo: ['R', 'C'], extra: 1, accion: 'detalles' },
+  {
+    id: '1', dia: 'Jue', numero: 17, mes: 'Sep',
+    titulo: 'Revisión de avances', proyecto: 'Reclutamiento TOTIS', tipo: 'Seguimiento',
+    hora: '10:00 a.m. - 11:00 a.m.', plataforma: 'Google Meet', estatus: 'Confirmada',
+    equipo: ['A', 'M', 'R'], extra: 2,
+    descripcion: 'Revisar avances del reclutamiento, métricas del último mes y próximos pasos.',
+    recordatorio: '15 minutos antes',
+    participantes: [
+      { nombre: 'Ana Torres', rol: 'Organizadora' },
+      { nombre: 'Luis Mendoza' },
+      { nombre: 'Carla Ruiz' },
+      { nombre: 'Jorge Ramírez' },
+      { nombre: 'Sofía Campos' },
+    ],
+    documentos: 2, notas: 1,
+  },
+  {
+    id: '2', dia: 'Vie', numero: 18, mes: 'Sep',
+    titulo: 'Planeación Q4', proyecto: 'Canales', tipo: 'Planeación',
+    hora: '02:00 p.m. - 03:00 p.m.', plataforma: 'Microsoft Teams', estatus: 'En espera',
+    equipo: ['C', 'L'],
+    descripcion: 'Definir objetivos y prioridades de canales para el último trimestre del año.',
+    recordatorio: '10 minutos antes',
+    participantes: [
+      { nombre: 'Carla Ruiz', rol: 'Organizadora' },
+      { nombre: 'Luis Mendoza' },
+    ],
+    documentos: 1, notas: 0,
+  },
+  {
+    id: '3', dia: 'Lun', numero: 21, mes: 'Sep',
+    titulo: 'Revisión de campaña', proyecto: 'Marketing', tipo: 'Seguimiento',
+    hora: '11:00 a.m. - 12:00 p.m.', plataforma: 'Google Meet', estatus: 'Confirmada',
+    equipo: ['A', 'M'],
+    descripcion: 'Analizar resultados de la campaña de reclutamiento y ajustar la estrategia.',
+    recordatorio: '15 minutos antes',
+    participantes: [
+      { nombre: 'Ana Torres', rol: 'Organizadora' },
+      { nombre: 'Luis Mendoza' },
+    ],
+    documentos: 0, notas: 0,
+  },
+  {
+    id: '4', dia: 'Mié', numero: 23, mes: 'Sep',
+    titulo: 'Seguimiento de proyecto', proyecto: 'Desarrollo', tipo: 'Seguimiento',
+    hora: '04:00 p.m. - 05:00 p.m.', plataforma: 'Zoom', estatus: 'Confirmada',
+    equipo: ['R', 'C'], extra: 1,
+    descripcion: 'Actualización del estado del proyecto y bloqueos actuales del equipo.',
+    recordatorio: '5 minutos antes',
+    participantes: [
+      { nombre: 'Jorge Ramírez', rol: 'Organizador' },
+      { nombre: 'Carla Ruiz' },
+      { nombre: 'Sofía Campos' },
+    ],
+    documentos: 3, notas: 2,
+  },
 ]
 
 const DIAS_CON_REUNION = new Set(REUNIONES.map((r) => r.numero))
 const DIA_SELECCIONADO = 17
 
-const ENLACES_RAPIDOS = [
-  { icon: CalendarPlus, titulo: 'Agendar reunión', desc: 'Crea una nueva reunión' },
-  { icon: History, titulo: 'Mis reuniones', desc: 'Consulta tu historial' },
-  { icon: Settings, titulo: 'Configuración', desc: 'Ajusta tus preferencias' },
-]
+const TABS_PRINCIPALES = ['Próximas', 'Historial'] as const
+const SUBTABS = ['Detalles', 'Participantes', 'Documentos', 'Notas'] as const
 
-const CONSEJOS = [
-  'Llega unos minutos antes',
-  'Prepara los temas a tratar',
-  'Comparte la agenda con anticipación',
-  'Mantén la reunión enfocada',
-]
+const COLORES_AVATAR = ['bg-[#19b6bc]', 'bg-[#00537f]', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500']
 
-const TABS = ['Próximas', 'Historial', 'Canceladas'] as const
-const FILTROS = ['Todas', 'Hoy', 'Esta semana', 'Este mes'] as const
+function inicialesDe(nombre: string) {
+  const partes = nombre.trim().split(/\s+/)
+  return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '')).toUpperCase()
+}
 
 function Breadcrumb() {
   return (
@@ -76,9 +126,8 @@ function HeaderReuniones() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold text-ink">Reuniones</h1>
-          <p className="text-sm font-bold text-[#19b6bc]">Conecta, colabora y avanza.</p>
-          <p className="mt-1 max-w-md text-sm text-ink-tertiary">
-            Gestiona tus reuniones, consulta tu agenda y accede rápidamente a tus sesiones.
+          <p className="mt-0.5 text-sm text-ink-tertiary">
+            Conecta, colabora y avanza. Gestiona tus reuniones en un solo lugar.
           </p>
         </div>
       </div>
@@ -91,36 +140,50 @@ function HeaderReuniones() {
           <Plus className="h-4 w-4" />
           Nueva reunión
         </button>
-        <div className="max-w-[220px] text-right">
-          <p className="text-sm italic text-ink-tertiary">
+
+        {/* Tarjeta decorativa con la cita — reemplaza la foto de la
+           referencia por un degradado, no hay ningún asset real disponible. */}
+        <div className="relative flex h-20 w-64 items-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-800 to-[#0a2f71] px-4 shadow-card">
+          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-[#19b6bc]/20 blur-xl" />
+          <div className="pointer-events-none absolute -bottom-8 right-8 h-16 w-16 rounded-full bg-white/10 blur-lg" />
+          <p className="relative text-right text-xs italic leading-snug text-white/90">
             &ldquo;Las mejores decisiones nacen de buenas conversaciones.&rdquo;
           </p>
-          <span className="mt-2 inline-block h-0.5 w-10 rounded-full bg-[#19b6bc]" />
         </div>
       </div>
     </div>
   )
 }
 
-function CardHeader({ icon, title, cta }: { icon: React.ReactNode; title: string; cta?: string }) {
+function EstatusBadge({ estatus }: { estatus: Reunion['estatus'] }) {
   return (
-    <div className="mb-4 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        {icon}
-        <h3 className="text-sm font-bold text-ink">{title}</h3>
-      </div>
-      {cta && (
-        <button type="button" className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
-          {cta}
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
+    <span
+      className={clsx(
+        'flex-shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold',
+        estatus === 'Confirmada' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'
       )}
+    >
+      {estatus}
+    </span>
+  )
+}
+
+function DateBadge({ r, small }: { r: Pick<Reunion, 'dia' | 'numero' | 'mes'>; small?: boolean }) {
+  return (
+    <div
+      className={clsx(
+        'flex flex-shrink-0 flex-col items-center justify-center rounded-lg bg-surface',
+        small ? 'w-12 py-1.5' : 'w-14 py-2'
+      )}
+    >
+      <span className="text-[9px] font-bold uppercase tracking-wide text-brand">{r.dia}</span>
+      <span className={clsx('font-extrabold text-ink', small ? 'text-sm' : 'text-lg')}>{r.numero}</span>
+      <span className="text-[9px] font-bold uppercase tracking-wide text-ink-tertiary">{r.mes}</span>
     </div>
   )
 }
 
 function AvatarStack({ equipo, extra }: { equipo: string[]; extra?: number }) {
-  const colores = ['bg-[#19b6bc]', 'bg-[#00537f]', 'bg-emerald-500']
   return (
     <div className="flex -space-x-2">
       {equipo.map((letra, i) => (
@@ -128,7 +191,7 @@ function AvatarStack({ equipo, extra }: { equipo: string[]; extra?: number }) {
           key={i}
           className={clsx(
             'flex h-7 w-7 items-center justify-center rounded-full border-2 border-card text-[11px] font-bold text-white',
-            colores[i % colores.length]
+            COLORES_AVATAR[i % COLORES_AVATAR.length]
           )}
         >
           {letra}
@@ -143,50 +206,264 @@ function AvatarStack({ equipo, extra }: { equipo: string[]; extra?: number }) {
   )
 }
 
-function ProximaReunionCard() {
+function FiltroBoton({ icon, label }: { icon?: React.ReactNode; label: string }) {
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-2 rounded-full border border-surface-border bg-card px-3.5 py-2 text-xs font-semibold text-ink-secondary hover:bg-surface"
+    >
+      {icon}
+      {label}
+      <ChevronDown className="h-3.5 w-3.5 text-ink-tertiary" />
+    </button>
+  )
+}
+
+function BarraFiltros({ busqueda, onBusqueda }: { busqueda: string; onBusqueda: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="relative flex-1 min-w-[220px]">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => onBusqueda(e.target.value)}
+          placeholder="Buscar reuniones..."
+          className="w-full rounded-full border border-surface-border bg-card py-2 pl-10 pr-4 text-xs text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
+        />
+      </div>
+      <FiltroBoton label="Todos los proyectos" />
+      <FiltroBoton label="Todos los tipos" />
+      <FiltroBoton icon={<Calendar className="h-3.5 w-3.5 text-ink-tertiary" />} label="Este mes" />
+      <button
+        type="button"
+        aria-label="Más filtros"
+        className="rounded-full border border-surface-border bg-card p-2.5 text-ink-secondary hover:bg-surface"
+      >
+        <Filter className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+function ReunionListItem({
+  r, seleccionada, onClick,
+}: { r: Reunion; seleccionada: boolean; onClick: () => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={clsx(
+          'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors',
+          seleccionada ? 'border-brand bg-brand/5' : 'border-surface-border hover:bg-surface'
+        )}
+      >
+        <DateBadge r={r} small />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-bold text-ink">{r.titulo}</p>
+            <EstatusBadge estatus={r.estatus} />
+          </div>
+          <p className="mt-0.5 truncate text-xs text-ink-tertiary">Proyecto: {r.proyecto}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-tertiary">
+            <span>{r.hora}</span>
+            <span className="flex items-center gap-1">
+              <Video className="h-3 w-3" />
+              {r.plataforma}
+            </span>
+          </div>
+        </div>
+        <AvatarStack equipo={r.equipo} extra={r.extra} />
+        <ChevronRight className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
+      </button>
+    </li>
+  )
+}
+
+function ListaReuniones({
+  reuniones, seleccionadaId, onSeleccionar,
+}: { reuniones: Reunion[]; seleccionadaId: string; onSeleccionar: (id: string) => void }) {
   return (
     <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
-      <CardHeader icon={<Calendar className="h-4 w-4 text-brand" />} title="Próxima reunión" cta="Ver detalles" />
-      <div className="flex gap-3">
-        <div className="flex w-16 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-surface py-2">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-brand">{PROXIMA_REUNION.dia}</span>
-          <span className="text-xl font-extrabold text-ink">{PROXIMA_REUNION.numero}</span>
-          <span className="text-[10px] font-bold uppercase tracking-wide text-ink-tertiary">{PROXIMA_REUNION.mes}</span>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-bold text-ink">Próximas reuniones ({reuniones.length})</h3>
+        <button type="button" className="flex items-center gap-1 text-xs font-semibold text-ink-tertiary hover:text-ink-secondary">
+          Más próximas
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {reuniones.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-14 text-center text-ink-tertiary">
+          <CalendarClock className="h-8 w-8" />
+          <p className="text-sm">No se encontraron reuniones.</p>
         </div>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {reuniones.map((r) => (
+            <ReunionListItem key={r.id} r={r} seleccionada={r.id === seleccionadaId} onClick={() => onSeleccionar(r.id)} />
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4 flex items-center justify-center gap-1.5">
+        <button type="button" className="rounded-full p-1.5 text-ink-tertiary hover:bg-surface" aria-label="Página anterior">
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">1</button>
+        <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-ink-secondary hover:bg-surface">2</button>
+        <button type="button" className="rounded-full p-1.5 text-ink-tertiary hover:bg-surface" aria-label="Página siguiente">
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AccionIcono({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      type="button"
+      className="flex flex-1 flex-col items-center gap-1 rounded-xl border border-surface-border py-2.5 text-[11px] font-semibold text-ink-secondary hover:bg-surface"
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+function DetalleReunion({ r }: { r: Reunion }) {
+  const [subtab, setSubtab] = useState<(typeof SUBTABS)[number]>('Detalles')
+
+  return (
+    <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
+      <div className="flex items-start gap-3">
+        <DateBadge r={r} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-ink">{PROXIMA_REUNION.titulo}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-ink">{r.titulo}</h3>
+            <EstatusBadge estatus={r.estatus} />
+          </div>
           <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-tertiary">
-            <Clock className="h-3.5 w-3.5 flex-shrink-0" />
-            {PROXIMA_REUNION.hora}
+            <Clock className="h-3.5 w-3.5" />
+            {r.hora}
           </p>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-tertiary">
-            <Video className="h-3.5 w-3.5 flex-shrink-0" />
-            {PROXIMA_REUNION.plataforma}
+            <Video className="h-3.5 w-3.5" />
+            {r.plataforma}
           </p>
-          <p className="mt-1 text-xs text-ink-tertiary">Con: {PROXIMA_REUNION.con}</p>
         </div>
-      </div>
-
-      <div className="mt-3">
-        <AvatarStack equipo={PROXIMA_REUNION.equipo} extra={PROXIMA_REUNION.extra} />
-      </div>
-
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] py-2.5 text-xs font-bold text-white hover:opacity-90"
-        >
-          <Video className="h-3.5 w-3.5" />
-          Unirme ahora
-        </button>
-        <button
-          type="button"
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-surface-border py-2.5 text-xs font-bold text-ink-secondary hover:bg-surface"
-        >
-          <CalendarPlus className="h-3.5 w-3.5" />
-          Agregar al calendario
+        <button type="button" aria-label="Más opciones" className="rounded-full p-1.5 text-ink-tertiary hover:bg-surface">
+          <MoreVertical className="h-4 w-4" />
         </button>
       </div>
+
+      <button
+        type="button"
+        className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] py-2.5 text-xs font-bold text-white hover:opacity-90"
+      >
+        <Video className="h-3.5 w-3.5" />
+        Unirme
+      </button>
+
+      <div className="mt-3 flex gap-2">
+        <AccionIcono icon={<Pencil className="h-4 w-4" />} label="Editar" />
+        <AccionIcono icon={<RefreshCcw className="h-4 w-4" />} label="Reprogramar" />
+        <AccionIcono icon={<XCircle className="h-4 w-4" />} label="Cancelar" />
+      </div>
+
+      <div className="mt-5 flex gap-5 overflow-x-auto border-b border-surface-border">
+        {SUBTABS.map((t) => {
+          const contador = t === 'Participantes' ? r.participantes.length : t === 'Documentos' ? r.documentos : t === 'Notas' ? r.notas : null
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setSubtab(t)}
+              className={clsx(
+                'relative flex-shrink-0 whitespace-nowrap pb-2.5 text-xs font-semibold transition-colors',
+                subtab === t ? 'text-brand' : 'text-ink-tertiary hover:text-ink-secondary'
+              )}
+            >
+              {t}
+              {contador !== null && ` (${contador})`}
+              {subtab === t && <span className="absolute -bottom-px left-0 right-0 h-0.5 rounded-full bg-brand" />}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="mt-4">
+        {subtab === 'Detalles' && (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-ink-tertiary">Proyecto</p>
+                <p className="mt-0.5 text-sm text-ink-secondary">{r.proyecto}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-ink-tertiary">Tipo de reunión</p>
+                <p className="mt-0.5 text-sm text-ink-secondary">{r.tipo}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-ink-tertiary">Descripción</p>
+                <p className="mt-0.5 text-sm text-ink-secondary">{r.descripcion}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-ink-tertiary">Recordatorio</p>
+                <p className="mt-0.5 text-sm text-ink-secondary">{r.recordatorio}</p>
+              </div>
+            </div>
+            <ListaParticipantes participantes={r.participantes} />
+          </div>
+        )}
+
+        {subtab === 'Participantes' && <ListaParticipantes participantes={r.participantes} completa />}
+
+        {subtab === 'Documentos' && (
+          <EstadoVacioSubtab icon={<FileText className="h-6 w-6" />} texto="Todavía no se han compartido documentos para esta reunión." />
+        )}
+
+        {subtab === 'Notas' && (
+          <EstadoVacioSubtab icon={<StickyNote className="h-6 w-6" />} texto="Todavía no hay notas registradas para esta reunión." />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ListaParticipantes({ participantes, completa }: { participantes: Participante[]; completa?: boolean }) {
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-tertiary">Participantes</p>
+      <ul className={clsx('flex flex-col gap-2.5', completa && 'sm:grid sm:grid-cols-2 sm:gap-x-6')}>
+        {participantes.map((p, i) => (
+          <li key={p.nombre} className="flex items-center gap-2.5">
+            <span
+              className={clsx(
+                'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white',
+                COLORES_AVATAR[i % COLORES_AVATAR.length]
+              )}
+            >
+              {inicialesDe(p.nombre)}
+            </span>
+            <span>
+              <span className="block text-sm text-ink-secondary">{p.nombre}</span>
+              {p.rol && <span className="block text-[11px] text-ink-tertiary">{p.rol}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function EstadoVacioSubtab({ icon, texto }: { icon: React.ReactNode; texto: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-10 text-center text-ink-tertiary">
+      {icon}
+      <p className="max-w-xs text-sm">{texto}</p>
     </div>
   )
 }
@@ -197,7 +474,6 @@ function useCalendarGrid(year: number, monthIndex: number) {
   const firstOfMonth = new Date(year, monthIndex, 1)
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
   const daysInPrevMonth = new Date(year, monthIndex, 0).getDate()
-  // getDay(): 0=domingo..6=sabado → convertir a 0=lunes..6=domingo
   const firstWeekday = (firstOfMonth.getDay() + 6) % 7
 
   const cells: { day: number; current: boolean }[] = []
@@ -207,7 +483,7 @@ function useCalendarGrid(year: number, monthIndex: number) {
   return cells
 }
 
-function AgendaCalendario() {
+function VistaCalendario() {
   const [mesIndex] = useState(8) // Septiembre (0-indexado)
   const anio = 2026
   const celdas = useCalendarGrid(anio, mesIndex)
@@ -228,7 +504,7 @@ function AgendaCalendario() {
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-y-1.5 text-center">
+      <div className="mx-auto grid max-w-md grid-cols-7 gap-y-1.5 text-center">
         {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
           <span key={i} className="text-[11px] font-bold text-ink-tertiary">{d}</span>
         ))}
@@ -239,7 +515,7 @@ function AgendaCalendario() {
             <div key={i} className="flex flex-col items-center gap-0.5 py-1">
               <span
                 className={clsx(
-                  'flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold',
+                  'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
                   !c.current && 'text-ink-tertiary/40',
                   c.current && !esSeleccionado && 'text-ink-secondary',
                   esSeleccionado && 'bg-brand text-white'
@@ -253,7 +529,7 @@ function AgendaCalendario() {
         })}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-surface-border pt-4 text-[11px] text-ink-tertiary">
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-surface-border pt-4 text-[11px] text-ink-tertiary">
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" />Hoy</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#19b6bc]" />Con reunión</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" />Seleccionado</span>
@@ -262,230 +538,56 @@ function AgendaCalendario() {
   )
 }
 
-function EnlacesRapidosCard() {
-  return (
-    <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
-      <h3 className="mb-3 text-sm font-bold text-ink">Enlaces rápidos</h3>
-      <div className="flex flex-col">
-        {ENLACES_RAPIDOS.map((e, i) => (
-          <button
-            key={e.titulo}
-            type="button"
-            className={clsx(
-              'flex items-center gap-3 py-2.5 text-left hover:opacity-80',
-              i !== 0 && 'border-t border-surface-border'
-            )}
-          >
-            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
-              <e.icon className="h-4 w-4" />
-            </span>
-            <span className="flex-1">
-              <span className="block text-sm font-semibold text-ink">{e.titulo}</span>
-              <span className="block text-xs text-ink-tertiary">{e.desc}</span>
-            </span>
-            <ChevronRight className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function NecesitasReunionCard() {
-  return (
-    <div className="rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-700 p-5 text-white shadow-card">
-      <p className="text-sm font-bold">¿Necesitas una reunión con nuestro equipo?</p>
-      <p className="mt-1.5 text-xs text-white/80">
-        Solicita una reunión con un asesor y te ayudaremos en lo que necesites.
-      </p>
-      <button
-        type="button"
-        className="mt-4 w-full rounded-full bg-white py-2.5 text-xs font-bold text-violet-700 hover:bg-white/90"
-      >
-        Solicitar reunión
-      </button>
-    </div>
-  )
-}
-
-function ConsejosCard() {
-  return (
-    <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
-      <div className="mb-3 flex items-center gap-2">
-        <Lightbulb className="h-4 w-4 text-amber-400" />
-        <h3 className="text-sm font-bold text-ink">Consejos para reuniones efectivas</h3>
-      </div>
-      <ul className="flex flex-col gap-1.5">
-        {CONSEJOS.map((c) => (
-          <li key={c} className="flex items-start gap-2 text-xs text-ink-secondary">
-            <ChevronRight className="mt-0.5 h-3 w-3 flex-shrink-0 text-brand" />
-            {c}
-          </li>
-        ))}
-      </ul>
-      <button type="button" className="mt-3 flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
-        Ver más consejos
-        <ChevronRight className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function QuoteCard() {
-  return (
-    <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
-      <Quote className="h-5 w-5 text-brand" />
-      <p className="mt-2 text-sm italic text-ink-secondary">
-        &ldquo;Reunirse es un comienzo, permanecer juntos es un progreso, trabajar juntos es un éxito.&rdquo;
-      </p>
-      <p className="mt-2 text-xs font-semibold text-ink-tertiary">— Henry Ford</p>
-    </div>
-  )
-}
-
-function EnlacesRapidos() {
-  return (
-    <div className="flex flex-col gap-5">
-      <EnlacesRapidosCard />
-      <NecesitasReunionCard />
-      <ConsejosCard />
-      <QuoteCard />
-    </div>
-  )
-}
-
-function ReunionRow({ r }: { r: Reunion }) {
-  return (
-    <li className="flex flex-wrap items-center gap-4 rounded-xl border border-surface-border p-3">
-      <div className="flex w-14 flex-shrink-0 flex-col items-center justify-center rounded-lg bg-surface py-1.5">
-        <span className="text-[9px] font-bold uppercase tracking-wide text-brand">{r.dia}</span>
-        <span className="text-base font-extrabold text-ink">{r.numero}</span>
-        <span className="text-[9px] font-bold uppercase tracking-wide text-ink-tertiary">{r.mes}</span>
-      </div>
-
-      <div className="min-w-[160px] flex-1">
-        <p className="text-sm font-bold text-ink">{r.titulo}</p>
-        <p className="mt-0.5 text-xs text-ink-tertiary">{r.hora}</p>
-      </div>
-
-      <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-        <Video className="h-3.5 w-3.5" />
-        {r.plataforma}
-      </div>
-
-      <AvatarStack equipo={r.equipo} extra={r.extra} />
-
-      {r.accion === 'unirme' ? (
-        <button
-          type="button"
-          className="flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] px-4 py-2 text-xs font-bold text-white hover:opacity-90"
-        >
-          <Video className="h-3.5 w-3.5" />
-          Unirme
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="flex items-center gap-1 rounded-full border border-surface-border px-4 py-2 text-xs font-bold text-ink-secondary hover:bg-surface"
-        >
-          Ver detalles
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-      )}
-
-      <button type="button" className="rounded-full p-1.5 text-ink-tertiary hover:bg-surface" aria-label="Más opciones">
-        <MoreVertical className="h-4 w-4" />
-      </button>
-    </li>
-  )
-}
-
-function ListaReuniones() {
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Próximas')
-  const [filtro, setFiltro] = useState<(typeof FILTROS)[number]>('Todas')
-  const [busqueda, setBusqueda] = useState('')
-
-  const reunionesFiltradas = REUNIONES.filter((r) =>
-    r.titulo.toLowerCase().includes(busqueda.toLowerCase())
-  )
-
-  return (
-    <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-5 border-b border-surface-border">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={clsx(
-                'relative pb-3 text-sm font-semibold transition-colors',
-                tab === t ? 'text-brand' : 'text-ink-tertiary hover:text-ink-secondary'
-              )}
-            >
-              {t}
-              {tab === t && <span className="absolute -bottom-px left-0 right-0 h-0.5 rounded-full bg-brand" />}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar reuniones..."
-            className="w-56 rounded-full border border-surface-border bg-surface py-2 pl-10 pr-4 text-xs text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
-          />
-        </div>
-      </div>
-
-      <div className="mb-4 flex gap-2">
-        {FILTROS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFiltro(f)}
-            className={clsx(
-              'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
-              filtro === f ? 'bg-brand text-white' : 'bg-surface text-ink-tertiary hover:bg-surface/70'
-            )}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'Próximas' ? (
-        <ul className="flex flex-col gap-3">
-          {reunionesFiltradas.map((r) => (
-            <ReunionRow key={r.titulo} r={r} />
-          ))}
-        </ul>
-      ) : (
-        <div className="flex flex-col items-center gap-2 py-14 text-center text-ink-tertiary">
-          <CalendarClock className="h-8 w-8" />
-          <p className="text-sm">Todavía no hay reuniones en {tab.toLowerCase()}.</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
 export function PortalClienteReunionesPage() {
+  const [tab, setTab] = useState<(typeof TABS_PRINCIPALES)[number]>('Próximas')
+  const [busqueda, setBusqueda] = useState('')
+  const [seleccionadaId, setSeleccionadaId] = useState(REUNIONES[0].id)
+
+  const reunionesFiltradas = REUNIONES.filter((r) => r.titulo.toLowerCase().includes(busqueda.toLowerCase()))
+  const seleccionada = REUNIONES.find((r) => r.id === seleccionadaId) ?? REUNIONES[0]
+
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
       <Breadcrumb />
       <HeaderReuniones />
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1fr_320px]">
-        <Reveal index={0}><ProximaReunionCard /></Reveal>
-        <Reveal index={1}><AgendaCalendario /></Reveal>
-        <Reveal index={2}><EnlacesRapidos /></Reveal>
+      <div className="flex gap-5 border-b border-surface-border">
+        {TABS_PRINCIPALES.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={clsx(
+              'relative pb-3 text-sm font-semibold transition-colors',
+              tab === t ? 'text-brand' : 'text-ink-tertiary hover:text-ink-secondary'
+            )}
+          >
+            {t}
+            {tab === t && <span className="absolute -bottom-px left-0 right-0 h-0.5 rounded-full bg-brand" />}
+          </button>
+        ))}
       </div>
 
-      <Reveal index={3}><ListaReuniones /></Reveal>
+      {tab === 'Próximas' && (
+        <Reveal index={0} className="flex flex-col gap-5">
+          <BarraFiltros busqueda={busqueda} onBusqueda={setBusqueda} />
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1fr_320px]">
+            <ListaReuniones reuniones={reunionesFiltradas} seleccionadaId={seleccionadaId} onSeleccionar={setSeleccionadaId} />
+            <DetalleReunion r={seleccionada} />
+            <VistaCalendario />
+          </div>
+        </Reveal>
+      )}
+
+      {tab === 'Historial' && (
+        <Reveal index={0} className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
+          <div className="flex flex-col items-center gap-2 py-14 text-center text-ink-tertiary">
+            <CalendarClock className="h-8 w-8" />
+            <p className="text-sm">Todavía no hay reuniones en el historial.</p>
+          </div>
+        </Reveal>
+      )}
+
     </div>
   )
 }
