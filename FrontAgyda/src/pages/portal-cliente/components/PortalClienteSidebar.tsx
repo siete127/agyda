@@ -35,7 +35,7 @@ export function PortalClienteSidebar({ className }: { className?: string }) {
         // "Flotante": separado de los bordes de la ventana (my-4 ml-4) y
         // con esquinas redondeadas + sombra propia, en vez de pegado a la
         // izquierda ocupando toda la altura de la pantalla.
-        'my-4 ml-4 flex flex-shrink-0 flex-col overflow-hidden rounded-3xl bg-[#0a2f71] py-6 shadow-2xl shadow-black/30 transition-[width] duration-300',
+        'my-4 ml-4 flex flex-shrink-0 flex-col overflow-hidden rounded-3xl bg-[#0a2f71] py-6 shadow-2xl shadow-black/30 transition-[width,transform,opacity] duration-300',
         collapsed ? 'w-20 px-3' : 'w-[260px] px-4',
         className
       )}

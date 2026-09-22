@@ -36,7 +36,11 @@ export function PortalClienteLayout() {
     <div className="flex h-screen overflow-hidden bg-surface">
       <PortalClienteSidebar
         className={clsx(
-          'transition-[transform,opacity] duration-500 ease-out',
+          // No declara su propia transition-[...]: el <aside> ya trae
+          // transition-[width,transform,opacity] de base — dos utilidades
+          // `transition-[...]` en el mismo elemento compiten por la cascada
+          // y solo una gana, dejando transform/opacity sin transición real.
+          'duration-500 ease-out',
           entered ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'
         )}
       />
