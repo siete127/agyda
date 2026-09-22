@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { clsx } from 'clsx'
 import {
-  Box, Monitor, Megaphone, Calendar, ChevronRight, FileText, CheckCircle2,
+  Box, Monitor, Megaphone, Calendar, ChevronRight, ArrowRight, FileText, CheckCircle2,
   BarChart3, Users, Star, Mail, Phone, Globe, Headphones, Receipt,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
@@ -10,6 +10,7 @@ import { ProgressGauge } from '@/pages/portal-cliente/components/ProgressGauge'
 import { MiniBarChart } from '@/pages/portal-cliente/components/MiniBarChart'
 import { CountUp } from '@/pages/portal-cliente/components/CountUp'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
+import facturaHero from '@/assets/factura-hero.png'
 
 // --- Datos de ejemplo — reemplazar por datos reales del backend cuando el
 // panel se conecte a los endpoints de proyectos/campañas/reuniones/actividad
@@ -63,9 +64,9 @@ const STATS = [
 ]
 
 const ACTIVIDAD = [
-  { tipo: 'Campaña', icon: Megaphone, color: 'text-emerald-500 bg-emerald-50', badge: 'bg-emerald-50 text-emerald-600', texto: 'Tu campaña "Campaña de reclutamiento Totis" fue publicada.', tiempo: 'Hace 2 horas' },
-  { tipo: 'Proyecto', icon: Monitor, color: 'text-blue-500 bg-blue-50', badge: 'bg-blue-50 text-blue-600', texto: 'Se actualizó el proyecto Sitio web corporativo.', tiempo: 'Hace 5 horas' },
-  { tipo: 'Reunión', icon: Calendar, color: 'text-purple-500 bg-purple-50', badge: 'bg-purple-50 text-purple-600', texto: 'Reunión confirmada: Revisión de avances.', tiempo: 'Hace 1 día' },
+  { tipo: 'Campaña', icon: Megaphone, color: 'text-emerald-500 bg-emerald-500/10', badge: 'bg-emerald-500/10 text-emerald-500', texto: 'Tu campaña "Campaña de reclutamiento Totis" fue publicada.', tiempo: 'Hace 2 horas' },
+  { tipo: 'Proyecto', icon: Monitor, color: 'text-blue-500 bg-blue-500/10', badge: 'bg-blue-500/10 text-blue-500', texto: 'Se actualizó el proyecto Sitio web corporativo.', tiempo: 'Hace 5 horas' },
+  { tipo: 'Reunión', icon: Calendar, color: 'text-purple-500 bg-purple-500/10', badge: 'bg-purple-500/10 text-purple-500', texto: 'Reunión confirmada: Revisión de avances.', tiempo: 'Hace 1 día' },
   { tipo: 'Atención', icon: Headphones, color: 'text-ink-tertiary bg-surface', badge: 'bg-surface text-ink-tertiary', texto: 'Tu solicitud #A123 fue respondida.', tiempo: 'Hace 1 día' },
 ]
 
@@ -74,9 +75,9 @@ const FILTROS = ['Todas', 'Proyectos', 'Campañas', 'Reuniones', 'Atención']
 const CANALES = [
   { nombre: 'WhatsApp', desc: 'Chat directo', img: '/whatsapp.png', color: '', accion: 'Abrir' },
   { nombre: 'Messenger', desc: 'Chat directo', img: '/messenger.png', color: '', accion: 'Abrir' },
-  { nombre: 'Email', desc: 'Escríbenos', icon: Mail, color: 'text-red-500 bg-red-50', accion: 'Redactar' },
-  { nombre: 'Teléfono', desc: 'Llámanos', icon: Phone, color: 'text-emerald-500 bg-emerald-50', accion: 'Llamar' },
-  { nombre: 'Sitio web', desc: 'Visita nuestro sitio', icon: Globe, color: 'text-sky-500 bg-sky-50', accion: 'Ir al sitio' },
+  { nombre: 'Email', desc: 'Escríbenos', icon: Mail, color: 'text-red-500 bg-red-500/10', accion: 'Redactar' },
+  { nombre: 'Teléfono', desc: 'Llámanos', icon: Phone, color: 'text-emerald-500 bg-emerald-500/10', accion: 'Llamar' },
+  { nombre: 'Sitio web', desc: 'Visita nuestro sitio', icon: Globe, color: 'text-sky-500 bg-sky-500/10', accion: 'Ir al sitio' },
 ]
 
 function saludoFecha() {
@@ -183,7 +184,7 @@ function CampanaCard() {
     <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
       <CardHeader icon={<Megaphone className="h-4 w-4 text-brand" />} title="Mis campañas" cta="Ver todas" />
       <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#19b6bc]/10 text-[#19b6bc]">
           <Megaphone className="h-6 w-6" />
         </div>
         <div className="flex-1">
@@ -230,7 +231,7 @@ function ReunionCard() {
     <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
       <CardHeader icon={<Calendar className="h-4 w-4 text-brand" />} title="Próxima reunión" cta="Ver todas" />
       <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-500">
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#19b6bc]/10 text-[#19b6bc]">
           <Calendar className="h-6 w-6" />
         </div>
         <div className="flex-1">
@@ -256,14 +257,18 @@ function ReunionCard() {
 }
 
 const FACTURA_ESTATUS_BADGE: Record<string, string> = {
-  Pagada: 'bg-emerald-50 text-emerald-600',
-  Pendiente: 'bg-amber-50 text-amber-600',
+  Pagada: 'bg-emerald-500/10 text-emerald-500',
+  Pendiente: 'bg-amber-500/10 text-amber-500',
 }
 
 function FacturasSeccion() {
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[320px_1fr]">
-      <div className="relative overflow-hidden rounded-2xl bg-[#0a2f71] p-6">
+      <div
+        className="relative overflow-hidden rounded-2xl bg-cover bg-center p-6"
+        style={{ backgroundImage: `url(${facturaHero})` }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[#0a2f71]/85" />
         <div className="relative z-10">
           <div className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-white" />
@@ -277,8 +282,6 @@ function FacturasSeccion() {
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
-        {/* Ícono decorativo grande, a modo de placeholder de ilustración */}
-        <Receipt className="pointer-events-none absolute -bottom-6 -right-6 h-32 w-32 text-white/10" />
       </div>
 
       <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
@@ -329,18 +332,18 @@ function LoImportanteDelDia() {
           <button
             key={s.label}
             type="button"
-            className="flex aspect-square flex-col items-start justify-center gap-2 rounded-2xl border border-surface-border bg-card p-4 text-left shadow-card hover:bg-surface"
+            className="group flex h-36 flex-col items-center justify-center gap-3 rounded-2xl border border-surface-border bg-card p-4 text-center shadow-card hover:bg-surface"
           >
-            <span className="flex items-center gap-2">
-              <span className={clsx('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full', s.color)}>
+            <div className="flex items-center justify-center gap-2">
+              <span className={clsx('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl', s.color)}>
                 <s.icon className="h-6 w-6" />
               </span>
               <CountUp end={s.valor} className="text-3xl font-bold text-ink" />
-            </span>
-            <span className="flex items-center gap-0.5 whitespace-nowrap text-[11px] leading-tight text-ink-tertiary">
-              {s.label}
-              <ChevronRight className="h-3 w-3" />
-            </span>
+            </div>
+            <div className="flex items-center justify-center gap-1">
+              <span className="text-xs leading-tight text-ink-tertiary">{s.label}</span>
+              <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand transition-transform group-hover:translate-x-0.5" />
+            </div>
           </button>
         ))}
       </div>
