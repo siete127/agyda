@@ -33,6 +33,7 @@ const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/Porta
 const PortalClienteReunionesPage = lz(() => import('@/pages/portal-cliente/PortalClienteReunionesPage'), 'PortalClienteReunionesPage')
 const PortalClienteAtencionPage = lz(() => import('@/pages/portal-cliente/PortalClienteAtencionPage'), 'PortalClienteAtencionPage')
 const PortalClienteCanalesPage = lz(() => import('@/pages/portal-cliente/PortalClienteCanalesPage'), 'PortalClienteCanalesPage')
+const PortalClienteFacturasPage = lz(() => import('@/pages/portal-cliente/PortalClienteFacturasPage'), 'PortalClienteFacturasPage')
 import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
@@ -217,7 +218,7 @@ export const router = createBrowserRouter([
           { path: '/portal-cliente/atencion', element: wrap(<PortalClienteAtencionPage />) },
           { path: '/portal-cliente/atencion/nueva', element: wrap(<ProximamentePage titulo="Nueva solicitud" />) },
           { path: '/portal-cliente/canales', element: wrap(<PortalClienteCanalesPage />) },
-          { path: '/portal-cliente/facturas', element: wrap(<ProximamentePage titulo="Facturas" />) },
+          { path: '/portal-cliente/facturas', element: wrap(<PortalClienteFacturasPage />) },
         ],
       },
 
