@@ -27,7 +27,6 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
   const { data: usuarios } = useUsuariosSimple()
   const [editando, setEditando] = useState(false)
 
-  const [tipoCliente, setTipoCliente] = useState(cliente.tipoCliente ?? '')
   const [direccion, setDireccion] = useState(cliente.direccion ?? '')
   const [productoServicio, setProductoServicio] = useState(cliente.productoServicio ?? '')
   const [responsableId, setResponsableId] = useState(cliente.responsableId ? String(cliente.responsableId) : '')
@@ -39,7 +38,6 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
 
   const guardar = useMutation({
     mutationFn: () => crmService.altaCliente(cliente.id, {
-      tipoCliente: tipoCliente || undefined,
       direccion: direccion || undefined,
       productoServicio: productoServicio || undefined,
       responsableId: responsableId ? Number(responsableId) : undefined,
@@ -83,7 +81,6 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Campo label="Empresa" value={cliente.empresa} />
-            <Campo label="Tipo de cliente" value={cliente.tipoCliente} />
             <Campo label="Teléfono" value={cliente.telefono} />
             <Campo label="Correo" value={cliente.correo} />
             <Campo label="Dirección" value={cliente.direccion} />
@@ -114,14 +111,17 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
       <div className="p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Tipo de cliente</label>
-            <input value={tipoCliente} onChange={(e) => setTipoCliente(e.target.value)} className="field" maxLength={50} />
-          </div>
-          <div>
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Responsable</label>
             <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)} className="field">
               <option value="">Sin asignar</option>
               {usuarios?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Medio de contacto</label>
+            <select value={medioContacto} onChange={(e) => setMedioContacto(e.target.value)} className="field">
+              <option value="">Sin especificar</option>
+              {MEDIOS_CONTACTO.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div className="col-span-2">
@@ -132,14 +132,8 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Producto o servicio contratado</label>
             <input value={productoServicio} onChange={(e) => setProductoServicio(e.target.value)} className="field" maxLength={300} />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Medio de contacto</label>
-            <select value={medioContacto} onChange={(e) => setMedioContacto(e.target.value)} className="field">
-              <option value="">Sin especificar</option>
-              {MEDIOS_CONTACTO.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
         </div>
+
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Estatus</label>
           <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">

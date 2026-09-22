@@ -75,9 +75,24 @@ export interface Mascota {
   flotante: MascotaParte & { habilitado: boolean }
 }
 
+export const ESTATUS_VENTA_VALIDOS = [
+  'Prospecto', 'Cotizada', 'Aprobada', 'Formalizada', 'Formalizado', 'Garantizada', 'Cancelada', 'Rechazada',
+] as const
+
 export interface VentasConfig {
   margen: { verdeMin: number; amarilloMin: number; rojoMax: number; requiereOverride: boolean }
   iva: { tasaDefault: number }
+  // Definición única y compartida de "venta contada" — la usan Metas, Comisiones
+  // e Incentivos en vez de cada uno traer su propio whitelist.
+  estatusContados: string[]
+}
+
+export interface ProspeccionConfig {
+  ventanaAnalisisDias: number
+}
+
+export interface EmailMarketingConfig {
+  emailsPorHoraDefault: number
 }
 
 export interface PersonalizacionConfig {
@@ -88,6 +103,8 @@ export interface PersonalizacionConfig {
   enlacesTopbar: EnlaceTopbar[]
   mascota: Mascota
   ventas: VentasConfig
+  prospeccion: ProspeccionConfig
+  emailMarketing: EmailMarketingConfig
 }
 
 export const personalizacionService = {
@@ -121,6 +138,16 @@ export const personalizacionService = {
   async updateVentas(v: VentasConfig): Promise<VentasConfig> {
     const { data } = await api.put('/personalizacion/ventas', v)
     return data.data as VentasConfig
+  },
+
+  async updateProspeccion(p: ProspeccionConfig): Promise<ProspeccionConfig> {
+    const { data } = await api.put('/personalizacion/prospeccion', p)
+    return data.data as ProspeccionConfig
+  },
+
+  async updateEmailMarketing(e: EmailMarketingConfig): Promise<EmailMarketingConfig> {
+    const { data } = await api.put('/personalizacion/email-marketing', e)
+    return data.data as EmailMarketingConfig
   },
 
   async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {

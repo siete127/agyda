@@ -1,8 +1,10 @@
 import { useMemo, useState, type ComponentType } from 'react'
-import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2 } from 'lucide-react'
+import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth.store'
 import { CONFIG_TREE, CONFIG_NODE_INDEX, type ConfigNode } from './configTree'
+import { NuevoClienteModal } from '@/pages/atencion-cliente/clientes/NuevoClienteModal'
 import { CATEGORY_STYLES, DEFAULT_CATEGORY_STYLE, countLeaves } from './categoryStyles'
 import { EmpresasTab } from './EmpresasTab'
 import { ModulosEmpresaTab } from './ModulosEmpresaTab'
@@ -19,6 +21,19 @@ import { BrandingTab } from './BrandingTab'
 import { InstitucionalTab } from './InstitucionalTab'
 import { VentasTab } from './VentasTab'
 import { FacturacionTab } from './FacturacionTab'
+import { MetasConfigTab } from './MetasConfigTab'
+import { ComisionesConfigTab } from './ComisionesConfigTab'
+import { IncentivosConfigTab } from './IncentivosConfigTab'
+import { ProspeccionConfigTab } from './ProspeccionConfigTab'
+import { EmailMarketingConfigTab } from './EmailMarketingConfigTab'
+import { TiposClienteConfigTab } from './TiposClienteConfigTab'
+import { SegmentosClienteConfigTab } from './SegmentosClienteConfigTab'
+import { CategoriasClienteConfigTab } from './CategoriasClienteConfigTab'
+import { IndustriasClienteConfigTab } from './IndustriasClienteConfigTab'
+import { ClasificacionesClienteConfigTab } from './ClasificacionesClienteConfigTab'
+import { EtiquetasClienteConfigTab } from './EtiquetasClienteConfigTab'
+import { TiposAccesoPortalConfigTab } from './TiposAccesoPortalConfigTab'
+import { ClientesConfigResumen } from './ClientesConfigResumen'
 import { CCSkillsTab, CCConfigTab, CCSimuladorTab, CCPostulantesGestionTab } from './ContactCenterTabs'
 import { CCFormulariosTab } from './CCFormulariosTab'
 import { QrGeneratorTab } from './QrGeneratorTab'
@@ -63,6 +78,19 @@ const SCREENS: Record<string, ComponentType> = {
   'pers-institucional': InstitucionalTab,
   ventas: VentasTab,
   facturacion: FacturacionTab,
+  'metas-config': MetasConfigTab,
+  'comisiones-config': ComisionesConfigTab,
+  'incentivos-config': IncentivosConfigTab,
+  'prospeccion-config': ProspeccionConfigTab,
+  'email-marketing-config': EmailMarketingConfigTab,
+  'tipos-cliente-crm': TiposClienteConfigTab,
+  'segmentos-crm': SegmentosClienteConfigTab,
+  'categorias-cliente-crm': CategoriasClienteConfigTab,
+  'industrias-crm': IndustriasClienteConfigTab,
+  'clasificaciones-crm': ClasificacionesClienteConfigTab,
+  'etiquetas-cliente-crm': EtiquetasClienteConfigTab,
+  'tipos-acceso-portal-crm': TiposAccesoPortalConfigTab,
+  'clientes-crm-resumen': ClientesConfigResumen,
   'cc-skills': CCSkillsTab,
   'cc-formularios': CCFormulariosTab,
   'cc-postulantes': CCPostulantesGestionTab,
@@ -320,6 +348,13 @@ function CategoryView({
   // penúltimo crumb si hay uno seleccionado, o el penúltimo de la categoría.
   const upKey = breadcrumb.length >= 2 ? breadcrumb[breadcrumb.length - 2].key : null
 
+  // En la grilla de catálogos de Clientes (Configuración → CRM → Clientes),
+  // se ofrece crear un cliente directamente aquí — mismo modal/flujo que ya
+  // existe en Atención al Cliente → Seguimiento de clientes.
+  const qc = useQueryClient()
+  const [showNuevoCliente, setShowNuevoCliente] = useState(false)
+  const enGrillaClientes = lastKey === 'clientes-crm'
+
   return (
     <div className="space-y-4">
       {/* Header ilustrado */}
@@ -361,8 +396,26 @@ function CategoryView({
             </div>
             <p className="mt-0.5 truncate text-[0.98rem] font-bold text-gray-900">{selectedNode?.label ?? category.label}</p>
           </div>
+          {enGrillaClientes && (
+            <button
+              onClick={() => setShowNuevoCliente(true)}
+              className="flex flex-shrink-0 items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-violet-600/20 transition-all hover:bg-violet-700 active:scale-[0.98]"
+            >
+              <UserPlus className="h-3.5 w-3.5" /> Nuevo cliente
+            </button>
+          )}
         </div>
       </div>
+
+      {showNuevoCliente && (
+        <NuevoClienteModal
+          onClose={() => setShowNuevoCliente(false)}
+          onCreated={() => {
+            qc.invalidateQueries({ queryKey: ['clientes-lista'] })
+            setShowNuevoCliente(false)
+          }}
+        />
+      )}
 
       {Screen ? (
         <Screen />

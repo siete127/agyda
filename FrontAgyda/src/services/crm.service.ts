@@ -70,6 +70,9 @@ export const crmService = {
   altaCliente: async (id: number, body: {
     tipoCliente?: string; direccion?: string; productoServicio?: string; responsableId?: number
     estatusCliente?: string; medioContacto?: string; observacionesIniciales?: string
+    tipoClienteId?: number; segmentoId?: number; categoriaId?: number; industriaId?: number
+    clasificacionId?: number; etiquetaIds?: number[]
+    generarAccesoPortal?: boolean; passwordPortal?: string; tipoAccesoId?: number; enviarInvitacion?: boolean
   }) => {
     const { data } = await api.put(`/crm/contactos/${id}/alta-cliente`, body)
     return data
@@ -109,7 +112,7 @@ export const crmService = {
     nombreProyecto: string,
     miembros: { nombre: string; rol: 'lider' | 'miembro' | 'revisor' }[],
     datosCliente?: {
-      tipoCliente?: string; productoServicio?: string; responsableId?: number
+      tipoCliente?: string; productosServiciosIds?: number[]; responsableId?: number
       estatusCliente?: string; observacionesIniciales?: string
     },
   ) =>

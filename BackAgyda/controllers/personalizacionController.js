@@ -76,9 +76,23 @@ const DEFAULT_CONFIG = {
   // defecto. El semáforo compara el margen global de la cotización contra estos
   // umbrales; si cae en ROJO y `requiereOverride` está activo, guardar/aprobar
   // exige el permiso crm:cotizacion-override-margen.
+  // `estatusContados` es la definición única y compartida de "venta contada" —
+  // la consumen Metas, Comisiones e Incentivos (ventasAreaController) en vez de
+  // cada uno traer su propio whitelist hardcodeado.
   ventas: {
     margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
     iva: { tasaDefault: 0.16 },
+    estatusContados: ['Aprobada', 'Formalizada', 'Formalizado', 'Garantizada'],
+  },
+  // Prospección (ventas-area) — ventana usada para "gestiones recientes" y
+  // "tipos de gestión más comunes" en el dashboard de prospección.
+  prospeccion: {
+    ventanaAnalisisDias: 30,
+  },
+  // Email Marketing — throttle por defecto al crear una campaña (el usuario
+  // puede ajustarlo por campaña; esto es solo el valor sugerido).
+  emailMarketing: {
+    emailsPorHoraDefault: 200,
   },
 };
 
@@ -87,6 +101,8 @@ function clamp(n, min, max, fallback) {
   if (!Number.isFinite(v)) return fallback;
   return Math.min(Math.max(v, min), max);
 }
+
+const ESTATUS_VENTA_VALIDOS = ['Prospecto', 'Cotizada', 'Aprobada', 'Formalizada', 'Formalizado', 'Garantizada', 'Cancelada', 'Rechazada'];
 
 // Normaliza la rama `ventas` con clamps coherentes (verde >= amarillo >= rojo).
 function limpiarVentas(raw) {
@@ -99,6 +115,9 @@ function limpiarVentas(raw) {
   let verdeMin = clamp(mg.verdeMin, 0, 100, D.margen.verdeMin);
   if (amarilloMin < rojoMax) amarilloMin = rojoMax;
   if (verdeMin < amarilloMin) verdeMin = amarilloMin;
+  const estatusContados = Array.isArray(m.estatusContados)
+    ? m.estatusContados.filter((e) => ESTATUS_VENTA_VALIDOS.includes(e))
+    : D.estatusContados;
   return {
     margen: {
       verdeMin,
@@ -107,7 +126,20 @@ function limpiarVentas(raw) {
       requiereOverride: mg.requiereOverride !== false,
     },
     iva: { tasaDefault: clamp(iva.tasaDefault, 0, 1, D.iva.tasaDefault) },
+    estatusContados: estatusContados.length > 0 ? estatusContados : D.estatusContados,
   };
+}
+
+function limpiarProspeccion(raw) {
+  const D = DEFAULT_CONFIG.prospeccion;
+  const m = raw && typeof raw === 'object' ? raw : {};
+  return { ventanaAnalisisDias: Math.round(clamp(m.ventanaAnalisisDias, 1, 365, D.ventanaAnalisisDias)) };
+}
+
+function limpiarEmailMarketing(raw) {
+  const D = DEFAULT_CONFIG.emailMarketing;
+  const m = raw && typeof raw === 'object' ? raw : {};
+  return { emailsPorHoraDefault: Math.round(clamp(m.emailsPorHoraDefault, 1, 10000, D.emailsPorHoraDefault)) };
 }
 
 // Config de margen que consume crmCotizacionesController (evita duplicar defaults).
@@ -115,6 +147,15 @@ exports.calcMargenConfig = function calcMargenConfig(config) {
   const v = limpiarVentas(config?.ventas);
   return { ...v.margen, tasaIvaDefault: v.iva.tasaDefault };
 };
+
+// Definición única y compartida de "venta contada" — la consume
+// ventasAreaController (Metas, Comisiones, Incentivos) en vez de cada uno
+// traer su propio whitelist hardcodeado.
+exports.getEstatusContados = function getEstatusContados(config) {
+  return limpiarVentas(config?.ventas).estatusContados;
+};
+
+exports.ESTATUS_VENTA_VALIDOS = ESTATUS_VENTA_VALIDOS;
 
 const MASCOTA_MOVIMIENTOS = ['ninguno', 'flotar', 'saludar', 'latir', 'balanceo'];
 const MASCOTA_VELOCIDADES = ['lenta', 'normal', 'rapida'];
@@ -166,6 +207,8 @@ function mergeConfig(stored) {
       ? stored.enlacesTopbar.map(limpiarEnlace).filter(Boolean)
       : base.enlacesTopbar,
     ventas: limpiarVentas(stored.ventas),
+    prospeccion: limpiarProspeccion(stored.prospeccion),
+    emailMarketing: limpiarEmailMarketing(stored.emailMarketing),
     mascota: (() => {
       const m = stored.mascota && typeof stored.mascota === 'object' ? stored.mascota : {};
       // Migración desde el formato viejo (una sola mascota con `modo`).
@@ -378,6 +421,46 @@ exports.updateVentas = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateVentas', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la configuración comercial' });
+  }
+};
+
+// PUT /api/personalizacion/prospeccion
+// Body: { ventanaAnalisisDias }
+exports.updateProspeccion = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.prospeccion = limpiarProspeccion(req.body);
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-prospeccion', detalle: JSON.stringify(config.prospeccion), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'prospeccion');
+    return res.json({ success: true, data: config.prospeccion });
+  } catch (e) {
+    logger.error('personalizacionController.updateProspeccion', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la configuración de prospección' });
+  }
+};
+
+// PUT /api/personalizacion/email-marketing
+// Body: { emailsPorHoraDefault }
+exports.updateEmailMarketing = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.emailMarketing = limpiarEmailMarketing(req.body);
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-email-marketing', detalle: JSON.stringify(config.emailMarketing), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'emailMarketing');
+    return res.json({ success: true, data: config.emailMarketing });
+  } catch (e) {
+    logger.error('personalizacionController.updateEmailMarketing', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la configuración de email marketing' });
   }
 };
 

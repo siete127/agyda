@@ -3,7 +3,6 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Home, Calendar, Headphones, Megaphone, Receipt, Settings, HelpCircle, LogOut,
-  ChevronRight,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { useThemeStore, resolveTheme } from '@/stores/theme.store'
@@ -12,37 +11,24 @@ interface NavItem {
   label: string
   to: string
   icon: React.ReactNode
-  children?: { label: string; to: string }[]
+  // Rutas adicionales que también cuentan como "esta sección activa" (ej.
+  // el historial de reuniones vive dentro de Reuniones aunque su URL sea
+  // distinta — ver ReunionesPage, que ya no depende de una entrada propia
+  // de sidebar para llegar ahí).
+  matchAlso?: string[]
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Principal', to: '/portal-cliente', icon: <Home className="h-5 w-5" /> },
-  {
-    label: 'Reuniones', to: '/portal-cliente/reuniones', icon: <Calendar className="h-5 w-5" />,
-    children: [
-      { label: 'Próximas reuniones', to: '/portal-cliente/reuniones' },
-      { label: 'Historial', to: '/portal-cliente/reuniones/historial' },
-    ],
-  },
-  {
-    label: 'Atención', to: '/portal-cliente/atencion', icon: <Headphones className="h-5 w-5" />,
-    children: [
-      { label: 'Mis solicitudes', to: '/portal-cliente/atencion' },
-      { label: 'Nueva solicitud', to: '/portal-cliente/atencion/nueva' },
-    ],
-  },
-  {
-    label: 'Canales', to: '/portal-cliente/canales', icon: <Megaphone className="h-5 w-5" />,
-    children: [
-      { label: 'Mis campañas', to: '/portal-cliente/canales' },
-    ],
-  },
+  { label: 'Reuniones', to: '/portal-cliente/reuniones', icon: <Calendar className="h-5 w-5" />, matchAlso: ['/portal-cliente/reuniones/historial'] },
+  { label: 'Atención', to: '/portal-cliente/atencion', icon: <Headphones className="h-5 w-5" />, matchAlso: ['/portal-cliente/atencion/nueva'] },
+  { label: 'Canales', to: '/portal-cliente/canales', icon: <Megaphone className="h-5 w-5" /> },
   { label: 'Facturas', to: '/portal-cliente/facturas', icon: <Receipt className="h-5 w-5" /> },
 ]
 
 function isItemActive(item: NavItem, pathname: string) {
   if (pathname === item.to) return true
-  return !!item.children?.some((c) => pathname === c.to)
+  return !!item.matchAlso?.some((p) => pathname === p)
 }
 
 interface NavItemRowProps {
@@ -52,68 +38,20 @@ interface NavItemRowProps {
 }
 
 function NavItemRow({ item, itemRef, isSectionActive }: NavItemRowProps) {
-  const [open, setOpen] = useState(isSectionActive)
-  const hasChildren = !!item.children?.length
-
-  if (!hasChildren) {
-    return (
-      <NavLink
-        ref={itemRef}
-        to={item.to}
-        end
-        className={({ isActive }) =>
-          clsx(
-            'relative z-10 flex items-center gap-3 py-3.5 pl-4 text-sm font-semibold transition-colors',
-            isActive
-              ? '-mr-4 rounded-l-full pr-6 text-[#19b6bc]'
-              : 'mr-4 rounded-full pr-4 text-white/70 hover:bg-white/10 hover:text-white'
-          )
-        }
-      >
-        {item.icon}
-        <span>{item.label}</span>
-      </NavLink>
-    )
-  }
-
   return (
-    <div className="relative z-10 mr-4">
-      <button
-        ref={itemRef as React.Ref<HTMLButtonElement>}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={clsx(
-          'flex w-full items-center gap-3 rounded-full py-3.5 pl-4 pr-4 text-sm font-semibold transition-colors',
-          isSectionActive ? 'text-[#19b6bc]' : 'text-white/70 hover:bg-white/10 hover:text-white'
-        )}
-      >
-        {item.icon}
-        <span className="flex-1 text-left">{item.label}</span>
-        <ChevronRight className={clsx('h-4 w-4 transition-transform', open && 'rotate-90')} />
-      </button>
-      {open && (
-        <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l border-white/10 pl-4">
-          {item.children!.map((child) => (
-            <NavLink
-              key={child.to}
-              to={child.to}
-              end
-              style={({ isActive }) =>
-                isActive ? { background: 'linear-gradient(135deg, #19b6bc 0%, #00537f 100%)' } : undefined
-              }
-              className={({ isActive }) =>
-                clsx(
-                  'rounded-full px-3 py-2 text-sm transition-colors',
-                  isActive ? 'font-semibold text-white' : 'text-white/60 hover:text-white'
-                )
-              }
-            >
-              {child.label}
-            </NavLink>
-          ))}
-        </div>
+    <NavLink
+      ref={itemRef}
+      to={item.to}
+      className={clsx(
+        'relative z-10 flex items-center gap-3 py-3.5 pl-4 text-sm font-semibold transition-colors',
+        isSectionActive
+          ? '-mr-4 rounded-l-full pr-6 text-[#19b6bc]'
+          : 'mr-4 rounded-full pr-4 text-white/70 hover:bg-white/10 hover:text-white'
       )}
-    </div>
+    >
+      {item.icon}
+      <span>{item.label}</span>
+    </NavLink>
   )
 }
 

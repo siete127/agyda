@@ -1,27 +1,39 @@
 import { useQuery } from '@tanstack/react-query'
-import { User, FileText, Building2, History, Inbox } from 'lucide-react'
+import { User, FileText, Building2, History, Inbox, Tag, Layers, FolderTree, Factory, ListTree, Tags, KeyRound } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Spinner } from '@/components/ui/Spinner'
 import { Tabs, type TabItem } from '@/components/ui/Tabs'
 import { crmService } from '@/services/crm.service'
+import { crmCatalogosClienteService } from '@/services/crmCatalogosCliente.service'
 import { CLIENTE_ESTATUS_COLORES } from '@/types/crm.types'
 import { DatosGeneralesTab } from './components/DatosGeneralesTab'
 import { DocumentosTab } from './components/DocumentosTab'
 import { SeguimientoConsolidadoTab, type SubSeguimiento } from './components/SeguimientoConsolidadoTab'
 import { CasosPagosTab, type SubCasosPagos } from './components/CasosPagosTab'
+import { CatalogoSeleccionTab } from './components/CatalogoSeleccionTab'
+import { EtiquetasClienteTab } from './components/EtiquetasClienteTab'
+import { AccesoPortalTab } from './components/AccesoPortalTab'
 
 // Cuerpo del expediente del cliente — extraído de ClientePerfilPage para que lo
 // compartan la ruta /clientes/:id (wrapper que lee la URL) y el ClienteDrawer
 // del módulo "Seguimiento de clientes" (le pasa tab/sub por props).
 //
-// Expediente de 4 pestañas:
-//   datos       → DatosGeneralesTab
-//   seguimiento → bitácora + tareas + citas + renovaciones + historial (sub-tabs)
-//   casos-pagos → casos + control de pagos + satisfacción + comercial (sub-tabs)
-//   documentos  → DocumentosTab
+// Expediente de 11 pestañas:
+//   datos          → DatosGeneralesTab
+//   tipo/segmento/categoria/industria/clasificacion → CatalogoSeleccionTab (×5)
+//   etiquetas      → EtiquetasClienteTab
+//   acceso-portal  → AccesoPortalTab
+//   seguimiento    → bitácora + tareas + citas + renovaciones + historial (sub-tabs)
+//   casos-pagos    → casos + control de pagos + satisfacción + comercial (sub-tabs)
+//   documentos     → DocumentosTab
 
-export type ExpedienteTab = 'datos' | 'seguimiento' | 'casos-pagos' | 'documentos'
-export const EXPEDIENTE_TAB_KEYS: ExpedienteTab[] = ['datos', 'seguimiento', 'casos-pagos', 'documentos']
+export type ExpedienteTab =
+  | 'datos' | 'tipo' | 'segmento' | 'categoria' | 'industria' | 'clasificacion' | 'etiquetas' | 'acceso-portal'
+  | 'seguimiento' | 'casos-pagos' | 'documentos'
+export const EXPEDIENTE_TAB_KEYS: ExpedienteTab[] = [
+  'datos', 'tipo', 'segmento', 'categoria', 'industria', 'clasificacion', 'etiquetas', 'acceso-portal',
+  'seguimiento', 'casos-pagos', 'documentos',
+]
 
 export const EXPEDIENTE_SUB_DEFAULT: Record<'seguimiento' | 'casos-pagos', string> = {
   seguimiento: 'bitacora',
@@ -60,6 +72,13 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
   const cfg = CLIENTE_ESTATUS_COLORES.find((e) => e.key === cliente.estatusCliente) ?? CLIENTE_ESTATUS_COLORES[0]
   const TABS: TabItem<ExpedienteTab>[] = [
     { key: 'datos', label: 'Datos', icon: User },
+    { key: 'tipo', label: 'Tipo', icon: Tag },
+    { key: 'segmento', label: 'Segmento', icon: Layers },
+    { key: 'categoria', label: 'Categoría', icon: FolderTree },
+    { key: 'industria', label: 'Industria', icon: Factory },
+    { key: 'clasificacion', label: 'Clasificación', icon: ListTree },
+    { key: 'etiquetas', label: 'Etiquetas', icon: Tags },
+    { key: 'acceso-portal', label: 'Acceso al portal', icon: KeyRound },
     { key: 'seguimiento', label: 'Seguimiento', icon: History },
     { key: 'casos-pagos', label: 'Casos, pagos y ventas', icon: Inbox },
     { key: 'documentos', label: 'Documentos', icon: FileText, badge: cliente.conteos?.documentos },
@@ -100,6 +119,43 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
       <Tabs tabs={TABS} value={tab} onChange={onTab} />
 
       {tab === 'datos' && <DatosGeneralesTab cliente={cliente} />}
+      {tab === 'tipo' && (
+        <CatalogoSeleccionTab
+          cliente={cliente} titulo="Tipo de cliente" subtitulo="Ej. Persona física, Persona moral, Gobierno."
+          icon={Tag} service={crmCatalogosClienteService.tipos} queryKey="crm-catalogo-tipos-cliente"
+          campo="tipoClienteId" valorActualId={cliente.tipoClienteId} valorActualNombre={cliente.tipoClienteNombre}
+        />
+      )}
+      {tab === 'segmento' && (
+        <CatalogoSeleccionTab
+          cliente={cliente} titulo="Segmento" subtitulo="Segmentación comercial del cliente."
+          icon={Layers} service={crmCatalogosClienteService.segmentos} queryKey="crm-catalogo-segmentos"
+          campo="segmentoId" valorActualId={cliente.segmentoId} valorActualNombre={cliente.segmentoNombre}
+        />
+      )}
+      {tab === 'categoria' && (
+        <CatalogoSeleccionTab
+          cliente={cliente} titulo="Categoría" subtitulo="Categoría comercial del cliente."
+          icon={FolderTree} service={crmCatalogosClienteService.categorias} queryKey="crm-catalogo-categorias-cliente"
+          campo="categoriaId" valorActualId={cliente.categoriaId} valorActualNombre={cliente.categoriaNombre}
+        />
+      )}
+      {tab === 'industria' && (
+        <CatalogoSeleccionTab
+          cliente={cliente} titulo="Industria" subtitulo="Giro o industria del cliente."
+          icon={Factory} service={crmCatalogosClienteService.industrias} queryKey="crm-catalogo-industrias"
+          campo="industriaId" valorActualId={cliente.industriaId} valorActualNombre={cliente.industriaNombre}
+        />
+      )}
+      {tab === 'clasificacion' && (
+        <CatalogoSeleccionTab
+          cliente={cliente} titulo="Clasificación" subtitulo="Clasificación interna del cliente."
+          icon={ListTree} service={crmCatalogosClienteService.clasificaciones} queryKey="crm-catalogo-clasificaciones-cliente"
+          campo="clasificacionId" valorActualId={cliente.clasificacionId} valorActualNombre={cliente.clasificacionNombre}
+        />
+      )}
+      {tab === 'etiquetas' && <EtiquetasClienteTab cliente={cliente} />}
+      {tab === 'acceso-portal' && <AccesoPortalTab cliente={cliente} />}
       {tab === 'seguimiento' && (
         <SeguimientoConsolidadoTab
           contactoId={cliente.id}

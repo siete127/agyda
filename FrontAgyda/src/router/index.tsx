@@ -32,6 +32,11 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 
 // Páginas lazy — cada una genera su propio chunk
 const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/PortalClientePrincipalPage'), 'PortalClientePrincipalPage')
+const ReunionesPage = lz(() => import('@/pages/portal-cliente/ReunionesPage'), 'ReunionesPage')
+const ReunionesHistorialPage = lz(() => import('@/pages/portal-cliente/ReunionesHistorialPage'), 'ReunionesHistorialPage')
+const AtencionPage = lz(() => import('@/pages/portal-cliente/AtencionPage'), 'AtencionPage')
+const AtencionNuevaPage = lz(() => import('@/pages/portal-cliente/AtencionNuevaPage'), 'AtencionNuevaPage')
+const FacturasPage = lz(() => import('@/pages/portal-cliente/FacturasPage'), 'FacturasPage')
 import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
@@ -213,12 +218,15 @@ export const router = createBrowserRouter([
         element: <PortalClienteLayout />,
         children: [
           { path: '/portal-cliente', element: wrap(<PortalClientePrincipalPage />) },
-          { path: '/portal-cliente/reuniones', element: wrap(<ProximamentePage titulo="Reuniones" />) },
-          { path: '/portal-cliente/reuniones/historial', element: wrap(<ProximamentePage titulo="Historial de reuniones" />) },
-          { path: '/portal-cliente/atencion', element: wrap(<ProximamentePage titulo="Atención" />) },
-          { path: '/portal-cliente/atencion/nueva', element: wrap(<ProximamentePage titulo="Nueva solicitud" />) },
+          { path: '/portal-cliente/reuniones', element: wrap(<ReunionesPage />) },
+          { path: '/portal-cliente/reuniones/historial', element: wrap(<ReunionesHistorialPage />) },
+          { path: '/portal-cliente/atencion', element: wrap(<AtencionPage />) },
+          { path: '/portal-cliente/atencion/nueva', element: wrap(<AtencionNuevaPage />) },
+          // "Canales / Mis campañas" queda pendiente: no existe hoy ninguna
+          // relación real entre un cliente (CRM_CONTACTOS) y una campaña del
+          // Contact Center (CCO_CAMPANIAS) — ver plan de portal del cliente.
           { path: '/portal-cliente/canales', element: wrap(<ProximamentePage titulo="Canales" />) },
-          { path: '/portal-cliente/facturas', element: wrap(<ProximamentePage titulo="Facturas" />) },
+          { path: '/portal-cliente/facturas', element: wrap(<FacturasPage />) },
         ],
       },
 

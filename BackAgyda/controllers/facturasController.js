@@ -42,6 +42,7 @@ exports.list = async (req, res) => {
     const where = ['1=1'];
     if (req.query.opoId) { rq.input('opo', sql.Int, req.query.opoId); where.push('FAC_OPO_ID=@opo'); }
     if (req.query.cotId) { rq.input('cot', sql.Int, req.query.cotId); where.push('FAC_COT_ID=@cot'); }
+    if (req.query.clienteId) { rq.input('cli', sql.Int, req.query.clienteId); where.push('FAC_CLIENTE_ID=@cli'); }
     const r = await rq.query(`SELECT * FROM dbo.FACTURAS WHERE ${where.join(' AND ')} ORDER BY FAC_ID DESC`);
     res.json({ success: true, data: r.recordset.map(mapFactura) });
   } catch (e) {
