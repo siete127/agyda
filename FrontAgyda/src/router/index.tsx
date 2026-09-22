@@ -31,6 +31,8 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 // Páginas lazy — cada una genera su propio chunk
 const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/PortalClientePrincipalPage'), 'PortalClientePrincipalPage')
 const PortalClienteReunionesPage = lz(() => import('@/pages/portal-cliente/PortalClienteReunionesPage'), 'PortalClienteReunionesPage')
+const PortalClienteAtencionPage = lz(() => import('@/pages/portal-cliente/PortalClienteAtencionPage'), 'PortalClienteAtencionPage')
+const PortalClienteCanalesPage = lz(() => import('@/pages/portal-cliente/PortalClienteCanalesPage'), 'PortalClienteCanalesPage')
 import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
@@ -212,9 +214,9 @@ export const router = createBrowserRouter([
           { path: '/portal-cliente', element: wrap(<PortalClientePrincipalPage />) },
           { path: '/portal-cliente/reuniones', element: wrap(<PortalClienteReunionesPage />) },
           { path: '/portal-cliente/reuniones/historial', element: wrap(<ProximamentePage titulo="Historial de reuniones" />) },
-          { path: '/portal-cliente/atencion', element: wrap(<ProximamentePage titulo="Atención" />) },
+          { path: '/portal-cliente/atencion', element: wrap(<PortalClienteAtencionPage />) },
           { path: '/portal-cliente/atencion/nueva', element: wrap(<ProximamentePage titulo="Nueva solicitud" />) },
-          { path: '/portal-cliente/canales', element: wrap(<ProximamentePage titulo="Canales" />) },
+          { path: '/portal-cliente/canales', element: wrap(<PortalClienteCanalesPage />) },
           { path: '/portal-cliente/facturas', element: wrap(<ProximamentePage titulo="Facturas" />) },
         ],
       },
