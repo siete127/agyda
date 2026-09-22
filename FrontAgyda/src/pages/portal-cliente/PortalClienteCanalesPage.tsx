@@ -1,11 +1,32 @@
 import { clsx } from 'clsx'
 import {
-  Megaphone, ChevronRight, Mail, Phone, Globe, Video, Zap,
-  Clock, CalendarClock, Sun, Cloud, Moon, Send, Copy,
+  Megaphone, ChevronRight, ArrowRight, Mail, Phone, Globe, Video, Zap,
+  Clock, CalendarClock, Sun, Cloud, Moon, Copy,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 import { Ardabito } from '@/components/effects/Ardabito'
+import canalesHero from '@/assets/canales-hero.png'
+
+// Efecto máquina de escribir: revela el texto letra por letra al montar —
+// da la sensación de que Ardabito "está escribiendo" su saludo en vez de
+// aparecer todo de golpe.
+function useTypewriter(texto: string, velocidadMs = 28) {
+  const [visible, setVisible] = useState('')
+
+  useEffect(() => {
+    setVisible('')
+    let i = 0
+    const id = setInterval(() => {
+      i += 1
+      setVisible(texto.slice(0, i))
+      if (i >= texto.length) clearInterval(id)
+    }, velocidadMs)
+    return () => clearInterval(id)
+  }, [texto, velocidadMs])
+
+  return visible
+}
 
 // --- Datos de ejemplo — reemplazar por datos reales (horarios/enlaces de
 // contacto configurados por la empresa) cuando el panel se conecte al
@@ -23,6 +44,7 @@ interface Canal {
   colorBoton: string
   icono?: React.ComponentType<{ className?: string }>
   img?: string
+  imgBoton?: string
   colorIcono: string
 }
 
@@ -32,14 +54,14 @@ const CANALES: Canal[] = [
     estado: 'En línea', estadoColor: 'bg-emerald-500/10 text-emerald-500',
     puntos: [{ icon: Zap, texto: 'Respuesta rápida' }, { icon: Clock, texto: 'Lun - Vie · 9:00 a.m. - 6:00 p.m.' }],
     accion: 'Abrir WhatsApp', href: 'https://wa.me/', colorBoton: 'bg-emerald-500 hover:bg-emerald-600',
-    img: '/whatsapp.png', colorIcono: 'bg-emerald-500/10',
+    img: '/whatsapp.png', imgBoton: '/whatsapp-white.png', colorIcono: 'bg-emerald-500/10',
   },
   {
     nombre: 'Messenger', descripcion: 'Escríbenos por Facebook Messenger.',
     estado: 'En línea', estadoColor: 'bg-emerald-500/10 text-emerald-500',
     puntos: [{ icon: Zap, texto: 'Respuesta en minutos' }, { icon: Clock, texto: 'Lun - Vie · 9:00 a.m. - 6:00 p.m.' }],
     accion: 'Abrir Messenger', href: 'https://m.me/', colorBoton: 'bg-blue-500 hover:bg-blue-600',
-    img: '/messenger.png', colorIcono: 'bg-blue-500/10',
+    img: '/messenger.png', imgBoton: '/messenger-white.png', colorIcono: 'bg-blue-500/10',
   },
   {
     nombre: 'Correo electrónico', descripcion: 'Envíanos un correo con el detalle de tu solicitud.',
@@ -73,9 +95,9 @@ const CANALES: Canal[] = [
 ]
 
 const HORARIOS = [
-  { dia: 'Lunes - Viernes', horario: '9:00 a.m. - 6:00 p.m.', icon: Sun },
-  { dia: 'Sábados', horario: '9:00 a.m. - 1:00 p.m.', icon: Cloud },
-  { dia: 'Domingos', horario: 'Cerrado', icon: Moon },
+  { dia: 'Lunes - Viernes', horario: '9:00 a.m. - 6:00 p.m.', icon: Sun, color: 'text-amber-500' },
+  { dia: 'Sábados', horario: '9:00 a.m. - 2:00 p.m.', icon: Cloud, color: 'text-blue-500' },
+  { dia: 'Domingos', horario: 'Cerrado', icon: Moon, color: 'text-violet-500' },
 ]
 
 function Breadcrumb() {
@@ -90,25 +112,35 @@ function Breadcrumb() {
 
 function HeaderCanales() {
   return (
-    <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-3xl border border-surface-border bg-card px-6 py-6 shadow-card sm:px-8">
-      <div className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-[#19b6bc]/10" />
-      <div className="pointer-events-none absolute -right-24 bottom-0 h-40 w-40 rounded-full bg-brand/10" />
-
+    <div
+      className="relative flex h-[170px] flex-shrink-0 items-center justify-between gap-6 overflow-hidden rounded-3xl bg-cover bg-center px-6 shadow-md sm:px-8"
+      style={{ backgroundImage: `url(${canalesHero})` }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#0a2f71]/90 via-[#0a2f71]/70 to-[#0a2f71]/30" />
       <div className="relative flex items-center gap-4">
-        <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md">
+        <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md">
           <Megaphone className="h-6 w-6" />
         </span>
         <div>
-          <h1 className="text-2xl font-extrabold text-ink">Canales</h1>
-          <p className="mt-0.5 text-sm text-ink-tertiary">
+          <h1 className="text-2xl font-extrabold text-white">Canales</h1>
+          <p className="mt-0.5 text-sm text-white/80">
             Conéctate con nosotros por el medio que más te convenga. Estamos para ayudarte.
           </p>
         </div>
       </div>
 
-      <p className="relative hidden text-right text-sm font-semibold italic text-ink-tertiary md:block">
-        Diferentes formas.<br />el mismo compromiso.
-      </p>
+      <div className="relative hidden flex-shrink-0 flex-col gap-1.5 rounded-2xl bg-white/10 px-4 py-3 backdrop-blur-sm md:flex">
+        <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/90">
+          <Clock className="h-3.5 w-3.5" />
+          Horarios de atención
+        </p>
+        {HORARIOS.map((h) => (
+          <div key={h.dia} className="flex items-center gap-2">
+            <h.icon className={clsx('h-3.5 w-3.5 flex-shrink-0', h.color)} />
+            <span className="text-[11px] text-white/80">{h.dia}: <span className="font-semibold text-white">{h.horario}</span></span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -137,8 +169,12 @@ function CanalCard({ c }: { c: Canal }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-surface-border bg-card p-5 shadow-card">
       <div className="flex items-start justify-between gap-3">
-        <span className={clsx('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl', c.colorIcono)}>
-          {c.img ? <img src={c.img} alt="" className="h-7 w-7 object-contain" /> : c.icono && <c.icono className="h-6 w-6" />}
+        <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center">
+          {c.img ? (
+            <img src={c.img} alt="" className="h-9 w-9 object-contain" />
+          ) : (
+            c.icono && <c.icono className={clsx('h-8 w-8', c.colorIcono.split(' ').filter((cl) => cl.startsWith('text-')).join(' '))} />
+          )}
         </span>
         <span className={clsx('rounded-full px-2.5 py-1 text-[10px] font-bold', c.estadoColor)}>{c.estado}</span>
       </div>
@@ -168,78 +204,49 @@ function CanalCard({ c }: { c: Canal }) {
         rel={c.href.startsWith('http') ? 'noreferrer' : undefined}
         className={clsx('mt-1 flex items-center justify-center gap-1.5 rounded-full py-2.5 text-xs font-bold text-white transition-colors', c.colorBoton)}
       >
-        {c.img ? <img src={c.img} alt="" className="h-4 w-4 object-contain brightness-0 invert" /> : c.icono && <c.icono className="h-3.5 w-3.5" />}
+        {c.imgBoton ? (
+          <img src={c.imgBoton} alt="" className="h-4 w-4 object-contain" />
+        ) : c.img ? (
+          <img src={c.img} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
+        ) : (
+          c.icono && <c.icono className="h-3.5 w-3.5" />
+        )}
         {c.accion}
-        <ChevronRight className="h-3.5 w-3.5" />
+        <ArrowRight className="h-3.5 w-3.5" />
       </a>
     </div>
   )
 }
 
+const SALUDO_ARDABITO = '¡Hola! Soy Ardabito. ¿En qué puedo ayudarte?'
+
 function ArdabitoCard() {
+  const textoVisible = useTypewriter(SALUDO_ARDABITO)
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col items-center">
-        <div className="mb-1 flex aspect-square w-36 flex-shrink-0 items-center justify-center rounded-full bg-surface px-4 text-center shadow-sm">
-          <div>
-            <p className="text-sm font-bold leading-tight text-ink">¡Hola!<br />Soy Ardabito</p>
-            <p className="mt-1 text-[11px] leading-tight text-ink-tertiary">¿En qué puedo<br />ayudarte?</p>
-          </div>
-        </div>
-        <div className="h-44 w-44 flex-shrink-0">
+      <div className="relative flex justify-center pt-14">
+        <div className="h-64 w-64 flex-shrink-0">
           <Ardabito />
         </div>
-      </div>
-
-      <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
-        <h3 className="text-sm font-bold text-ink">¿Necesitas ayuda?</h3>
-        <p className="mt-1 text-xs text-ink-tertiary">
-          Si no sabes qué canal usar, cuéntanos brevemente tu consulta y te orientamos.
-        </p>
-        <a
-          href="/portal-cliente/atencion"
-          className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-brand py-2.5 text-xs font-bold text-white hover:bg-brand-dark"
-        >
-          <Send className="h-3.5 w-3.5" />
-          Enviar mensaje rápido
-        </a>
+        <div className="absolute right-4 top-0 z-10 flex aspect-square w-24 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-card px-2.5 text-center shadow-card">
+          <p className="text-[10px] font-semibold leading-tight text-ink">
+            {textoVisible}
+            <span className="ml-0.5 inline-block w-[2px] animate-pulse bg-ink align-middle" style={{ height: '0.85em' }} />
+          </p>
+          {/* Pico del globo apuntando hacia Ardabito — triángulo CSS puro
+             (border-trick), no un cuadrado rotado, para que la punta salga
+             limpia sin esquinas rectas visibles. Doble capa: una ligeramente
+             más grande con el color del borde, y encima la del color de
+             fondo, para simular el contorno del globo en la punta. */}
+          <span className="absolute -bottom-[9px] left-5 h-0 w-0 border-x-[9px] border-t-[9px] border-x-transparent border-t-surface-border" />
+          <span className="absolute -bottom-2 left-[22px] h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-card" />
+        </div>
       </div>
 
       <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-[11px] text-amber-600 dark:text-amber-400">
         <Zap className="h-4 w-4 flex-shrink-0" />
         <span>Para temas urgentes, te recomendamos escribirnos por WhatsApp.</span>
-      </div>
-    </div>
-  )
-}
-
-function HorariosFooter() {
-  return (
-    <div className="flex flex-col items-center justify-between gap-5 rounded-2xl border border-surface-border bg-card p-5 shadow-card sm:flex-row">
-      <div>
-        <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
-          <Clock className="h-4 w-4 text-brand" />
-          Horarios de atención
-        </h3>
-        <p className="mt-0.5 text-xs text-ink-tertiary">Te atendemos en los siguientes horarios:</p>
-        <div className="mt-3 flex flex-wrap gap-6">
-          {HORARIOS.map((h) => (
-            <div key={h.dia} className="flex items-center gap-2">
-              <h.icon className="h-5 w-5 flex-shrink-0 text-amber-500" />
-              <div>
-                <p className="text-xs font-bold text-ink">{h.dia}</p>
-                <p className="text-[11px] text-ink-tertiary">{h.horario}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="hidden items-center gap-3 border-l border-surface-border pl-5 sm:flex">
-        <CalendarClock className="h-8 w-8 flex-shrink-0 text-brand/40" />
-        <p className="max-w-[140px] text-xs font-semibold italic text-ink-tertiary">
-          Estamos aquí cuando nos necesites.
-        </p>
       </div>
     </div>
   )
@@ -256,10 +263,6 @@ export function PortalClienteCanalesPage() {
           {CANALES.map((c) => <CanalCard key={c.nombre} c={c} />)}
         </div>
         <ArdabitoCard />
-      </Reveal>
-
-      <Reveal index={1}>
-        <HorariosFooter />
       </Reveal>
     </div>
   )
