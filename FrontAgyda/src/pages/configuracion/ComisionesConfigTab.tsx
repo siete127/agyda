@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import type { ReglaComision } from '@/types/comisiones.types'
+import { EstatusContadosCard } from './EstatusContadosCard'
 
 function formatMonto(monto: number) {
   return monto.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -173,6 +174,8 @@ export function ComisionesConfigTab() {
           </div>
         </div>
       </div>
+
+      <EstatusContadosCard uso="comisiones" />
 
       <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <div className="flex items-center justify-between mb-3">

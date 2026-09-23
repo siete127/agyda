@@ -13,6 +13,7 @@ const sql = require('mssql');
 const { listTenants } = require('../config/tenants');
 const databaseService = require('../services/databaseService');
 const socketService = require('../services/socketService');
+const { sqlPausas } = require('../services/pausaTiposService');
 const { DEFAULT_TENANT } = require('../config/tenants');
 
 function emitir(tenantKey, room, evento, payload) {
@@ -20,15 +21,15 @@ function emitir(tenantKey, room, evento, payload) {
   catch (e) { console.warn('[supervisorAlarmas] emit falló:', e?.message || e); }
 }
 
-// Evalúa una alarma tipo 'agente_pausa': agentes con pausa abierta (status_id
-// en 2,3,5,6 — comida/baño/capacitación/permiso, mismo set que PAUSA_LABELS
-// de operacionesController) hace más de CSA_UMBRAL_MINUTOS.
+// Evalúa una alarma tipo 'agente_pausa': agentes con pausa abierta de un tipo
+// que cuenta en Contact Center (configurable en Configuración → Tipos de pausa)
+// hace más de CSA_UMBRAL_MINUTOS.
 async function evaluarAgentePausa(pool, alarma) {
   const r = await pool.request().input('min', sql.Int, alarma.CSA_UMBRAL_MINUTOS).query(`
     SELECT ut.neus_id agenteId, u.NEUS_NOMBRES nombre
     FROM dbo.USUARIO_TIEMPOS ut
     JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = ut.neus_id
-    WHERE ut.fecha_fin IS NULL AND ut.status_id IN (2,3,5,6)
+    WHERE ut.fecha_fin IS NULL AND ut.status_id IN ${sqlPausas('contact_center')}
       AND DATEDIFF(MINUTE, ut.fecha_inicio, GETDATE()) > @min
   `);
   return r.recordset.map((row) => ({ objetoId: row.agenteId, objetoNombre: row.nombre }));

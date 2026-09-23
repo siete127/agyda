@@ -1,6 +1,6 @@
 import {
-  Building2, ShieldCheck, Landmark, Users, Headset, Wrench, Plug, BookOpen,
-  BellRing, ClipboardList, SlidersHorizontal, LayoutGrid, Palette,
+  Building2, ShieldCheck, Landmark, Users, Headset, SlidersHorizontal, Home,
+  LayoutDashboard, UserPlus, Megaphone, Cpu, Headphones, Scale, Briefcase,
 } from 'lucide-react'
 
 export interface CategoryStyle {
@@ -10,22 +10,23 @@ export interface CategoryStyle {
   text: string
 }
 
-// Icono + paleta por categoría raíz de Configuración — una identidad visual
-// propia por sección para que el mapa completo sea fácil de escanear.
+// Icono + paleta por sección de Configuración (mismas secciones del sidebar,
+// ver configTree.ts) — una identidad visual propia por sección para que el
+// mapa completo sea fácil de escanear.
 export const CATEGORY_STYLES: Record<string, CategoryStyle> = {
-  'modulos-empresa': { icon: LayoutGrid, gradient: 'from-fuchsia-500 to-fuchsia-600', soft: 'bg-fuchsia-50', text: 'text-fuchsia-600' },
-  apariencia: { icon: Palette, gradient: 'from-orange-500 to-orange-600', soft: 'bg-orange-50', text: 'text-orange-600' },
-  organizacion: { icon: Building2, gradient: 'from-indigo-500 to-indigo-600', soft: 'bg-indigo-50', text: 'text-indigo-600' },
-  'usuarios-seguridad': { icon: ShieldCheck, gradient: 'from-emerald-500 to-emerald-600', soft: 'bg-emerald-50', text: 'text-emerald-600' },
-  erp: { icon: Landmark, gradient: 'from-blue-500 to-blue-600', soft: 'bg-blue-50', text: 'text-blue-600' },
-  crm: { icon: Users, gradient: 'from-pink-500 to-pink-600', soft: 'bg-pink-50', text: 'text-pink-600' },
-  'contact-center': { icon: Headset, gradient: 'from-purple-500 to-purple-600', soft: 'bg-purple-50', text: 'text-purple-600' },
-  ti: { icon: Wrench, gradient: 'from-slate-500 to-slate-600', soft: 'bg-slate-50', text: 'text-slate-600' },
-  integraciones: { icon: Plug, gradient: 'from-cyan-500 to-cyan-600', soft: 'bg-cyan-50', text: 'text-cyan-600' },
-  catalogos: { icon: BookOpen, gradient: 'from-teal-500 to-teal-600', soft: 'bg-teal-50', text: 'text-teal-600' },
-  'notificaciones-root': { icon: BellRing, gradient: 'from-rose-500 to-rose-600', soft: 'bg-rose-50', text: 'text-rose-600' },
-  auditoria: { icon: ClipboardList, gradient: 'from-amber-500 to-amber-600', soft: 'bg-amber-50', text: 'text-amber-600' },
-  sistema: { icon: SlidersHorizontal, gradient: 'from-violet-500 to-violet-600', soft: 'bg-violet-50', text: 'text-violet-600' },
+  'sec-general': { icon: SlidersHorizontal, gradient: 'from-violet-500 to-violet-600', soft: 'bg-violet-50', text: 'text-violet-600' },
+  'sec-principal': { icon: Home, gradient: 'from-sky-500 to-sky-600', soft: 'bg-sky-50', text: 'text-sky-600' },
+  'sec-direccion-general': { icon: LayoutDashboard, gradient: 'from-indigo-500 to-indigo-600', soft: 'bg-indigo-50', text: 'text-indigo-600' },
+  'sec-recursos-humanos': { icon: UserPlus, gradient: 'from-emerald-500 to-emerald-600', soft: 'bg-emerald-50', text: 'text-emerald-600' },
+  'sec-finanzas-administracion': { icon: Landmark, gradient: 'from-blue-500 to-blue-600', soft: 'bg-blue-50', text: 'text-blue-600' },
+  'sec-crm': { icon: Users, gradient: 'from-pink-500 to-pink-600', soft: 'bg-pink-50', text: 'text-pink-600' },
+  'sec-contact-center': { icon: Headset, gradient: 'from-purple-500 to-purple-600', soft: 'bg-purple-50', text: 'text-purple-600' },
+  'sec-calidad': { icon: ShieldCheck, gradient: 'from-amber-500 to-amber-600', soft: 'bg-amber-50', text: 'text-amber-600' },
+  'sec-marketing': { icon: Megaphone, gradient: 'from-orange-500 to-orange-600', soft: 'bg-orange-50', text: 'text-orange-600' },
+  'sec-tecnologia-ti': { icon: Cpu, gradient: 'from-slate-500 to-slate-600', soft: 'bg-slate-50', text: 'text-slate-600' },
+  'sec-atencion-cliente': { icon: Headphones, gradient: 'from-teal-500 to-teal-600', soft: 'bg-teal-50', text: 'text-teal-600' },
+  'sec-legal-cumplimiento': { icon: Scale, gradient: 'from-rose-500 to-rose-600', soft: 'bg-rose-50', text: 'text-rose-600' },
+  'sec-otros': { icon: Briefcase, gradient: 'from-cyan-500 to-cyan-600', soft: 'bg-cyan-50', text: 'text-cyan-600' },
 }
 
 export const DEFAULT_CATEGORY_STYLE: CategoryStyle = {

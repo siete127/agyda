@@ -7,7 +7,9 @@ const { DEFAULT_TENANT } = require('../config/tenants');
 // skill (grupo) y bloqueando agentes en pausa (USUARIO_TIEMPOS) o en ACW.
 // Adaptado de livechatController.buscarAgenteDisponible.
 
-const STATUS_PAUSA = [2, 3, 5, 6]; // comida, sanitario, capacitacion, permiso — ver STATUS seed
+// Pausas que sacan al agente del enrutamiento: los tipos que cuentan en
+// Contact Center (configurables en Configuración → Tipos de pausa).
+const SQL_PAUSAS_CC = require('./pausaTiposService').sqlPausas('contact_center');
 
 async function getConfig(pool) {
   try {
@@ -73,7 +75,7 @@ async function buscarAgenteDisponible(pool, { grupoId, campaniaId, maxGlobal = 4
       AND NOT EXISTS (
         SELECT 1 FROM dbo.USUARIO_TIEMPOS ut
         WHERE ut.neus_id = ae.CAE_USUARIO_ID AND ut.fecha_fin IS NULL
-          AND ut.status_id IN (${STATUS_PAUSA.join(',')})
+          AND ut.status_id IN ${SQL_PAUSAS_CC}
       )
       AND (SELECT COUNT(*) FROM dbo.CCO_INTERACCIONES i
             WHERE i.CI_AGENTE_ID = ae.CAE_USUARIO_ID AND i.CI_ESTADO = 'activa')

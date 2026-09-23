@@ -40,7 +40,11 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
   ventas: {
     margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
     iva: { tasaDefault: 0.16 },
+    estatusContados: ['Aprobada', 'Formalizada', 'Formalizado', 'Garantizada'],
   },
+  // Mismos defaults que personalizacionController (DEFAULT_CONFIG).
+  prospeccion: { ventanaAnalisisDias: 30 },
+  emailMarketing: { emailsPorHoraDefault: 200 },
 }
 
 // Layout por defecto del inicio — el orden/tamaño que ya tenía la portada,

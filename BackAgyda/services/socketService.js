@@ -7,6 +7,10 @@ const { DEFAULT_TENANT } = require('../config/tenants');
 
 let io;
 
+// status_id del baño en ESTA empresa: el tipo de pausa con clave 'sanitario'
+// (su id cambia entre empresas; ver pausaTiposService).
+const SQL_BANIO = `(SELECT status_id FROM dbo.STATUS WHERE clave = 'sanitario')`;
+
 function makeEmptyBanioState() {
   return {
     hombres: { ocupado: false, porUsuario: null, porNombre: null, genero: 'M', tiempoId: null },
@@ -124,7 +128,7 @@ async function reconstituirEstadoBanio(tenantKey) {
       SELECT TOP 2 t.neus_id, t.tiempo_id, u.NEUS_NOMBRES as nombre, u.NEUS_GENERO as generoDb
       FROM USUARIO_TIEMPOS t
       JOIN NEUS_USUARIOS u ON u.NEUS_ID = t.neus_id
-      WHERE t.status_id = 3 AND t.fecha_fin IS NULL
+      WHERE t.status_id IN ${SQL_BANIO} AND t.fecha_fin IS NULL
       ORDER BY t.fecha_inicio DESC
     `);
     const banioState = makeEmptyBanioState();
@@ -220,6 +224,20 @@ function initialize(server) {
         // 2. Determinar acción: entrar o salir
         const yaEstaAdentro = slot.ocupado && slot.porUsuario === userId;
 
+        // Entrar requiere la acción reports:gestionar-pausas (mismo permiso que
+        // /api/reports/pausa/*). Salir siempre se permite, para que nadie se
+        // quede "adentro" si le quitan el permiso a media pausa.
+        if (!yaEstaAdentro) {
+          const { getEmpresaModulosBloqueados, getUserAllowedActions } = require('../middleware/moduleAccess');
+          const bloqueados = await getEmpresaModulosBloqueados(tenantKey);
+          const acciones = bloqueados.has('reports') ? new Set() : await getUserAllowedActions(userId, 'reports', tenantKey);
+          if (!acciones.has('*') && !acciones.has('gestionar-pausas')) {
+            logger.warn(`[BAÑO][${tenantKey}] userId=${userId} sin permiso reports:gestionar-pausas — toggle ignorado`);
+            socket.emit('banio:status', banioState);
+            return;
+          }
+        }
+
         if (yaEstaAdentro) {
           // ── SALIR ──────────────────────────────────────────────────────────
           const tiempoId = slot.tiempoId ?? null;
@@ -239,7 +257,7 @@ function initialize(server) {
               } else {
                 await pool.request()
                   .input('neusId', sql.Int, neusIdInt)
-                  .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id = 3 AND fecha_fin IS NULL`);
+                  .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id IN ${SQL_BANIO} AND fecha_fin IS NULL`);
                 logger.info(`[BAÑO][${tenantKey}] Cierre BD fallback neusId=${userId}`);
               }
             } catch (dbErr) { logger.warn(`[BAÑO][${tenantKey}] Error cerrando BD:`, dbErr?.message); }
@@ -258,16 +276,17 @@ function initialize(server) {
               // Cerrar cualquier registro previo abierto de este usuario (limpieza defensiva)
               await pool.request()
                 .input('neusId', sql.Int, neusIdInt)
-                .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id = 3 AND fecha_fin IS NULL`);
+                .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id IN ${SQL_BANIO} AND fecha_fin IS NULL`);
               // Abrir nuevo registro
               const r = await pool.request()
                 .input('neusId', sql.Int, neusIdInt)
-                .input('statusId', sql.Int, 3)
                 .query(`
                   DECLARE @ids TABLE (id INT);
-                  INSERT INTO USUARIO_TIEMPOS (neus_id, status_id, fecha_inicio, creado_en)
+                  -- Sin creado_en: no existe en todas las BD (donde existe, su DEFAULT lo llena),
+                  -- igual que reportController.iniciarPausa.
+                  INSERT INTO USUARIO_TIEMPOS (neus_id, status_id, fecha_inicio)
                   OUTPUT INSERTED.tiempo_id INTO @ids(id)
-                  VALUES (@neusId, @statusId, GETDATE(), GETDATE());
+                  SELECT TOP 1 @neusId, s.status_id, GETDATE() FROM dbo.STATUS s WHERE s.status_id IN ${SQL_BANIO};
                   SELECT id AS tiempoId FROM @ids;
                 `);
               const tiempoId = r.recordset[0]?.tiempoId ?? null;

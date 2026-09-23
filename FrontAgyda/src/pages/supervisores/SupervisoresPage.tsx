@@ -28,9 +28,16 @@ import { Eye, Radio, LogIn } from 'lucide-react'
 import type { CCMensaje } from '@/types/cc.types'
 import { getSocket } from '@/lib/socket'
 import { useColumnasVisibles } from '@/hooks/useColumnasVisibles'
+import { usePausaTipos } from '@/hooks/usePausaTipos'
+import { limitePausa, llaveLegacy, type PausaTipo } from '@/types/pausaTipos.types'
 import { SelectorColumnas } from '@/components/ui/SelectorColumnas'
 
 interface Usuario { id: number; nombre: string; tipoUsuario: string }
+
+// Minutos transcurridos desde `iso` (0 si no hay fecha) — mismo criterio que formatDuracion.
+function minutosDesde(iso: string | null) {
+  return iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 60000) : 0
+}
 
 function formatDuracion(iso: string | null) {
   if (!iso) return ''
@@ -49,11 +56,20 @@ const ESTADO_ESTILOS: Record<EstadoAgente, { card: string; iconBg: string; dot: 
   desconectado: { card: 'border-gray-200 bg-gray-50/60 opacity-75', iconBg: 'bg-gray-100 text-gray-400', dot: 'bg-gray-300', icon: (p) => <PowerOff {...p} /> },
 }
 
-function estadoTexto(agente: AgenteEstado) {
-  if (agente.estado === 'pausa') {
-    return <>En {TIPO_PAUSA_LABELS[agente.tipoPausa ?? ''] ?? agente.tipoPausa} · {formatDuracion(agente.pausaDesde)}</>
-  }
-  return ESTADO_AGENTE_LABELS[agente.estado]
+// Estado del agente; si está en una pausa con límite por pausa (modo 'visita')
+// y ya lo excedió —con el límite de Contact Center si tiene uno propio—, se
+// marca en rojo.
+function EstadoTexto({ agente }: { agente: AgenteEstado }) {
+  const { porId } = usePausaTipos()
+  if (agente.estado !== 'pausa') return <>{ESTADO_AGENTE_LABELS[agente.estado]}</>
+  const tipo = porId(agente.tipoPausaStatusId)
+  const limite = tipo?.limiteModo === 'visita' ? limitePausa(tipo, '', 'contact_center') : null
+  const excedido = limite !== null && minutosDesde(agente.pausaDesde) > limite
+  return (
+    <span className={clsx(excedido && 'font-semibold text-red-600')} title={excedido ? `Excede el límite de ${limite} min` : undefined}>
+      En {TIPO_PAUSA_LABELS[agente.tipoPausa ?? ''] ?? agente.tipoPausa} · {formatDuracion(agente.pausaDesde)}{excedido && ' ⚠️'}
+    </span>
+  )
 }
 
 /* ── Fila de chat asignado (nivel 4: chats de un agente) — clic abre el visor de solo lectura ── */
@@ -221,7 +237,7 @@ function AgenteRow({ agente, chatsActivos, expandido, onClick }: { agente: Agent
       </div>
       <div className="min-w-0 flex-1 flex items-baseline gap-2">
         <p className="text-sm font-semibold text-gray-900 truncate">{agente.nombre}</p>
-        <p className="text-xs text-gray-500 truncate">{estadoTexto(agente)}</p>
+        <p className="text-xs text-gray-500 truncate"><EstadoTexto agente={agente} /></p>
       </div>
       {chatsActivos > 0 && (
         <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-semibold text-brand">
@@ -444,7 +460,7 @@ function PanelEnVivoTab() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900 truncate">{agenteSeleccionado.nombre}</p>
-                <p className="text-xs text-gray-500">{estadoTexto(agenteSeleccionado)}</p>
+                <p className="text-xs text-gray-500"><EstadoTexto agente={agenteSeleccionado} /></p>
               </div>
               <AccionesRemotasAgente agenteId={agenteSeleccionado.agenteId} />
             </div>
@@ -555,19 +571,21 @@ function PanelEnVivoTab() {
 }
 
 /* ── Tab: Productividad del día ── */
-const PAUSA_COLORES: Record<'banio' | 'comida' | 'capacitacion' | 'permiso', { bar: string; dot: string; label: string }> = {
-  banio: { bar: 'bg-blue-400', dot: 'bg-blue-400', label: 'Baño' },
-  comida: { bar: 'bg-orange-400', dot: 'bg-orange-400', label: 'Comida' },
-  capacitacion: { bar: 'bg-violet-400', dot: 'bg-violet-400', label: 'Capacitación' },
-  permiso: { bar: 'bg-emerald-400', dot: 'bg-emerald-400', label: 'Permiso' },
-}
-
 function hoyISO() {
   return new Date().toISOString().slice(0, 10)
 }
 
+
 /* ── Barras apiladas: minutos en pausa por agente, coloreadas por tipo ── */
 function GraficoPausasPorAgente({ productividad }: { productividad: ProductividadAgente[] }) {
+  // Los tipos de pausa que cuentan en Contact Center, con su color configurado.
+  const tiposCC = usePausaTipos().tipos.filter((t) => t.usos.contact_center)
+  // Respaldo si el backend aún no manda `pausasPorTipo`: la llave fija de los
+  // 4 tipos por default (por clave; su status_id cambia entre empresas).
+  const minutosDe = (p: ProductividadAgente, t: PausaTipo) => {
+    const llave = llaveLegacy(t)
+    return p.pausasPorTipo?.[t.statusId] ?? (llave ? p[llave] : 0)
+  }
   const conPausas = productividad.filter((p) => p.totalPausaMin > 0)
   if (conPausas.length === 0) {
     return (
@@ -585,10 +603,10 @@ function GraficoPausasPorAgente({ productividad }: { productividad: Productivida
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-900">Minutos en pausa por agente</p>
         <div className="flex flex-wrap items-center gap-3">
-          {(Object.keys(PAUSA_COLORES) as (keyof typeof PAUSA_COLORES)[]).map((k) => (
-            <span key={k} className="flex items-center gap-1.5 text-[0.68rem] text-gray-500">
-              <span className={clsx('h-2 w-2 rounded-full', PAUSA_COLORES[k].dot)} />
-              {PAUSA_COLORES[k].label}
+          {tiposCC.map((t) => (
+            <span key={t.statusId} className="flex items-center gap-1.5 text-[0.68rem] text-gray-500">
+              <span className="h-2 w-2 rounded-full" style={{ background: t.color }} />
+              {t.etiqueta}
             </span>
           ))}
         </div>
@@ -598,15 +616,15 @@ function GraficoPausasPorAgente({ productividad }: { productividad: Productivida
           <div key={p.agenteId} className="flex items-center gap-3">
             <p className="w-36 flex-shrink-0 truncate text-xs font-medium text-gray-700">{p.nombre}</p>
             <div className="flex h-5 flex-1 overflow-hidden rounded-full bg-gray-100">
-              {(['banio', 'comida', 'capacitacion', 'permiso'] as const).map((k) => {
-                const minutos = p[k]
+              {tiposCC.map((t) => {
+                const minutos = minutosDe(p, t)
                 if (minutos <= 0) return null
                 return (
                   <div
-                    key={k}
-                    className={clsx('h-full transition-all', PAUSA_COLORES[k].bar)}
-                    style={{ width: `${(minutos / maxMin) * 100}%` }}
-                    title={`${PAUSA_COLORES[k].label}: ${minutos} min`}
+                    key={t.statusId}
+                    className="h-full transition-all"
+                    style={{ width: `${(minutos / maxMin) * 100}%`, background: t.color }}
+                    title={`${t.etiqueta}: ${minutos} min`}
                   />
                 )
               })}
@@ -640,6 +658,20 @@ function ComparativoSemanal({ p }: { p: ProductividadAgente }) {
     )}>
       {arriba ? '↑' : '↓'} {Math.abs(diferencia)} min <span className="font-normal opacity-70">vs. {p.avgSemanalMin} min</span>
     </span>
+  )
+}
+
+// Minutos del día de un tipo de pausa; en rojo si pasa su límite diario
+// (modo 'diario') de Contact Center. Un límite "por pausa" no se puede evaluar
+// con el total del día, así que ahí no se marca.
+function CeldaMinutos({ minutos, tipo }: { minutos: number; tipo?: PausaTipo }) {
+  const limite = tipo?.limiteModo === 'diario' ? limitePausa(tipo, '', 'contact_center') : null
+  const excedido = limite !== null && minutos > limite
+  return (
+    <td className={clsx('px-4 py-2.5 font-mono tabular-nums', excedido ? 'font-semibold text-red-600' : 'text-gray-600')}
+      title={excedido ? `Excede el límite diario de ${limite} min` : undefined}>
+      {minutos} min{excedido && ' ⚠️'}
+    </td>
   )
 }
 
@@ -878,6 +910,12 @@ function ProductividadTab() {
   const [fecha, setFecha] = useState(hoyISO())
   const esHoy = fecha === hoyISO()
   const { visibles, toggle, esVisible } = useColumnasVisibles('productividad', COLUMNAS_PRODUCTIVIDAD)
+  // Tipos de pausa que cuentan en Contact Center. Los 4 por default tienen su
+  // columna (en el selector); los que agregue la empresa, una columna propia.
+  const { tipos: tiposPausa } = usePausaTipos()
+  const tiposCC = tiposPausa.filter((t) => t.usos.contact_center)
+  const tiposExtra = tiposCC.filter((t) => !llaveLegacy(t))
+  const tipoDe = (llave: string) => tiposPausa.find((t) => llaveLegacy(t) === llave)
 
   const { data: productividad = [], isLoading } = useQuery({
     queryKey: ['supervisores-productividad', fecha],
@@ -952,6 +990,9 @@ function ProductividadTab() {
                   {esVisible('comida') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Comida</th>}
                   {esVisible('capacitacion') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Capacitación</th>}
                   {esVisible('permiso') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Permiso</th>}
+                  {tiposExtra.map((t) => (
+                    <th key={t.statusId} className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">{t.emoji} {t.etiqueta}</th>
+                  ))}
                   {esVisible('totalPausaMin') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Total pausas</th>}
                   {esVisible('avgSemanal') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Vs. promedio semanal</th>}
                 </tr>
@@ -993,10 +1034,13 @@ function ProductividadTab() {
                             </span>
                           </td>
                         )}
-                        {esVisible('banio') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.banio} min</td>}
-                        {esVisible('comida') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.comida} min</td>}
-                        {esVisible('capacitacion') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.capacitacion} min</td>}
-                        {esVisible('permiso') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.permiso} min</td>}
+                        {esVisible('banio') && <CeldaMinutos minutos={p.banio} tipo={tipoDe('banio')} />}
+                        {esVisible('comida') && <CeldaMinutos minutos={p.comida} tipo={tipoDe('comida')} />}
+                        {esVisible('capacitacion') && <CeldaMinutos minutos={p.capacitacion} tipo={tipoDe('capacitacion')} />}
+                        {esVisible('permiso') && <CeldaMinutos minutos={p.permiso} tipo={tipoDe('permiso')} />}
+                        {tiposExtra.map((t) => (
+                          <CeldaMinutos key={t.statusId} minutos={p.pausasPorTipo?.[t.statusId] ?? 0} tipo={t} />
+                        ))}
                         {esVisible('totalPausaMin') && (
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
@@ -1208,7 +1252,7 @@ function EstatusTab() {
                   </div>
                   <div className="min-w-0 flex-1 flex items-baseline gap-2">
                     <p className="text-sm font-semibold text-gray-900 truncate">{a.nombre}</p>
-                    <p className="text-xs text-gray-500 truncate">{estadoTexto(a)}</p>
+                    <p className="text-xs text-gray-500 truncate"><EstadoTexto agente={a} /></p>
                   </div>
                   <p className="flex-shrink-0 text-[0.68rem] text-gray-400">
                     {nombreCampania.get(a.campaniaId) ?? ''} · {nombreSkill.get(a.grupoId) ?? ''}

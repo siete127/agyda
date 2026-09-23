@@ -4,6 +4,7 @@ const dbVentas = require('../config/database_ventas');
 const { upsertKpi } = require('./areasController');
 const { evaluarFormula, validarFormula } = require('../services/formulaService');
 const { getPausasHoyDe } = require('./reportController');
+const pausaTiposService = require('../services/pausaTiposService');
 const personalizacionController = require('./personalizacionController');
 const logger = global.logger || require('../utils/logger');
 
@@ -13,16 +14,16 @@ const VARIABLES_FORMULA_INCENTIVO = ['ventas', 'meta', 'pctcumplimiento', 'monto
 // porque ahí es lo que la fórmula calcula, no un input.
 const VARIABLES_FORMULA_COMISION = ['ventas', 'meta', 'pctcumplimiento'];
 
-// Definición de "venta contada" (Ventas.estatus), configurable desde
-// Configuración → CRM → Ventas → Estatus contados (personalizacionController).
+// Definición de "venta contada" (Ventas.estatus) de cada módulo: `uso` =
+// 'metas' | 'comisiones' | 'incentivos', configurable en Configuración → CRM → Ventas (Área) (personalizacionController).
 // La BD de Ventas (plata_prospectPRO, ver getVentasPool) es distinta de la BD de
 // la intranet donde vive INTRANET_PERSONALIZACION, así que el whitelist se arma
 // aquí como fragmento SQL ya sanitizado (solo valores de ESTATUS_VENTA_VALIDOS).
-async function getEstatusContadosSqlIn(tenantKey) {
+async function getEstatusContadosSqlIn(tenantKey, uso) {
   const pool = await databaseService.getPool(tenantKey);
   const rs = await pool.request().query('SELECT TOP 1 CONFIG_DATA FROM dbo.INTRANET_PERSONALIZACION ORDER BY ID DESC');
   const stored = rs.recordset.length ? JSON.parse(rs.recordset[0].CONFIG_DATA) : null;
-  const estatusContados = personalizacionController.getEstatusContados(stored);
+  const estatusContados = personalizacionController.getEstatusContados(stored, uso);
   return estatusContados.map((e) => `'${e.replace(/'/g, "''")}'`).join(',');
 }
 
@@ -90,7 +91,7 @@ async function listMetas(req, res) {
     if (metas.length === 0) return res.json({ success: true, data: [] });
 
     const ventasPool = await getVentasPool();
-    const estatusContadosIn = await getEstatusContadosSqlIn(req.user?.empresa);
+    const estatusContadosIn = await getEstatusContadosSqlIn(req.user?.empresa, 'metas');
 
     const asesorIds = [...new Set(metas.filter((m) => m.asesorId).map((m) => m.asesorId))];
     const nombrePorId = new Map();
@@ -288,7 +289,7 @@ async function getMisMetas(req, res) {
     const metas = metasRs.recordset;
     if (!metas.length) return res.json({ success: true, data: [] });
 
-    const estatusContadosIn = await getEstatusContadosSqlIn(req.user?.empresa);
+    const estatusContadosIn = await getEstatusContadosSqlIn(req.user?.empresa, 'metas');
 
     const campanaNombreRs = asesor.campanaId
       ? await ventasPool.request().input('id', sql.Int, asesor.campanaId).query(`SELECT nombre FROM [Campanas] WHERE id = @id`)
@@ -334,7 +335,7 @@ async function getMisMetas(req, res) {
 }
 
 // GET /api/ventas-area/metas/:id/pausas — desglose de tiempos de pausa de HOY
-// (baño, comida, capacitación, permiso) de la(s) persona(s) de una meta.
+// (todos los tipos de pausa configurados) de la(s) persona(s) de una meta.
 //   - alcance 'asesor'  -> una fila: el asesor de la meta.
 //   - alcance 'campana' -> una fila por cada agente activo de la campaña.
 // Cruza Users (BD de ventas) -> NEUS_USUARIOS por nombre y suma de USUARIO_TIEMPOS.
@@ -342,6 +343,13 @@ async function getMetaPausas(req, res) {
   try {
     const metaId = parseInt(req.params.id, 10);
     if (!metaId) return res.status(400).json({ success: false, message: 'Meta inválida' });
+
+    // Empresa sin el módulo de pausas (reports): no hay pausas que mostrar y el
+    // bloque no debe aparecer.
+    const { getEmpresaModulosBloqueados } = require('../middleware/moduleAccess');
+    if ((await getEmpresaModulosBloqueados(req.user?.empresa)).has('reports')) {
+      return res.json({ success: true, data: { alcance: null, agentes: [], deshabilitado: true } });
+    }
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const metaRs = await pool.request()
@@ -396,18 +404,20 @@ async function getMetaPausas(req, res) {
       return null;
     };
 
+    const tipos = await pausaTiposService.listar(pool);
     const data = [];
     for (const a of agentes) {
       const neusId = resolverNeus(a);
       if (!neusId) {
-        data.push({ agenteId: a.id, nombre: a.nombre, sinRegistro: true, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0, totalSeg: 0 });
+        data.push({ agenteId: a.id, nombre: a.nombre, sinRegistro: true, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0, totalSeg: 0, pausasPorTipo: [] });
         continue;
       }
-      const p = await getPausasHoyDe(pool, neusId);
-      const totalSeg = p[2] + p[3] + p[5] + p[6];
+      const p = await getPausasHoyDe(pool, neusId, tipos);
+      const { porTipo, total } = pausaTiposService.desglose(tipos, p);
       data.push({
         agenteId: a.id, nombre: a.nombre, sinRegistro: false,
-        comidaSeg: p[2], banioSeg: p[3], capacitacionSeg: p[5], permisoSeg: p[6], totalSeg,
+        ...pausaTiposService.camposSeg(tipos, p), totalSeg: total,
+        pausasPorTipo: porTipo.map(({ valor, ...t }) => ({ ...t, seg: valor })),
       });
     }
 
@@ -663,7 +673,8 @@ function normalizarNombre(n) {
 // Núcleo compartido entre Comisiones e Incentivos: ventas por asesor del mes (Nómina +
 // provisional) cruzadas contra VENTAS_METAS, con % de cumplimiento. Extraído para que
 // Incentivos aplique sus reglas sobre exactamente el mismo cálculo, sin duplicarlo.
-async function calcularCumplimientoAsesores(periodo, tenantKey) {
+// `uso`: 'comisiones' o 'incentivos' — qué lista de estatus contados aplica al conteo provisional.
+async function calcularCumplimientoAsesores(periodo, tenantKey, uso) {
   const [anio, mes] = periodo.split('-').map(Number);
   const inicioMes = new Date(anio, mes - 1, 1);
   const finMes = new Date(anio, mes, 0);
@@ -713,7 +724,7 @@ async function calcularCumplimientoAsesores(periodo, tenantKey) {
   // 2) Conteo provisional de ventas del tramo del mes aún no calculado en Nómina.
   let provisionalPorAgente = new Map();
   if (rangoSinCubrir) {
-    const estatusContadosIn = await getEstatusContadosSqlIn(tenantKey);
+    const estatusContadosIn = await getEstatusContadosSqlIn(tenantKey, uso);
     const provRs = await poolVentas.request()
       .input('desde', sql.Date, rangoSinCubrir.desde)
       .input('hasta', sql.Date, rangoSinCubrir.hasta)
@@ -803,7 +814,7 @@ async function getKpisComisiones(req, res) {
     `);
     const reglasActivas = reglasRs.recordset;
 
-    const { quincenasCubiertas, rangoProvisional, asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa);
+    const { quincenasCubiertas, rangoProvisional, asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa, 'comisiones');
 
     const asesoresConComision = asesores.map((a) => {
       const variables = {
@@ -1071,7 +1082,7 @@ async function getKpisIncentivos(req, res) {
     `);
     const reglasActivas = reglasRs.recordset;
 
-    const { asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa);
+    const { asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa, 'incentivos');
 
     const asesoresConIncentivo = asesores.map((a) => {
       const variables = {
