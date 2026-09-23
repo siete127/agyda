@@ -3,14 +3,16 @@ import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Home, Calendar, Headphones, Megaphone, Receipt, Settings, HelpCircle, LogOut,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, Users,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePortalAcciones } from '@/hooks/usePortalAcciones'
 
 interface NavItem {
   label: string
   to: string
   icon: React.ReactNode
+  requiereAccion?: string
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -19,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Atención', to: '/portal-cliente/atencion', icon: <Headphones className="h-5 w-5 flex-shrink-0" /> },
   { label: 'Canales', to: '/portal-cliente/canales', icon: <Megaphone className="h-5 w-5 flex-shrink-0" /> },
   { label: 'Facturas', to: '/portal-cliente/facturas', icon: <Receipt className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Usuarios', to: '/portal-cliente/usuarios', icon: <Users className="h-5 w-5 flex-shrink-0" />, requiereAccion: 'gestionar-usuarios' },
 ]
 
 // Pill activo: degradado sólido, igual para todos los ítems (nav y footer).
@@ -28,6 +31,8 @@ const INACTIVE_PILL = 'text-white/70 hover:bg-white/10 hover:text-white'
 export function PortalClienteSidebar({ className }: { className?: string }) {
   const clearSession = useAuthStore((s) => s.clearSession)
   const [collapsed, setCollapsed] = useState(false)
+  const { puede } = usePortalAcciones()
+  const navItems = NAV_ITEMS.filter((item) => !item.requiereAccion || puede(item.requiereAccion))
 
   return (
     <aside
@@ -54,7 +59,7 @@ export function PortalClienteSidebar({ className }: { className?: string }) {
       </button>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

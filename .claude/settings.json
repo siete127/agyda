@@ -181,7 +181,15 @@
       "Bash(node --check routes/crm.js)",
       "Bash(node --check services/emailService.js)",
       "Bash(node --check services/schemaService.js)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git ls-remote *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 5 http://localhost:8447/)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:8447/\" -TimeoutSec 5 -UseBasicParsing; Write-Output \"STATUS: $\\($r.StatusCode\\)\" } catch { Write-Output \"ERROR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5173/\" -TimeoutSec 3 -UseBasicParsing; Write-Output \"YA_CORRIENDO: $\\($r.StatusCode\\)\" } catch { Write-Output \"NO_CORRIENDO\" })",
+      "PowerShell(Start-Process -FilePath \"npm\" -ArgumentList \"run\",\"dev\" -WorkingDirectory \"C:\\\\Users\\\\Usuario\\\\agyda\\\\FrontAgyda\" -RedirectStandardOutput \"C:\\\\Users\\\\Usuario\\\\agyda\\\\FrontAgyda\\\\_devlog.out.txt\" -RedirectStandardError \"C:\\\\Users\\\\Usuario\\\\agyda\\\\FrontAgyda\\\\_devlog.err.txt\" -WindowStyle Hidden)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5173/\" -TimeoutSec 8 -UseBasicParsing; Write-Output \"STATUS: $\\($r.StatusCode\\)\" } catch { Write-Output \"ERROR: $\\($_.Exception.Message\\)\" })",
+      "Bash(node _check_user.js)"
     ]
   }
 }

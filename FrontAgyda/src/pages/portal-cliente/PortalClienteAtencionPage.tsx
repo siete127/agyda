@@ -11,6 +11,7 @@ import {
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 import { Modal } from '@/components/ui/Modal'
 import { portalClienteService } from '@/services/portalCliente.service'
+import { usePortalAcciones } from '@/hooks/usePortalAcciones'
 import type { PortalIncidencia } from '@/types/portalCliente.types'
 import atencionHero from '@/assets/atencion-hero.png'
 
@@ -421,6 +422,7 @@ export function PortalClienteAtencionPage() {
   const [seleccionadaId, setSeleccionadaId] = useState<number | null>(null)
   const [modalNueva, setModalNueva] = useState(false)
   const [filtros, setFiltros] = useState<Filtros>({ busqueda: '', estado: 'Todos los estados' })
+  const { puede } = usePortalAcciones()
 
   const { data: incidencias = [], isLoading } = useQuery({ queryKey: ['portal-incidencias'], queryFn: () => portalClienteService.getIncidencias() })
 
@@ -460,7 +462,7 @@ export function PortalClienteAtencionPage() {
           ))}
         </div>
 
-        {tab === 'Mis solicitudes' && (
+        {tab === 'Mis solicitudes' && puede('crear-incidencias') && (
           <button
             type="button"
             onClick={() => setModalNueva(true)}

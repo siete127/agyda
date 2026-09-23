@@ -32,7 +32,10 @@ exports.getServicios = async (req, res) => {
   }
 };
 
-
+// Productos/servicios contratados por un cliente. CLIENTES (legacy) fue
+// absorbida por CRM_CONTACTOS — "id" aquí es CONT_ID, y el puente moderno
+// CRM_CONTACTO_PRODUCTOS_SERVICIOS (ya usado por crmContactosController.js)
+// reemplaza a la tabla legacy CLIENTE_PRODUCTOS_SERVICIOS.
 exports.getProductosServiciosCliente = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -44,13 +47,13 @@ exports.getProductosServiciosCliente = async (req, res) => {
       .input('id', sql.Int, id)
       .query(`
         SELECT
-          CPS.CPS_ID as id, PS.PS_ID as productoServicioId, PS.PS_TIPO as tipo,
+          CCPS.CCPS_ID as id, PS.PS_ID as productoServicioId, PS.PS_TIPO as tipo,
           PS.PS_NOMBRE as nombre, PS.PS_DESCRIPCION as descripcion,
           PS.PS_PRECIO as precio, PS.PS_RECURRENCIA as recurrencia,
-          CPS.CPS_FECHA_ALTA as fechaAlta
-        FROM CLIENTE_PRODUCTOS_SERVICIOS CPS
-        JOIN PRODUCTOS_SERVICIOS PS ON PS.PS_ID = CPS.PS_ID
-        WHERE CPS.CL_ID = @id AND CPS.CPS_ACTIVO = 1
+          CCPS.CCPS_FECHA_ASIGNACION as fechaAlta
+        FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS CCPS
+        JOIN PRODUCTOS_SERVICIOS PS ON PS.PS_ID = CCPS.CCPS_PS_ID
+        WHERE CCPS.CCPS_CONT_ID = @id
         ORDER BY PS.PS_NOMBRE ASC
       `);
     return res.json({ success: true, data: result.recordset });
@@ -74,7 +77,7 @@ exports.getFinanzasCliente = async (req, res) => {
     const pool = await databaseService.getPool(req.user?.empresa);
 
     const cli = await pool.request().input('id', sql.Int, id)
-      .query(`SELECT CL_EMPRESA as empresa, CL_NOMBRE as nombre FROM CLIENTES WHERE CL_ID = @id`);
+      .query(`SELECT CONT_EMPRESA as empresa, CONT_NOMBRE as nombre FROM CRM_CONTACTOS WHERE CONT_ID = @id`);
     if (!cli.recordset.length) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
     const { empresa, nombre } = cli.recordset[0];
     const patron = `%${(empresa || nombre || '').trim()}%`;
@@ -147,13 +150,11 @@ exports.asignarProductoServicio = async (req, res) => {
     }
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
-      .input('clId', sql.Int, id)
+      .input('contId', sql.Int, id)
       .input('psId', sql.Int, psId)
       .query(`
-        IF EXISTS (SELECT 1 FROM CLIENTE_PRODUCTOS_SERVICIOS WHERE CL_ID = @clId AND PS_ID = @psId)
-          UPDATE CLIENTE_PRODUCTOS_SERVICIOS SET CPS_ACTIVO = 1 WHERE CL_ID = @clId AND PS_ID = @psId
-        ELSE
-          INSERT INTO CLIENTE_PRODUCTOS_SERVICIOS (CL_ID, PS_ID) VALUES (@clId, @psId)
+        IF NOT EXISTS (SELECT 1 FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId)
+          INSERT INTO CRM_CONTACTO_PRODUCTOS_SERVICIOS (CCPS_CONT_ID, CCPS_PS_ID) VALUES (@contId, @psId)
       `);
     return res.status(201).json({ success: true });
   } catch (e) {
@@ -171,9 +172,9 @@ exports.quitarProductoServicio = async (req, res) => {
     }
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
-      .input('clId', sql.Int, id)
+      .input('contId', sql.Int, id)
       .input('psId', sql.Int, psId)
-      .query(`DELETE FROM CLIENTE_PRODUCTOS_SERVICIOS WHERE CL_ID = @clId AND PS_ID = @psId`);
+      .query(`DELETE FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId`);
     return res.json({ success: true });
   } catch (e) {
     console.error('Error quitando producto/servicio de cliente:', e);
@@ -181,32 +182,38 @@ exports.quitarProductoServicio = async (req, res) => {
   }
 };
 
+// El módulo Clientes ahora lee/escribe sobre CRM_CONTACTOS (CLIENTES fue
+// absorbida) — solo contactos marcados CONT_ES_CLIENTE=1, para no listar los
+// ~80 contactos/prospectos del CRM que no son clientes formales. Los alias de
+// salida (id/empresa/nombre/...) se mantienen idénticos a los de la tabla
+// legacy para que el frontend (ClientesPage.tsx) no requiera cambios.
 exports.getClientes = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
       SELECT
-        CL.CL_ID as id,
-        CL.NEUS_ID as neusId,
+        C.CONT_ID as id,
+        C.CONT_NEUS_ID as neusId,
         NU.NEUS_ACTIVO as accesoActivo,
         NU.NEUS_USUARIO as accesoUsuario,
-        CL.CL_EMPRESA as empresa,
-        CL.CL_RFC as rfc,
-        CL.CL_NOMBRE as nombre,
-        CL.CL_TELEFONO as telefono,
-        CL.CL_CIUDAD as ciudad,
-        CL.CL_CORREO as correo,
-        CL.CL_ACTIVO as activo,
-        CL.CL_FECHA_REGISTRO as fechaRegistro,
-        CL.CL_CALLE as calle,
-        CL.CL_NUM_EXT as numExt,
-        CL.CL_NUM_INT as numInt,
-        CL.CL_COLONIA as colonia,
-        CL.CL_CP as cp,
-        CL.CL_PAIS as pais
-      FROM CLIENTES CL
-      LEFT JOIN NEUS_USUARIOS NU ON NU.NEUS_ID = CL.NEUS_ID
-      ORDER BY CL.CL_EMPRESA ASC, CL.CL_NOMBRE ASC
+        C.CONT_EMPRESA as empresa,
+        C.CONT_RFC as rfc,
+        C.CONT_NOMBRE as nombre,
+        C.CONT_TELEFONO as telefono,
+        C.CONT_CIUDAD as ciudad,
+        C.CONT_CORREO as correo,
+        C.CONT_ACTIVO as activo,
+        C.CONT_FECHA as fechaRegistro,
+        C.CONT_CALLE as calle,
+        C.CONT_NUM_EXT as numExt,
+        C.CONT_NUM_INT as numInt,
+        C.CONT_COLONIA as colonia,
+        C.CONT_CP as cp,
+        C.CONT_PAIS as pais
+      FROM CRM_CONTACTOS C
+      LEFT JOIN NEUS_USUARIOS NU ON NU.NEUS_ID = C.CONT_NEUS_ID
+      WHERE C.CONT_ES_CLIENTE = 1
+      ORDER BY C.CONT_EMPRESA ASC, C.CONT_NOMBRE ASC
     `);
     res.json({ success: true, data: rs.recordset });
   } catch (err) {
@@ -260,8 +267,8 @@ exports.createCliente = async (req, res) => {
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
-    // Use a transaction: if we need to create a NEUS_USUARIOS row and then CLIENTES,
-    // ensure both succeed or both roll back.
+    // Transacción: si hace falta crear un NEUS_USUARIOS y luego el contacto,
+    // que ambos pasen o ninguno.
     const transaction = new sql.Transaction(pool);
     try {
       await transaction.begin();
@@ -305,14 +312,14 @@ exports.createCliente = async (req, res) => {
           .query(`UPDATE NEUS_USUARIOS SET NEUS_TIPOUSUARIO = 'CL' WHERE NEUS_ID = @neusId`);
       }
 
-      // Now insert the CLIENTES row using finalNeusId (guaranteed non-null)
+      // Insertar el contacto usando finalNeusId (garantizado no-nulo).
       // Map domicilio -> calle if calle not provided
       const calleFinal = (calle && String(calle).trim() !== '') ? calle : (domicilio || null);
 
       const insReq = transaction.request()
         .input('neusIdFinal', sql.Int, finalNeusId)
         .input('empresa', sql.NVarChar, empresa || null)
-        .input('nombre', sql.NVarChar, nombre || null)
+        .input('nombre', sql.NVarChar, nombre || (empresa || 'Cliente'))
         .input('telefono', sql.NVarChar, telefono || null)
         .input('ciudad', sql.NVarChar, ciudad || null)
         .input('correo', sql.NVarChar, correo || null)
@@ -326,8 +333,8 @@ exports.createCliente = async (req, res) => {
         .input('pais', sql.NVarChar, pais || null);
 
       const insertClienteResult = await insReq.query(`
-        INSERT INTO CLIENTES (NEUS_ID, CL_EMPRESA, CL_RFC, CL_NOMBRE, CL_TELEFONO, CL_CIUDAD, CL_CORREO, CL_ACTIVO, CL_FECHA_REGISTRO, CL_CALLE, CL_NUM_EXT, CL_NUM_INT, CL_COLONIA, CL_CP, CL_PAIS)
-        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais);
+        INSERT INTO CRM_CONTACTOS (CONT_NEUS_ID, CONT_EMPRESA, CONT_RFC, CONT_NOMBRE, CONT_TELEFONO, CONT_CIUDAD, CONT_CORREO, CONT_ACTIVO, CONT_FECHA, CONT_CALLE, CONT_NUM_EXT, CONT_NUM_INT, CONT_COLONIA, CONT_CP, CONT_PAIS, CONT_ES_CLIENTE)
+        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais, 1);
         SELECT SCOPE_IDENTITY() as id;
       `);
 
@@ -336,26 +343,23 @@ exports.createCliente = async (req, res) => {
         // Guardar productos y servicios seleccionados si vienen en el body
         const productos = Array.isArray(req.body.productos) ? req.body.productos : (req.body.productos ? [req.body.productos] : []);
         const servicios = Array.isArray(req.body.servicios) ? req.body.servicios : (req.body.servicios ? [req.body.servicios] : []);
+        // El módulo Clientes distinguía productos/servicios en catálogos separados
+        // (PRODUCTOS/SERVICIOS); el puente moderno CRM_CONTACTO_PRODUCTOS_SERVICIOS
+        // los unifica sobre PRODUCTOS_SERVICIOS (PS_ID), así que ambas listas se
+        // insertan igual, solo tratando cada id como un PS_ID.
+        const psIds = [...productos, ...servicios];
 
         if (createdId) {
-          // Insertar productos seleccionados
-          for (const p of productos) {
-            const prodId = parseInt(p, 10);
-            if (!Number.isInteger(prodId) || prodId <= 0) continue;
+          for (const p of psIds) {
+            const psId = parseInt(p, 10);
+            if (!Number.isInteger(psId) || psId <= 0) continue;
             await transaction.request()
-              .input('clId', sql.Int, createdId)
-              .input('prodId', sql.Int, prodId)
-              .query(`INSERT INTO CLIENTE_PRODUCTOS (CL_ID, PROD_ID) VALUES (@clId, @prodId)`);
-          }
-
-          // Insertar servicios seleccionados
-          for (const s of servicios) {
-            const servId = parseInt(s, 10);
-            if (!Number.isInteger(servId) || servId <= 0) continue;
-            await transaction.request()
-              .input('clId', sql.Int, createdId)
-              .input('servId', sql.Int, servId)
-              .query(`INSERT INTO CLIENTE_SERVICIOS (CL_ID, SERV_ID) VALUES (@clId, @servId)`);
+              .input('contId', sql.Int, createdId)
+              .input('psId', sql.Int, psId)
+              .query(`
+                IF NOT EXISTS (SELECT 1 FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId)
+                  INSERT INTO CRM_CONTACTO_PRODUCTOS_SERVICIOS (CCPS_CONT_ID, CCPS_PS_ID) VALUES (@contId, @psId)
+              `);
           }
         }
 
@@ -416,7 +420,7 @@ exports.updateCliente = async (req, res) => {
       }
 
       // Update NEUS_USUARIOS password and/or correo as NEUS_USUARIO if provided
-      // (request propio — no compartir parámetros con el UPDATE de CLIENTES de abajo).
+      // (request propio — no compartir parámetros con el UPDATE de CRM_CONTACTOS de abajo).
       if ((password !== undefined && password !== null) || (correo !== undefined && correo !== null)) {
         let updateQuery = 'UPDATE NEUS_USUARIOS SET ';
         const updateFields = [];
@@ -438,7 +442,7 @@ exports.updateCliente = async (req, res) => {
         }
       }
 
-      // Update CLIENTES fields
+      // Update CRM_CONTACTOS fields
       await transaction.request()
         .input('id', sql.Int, id)
         .input('empresa', sql.NVarChar, empresa || null)
@@ -455,52 +459,37 @@ exports.updateCliente = async (req, res) => {
         .input('cp', sql.NVarChar, cp || null)
         .input('pais', sql.NVarChar, pais || null)
         .query(`
-          UPDATE CLIENTES SET
-            CL_EMPRESA = COALESCE(@empresa, CL_EMPRESA),
-            CL_NOMBRE = COALESCE(@nombre, CL_NOMBRE),
-            CL_TELEFONO = COALESCE(@telefono, CL_TELEFONO),
-            CL_CIUDAD = COALESCE(@ciudad, CL_CIUDAD),
-            CL_CORREO = COALESCE(@correo, CL_CORREO),
-            CL_RFC = COALESCE(@rfc, CL_RFC),
-            CL_CALLE = COALESCE(@calle, CL_CALLE),
-            CL_NUM_EXT = COALESCE(@numExt, CL_NUM_EXT),
-            CL_NUM_INT = COALESCE(@numInt, CL_NUM_INT),
-            CL_COLONIA = COALESCE(@colonia, CL_COLONIA),
-            CL_CP = COALESCE(@cp, CL_CP),
-            CL_PAIS = COALESCE(@pais, CL_PAIS),
-            CL_ACTIVO = CASE WHEN @activo IS NULL THEN CL_ACTIVO ELSE @activo END
-          WHERE CL_ID = @id
+          UPDATE CRM_CONTACTOS SET
+            CONT_EMPRESA = COALESCE(@empresa, CONT_EMPRESA),
+            CONT_NOMBRE = COALESCE(@nombre, CONT_NOMBRE),
+            CONT_TELEFONO = COALESCE(@telefono, CONT_TELEFONO),
+            CONT_CIUDAD = COALESCE(@ciudad, CONT_CIUDAD),
+            CONT_CORREO = COALESCE(@correo, CONT_CORREO),
+            CONT_RFC = COALESCE(@rfc, CONT_RFC),
+            CONT_CALLE = COALESCE(@calle, CONT_CALLE),
+            CONT_NUM_EXT = COALESCE(@numExt, CONT_NUM_EXT),
+            CONT_NUM_INT = COALESCE(@numInt, CONT_NUM_INT),
+            CONT_COLONIA = COALESCE(@colonia, CONT_COLONIA),
+            CONT_CP = COALESCE(@cp, CONT_CP),
+            CONT_PAIS = COALESCE(@pais, CONT_PAIS),
+            CONT_ACTIVO = CASE WHEN @activo IS NULL THEN CONT_ACTIVO ELSE @activo END
+          WHERE CONT_ID = @id
         `);
 
       // Si vienen listas de productos/servicios, reemplazarlas (borrar existentes e insertar nuevas)
       const productos = Array.isArray(req.body.productos) ? req.body.productos : (req.body.productos ? [req.body.productos] : []);
       const servicios = Array.isArray(req.body.servicios) ? req.body.servicios : (req.body.servicios ? [req.body.servicios] : []);
+      const psIds = [...productos, ...servicios];
 
-      if (productos.length > 0) {
-        // Borrar productos actuales
-        await transaction.request().input('id', sql.Int, id).query(`DELETE FROM CLIENTE_PRODUCTOS WHERE CL_ID = @id`);
-        // Insertar los nuevos
-        for (const p of productos) {
-          const prodId = parseInt(p, 10);
-          if (!Number.isInteger(prodId) || prodId <= 0) continue;
+      if (psIds.length > 0) {
+        await transaction.request().input('id', sql.Int, id).query(`DELETE FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @id`);
+        for (const p of psIds) {
+          const psId = parseInt(p, 10);
+          if (!Number.isInteger(psId) || psId <= 0) continue;
           await transaction.request()
-            .input('clId', sql.Int, id)
-            .input('prodId', sql.Int, prodId)
-            .query(`INSERT INTO CLIENTE_PRODUCTOS (CL_ID, PROD_ID) VALUES (@clId, @prodId)`);
-        }
-      }
-
-      if (servicios.length > 0) {
-        // Borrar servicios actuales
-        await transaction.request().input('id', sql.Int, id).query(`DELETE FROM CLIENTE_SERVICIOS WHERE CL_ID = @id`);
-        // Insertar los nuevos
-        for (const s of servicios) {
-          const servId = parseInt(s, 10);
-          if (!Number.isInteger(servId) || servId <= 0) continue;
-          await transaction.request()
-            .input('clId', sql.Int, id)
-            .input('servId', sql.Int, servId)
-            .query(`INSERT INTO CLIENTE_SERVICIOS (CL_ID, SERV_ID) VALUES (@clId, @servId)`);
+            .input('contId', sql.Int, id)
+            .input('psId', sql.Int, psId)
+            .query(`INSERT INTO CRM_CONTACTO_PRODUCTOS_SERVICIOS (CCPS_CONT_ID, CCPS_PS_ID) VALUES (@contId, @psId)`);
         }
       }
 
@@ -551,13 +540,11 @@ exports.deleteCliente = async (req, res) => {
         req.body && (req.body.definitivo === true || req.body.permanente === true)
       );
 
-      // Use fresh Request objects per query to avoid input parameter bleed
       const selectReq = transaction.request();
       const clienteRs = await selectReq.input('id', sql.Int, id).query(
-        `SELECT NEUS_ID as neusId FROM CLIENTES WHERE CL_ID = @id`
+        `SELECT CONT_NEUS_ID as neusId FROM CRM_CONTACTOS WHERE CONT_ID = @id`
       );
 
-      // If the cliente doesn't exist, rollback and return 404
       if (!clienteRs.recordset || clienteRs.recordset.length === 0) {
         try { await transaction.rollback(); } catch (e) {}
         return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
@@ -566,35 +553,39 @@ exports.deleteCliente = async (req, res) => {
       const neusId = clienteRs.recordset[0] ? clienteRs.recordset[0].neusId : null;
 
       if (definitivo) {
-        // Permanent delete: first remove related records due to foreign key constraints
-        // Delete from CLIENTE_SERVICIOS
-        const delServiciosReq = transaction.request();
-        await delServiciosReq.input('id', sql.Int, id).query(`DELETE FROM CLIENTE_SERVICIOS WHERE CL_ID = @id`);
+        // A diferencia de la tabla legacy CLIENTES (sin FKs reales), un contacto
+        // de CRM puede tener oportunidades/documentos/casos asociados — borrar
+        // esa fila rompería el historial. Se bloquea el borrado definitivo si
+        // existe cualquier referencia real; el soft-delete de abajo siempre
+        // sigue disponible.
+        const refsRs = await transaction.request().input('id', sql.Int, id).query(`
+          SELECT
+            (SELECT COUNT(*) FROM CRM_OPORTUNIDADES WHERE OPO_CONTACTO_ID = @id) +
+            (SELECT COUNT(*) FROM CRM_DOCUMENTOS_CLIENTE WHERE DOC_CONTACTO_ID = @id) +
+            (SELECT COUNT(*) FROM CASOS WHERE CASO_CONTACTO_ID = @id) as n
+        `);
+        const tieneReferencias = (refsRs.recordset[0]?.n || 0) > 0;
+        if (tieneReferencias) {
+          try { await transaction.rollback(); } catch (e) {}
+          return res.status(409).json({ success: false, message: 'No se puede eliminar definitivamente: el cliente tiene oportunidades, documentos o casos asociados. Desactívalo en su lugar.' });
+        }
 
-        // Delete from CLIENTE_PRODUCTOS
-        const delProductosReq = transaction.request();
-        await delProductosReq.input('id', sql.Int, id).query(`DELETE FROM CLIENTE_PRODUCTOS WHERE CL_ID = @id`);
+        await transaction.request().input('id', sql.Int, id).query(`DELETE FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @id`);
+        await transaction.request().input('id', sql.Int, id).query(`DELETE FROM CRM_CONTACTOS WHERE CONT_ID = @id`);
 
-        // Now remove CLIENTES row
-        const delClienteReq = transaction.request();
-        await delClienteReq.input('id', sql.Int, id).query(`DELETE FROM CLIENTES WHERE CL_ID = @id`);
-
-        // If NEUS_ID exists, check if other CLIENTES reference it
+        // If NEUS_ID exists, check if other CRM_CONTACTOS reference it
         if (neusId) {
           const countReq = transaction.request();
           const othersRs = await countReq
             .input('neusId', sql.Int, neusId)
             .input('id', sql.Int, id)
-            .query(`SELECT COUNT(1) as cnt FROM CLIENTES WHERE NEUS_ID = @neusId AND CL_ID <> @id`);
+            .query(`SELECT COUNT(1) as cnt FROM CRM_CONTACTOS WHERE CONT_NEUS_ID = @neusId AND CONT_ID <> @id`);
 
           const others = (othersRs.recordset && othersRs.recordset[0]) ? parseInt(othersRs.recordset[0].cnt, 10) : 0;
           if (others === 0) {
-            // No other clients reference this user, so delete user-related records from other tables
-            // Delete from ENCUESTA_ASIGNACION
             const delEncuestaReq = transaction.request();
             await delEncuestaReq.input('neusId', sql.Int, neusId).query(`DELETE FROM ENCUESTA_ASIGNACION WHERE EAS_NEUS_ID = @neusId`);
 
-            // Delete from NEUS_USUARIOS
             const delUserReq = transaction.request();
             await delUserReq.input('neusId', sql.Int, neusId).query(`DELETE FROM NEUS_USUARIOS WHERE NEUS_ID = @neusId`);
           }
@@ -603,30 +594,26 @@ exports.deleteCliente = async (req, res) => {
         await transaction.commit();
         return res.json({ success: true, message: 'Cliente eliminado definitivamente' });
       } else {
-        // Soft-delete (existing behavior): deactivate cliente and usuario
+        // Soft-delete: desactiva el contacto sin tocar CONT_ES_CLIENTE (conserva
+        // el historial de que llegó a ser cliente).
         const updateClienteReq = transaction.request();
-        await updateClienteReq.input('id', sql.Int, id).query(`UPDATE CLIENTES SET CL_ACTIVO = 0 WHERE CL_ID = @id`);
+        await updateClienteReq.input('id', sql.Int, id).query(`UPDATE CRM_CONTACTOS SET CONT_ACTIVO = 0 WHERE CONT_ID = @id`);
 
-        // Check if there are other clients referencing this NEUS_ID
         if (neusId) {
           const countReq = transaction.request();
           const othersRs = await countReq
             .input('neusId', sql.Int, neusId)
             .input('id', sql.Int, id)
-            .query(`SELECT COUNT(1) as cnt FROM CLIENTES WHERE NEUS_ID = @neusId AND CL_ID <> @id`);
+            .query(`SELECT COUNT(1) as cnt FROM CRM_CONTACTOS WHERE CONT_NEUS_ID = @neusId AND CONT_ID <> @id`);
 
           const others = (othersRs.recordset && othersRs.recordset[0]) ? parseInt(othersRs.recordset[0].cnt, 10) : 0;
           if (others === 0) {
-            // No other clients reference this user, so delete user and related records
-            // First delete from ENCUESTA_ASIGNACION
             const delEncuestaReq = transaction.request();
             await delEncuestaReq.input('neusId', sql.Int, neusId).query(`DELETE FROM ENCUESTA_ASIGNACION WHERE EAS_NEUS_ID = @neusId`);
 
-            // Then delete the user
             const delUserReq = transaction.request();
             await delUserReq.input('neusId', sql.Int, neusId).query(`DELETE FROM NEUS_USUARIOS WHERE NEUS_ID = @neusId`);
           } else {
-            // Other clients reference this user, so just deactivate
             const updateUserReq = transaction.request();
             await updateUserReq.input('neusId', sql.Int, neusId).query(`UPDATE NEUS_USUARIOS SET NEUS_ACTIVO = 0 WHERE NEUS_ID = @neusId`);
           }

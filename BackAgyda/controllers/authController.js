@@ -331,6 +331,32 @@ exports.login = async (req, res) => {
       }
     };
 
+    // Portal de Cliente: datos de sub-rol/empresa para que el frontend gatee
+    // UI (defensa real sigue siendo el backend vía requirePortalAction). No
+    // van en el JWT para no invalidar tokens existentes ni tener que
+    // revalidar sesiones — se resuelven de nuevo en cada login.
+    if (user['TIPO USUARIO'] === 'CL') {
+      try {
+        const portalRs = await pool.request()
+          .input('neusId', sql.Int, user['ID USUARIO'])
+          .query(`
+            SELECT pu.PU_CONT_ID as contId, pu.PU_ES_ANCLA as esAncla, r.ROL_ID as subrolId, r.NOMBRE as subrolNombre
+            FROM PORTAL_USUARIOS pu
+            JOIN PORTAL_ROLES r ON r.ROL_ID = pu.PU_SUBROL_ID
+            WHERE pu.PU_NEUS_ID = @neusId AND pu.PU_ACTIVO = 1
+          `);
+        const portal = portalRs.recordset[0];
+        if (portal) {
+          response.data.portalEmpresaContId = portal.contId;
+          response.data.portalEsAncla = !!portal.esAncla;
+          response.data.portalSubrolId = portal.subrolId;
+          response.data.portalSubrolNombre = portal.subrolNombre;
+        }
+      } catch (e) {
+        logger.warn('⚠️ No se pudo resolver sub-rol del Portal de Cliente:', e && e.message);
+      }
+    }
+
     // Indicar al cliente que, puesto que creamos el registro de presencia,
     // el usuario está online (esto permite actualizar la UI inmediatamente)
     try {

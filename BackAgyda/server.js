@@ -172,6 +172,7 @@ app.use('/api/evaluacion-desempeno', require('./routes/evaluacionDesempeno'));
 app.use('/api/auditoria', require('./routes/auditoria'));
 app.use('/api/crm',      require('./routes/crm'));
 app.use('/api/portal-cliente', require('./routes/portalCliente'));
+app.use('/api/portal-roles', require('./routes/portalRoles'));
 app.use('/api/crm-setup', require('./routes/crmSetup'));
 app.use('/api/crm-accesos', require('./routes/crmAccesos'));
 app.use('/api/vacantes', require('./routes/vacantes'));

@@ -2256,9 +2256,12 @@ async function ensureSolicitudFiscalSchema(pool) {
     }
   }
 
-  // CRM_OPORTUNIDADES solo tenía OPO_CONTACTO_ID (FK a CRM_CONTACTOS). Se
-  // añade OPO_CLIENTE_ID para vincular la oportunidad con el cliente de
-  // facturación real una vez completado el formulario fiscal.
+  // DEPRECADA tras la unificación CLIENTES→CRM_CONTACTOS: originalmente
+  // vinculaba la oportunidad con la tabla legacy CLIENTES una vez completado
+  // el formulario fiscal. Ahora ese vínculo ya existe vía OPO_CONTACTO_ID
+  // (el propio contacto se marca CONT_ES_CLIENTE=1), así que esta columna no
+  // se escribe más. Se deja sin DROP (0 filas la usaban) por si algo externo
+  // llegó a depender de ella.
   try {
     await pool.request().batch(`
       IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_OPORTUNIDADES') AND name = 'OPO_CLIENTE_ID')
@@ -2269,6 +2272,119 @@ async function ensureSolicitudFiscalSchema(pool) {
   }
 
   logger.info('✅ Esquema de solicitud de datos fiscales asegurado');
+}
+
+// Multi-usuario del Portal de Cliente: una empresa cliente (CRM_CONTACTOS con
+// CONT_ES_CLIENTE=1, el contacto "ancla" dueño de todos sus datos de negocio)
+// puede tener varios logins (NEUS_USUARIOS tipo 'CL'), cada uno con un
+// sub-rol (Admin/Supervisor/Apoyo/Agente) que determina qué puede ver/hacer
+// dentro del portal. PORTAL_USUARIOS desacopla "quién puede loguearse" de "a
+// qué empresa pertenece"; PORTAL_ROLES/PORTAL_ROLES_PERMISOS son plantillas
+// de permisos editables, resueltas en tiempo real (no se copian al usuario).
+async function ensurePortalRolesSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.PORTAL_ROLES', 'U') IS NULL
+      CREATE TABLE dbo.PORTAL_ROLES (
+        ROL_ID       INT IDENTITY(1,1) PRIMARY KEY,
+        NOMBRE       NVARCHAR(80)  NOT NULL,
+        DESCRIPCION  NVARCHAR(255) NULL,
+        ES_SISTEMA   BIT           NOT NULL DEFAULT 0,
+        ACTIVO       BIT           NOT NULL DEFAULT 1,
+        CREADO_EN    DATETIME      NOT NULL DEFAULT GETDATE(),
+        CREADO_POR   INT           NULL,
+        CONSTRAINT UQ_PORTAL_ROLES_NOMBRE UNIQUE (NOMBRE)
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalRolesSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.PORTAL_ROLES_PERMISOS', 'U') IS NULL
+      CREATE TABLE dbo.PORTAL_ROLES_PERMISOS (
+        ID          INT IDENTITY(1,1) PRIMARY KEY,
+        ROL_ID      INT           NOT NULL,
+        ACCION_KEY  NVARCHAR(100) NOT NULL,
+        CONSTRAINT UQ_PORTAL_ROLES_PERMISOS UNIQUE (ROL_ID, ACCION_KEY),
+        CONSTRAINT FK_PRP_ROL FOREIGN KEY (ROL_ID) REFERENCES dbo.PORTAL_ROLES(ROL_ID)
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalRolesPermisosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.PORTAL_USUARIOS', 'U') IS NULL
+      CREATE TABLE dbo.PORTAL_USUARIOS (
+        PU_ID           INT IDENTITY(1,1) PRIMARY KEY,
+        PU_NEUS_ID      SMALLINT NOT NULL,
+        PU_CONT_ID      INT NOT NULL,
+        PU_SUBROL_ID    INT NOT NULL,
+        PU_ES_ANCLA     BIT NOT NULL DEFAULT 0,
+        PU_ACTIVO       BIT NOT NULL DEFAULT 1,
+        PU_CREADO_EN    DATETIME NOT NULL DEFAULT GETDATE(),
+        PU_CREADO_POR   INT NULL,
+        CONSTRAINT UQ_PORTAL_USUARIOS_NEUS UNIQUE (PU_NEUS_ID),
+        CONSTRAINT FK_PU_CONT FOREIGN KEY (PU_CONT_ID) REFERENCES dbo.CRM_CONTACTOS(CONT_ID),
+        CONSTRAINT FK_PU_NEUS FOREIGN KEY (PU_NEUS_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID),
+        CONSTRAINT FK_PU_ROL FOREIGN KEY (PU_SUBROL_ID) REFERENCES dbo.PORTAL_ROLES(ROL_ID)
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalUsuariosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PORTAL_USUARIOS_CONT' AND object_id = OBJECT_ID('dbo.PORTAL_USUARIOS'))
+        CREATE INDEX IX_PORTAL_USUARIOS_CONT ON dbo.PORTAL_USUARIOS(PU_CONT_ID);
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalUsuariosIndexSchema:', err.message);
+  }
+
+  // Seed de los 4 sub-roles de sistema (solo si la tabla está vacía —
+  // editables después desde el CRUD, con ES_SISTEMA protegiendo nombre/borrado).
+  const PORTAL_ACCIONES_TODAS = [
+    'ver-resumen', 'ver-proyectos', 'ver-cotizaciones', 'ver-facturas', 'descargar-documentos',
+    'ver-citas', 'gestionar-citas', 'ver-incidencias', 'crear-incidencias', 'gestionar-usuarios',
+  ];
+  const PORTAL_ACCIONES_LECTURA = [
+    'ver-resumen', 'ver-proyectos', 'ver-cotizaciones', 'ver-facturas', 'descargar-documentos',
+    'ver-citas', 'ver-incidencias',
+  ];
+  const SEED_ROLES = [
+    { nombre: 'Admin', descripcion: 'Acceso total al portal, incluida la gestión de usuarios de su empresa', acciones: PORTAL_ACCIONES_TODAS },
+    { nombre: 'Supervisor', descripcion: 'Acceso total al portal, sin gestionar usuarios', acciones: PORTAL_ACCIONES_TODAS.filter((a) => a !== 'gestionar-usuarios') },
+    { nombre: 'Apoyo', descripcion: 'Solo lectura, puede crear incidencias', acciones: [...PORTAL_ACCIONES_LECTURA, 'crear-incidencias'] },
+    { nombre: 'Agente', descripcion: 'Solo lectura, sin ninguna acción', acciones: PORTAL_ACCIONES_LECTURA },
+  ];
+  try {
+    const existentes = await pool.request().query(`SELECT COUNT(*) as n FROM PORTAL_ROLES`);
+    if ((existentes.recordset[0]?.n || 0) === 0) {
+      for (const rol of SEED_ROLES) {
+        const insRol = await pool.request()
+          .input('nombre', sql.NVarChar, rol.nombre)
+          .input('descripcion', sql.NVarChar, rol.descripcion)
+          .query(`INSERT INTO PORTAL_ROLES (NOMBRE, DESCRIPCION, ES_SISTEMA, ACTIVO) VALUES (@nombre, @descripcion, 1, 1); SELECT SCOPE_IDENTITY() as id;`);
+        const rolId = insRol.recordset[0].id;
+        for (const accionKey of rol.acciones) {
+          await pool.request()
+            .input('rolId', sql.Int, rolId)
+            .input('accionKey', sql.NVarChar, accionKey)
+            .query(`INSERT INTO PORTAL_ROLES_PERMISOS (ROL_ID, ACCION_KEY) VALUES (@rolId, @accionKey)`);
+        }
+      }
+      logger.info('✅ Sub-roles de sistema del Portal de Cliente sembrados (Admin/Supervisor/Apoyo/Agente)');
+    }
+  } catch (err) {
+    console.warn('⚠️ PortalRolesSeed:', err.message);
+  }
+
+  logger.info('✅ Esquema de roles del Portal de Cliente asegurado');
 }
 
 // Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
@@ -2461,6 +2577,17 @@ CREATE TABLE dbo.NOTA_CREDITO_ITEMS (
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_REGIMEN_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_REGIMEN_FISCAL NVARCHAR(3) NULL;`,
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CP_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CP_FISCAL NVARCHAR(5) NULL;`,
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_USO_CFDI') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_USO_CFDI NVARCHAR(4) NULL;`,
+    // Paridad con la tabla legacy CLIENTES (absorbida por CRM_CONTACTOS): dirección
+    // desglosada + correo de facturación. CONT_CP es el CP de domicilio, distinto
+    // de CONT_CP_FISCAL (5, el que usa el SAT en el CFDI).
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CALLE') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CALLE NVARCHAR(200) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_NUM_EXT') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_NUM_EXT NVARCHAR(20) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_NUM_INT') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_NUM_INT NVARCHAR(20) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_COLONIA') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_COLONIA NVARCHAR(150) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CP') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CP NVARCHAR(10) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_PAIS') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_PAIS NVARCHAR(60) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CIUDAD') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CIUDAD NVARCHAR(120) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CORREO_FACTURACION') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CORREO_FACTURACION NVARCHAR(200) NULL;`,
   ];
   const facturaCols = [
     `IF COL_LENGTH('dbo.FACTURAS','FAC_SALDO') IS NULL ALTER TABLE dbo.FACTURAS ADD FAC_SALDO DECIMAL(18,2) NULL;`,
@@ -5671,6 +5798,7 @@ async function ensureAllSchemas(pool) {
   await ensureCrmSeguimientoSchema(pool);
   await ensureCrmPortalSchema(pool);
   await ensureSolicitudFiscalSchema(pool);
+  await ensurePortalRolesSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
@@ -8747,5 +8875,6 @@ module.exports = {
     ensureEncuestasSchema,
     ensureRolesSchema,
     ensurePerfilesSchema,
-    ensureSolicitudFiscalSchema
+    ensureSolicitudFiscalSchema,
+    ensurePortalRolesSchema
 };

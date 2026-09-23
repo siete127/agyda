@@ -10,6 +10,7 @@ import {
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 import { Modal } from '@/components/ui/Modal'
 import { portalClienteService } from '@/services/portalCliente.service'
+import { usePortalAcciones } from '@/hooks/usePortalAcciones'
 import type { PortalCita } from '@/types/portalCliente.types'
 import reunionesHero from '@/assets/reuniones-hero.png'
 
@@ -288,6 +289,8 @@ function DetalleCita({ c }: { c: PortalCita }) {
   const [subtab, setSubtab] = useState<(typeof SUBTABS)[number]>('Detalles')
   const [modalCambio, setModalCambio] = useState(false)
   const qc = useQueryClient()
+  const { puede } = usePortalAcciones()
+  const puedeGestionarCitas = puede('gestionar-citas')
 
   const confirmar = useMutation({
     mutationFn: () => portalClienteService.confirmarCita(c.id),
@@ -341,7 +344,7 @@ function DetalleCita({ c }: { c: PortalCita }) {
         </a>
       )}
 
-      {!c.confirmadaPorCliente && (
+      {!c.confirmadaPorCliente && puedeGestionarCitas && (
         <button
           type="button"
           onClick={() => confirmar.mutate()}
@@ -353,7 +356,7 @@ function DetalleCita({ c }: { c: PortalCita }) {
         </button>
       )}
 
-      {!c.solicitudPendienteTipo && (
+      {!c.solicitudPendienteTipo && puedeGestionarCitas && (
         <button
           type="button"
           onClick={() => setModalCambio(true)}
