@@ -32,6 +32,12 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 
 // Páginas lazy — cada una genera su propio chunk
 const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/PortalClientePrincipalPage'), 'PortalClientePrincipalPage')
+const PortalClienteReunionesPage = lz(() => import('@/pages/portal-cliente/PortalClienteReunionesPage'), 'PortalClienteReunionesPage')
+const PortalClienteAtencionPage = lz(() => import('@/pages/portal-cliente/PortalClienteAtencionPage'), 'PortalClienteAtencionPage')
+const PortalClienteCanalesPage = lz(() => import('@/pages/portal-cliente/PortalClienteCanalesPage'), 'PortalClienteCanalesPage')
+// Facturas: diseño de la rama de Betty, reconectado al servicio real de
+// main (portalCliente.service.ts) en vez de a datos mock.
+const PortalClienteFacturasPage = lz(() => import('@/pages/portal-cliente/PortalClienteFacturasPage'), 'PortalClienteFacturasPage')
 import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
@@ -74,6 +80,7 @@ const EvaluacionCapacitacionPage   = lz(() => import('@/pages/evaluacion/Evaluac
 const AuditoriaPage                = lz(() => import('@/pages/auditoria/AuditoriaPage'),                             'AuditoriaPage')
 const CRMInternoPage               = lz(() => import('@/pages/crm-interno/CRMInternoPage'),                          'CRMInternoPage')
 const CRMPortalPage                = lz(() => import('@/pages/crm-interno/CRMPortalPage'),  'CRMPortalPage')
+const FormularioFiscalPage         = lz(() => import('@/pages/crm-interno/FormularioFiscalPage'),  'FormularioFiscalPage')
 const EmailMarketingPage           = lz(() => import('@/pages/email-marketing/EmailMarketingPage'),                   'EmailMarketingPage')
 const GastosPage                   = lz(() => import('@/pages/gastos/GastosPage'),           'default')
 
@@ -176,6 +183,7 @@ export const router = createBrowserRouter([
 
   // Portal del cliente (acceso público con token)
   { path: '/portal', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><CRMPortalPage /></Suspense> },
+  { path: '/formulario-fiscal', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><FormularioFiscalPage /></Suspense> },
 
   // Puente de sesión desde la página pública (ardabytec.com) — evita doble login
   { path: '/auth-bridge', element: <AuthBridgePage /> },
@@ -213,12 +221,17 @@ export const router = createBrowserRouter([
         element: <PortalClienteLayout />,
         children: [
           { path: '/portal-cliente', element: wrap(<PortalClientePrincipalPage />) },
-          { path: '/portal-cliente/reuniones', element: wrap(<ProximamentePage titulo="Reuniones" />) },
+          { path: '/portal-cliente/reuniones', element: wrap(<PortalClienteReunionesPage />) },
           { path: '/portal-cliente/reuniones/historial', element: wrap(<ProximamentePage titulo="Historial de reuniones" />) },
-          { path: '/portal-cliente/atencion', element: wrap(<ProximamentePage titulo="Atención" />) },
+          { path: '/portal-cliente/atencion', element: wrap(<PortalClienteAtencionPage />) },
           { path: '/portal-cliente/atencion/nueva', element: wrap(<ProximamentePage titulo="Nueva solicitud" />) },
-          { path: '/portal-cliente/canales', element: wrap(<ProximamentePage titulo="Canales" />) },
-          { path: '/portal-cliente/facturas', element: wrap(<ProximamentePage titulo="Facturas" />) },
+          // "Canales / Mis campañas" queda pendiente: no existe hoy ninguna
+          // relación real entre un cliente (CRM_CONTACTOS) y una campaña del
+          // Contact Center (CCO_CAMPANIAS) — ver plan de portal del cliente.
+          // La página ya tiene diseño propio (contacto/soporte, no campañas),
+          // se deja activa mientras se decide si conecta a datos reales.
+          { path: '/portal-cliente/canales', element: wrap(<PortalClienteCanalesPage />) },
+          { path: '/portal-cliente/facturas', element: wrap(<PortalClienteFacturasPage />) },
         ],
       },
 

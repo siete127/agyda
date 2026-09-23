@@ -2,8 +2,8 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth.store'
 import Particles from '@/components/effects/Particles'
 import GlowCursor from '@/components/effects/GlowCursor'
-
-const FONDO_VIDEO_SRC = '/fondo-login.mp4'
+import { GlobeBackground } from '@/components/effects/GlobeBackground'
+import { Ardabito } from '@/components/effects/Ardabito'
 
 export function AuthLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -12,25 +12,35 @@ export function AuthLayout() {
   if (isInitialized && isAuthenticated) return <Navigate to="/dashboard" replace />
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0D1B3E]">
-      <video
-        src={FONDO_VIDEO_SRC}
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="auto"
-        style={{ willChange: 'transform', transform: 'translateZ(0)' }}
-        className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-contain [@media(min-width:1024px)_and_(min-height:855px)]:block"
-        onError={(e) => {
-          e.currentTarget.style.display = 'none'
-        }}
-      />
-      <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-[#0D1B3E]/80 via-[#0D1B3E]/55 to-[#0D1B3E]/85" />
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#07142E]">
+      {/* Globo 3D — visible desde tablet en adelante (md+); en teléfono
+         queda oculto y solo se ve el card de login. El tamaño usa
+         min(vh, vw) en vez de solo vh: así el cuadrado del globo siempre
+         cabe tanto en alto como en ancho sin importar la resolución real de
+         la pantalla (una laptop de 15" con poca altura de viewport, una
+         tablet en vertical, etc.) — nunca desaparece, solo se achica. */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-0 hidden w-[55%] md:block">
+        <div className="absolute left-1/2 top-1/2 aspect-square h-[min(85vh,48vw)] max-h-full -translate-x-1/2 -translate-y-1/2">
+          <GlobeBackground className="h-full w-full" rotationSpeed={0.08} cameraDistance={6.3} />
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-[#07142E]/80 via-[#091A3A]/55 to-[#091A3A]/85" />
+
+      {/* Ardabito — delante del globo (y de su overlay), superpuesto sobre
+         el propio globo. Mismo breakpoint que el globo (md+) para que
+         aparezcan/desaparezcan juntos. Ancho en min(vw,vh) para que también
+         se achique en pantallas bajas de altura y no solo angostas, con un
+         piso menor que antes para no desbordar en tablets angostas. */}
+      <div className="pointer-events-none absolute inset-0 z-[5] hidden md:block">
+        <div className="absolute bottom-4 left-[calc(48%-57px)] w-[min(50vw,62vh,840px)] min-w-[300px] -translate-x-1/2 md:bottom-5 lg:bottom-7">
+          <Ardabito />
+        </div>
+      </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
         <Particles
-          particleColors={['#22D3EE', '#5B8DEF', '#ffffff']}
+          particleColors={['#8FC7E8']}
           particleCount={220}
           particleSpread={12}
           speed={0.08}
@@ -64,19 +74,12 @@ export function AuthLayout() {
         />
       </div>
 
-      <div className="absolute left-6 top-6 z-30 flex items-center gap-3 lg:left-10 lg:top-10">
-        <img
-          src="/Logo_AGYDA.png"
-          alt="AGYDA"
-          className="h-14 w-auto lg:h-16"
-        />
-        <div className="leading-tight">
-          <p className="text-base font-bold text-white tracking-wide lg:text-lg">AGYDA</p>
-          <p className="text-[0.7rem] text-blue-200/60 lg:text-xs">Soluciones en tecnología</p>
-        </div>
+      <div className="absolute left-6 top-6 z-30 leading-tight md:left-10 md:top-10">
+        <p className="text-base font-bold text-white tracking-wide md:text-lg">AGYDA</p>
+        <p className="text-[0.7rem] text-blue-200/60 md:text-xs">Soluciones de tecnología</p>
       </div>
 
-      <div className="relative z-30 flex flex-1 flex-col items-center justify-center px-6 py-10 lg:items-end lg:pr-[8%]">
+      <div className="relative z-30 flex flex-1 flex-col items-center justify-center px-6 py-10 md:items-end md:pr-[8%]">
         <div className="w-full max-w-[400px] animate-slide-up">
           <Outlet />
         </div>

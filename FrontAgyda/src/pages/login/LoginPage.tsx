@@ -83,8 +83,8 @@ export function LoginPage() {
       {/* Encabezado — logo + título centrados juntos */}
       <div className="flex flex-col items-center text-center">
         <img
-          src="/logo_ardabytec.png"
-          alt="AGYDA System"
+          src="/logos-empresa/logo1-modo-oscuro.png"
+          alt="ArdaBytec"
           className="mb-3 h-20 w-auto drop-shadow-[0_0_20px_rgba(34,211,238,0.35)]"
         />
         <h2 className="text-2xl font-bold text-white tracking-tight">Iniciar sesión</h2>

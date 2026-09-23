@@ -2025,6 +2025,13 @@ END`,
 BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ULTIMA_ALERTA_INACTIVIDAD DATETIME NULL;
 END`,
+    // Vincula el contacto/cliente con su login de portal (NEUS_USUARIOS,
+    // NEUS_TIPOUSUARIO='CL') cuando se le da acceso al portal-cliente desde
+    // altaCliente — sin FK física, mismo estilo que CONT_RESPONSABLE_ID.
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_NEUS_ID')
+BEGIN
+  ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_NEUS_ID INT NULL;
+END`,
     `IF OBJECT_ID('dbo.CRM_ACTIVIDADES', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.CRM_ACTIVIDADES (
@@ -2072,6 +2079,105 @@ END`,
   logger.info('✅ Esquema CRM asegurado/actualizado');
 }
 
+// Catálogos administrables de Clientes (Configuración → CRM → Clientes): Tipos,
+// Segmentos, Categorías, Industrias, Clasificaciones — mismo shape simple que
+// TICKET_CLASIFICACIONES (ver ensureTiAreaSchema/catalogosTiController): clave
+// inmutable + nombre editable + orden + activa (soft-delete). Etiquetas es
+// multi-valor por contacto, así que además lleva su tabla puente.
+async function ensureCrmCatalogosClienteSchema(pool) {
+  const CATALOGOS = [
+    { tabla: 'CRM_TIPOS_CLIENTE', prefijo: 'TIP' },
+    { tabla: 'CRM_SEGMENTOS', prefijo: 'SEG' },
+    { tabla: 'CRM_CATEGORIAS_CLIENTE', prefijo: 'CAT' },
+    { tabla: 'CRM_INDUSTRIAS', prefijo: 'IND' },
+    { tabla: 'CRM_CLASIFICACIONES_CLIENTE', prefijo: 'CLC' },
+    { tabla: 'CRM_ETIQUETAS', prefijo: 'ETQ' },
+    // Tipo de acceso al portal-cliente (ej. Reclutamiento, Facturación,
+    // Completo) — solo aplica a contactos con CONT_NEUS_ID (con login).
+    { tabla: 'CRM_TIPOS_ACCESO_PORTAL', prefijo: 'TAP' },
+  ];
+  for (const { tabla, prefijo } of CATALOGOS) {
+    try {
+      await pool.request().batch(`
+        IF OBJECT_ID('dbo.${tabla}', 'U') IS NULL
+        BEGIN
+          CREATE TABLE dbo.${tabla} (
+            ${prefijo}_ID INT IDENTITY(1,1) PRIMARY KEY,
+            ${prefijo}_CLAVE NVARCHAR(30) NOT NULL,
+            ${prefijo}_NOMBRE NVARCHAR(100) NOT NULL,
+            ${prefijo}_ORDEN INT NOT NULL DEFAULT 0,
+            ${prefijo}_ACTIVA BIT NOT NULL DEFAULT 1,
+            CONSTRAINT UQ_${tabla}_CLAVE UNIQUE (${prefijo}_CLAVE)
+          );
+        END
+      `);
+    } catch (err) {
+      console.warn(`⚠️ CrmCatalogosClienteSchema (${tabla}):`, err.message);
+    }
+  }
+
+  // Columnas de selección única en CRM_CONTACTOS (sin FK física, mismo estilo
+  // que CONT_RESPONSABLE_ID, para no acoplar el borrado del catálogo).
+  const COLUMNAS_FK = [
+    'CONT_TIPO_CLIENTE_ID', 'CONT_SEGMENTO_ID', 'CONT_CATEGORIA_ID', 'CONT_INDUSTRIA_ID', 'CONT_CLASIFICACION_ID',
+    'CONT_TIPO_ACCESO_ID',
+  ];
+  for (const col of COLUMNAS_FK) {
+    try {
+      await pool.request().batch(`
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = '${col}')
+        BEGIN
+          ALTER TABLE dbo.CRM_CONTACTOS ADD ${col} INT NULL;
+        END
+      `);
+    } catch (err) {
+      console.warn(`⚠️ CrmContactosCatalogoFk (${col}):`, err.message);
+    }
+  }
+
+  // Etiquetas es multi-valor por contacto → tabla puente.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_CONTACTOS_ETIQUETAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CRM_CONTACTOS_ETIQUETAS (
+          CCE_CONTACTO_ID INT NOT NULL,
+          CCE_ETIQUETA_ID INT NOT NULL,
+          CONSTRAINT PK_CRM_CONTACTOS_ETIQUETAS PRIMARY KEY (CCE_CONTACTO_ID, CCE_ETIQUETA_ID)
+        );
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmContactosEtiquetasSchema:', err.message);
+  }
+
+  // Migración: CONT_TIPO_CLIENTE (texto libre, ya en uso) se preserva; se
+  // migran sus valores distintos a CRM_TIPOS_CLIENTE como semilla, y se
+  // backfillea CONT_TIPO_CLIENTE_ID para no perder el dato ya capturado.
+  try {
+    await pool.request().batch(`
+      INSERT INTO dbo.CRM_TIPOS_CLIENTE (TIP_CLAVE, TIP_NOMBRE, TIP_ORDEN)
+      SELECT LOWER(REPLACE(REPLACE(LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), ' ', '_'), '.', '')), LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), 0
+      FROM (SELECT DISTINCT CONT_TIPO_CLIENTE FROM dbo.CRM_CONTACTOS WHERE CONT_TIPO_CLIENTE IS NOT NULL AND LTRIM(RTRIM(CONT_TIPO_CLIENTE)) <> '') t
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.CRM_TIPOS_CLIENTE tc
+        WHERE tc.TIP_CLAVE = LOWER(REPLACE(REPLACE(LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), ' ', '_'), '.', ''))
+      );
+    `);
+    await pool.request().batch(`
+      UPDATE c SET c.CONT_TIPO_CLIENTE_ID = tc.TIP_ID
+      FROM dbo.CRM_CONTACTOS c
+      INNER JOIN dbo.CRM_TIPOS_CLIENTE tc
+        ON tc.TIP_CLAVE = LOWER(REPLACE(REPLACE(LTRIM(RTRIM(c.CONT_TIPO_CLIENTE)), ' ', '_'), '.', ''))
+      WHERE c.CONT_TIPO_CLIENTE_ID IS NULL AND c.CONT_TIPO_CLIENTE IS NOT NULL AND LTRIM(RTRIM(c.CONT_TIPO_CLIENTE)) <> '';
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmTiposClienteMigracion:', err.message);
+  }
+
+  logger.info('✅ Esquema de catálogos de Clientes (CRM) asegurado');
+}
+
 // Portal público del cliente (acceso por token, sin login). La tabla se creaba
 // solo en routes/crmSetup.js (endpoint manual); aquí se asegura al arrancar para
 // que exista en cada tenant sin correr ese setup a mano.
@@ -2104,6 +2210,65 @@ async function ensureCrmPortalSchema(pool) {
   }
 
   logger.info('✅ Esquema de portal del cliente asegurado');
+}
+
+// Solicitud de datos fiscales: un empleado dispara desde una Oportunidad el
+// envío de un link (mismo patrón de token que CRM_PORTAL_TOKENS) para que el
+// propio cliente capture RFC/razón social/régimen fiscal/CFDI sin necesitar
+// login. Al completarse, esos datos se guardan en CLIENTES (no en
+// CRM_CONTACTOS) porque son datos de facturación real.
+async function ensureSolicitudFiscalSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_SOLICITUD_FISCAL_TOKENS', 'U') IS NULL
+      CREATE TABLE dbo.CRM_SOLICITUD_FISCAL_TOKENS (
+        SFT_ID            INT IDENTITY(1,1) PRIMARY KEY,
+        SFT_OPORTUNIDAD_ID INT NOT NULL,
+        SFT_TOKEN         NVARCHAR(100) NOT NULL UNIQUE,
+        SFT_EMAIL         NVARCHAR(300) NOT NULL,
+        SFT_ACTIVO        BIT DEFAULT 1,
+        SFT_COMPLETADO    BIT DEFAULT 0,
+        SFT_EXPIRA        DATETIME NULL,
+        SFT_FECHA         DATETIME DEFAULT GETDATE(),
+        SFT_FECHA_COMPLETADO DATETIME NULL
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmSolicitudFiscalTokensSchema:', err.message);
+  }
+
+  // Columnas fiscales nuevas en CLIENTES — CL_RFC y CL_CP ya existían (se
+  // reutilizan), el resto son campos de facturación que faltaban.
+  const columnasClientes = [
+    ['CL_RAZON_SOCIAL', 'NVARCHAR(300) NULL'],
+    ['CL_REGIMEN_FISCAL', 'NVARCHAR(10) NULL'],
+    ['CL_USO_CFDI', 'NVARCHAR(10) NULL'],
+    ['CL_CORREO_FACTURACION', 'NVARCHAR(300) NULL'],
+  ];
+  for (const [col, tipo] of columnasClientes) {
+    try {
+      await pool.request().batch(`
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLIENTES') AND name = '${col}')
+          ALTER TABLE dbo.CLIENTES ADD ${col} ${tipo};
+      `);
+    } catch (err) {
+      console.warn(`⚠️ ClientesDatosFiscalesSchema (${col}):`, err.message);
+    }
+  }
+
+  // CRM_OPORTUNIDADES solo tenía OPO_CONTACTO_ID (FK a CRM_CONTACTOS). Se
+  // añade OPO_CLIENTE_ID para vincular la oportunidad con el cliente de
+  // facturación real una vez completado el formulario fiscal.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_OPORTUNIDADES') AND name = 'OPO_CLIENTE_ID')
+        ALTER TABLE dbo.CRM_OPORTUNIDADES ADD OPO_CLIENTE_ID INT NULL;
+    `);
+  } catch (err) {
+    console.warn('⚠️ OportunidadesClienteIdSchema:', err.message);
+  }
+
+  logger.info('✅ Esquema de solicitud de datos fiscales asegurado');
 }
 
 // Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
@@ -3424,6 +3589,32 @@ async function ensureIncentivosSchema(pool) {
     }
   } catch (err) {
     console.warn('⚠️ IncentivosSchema:', err.message);
+  }
+}
+
+// Ventas: fórmulas de comisión definidas por el admin — mismo patrón que
+// VENTAS_INCENTIVOS_REGLAS (ver ensureIncentivosSchema), pero el resultado
+// reemplaza el monto de comisión mostrado en el CRM (antes leído de
+// NOMINA_COMISIONES) en vez de sumarse como bono aparte.
+async function ensureComisionesReglasSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.VENTAS_COMISIONES_REGLAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.VENTAS_COMISIONES_REGLAS (
+          VCR_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          VCR_NOMBRE          NVARCHAR(150)   NOT NULL,
+          VCR_FORMULA         NVARCHAR(1000)  NOT NULL,
+          VCR_ORDEN           INT             NOT NULL DEFAULT 0,
+          VCR_ACTIVA          BIT             NOT NULL DEFAULT 1,
+          VCR_CREADO_POR      SMALLINT        NULL,
+          VCR_FECHA_CREACION  DATETIME        NOT NULL DEFAULT GETDATE()
+        );
+        CREATE INDEX IX_VCR_ORDEN ON dbo.VENTAS_COMISIONES_REGLAS(VCR_ORDEN);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ ComisionesReglasSchema:', err.message);
   }
 }
 
@@ -5475,9 +5666,11 @@ async function ensureAllSchemas(pool) {
   await ensureEncuestasSchema(pool);
   await ensureEncuestaSatisfaccionClienteSeed(pool);
   await ensureCrmSchema(pool);
+  await ensureCrmCatalogosClienteSchema(pool);
   await ensureCrmCotizacionesSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
   await ensureCrmPortalSchema(pool);
+  await ensureSolicitudFiscalSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
@@ -5489,6 +5682,7 @@ async function ensureAllSchemas(pool) {
   await ensureFinanzasSchema(pool);
   await ensureVentasMetasSchema(pool);
   await ensureIncentivosSchema(pool);
+  await ensureComisionesReglasSchema(pool);
   await ensureCallCenterSchema(pool);
   await ensureTiAreaSchema(pool);
   await ensureAtencionClienteSchema(pool);
@@ -8184,6 +8378,24 @@ END
     console.warn('⚠️ ClienteProductosServiciosSchema:', err.message);
   }
 
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS (
+    CCPS_ID               INT IDENTITY(1,1) PRIMARY KEY,
+    CCPS_CONT_ID          INT NOT NULL,
+    CCPS_PS_ID            INT NOT NULL,
+    CCPS_FECHA_ASIGNACION DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_CRM_CONTACTO_PS UNIQUE (CCPS_CONT_ID, CCPS_PS_ID)
+  );
+  CREATE INDEX IX_CCPS_CONTACTO ON dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS(CCPS_CONT_ID);
+END
+`);
+  } catch (err) {
+    console.warn('⚠️ CrmContactoProductosServiciosSchema:', err.message);
+  }
+
   // Columnas fiscales (costo + claves SAT) para poder cotizar y facturar.
   const psCols = [
     `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_COSTO') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_COSTO DECIMAL(18,2) NULL;`,
@@ -8539,5 +8751,6 @@ module.exports = {
     ensureMensajeriaSchema,
     ensureEncuestasSchema,
     ensureRolesSchema,
-    ensurePerfilesSchema
+    ensurePerfilesSchema,
+    ensureSolicitudFiscalSchema
 };

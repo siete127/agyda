@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText,
-  Package, LayoutGrid, List, Eye, MoreVertical, Power, X, User, Route, MapPinned, Hash,
-  ShoppingBag, PackagePlus, Save, ChevronDown, Wallet, ArrowUpRight,
+  Package, LayoutGrid, List, Eye, EyeOff, MoreVertical, Power, X, User, Route, MapPinned, Hash,
+  ShoppingBag, PackagePlus, Save, ChevronDown, Wallet, ArrowUpRight, KeyRound,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
@@ -136,6 +136,9 @@ interface Cliente {
   cp: string
   activo: boolean
   fechaRegistro: string
+  neusId: number | null
+  accesoActivo: boolean | null
+  accesoUsuario: string | null
 }
 
 function parseCliente(r: Record<string, unknown>): Cliente {
@@ -153,6 +156,9 @@ function parseCliente(r: Record<string, unknown>): Cliente {
     cp: s(['cp', 'CL_CP', 'codigoPostal', 'zipCode']),
     activo: Boolean(r['activo'] ?? r['CL_ACTIVO'] ?? true),
     fechaRegistro: s(['fechaRegistro', 'CL_FECHA_REGISTRO', 'createdAt']),
+    neusId: r['neusId'] != null ? Number(r['neusId']) : null,
+    accesoActivo: r['accesoActivo'] != null ? Boolean(r['accesoActivo']) : null,
+    accesoUsuario: r['accesoUsuario'] != null ? String(r['accesoUsuario']) : null,
   }
 }
 
@@ -291,9 +297,22 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
     telefono: cliente.telefono, correo: cliente.correo, ciudad: cliente.ciudad,
     calle: cliente.calle, colonia: cliente.colonia, cp: cliente.cp,
   } : { ...EMPTY_FORM })
+  const [accesoActivo, setAccesoActivo] = useState(cliente?.accesoActivo ?? false)
+  const [passwordPortal, setPasswordPortal] = useState('')
+  const [mostrarPassword, setMostrarPassword] = useState(false)
+  const [enviarInvitacion, setEnviarInvitacion] = useState(true)
 
   const guardar = useMutation({
-    mutationFn: () => cliente ? api.put(`/clientes/${cliente.id}`, form) : api.post('/clientes', form),
+    mutationFn: () => {
+      const body: Record<string, unknown> = { ...form }
+      if (cliente) {
+        body.neusId = cliente.neusId
+        body.activarAcceso = accesoActivo
+        if (passwordPortal) body.password = passwordPortal
+        if (enviarInvitacion && accesoActivo) body.enviarInvitacion = true
+      }
+      return cliente ? api.put(`/clientes/${cliente.id}`, body) : api.post('/clientes', body)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clientes'] })
       toast.success(cliente ? 'Cliente actualizado' : 'Cliente creado')
@@ -370,6 +389,64 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
           {cliente && (
             <div className="space-y-5">
               <FinanzasClienteBloque clienteId={cliente.id} />
+
+              <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+                <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                    <KeyRound className="h-4 w-4" />
+                  </div>
+                  <p className="text-[0.9rem] font-bold text-gray-800">Acceso al sistema</p>
+                </div>
+                <div className="space-y-3">
+                  <label className="flex cursor-pointer items-center justify-between gap-3">
+                    <span>
+                      <span className="block text-[0.82rem] font-semibold text-gray-700">Acceso activo</span>
+                      <span className="block text-[0.72rem] text-gray-400">
+                        {cliente.accesoUsuario ? `Usuario: ${cliente.accesoUsuario}` : 'El cliente puede iniciar sesión en el sistema.'}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAccesoActivo((v) => !v)}
+                      className={clsx('relative h-6 w-11 flex-shrink-0 rounded-full transition-colors', accesoActivo ? 'bg-violet-600' : 'bg-gray-200')}
+                    >
+                      <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-card shadow transition-transform', accesoActivo ? 'translate-x-5' : 'translate-x-0.5')} />
+                    </button>
+                  </label>
+                  {accesoActivo && (
+                    <>
+                      <div>
+                        <label className="mb-1.5 block text-[0.75rem] font-semibold text-gray-500">Nueva contraseña (opcional)</label>
+                        <div className="relative">
+                          <input
+                            type={mostrarPassword ? 'text' : 'password'}
+                            value={passwordPortal}
+                            onChange={(e) => setPasswordPortal(e.target.value)}
+                            placeholder="Dejar en blanco para no cambiarla"
+                            className="w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 pr-10 text-[0.85rem] text-gray-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setMostrarPassword((v) => !v)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            {mostrarPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <label className="flex cursor-pointer items-start gap-2">
+                        <input type="checkbox" className="mt-0.5 h-4 w-4 accent-violet-600" checked={enviarInvitacion} onChange={(e) => setEnviarInvitacion(e.target.checked)} />
+                        <span>
+                          <span className="block text-[0.78rem] font-semibold text-gray-700">Enviar invitación por correo</span>
+                          <span className="block text-[0.68rem] text-gray-400">
+                            {form.correo ? `Se enviará a ${form.correo} con su usuario, contraseña y la liga de acceso.` : 'Captura un correo arriba para poder enviar la invitación.'}
+                          </span>
+                        </span>
+                      </label>
+                    </>
+                  )}
+                </div>
+              </div>
 
               <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
                 <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">

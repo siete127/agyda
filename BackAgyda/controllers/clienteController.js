@@ -1,5 +1,8 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
+const emailService = require('../services/emailService');
+
+const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
 
 exports.getProductos = async (req, res) => {
   try {
@@ -182,9 +185,11 @@ exports.getClientes = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
-      SELECT 
+      SELECT
         CL.CL_ID as id,
         CL.NEUS_ID as neusId,
+        NU.NEUS_ACTIVO as accesoActivo,
+        NU.NEUS_USUARIO as accesoUsuario,
         CL.CL_EMPRESA as empresa,
         CL.CL_RFC as rfc,
         CL.CL_NOMBRE as nombre,
@@ -200,6 +205,7 @@ exports.getClientes = async (req, res) => {
         CL.CL_CP as cp,
         CL.CL_PAIS as pais
       FROM CLIENTES CL
+      LEFT JOIN NEUS_USUARIOS NU ON NU.NEUS_ID = CL.NEUS_ID
       ORDER BY CL.CL_EMPRESA ASC, CL.CL_NOMBRE ASC
     `);
     res.json({ success: true, data: rs.recordset });
@@ -390,38 +396,50 @@ exports.updateCliente = async (req, res) => {
       colonia,
       cp,
       rfc,
-      pais
+      pais,
+      activarAcceso,
+      enviarInvitacion,
     } = req.body;
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const transaction = new sql.Transaction(pool);
     try {
       await transaction.begin();
-      const tr = transaction.request();
+
+      // Activar/desactivar el acceso al sistema sin borrar el usuario —
+      // toggle independiente del password/correo de abajo.
+      if (activarAcceso !== undefined && neusId) {
+        await transaction.request()
+          .input('neusId', sql.Int, neusId)
+          .input('activo', sql.Bit, activarAcceso ? 1 : 0)
+          .query(`UPDATE NEUS_USUARIOS SET NEUS_ACTIVO = @activo WHERE NEUS_ID = @neusId`);
+      }
 
       // Update NEUS_USUARIOS password and/or correo as NEUS_USUARIO if provided
+      // (request propio — no compartir parámetros con el UPDATE de CLIENTES de abajo).
       if ((password !== undefined && password !== null) || (correo !== undefined && correo !== null)) {
         let updateQuery = 'UPDATE NEUS_USUARIOS SET ';
         const updateFields = [];
-        
+        let neusReq = transaction.request();
+
         if (password !== undefined && password !== null) {
           updateFields.push('NEUS_CONTRA = @password');
-          tr = tr.input('password', sql.NVarChar, String(password));
+          neusReq = neusReq.input('password', sql.NVarChar, String(password));
         }
-        
+
         if (correo !== undefined && correo !== null && String(correo).trim() !== '') {
           updateFields.push('NEUS_USUARIO = @correo');
-          tr = tr.input('correo', sql.NVarChar, String(correo));
+          neusReq = neusReq.input('correo', sql.NVarChar, String(correo));
         }
-        
+
         if (updateFields.length > 0) {
           updateQuery += updateFields.join(', ') + ' WHERE NEUS_ID = @neusId';
-          await tr.input('neusId', sql.Int, neusId || null).query(updateQuery);
+          await neusReq.input('neusId', sql.Int, neusId || null).query(updateQuery);
         }
       }
 
       // Update CLIENTES fields
-      await tr
+      await transaction.request()
         .input('id', sql.Int, id)
         .input('empresa', sql.NVarChar, empresa || null)
         .input('nombre', sql.NVarChar, nombre || null)
@@ -487,6 +505,23 @@ exports.updateCliente = async (req, res) => {
       }
 
       await transaction.commit();
+
+      // Invitación por correo con credenciales — solo si se pidió explícitamente
+      // (switch en el frontend) y hay a quién mandarla.
+      if (enviarInvitacion && neusId && correo) {
+        const usuarioRs = await pool.request().input('id', sql.Int, neusId).query(`SELECT NEUS_USUARIO as usuario FROM NEUS_USUARIOS WHERE NEUS_ID=@id`);
+        const usuarioLogin = usuarioRs.recordset[0]?.usuario;
+        if (usuarioLogin) {
+          emailService.sendInvitacionAccesoSistemaEmail({
+            nombre: nombre || empresa,
+            correo,
+            usuario: usuarioLogin,
+            password: password || null,
+            link: `${BASE_URL}/login`,
+          }).catch(() => {});
+        }
+      }
+
       return res.json({ success: true });
     } catch (txErr) {
       try { await transaction.rollback(); } catch (e) {}

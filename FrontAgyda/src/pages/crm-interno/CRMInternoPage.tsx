@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
@@ -8,7 +9,7 @@ import {
   CheckCircle2, Circle, Trash2, Users, Kanban, ListTodo,
   Building2, User, ArrowRight, PhoneCall, Edit2, DollarSign,
   Calendar, ChevronRight, MoreHorizontal, BarChart2, Globe,
-  Clock, List, Star, UserCheck, Briefcase,
+  Clock, List, Star, UserCheck, Briefcase, Receipt,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { Modal } from '@/components/ui/Modal'
@@ -30,6 +31,7 @@ import { CRMEmailModal }   from './CRMEmailModal'
 import { CRMCotizacionModal } from './CRMCotizacionModal'
 import { CRMSeguimientoTab } from './CRMSeguimientoTab'
 import { CRMGenerarProyectoModal } from './CRMGenerarProyectoModal'
+import { CRMSolicitudFiscalModal } from './CRMSolicitudFiscalModal'
 
 type Tab = 'pipeline' | 'contactos' | 'actividades' | 'seguimiento' | 'reportes'
 type DrawerState = { opo: CRMOportunidad; contactos: CRMContacto[] } | null
@@ -635,6 +637,7 @@ function OportunidadDrawer({
   onUpdated: () => void
 }) {
   const qc   = useQueryClient()
+  const navigate = useNavigate()
   const user = useCurrentUser()
   const { can } = useActionAccess()
   const [etapa, setEtapa]         = useState<CRMEtapa>(opo.etapa)
@@ -648,6 +651,7 @@ function OportunidadDrawer({
   const [showCotModal, setShowCotModal] = useState(false)
   const [editCot, setEditCot]     = useState<CRMCotizacion | null>(null)
   const [showGenerarProyecto, setShowGenerarProyecto] = useState(false)
+  const [showSolicitudFiscal, setShowSolicitudFiscal] = useState(false)
   const contactoActual            = contactos.find((c) => c.id === opo.contactoId) ?? null
 
   const { data: actividades = [], isLoading: loadAct } = useQuery({
@@ -757,6 +761,9 @@ function OportunidadDrawer({
             <button onClick={() => setEmail(true)} title="Enviar email" className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-colors">
               <Mail className="h-4 w-4" />
             </button>
+            <button onClick={() => setShowSolicitudFiscal(true)} title="Solicitar datos fiscales" className="rounded-lg p-1.5 text-gray-400 hover:bg-violet-50 hover:text-violet-600 transition-colors">
+              <Receipt className="h-4 w-4" />
+            </button>
             <button onClick={() => setEditMode(true)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 transition-colors">
               <Edit2 className="h-4 w-4" />
             </button>
@@ -816,9 +823,13 @@ function OportunidadDrawer({
           </div>
 
           {opo.proyectoId ? (
-            <div className="flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[0.75rem] font-semibold text-indigo-700">
+            <button
+              onClick={() => navigate(`/proyectos?id=${opo.proyectoId}`)}
+              className="flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[0.75rem] font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 cursor-pointer"
+            >
               <Briefcase className="h-3.5 w-3.5" /> Proyecto vinculado (#{opo.proyectoId})
-            </div>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
           ) : (
             <button
               onClick={() => setShowGenerarProyecto(true)}
@@ -1051,6 +1062,15 @@ function OportunidadDrawer({
           opo={opo}
           onClose={() => setShowGenerarProyecto(false)}
           onCreated={() => { setShowGenerarProyecto(false); onUpdated() }}
+        />
+      )}
+
+      {showSolicitudFiscal && (
+        <CRMSolicitudFiscalModal
+          opo={opo}
+          correoSugerido={contactoActual?.correo ?? null}
+          onClose={() => setShowSolicitudFiscal(false)}
+          onSent={() => setShowSolicitudFiscal(false)}
         />
       )}
     </>
