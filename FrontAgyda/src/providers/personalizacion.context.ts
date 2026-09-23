@@ -61,6 +61,7 @@ export const DASHBOARD_DEFAULT: PersonalizacionConfig['dashboard']['cards'] = [
   { id: 'cumpleanos',      x: 8, y: 8, w: 4, h: 3, visible: true },
   { id: 'soporte',         x: 8, y: 11, w: 4, h: 2, visible: true },
   { id: 'accesos-rapidos', x: 0, y: 13, w: 12, h: 3, visible: true },
+  { id: 'r-mis-enlaces',   x: 0, y: 16, w: 12, h: 3, visible: true },
 ]
 
 export const PersonalizacionContext = createContext<PersonalizacionConfig>(DEFAULT_CONFIG)

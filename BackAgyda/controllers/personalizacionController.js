@@ -24,6 +24,8 @@ const DASHBOARD_CARD_IDS = [
   'r-reglamento', 'r-livechat', 'r-pausas', 'r-vacaciones', 'r-capacitacion',
   'r-incapacidades', 'r-noticias', 'r-vacantes', 'r-ventas',
   'r-tiempos-equipo', 'r-metas-ventas',
+  // Personales
+  'r-mis-enlaces',
 ];
 
 const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];
@@ -206,6 +208,9 @@ function limpiarEnlace(raw, i) {
     visible: raw?.visible !== false,
   };
 }
+
+// Reutilizado por los enlaces personales de cada usuario (enlacesPersonalesController).
+exports.limpiarEnlace = limpiarEnlace;
 
 function mergeConfig(stored) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));

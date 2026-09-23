@@ -1,15 +1,25 @@
 /* eslint-disable react-refresh/only-export-components --
    Módulo de catálogo: expone el registro RESUMEN_CARDS junto a los componentes
    que renderiza. No es un módulo de UI con hot-reload crítico. */
-import { type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Ticket, FolderKanban, ClipboardList, MessageSquareWarning, Scale, BookOpenCheck,
   Headset, CalendarClock, Newspaper, PlaneTakeoff, GraduationCap, HeartPulse,
-  Users, Target, ChevronRight, Star, TrendingUp, type LucideIcon,
+  Users, Target, ChevronRight, Star, TrendingUp, Link2, Plus, type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import toast from 'react-hot-toast'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { EnlacesEditor } from '@/components/enlaces/EnlacesEditor'
+import { hayEnlacesInvalidos } from '@/components/enlaces/enlaces.utils'
+import { ENLACE_ICONOS } from '@/lib/enlaceTopbarIconos'
+import { useEnlaceFrameStore } from '@/stores/enlaceFrame.store'
+import { enlacesPersonalesService } from '@/services/enlacesPersonales.service'
+import type { EnlaceTopbar } from '@/services/personalizacion.service'
 import { api } from '@/lib/axios'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -41,8 +51,9 @@ export interface ResumenCardDef {
   id: string
   titulo: string
   descripcion: string
-  categoria: 'Operación' | 'Personas' | 'Comercial' | 'Contenido'
-  moduleKey: string
+  categoria: 'Portada' | 'Operación' | 'Personas' | 'Comercial' | 'Contenido'
+  // Sin moduleKey = no depende de un módulo (p. ej. "Mis enlaces", personal).
+  moduleKey?: string
   /** Tamaño sugerido al agregarla (grilla de 12 columnas, fila = 64px). */
   size: { w: number; h: number }
   Icon: LucideIcon
@@ -52,11 +63,12 @@ export interface ResumenCardDef {
 /* ── Shell visual común ─────────────────────────────────────────────── */
 
 function CardShell({
-  titulo, Icon, to, verLabel = 'Abrir', children, tono = 'brand',
+  titulo, Icon, to, onVer, verLabel = 'Abrir', children, tono = 'brand',
 }: {
   titulo: string
   Icon: LucideIcon
-  to: string
+  to?: string
+  onVer?: () => void // acción del botón del encabezado en lugar de navegar a `to`
   verLabel?: string
   children: ReactNode
   tono?: 'brand' | 'amber' | 'rose' | 'emerald' | 'violet'
@@ -74,7 +86,7 @@ function CardShell({
           <h3 className="text-[0.82rem] font-bold text-ink">{titulo}</h3>
         </div>
         <button
-          onClick={() => navigate(to)}
+          onClick={() => (onVer ? onVer() : to && navigate(to))}
           className="flex items-center gap-1 text-[0.68rem] font-semibold text-brand transition-colors hover:text-brand-dark"
         >
           {verLabel} <ChevronRight className="h-3 w-3" />
@@ -643,6 +655,109 @@ function VentasResumen() {
   )
 }
 
+/* "Mis enlaces" — accesos a sitios externos PERSONALES: cada usuario agrega,
+   ve y edita solo los suyos (USUARIO_ENLACES_PERSONALES). Mismo editor y mismo
+   comportamiento (pestaña nueva / panel flotante) que los enlaces del
+   encabezado de la empresa. */
+const ENLACES_PERSONALES_KEY = ['enlaces-personales'] as const
+
+function MisEnlacesResumen() {
+  const qc = useQueryClient()
+  const abrirFlotante = useEnlaceFrameStore((s) => s.abrir)
+  const { data: enlaces = [], isLoading } = useQuery({
+    queryKey: ENLACES_PERSONALES_KEY,
+    queryFn: () => enlacesPersonalesService.getMios(),
+    staleTime: 5 * 60_000,
+  })
+
+  const [editando, setEditando] = useState(false)
+  // El panel flotante (z-40) quedaría detrás del modal: mientras se ve una
+  // vista previa flotante, el editor se oculta sin perder el borrador.
+  const [oculto, setOculto] = useState(false)
+  const [draft, setDraft] = useState<EnlaceTopbar[]>([])
+  const abrirEditor = () => { setDraft(enlaces); setOculto(false); setEditando(true) }
+  const cerrarEditor = () => { setEditando(false); setOculto(false) }
+
+  const guardar = useMutation({
+    mutationFn: () => enlacesPersonalesService.guardarMios(draft),
+    onSuccess: (guardados) => {
+      qc.setQueryData(ENLACES_PERSONALES_KEY, guardados)
+      toast.success('Tus enlaces se guardaron')
+      cerrarEditor()
+    },
+    onError: () => toast.error('No se pudieron guardar tus enlaces'),
+  })
+
+  const abrir = (e: EnlaceTopbar) => {
+    if (e.modo === 'flotante') abrirFlotante({ id: e.id, label: e.label, url: e.url, color: e.color })
+    else window.open(e.url, '_blank', 'noopener,noreferrer')
+  }
+  const visibles = enlaces.filter((e) => e.visible)
+
+  return (
+    <CardShell titulo="Mis enlaces" Icon={Link2} onVer={abrirEditor} verLabel={enlaces.length ? 'Editar' : 'Agregar'} tono="violet">
+      {isLoading ? (
+        <p className="text-[0.72rem] text-ink-tertiary">Cargando…</p>
+      ) : visibles.length === 0 ? (
+        <div className="flex h-full flex-col items-center justify-center gap-2 py-2 text-center">
+          <p className="text-[0.74rem] text-ink-secondary">Agrega tus sitios frecuentes. Solo tú los ves.</p>
+          <button
+            onClick={abrirEditor}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[0.72rem] font-semibold text-white transition-colors hover:bg-violet-700"
+          >
+            <Plus className="h-3.5 w-3.5" /> Agregar enlaces
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2">
+          {visibles.map((e) => {
+            const Ico = ENLACE_ICONOS[e.icono] ?? ENLACE_ICONOS.link
+            return (
+              <button
+                key={e.id}
+                onClick={() => abrir(e)}
+                title={e.url}
+                className="group flex min-w-0 flex-col items-center gap-1.5 rounded-xl p-2 transition-colors hover:bg-surface"
+              >
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-sm transition-transform group-hover:scale-105"
+                  style={{ backgroundColor: e.color }}
+                >
+                  <Ico className="h-5 w-5" />
+                </span>
+                <span className="w-full truncate text-center text-[0.68rem] font-semibold text-ink-secondary">{e.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <Modal isOpen={editando && !oculto} onClose={cerrarEditor} title="Mis enlaces" size="xl">
+        <p className="mb-4 text-[0.78rem] leading-relaxed text-gray-500">
+          Estos enlaces son solo tuyos: nadie más los ve. Algunos sitios (Google, bancos…) no se dejan mostrar
+          en el modo <b>Flotante</b>; para esos usa <b>Pestaña nueva</b>.
+        </p>
+        <EnlacesEditor enlaces={draft} onChange={setDraft} donde="tarjeta" alAbrirFlotante={() => setOculto(true)} />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={cerrarEditor}>Cancelar</Button>
+          <Button onClick={() => guardar.mutate()} disabled={hayEnlacesInvalidos(draft)} isLoading={guardar.isPending}>
+            Guardar
+          </Button>
+        </div>
+      </Modal>
+      {editando && oculto && createPortal(
+        <button
+          onClick={() => setOculto(false)}
+          className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-violet-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-lg hover:bg-violet-700"
+        >
+          <Link2 className="h-4 w-4" /> Volver a editar mis enlaces
+        </button>,
+        document.body,
+      )}
+    </CardShell>
+  )
+}
+
 /* ── Registro del catálogo ──────────────────────────────────────────── */
 
 export const RESUMEN_CARDS: ResumenCardDef[] = [
@@ -661,6 +776,7 @@ export const RESUMEN_CARDS: ResumenCardDef[] = [
   { id: 'r-noticias', titulo: 'Noticias sin leer', descripcion: 'Publicaciones que aún no has visto.', categoria: 'Contenido', moduleKey: 'noticias', size: { w: 3, h: 3 }, Icon: Newspaper, render: () => <NoticiasNuevasResumen /> },
   { id: 'r-vacantes', titulo: 'Reclutamiento', descripcion: 'Vacantes abiertas y postulantes nuevos.', categoria: 'Personas', moduleKey: 'vacantes', size: { w: 3, h: 3 }, Icon: Users, render: () => <VacantesResumen /> },
   { id: 'r-ventas', titulo: 'Ventas del día', descripcion: 'Ventas aprobadas y rechazadas de hoy (VICIdial).', categoria: 'Comercial', moduleKey: 'ventas', size: { w: 3, h: 4 }, Icon: Target, render: () => <VentasResumen /> },
+  { id: 'r-mis-enlaces', titulo: 'Mis enlaces', descripcion: 'Accesos personales a sitios externos: cada usuario agrega y ve solo los suyos.', categoria: 'Portada', size: { w: 4, h: 3 }, Icon: Link2, render: () => <MisEnlacesResumen /> },
   { id: 'r-metas-ventas', titulo: 'Metas de ventas', descripcion: 'Avance de tus metas diarias por campaña, individual y de equipo.', categoria: 'Comercial', moduleKey: 'ventas-area', size: { w: 3, h: 5 }, Icon: Target, render: () => <MetasVentasResumen /> },
 ]
 

@@ -102,6 +102,7 @@ app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/campanas', require('./routes/campanas'));
 app.use('/api/status', require('./routes/status'));
 app.use('/api/pausa-tipos', require('./routes/pausaTipos'));
+app.use('/api/enlaces-personales', require('./routes/enlacesPersonales'));
 app.use('/api/noticias', require('./routes/noticias'));
 app.use('/api/comentarios', require('./routes/comentarios'));
 app.use('/api/proyectos', require('./routes/proyectos'));
