@@ -2049,6 +2049,34 @@ async function sendInvitacionPortalEmail({ nombre, correo, link }) {
   }
 }
 
+// Solicitud de datos fiscales: liga pública (sin login) enviada desde una
+// Oportunidad para que el cliente capture su RFC/razón social/régimen
+// fiscal/CFDI. Mismo patrón visual que sendInvitacionPortalEmail.
+async function sendSolicitudDatosFiscalesEmail({ nombre, correo, link }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendSolicitudDatosFiscalesEmail] SMTP no configurado. Email simulado'); return; }
+    if (!correo) return;
+
+    const html = _shellSeguimiento({
+      titulo: '🧾 Datos fiscales para tu factura',
+      saludo: `Hola ${nombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Para poder emitir tu factura necesitamos algunos datos fiscales. Por favor complétalos en el siguiente formulario.</p>`,
+      ctaHtml: `<p style="text-align:center;margin:24px 0;"><a href="${link}" style="background:#1B4FD8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Completar datos fiscales</a></p>
+        <p style="color:#999;font-size:12px;text-align:center;">Este enlace es válido por 15 días.</p>`,
+    });
+    const text = `Datos fiscales para tu factura\n${link}\n\nEste enlace es válido por 15 días.`;
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: correo,
+      subject: 'Datos fiscales para tu factura',
+      text, html,
+    });
+    logger.debug(`✅ [sendSolicitudDatosFiscalesEmail] Enviado a ${correo}`);
+  } catch (err) {
+    console.error('❌ [sendSolicitudDatosFiscalesEmail] Error general:', err?.message || err);
+  }
+}
+
 // Invitación con credenciales de login al sistema (portal-cliente,
 // NEUS_USUARIOS tipo 'CL') — distinto de sendInvitacionPortalEmail (esa es
 // una liga con token sin contraseña, para el portal de cotizaciones/
@@ -2275,6 +2303,7 @@ module.exports = {
   sendIncidenciaSlaEmail,
   sendClienteInactivoEmail,
   sendInvitacionPortalEmail,
+  sendSolicitudDatosFiscalesEmail,
   sendInvitacionAccesoSistemaEmail,
   sendEncuestaSeguimientoEmail,
   sendRatRevisionPendienteEmail,

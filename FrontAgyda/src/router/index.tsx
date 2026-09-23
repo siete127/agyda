@@ -31,6 +31,7 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 ) => lazy(() => fn().then((m) => ({ default: m[name] })))
 
 // Páginas lazy — cada una genera su propio chunk
+const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/PortalClientePrincipalPage'), 'PortalClientePrincipalPage')
 const PortalClienteReunionesPage = lz(() => import('@/pages/portal-cliente/PortalClienteReunionesPage'), 'PortalClienteReunionesPage')
 const PortalClienteAtencionPage = lz(() => import('@/pages/portal-cliente/PortalClienteAtencionPage'), 'PortalClienteAtencionPage')
 const PortalClienteCanalesPage = lz(() => import('@/pages/portal-cliente/PortalClienteCanalesPage'), 'PortalClienteCanalesPage')
@@ -79,6 +80,7 @@ const EvaluacionCapacitacionPage   = lz(() => import('@/pages/evaluacion/Evaluac
 const AuditoriaPage                = lz(() => import('@/pages/auditoria/AuditoriaPage'),                             'AuditoriaPage')
 const CRMInternoPage               = lz(() => import('@/pages/crm-interno/CRMInternoPage'),                          'CRMInternoPage')
 const CRMPortalPage                = lz(() => import('@/pages/crm-interno/CRMPortalPage'),  'CRMPortalPage')
+const FormularioFiscalPage         = lz(() => import('@/pages/crm-interno/FormularioFiscalPage'),  'FormularioFiscalPage')
 const EmailMarketingPage           = lz(() => import('@/pages/email-marketing/EmailMarketingPage'),                   'EmailMarketingPage')
 const GastosPage                   = lz(() => import('@/pages/gastos/GastosPage'),           'default')
 
@@ -181,6 +183,7 @@ export const router = createBrowserRouter([
 
   // Portal del cliente (acceso público con token)
   { path: '/portal', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><CRMPortalPage /></Suspense> },
+  { path: '/formulario-fiscal', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><FormularioFiscalPage /></Suspense> },
 
   // Puente de sesión desde la página pública (ardabytec.com) — evita doble login
   { path: '/auth-bridge', element: <AuthBridgePage /> },

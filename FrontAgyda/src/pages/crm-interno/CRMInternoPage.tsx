@@ -9,7 +9,7 @@ import {
   CheckCircle2, Circle, Trash2, Users, Kanban, ListTodo,
   Building2, User, ArrowRight, PhoneCall, Edit2, DollarSign,
   Calendar, ChevronRight, MoreHorizontal, BarChart2, Globe,
-  Clock, List, Star, UserCheck, Briefcase,
+  Clock, List, Star, UserCheck, Briefcase, Receipt,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { Modal } from '@/components/ui/Modal'
@@ -31,6 +31,7 @@ import { CRMEmailModal }   from './CRMEmailModal'
 import { CRMCotizacionModal } from './CRMCotizacionModal'
 import { CRMSeguimientoTab } from './CRMSeguimientoTab'
 import { CRMGenerarProyectoModal } from './CRMGenerarProyectoModal'
+import { CRMSolicitudFiscalModal } from './CRMSolicitudFiscalModal'
 
 type Tab = 'pipeline' | 'contactos' | 'actividades' | 'seguimiento' | 'reportes'
 type DrawerState = { opo: CRMOportunidad; contactos: CRMContacto[] } | null
@@ -650,6 +651,7 @@ function OportunidadDrawer({
   const [showCotModal, setShowCotModal] = useState(false)
   const [editCot, setEditCot]     = useState<CRMCotizacion | null>(null)
   const [showGenerarProyecto, setShowGenerarProyecto] = useState(false)
+  const [showSolicitudFiscal, setShowSolicitudFiscal] = useState(false)
   const contactoActual            = contactos.find((c) => c.id === opo.contactoId) ?? null
 
   const { data: actividades = [], isLoading: loadAct } = useQuery({
@@ -758,6 +760,9 @@ function OportunidadDrawer({
           <div className="flex items-center gap-1 flex-shrink-0">
             <button onClick={() => setEmail(true)} title="Enviar email" className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-colors">
               <Mail className="h-4 w-4" />
+            </button>
+            <button onClick={() => setShowSolicitudFiscal(true)} title="Solicitar datos fiscales" className="rounded-lg p-1.5 text-gray-400 hover:bg-violet-50 hover:text-violet-600 transition-colors">
+              <Receipt className="h-4 w-4" />
             </button>
             <button onClick={() => setEditMode(true)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 transition-colors">
               <Edit2 className="h-4 w-4" />
@@ -1057,6 +1062,15 @@ function OportunidadDrawer({
           opo={opo}
           onClose={() => setShowGenerarProyecto(false)}
           onCreated={() => { setShowGenerarProyecto(false); onUpdated() }}
+        />
+      )}
+
+      {showSolicitudFiscal && (
+        <CRMSolicitudFiscalModal
+          opo={opo}
+          correoSugerido={contactoActual?.correo ?? null}
+          onClose={() => setShowSolicitudFiscal(false)}
+          onSent={() => setShowSolicitudFiscal(false)}
         />
       )}
     </>

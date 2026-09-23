@@ -12,6 +12,7 @@ const crmCuotas      = require('../controllers/crmCuotasController');
 const crmEmails      = require('../controllers/crmEmailsController');
 const crmAuto        = require('../controllers/crmAutomatizacionesController');
 const crmPortal      = require('../controllers/crmPortalController');
+const crmSolicitudFiscal = require('../controllers/crmSolicitudFiscalController');
 const crmAutomatizacionesReglas = require('../controllers/crmAutomatizacionesReglasController');
 const crmCotizaciones    = require('../controllers/crmCotizacionesController');
 const crmLeadMarketing   = require('../controllers/crmLeadMarketingController');
@@ -125,6 +126,12 @@ router.get('/portal/documentos/:docId/download', crmPortal.downloadDocumentoPort
 router.post('/portal/incidencias', crmPortal.crearIncidenciaPortal); // público, token en el body
 router.post('/portal/citas/:id/confirmar', crmPortal.confirmarCitaPortal); // público, token en el body
 router.post('/portal/citas/:id/solicitar-cambio', crmPortal.solicitarCambioCitaPortal); // público, token en el body
+
+// Solicitud de datos fiscales: un empleado la dispara desde el detalle de
+// una Oportunidad; el cliente la completa sin login vía token en el link.
+router.post('/oportunidades/:id/solicitar-datos-fiscales', authenticateToken, crmSolicitudFiscal.solicitar);
+router.get('/solicitud-fiscal/datos', leadFormRateLimit, crmSolicitudFiscal.getDatos); // público con token en query
+router.post('/solicitud-fiscal/enviar', leadFormRateLimit, crmSolicitudFiscal.enviar); // público con token en el body
 
 // ── Seguimiento a Clientes: Recordatorios de pago ──────
 router.get('/recordatorios', authenticateToken, requireAnyActionAccess([['crm','seguimiento-ver'],['atencion-cliente','clientes-ver']]), crmRecordatorios.listByContacto);

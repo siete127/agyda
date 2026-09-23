@@ -504,7 +504,10 @@
       "PowerShell(cd C:\\\\Users\\\\Administrator\\\\Desktop\\\\AGYDA_desarrollo\\\\BackAgyda; foreach \\($f in @\\('controllers\\\\activoGeneralController.js','routes\\\\activos.js'\\)\\) { $r = node -c $f 2>&1; if \\($LASTEXITCODE -ne 0\\) { Write-Output \"FAIL: $f\"; Write-Output $r } else { Write-Output \"OK: $f\" } })",
       "PowerShell(Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,2\\)}})",
       "PowerShell(Get-PSDrive -PSProvider FileSystem | Where-Object Name -eq C | Select-Object @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,2\\)}})",
-      "PowerShell(Get-Website | Select-Object Name, State, @{N='Bindings';E={\\($_.Bindings.Collection | ForEach-Object {$_.bindingInformation}\\) -join '; '}}, PhysicalPath | Format-Table -AutoSize -Wrap)"
+      "PowerShell(Get-Website | Select-Object Name, State, @{N='Bindings';E={\\($_.Bindings.Collection | ForEach-Object {$_.bindingInformation}\\) -join '; '}}, PhysicalPath | Format-Table -AutoSize -Wrap)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 5 http://localhost:5173/)",
+      "PowerShell(Stop-Process -Id 13288 -Force)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 8 http://localhost:5173/)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Administrator\\Desktop\\INTRANET\\INTRANET\\intranet-react\\dist",

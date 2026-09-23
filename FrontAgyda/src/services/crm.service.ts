@@ -118,6 +118,9 @@ export const crmService = {
   ) =>
     api.post(`/crm/oportunidades/${opoId}/generar-proyecto`, { nombreProyecto, miembros, datosCliente })
       .then(r => r.data as { success: boolean; proyectoId: number; altaCliente?: boolean; contactoId?: number | null }),
+  solicitarDatosFiscales: (opoId: number, correo?: string) =>
+    api.post(`/crm/oportunidades/${opoId}/solicitar-datos-fiscales`, correo ? { correo } : {})
+      .then(r => r.data as { success: boolean; message: string }),
   getActividades: async (opoId: number): Promise<CRMActividad[]> => {
     const { data } = await api.get(`/crm/oportunidades/${opoId}/actividades`)
     return norm(data?.data ?? data, parseCRMActividad)

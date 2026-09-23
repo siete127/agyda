@@ -2212,6 +2212,65 @@ async function ensureCrmPortalSchema(pool) {
   logger.info('✅ Esquema de portal del cliente asegurado');
 }
 
+// Solicitud de datos fiscales: un empleado dispara desde una Oportunidad el
+// envío de un link (mismo patrón de token que CRM_PORTAL_TOKENS) para que el
+// propio cliente capture RFC/razón social/régimen fiscal/CFDI sin necesitar
+// login. Al completarse, esos datos se guardan en CLIENTES (no en
+// CRM_CONTACTOS) porque son datos de facturación real.
+async function ensureSolicitudFiscalSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_SOLICITUD_FISCAL_TOKENS', 'U') IS NULL
+      CREATE TABLE dbo.CRM_SOLICITUD_FISCAL_TOKENS (
+        SFT_ID            INT IDENTITY(1,1) PRIMARY KEY,
+        SFT_OPORTUNIDAD_ID INT NOT NULL,
+        SFT_TOKEN         NVARCHAR(100) NOT NULL UNIQUE,
+        SFT_EMAIL         NVARCHAR(300) NOT NULL,
+        SFT_ACTIVO        BIT DEFAULT 1,
+        SFT_COMPLETADO    BIT DEFAULT 0,
+        SFT_EXPIRA        DATETIME NULL,
+        SFT_FECHA         DATETIME DEFAULT GETDATE(),
+        SFT_FECHA_COMPLETADO DATETIME NULL
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmSolicitudFiscalTokensSchema:', err.message);
+  }
+
+  // Columnas fiscales nuevas en CLIENTES — CL_RFC y CL_CP ya existían (se
+  // reutilizan), el resto son campos de facturación que faltaban.
+  const columnasClientes = [
+    ['CL_RAZON_SOCIAL', 'NVARCHAR(300) NULL'],
+    ['CL_REGIMEN_FISCAL', 'NVARCHAR(10) NULL'],
+    ['CL_USO_CFDI', 'NVARCHAR(10) NULL'],
+    ['CL_CORREO_FACTURACION', 'NVARCHAR(300) NULL'],
+  ];
+  for (const [col, tipo] of columnasClientes) {
+    try {
+      await pool.request().batch(`
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLIENTES') AND name = '${col}')
+          ALTER TABLE dbo.CLIENTES ADD ${col} ${tipo};
+      `);
+    } catch (err) {
+      console.warn(`⚠️ ClientesDatosFiscalesSchema (${col}):`, err.message);
+    }
+  }
+
+  // CRM_OPORTUNIDADES solo tenía OPO_CONTACTO_ID (FK a CRM_CONTACTOS). Se
+  // añade OPO_CLIENTE_ID para vincular la oportunidad con el cliente de
+  // facturación real una vez completado el formulario fiscal.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_OPORTUNIDADES') AND name = 'OPO_CLIENTE_ID')
+        ALTER TABLE dbo.CRM_OPORTUNIDADES ADD OPO_CLIENTE_ID INT NULL;
+    `);
+  } catch (err) {
+    console.warn('⚠️ OportunidadesClienteIdSchema:', err.message);
+  }
+
+  logger.info('✅ Esquema de solicitud de datos fiscales asegurado');
+}
+
 // Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
 // tenant; aquí se aseguran + se añaden las columnas de costeo/margen/IVA para el
 // semáforo de rentabilidad y la aprobación interna.
@@ -5611,6 +5670,7 @@ async function ensureAllSchemas(pool) {
   await ensureCrmCotizacionesSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
   await ensureCrmPortalSchema(pool);
+  await ensureSolicitudFiscalSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
@@ -8684,5 +8744,6 @@ module.exports = {
     ensureMensajeriaSchema,
     ensureEncuestasSchema,
     ensureRolesSchema,
-    ensurePerfilesSchema
+    ensurePerfilesSchema,
+    ensureSolicitudFiscalSchema
 };
