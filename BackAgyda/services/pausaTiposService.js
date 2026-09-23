@@ -4,11 +4,13 @@ const logger = global.logger || require('../utils/logger');
 // referencia USUARIO_TIEMPOS por FK), con columnas extra de configuración:
 //   ES_PAUSA            → el estado es una pausa (online/offline no lo son).
 //   ES_SISTEMA          → vino por default; no se puede eliminar.
-//   CONTROL_OCUPACION   → semáforo de ocupación por género (el baño, vía socket).
+//   CONTROL_OCUPACION   → semáforo de ocupación por espacios (el baño, vía socket).
 //   LIMITE_MIN/MODO     → minutos permitidos, 'visita' (por pausa) o 'diario' (acumulado).
 //   USO_<MODULO>        → en qué módulos cuenta la pausa (ver USOS).
 // Límites distintos por área (p. ej. comida 60 min para TI/AD) en STATUS_LIMITE_AREA,
 // y por módulo en STATUS_LIMITE_MODULO (ver LIMITE_MODULOS).
+// Los lugares físicos de un tipo con ocupación (los baños) en STATUS_ESPACIOS:
+// cada uno con género (o mixto), capacidad y áreas que lo usan.
 //
 // OJO: los status_id NO son fijos entre empresas. En unas BD status_id es
 // TINYINT sin IDENTITY (creada por schemaService), en otras TINYINT o INT con
@@ -50,7 +52,44 @@ function sqlPausas(uso) {
   return `(SELECT status_id FROM dbo.STATUS WHERE ES_PAUSA = 1${col})`;
 }
 
-function mapTipo(r, limites, limitesMod) {
+// Áreas = rol base del usuario (NEUS_TIPOUSUARIO).
+const AREAS_BASE = { AD: 'Administración', TI: 'Tecnología', CC: 'Call Center', ST: 'Staff', VE: 'Ventas', CL: 'Clientes' };
+const MAX_CAPACIDAD = 50;
+const MAX_ESPACIOS = 30;
+
+// Los baños que ya había escritos en el código: uno de hombres y uno de
+// mujeres, de una persona, para toda la empresa.
+const ESPACIOS_DEFAULT = [
+  { nombre: 'Baño de hombres', genero: 'M', capacidad: 1, areas: null },
+  { nombre: 'Baño de mujeres', genero: 'F', capacidad: 1, areas: null },
+];
+
+function mapEspacio(r) {
+  return {
+    id: r.ESPACIO_ID,
+    statusId: r.STATUS_ID,
+    nombre: r.NOMBRE,
+    genero: r.GENERO === 'M' || r.GENERO === 'F' ? r.GENERO : null, // null = mixto
+    capacidad: r.CAPACIDAD,
+    areas: r.AREAS ? r.AREAS.split(',').filter(Boolean) : null, // null = todas
+    orden: r.ORDEN,
+  };
+}
+
+// ¿Puede usar este espacio alguien de ese género y área?
+function aplicaEspacio(espacio, genero, area) {
+  return (!espacio.genero || espacio.genero === genero)
+    && (!espacio.areas || espacio.areas.includes(String(area || '').toUpperCase()));
+}
+
+async function listarEspacios(pool) {
+  const r = await pool.request().query(`
+    SELECT ESPACIO_ID, STATUS_ID, NOMBRE, GENERO, CAPACIDAD, AREAS, ORDEN
+    FROM dbo.STATUS_ESPACIOS ORDER BY STATUS_ID, ORDEN, ESPACIO_ID`);
+  return r.recordset.map(mapEspacio);
+}
+
+function mapTipo(r, limites, limitesMod, espacios) {
   const limitesArea = {};
   for (const l of limites) if (l.STATUS_ID === r.status_id) limitesArea[l.AREA] = l.LIMITE_MIN;
   const limitesModulo = {};
@@ -69,6 +108,7 @@ function mapTipo(r, limites, limitesMod) {
     limiteModo: r.LIMITE_MIN ? (r.LIMITE_MODO === 'diario' ? 'diario' : 'visita') : null,
     limitesArea,
     limitesModulo,
+    espacios: r.CONTROL_OCUPACION ? espacios.filter((e) => e.STATUS_ID === r.status_id).map(mapEspacio) : [],
     usos: {
       asistencia: !!r.USO_ASISTENCIA,
       nomina: !!r.USO_NOMINA,
@@ -86,9 +126,10 @@ async function listar(pool) {
     FROM dbo.STATUS WHERE ES_PAUSA = 1 ORDER BY ORDEN, status_id;
     SELECT STATUS_ID, AREA, LIMITE_MIN FROM dbo.STATUS_LIMITE_AREA;
     SELECT STATUS_ID, MODULO, LIMITE_MIN FROM dbo.STATUS_LIMITE_MODULO;
+    SELECT ESPACIO_ID, STATUS_ID, NOMBRE, GENERO, CAPACIDAD, AREAS, ORDEN FROM dbo.STATUS_ESPACIOS ORDER BY ORDEN, ESPACIO_ID;
   `);
-  const [tipos, limites, limitesMod] = r.recordsets;
-  return tipos.map((t) => mapTipo(t, limites, limitesMod));
+  const [tipos, limites, limitesMod, espacios] = r.recordsets;
+  return tipos.map((t) => mapTipo(t, limites, limitesMod, espacios));
 }
 
 // Etiqueta de un tipo para el panel de supervisor/asesores (los 4 por default
@@ -214,6 +255,17 @@ IF OBJECT_ID('dbo.STATUS_LIMITE_MODULO', 'U') IS NULL
     CONSTRAINT PK_STATUS_LIMITE_MODULO PRIMARY KEY (STATUS_ID, MODULO),
     CONSTRAINT FK_STATUS_LIMITE_MODULO FOREIGN KEY (STATUS_ID) REFERENCES dbo.STATUS(status_id) ON DELETE CASCADE
   );
+IF OBJECT_ID('dbo.STATUS_ESPACIOS', 'U') IS NULL
+  CREATE TABLE dbo.STATUS_ESPACIOS (
+    ESPACIO_ID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_STATUS_ESPACIOS PRIMARY KEY,
+    STATUS_ID  ${meta.tipo.toUpperCase()} NOT NULL,
+    NOMBRE     NVARCHAR(60) NOT NULL,
+    GENERO     CHAR(1)      NULL,     -- 'M' | 'F' | NULL = mixto
+    CAPACIDAD  INT          NOT NULL CONSTRAINT DF_STATUS_ESPACIOS_CAPACIDAD DEFAULT 1,
+    AREAS      VARCHAR(200) NULL,     -- 'AD,TI' | NULL = todas las áreas
+    ORDEN      INT          NOT NULL CONSTRAINT DF_STATUS_ESPACIOS_ORDEN DEFAULT 0,
+    CONSTRAINT FK_STATUS_ESPACIOS FOREIGN KEY (STATUS_ID) REFERENCES dbo.STATUS(status_id) ON DELETE CASCADE
+  );
 `);
 
     // 3) Los 4 tipos por default, por clave: si falta la fila se crea
@@ -245,6 +297,18 @@ END`;
 UPDATE dbo.STATUS SET ES_SISTEMA = 1 WHERE clave IN ('online', 'offline') AND ES_SISTEMA = 0;
 ${DEFAULTS.map(configurar).join('\n')}
 `);
+
+    // 4) Espacios del baño: si el tipo con ocupación no tiene ninguno, los 2
+    //    de siempre (la API no deja guardar una lista vacía, así que esto solo
+    //    corre la primera vez).
+    await pool.request().batch(`
+INSERT INTO dbo.STATUS_ESPACIOS (STATUS_ID, NOMBRE, GENERO, CAPACIDAD, AREAS, ORDEN)
+SELECT s.status_id, v.nombre, v.genero, v.capacidad, NULL, v.orden
+FROM dbo.STATUS s
+CROSS JOIN (VALUES ${ESPACIOS_DEFAULT.map((e, i) => `(N'${q(e.nombre)}', '${e.genero}', ${e.capacidad}, ${i + 1})`).join(', ')}) v(nombre, genero, capacidad, orden)
+WHERE s.ES_PAUSA = 1 AND s.CONTROL_OCUPACION = 1
+  AND NOT EXISTS (SELECT 1 FROM dbo.STATUS_ESPACIOS e WHERE e.STATUS_ID = s.status_id);
+`);
     logger.info('✅ Esquema de tipos de pausa asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de tipos de pausa:', err.message);
@@ -255,8 +319,15 @@ module.exports = {
   USOS,
   LIMITE_MODULOS,
   DEFAULTS,
+  AREAS_BASE,
+  MAX_CAPACIDAD,
+  MAX_ESPACIOS,
+  ESPACIOS_DEFAULT,
   sqlPausas,
   listar,
+  listarEspacios,
+  mapEspacio,
+  aplicaEspacio,
   etiquetaPausa,
   llaveLegacy,
   legado,

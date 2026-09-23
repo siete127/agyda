@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Coffee, Plus, Pencil, Trash2, Lock, X } from 'lucide-react'
+import { Coffee, Plus, Pencil, Trash2, Lock, X, DoorOpen } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +13,7 @@ import {
   type PausaTipo, type PausaTipoPayload, type UsoPausa, type ModuloLimite,
 } from '@/types/pausaTipos.types'
 import { AlcanceCambioModal } from './AlcanceCambioModal'
+import { PausaEspaciosModal } from './PausaEspaciosModal'
 import { useConfigModulo } from './configUbicacion'
 
 // Módulo del sidebar desde el que se abre esta pantalla → módulo de uso de la pausa.
@@ -29,6 +30,12 @@ const inputCls =
 function mensajeError(e: unknown, fallback: string): string {
   const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
   return msg || fallback
+}
+
+// Resumen de los baños: "Baño de hombres (1) · Baño de mujeres (1)" — (n) = personas a la vez.
+function describirEspacios(t: PausaTipo): string {
+  if (!t.espacios?.length) return 'Sin baños configurados'
+  return t.espacios.map((e) => `${e.nombre} (${e.capacidad})`).join(' · ')
 }
 
 function describirLimite(t: PausaTipo): string {
@@ -264,6 +271,7 @@ export function PausaTiposTab() {
   const { modulos: modulosEmpresa } = usePausaModulos()
   const [editando, setEditando] = useState<PausaTipo | 'nuevo' | null>(null)
   const [eliminando, setEliminando] = useState<PausaTipo | null>(null)
+  const [espacios, setEspacios] = useState<PausaTipo | null>(null)
 
   const eliminar = useMutation({
     mutationFn: (t: PausaTipo) => pausaTiposService.remove(t.statusId),
@@ -319,6 +327,9 @@ export function PausaTiposTab() {
                     {t.controlOcupacion && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[0.6rem] font-medium text-blue-600">Semáforo de ocupación</span>}
                   </p>
                   <p className="text-[0.72rem] text-gray-400">{describirLimite(t)}</p>
+                  {t.controlOcupacion && (
+                    <p className="text-[0.72rem] text-gray-500">🚪 {describirEspacios(t)}</p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {USOS_PAUSA.filter((u) => modulosEmpresa[u.key]).map((u) => (
@@ -333,6 +344,12 @@ export function PausaTiposTab() {
                   ))}
                 </div>
                 <div className="flex gap-1">
+                  {t.controlOcupacion && (
+                    <button type="button" onClick={() => setEspacios(t)} title="Baños: cuántos hay, para quién y cuántas personas caben"
+                      className="flex items-center gap-1 rounded-lg px-2 py-2 text-[0.72rem] font-semibold text-blue-600 hover:bg-blue-50">
+                      <DoorOpen className="h-4 w-4" /> Baños
+                    </button>
+                  )}
                   <button type="button" onClick={() => setEditando(t)} title="Editar"
                     className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-violet-600">
                     <Pencil className="h-4 w-4" />
@@ -358,6 +375,8 @@ export function PausaTiposTab() {
           onClose={() => setEditando(null)}
         />
       )}
+
+      {espacios && <PausaEspaciosModal tipo={espacios} onClose={() => setEspacios(null)} />}
 
       <ConfirmDialog
         isOpen={!!eliminando}

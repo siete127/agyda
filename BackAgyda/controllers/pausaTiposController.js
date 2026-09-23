@@ -233,6 +233,113 @@ exports.update = async (req, res) => {
   }
 };
 
+// Valida la lista de espacios (baños) de un tipo con ocupación.
+function leerEspacios(body) {
+  const lista = Array.isArray(body?.espacios) ? body.espacios : null;
+  if (!lista) return { errores: ['Falta la lista de espacios'] };
+  if (!lista.length) return { errores: ['Debe haber al menos un espacio'] };
+  if (lista.length > pausaTiposService.MAX_ESPACIOS) return { errores: [`Máximo ${pausaTiposService.MAX_ESPACIOS} espacios`] };
+  const errores = [];
+  const espacios = lista.map((e, i) => {
+    const nombre = String(e?.nombre ?? '').trim();
+    if (!nombre || nombre.length > 60) errores.push(`Espacio ${i + 1}: el nombre es obligatorio (máximo 60 caracteres)`);
+    const genero = e?.genero === 'M' || e?.genero === 'F' ? e.genero : null;
+    const capacidad = Number(e?.capacidad);
+    if (!Number.isInteger(capacidad) || capacidad < 1 || capacidad > pausaTiposService.MAX_CAPACIDAD) {
+      errores.push(`Espacio ${i + 1}: la capacidad debe ser de 1 a ${pausaTiposService.MAX_CAPACIDAD}`);
+    }
+    let areas = null;
+    if (Array.isArray(e?.areas)) {
+      areas = [...new Set(e.areas.map((a) => String(a).trim().toUpperCase()))];
+      if (!areas.length) errores.push(`Espacio ${i + 1}: elige al menos un área o "Todas las áreas"`);
+      if (areas.some((a) => !/^[A-Z]{2,20}$/.test(a))) errores.push(`Espacio ${i + 1}: área inválida`);
+      if (areas.join(',').length > 200) errores.push(`Espacio ${i + 1}: demasiadas áreas`);
+    }
+    const id = Number.isInteger(Number(e?.id)) && Number(e.id) > 0 ? Number(e.id) : null;
+    return { id, nombre, genero, capacidad, areas, orden: i + 1 };
+  });
+  return { espacios, errores };
+}
+
+// PUT /api/pausa-tipos/:id/espacios — reemplaza los espacios (baños) de un
+// tipo con ocupación: actualiza los que traen id, crea los nuevos y borra
+// los que ya no vienen. Quien esté adentro se reubica (socketService).
+exports.updateEspacios = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ success: false, message: 'Id inválido' });
+  const { espacios, errores } = leerEspacios(req.body);
+  if (errores.length) return res.status(400).json({ success: false, message: errores.join('. ') });
+
+  let tx;
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const actual = (await pausaTiposService.listar(pool)).find((t) => t.statusId === id);
+    if (!actual) return res.status(404).json({ success: false, message: 'Tipo de pausa no encontrado' });
+    if (!actual.controlOcupacion) return res.status(409).json({ success: false, message: 'Este tipo de pausa no controla ocupación' });
+
+    tx = new sql.Transaction(pool);
+    await tx.begin();
+    const r = () => new sql.Request(tx).input('sid', sql.Int, id);
+    const conservar = espacios.filter((e) => e.id && actual.espacios.some((x) => x.id === e.id)).map((e) => e.id);
+    await r().query(`DELETE FROM dbo.STATUS_ESPACIOS WHERE STATUS_ID = @sid${conservar.length ? ` AND ESPACIO_ID NOT IN (${conservar.join(',')})` : ''}`);
+    for (const e of espacios) {
+      const q = r()
+        .input('nombre', sql.NVarChar(60), e.nombre)
+        .input('genero', sql.Char(1), e.genero)
+        .input('cap', sql.Int, e.capacidad)
+        .input('areas', sql.VarChar(200), e.areas ? e.areas.join(',') : null)
+        .input('orden', sql.Int, e.orden);
+      if (e.id && conservar.includes(e.id)) {
+        await q.input('eid', sql.Int, e.id).query(`
+          UPDATE dbo.STATUS_ESPACIOS SET NOMBRE = @nombre, GENERO = @genero, CAPACIDAD = @cap, AREAS = @areas, ORDEN = @orden
+          WHERE ESPACIO_ID = @eid AND STATUS_ID = @sid`);
+      } else {
+        await q.query(`
+          INSERT INTO dbo.STATUS_ESPACIOS (STATUS_ID, NOMBRE, GENERO, CAPACIDAD, AREAS, ORDEN)
+          VALUES (@sid, @nombre, @genero, @cap, @areas, @orden)`);
+      }
+    }
+    await tx.commit();
+
+    await audit(pool, req, 'pausa-tipo-espacios', { id, antes: actual.espacios, despues: espacios });
+    notify(req);
+    await socketService.recargarEspacios(req.user?.empresa).catch(() => {});
+    const tipo = (await pausaTiposService.listar(pool)).find((t) => t.statusId === id);
+    res.json({ success: true, data: tipo });
+  } catch (e) {
+    if (tx) await tx.rollback().catch(() => {});
+    logger.error('pausaTiposController.updateEspacios', e);
+    res.status(500).json({ success: false, message: 'Error al guardar los espacios' });
+  }
+};
+
+// GET /api/pausa-tipos/areas — áreas con usuarios activos (hombres/mujeres),
+// para asignar los baños y avisar quién se queda sin uno.
+exports.areas = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const r = await pool.request().query(`
+      SELECT NEUS_TIPOUSUARIO AS area, NEUS_GENERO AS generoDb, NEUS_NOMBRES AS nombre
+      FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1`);
+    const porArea = {};
+    for (const code of Object.keys(pausaTiposService.AREAS_BASE)) porArea[code] = { hombres: 0, mujeres: 0 };
+    for (const u of r.recordset) {
+      const area = String(u.area || '').trim().toUpperCase();
+      if (!/^[A-Z]{2,20}$/.test(area)) continue;
+      porArea[area] = porArea[area] || { hombres: 0, mujeres: 0 };
+      if (socketService.generoDe(u.nombre, u.generoDb) === 'F') porArea[area].mujeres++;
+      else porArea[area].hombres++;
+    }
+    const data = Object.entries(porArea).map(([area, n]) => ({
+      area, label: pausaTiposService.AREAS_BASE[area] || area, ...n,
+    }));
+    res.json({ success: true, data });
+  } catch (e) {
+    logger.error('pausaTiposController.areas', e);
+    res.status(500).json({ success: false, message: 'Error al obtener las áreas' });
+  }
+};
+
 // DELETE /api/pausa-tipos/:id — solo tipos creados por la empresa y sin
 // registros; si ya se usó, se desactiva en vez de borrarse (conserva historial).
 exports.remove = async (req, res) => {

@@ -26,8 +26,10 @@ router.get('/', authenticateToken, ctrl.list);
 // + que la empresa tenga el módulo de pausas.
 const soloAdminConfig = [authenticateToken, verificarRol(['AD']), requireActionAccess('configuracion', 'configurar'), empresaConPausas];
 
+router.get('/areas', ...soloAdminConfig, ctrl.areas);
 router.post('/', ...soloAdminConfig, ctrl.create);
 router.put('/:id', ...soloAdminConfig, ctrl.update);
+router.put('/:id/espacios', ...soloAdminConfig, ctrl.updateEspacios);
 router.delete('/:id', ...soloAdminConfig, ctrl.remove);
 
 module.exports = router;

@@ -16,13 +16,48 @@ export interface PausaTipo {
   orden: number
   activo: boolean
   esSistema: boolean // vino por default: no se puede eliminar
-  controlOcupacion: boolean // semáforo de ocupación por género (el baño)
+  controlOcupacion: boolean // semáforo de ocupación por espacios (el baño)
   limiteMin: number | null
   limiteModo: 'visita' | 'diario' | null // por pausa, o acumulado en el día
   limitesArea: Record<string, number> // p. ej. { TI: 60, AD: 60 }
   // Límite propio de un módulo; en ese módulo reemplaza al general y a los de área.
   limitesModulo: Partial<Record<ModuloLimite, number>>
+  espacios?: EspacioPausa[] // solo el tipo con ocupación (los baños)
   usos: Record<UsoPausa, boolean>
+}
+
+// Un lugar físico de un tipo con ocupación (p. ej. "Baño piso 2"): quién lo
+// puede usar (género y áreas) y cuántas personas a la vez.
+export interface EspacioPausa {
+  id?: number // sin id = nuevo
+  nombre: string
+  genero: 'M' | 'F' | null // null = mixto
+  capacidad: number
+  areas: string[] | null // null = todas las áreas
+}
+
+// ¿Puede usar este espacio alguien de ese género y área? (backend: pausaTiposService.aplicaEspacio)
+export function aplicaEspacio(e: Pick<EspacioPausa, 'genero' | 'areas'>, genero: 'M' | 'F', area: string): boolean {
+  return (!e.genero || e.genero === genero) && (!e.areas || e.areas.includes(area.toUpperCase()))
+}
+
+// Área (rol base, NEUS_TIPOUSUARIO) con cuántos usuarios activos tiene.
+export interface AreaPausa {
+  area: string
+  label: string
+  hombres: number
+  mujeres: number
+}
+
+// Estado en vivo de los baños (socket banio:status).
+export interface BanioOcupante { userId: string; nombre: string }
+export interface BanioEspacioEstado extends Required<Omit<EspacioPausa, 'id'>> {
+  id: number
+  ocupantes: BanioOcupante[]
+}
+export interface BanioEstado {
+  espacios: BanioEspacioEstado[]
+  sinEspacio: BanioOcupante[] // adentro sin semáforo (su área no tiene baño)
 }
 
 export interface PausaTipoPayload {

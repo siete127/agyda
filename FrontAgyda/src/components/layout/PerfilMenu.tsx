@@ -11,19 +11,18 @@ import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { disconnectSocket, getSocket } from '@/lib/socket'
 import { api } from '@/lib/axios'
-import { detectarGenero } from '@/lib/genero'
 import { livechatService } from '@/services/livechat.service'
 import { Avatar } from '@/components/ui/Avatar'
 import { usePausaTipos, usePausaModulos } from '@/hooks/usePausaTipos'
+import { useBanioEstado } from '@/hooks/useBanioEstado'
 import { limitePausa } from '@/types/pausaTipos.types'
 
 interface PausaActiva { tiempo_id: number; status_id: number; fecha_inicio: string; duracionSegundos: number }
-interface BanioSlot { ocupado: boolean; porUsuario: string | null; porNombre: string | null }
-interface BanioStatus { hombres: BanioSlot; mujeres: BanioSlot }
 
 // Los estados son los tipos de pausa configurados (Configuración → Tipos de
 // pausa). El baño (tipo con semáforo de ocupación) además se refleja/dispara
-// por socket; el resto es solo REST (/reports/pausa/*).
+// por socket, con sus espacios (baños) configurados; el resto es solo REST
+// (/reports/pausa/*).
 
 // Tinte del color del tipo: translúcido (sufijo alfa hex) para que funcione
 // sobre fondo claro u oscuro sin quedar "en blanco" en modo noche.
@@ -108,20 +107,16 @@ export function PerfilMenu() {
   }, [open, puedePausar, refetchPausa, refetchAcum])
 
   /* ── Baño (socket) ── */
-  const esF = user?.genero ? user.genero === 'F' : detectarGenero(user?.nombres ?? '') === 'F'
-  const miKey = esF ? 'mujeres' : 'hombres'
-  const [banio, setBanio] = useState<BanioSlot | null>(null)
+  const banio = useBanioEstado()
+  const esF = banio.genero === 'F'
+  const banioMio = banio.dentro
+  const banioBloqueado = banio.lleno
   useEffect(() => {
     const sock = getSocket()
-    const onStatus = (data: BanioStatus) => setBanio(data[miKey])
-    sock.on('banio:status', onStatus)
-    if (sock.connected) sock.emit('banio:get')
-    return () => { sock.off('banio:status', onStatus) }
-  }, [miKey])
-
-  const myIdStr = String(user?.id ?? '')
-  const banioMio = !!banio?.ocupado && String(banio.porUsuario) === myIdStr
-  const banioBloqueado = !!banio?.ocupado && !banioMio
+    const onRechazo = (d: { message?: string }) => toast.error(d?.message || 'El baño está ocupado')
+    sock.on('banio:rechazado', onRechazo)
+    return () => { sock.off('banio:rechazado', onRechazo) }
+  }, [])
 
   // Cuando el socket confirma que entré/salí del baño, refrescar las queries
   // REST (el socket escribe la fila async). Dos refetches: uno rápido y uno
@@ -293,7 +288,12 @@ export function PerfilMenu() {
                       <span className="text-lg leading-none">{esBanio ? (esF ? '🚺' : '🚹') : (est?.emoji ?? '⏸️')}</span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={clsx('text-[0.8rem] font-bold leading-tight', excedido && 'text-red-500')} style={excedido ? undefined : a.text}>{est?.etiqueta ?? 'Pausa'}</p>
+                      <p className={clsx('text-[0.8rem] font-bold leading-tight', excedido && 'text-red-500')} style={excedido ? undefined : a.text}>
+                        {est?.etiqueta ?? 'Pausa'}
+                        {esBanio && banio.variosEspacios && banio.espacioDentro && (
+                          <span className="font-medium opacity-70"> · {banio.espacioDentro.nombre}</span>
+                        )}
+                      </p>
                       <p className={clsx('mt-0.5 font-mono text-[0.9rem] font-bold tabular-nums', excedido && 'text-red-500')} style={excedido ? undefined : a.text}>
                         {/* izquierda: acumulado de hoy (sube) · derecha: límite − acumulado (baja a 0) */}
                         {elapsed === null ? '··:··' : fmtCronometro(seg)}
@@ -329,7 +329,7 @@ export function PerfilMenu() {
                       key={e.statusId}
                       onClick={() => cambiarEstado(e.statusId)}
                       disabled={loadingStatus !== null || bloqueado}
-                      title={bloqueado ? `${banio?.porNombre ?? 'Alguien'} está en el baño` : undefined}
+                      title={bloqueado ? `Ocupado: ${banio.ocupantes.map((o) => o.nombre).join(', ') || 'alguien'}` : undefined}
                       className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-2 text-[0.72rem] font-semibold text-gray-600 transition-colors hover:border-gray-300 disabled:opacity-40"
                     >
                       {cargando ? <Loader2 className="h-4 w-4 animate-spin" />
