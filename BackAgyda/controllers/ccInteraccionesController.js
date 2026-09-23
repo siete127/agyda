@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const databaseService = require('../services/databaseService');
 const ccRouting = require('../services/ccRoutingService');
+const { sqlPausas } = require('../services/pausaTiposService');
 const socketService = require('../services/socketService');
 const metaClient = require('../services/canalesMeta/metaClient');
 const baileysManager = require('../services/canalesBaileys/baileysManager');
@@ -439,7 +440,7 @@ exports.getMiEstado = async (req, res) => {
               FROM dbo.CCO_AGENTE_ESTADO WHERE CAE_USUARIO_ID = @u`);
     const row = r.recordset[0] || { online: false, disponible: false, activas: 0, acwHasta: null };
     const enPausa = await p.request().input('u', sql.Int, uid)
-      .query(`SELECT TOP 1 status_id FROM dbo.USUARIO_TIEMPOS WHERE neus_id = @u AND fecha_fin IS NULL AND status_id IN (2,3,5,6)`);
+      .query(`SELECT TOP 1 status_id FROM dbo.USUARIO_TIEMPOS WHERE neus_id = @u AND fecha_fin IS NULL AND status_id IN ${sqlPausas('contact_center')}`);
     res.json({ success: true, data: { online: !!row.online, disponible: !!row.disponible, activas: row.activas || 0,
       acwHasta: row.acwHasta, enPausa: enPausa.recordset.length > 0,
       enAcw: row.acwHasta && new Date(row.acwHasta) > new Date() } });
@@ -455,7 +456,7 @@ exports.getAgentesEstado = async (req, res) => {
       SELECT ae.CAE_USUARIO_ID usuarioId, ISNULL(u.NEUS_NOMBRES, CONVERT(NVARCHAR(20), ae.CAE_USUARIO_ID)) nombre,
              ae.CAE_ONLINE online, ae.CAE_DISPONIBLE disponible, ae.CAE_INTERACCIONES_ACTIVAS activas,
              ae.CAE_ACW_HASTA acwHasta, ae.CAE_ULTIMA_CONEXION ultimaConexion,
-             CASE WHEN EXISTS (SELECT 1 FROM dbo.USUARIO_TIEMPOS ut WHERE ut.neus_id = ae.CAE_USUARIO_ID AND ut.fecha_fin IS NULL AND ut.status_id IN (2,3,5,6)) THEN 1 ELSE 0 END enPausa
+             CASE WHEN EXISTS (SELECT 1 FROM dbo.USUARIO_TIEMPOS ut WHERE ut.neus_id = ae.CAE_USUARIO_ID AND ut.fecha_fin IS NULL AND ut.status_id IN ${sqlPausas('contact_center')}) THEN 1 ELSE 0 END enPausa
       FROM dbo.CCO_AGENTE_ESTADO ae
       LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = ae.CAE_USUARIO_ID
       ORDER BY ae.CAE_DISPONIBLE DESC, ae.CAE_ONLINE DESC, nombre`);

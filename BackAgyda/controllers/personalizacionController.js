@@ -104,6 +104,15 @@ function clamp(n, min, max, fallback) {
 
 const ESTATUS_VENTA_VALIDOS = ['Prospecto', 'Cotizada', 'Aprobada', 'Formalizada', 'Formalizado', 'Garantizada', 'Cancelada', 'Rechazada'];
 
+// Módulos que cuentan ventas con su propia lista de estatus. Si un módulo no
+// tiene lista propia usa `estatusContados` (el valor general, y el único que
+// existía antes de separarlos).
+const USOS_ESTATUS_CONTADOS = ['metas', 'comisiones', 'incentivos'];
+
+function limpiarListaEstatus(lista) {
+  return Array.isArray(lista) ? lista.filter((e) => ESTATUS_VENTA_VALIDOS.includes(e)) : [];
+}
+
 // Normaliza la rama `ventas` con clamps coherentes (verde >= amarillo >= rojo).
 function limpiarVentas(raw) {
   const D = DEFAULT_CONFIG.ventas;
@@ -116,8 +125,15 @@ function limpiarVentas(raw) {
   if (amarilloMin < rojoMax) amarilloMin = rojoMax;
   if (verdeMin < amarilloMin) verdeMin = amarilloMin;
   const estatusContados = Array.isArray(m.estatusContados)
-    ? m.estatusContados.filter((e) => ESTATUS_VENTA_VALIDOS.includes(e))
+    ? limpiarListaEstatus(m.estatusContados)
     : D.estatusContados;
+  const general = estatusContados.length > 0 ? estatusContados : D.estatusContados;
+  const porUsoRaw = m.estatusContadosPorUso && typeof m.estatusContadosPorUso === 'object' ? m.estatusContadosPorUso : {};
+  const estatusContadosPorUso = {};
+  for (const uso of USOS_ESTATUS_CONTADOS) {
+    const lista = limpiarListaEstatus(porUsoRaw[uso]);
+    estatusContadosPorUso[uso] = lista.length > 0 ? lista : general;
+  }
   return {
     margen: {
       verdeMin,
@@ -126,7 +142,8 @@ function limpiarVentas(raw) {
       requiereOverride: mg.requiereOverride !== false,
     },
     iva: { tasaDefault: clamp(iva.tasaDefault, 0, 1, D.iva.tasaDefault) },
-    estatusContados: estatusContados.length > 0 ? estatusContados : D.estatusContados,
+    estatusContados: general,
+    estatusContadosPorUso,
   };
 }
 
@@ -148,14 +165,16 @@ exports.calcMargenConfig = function calcMargenConfig(config) {
   return { ...v.margen, tasaIvaDefault: v.iva.tasaDefault };
 };
 
-// Definición única y compartida de "venta contada" — la consume
-// ventasAreaController (Metas, Comisiones, Incentivos) en vez de cada uno
-// traer su propio whitelist hardcodeado.
-exports.getEstatusContados = function getEstatusContados(config) {
-  return limpiarVentas(config?.ventas).estatusContados;
+// Definición de "venta contada" — la consume ventasAreaController en vez de
+// traer su propio whitelist hardcodeado. `uso` ('metas' | 'comisiones' |
+// 'incentivos') devuelve la lista de ese módulo; sin `uso`, la general.
+exports.getEstatusContados = function getEstatusContados(config, uso) {
+  const v = limpiarVentas(config?.ventas);
+  return (uso && v.estatusContadosPorUso[uso]) || v.estatusContados;
 };
 
 exports.ESTATUS_VENTA_VALIDOS = ESTATUS_VENTA_VALIDOS;
+exports.USOS_ESTATUS_CONTADOS = USOS_ESTATUS_CONTADOS;
 
 const MASCOTA_MOVIMIENTOS = ['ninguno', 'flotar', 'saludar', 'latir', 'balanceo'];
 const MASCOTA_VELOCIDADES = ['lenta', 'normal', 'rapida'];
@@ -406,11 +425,13 @@ exports.updateInstitucional = async (req, res) => {
 
 // PUT /api/personalizacion/ventas
 // Body: { margen: { verdeMin, amarilloMin, rojoMax, requiereOverride }, iva: { tasaDefault } }
+// Se fusiona con lo guardado: lo que no venga en el body (p. ej. los estatus
+// contados por módulo, que tienen su propio endpoint) se conserva.
 exports.updateVentas = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const config = await readConfig(pool);
-    config.ventas = limpiarVentas(req.body);
+    config.ventas = limpiarVentas({ ...(config.ventas || {}), ...(req.body || {}) });
     await writeConfig(pool, config, req.user?.id);
     await logAudit(pool, {
       userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
@@ -421,6 +442,41 @@ exports.updateVentas = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateVentas', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la configuración comercial' });
+  }
+};
+
+// PUT /api/personalizacion/ventas/estatus-contados
+// Body: { estatus: string[], usos: ('metas' | 'comisiones' | 'incentivos')[] }
+// Aplica la lista solo a los módulos elegidos; los demás conservan la suya.
+// Si se aplica a todos, también pasa a ser el valor general.
+exports.updateEstatusContados = async (req, res) => {
+  try {
+    const estatus = limpiarListaEstatus(req.body?.estatus);
+    const usos = Array.isArray(req.body?.usos) ? req.body.usos.filter((u) => USOS_ESTATUS_CONTADOS.includes(u)) : [];
+    if (estatus.length === 0) return res.status(400).json({ success: false, message: 'Selecciona al menos un estatus' });
+    if (usos.length === 0) return res.status(400).json({ success: false, message: 'Selecciona al menos un módulo' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    const actual = limpiarVentas(config.ventas);
+    const estatusContadosPorUso = { ...actual.estatusContadosPorUso };
+    for (const uso of usos) estatusContadosPorUso[uso] = estatus;
+    const todos = USOS_ESTATUS_CONTADOS.every((u) => usos.includes(u));
+    config.ventas = limpiarVentas({
+      ...actual,
+      estatusContados: todos ? estatus : actual.estatusContados,
+      estatusContadosPorUso,
+    });
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-estatus-contados', detalle: JSON.stringify({ estatus, usos }), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'ventas');
+    return res.json({ success: true, data: config.ventas });
+  } catch (e) {
+    logger.error('personalizacionController.updateEstatusContados', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar los estatus contados' });
   }
 };
 

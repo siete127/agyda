@@ -4,29 +4,31 @@ import { RefreshCw, Clock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
 import { getSocket } from '@/lib/socket'
+import { usePausaTipos } from '@/hooks/usePausaTipos'
+import { limitePausa, type PausaTipo } from '@/types/pausaTipos.types'
 
-// ── Configuración de tipos de pausa ──────────────────────────────────────────
-const PAUSAS = [
-  { statusId: 0,   label: 'Todas',           emoji: '📋', color: 'gray',   limiteMin: null,  acumulado: false },
-  { statusId: 2,   label: 'Comida',          emoji: '🍽️', color: 'orange', limiteMin: 40,    acumulado: false },
-  { statusId: 3,   label: 'Baño',            emoji: '🚻', color: 'blue',   limiteMin: 20,    acumulado: true  },
-  { statusId: 5,   label: 'Capacitación',    emoji: '📚', color: 'purple', limiteMin: null,  acumulado: false },
-  { statusId: 6,   label: 'Permiso',         emoji: '✋', color: 'green',  limiteMin: null,  acumulado: false },
-] as const
+// ── Tipos de pausa: los configurados en Configuración → Tipos de pausa ───────
+// Pestaña "Todas" (statusId 0) + un tipo por pestaña. `acumulado` = el límite
+// es por día (modo 'diario'); si no, por pausa.
+interface PestanaPausa {
+  statusId: number
+  label: string
+  emoji: string
+  color: string
+  limiteMin: number | null
+  acumulado: boolean
+  tipo?: PausaTipo
+}
+const TODAS: PestanaPausa = { statusId: 0, label: 'Todas', emoji: '📋', color: '#6B7280', limiteMin: null, acumulado: false }
 
-// TI y AD tienen 60 min de comida; el resto 40 min
-function getLimiteComida(area: string): number {
-  return (area === 'TI' || area === 'AD') ? 60 : 40
+function pestanaDe(t: PausaTipo): PestanaPausa {
+  return { statusId: t.statusId, label: t.etiqueta, emoji: t.emoji, color: t.color, limiteMin: t.limiteMin, acumulado: t.limiteModo === 'diario', tipo: t }
 }
 
-// Colores por status_id
-const STATUS_STYLES: Record<number, { bg: string; text: string; border: string; badge: string }> = {
-  2: { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  badge: 'bg-orange-100 text-orange-700 border-orange-200'  },
-  3: { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    badge: 'bg-blue-100 text-blue-700 border-blue-200'        },
-  5: { bg: 'bg-purple-50',  text: 'text-purple-700',  border: 'border-purple-200',  badge: 'bg-purple-100 text-purple-700 border-purple-200'  },
-  6: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700 border-emerald-200'},
+// Badge con el color del tipo (tinte translúcido, sirve en claro y oscuro).
+function badgeStyle(color: string) {
+  return { background: `${color}1F`, color, borderColor: `${color}55` }
 }
-const DEFAULT_STYLE = { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200', badge: 'bg-gray-100 text-gray-600 border-gray-200' }
 
 const AREAS = [
   { value: '',   label: 'Todas las áreas' },
@@ -81,10 +83,20 @@ export function BanioReportePage() {
   const [from,     setFrom]    = useState(today)
   const [to,       setTo]      = useState(today)
   const [buscar,   setBuscar]  = useState('')
-  const [tabIdx,   setTabIdx]  = useState(0)
+  const [tabId,    setTabId]   = useState(0) // statusId de la pestaña; 0 = Todas
   const [area,     setArea]    = useState('')
 
-  const pausaActiva = PAUSAS[tabIdx]
+  // Pestañas: los tipos activos + los inactivos que aún tengan historial se ven
+  // en "Todas" (se buscan en todos los tipos para etiquetar cada registro).
+  const { tipos, activos: tiposActivos } = usePausaTipos()
+  const PAUSAS: PestanaPausa[] = [TODAS, ...tiposActivos.map(pestanaDe)]
+  const pausaDe = (statusId: number): PestanaPausa => {
+    const t = tipos.find((x) => x.statusId === statusId)
+    return t ? pestanaDe(t) : { ...TODAS, statusId, label: 'Pausa', emoji: '⏸️' }
+  }
+  const pausaActiva = PAUSAS.find((p) => p.statusId === tabId) ?? TODAS
+  // Límite efectivo de un tipo para el área del colaborador (p. ej. comida 60 min en TI/AD).
+  const limiteDe = (p: PestanaPausa, areaColab: string) => (p.tipo ? limitePausa(p.tipo, areaColab) : p.limiteMin)
   const qc = useQueryClient()
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
@@ -205,7 +217,7 @@ export function BanioReportePage() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight">Reporte de Pausas</h1>
-                <p className="mt-0.5 text-xs text-blue-200/80">Comida · Baño · Capacitación · Permiso</p>
+                <p className="mt-0.5 text-xs text-blue-200/80">{tiposActivos.map((t) => t.etiqueta).join(' · ')}</p>
               </div>
             </div>
             <button
@@ -220,17 +232,17 @@ export function BanioReportePage() {
 
       {/* Tabs por tipo */}
       <div className="flex gap-1.5 flex-wrap">
-        {PAUSAS.map((p, i) => (
-          <button key={p.statusId} onClick={() => setTabIdx(i)}
+        {PAUSAS.map((p) => (
+          <button key={p.statusId} onClick={() => setTabId(p.statusId)}
             className={[
               'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[0.8rem] font-semibold border transition-all',
-              tabIdx === i
+              tabId === p.statusId
                 ? 'bg-brand text-white border-brand shadow-sm'
                 : 'bg-card text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
             ].join(' ')}>
             <span>{p.emoji}</span>
             {p.label}
-            {p.limiteMin !== null && tabIdx === i && (
+            {p.limiteMin !== null && tabId === p.statusId && (
               <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[0.68rem]">
                 {p.acumulado ? `máx ${p.limiteMin}m/día` : `máx ${p.limiteMin}m`}
               </span>
@@ -241,14 +253,17 @@ export function BanioReportePage() {
 
       {/* Límite info */}
       {pausaActiva.limiteMin !== null && (
-        <div className={`rounded-xl border px-4 py-2.5 flex items-center gap-2.5 text-sm
-          ${pausaActiva.color === 'orange' ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-blue-50 border-blue-200 text-blue-700'}`}>
+        <div className="rounded-xl border px-4 py-2.5 flex items-center gap-2.5 text-sm"
+          style={badgeStyle(pausaActiva.color)}>
           <span className="text-lg">{pausaActiva.emoji}</span>
           <span>
             <strong>{pausaActiva.label}:</strong>{' '}
             {pausaActiva.acumulado
               ? `máximo ${pausaActiva.limiteMin} minutos acumulados por día`
               : `máximo ${pausaActiva.limiteMin} minutos por visita`}
+            {pausaActiva.tipo && Object.keys(pausaActiva.tipo.limitesArea).length > 0 && (
+              <> ({Object.entries(pausaActiva.tipo.limitesArea).map(([a, m]) => `${a}: ${m} min`).join(', ')})</>
+            )}
             {' '}— <span className="font-semibold">en rojo</span> los que excedan el límite.
           </span>
         </div>
@@ -306,11 +321,11 @@ export function BanioReportePage() {
             <p className="text-sm font-semibold text-amber-800">Activos ahora</p>
             <div className="mt-1 flex flex-wrap gap-2">
               {activos.map((r) => {
-                const st = STATUS_STYLES[r.statusId] ?? DEFAULT_STYLE
-                const pausa = PAUSAS.find(p => p.statusId === r.statusId)
+                const pausa = pausaDe(r.statusId)
                 return (
-                  <span key={r.id} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold ${st.badge}`}>
-                    {pausa?.emoji} {r.nombre.split(' ').slice(0,2).join(' ')} · <span className="font-mono tabular-nums">{fmt(liveDur(r))}</span>
+                  <span key={r.id} className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold"
+                    style={badgeStyle(pausa.color)}>
+                    {pausa.emoji} {r.nombre.split(' ').slice(0,2).join(' ')} · <span className="font-mono tabular-nums">{fmt(liveDur(r))}</span>
                   </span>
                 )
               })}
@@ -326,11 +341,10 @@ export function BanioReportePage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {resumenList.map((r) => {
               const tipos = Object.entries(r.porTipo).map(([sid, data]) => {
-                const pausa = PAUSAS.find(p => p.statusId === Number(sid)) ?? PAUSAS[0]
-                const limiteEfectivo = pausa.statusId === 2 ? getLimiteComida(r.area) : pausa.limiteMin
+                const pausa = pausaDe(Number(sid))
+                const limiteEfectivo = limiteDe(pausa, r.area)
                 const excede = limiteEfectivo !== null && data.totalSeg > limiteEfectivo * 60
-                const st = STATUS_STYLES[Number(sid)] ?? DEFAULT_STYLE
-                return { pausa, limiteEfectivo, excede, st, ...data, statusId: Number(sid) }
+                return { pausa, limiteEfectivo, excede, ...data, statusId: Number(sid) }
               })
               const hayExcede = tipos.some(t => t.excede)
               return (
@@ -340,7 +354,8 @@ export function BanioReportePage() {
                   </p>
                   {tipos.map((t) => (
                     <div key={t.statusId} className="flex flex-col gap-0.5">
-                      <span className={`self-start inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold ${t.st.badge}`}>
+                      <span className="self-start inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold"
+                        style={badgeStyle(t.pausa.color)}>
                         {t.pausa.emoji} {t.pausa.label} · {t.visitas} {t.visitas === 1 ? 'visita' : 'visitas'}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -394,13 +409,12 @@ export function BanioReportePage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {registros.map((r) => {
-                  const st  = STATUS_STYLES[r.statusId] ?? DEFAULT_STYLE
-                  const pausa = PAUSAS.find(p => p.statusId === r.statusId) ?? PAUSAS[0]
-                  // Para baño: comparar con total acumulado del usuario ese día
+                  const pausa = pausaDe(r.statusId)
+                  // Límite diario (p. ej. baño): comparar con el total acumulado del usuario en ese tipo
                   const totalAcumSeg = pausa.acumulado
-                    ? registros.filter(x => x.usuarioId === r.usuarioId && !x.activo).reduce((s, x) => s + x.duracionSegundos, 0)
+                    ? registros.filter(x => x.usuarioId === r.usuarioId && x.statusId === r.statusId && !x.activo).reduce((s, x) => s + x.duracionSegundos, 0)
                     : r.duracionSegundos
-                  const limiteEfectivoRow = pausa.statusId === 2 ? getLimiteComida(r.area) : pausa.limiteMin
+                  const limiteEfectivoRow = limiteDe(pausa, r.area)
                   const excede = limiteEfectivoRow !== null
                     && (pausa.acumulado ? totalAcumSeg : r.duracionSegundos) > limiteEfectivoRow * 60
 
@@ -417,7 +431,8 @@ export function BanioReportePage() {
                       </td>
                       {pausaActiva.statusId === 0 && (
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold ${st.badge}`}>
+                          <span className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[0.72rem] font-semibold"
+                            style={badgeStyle(pausa.color)}>
                             {pausa.emoji} {pausa.label}
                           </span>
                         </td>

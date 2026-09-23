@@ -117,7 +117,8 @@ function MiniLista({ items }: { items: { k: string; a: string; b?: string }[] })
   )
 }
 
-function Barra({ pct, tono = 'brand' }: { pct: number; tono?: 'brand' | 'emerald' | 'amber' | 'rose' | 'violet' }) {
+// `color` (hex) tiene prioridad sobre `tono` — p. ej. el color de un tipo de pausa.
+function Barra({ pct, tono = 'brand', color }: { pct: number; tono?: 'brand' | 'emerald' | 'amber' | 'rose' | 'violet'; color?: string }) {
   const colores: Record<string, string> = {
     brand: 'bg-brand', emerald: 'bg-emerald-500', amber: 'bg-amber-500',
     rose: 'bg-rose-500', violet: 'bg-violet-500',
@@ -125,8 +126,8 @@ function Barra({ pct, tono = 'brand' }: { pct: number; tono?: 'brand' | 'emerald
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-border">
       <div
-        className={clsx('h-full rounded-full transition-all', colores[tono])}
-        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+        className={clsx('h-full rounded-full transition-all', !color && colores[tono])}
+        style={{ width: `${Math.max(0, Math.min(100, pct))}%`, ...(color ? { background: color } : {}) }}
       />
     </div>
   )
@@ -294,12 +295,18 @@ function MisTiemposResumen() {
     )
   }
 
-  const filas: { label: string; seg: number; tono: 'emerald' | 'amber' | 'brand' | 'violet' | 'rose' }[] = [
+  // Disponible + un renglón por tipo de pausa configurado (con su color). Si el
+  // backend aún no manda `pausasPorTipo`, se usan los 4 campos de siempre.
+  const filas: { label: string; seg: number; tono: 'emerald' | 'amber' | 'brand' | 'violet' | 'rose'; color?: string }[] = [
     { label: 'Disponible', seg: data.disponibleSeg, tono: 'emerald' },
-    { label: 'Comida', seg: data.comidaSeg, tono: 'amber' },
-    { label: 'Baño', seg: data.banioSeg, tono: 'brand' },
-    { label: 'Capacitación', seg: data.capacitacionSeg, tono: 'violet' },
-    { label: 'Permiso', seg: data.permisoSeg, tono: 'rose' },
+    ...(data.pausasPorTipo
+      ? data.pausasPorTipo.map((p) => ({ label: p.etiqueta, seg: p.seg, tono: 'brand' as const, color: p.color }))
+      : [
+          { label: 'Comida', seg: data.comidaSeg, tono: 'amber' as const },
+          { label: 'Baño', seg: data.banioSeg, tono: 'brand' as const },
+          { label: 'Capacitación', seg: data.capacitacionSeg, tono: 'violet' as const },
+          { label: 'Permiso', seg: data.permisoSeg, tono: 'rose' as const },
+        ]),
   ]
 
   return (
@@ -312,7 +319,7 @@ function MisTiemposResumen() {
               <span className="text-ink-secondary">{f.label}</span>
               <span className="font-semibold text-ink-tertiary">{fmtDuracion(f.seg)}</span>
             </div>
-            <Barra pct={data.jornadaSeg > 0 ? (f.seg / data.jornadaSeg) * 100 : 0} tono={f.tono} />
+            <Barra pct={data.jornadaSeg > 0 ? (f.seg / data.jornadaSeg) * 100 : 0} tono={f.tono} color={f.color} />
           </div>
         ))}
       </div>

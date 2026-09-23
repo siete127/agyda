@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import { Headset, LogIn, Coffee, UserCheck, ListTree, Megaphone, Tag, Power, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { asesoresService } from '@/services/asesores.service'
+import { usePausaTipos } from '@/hooks/usePausaTipos'
 import { TIPO_PAUSA_LABELS } from '@/types/asesores.types'
 import { Spinner } from '@/components/ui/Spinner'
 import { ccService } from '@/services/cc.service'
@@ -59,6 +60,8 @@ export function AsesoresPanel() {
   const qc = useQueryClient()
   const [fecha, setFecha] = useState(hoy())
 
+  // Etiqueta de los tipos de pausa que agregue la empresa (su clave es interna).
+  const { porId: tipoPausaPorId } = usePausaTipos()
   const { data, isLoading } = useQuery({
     queryKey: ['asesores-mi-resumen', fecha],
     queryFn: () => asesoresService.getMiResumen(fecha),
@@ -181,12 +184,19 @@ export function AsesoresPanel() {
           <div className="card p-4">
             <h2 className="mb-3 text-sm font-bold text-ink">Minutos por tipo de pausa</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {Object.entries(data.minutosPorTipo).map(([key, min]) => (
-                <div key={key} className="rounded-xl border border-gray-100 p-3 text-center">
-                  <p className="text-base font-bold text-gray-900">{min}</p>
-                  <p className="text-[0.65rem] text-gray-500">{TIPO_PAUSA_LABELS[key] ?? key} (min)</p>
-                </div>
-              ))}
+              {data.tiposPausa && data.minutosPorStatus
+                ? data.tiposPausa.map((t) => (
+                    <div key={t.statusId} className="rounded-xl border border-gray-100 p-3 text-center">
+                      <p className="text-base font-bold text-gray-900">{data.minutosPorStatus?.[t.statusId] ?? 0}</p>
+                      <p className="text-[0.65rem] text-gray-500">{t.emoji} {t.etiqueta} (min)</p>
+                    </div>
+                  ))
+                : Object.entries(data.minutosPorTipo).map(([key, min]) => (
+                    <div key={key} className="rounded-xl border border-gray-100 p-3 text-center">
+                      <p className="text-base font-bold text-gray-900">{min}</p>
+                      <p className="text-[0.65rem] text-gray-500">{TIPO_PAUSA_LABELS[key] ?? key} (min)</p>
+                    </div>
+                  ))}
             </div>
           </div>
 
@@ -206,7 +216,7 @@ export function AsesoresPanel() {
                     <tr key={s.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                       <td className="px-4 py-2.5">
                         <span className={clsx('inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold', STATUS_COLOR[s.statusClave] ?? STATUS_COLOR.desconocido)}>
-                          {STATUS_LABELS[s.statusClave] ?? s.statusClave}
+                          {STATUS_LABELS[s.statusClave] ?? tipoPausaPorId(s.statusId)?.etiqueta ?? s.statusClave}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600">{formatHora(s.fechaInicio)}</td>

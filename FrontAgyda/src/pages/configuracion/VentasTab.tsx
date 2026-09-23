@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { TrendingUp, Gauge, Percent, ShieldAlert, Check, Loader2, Info, ListChecks } from 'lucide-react'
+import { TrendingUp, Gauge, Percent, ShieldAlert, Check, Loader2, Info } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { personalizacionService, ESTATUS_VENTA_VALIDOS, type VentasConfig } from '@/services/personalizacion.service'
+import { personalizacionService, type VentasConfig } from '@/services/personalizacion.service'
+
+// Los estatus de venta contados ya no se editan aquí: cada módulo (Metas,
+// Comisiones, Incentivos) tiene su lista en su propia pantalla.
+type MargenIva = Pick<VentasConfig, 'margen' | 'iva'>
 
 const numCls =
   'w-full rounded-xl border border-gray-200 bg-card px-3.5 py-2.5 text-[0.88rem] text-gray-900 ' +
@@ -28,10 +32,9 @@ function CardSeccion({ icon: Icon, titulo, subtitulo, children }: {
   )
 }
 
-const DEFAULTS: VentasConfig = {
+const DEFAULTS: MargenIva = {
   margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
   iva: { tasaDefault: 0.16 },
-  estatusContados: ['Aprobada', 'Formalizada', 'Formalizado', 'Garantizada'],
 }
 
 export function VentasTab() {
@@ -41,24 +44,16 @@ export function VentasTab() {
     queryFn: () => personalizacionService.get(),
   })
 
-  const [form, setForm] = useState<VentasConfig | null>(null)
-  const [seededFrom, setSeededFrom] = useState<VentasConfig | null>(null)
-  const actual = data?.ventas ?? DEFAULTS
+  const [form, setForm] = useState<MargenIva | null>(null)
+  const [seededFrom, setSeededFrom] = useState<MargenIva | null>(null)
+  const actual: MargenIva = data?.ventas ?? DEFAULTS
   if (data && actual !== seededFrom) {
     setSeededFrom(actual)
-    setForm({ margen: { ...actual.margen }, iva: { ...actual.iva }, estatusContados: [...actual.estatusContados] })
+    setForm({ margen: { ...actual.margen }, iva: { ...actual.iva } })
   }
 
   const setMargen = <K extends keyof VentasConfig['margen']>(k: K, v: VentasConfig['margen'][K]) =>
     setForm((f) => (f ? { ...f, margen: { ...f.margen, [k]: v } } : f))
-
-  const toggleEstatusContado = (estatus: string) =>
-    setForm((f) => {
-      if (!f) return f
-      const activo = f.estatusContados.includes(estatus)
-      const estatusContados = activo ? f.estatusContados.filter((e) => e !== estatus) : [...f.estatusContados, estatus]
-      return { ...f, estatusContados }
-    })
 
   const guardar = useMutation({
     mutationFn: async () => {
@@ -157,26 +152,11 @@ export function VentasTab() {
         <p className="mt-2 text-[0.68rem] text-gray-400">Normalmente 16%. Cada renglón puede ajustarse individualmente en la cotización.</p>
       </CardSeccion>
 
-      <CardSeccion icon={ListChecks} titulo="Estatus de venta contados" subtitulo="Qué estatus de Ventas.estatus cuenta como 'venta realizada' para Metas, Comisiones e Incentivos.">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {ESTATUS_VENTA_VALIDOS.map((estatus) => (
-            <label key={estatus} className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-100 px-3 py-2">
-              <input type="checkbox" className="h-4 w-4 accent-violet-600"
-                checked={form.estatusContados.includes(estatus)}
-                onChange={() => toggleEstatusContado(estatus)} />
-              <span className="text-[0.8rem] text-gray-700">{estatus}</span>
-            </label>
-          ))}
-        </div>
-        <p className="mt-2 text-[0.68rem] text-gray-400">
-          Es la misma definición para todo el área comercial — cambiarla aquí afecta el conteo de avance de Metas y el cálculo de fórmulas de Comisiones e Incentivos al mismo tiempo.
-        </p>
-      </CardSeccion>
-
       <div className="flex items-start gap-2 rounded-xl bg-violet-50/60 px-3 py-2.5">
         <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500" />
         <p className="text-[0.72rem] text-gray-500">
           Esta configuración es propia de esta empresa. El semáforo y el bloqueo aplican en el editor de cotizaciones del CRM.
+          Los estatus de venta contados se configuran en Ventas (Área) → Metas, Comisiones e Incentivos, cada uno con su propia lista.
         </p>
       </div>
 

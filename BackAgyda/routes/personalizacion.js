@@ -20,6 +20,7 @@ router.put('/header-buttons', ...soloAdminConfig, ctrl.updateHeaderButtons);
 router.put('/institucional', ...soloAdminConfig, ctrl.updateInstitucional);
 router.put('/enlaces-topbar', ...soloAdminConfig, ctrl.updateEnlacesTopbar);
 router.put('/ventas', ...soloAdminConfig, ctrl.updateVentas);
+router.put('/ventas/estatus-contados', ...soloAdminConfig, ctrl.updateEstatusContados);
 router.put('/prospeccion', ...soloAdminConfig, ctrl.updateProspeccion);
 router.put('/email-marketing', ...soloAdminConfig, ctrl.updateEmailMarketing);
 router.put('/dashboard', ...soloAdminConfig, ctrl.updateDashboard);

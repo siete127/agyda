@@ -5711,6 +5711,8 @@ async function ensureAllSchemas(pool) {
   await ensureFacturacionSchema(pool);
   await ensureActivosSchema(pool);
   await ensureUsuarioTiemposSchema(pool);
+  // Después de STATUS: le agrega las columnas de configuración de pausas.
+  await require('./pausaTiposService').ensureSchema(pool);
 }
 
 // Expediente extendido (tabs "Persona", "Adicionales", "Familiares", "Formación", "Talento")

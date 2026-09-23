@@ -1,5 +1,9 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
+const pausaTiposService = require('../services/pausaTiposService');
+
+// status_id de todos los tipos de pausa (configurables en Configuración).
+const SQL_PAUSAS = pausaTiposService.sqlPausas();
 
 // Reporte: Agregación de minutos por usuario y por estado entre fechas
 exports.getUserTimesReport = async (req, res) => {
@@ -69,9 +73,13 @@ exports.iniciarPausa = async (req, res) => {
     const { statusId } = req.body;
     const neusId = req.user?.id;
     if (!neusId || !statusId) return res.status(400).json({ success: false, message: 'Faltan datos' });
-    if (![2, 3, 5, 6].includes(Number(statusId))) return res.status(400).json({ success: false, message: 'statusId inválido' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    // Solo tipos de pausa activos se pueden iniciar.
+    const tipo = await pool.request()
+      .input('statusId', sql.Int, Number(statusId))
+      .query('SELECT 1 AS ok FROM dbo.STATUS WHERE status_id = @statusId AND ES_PAUSA = 1 AND ACTIVO = 1');
+    if (!tipo.recordset.length) return res.status(400).json({ success: false, message: 'statusId inválido' });
 
     // Si ya existe una pausa abierta del mismo tipo, devolverla sin duplicar
     const existing = await pool.request()
@@ -92,7 +100,7 @@ exports.iniciarPausa = async (req, res) => {
       .input('neusId', sql.Int, neusId)
       .query(`
         UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE()
-        WHERE neus_id = @neusId AND status_id IN (2,3,5,6) AND fecha_fin IS NULL
+        WHERE neus_id = @neusId AND status_id IN ${SQL_PAUSAS} AND fecha_fin IS NULL
       `);
 
     // Insertar nuevo registro
@@ -154,7 +162,7 @@ exports.getPausaActiva = async (req, res) => {
         FROM USUARIO_TIEMPOS ut
         WHERE ut.neus_id = @neusId
           AND ut.fecha_fin IS NULL
-          AND ut.status_id IN (2, 3, 5, 6)
+          AND ut.status_id IN ${SQL_PAUSAS}
         ORDER BY ut.fecha_inicio DESC
       `);
 
@@ -175,23 +183,8 @@ exports.getPausaHoy = async (req, res) => {
     if (!neusId) return res.status(400).json({ success: false });
 
     const pool = await databaseService.getPool(req.user?.empresa);
-    const result = await pool.request()
-      .input('neusId', sql.Int, neusId)
-      .query(`
-        SELECT ut.status_id,
-          SUM(DATEDIFF(SECOND, ut.fecha_inicio, ISNULL(ut.fecha_fin, GETDATE()))) AS totalSegundos
-        FROM USUARIO_TIEMPOS ut
-        WHERE ut.neus_id = @neusId
-          AND ut.status_id IN (2, 3, 5, 6)
-          AND CAST(ut.fecha_inicio AS DATE) = CAST(GETDATE() AS DATE)
-        GROUP BY ut.status_id
-      `);
-
-    // { "2": 45, "3": 552, "5": 2, "6": 0 }
-    const porEstado = { 2: 0, 3: 0, 5: 0, 6: 0 };
-    for (const r of result.recordset) porEstado[r.status_id] = Math.max(0, r.totalSegundos || 0);
-
-    return res.json({ success: true, data: porEstado });
+    // { "2": 45, "3": 552, "5": 2, "6": 0, ...un valor por cada tipo de pausa }
+    return res.json({ success: true, data: await getPausasHoyDe(pool, neusId) });
   } catch (e) {
     console.error('Error getPausaHoy:', e?.message);
     return res.json({ success: true, data: { 2: 0, 3: 0, 5: 0, 6: 0 } });
@@ -231,8 +224,11 @@ async function getJornadaHoy(pool, neusId, rol) {
   return { jornadaSeg: Math.max(0, jr.recordset[0].jornadaSeg || 0), horaEntrada: horaEntradaReal };
 }
 
-// Suma de pausas de HOY por status_id para un usuario: { 2: seg, 3: seg, 5: seg, 6: seg }
-async function getPausasHoyDe(pool, neusId) {
+// Suma de pausas de HOY por status_id para un usuario: { 2: seg, 3: seg, ... },
+// con una llave por cada tipo de pausa (en 0 si no hubo). `tipos` es opcional
+// (se pasa cuando ya se cargaron, p. ej. en un ciclo por usuario).
+async function getPausasHoyDe(pool, neusId, tipos) {
+  const tiposPausa = tipos ?? await pausaTiposService.listar(pool);
   const result = await pool.request()
     .input('neusId', sql.Int, neusId)
     .query(`
@@ -240,16 +236,30 @@ async function getPausasHoyDe(pool, neusId) {
         SUM(DATEDIFF(SECOND, ut.fecha_inicio, ISNULL(ut.fecha_fin, GETDATE()))) AS totalSegundos
       FROM USUARIO_TIEMPOS ut
       WHERE ut.neus_id = @neusId
-        AND ut.status_id IN (2, 3, 5, 6)
+        AND ut.status_id IN ${SQL_PAUSAS}
         AND CAST(ut.fecha_inicio AS DATE) = CAST(GETDATE() AS DATE)
       GROUP BY ut.status_id
     `);
-  const porEstado = { 2: 0, 3: 0, 5: 0, 6: 0 };
+  const porEstado = pausaTiposService.mapaEnCero(tiposPausa);
   for (const r of result.recordset) porEstado[r.status_id] = Math.max(0, r.totalSegundos || 0);
   return porEstado;
 }
 // Reutilizable desde otros módulos (p. ej. Ventas Área — pausas por meta).
 exports.getPausasHoyDe = getPausasHoyDe;
+
+// Campos de tiempos de un usuario: los 4 por default (compatibilidad) +
+// `pausasPorTipo` con todos los tipos. El disponible solo descuenta las pausas
+// que cuentan en Asistencia.
+function camposTiempos(tipos, pausas, jornada) {
+  const { porTipo, total } = pausaTiposService.desglose(tipos, pausas, 'asistencia');
+  return {
+    sinEntrada: !jornada,
+    jornadaSeg: jornada ? jornada.jornadaSeg : 0,
+    disponibleSeg: jornada ? Math.max(0, jornada.jornadaSeg - total) : 0,
+    ...pausaTiposService.camposSeg(tipos, pausas),
+    pausasPorTipo: porTipo.map(({ valor, ...t }) => ({ ...t, seg: valor })),
+  };
+}
 
 // GET /api/reports/tiempos/hoy — tiempo disponible (jornada − pausas) + desglose
 // de pausas del día para el usuario autenticado. Emparejado con /pausa/hoy: misma
@@ -261,29 +271,13 @@ exports.getTiemposHoy = async (req, res) => {
     if (!neusId) return res.status(400).json({ success: false });
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    const tipos = await pausaTiposService.listar(pool);
     const jornada = await getJornadaHoy(pool, neusId, rol);
-    const pausas = await getPausasHoyDe(pool, neusId);
-    const pausasSeg = pausas[2] + pausas[3] + pausas[5] + pausas[6];
-
-    if (!jornada) {
-      return res.json({
-        success: true,
-        data: { sinEntrada: true, jornadaSeg: 0, disponibleSeg: 0, comidaSeg: pausas[2], banioSeg: pausas[3], capacitacionSeg: pausas[5], permisoSeg: pausas[6] },
-      });
-    }
-
-    return res.json({
-      success: true,
-      data: {
-        sinEntrada: false,
-        jornadaSeg: jornada.jornadaSeg,
-        disponibleSeg: Math.max(0, jornada.jornadaSeg - pausasSeg),
-        comidaSeg: pausas[2], banioSeg: pausas[3], capacitacionSeg: pausas[5], permisoSeg: pausas[6],
-      },
-    });
+    const pausas = await getPausasHoyDe(pool, neusId, tipos);
+    return res.json({ success: true, data: camposTiempos(tipos, pausas, jornada) });
   } catch (e) {
     console.error('Error getTiemposHoy:', e?.message);
-    return res.json({ success: true, data: { sinEntrada: true, jornadaSeg: 0, disponibleSeg: 0, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0 } });
+    return res.json({ success: true, data: { sinEntrada: true, jornadaSeg: 0, disponibleSeg: 0, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0, pausasPorTipo: [] } });
   }
 };
 
@@ -303,18 +297,12 @@ exports.getTiemposHoyEquipo = async (req, res) => {
       ORDER BY NEUS_NOMBRES
     `);
 
+    const tipos = await pausaTiposService.listar(pool);
     const data = [];
     for (const u of usuarios.recordset) {
       const jornada = await getJornadaHoy(pool, u.id, u.rol);
-      const pausas = await getPausasHoyDe(pool, u.id);
-      const pausasSeg = pausas[2] + pausas[3] + pausas[5] + pausas[6];
-      data.push({
-        usuarioId: u.id, nombre: u.nombre, area: u.rol,
-        sinEntrada: !jornada,
-        jornadaSeg: jornada ? jornada.jornadaSeg : 0,
-        disponibleSeg: jornada ? Math.max(0, jornada.jornadaSeg - pausasSeg) : 0,
-        comidaSeg: pausas[2], banioSeg: pausas[3], capacitacionSeg: pausas[5], permisoSeg: pausas[6],
-      });
+      const pausas = await getPausasHoyDe(pool, u.id, tipos);
+      data.push({ usuarioId: u.id, nombre: u.nombre, area: u.rol, ...camposTiempos(tipos, pausas, jornada) });
     }
 
     return res.json({ success: true, data });
@@ -380,7 +368,7 @@ exports.getResumenGeneral = async (req, res) => {
       `).catch(() => ({ recordset: [] }));
     const quejasPorUser = Object.fromEntries(quejasResult.recordset.map((r) => [r.usuarioId, r.total]));
 
-    // 3. Pausas por tipo (statusId: 3=baño,2=comida,5=capacitación,6=permiso)
+    // 3. Pausas por tipo (todos los tipos configurados; 3=baño, 2=comida, 5=capacitación, 6=permiso por default)
     const pausasResult = await pool.request()
       .input('fromDate', sql.NVarChar, fromDate)
       .input('toDate', sql.NVarChar, toDate)
@@ -390,7 +378,7 @@ exports.getResumenGeneral = async (req, res) => {
                    ELSE DATEDIFF(SECOND, fecha_inicio, GETDATE()) END) / 60 as totalMinutos
         FROM USUARIO_TIEMPOS
         WHERE CAST(fecha_inicio AS date) >= @fromDate AND CAST(fecha_inicio AS date) <= @toDate
-          AND status_id IN (2,3,5,6)
+          AND status_id IN ${SQL_PAUSAS}
           AND neus_id IN (${ids})
         GROUP BY neus_id, status_id
       `);
@@ -442,15 +430,16 @@ exports.getResumenGeneral = async (req, res) => {
       `);
     const ticketsPorUser = Object.fromEntries(ticketsResult.recordset.map((r) => [r.usuarioId, r.total]));
 
+    // Los 4 tipos por default se ubican por clave (su status_id cambia entre empresas).
+    const tiposPausa = await pausaTiposService.listar(pool);
     const data = usuarios.map((u) => ({
       usuarioId: u.id,
       nombre: u.nombre,
       rol: u.rol,
       quejas: quejasPorUser[u.id] ?? 0,
-      pausaBanioMin: pausasMap[u.id]?.[2] ?? 0,
-      pausaComidaMin: pausasMap[u.id]?.[3] ?? 0,
-      pausaCapacitacionMin: pausasMap[u.id]?.[5] ?? 0,
-      pausaPermisoMin: pausasMap[u.id]?.[6] ?? 0,
+      ...pausaTiposService.camposMin(tiposPausa, pausasMap[u.id] ?? {}),
+      // Minutos por cada tipo de pausa (incluye los creados por la empresa).
+      pausasMinPorTipo: pausasMap[u.id] ?? {},
       checklistCompletados: checklistPorUser[u.id] ?? 0,
       entradasATiempo: asistenciaPorUser[u.id]?.aTiempo ?? 0,
       retardos: asistenciaPorUser[u.id]?.retardos ?? 0,
@@ -464,7 +453,7 @@ exports.getResumenGeneral = async (req, res) => {
   }
 };
 
-// Reporte de pausas: baño, comida, capacitación, permiso
+// Reporte de pausas: todos los tipos configurados (baño, comida, capacitación, permiso y los que agregue la empresa)
 exports.getBanioReport = async (req, res) => {
   try {
     const { from, to, statusId, area } = req.query;
@@ -485,7 +474,7 @@ exports.getBanioReport = async (req, res) => {
 
     const statusFilter = statusId
       ? 'AND ut.status_id = @statusId'
-      : 'AND ut.status_id IN (2, 3, 5, 6)';
+      : `AND ut.status_id IN ${SQL_PAUSAS}`;
 
     const areaFilter = area ? 'AND nu.NEUS_TIPOUSUARIO = @area' : '';
 

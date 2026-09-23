@@ -544,7 +544,8 @@ exports.changeStatus = async (req, res) => {
               AND ut.fecha_fin IS NOT NULL
               AND (ut.duracion_minutos IS NULL OR ut.duracion_minutos = 0)
               AND (
-                LOWER(s.clave) LIKE '%comida%' OR LOWER(s.clave) LIKE '%lunch%' OR LOWER(s.clave) LIKE '%almuerzo%'
+                s.ES_PAUSA = 1
+                OR LOWER(s.clave) LIKE '%comida%' OR LOWER(s.clave) LIKE '%lunch%' OR LOWER(s.clave) LIKE '%almuerzo%'
                 OR LOWER(s.clave) LIKE '%sanitar%' OR LOWER(s.clave) LIKE '%ba%' OR LOWER(s.clave) LIKE '%baño%' OR LOWER(s.clave) LIKE '%bath%'
                 OR LOWER(s.clave) LIKE '%ausente%' OR LOWER(s.clave) LIKE '%pausa%' OR LOWER(s.clave) LIKE '%break%'
               );
@@ -560,9 +561,10 @@ exports.changeStatus = async (req, res) => {
       // Insertar nuevo registro de tiempo SOLO si el nuevo estado es de tipo 'ausente'
       try {
         const statusCheckReq = new sql.Request(transaction);
-        const statusRow = await statusCheckReq.input('statusId', sql.Int, parsedStatus).query("SELECT ISNULL(clave,'') as clave FROM STATUS WHERE status_id = @statusId");
+        const statusRow = await statusCheckReq.input('statusId', sql.Int, parsedStatus).query("SELECT ISNULL(clave,'') as clave, ISNULL(ES_PAUSA, 0) as esPausa FROM STATUS WHERE status_id = @statusId");
         const statusKey = (statusRow && statusRow.recordset && statusRow.recordset[0] && statusRow.recordset[0].clave) ? String(statusRow.recordset[0].clave).toLowerCase() : '';
-        const isAbsent = (statusKey.indexOf('comida') !== -1 || statusKey.indexOf('lunch') !== -1 || statusKey.indexOf('almuerzo') !== -1 || statusKey.indexOf('sanitar') !== -1 || statusKey.indexOf('ba') !== -1 || statusKey.indexOf('baño') !== -1 || statusKey.indexOf('bath') !== -1 || statusKey.indexOf('ausente') !== -1 || statusKey.indexOf('pausa') !== -1 || statusKey.indexOf('break') !== -1);
+        // Tipos de pausa configurables (ES_PAUSA) + la detección por clave de siempre.
+        const isAbsent = !!statusRow?.recordset?.[0]?.esPausa || (statusKey.indexOf('comida') !== -1 || statusKey.indexOf('lunch') !== -1 || statusKey.indexOf('almuerzo') !== -1 || statusKey.indexOf('sanitar') !== -1 || statusKey.indexOf('ba') !== -1 || statusKey.indexOf('baño') !== -1 || statusKey.indexOf('bath') !== -1 || statusKey.indexOf('ausente') !== -1 || statusKey.indexOf('pausa') !== -1 || statusKey.indexOf('break') !== -1);
         if (isAbsent) {
           const insReq = new sql.Request(transaction);
           await insReq.input('id', sql.Int, parsedId).input('statusId', sql.Int, parsedStatus).query(`

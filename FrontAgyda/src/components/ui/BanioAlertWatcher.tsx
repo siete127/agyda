@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { getSocket } from '@/lib/socket'
 import { useAuthStore } from '@/stores/auth.store'
 import { detectarGenero } from '@/lib/genero'
+import { usePausaModulos } from '@/hooks/usePausaTipos'
 
 interface BanioSlot { ocupado: boolean; porUsuario: string | null; porNombre: string | null; genero: 'M' | 'F'; tiempoId: number | null }
 interface BanioStatus { hombres: BanioSlot; mujeres: BanioSlot }
@@ -37,6 +38,9 @@ export function BanioAlertWatcher() {
   const myId = String(user?.id ?? '')
   const esF = user?.genero ? user.genero === 'F' : detectarGenero(user?.nombres ?? '') === 'F'
   const miKey = esF ? 'mujeres' : 'hombres'
+  // Solo quien puede marcar pausas (reports:gestionar-pausas, con el módulo
+  // activo en su empresa) usa el baño y recibe estas alertas.
+  const { puedePausar } = usePausaModulos()
 
   const [alerta, setAlerta] = useState<BanioSlot | null>(null)
   const prevRef = useRef<BanioStatus | null>(null)
@@ -44,7 +48,7 @@ export function BanioAlertWatcher() {
   const initRef = useRef(false)
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || !puedePausar) return
     const sock = getSocket()
     const onStatus = (data: BanioStatus) => {
       const antes = prevRef.current?.[miKey]
@@ -64,8 +68,8 @@ export function BanioAlertWatcher() {
     sock.on('connect', onConn)
     if (sock.connected) sock.emit('banio:get')
     return () => { sock.off('banio:status', onStatus); sock.off('connect', onConn) }
-  }, [user?.id, myId, miKey])
+  }, [user?.id, myId, miKey, puedePausar])
 
-  if (!alerta) return null
+  if (!alerta || !puedePausar) return null
   return <BanioAlertModal slot={alerta} onClose={() => setAlerta(null)} />
 }

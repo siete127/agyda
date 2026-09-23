@@ -5,6 +5,8 @@ import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 import * as XLSX from 'xlsx'
+import { usePausaTipos } from '@/hooks/usePausaTipos'
+import { llaveLegacy } from '@/types/pausaTipos.types'
 
 interface UserTime {
   usuarioId: number
@@ -23,6 +25,8 @@ interface ResumenUsuario {
   pausaComidaMin: number
   pausaCapacitacionMin: number
   pausaPermisoMin: number
+  // Minutos por status_id de todos los tipos de pausa (incluye los que agregue la empresa).
+  pausasMinPorTipo?: Record<number, number>
   checklistCompletados: number
   entradasATiempo: number
   retardos: number
@@ -56,10 +60,13 @@ function fmtMin(min: number) {
   return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
-function exportResumenExcel(rows: ResumenUsuario[], from: string, to: string) {
+// Tipos de pausa agregados por la empresa (los 4 por default ya tienen columna fija).
+interface PausaExtra { statusId: number; etiqueta: string; emoji: string; color: string }
+
+function exportResumenExcel(rows: ResumenUsuario[], from: string, to: string, extras: PausaExtra[]) {
   const fechaGen = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-  const headers = ['#', 'Colaborador', 'Rol', 'Quejas', 'Tickets', 'Baño', 'Comida', 'Capacitación', 'Permiso', 'Checklist completados', 'A tiempo', 'Retardos']
+  const headers = ['#', 'Colaborador', 'Rol', 'Quejas', 'Tickets', 'Baño', 'Comida', 'Capacitación', 'Permiso', ...extras.map((t) => t.etiqueta), 'Checklist completados', 'A tiempo', 'Retardos']
   const data = rows.map((r, i) => [
     i + 1,
     r.nombre,
@@ -70,17 +77,18 @@ function exportResumenExcel(rows: ResumenUsuario[], from: string, to: string) {
     fmtMin(r.pausaComidaMin),
     fmtMin(r.pausaCapacitacionMin),
     fmtMin(r.pausaPermisoMin),
+    ...extras.map((t) => fmtMin(r.pausasMinPorTipo?.[t.statusId] ?? 0)),
     r.checklistCompletados,
     r.entradasATiempo,
     r.retardos,
   ])
 
-  const titleRow = [`Resumen General — ${from} a ${to} · generado ${fechaGen} · ${rows.length} usuarios`, '', '', '', '', '', '', '', '', '', '', '']
+  const titleRow = [`Resumen General — ${from} a ${to} · generado ${fechaGen} · ${rows.length} usuarios`, ...headers.slice(1).map(() => '')]
   const wsData = [titleRow, headers, ...data]
   const ws = XLSX.utils.aoa_to_sheet(wsData)
 
-  ws['!cols'] = [{ wch: 5 }, { wch: 32 }, { wch: 16 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 13 }, { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 10 }]
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }]
+  ws['!cols'] = [{ wch: 5 }, { wch: 32 }, { wch: 16 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 13 }, { wch: 10 }, ...extras.map(() => ({ wch: 13 })), { wch: 20 }, { wch: 10 }, { wch: 10 }]
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }]
 
   const titleStyle = {
     font: { bold: true, sz: 13, color: { rgb: 'FFFFFFFF' } },
@@ -96,7 +104,7 @@ function exportResumenExcel(rows: ResumenUsuario[], from: string, to: string) {
   const cellEven = { font: { sz: 10 }, fill: { fgColor: { rgb: 'FFF3F0FF' }, patternType: 'solid' }, alignment: { vertical: 'center' } }
   const cellOdd = { font: { sz: 10 }, fill: { fgColor: { rgb: 'FFFFFFFF' }, patternType: 'solid' }, alignment: { vertical: 'center' } }
 
-  const cols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+  const cols = headers.map((_, i) => XLSX.utils.encode_col(i))
   cols.forEach(c => { if (ws[`${c}1`]) ws[`${c}1`].s = titleStyle })
   cols.forEach(c => { if (ws[`${c}2`]) ws[`${c}2`].s = headerStyle })
   data.forEach((_, i) => {
@@ -140,7 +148,7 @@ const METRICAS: { key: MetricaKey; label: string; color: string; bg: string; esM
   { key: 'retardos',             label: 'Retardos',     color: 'bg-pink-500',    bg: 'bg-pink-50',    },
 ]
 
-function ResumenDashboard({ rows }: { rows: ResumenUsuario[] }) {
+function ResumenDashboard({ rows, extras }: { rows: ResumenUsuario[]; extras: PausaExtra[] }) {
   const maximos = useMemo(() => {
     const result = {} as Record<MetricaKey, number>
     for (const m of METRICAS) {
@@ -159,6 +167,12 @@ function ResumenDashboard({ rows }: { rows: ResumenUsuario[] }) {
           <div key={m.key} className="flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-sm flex-shrink-0 ${m.color}`} />
             <span className="text-[0.72rem] text-gray-500">{m.label}</span>
+          </div>
+        ))}
+        {extras.map((t) => (
+          <div key={t.statusId} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm flex-shrink-0" style={{ background: t.color }} />
+            <span className="text-[0.72rem] text-gray-500">{t.etiqueta}</span>
           </div>
         ))}
       </div>
@@ -204,7 +218,24 @@ function ResumenDashboard({ rows }: { rows: ResumenUsuario[] }) {
                 </div>
               )
             })}
-            {METRICAS.every((m) => usuario[m.key] === 0) && (
+            {extras.map((t) => {
+              const value = usuario.pausasMinPorTipo?.[t.statusId] ?? 0
+              if (value === 0) return null
+              const max = Math.max(1, ...rows.map((r) => r.pausasMinPorTipo?.[t.statusId] ?? 0))
+              return (
+                <div key={t.statusId} className="flex items-center gap-3">
+                  <span className="w-24 flex-shrink-0 truncate text-[0.72rem] font-semibold text-gray-500">{t.etiqueta}</span>
+                  <div className="flex-1 h-5 rounded-full bg-gray-200 overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500 flex items-center pl-2"
+                      style={{ width: `${Math.max((value / max) * 100, 6)}%`, background: t.color }}>
+                      <span className="text-[0.65rem] font-bold text-white leading-none whitespace-nowrap">{fmtMin(value)}</span>
+                    </div>
+                  </div>
+                  <span className="w-10 flex-shrink-0 text-right text-[0.72rem] font-bold text-gray-600">{fmtMin(value)}</span>
+                </div>
+              )
+            })}
+            {METRICAS.every((m) => usuario[m.key] === 0) && extras.every((t) => !usuario.pausasMinPorTipo?.[t.statusId]) && (
               <p className="text-[0.75rem] text-gray-400 italic">Sin actividad en este período</p>
             )}
           </div>
@@ -243,6 +274,10 @@ export function ReportesPage() {
     enabled: enabled && tab === 'resumen',
     retry: false,
   })
+  // Tipos de pausa agregados por la empresa: los activos y los que tengan minutos en el periodo.
+  const { tipos: tiposPausa } = usePausaTipos()
+  const pausasExtra: PausaExtra[] = tiposPausa.filter((t) =>
+    !llaveLegacy(t) && (t.activo || resumen.some((r) => r.pausasMinPorTipo?.[t.statusId])))
 
   const errorResumenMsg = errorResumen
     ? ((errorResumen as { response?: { status?: number; data?: { message?: string } } })?.response?.status === 403
@@ -315,7 +350,7 @@ export function ReportesPage() {
             )}
             {tab === 'resumen' && resumen.length > 0 && (
               <div className="flex items-center gap-2">
-                <Button onClick={() => exportResumenExcel(resumen, from, to)} className="bg-card !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                <Button onClick={() => exportResumenExcel(resumen, from, to, pausasExtra)} className="bg-card !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Download className="h-3.5 w-3.5" /> Exportar Excel
                 </Button>
                 <button
@@ -502,6 +537,9 @@ export function ReportesPage() {
                         <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Comida</th>
                         <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Capacitación</th>
                         <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Permiso</th>
+                        {pausasExtra.map((t) => (
+                          <th key={t.statusId} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">{t.emoji} {t.etiqueta}</th>
+                        ))}
                         <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Checklist</th>
                         <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">A tiempo</th>
                         <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Retardos</th>
@@ -526,6 +564,9 @@ export function ReportesPage() {
                           <td className="px-4 py-3 text-center text-[0.78rem] text-gray-500">{fmtMin(r.pausaComidaMin)}</td>
                           <td className="px-4 py-3 text-center text-[0.78rem] text-gray-500">{fmtMin(r.pausaCapacitacionMin)}</td>
                           <td className="px-4 py-3 text-center text-[0.78rem] text-gray-500">{fmtMin(r.pausaPermisoMin)}</td>
+                          {pausasExtra.map((t) => (
+                            <td key={t.statusId} className="px-4 py-3 text-center text-[0.78rem] text-gray-500">{fmtMin(r.pausasMinPorTipo?.[t.statusId] ?? 0)}</td>
+                          ))}
                           <td className="px-4 py-3 text-center text-[0.78rem]">
                             {r.checklistCompletados > 0 ? <span className="font-semibold text-emerald-600">{r.checklistCompletados}</span> : <span className="text-gray-300">0</span>}
                           </td>
@@ -542,7 +583,7 @@ export function ReportesPage() {
             ) : (
               /* Dashboard de barras */
               <div className="card p-5">
-                <ResumenDashboard rows={resumen} />
+                <ResumenDashboard rows={resumen} extras={pausasExtra} />
               </div>
             )}
           </div>
