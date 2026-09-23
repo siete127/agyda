@@ -1,6 +1,14 @@
+const fs = require('fs');
+const path = require('path');
 const sql = require('mssql');
+const XLSX = require('xlsx');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
+const { logAudit } = require('../services/auditService');
+const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
+const { RDL_DIR } = require('../middleware/rdlUpload');
+const reportBuilderCatalog = require('../services/reportBuilderCatalog');
+const reportBuilderRunner = require('../services/reportBuilderRunner');
 const logger = global.logger || require('../utils/logger');
 
 async function listCampanias(req, res) {
@@ -108,8 +116,10 @@ async function getDashboard(req, res) {
 
 /* ── Supervisores: asignación a campañas + panel de agentes con estado en vivo ── */
 
-// Estados de pausa según USUARIO_TIEMPOS.status_id (mismo mapeo que reportController.js)
-const PAUSA_LABELS = { 2: 'baño', 3: 'comida', 5: 'capacitación', 6: 'permiso' };
+// Estados de pausa según USUARIO_TIEMPOS.status_id — mismo mapeo que el botón
+// real que usa el agente (PerfilMenu.tsx: statusId 3 = Baño, 2 = Comida) y
+// que socketService.js al cerrar la pausa de baño (status_id = 3).
+const PAUSA_LABELS = { 3: 'baño', 2: 'comida', 5: 'capacitación', 6: 'permiso' };
 
 async function listSupervisores(req, res) {
   try {
@@ -145,6 +155,15 @@ async function asignarSupervisor(req, res) {
       .input('campaniaId', sql.Int, campaniaId)
       .input('supervisorId', sql.Int, supervisorId)
       .query('INSERT INTO CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@campaniaId, @supervisorId)');
+    const info = await pool.request().input('c', sql.Int, campaniaId).input('u', sql.Int, supervisorId).query(`
+      SELECT (SELECT CM2_NOMBRE FROM CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
+             (SELECT NEUS_NOMBRES FROM NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'asignar-supervisor-campania',
+      entidadId: campaniaId,
+      detalle: { campaniaId, campaniaNombre: info.recordset[0]?.campaniaNombre, supervisorId, supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.status(201).json({ success: true });
   } catch (err) {
     logger.error('operacionesController.asignarSupervisor', err);
@@ -156,7 +175,17 @@ async function quitarSupervisor(req, res) {
   try {
     const { id } = req.params;
     const pool = await databaseService.getPool(req.user?.empresa);
+    const info = await pool.request().input('id', sql.Int, id).query(`
+      SELECT cs.CS_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre, cs.CS_SUPERVISOR_ID supervisorId, u.NEUS_NOMBRES supervisorNombre
+      FROM CC_CAMPANIAS_SUPERVISORES cs
+      LEFT JOIN CCO_CAMPANIAS c ON c.CM2_ID = cs.CS_CAMPANIA_ID
+      LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
+      WHERE cs.CS_ID = @id`);
     await pool.request().input('id', sql.Int, id).query('DELETE FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_ID = @id');
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-campania',
+      entidadId: id, detalle: info.recordset[0] ?? {}, ip: req.ip,
+    });
     res.json({ success: true });
   } catch (err) {
     logger.error('operacionesController.quitarSupervisor', err);
@@ -311,6 +340,31 @@ async function getProductividadDia(req, res) {
         GROUP BY neus_id, status_id
       `);
 
+    // Promedio diario de pausas de los 7 días previos a la fecha consultada
+    // (sin incluirla) — sirve de referencia para detectar si un agente se
+    // está pasando de lo que acostumbra, no de un límite fijo del sistema.
+    const historicoRs = await pool.request()
+      .input('fecha', sql.NVarChar, fecha)
+      .query(`
+        SELECT neus_id as agenteId, CAST(fecha_inicio AS date) as dia,
+               SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutosDia
+        FROM USUARIO_TIEMPOS
+        WHERE neus_id IN (${agenteIds.join(',')})
+          AND status_id IN (2,3,5,6)
+          AND CAST(fecha_inicio AS date) >= DATEADD(DAY, -7, CAST(@fecha AS date))
+          AND CAST(fecha_inicio AS date) < CAST(@fecha AS date)
+        GROUP BY neus_id, CAST(fecha_inicio AS date)
+      `);
+    const diasPorAgente = new Map();
+    for (const h of historicoRs.recordset) {
+      if (!diasPorAgente.has(h.agenteId)) diasPorAgente.set(h.agenteId, []);
+      diasPorAgente.get(h.agenteId).push(h.minutosDia);
+    }
+    const avgSemanalPorAgente = new Map();
+    for (const [id, dias] of diasPorAgente) {
+      avgSemanalPorAgente.set(id, Math.round(dias.reduce((a, b) => a + b, 0) / dias.length));
+    }
+
     // Estado ACTUAL (independiente del acumulado de arriba) — misma lógica que
     // getMiPanel: una fila sin fecha_fin es la pausa en curso ahora mismo.
     const pausaActivaRs = await pool.request().query(`
@@ -345,12 +399,13 @@ async function getProductividadDia(req, res) {
         estado,
         tipoPausa: pausaActiva ? (PAUSA_LABELS[pausaActiva.statusId] ?? 'pausa') : null,
         ultimaConexion: est?.ultimaConexion ?? null,
+        avgSemanalMin: avgSemanalPorAgente.get(id) ?? null,
       });
     }
     for (const p of pausasRs.recordset) {
       const row = porAgente.get(p.agenteId);
       if (!row) continue;
-      const key = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' }[p.statusId];
+      const key = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' }[p.statusId];
       if (key) row[key] = p.minutos;
       row.totalPausaMin += p.minutos;
     }
@@ -359,6 +414,210 @@ async function getProductividadDia(req, res) {
   } catch (err) {
     logger.error('operacionesController.getProductividadDia', err);
     res.status(500).json({ success: false, message: 'Error al obtener la productividad del día' });
+  }
+}
+
+// GET /api/operaciones/supervisores/comparador?fecha=YYYY-MM-DD — Fase 2,
+// punto 3.4 del plan basado en PSUP: comparar agentes/campañas ENTRE SÍ (no
+// solo un agente contra su propio histórico, que es lo que ya hace
+// getProductividadDia). Reutiliza las mismas fuentes que Panel en
+// vivo/Productividad (USUARIO_TIEMPOS para pausas, CCO_INTERACCIONES para
+// chats) para no duplicar lógica, agregando por agente y por campaña.
+async function getComparador(req, res) {
+  try {
+    const uid = req.user?.id;
+    const tipoUsuario = (req.user?.tipoUsuario || '').toString().toUpperCase();
+    const esAdmin = ['AD', 'TI'].includes(tipoUsuario);
+    const fecha = (req.query.fecha || new Date().toISOString().slice(0, 10)).toString();
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const campaniasReq = pool.request();
+    let campaniasWhere = '';
+    if (!esAdmin) {
+      campaniasWhere = `WHERE CS_SUPERVISOR_ID = @uid`;
+      campaniasReq.input('uid', sql.Int, uid);
+    }
+    const campaniaIdsRs = await campaniasReq.query(
+      esAdmin
+        ? 'SELECT CM2_ID as id, CM2_NOMBRE as nombre FROM CCO_CAMPANIAS'
+        : `SELECT DISTINCT c.CM2_ID as id, c.CM2_NOMBRE as nombre
+           FROM CCO_CAMPANIAS c
+           JOIN CC_CAMPANIAS_SUPERVISORES cs ON cs.CS_CAMPANIA_ID = c.CM2_ID ${campaniasWhere.replace('CS_SUPERVISOR_ID', 'cs.CS_SUPERVISOR_ID')}`
+    );
+    const campanias = campaniaIdsRs.recordset;
+    const campaniaIds = campanias.map((c) => c.id);
+    if (campaniaIds.length === 0) return res.json({ success: true, data: { agentes: [], campanias: [] } });
+
+    const agentesRs = await pool.request().query(`
+      SELECT DISTINCT ga.CGA_USUARIO_ID as agenteId, g.CG_CAMPANIA_ID as campaniaId
+      FROM CCO_GRUPO_AGENTES ga
+      INNER JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
+      WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
+    `);
+    const agenteIds = [...new Set(agentesRs.recordset.map((a) => a.agenteId))];
+    if (agenteIds.length === 0) return res.json({ success: true, data: { agentes: [], campanias: [] } });
+    // Un agente puede estar en skills de varias campañas asignadas al mismo
+    // supervisor — para el comparador por campaña se cuenta bajo cada una.
+    const campaniasPorAgente = new Map();
+    for (const a of agentesRs.recordset) {
+      if (!campaniasPorAgente.has(a.agenteId)) campaniasPorAgente.set(a.agenteId, []);
+      campaniasPorAgente.get(a.agenteId).push(a.campaniaId);
+    }
+
+    const nombresRs = await pool.request().query(`SELECT NEUS_ID as id, NEUS_NOMBRES as nombre FROM NEUS_USUARIOS WHERE NEUS_ID IN (${agenteIds.join(',')})`);
+    const nombrePorId = new Map(nombresRs.recordset.map((u) => [u.id, u.nombre]));
+
+    const pausasRs = await pool.request().input('fecha', sql.NVarChar, fecha).query(`
+      SELECT neus_id as agenteId, SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutos
+      FROM USUARIO_TIEMPOS
+      WHERE neus_id IN (${agenteIds.join(',')}) AND status_id IN (2,3,5,6) AND CAST(fecha_inicio AS date) = @fecha
+      GROUP BY neus_id
+    `);
+    const pausaPorAgente = new Map(pausasRs.recordset.map((p) => [p.agenteId, p.minutos]));
+
+    // Chats cerrados el día + tiempo promedio a primera respuesta (minutos),
+    // por agente — mismas columnas que ya usa ccInteraccionesController.
+    const chatsRs = await pool.request().input('fecha', sql.NVarChar, fecha).query(`
+      SELECT CI_AGENTE_ID as agenteId,
+             COUNT(*) as cerrados,
+             AVG(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL
+                      THEN DATEDIFF(SECOND, CI_FECHA_INICIO, CI_FECHA_PRIMER_RESPUESTA) END) as segRespuestaProm
+      FROM CCO_INTERACCIONES
+      WHERE CI_AGENTE_ID IN (${agenteIds.join(',')}) AND CI_ESTADO = 'cerrada' AND CAST(CI_FECHA_CIERRE AS date) = @fecha
+      GROUP BY CI_AGENTE_ID
+    `);
+    const chatsPorAgente = new Map(chatsRs.recordset.map((c) => [c.agenteId, c]));
+
+    const agentes = agenteIds.map((id) => {
+      const chat = chatsPorAgente.get(id);
+      return {
+        agenteId: id,
+        nombre: nombrePorId.get(id) ?? '',
+        pausaMin: pausaPorAgente.get(id) ?? 0,
+        chatsCerrados: chat?.cerrados ?? 0,
+        tiempoRespuestaProm: chat?.segRespuestaProm != null ? Math.round(chat.segRespuestaProm) : null,
+      };
+    });
+
+    // Agregado por campaña: suma de sus agentes (un agente en 2 campañas
+    // asignadas cuenta en ambas, a propósito — son vistas distintas).
+    const porCampania = new Map(campaniaIds.map((id) => [id, { campaniaId: id, agentes: 0, pausaMin: 0, chatsCerrados: 0 }]));
+    for (const a of agentes) {
+      for (const campId of campaniasPorAgente.get(a.agenteId) ?? []) {
+        const row = porCampania.get(campId);
+        if (!row) continue;
+        row.agentes += 1;
+        row.pausaMin += a.pausaMin;
+        row.chatsCerrados += a.chatsCerrados;
+      }
+    }
+    const nombrePorCampania = new Map(campanias.map((c) => [c.id, c.nombre]));
+    const resultCampanias = Array.from(porCampania.values()).map((c) => ({ ...c, nombre: nombrePorCampania.get(c.campaniaId) ?? '' }));
+
+    res.json({ success: true, data: { agentes, campanias: resultCampanias } });
+  } catch (err) {
+    logger.error('operacionesController.getComparador', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el comparador' });
+  }
+}
+
+// Umbral de "Nivel de Servicio" (SLA) para primera respuesta de chat, en
+// segundos — mismo concepto que el manual PSUP de Mitrol. Fijo por ahora;
+// si más adelante se necesita por campaña, se movería a CCO_CAMPANIAS.
+const SLA_UMBRAL_SEGUNDOS = 120;
+
+// GET /api/operaciones/supervisores/historico-sla?dias=7|30&campaniaId= —
+// Fase 3, punto 3.5 del plan basado en PSUP: línea de tiempo de cómo
+// evolucionan las métricas de chat día a día (no solo "hoy", como
+// getProductividadDia/getComparador). Reutiliza CCO_INTERACCIONES agregando
+// por día en vez de por agente/campaña, con el mismo alcance de campañas del
+// supervisor que ya usan las demás pestañas.
+async function getHistoricoSla(req, res) {
+  try {
+    const uid = req.user?.id;
+    const tipoUsuario = (req.user?.tipoUsuario || '').toString().toUpperCase();
+    const esAdmin = ['AD', 'TI'].includes(tipoUsuario);
+    const dias = [7, 30].includes(Number(req.query.dias)) ? Number(req.query.dias) : 7;
+    const campaniaIdFiltro = req.query.campaniaId ? Number(req.query.campaniaId) : null;
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const campaniasReq = pool.request();
+    let campaniasWhere = '';
+    if (!esAdmin) {
+      campaniasWhere = `WHERE CS_SUPERVISOR_ID = @uid`;
+      campaniasReq.input('uid', sql.Int, uid);
+    }
+    const campaniaIdsRs = await campaniasReq.query(
+      esAdmin
+        ? 'SELECT CM2_ID as id, CM2_NOMBRE as nombre FROM CCO_CAMPANIAS'
+        : `SELECT DISTINCT c.CM2_ID as id, c.CM2_NOMBRE as nombre
+           FROM CCO_CAMPANIAS c
+           JOIN CC_CAMPANIAS_SUPERVISORES cs ON cs.CS_CAMPANIA_ID = c.CM2_ID ${campaniasWhere.replace('CS_SUPERVISOR_ID', 'cs.CS_SUPERVISOR_ID')}`
+    );
+    const campanias = campaniaIdsRs.recordset;
+    let campaniaIds = campanias.map((c) => c.id);
+    if (campaniaIdFiltro) campaniaIds = campaniaIds.filter((id) => id === campaniaIdFiltro);
+    if (campaniaIds.length === 0) return res.json({ success: true, data: { campanias, serie: [] } });
+
+    const agentesRs = await pool.request().query(`
+      SELECT DISTINCT ga.CGA_USUARIO_ID as agenteId
+      FROM CCO_GRUPO_AGENTES ga
+      INNER JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
+      WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
+    `);
+    const agenteIds = [...new Set(agentesRs.recordset.map((a) => a.agenteId))];
+    if (agenteIds.length === 0) return res.json({ success: true, data: { campanias, serie: [] } });
+
+    // Un día por fila: volumen de chats cerrados, promedio de segundos a
+    // primera respuesta, y % de esos chats dentro del umbral de SLA.
+    const serieRs = await pool.request()
+      .input('dias', sql.Int, dias)
+      .input('umbral', sql.Int, SLA_UMBRAL_SEGUNDOS)
+      .query(`
+        SELECT CAST(CI_FECHA_CIERRE AS date) as dia,
+               COUNT(*) as chatsCerrados,
+               AVG(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL
+                        THEN DATEDIFF(SECOND, CI_FECHA_INICIO, CI_FECHA_PRIMER_RESPUESTA) END) as segRespuestaProm,
+               100.0 * SUM(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL
+                                 AND DATEDIFF(SECOND, CI_FECHA_INICIO, CI_FECHA_PRIMER_RESPUESTA) <= @umbral
+                            THEN 1 ELSE 0 END)
+               / NULLIF(SUM(CASE WHEN CI_FECHA_PRIMER_RESPUESTA IS NOT NULL THEN 1 ELSE 0 END), 0) as pctDentroSla
+        FROM CCO_INTERACCIONES
+        WHERE CI_AGENTE_ID IN (${agenteIds.join(',')})
+          AND CI_ESTADO = 'cerrada'
+          AND CAST(CI_FECHA_CIERRE AS date) >= DATEADD(DAY, -(@dias - 1), CAST(GETDATE() AS date))
+          AND CAST(CI_FECHA_CIERRE AS date) <= CAST(GETDATE() AS date)
+        GROUP BY CAST(CI_FECHA_CIERRE AS date)
+      `);
+    const porDia = new Map(serieRs.recordset.map((r) => [
+      r.dia.toISOString().slice(0, 10),
+      {
+        chatsCerrados: r.chatsCerrados,
+        segRespuestaProm: r.segRespuestaProm != null ? Math.round(r.segRespuestaProm) : null,
+        pctDentroSla: r.pctDentroSla != null ? Math.round(r.pctDentroSla * 10) / 10 : null,
+      },
+    ]));
+
+    // Rellena los días sin chats con ceros/null en vez de omitirlos, para que
+    // la línea de tiempo no salte fechas.
+    const serie = [];
+    for (let i = dias - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dia = d.toISOString().slice(0, 10);
+      const datos = porDia.get(dia);
+      serie.push({
+        dia,
+        chatsCerrados: datos?.chatsCerrados ?? 0,
+        segRespuestaProm: datos?.segRespuestaProm ?? null,
+        pctDentroSla: datos?.pctDentroSla ?? null,
+      });
+    }
+
+    res.json({ success: true, data: { campanias, serie } });
+  } catch (err) {
+    logger.error('operacionesController.getHistoricoSla', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el histórico de SLA' });
   }
 }
 
@@ -468,7 +727,7 @@ async function getMiResumenAsesor(req, res) {
     const primeraEntrada = sesiones.length > 0 ? sesiones[0].fechaInicio : null;
     const pausaActiva = sesiones.find((s) => [2, 3, 5, 6].includes(s.statusId) && !s.fechaFin);
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
-    const TIPO_KEYS = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' };
+    const TIPO_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
     for (const s of sesiones) {
       const key = TIPO_KEYS[s.statusId];
       if (key) minutosPorTipo[key] += s.minutos;
@@ -643,7 +902,7 @@ async function getReporteDiario(req, res) {
         WHERE CAST(fecha_inicio AS date) = @fecha AND status_id IN (2,3,5,6)
         GROUP BY status_id
       `);
-    const PAUSA_KEYS = { 2: 'banio', 3: 'comida', 5: 'capacitacion', 6: 'permiso' };
+    const PAUSA_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
     for (const p of pausasPorTipoRs.recordset) {
       const key = PAUSA_KEYS[p.statusId];
@@ -677,6 +936,410 @@ async function getReporteDiario(req, res) {
   } catch (err) {
     logger.error('operacionesController.getReporteDiario', err);
     res.status(500).json({ success: false, message: 'Error al obtener el reporte diario' });
+  }
+}
+
+/* ── Reportería de postulantes: volumen, tipificación y fugas en un rango ──
+   Rango de fechas propio (no el día único del reporte de arriba) porque
+   volumen de postulantes se entiende mejor en un rango de varios días.
+   Productividad por agente se mide por notas (CCO_POSTULANTE_NOTAS), no por
+   tipificación — WEBPHONE_LLAMADAS_TIPIFICADAS no guarda qué agente tipificó,
+   solo el teléfono/postulante y la fecha, así que no hay forma de atribuir
+   la tipificación a un agente con el esquema actual. */
+
+function _rangoFechas(req) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const hace30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const desde = (req.query.desde || hace30).toString();
+  const hasta = (req.query.hasta || hoy).toString();
+  return { desde, hasta };
+}
+
+/* ── Reporte Ejecutivo de Reclutamiento: réplica del Excel de control de
+   postulantes (embudo, KPIs de conversión, gráficos por canal/asesor/fecha
+   de asistencia) para la campaña de un Formulario de Atención específico.
+   Fuente de datos: CCO_INTERACCIONES (una fila = un postulante gestionado)
+   + sus respuestas de formulario (CCF_INTERACCION_FORM_RESPUESTAS) para
+   Canal de contacto, Fecha de asistencia y Horario — campos que solo viven
+   ahí, no en CCO_INTERACCIONES. La etapa del embudo SÍ vive en
+   CI_TIPIFICACION_ID (el campo "Estatus actual" del formulario se refleja
+   ahí automáticamente — ver ccFormulariosController._guardarRespuestasCore,
+   fix 2026-09-09), así que no hace falta leerla de las respuestas. */
+
+// IDs de campo del formulario "Reclutamiento Totis Prueba" (FR_ID=3, versión
+// publicada FV_ID=2) confirmados directo en BD — no hay forma genérica de
+// resolverlos por etiqueta sin arriesgar falsos positivos entre formularios
+// distintos, así que se referencian explícitos aquí.
+const RECLUTAMIENTO_CAMPO_ID = {
+  fechaAsistencia: 5,
+  horario: 6,
+  canalContacto: 10,
+};
+
+async function getReporteEjecutivoReclutamiento(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    const campaniaId = req.query.campaniaId ? Number(req.query.campaniaId) : null;
+    if (!campaniaId) return res.status(400).json({ success: false, message: 'Falta campaniaId' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rq = pool.request()
+      .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+      .input('campania', sql.Int, campaniaId)
+      .input('fCanal', sql.Int, RECLUTAMIENTO_CAMPO_ID.canalContacto)
+      .input('fAsistencia', sql.Int, RECLUTAMIENTO_CAMPO_ID.fechaAsistencia)
+      .input('fHorario', sql.Int, RECLUTAMIENTO_CAMPO_ID.horario);
+
+    const r = await rq.query(`
+      SELECT
+        i.CI_ID id,
+        i.CI_CLIENTE_NOMBRE clienteNombre,
+        i.CI_CLIENTE_TELEFONO clienteTelefono,
+        i.CI_FECHA_INICIO fechaInicio,
+        i.CI_AGENTE_NOMBRE agenteNombre,
+        ISNULL(t.CT_NOMBRE, '(sin estatus)') estatus,
+        canal.FIR_VALOR_TEXTO canal,
+        asistencia.FIR_VALOR_FECHA fechaAsistencia,
+        horario.FIR_VALOR_TEXTO horario
+      FROM dbo.CCO_INTERACCIONES i
+      LEFT JOIN dbo.CCO_TIPIFICACIONES t ON t.CT_ID = i.CI_TIPIFICACION_ID
+      LEFT JOIN dbo.CCF_INTERACCION_FORM_RESPUESTAS canal
+        ON canal.FIR_INTERACCION_ID = i.CI_ID AND canal.FIR_CAMPO_ID = @fCanal
+      LEFT JOIN dbo.CCF_INTERACCION_FORM_RESPUESTAS asistencia
+        ON asistencia.FIR_INTERACCION_ID = i.CI_ID AND asistencia.FIR_CAMPO_ID = @fAsistencia
+      LEFT JOIN dbo.CCF_INTERACCION_FORM_RESPUESTAS horario
+        ON horario.FIR_INTERACCION_ID = i.CI_ID AND horario.FIR_CAMPO_ID = @fHorario
+      WHERE i.CI_CAMPANIA_ID = @campania
+        AND i.CI_FECHA_INICIO >= @desde AND i.CI_FECHA_INICIO < DATEADD(DAY, 1, @hasta)
+        AND ISNULL(t.CT_ACTIVO, 1) = 1
+      ORDER BY i.CI_FECHA_INICIO DESC
+    `);
+
+    const filas = r.recordset;
+    const total = filas.length;
+    const conFechaAsistencia = filas.filter((f) => f.fechaAsistencia).length;
+    const conHorario = filas.filter((f) => f.horario).length;
+    const conCanal = filas.filter((f) => f.canal).length;
+
+    const SIN_CANAL = 'Sin gestionar';
+    const porEstatus = new Map();
+    const porCanal = new Map();
+    const porAgente = new Map();
+    const porFechaAsistencia = new Map();
+    // IDs de interacción sin canal identificado — para poder abrir cada una
+    // desde el reporte (ver conversación + tipificar) sin salir a buscarla.
+    const sinGestionarIds = [];
+    for (const f of filas) {
+      porEstatus.set(f.estatus, (porEstatus.get(f.estatus) ?? 0) + 1);
+      const canalKey = f.canal || SIN_CANAL;
+      porCanal.set(canalKey, (porCanal.get(canalKey) ?? 0) + 1);
+      if (!f.canal) sinGestionarIds.push({ id: f.id, clienteNombre: f.clienteNombre, fechaInicio: f.fechaInicio });
+      const agenteKey = f.agenteNombre || '(sin asesor)';
+      porAgente.set(agenteKey, (porAgente.get(agenteKey) ?? 0) + 1);
+      if (f.fechaAsistencia) {
+        const dia = new Date(f.fechaAsistencia).toISOString().slice(0, 10);
+        porFechaAsistencia.set(dia, (porFechaAsistencia.get(dia) ?? 0) + 1);
+      }
+    }
+
+    // KPIs de conversión — mismas etapas que el Excel: Cita Agendada, Cita
+    // Confirmada, Asistió, Contratado, No asistió, No interesado, Descartado.
+    // Los nombres de CCO_TIPIFICACIONES son texto libre por campaña, así que
+    // se buscan por coincidencia parcial insensible a mayúsculas, no por ID fijo.
+    const contarEstatus = (patron) => filas.filter((f) => f.estatus.toLowerCase().includes(patron)).length;
+    const citas = contarEstatus('cita agendada');
+    const confirmadas = contarEstatus('cita confirmada');
+    const asistieron = contarEstatus('asisti'); // cubre "Asistió"
+    const contratados = contarEstatus('contratado');
+    const noAsistieron = contarEstatus('no asisti');
+    const noInteresados = contarEstatus('no interesado');
+    const descartados = contarEstatus('descartado');
+
+    const pct = (num, den) => (den > 0 ? Number(((num / den) * 100).toFixed(1)) : 0);
+
+    res.json({
+      success: true,
+      data: {
+        desde, hasta, campaniaId,
+        indicadores: {
+          totalPostulantes: total,
+          conFechaAsistencia,
+          conHorario,
+          conCanalIdentificado: conCanal,
+        },
+        embudo: Array.from(porEstatus.entries()).map(([estatus, cantidad]) => ({
+          estatus, cantidad, porcentaje: pct(cantidad, total),
+        })).sort((a, b) => b.cantidad - a.cantidad),
+        kpisConversion: {
+          citasSobreTotal: pct(citas, total),
+          confirmadasSobreCitas: pct(confirmadas, citas),
+          asistenciaRegistrada: pct(asistieron, total),
+          contratacionSobreTotal: pct(contratados, total),
+          descarteMasNoInteres: pct(descartados + noInteresados, total),
+        },
+        graficos: {
+          distribucionPorEstatus: Array.from(porEstatus.entries()).map(([estatus, cantidad]) => ({ estatus, cantidad })),
+          origenPorCanal: Array.from(porCanal.entries()).map(([canal, cantidad]) => ({ canal, cantidad })).sort((a, b) => b.cantidad - a.cantidad),
+          gestionPorAsesor: Array.from(porAgente.entries()).map(([agente, cantidad]) => ({ agente, cantidad })).sort((a, b) => b.cantidad - a.cantidad),
+          agendaPorFechaAsistencia: Array.from(porFechaAsistencia.entries()).map(([fecha, cantidad]) => ({ fecha, cantidad })).sort((a, b) => a.fecha.localeCompare(b.fecha)),
+        },
+        sinGestionar: sinGestionarIds,
+      },
+    });
+  } catch (err) {
+    logger.error('operacionesController.getReporteEjecutivoReclutamiento', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el reporte ejecutivo de reclutamiento' });
+  }
+}
+
+async function _queryReportePostulantes(pool, desde, hasta) {
+  const porCampaniaRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT CAST(cp.CP_FECHA_REGISTRO AS date) fecha, c.CM2_NOMBRE campania, COUNT(*) total
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+      GROUP BY CAST(cp.CP_FECHA_REGISTRO AS date), c.CM2_NOMBRE
+      ORDER BY fecha`);
+
+  const tipificadosRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT ult.WLT_TIPIFICACION tipificacion, COUNT(*) total
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      OUTER APPLY (
+        SELECT TOP 1 wlt.WLT_TIPIFICACION
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        ORDER BY wlt.WLT_FECHA DESC
+      ) ult
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+      GROUP BY ult.WLT_TIPIFICACION`);
+  const porTipificacion = tipificadosRs.recordset.map((r) => ({
+    tipificacion: r.tipificacion || null,
+    etiqueta: r.tipificacion ? (TIPIFICACIONES_LLAMADA_LABEL[r.tipificacion] || r.tipificacion) : 'Sin tipificar',
+    total: r.total,
+  }));
+
+  const productividadRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT PN_USUARIO_ID usuarioId, PN_USUARIO_NOMBRE usuarioNombre, COUNT(*) notas
+      FROM dbo.CCO_POSTULANTE_NOTAS
+      WHERE PN_FECHA >= @desde AND PN_FECHA < DATEADD(DAY, 1, @hasta)
+      GROUP BY PN_USUARIO_ID, PN_USUARIO_NOMBRE
+      ORDER BY notas DESC`);
+
+  const sinTipTotalRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT COUNT(*) total
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      OUTER APPLY (
+        SELECT TOP 1 wlt.WLT_TIPIFICACION
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        ORDER BY wlt.WLT_FECHA DESC
+      ) ult
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+        AND ult.WLT_TIPIFICACION IS NULL`);
+
+  const sinTipListaRs = await pool.request()
+    .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+    .query(`
+      SELECT TOP 10 cp.CP_NOMBRE nombre, cp.CP_TELEFONO telefono, c.CM2_NOMBRE campania,
+             DATEDIFF(DAY, cp.CP_FECHA_REGISTRO, GETDATE()) diasEsperando
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+      OUTER APPLY (
+        SELECT TOP 1 wlt.WLT_TIPIFICACION
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        ORDER BY wlt.WLT_FECHA DESC
+      ) ult
+      WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+        AND ult.WLT_TIPIFICACION IS NULL
+      ORDER BY cp.CP_FECHA_REGISTRO ASC`);
+
+  return {
+    porCampania: porCampaniaRs.recordset,
+    porTipificacion,
+    productividadAgentes: productividadRs.recordset,
+    sinTipificar: { total: sinTipTotalRs.recordset[0].total, masAntiguos: sinTipListaRs.recordset },
+  };
+}
+
+// GET /api/operaciones/reportes-postulantes?desde=&hasta= — volumen por
+// campaña/fecha, desglose por tipificación, notas por agente y postulantes
+// sin tipificar (fugas), en un rango de fechas (default: últimos 30 días).
+async function getReportePostulantes(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const data = await _queryReportePostulantes(pool, desde, hasta);
+    res.json({ success: true, data: { desde, hasta, ...data } });
+  } catch (err) {
+    logger.error('operacionesController.getReportePostulantes', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el reporte de postulantes' });
+  }
+}
+
+// GET /api/operaciones/reportes-postulantes/excel?desde=&hasta= — un
+// renglón por postulante registrado en el rango, con su tipificación más
+// reciente (mismo criterio que _queryReportePostulantes usa para "Por
+// tipificación" en pantalla — OUTER APPLY TOP 1 por fecha de tipificación,
+// filtrado por fecha de REGISTRO del postulante, no de tipificación — así
+// los totales del Excel cuadran con los de la pantalla).
+async function exportarReportePostulantes(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const r = await pool.request()
+      .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
+      .query(`
+        SELECT
+          cp.CP_NOMBRE postulante,
+          cp.CP_TELEFONO telefono,
+          ult.WLT_TIPIFICACION tipificacion,
+          ult.WLT_OBSERVACIONES observaciones,
+          ult.WLT_EXTENSION extension,
+          ult.WLT_FECHA fecha
+        FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+        OUTER APPLY (
+          SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_EXTENSION, wlt.WLT_FECHA
+          FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+          WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+             OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+          ORDER BY wlt.WLT_FECHA DESC
+        ) ult
+        WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
+        ORDER BY cp.CP_FECHA_REGISTRO DESC`);
+
+    const filas = r.recordset.map((row) => ({
+      Postulante: row.postulante,
+      Teléfono: row.telefono,
+      Tipificación: row.tipificacion ? (TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion) : 'Sin tipificar',
+      Observaciones: row.observaciones || '',
+      Extensión: row.extension || '',
+      Fecha: row.fecha ? new Date(row.fecha).toLocaleString('es-MX') : '',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filas.length ? filas : [{ Postulante: '', Teléfono: '', Tipificación: '', Observaciones: '', Extensión: '', Fecha: '' }]);
+    ws['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 26 }, { wch: 50 }, { wch: 10 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tipificaciones');
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte_postulantes_${desde}_a_${hasta}.xlsx"`);
+    res.send(buffer);
+  } catch (err) {
+    logger.error('operacionesController.exportarReportePostulantes', err);
+    res.status(500).json({ success: false, message: 'Error al generar el Excel' });
+  }
+}
+
+/* ── Interacciones cerradas: listado general con buscador real (todas las
+   campañas/canales del Contact Center, no acotado a un formulario) ──
+   Mismo criterio de "cerrada" que buscarInteraccionesDelFormulario
+   (ccFormulariosController.js), pero sin el filtro de campañas de un
+   formulario — este es el listado completo para la Suite de reportes. */
+
+function _buildWhereInteracciones(req, rq) {
+  const where = [`i.CI_ESTADO = 'cerrada'`];
+  if (req.query.texto) {
+    rq.input('texto', sql.NVarChar(200), `%${req.query.texto}%`);
+    where.push('(i.CI_CLIENTE_NOMBRE LIKE @texto OR i.CI_CLIENTE_TELEFONO LIKE @texto)');
+  }
+  if (req.query.agenteId) {
+    rq.input('agenteId', sql.Int, req.query.agenteId);
+    where.push('i.CI_AGENTE_ID = @agenteId');
+  }
+  if (req.query.tipificacionId) {
+    rq.input('tipificacionId', sql.Int, req.query.tipificacionId);
+    where.push('i.CI_TIPIFICACION_ID = @tipificacionId');
+  }
+  if (req.query.campaniaId) {
+    rq.input('campaniaId', sql.Int, req.query.campaniaId);
+    where.push('i.CI_CAMPANIA_ID = @campaniaId');
+  }
+  if (req.query.desde) {
+    rq.input('desde', sql.DateTime, new Date(`${req.query.desde}T00:00:00`));
+    where.push('i.CI_FECHA_CIERRE >= @desde');
+  }
+  if (req.query.hasta) {
+    rq.input('hasta', sql.DateTime, new Date(`${req.query.hasta}T23:59:59`));
+    where.push('i.CI_FECHA_CIERRE <= @hasta');
+  }
+  return where;
+}
+
+// GET /api/operaciones/interacciones?texto=&agenteId=&tipificacionId=&campaniaId=&desde=&hasta=
+async function listInteracciones(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rq = pool.request();
+    const where = _buildWhereInteracciones(req, rq);
+
+    const rs = await rq.query(`
+      SELECT TOP 300
+        i.CI_ID id, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
+        i.CI_AGENTE_ID agenteId, i.CI_AGENTE_NOMBRE agenteNombre,
+        i.CI_FECHA_INICIO fechaInicio, i.CI_FECHA_CIERRE fechaCierre, i.CI_ESTADO estado,
+        cn.CN_NOMBRE canalNombre, cm.CM2_NOMBRE campaniaNombre, ti.CT_NOMBRE tipificacionNombre
+      FROM dbo.CCO_INTERACCIONES i
+      LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+      LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
+      LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
+      WHERE ${where.join(' AND ')}
+      ORDER BY i.CI_FECHA_CIERRE DESC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('operacionesController.listInteracciones', err);
+    res.status(500).json({ success: false, message: 'Error al buscar interacciones' });
+  }
+}
+
+// GET /api/operaciones/interacciones/excel — mismo filtro de arriba, en .xlsx
+async function exportarInteracciones(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rq = pool.request();
+    const where = _buildWhereInteracciones(req, rq);
+
+    const rs = await rq.query(`
+      SELECT TOP 2000
+        i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
+        cm.CM2_NOMBRE campaniaNombre, cn.CN_NOMBRE canalNombre, i.CI_AGENTE_NOMBRE agenteNombre,
+        ti.CT_NOMBRE tipificacionNombre, i.CI_FECHA_CIERRE fechaCierre
+      FROM dbo.CCO_INTERACCIONES i
+      LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+      LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
+      LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
+      WHERE ${where.join(' AND ')}
+      ORDER BY i.CI_FECHA_CIERRE DESC
+    `);
+
+    const hoja = rs.recordset.map((r) => ({
+      Cliente: r.clienteNombre || '', Teléfono: r.clienteTelefono || '', Campaña: r.campaniaNombre || '',
+      Canal: r.canalNombre || '', Agente: r.agenteNombre || '', Tipificación: r.tipificacionNombre || '',
+      Cierre: r.fechaCierre ? new Date(r.fechaCierre).toLocaleString('es-MX') : '',
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hoja.length ? hoja : [{ Cliente: '' }]), 'Interacciones');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="interacciones_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.send(buffer);
+  } catch (err) {
+    logger.error('operacionesController.exportarInteracciones', err);
+    res.status(500).json({ success: false, message: 'Error al generar el Excel' });
   }
 }
 
@@ -746,6 +1409,637 @@ async function getKpis(req, res) {
   }
 }
 
+// GET /api/operaciones/supervisores/historial-asignaciones — quién asignó o
+// quitó a qué supervisor de qué campaña/skill y cuándo (INTRANET_AUDITORIA,
+// módulo 'supervisores'). Accesible a cualquier supervisor autenticado —
+// a diferencia de /api/auditoria (solo rol AD), esto es historial del propio
+// módulo, no auditoría general del sistema.
+async function getHistorialAsignaciones(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT TOP 100 AUDIT_ID as id, USUARIO_NOMBRE as usuarioNombre, ACCION as accion,
+             DETALLE as detalle, FECHA as fecha
+      FROM INTRANET_AUDITORIA
+      WHERE MODULO = 'supervisores'
+      ORDER BY FECHA DESC
+    `);
+    const data = rs.recordset.map((r) => {
+      let detalle = null;
+      try { detalle = r.detalle ? JSON.parse(r.detalle) : null; } catch { /* detalle no parseable, se omite */ }
+      return { id: r.id, usuarioNombre: r.usuarioNombre, accion: r.accion, detalle, fecha: r.fecha };
+    });
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('operacionesController.getHistorialAsignaciones', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el historial de asignaciones' });
+  }
+}
+
+/* ── Suite de Reportes: catálogo de definiciones .rdl / .rdlc (SQL Server
+   Reporting Services) subidas por el equipo, organizadas en carpetas propias
+   (CC_RDL_CARPETAS) y con seguridad de acceso por reporte: roles permitidos
+   (CSV de AD/TI/CC/ST/VE) + usuarios sueltos (CSV de NEUS_ID). Un reporte sin
+   roles ni usuarios es público para todo el que entra al módulo. AD/TI siempre
+   ven y administran todo.
+   El archivo físico vive en RDL_DIR y se sirve como estático en /suite-reportes. ── */
+
+const RDL_ROLES_VALIDOS = ['AD', 'TI', 'CC', 'ST', 'VE'];
+
+async function ensureRdlSchema(pool) {
+  try {
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='CC_RDL_CARPETAS')
+      CREATE TABLE CC_RDL_CARPETAS (
+        RDC_ID          INT IDENTITY PRIMARY KEY,
+        RDC_NOMBRE      NVARCHAR(200) NOT NULL,
+        RDC_CREADO_POR  SMALLINT      NULL,
+        RDC_FECHA       DATETIME      NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT UQ_RDC_NOMBRE UNIQUE (RDC_NOMBRE)
+      )
+    `);
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='CC_RDL_REPORTES')
+      CREATE TABLE CC_RDL_REPORTES (
+        RDL_ID            INT IDENTITY PRIMARY KEY,
+        RDL_NOMBRE        NVARCHAR(200)  NOT NULL,
+        RDL_DESCRIPCION   NVARCHAR(1000) NULL,
+        RDL_CARPETA       NVARCHAR(200)  NOT NULL DEFAULT 'General',
+        RDL_CARPETA_ID    INT            NULL,
+        RDL_ARCHIVO       NVARCHAR(400)  NOT NULL,
+        RDL_ARCHIVO_ORIG  NVARCHAR(400)  NOT NULL,
+        RDL_TAMANO        INT            NOT NULL DEFAULT 0,
+        RDL_VERSION_RDL   NVARCHAR(50)   NULL,
+        RDL_COMPATIBLE    BIT            NOT NULL DEFAULT 1,
+        RDL_METADATA      NVARCHAR(MAX)  NULL,
+        RDL_ROLES         NVARCHAR(200)  NULL,
+        RDL_USUARIOS      NVARCHAR(MAX)  NULL,
+        RDL_SUBIDO_POR    SMALLINT       NULL,
+        RDL_SUBIDO_NOMBRE NVARCHAR(200)  NULL,
+        RDL_FECHA         DATETIME       NOT NULL DEFAULT GETDATE()
+      )
+    `);
+    // Migraciones suaves para instalaciones que ya tenían la tabla vieja
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CC_RDL_REPORTES' AND COLUMN_NAME='RDL_CARPETA_ID')
+      ALTER TABLE CC_RDL_REPORTES ADD RDL_CARPETA_ID INT NULL
+    `);
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CC_RDL_REPORTES' AND COLUMN_NAME='RDL_ROLES')
+      ALTER TABLE CC_RDL_REPORTES ADD RDL_ROLES NVARCHAR(200) NULL
+    `);
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CC_RDL_REPORTES' AND COLUMN_NAME='RDL_USUARIOS')
+      ALTER TABLE CC_RDL_REPORTES ADD RDL_USUARIOS NVARCHAR(MAX) NULL
+    `);
+    // Sembrar carpetas desde los valores de texto que ya existían y enlazar
+    await pool.request().query(`
+      INSERT INTO CC_RDL_CARPETAS (RDC_NOMBRE)
+      SELECT DISTINCT RDL_CARPETA FROM CC_RDL_REPORTES r
+      WHERE RDL_CARPETA IS NOT NULL AND LTRIM(RTRIM(RDL_CARPETA)) <> ''
+        AND NOT EXISTS (SELECT 1 FROM CC_RDL_CARPETAS c WHERE c.RDC_NOMBRE = r.RDL_CARPETA)
+    `);
+    await pool.request().query(`
+      UPDATE r SET r.RDL_CARPETA_ID = c.RDC_ID
+      FROM CC_RDL_REPORTES r JOIN CC_RDL_CARPETAS c ON c.RDC_NOMBRE = r.RDL_CARPETA
+      WHERE r.RDL_CARPETA_ID IS NULL
+    `);
+  } catch (e) {
+    logger.warn('operacionesController.ensureRdlSchema', e && e.message);
+  }
+}
+
+// Normaliza el CSV de roles: solo valores válidos, en mayúsculas, sin duplicados.
+function _parseRoles(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : String(raw).split(',');
+  return [...new Set(arr.map((r) => String(r).trim().toUpperCase()).filter((r) => RDL_ROLES_VALIDOS.includes(r)))];
+}
+// Normaliza el CSV de ids de usuario.
+function _parseUsuarios(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : String(raw).split(',');
+  return [...new Set(arr.map((n) => parseInt(String(n).trim(), 10)).filter((n) => Number.isInteger(n) && n > 0))];
+}
+
+// ¿El usuario `user` puede VER el reporte `row`?
+function _puedeVerRdl(user, row) {
+  const tipo = (user?.tipoUsuario || '').toString().toUpperCase();
+  if (tipo === 'AD' || tipo === 'TI') return true; // administradores: todo
+  const roles = _parseRoles(row.RDL_ROLES);
+  const usuarios = _parseUsuarios(row.RDL_USUARIOS);
+  if (roles.length === 0 && usuarios.length === 0) return true; // público
+  if (roles.includes(tipo)) return true;
+  if (user?.id && usuarios.includes(Number(user.id))) return true;
+  return false;
+}
+
+function _mapRdl(r) {
+  let metadata = null;
+  try { metadata = r.RDL_METADATA ? JSON.parse(r.RDL_METADATA) : null; } catch (_) { metadata = null; }
+  return {
+    id: r.RDL_ID,
+    nombre: r.RDL_NOMBRE,
+    descripcion: r.RDL_DESCRIPCION || '',
+    carpeta: r.RDL_CARPETA || 'General',
+    carpetaId: r.RDL_CARPETA_ID ?? null,
+    archivo: r.RDL_ARCHIVO,
+    archivoOriginal: r.RDL_ARCHIVO_ORIG,
+    tamano: r.RDL_TAMANO,
+    versionRdl: r.RDL_VERSION_RDL || null,
+    compatible: !!r.RDL_COMPATIBLE,
+    metadata,
+    roles: _parseRoles(r.RDL_ROLES),
+    usuarios: _parseUsuarios(r.RDL_USUARIOS),
+    subidoPor: r.RDL_SUBIDO_POR,
+    subidoNombre: r.RDL_SUBIDO_NOMBRE || '',
+    fecha: r.RDL_FECHA,
+    url: `/suite-reportes/${encodeURIComponent(r.RDL_ARCHIVO)}`,
+  };
+}
+
+/* ── Carpetas ── */
+
+// GET /api/operaciones/suite-reportes/carpetas
+async function listRdlCarpetas(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().query(`
+      SELECT c.RDC_ID as id, c.RDC_NOMBRE as nombre, c.RDC_FECHA as fecha,
+             (SELECT COUNT(*) FROM CC_RDL_REPORTES r WHERE r.RDL_CARPETA_ID = c.RDC_ID) as reportes
+      FROM CC_RDL_CARPETAS c ORDER BY c.RDC_NOMBRE ASC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('operacionesController.listRdlCarpetas', err);
+    res.status(500).json({ success: false, message: 'Error al listar las carpetas' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/carpetas  { nombre }
+async function crearRdlCarpeta(req, res) {
+  try {
+    const nombre = (req.body.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ success: false, message: 'Nombre de carpeta requerido' });
+    if (nombre.length > 200) return res.status(400).json({ success: false, message: 'Nombre demasiado largo' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    try {
+      const rs = await pool.request()
+        .input('nombre', sql.NVarChar, nombre)
+        .input('creadoPor', sql.SmallInt, req.user?.id ?? null)
+        .query(`
+          INSERT INTO CC_RDL_CARPETAS (RDC_NOMBRE, RDC_CREADO_POR)
+          OUTPUT INSERTED.RDC_ID as id, INSERTED.RDC_NOMBRE as nombre, INSERTED.RDC_FECHA as fecha
+          VALUES (@nombre, @creadoPor)
+        `);
+      res.status(201).json({ success: true, data: { ...rs.recordset[0], reportes: 0 } });
+    } catch (dbErr) {
+      if (dbErr.number === 2601 || dbErr.number === 2627) {
+        return res.status(409).json({ success: false, message: 'Ya existe una carpeta con ese nombre' });
+      }
+      throw dbErr;
+    }
+  } catch (err) {
+    logger.error('operacionesController.crearRdlCarpeta', err);
+    res.status(500).json({ success: false, message: 'Error al crear la carpeta' });
+  }
+}
+
+// PATCH /api/operaciones/suite-reportes/carpetas/:id  { nombre }
+async function renombrarRdlCarpeta(req, res) {
+  try {
+    const nombre = (req.body.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ success: false, message: 'Nombre requerido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    try {
+      await pool.request()
+        .input('id', sql.Int, req.params.id)
+        .input('nombre', sql.NVarChar, nombre)
+        .query(`
+          UPDATE CC_RDL_CARPETAS SET RDC_NOMBRE = @nombre WHERE RDC_ID = @id;
+          UPDATE CC_RDL_REPORTES SET RDL_CARPETA = @nombre WHERE RDL_CARPETA_ID = @id;
+        `);
+      res.json({ success: true });
+    } catch (dbErr) {
+      if (dbErr.number === 2601 || dbErr.number === 2627) {
+        return res.status(409).json({ success: false, message: 'Ya existe una carpeta con ese nombre' });
+      }
+      throw dbErr;
+    }
+  } catch (err) {
+    logger.error('operacionesController.renombrarRdlCarpeta', err);
+    res.status(500).json({ success: false, message: 'Error al renombrar la carpeta' });
+  }
+}
+
+// DELETE /api/operaciones/suite-reportes/carpetas/:id — solo si está vacía.
+async function eliminarRdlCarpeta(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const usoRs = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT COUNT(*) as total FROM CC_RDL_REPORTES WHERE RDL_CARPETA_ID = @id');
+    if (usoRs.recordset[0].total > 0) {
+      return res.status(409).json({ success: false, message: 'La carpeta tiene reportes — muévelos o elimínalos primero' });
+    }
+    await pool.request().input('id', sql.Int, req.params.id)
+      .query('DELETE FROM CC_RDL_CARPETAS WHERE RDC_ID = @id');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.eliminarRdlCarpeta', err);
+    res.status(500).json({ success: false, message: 'Error al eliminar la carpeta' });
+  }
+}
+
+async function _resolverCarpeta(pool, req) {
+  // Acepta carpetaId numérico o carpeta (nombre) — crea la carpeta si el nombre es nuevo.
+  const carpetaId = parseInt(req.body.carpetaId, 10);
+  if (Number.isInteger(carpetaId) && carpetaId > 0) {
+    const rs = await pool.request().input('id', sql.Int, carpetaId)
+      .query('SELECT RDC_ID as id, RDC_NOMBRE as nombre FROM CC_RDL_CARPETAS WHERE RDC_ID = @id');
+    if (rs.recordset.length > 0) return rs.recordset[0];
+  }
+  const nombre = (req.body.carpeta || '').trim() || 'General';
+  const existe = await pool.request().input('nombre', sql.NVarChar, nombre)
+    .query('SELECT RDC_ID as id, RDC_NOMBRE as nombre FROM CC_RDL_CARPETAS WHERE RDC_NOMBRE = @nombre');
+  if (existe.recordset.length > 0) return existe.recordset[0];
+  const creada = await pool.request()
+    .input('nombre', sql.NVarChar, nombre)
+    .input('creadoPor', sql.SmallInt, req.user?.id ?? null)
+    .query(`
+      INSERT INTO CC_RDL_CARPETAS (RDC_NOMBRE, RDC_CREADO_POR)
+      OUTPUT INSERTED.RDC_ID as id, INSERTED.RDC_NOMBRE as nombre
+      VALUES (@nombre, @creadoPor)
+    `);
+  return creada.recordset[0];
+}
+
+/* ── Reportes RDL ── */
+
+// GET /api/operaciones/suite-reportes/rdl — catálogo, filtrado por la seguridad
+// de cada reporte contra el usuario autenticado.
+async function listRdl(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().query(`
+      SELECT * FROM CC_RDL_REPORTES ORDER BY RDL_CARPETA ASC, RDL_NOMBRE ASC
+    `);
+    const visibles = rs.recordset.filter((r) => _puedeVerRdl(req.user, r)).map(_mapRdl);
+    res.json({ success: true, data: visibles });
+  } catch (err) {
+    logger.error('operacionesController.listRdl', err);
+    res.status(500).json({ success: false, message: 'Error al listar los reportes RDL' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/rdl  (multipart: archivo + campos)
+// El frontend ya parseó el XML con DOMParser y manda `metadata` (JSON) +
+// `versionRdl` + `compatible`. Aquí solo persistimos y catalogamos.
+async function subirRdl(req, res) {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'Archivo .rdl requerido' });
+
+    const nombre = (req.body.nombre || '').trim() || path.basename(req.file.originalname, path.extname(req.file.originalname));
+    const descripcion = (req.body.descripcion || '').trim() || null;
+    const versionRdl = (req.body.versionRdl || '').trim() || null;
+    const compatible = req.body.compatible === 'false' ? 0 : 1;
+    const roles = _parseRoles(req.body.roles).join(',') || null;
+    const usuarios = _parseUsuarios(req.body.usuarios).join(',') || null;
+    let metadata = null;
+    try { metadata = req.body.metadata ? JSON.stringify(JSON.parse(req.body.metadata)) : null; } catch (_) { metadata = null; }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const carpeta = await _resolverCarpeta(pool, req);
+
+    const rs = await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('descripcion', sql.NVarChar, descripcion)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('archivo', sql.NVarChar, req.file.filename)
+      .input('archivoOrig', sql.NVarChar, req.file.originalname)
+      .input('tamano', sql.Int, req.file.size || 0)
+      .input('versionRdl', sql.NVarChar, versionRdl)
+      .input('compatible', sql.Bit, compatible)
+      .input('metadata', sql.NVarChar, metadata)
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .input('subidoPor', sql.SmallInt, req.user?.id ?? null)
+      .input('subidoNombre', sql.NVarChar, req.user?.nombre || req.user?.username || null)
+      .query(`
+        INSERT INTO CC_RDL_REPORTES
+          (RDL_NOMBRE, RDL_DESCRIPCION, RDL_CARPETA, RDL_CARPETA_ID, RDL_ARCHIVO, RDL_ARCHIVO_ORIG, RDL_TAMANO,
+           RDL_VERSION_RDL, RDL_COMPATIBLE, RDL_METADATA, RDL_ROLES, RDL_USUARIOS, RDL_SUBIDO_POR, RDL_SUBIDO_NOMBRE)
+        OUTPUT INSERTED.*
+        VALUES
+          (@nombre, @descripcion, @carpeta, @carpetaId, @archivo, @archivoOrig, @tamano,
+           @versionRdl, @compatible, @metadata, @roles, @usuarios, @subidoPor, @subidoNombre)
+      `);
+    res.status(201).json({ success: true, data: _mapRdl(rs.recordset[0]) });
+  } catch (err) {
+    logger.error('operacionesController.subirRdl', err);
+    res.status(500).json({ success: false, message: 'Error al subir el reporte RDL' });
+  }
+}
+
+// GET /api/operaciones/suite-reportes/rdl/:id/raw — descarga del .rdl original.
+async function descargarRdl(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT * FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    if (rs.recordset.length === 0) return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
+    const row = rs.recordset[0];
+    if (!_puedeVerRdl(req.user, row)) return res.status(403).json({ success: false, message: 'No tienes acceso a este reporte' });
+    const full = path.join(RDL_DIR, row.RDL_ARCHIVO);
+    if (!fs.existsSync(full)) return res.status(404).json({ success: false, message: 'El archivo físico no existe' });
+    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader('Content-Disposition', `attachment; filename="${row.RDL_ARCHIVO_ORIG}"`);
+    fs.createReadStream(full).pipe(res);
+  } catch (err) {
+    logger.error('operacionesController.descargarRdl', err);
+    res.status(500).json({ success: false, message: 'Error al descargar el reporte RDL' });
+  }
+}
+
+// PATCH /api/operaciones/suite-reportes/rdl/:id — nombre/descripcion/carpeta + seguridad.
+async function actualizarRdl(req, res) {
+  try {
+    const { nombre, descripcion } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+
+    const actual = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT * FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    if (actual.recordset.length === 0) return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
+
+    const carpeta = (req.body.carpeta !== undefined || req.body.carpetaId !== undefined)
+      ? await _resolverCarpeta(pool, req)
+      : { id: actual.recordset[0].RDL_CARPETA_ID, nombre: actual.recordset[0].RDL_CARPETA };
+
+    const roles = req.body.roles !== undefined ? (_parseRoles(req.body.roles).join(',') || null) : actual.recordset[0].RDL_ROLES;
+    const usuarios = req.body.usuarios !== undefined ? (_parseUsuarios(req.body.usuarios).join(',') || null) : actual.recordset[0].RDL_USUARIOS;
+
+    await pool.request()
+      .input('id', sql.Int, req.params.id)
+      .input('nombre', sql.NVarChar, (nombre || '').trim() || null)
+      .input('descripcion', sql.NVarChar, descripcion != null ? String(descripcion).trim() : null)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .query(`
+        UPDATE CC_RDL_REPORTES SET
+          RDL_NOMBRE = ISNULL(@nombre, RDL_NOMBRE),
+          RDL_DESCRIPCION = @descripcion,
+          RDL_CARPETA = @carpeta,
+          RDL_CARPETA_ID = @carpetaId,
+          RDL_ROLES = @roles,
+          RDL_USUARIOS = @usuarios
+        WHERE RDL_ID = @id
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.actualizarRdl', err);
+    res.status(500).json({ success: false, message: 'Error al actualizar el reporte RDL' });
+  }
+}
+
+// DELETE /api/operaciones/suite-reportes/rdl/:id
+async function eliminarRdl(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    const rs = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT RDL_ARCHIVO FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    if (rs.recordset.length > 0) {
+      const full = path.join(RDL_DIR, rs.recordset[0].RDL_ARCHIVO);
+      try { if (fs.existsSync(full)) fs.unlinkSync(full); } catch (_) { /* best-effort */ }
+    }
+    await pool.request().input('id', sql.Int, req.params.id)
+      .query('DELETE FROM CC_RDL_REPORTES WHERE RDL_ID = @id');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.eliminarRdl', err);
+    res.status(500).json({ success: false, message: 'Error al eliminar el reporte RDL' });
+  }
+}
+
+/* ── Constructor de Reportes: catálogo de orígenes/campos, ejecución de
+   definiciones armadas en el front, y persistencia de reportes guardados
+   (reusa la seguridad rol+usuarios de los RDL). ── */
+
+async function ensureReportBuilderSchema(pool) {
+  try {
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='CC_REPORTES_CONSTRUIDOS')
+      CREATE TABLE CC_REPORTES_CONSTRUIDOS (
+        RC_ID            INT IDENTITY PRIMARY KEY,
+        RC_NOMBRE        NVARCHAR(200)  NOT NULL,
+        RC_DESCRIPCION   NVARCHAR(1000) NULL,
+        RC_CARPETA       NVARCHAR(200)  NOT NULL DEFAULT 'General',
+        RC_CARPETA_ID    INT            NULL,
+        RC_ORIGEN        NVARCHAR(60)   NOT NULL,
+        RC_DEFINICION    NVARCHAR(MAX)  NOT NULL,
+        RC_ROLES         NVARCHAR(200)  NULL,
+        RC_USUARIOS      NVARCHAR(MAX)  NULL,
+        RC_CREADO_POR    SMALLINT       NULL,
+        RC_CREADO_NOMBRE NVARCHAR(200)  NULL,
+        RC_FECHA         DATETIME       NOT NULL DEFAULT GETDATE(),
+        RC_ACTUALIZADO   DATETIME       NULL
+      )
+    `);
+  } catch (e) {
+    logger.warn('operacionesController.ensureReportBuilderSchema', e && e.message);
+  }
+}
+
+function _mapReporteConstruido(r) {
+  let definicion = null;
+  try { definicion = r.RC_DEFINICION ? JSON.parse(r.RC_DEFINICION) : null; } catch (_) { definicion = null; }
+  return {
+    id: r.RC_ID,
+    nombre: r.RC_NOMBRE,
+    descripcion: r.RC_DESCRIPCION || '',
+    carpeta: r.RC_CARPETA || 'General',
+    carpetaId: r.RC_CARPETA_ID ?? null,
+    origen: r.RC_ORIGEN,
+    definicion,
+    roles: _parseRoles(r.RC_ROLES),
+    usuarios: _parseUsuarios(r.RC_USUARIOS),
+    creadoPor: r.RC_CREADO_POR,
+    creadoNombre: r.RC_CREADO_NOMBRE || '',
+    fecha: r.RC_FECHA,
+    actualizado: r.RC_ACTUALIZADO,
+    tipo: 'construido',
+  };
+}
+
+// GET /api/operaciones/suite-reportes/builder/catalogo — orígenes, campos y filtros disponibles.
+async function getBuilderCatalogo(req, res) {
+  try {
+    res.json({ success: true, data: reportBuilderCatalog.catalogoPublico() });
+  } catch (err) {
+    logger.error('operacionesController.getBuilderCatalogo', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el catálogo del constructor' });
+  }
+}
+
+// GET /api/operaciones/suite-reportes/builder/catalogo-filtro/:catalogo — opciones de un selector.
+async function getBuilderCatalogoFiltro(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const data = await reportBuilderRunner.catalogoFiltro(pool, req.params.catalogo);
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.getBuilderCatalogoFiltro', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el catálogo del filtro' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/builder/ejecutar — corre una definición y devuelve filas.
+async function ejecutarBuilder(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const resultado = await reportBuilderRunner.ejecutar(pool, req.body?.definicion ?? req.body);
+    res.json({ success: true, data: resultado });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.ejecutarBuilder', err);
+    res.status(500).json({ success: false, message: 'Error al ejecutar el reporte' });
+  }
+}
+
+// GET /api/operaciones/suite-reportes/builder/reportes — reportes guardados visibles.
+async function listReportesConstruidos(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureReportBuilderSchema(pool);
+    const rs = await pool.request().query(`SELECT * FROM CC_REPORTES_CONSTRUIDOS ORDER BY RC_CARPETA, RC_NOMBRE`);
+    const visibles = rs.recordset
+      .filter((r) => _puedeVerRdl(req.user, { RDL_ROLES: r.RC_ROLES, RDL_USUARIOS: r.RC_USUARIOS }))
+      .map(_mapReporteConstruido);
+    res.json({ success: true, data: visibles });
+  } catch (err) {
+    logger.error('operacionesController.listReportesConstruidos', err);
+    res.status(500).json({ success: false, message: 'Error al listar los reportes guardados' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/builder/reportes — guarda una definición.
+async function guardarReporteConstruido(req, res) {
+  try {
+    const { nombre, descripcion, origen, definicion } = req.body || {};
+    if (!nombre || !nombre.trim()) return res.status(400).json({ success: false, message: 'Nombre requerido' });
+    if (!origen || !reportBuilderCatalog.ORIGENES[origen]) return res.status(400).json({ success: false, message: 'Origen inválido' });
+    // Validar la definición compilándola (lanza si algo no cuadra)
+    reportBuilderRunner.compilar(definicion);
+
+    const roles = _parseRoles(req.body.roles).join(',') || null;
+    const usuarios = _parseUsuarios(req.body.usuarios).join(',') || null;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    await ensureReportBuilderSchema(pool);
+    const carpeta = await _resolverCarpeta(pool, req);
+
+    const rs = await pool.request()
+      .input('nombre', sql.NVarChar, nombre.trim())
+      .input('descripcion', sql.NVarChar, (descripcion || '').trim() || null)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('origen', sql.NVarChar, origen)
+      .input('definicion', sql.NVarChar, JSON.stringify(definicion))
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .input('creadoPor', sql.SmallInt, req.user?.id ?? null)
+      .input('creadoNombre', sql.NVarChar, req.user?.nombre || req.user?.username || null)
+      .query(`
+        INSERT INTO CC_REPORTES_CONSTRUIDOS
+          (RC_NOMBRE, RC_DESCRIPCION, RC_CARPETA, RC_CARPETA_ID, RC_ORIGEN, RC_DEFINICION, RC_ROLES, RC_USUARIOS, RC_CREADO_POR, RC_CREADO_NOMBRE)
+        OUTPUT INSERTED.*
+        VALUES
+          (@nombre, @descripcion, @carpeta, @carpetaId, @origen, @definicion, @roles, @usuarios, @creadoPor, @creadoNombre)
+      `);
+    res.status(201).json({ success: true, data: _mapReporteConstruido(rs.recordset[0]) });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.guardarReporteConstruido', err);
+    res.status(500).json({ success: false, message: 'Error al guardar el reporte' });
+  }
+}
+
+// PATCH /api/operaciones/suite-reportes/builder/reportes/:id
+async function actualizarReporteConstruido(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureRdlSchema(pool);
+    await ensureReportBuilderSchema(pool);
+    const actual = await pool.request().input('id', sql.Int, req.params.id)
+      .query('SELECT * FROM CC_REPORTES_CONSTRUIDOS WHERE RC_ID = @id');
+    if (actual.recordset.length === 0) return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
+    const row = actual.recordset[0];
+
+    const { nombre, descripcion, definicion } = req.body || {};
+    if (definicion !== undefined) reportBuilderRunner.compilar(definicion);
+
+    const carpeta = (req.body.carpeta !== undefined || req.body.carpetaId !== undefined)
+      ? await _resolverCarpeta(pool, req)
+      : { id: row.RC_CARPETA_ID, nombre: row.RC_CARPETA };
+    const roles = req.body.roles !== undefined ? (_parseRoles(req.body.roles).join(',') || null) : row.RC_ROLES;
+    const usuarios = req.body.usuarios !== undefined ? (_parseUsuarios(req.body.usuarios).join(',') || null) : row.RC_USUARIOS;
+
+    await pool.request()
+      .input('id', sql.Int, req.params.id)
+      .input('nombre', sql.NVarChar, (nombre || '').trim() || null)
+      .input('descripcion', sql.NVarChar, descripcion != null ? String(descripcion).trim() : row.RC_DESCRIPCION)
+      .input('carpeta', sql.NVarChar, carpeta.nombre)
+      .input('carpetaId', sql.Int, carpeta.id)
+      .input('definicion', sql.NVarChar, definicion !== undefined ? JSON.stringify(definicion) : row.RC_DEFINICION)
+      .input('roles', sql.NVarChar, roles)
+      .input('usuarios', sql.NVarChar, usuarios)
+      .query(`
+        UPDATE CC_REPORTES_CONSTRUIDOS SET
+          RC_NOMBRE = ISNULL(@nombre, RC_NOMBRE),
+          RC_DESCRIPCION = @descripcion,
+          RC_CARPETA = @carpeta,
+          RC_CARPETA_ID = @carpetaId,
+          RC_DEFINICION = @definicion,
+          RC_ROLES = @roles,
+          RC_USUARIOS = @usuarios,
+          RC_ACTUALIZADO = GETDATE()
+        WHERE RC_ID = @id
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.actualizarReporteConstruido', err);
+    res.status(500).json({ success: false, message: 'Error al actualizar el reporte' });
+  }
+}
+
+// DELETE /api/operaciones/suite-reportes/builder/reportes/:id
+async function eliminarReporteConstruido(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureReportBuilderSchema(pool);
+    await pool.request().input('id', sql.Int, req.params.id)
+      .query('DELETE FROM CC_REPORTES_CONSTRUIDOS WHERE RC_ID = @id');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('operacionesController.eliminarReporteConstruido', err);
+    res.status(500).json({ success: false, message: 'Error al eliminar el reporte' });
+  }
+}
+
 module.exports = {
   listCampanias,
   crearCampania,
@@ -757,6 +2051,8 @@ module.exports = {
   quitarSupervisor,
   getMiPanel,
   getProductividadDia,
+  getComparador,
+  getHistoricoSla,
   getTiemposAgente,
   getMisAgentes,
   getKpis,
@@ -764,5 +2060,27 @@ module.exports = {
   crearMeta,
   eliminarMeta,
   getReporteDiario,
+  getReportePostulantes,
+  exportarReportePostulantes,
+  getReporteEjecutivoReclutamiento,
+  listInteracciones,
+  exportarInteracciones,
   getMiResumenAsesor,
+  getHistorialAsignaciones,
+  listRdl,
+  subirRdl,
+  descargarRdl,
+  actualizarRdl,
+  eliminarRdl,
+  listRdlCarpetas,
+  crearRdlCarpeta,
+  renombrarRdlCarpeta,
+  eliminarRdlCarpeta,
+  getBuilderCatalogo,
+  getBuilderCatalogoFiltro,
+  ejecutarBuilder,
+  listReportesConstruidos,
+  guardarReporteConstruido,
+  actualizarReporteConstruido,
+  eliminarReporteConstruido,
 };

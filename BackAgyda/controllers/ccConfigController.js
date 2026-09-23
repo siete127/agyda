@@ -2,11 +2,12 @@ const sql = require('mssql');
 const crypto = require('crypto');
 const XLSX = require('xlsx');
 const databaseService = require('../services/databaseService');
-const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
+const { TIPIFICACIONES_LLAMADA, TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada');
 const metaClient = require('../services/canalesMeta/metaClient');
 const baileysManager = require('../services/canalesBaileys/baileysManager');
 const fcaManager = require('../services/canalesFca/fcaManager');
 const igPrivateManager = require('../services/canalesIgPrivate/igPrivateManager');
+const { logAudit } = require('../services/auditService');
 
 function esAdmin(req) {
   return ['AD', 'TI'].includes(String(req.user?.tipoUsuario || '').toUpperCase());
@@ -36,6 +37,7 @@ exports.getConfig = async (req, res) => {
       msgFueraHorario: row.CF_MSG_FUERA_HORARIO || '',
       horarioInicio: row.CF_HORARIO_INICIO || '', horarioFin: row.CF_HORARIO_FIN || '',
       diasSemana: row.CF_DIAS_SEMANA || '1,2,3,4,5',
+      modoAsignacion: row.CF_MODO_ASIGNACION === 'manual' ? 'manual' : 'auto',
     } });
   } catch (e) {
     console.error('ccConfig.getConfig:', e.message);
@@ -61,11 +63,13 @@ exports.updateConfig = async (req, res) => {
       .input('hi', sql.NVarChar(5), b.horarioInicio || null)
       .input('hf', sql.NVarChar(5), b.horarioFin || null)
       .input('ds', sql.NVarChar(20), b.diasSemana || null)
+      .input('modo', sql.NVarChar(12), b.modoAsignacion === 'manual' ? 'manual' : 'auto')
       .query(`UPDATE dbo.CCO_CONFIG SET
         CF_SLA_PRIMERA_RESPUESTA_SEG=@sla1, CF_SLA_RESPUESTA_SEG=@sla2, CF_ACW_SEG=@acw,
         CF_MAX_INTERACCIONES_POR_AGENTE=@max, CF_AUTOCIERRE_INACTIVIDAD_MIN=@auto,
         CF_MSG_BIENVENIDA=@mb, CF_MSG_FUERA_HORARIO=@mf,
         CF_HORARIO_INICIO=@hi, CF_HORARIO_FIN=@hf, CF_DIAS_SEMANA=@ds,
+        CF_MODO_ASIGNACION=@modo,
         CF_FECHA_ACTUALIZACION=GETDATE()
         WHERE CF_ID=(SELECT TOP 1 CF_ID FROM dbo.CCO_CONFIG ORDER BY CF_ID)`);
     res.json({ success: true });
@@ -88,6 +92,7 @@ exports.listCanales = async (req, res) => {
     const r = await p.request().query(`
       SELECT CN_ID id, CN_TIPO tipo, CN_NOMBRE nombre, CN_HABILITADO habilitado,
              CN_GRUPO_ID grupoId, CN_CAMPANIA_ID campaniaId, CN_MODO_SESION modoSesion,
+             CN_MODO_ASIGNACION modoAsignacion,
              CN_META_PAGE_ID metaPageId, CN_META_BUSINESS_ID metaBusinessId,
              CN_VERIFY_TOKEN verifyToken, CN_WEBHOOK_SUSCRITO webhookSuscrito,
              CASE WHEN CN_ACCESS_TOKEN IS NOT NULL AND LEN(CN_ACCESS_TOKEN) > 0 THEN 1 ELSE 0 END accessTokenConfigurado,
@@ -95,13 +100,14 @@ exports.listCanales = async (req, res) => {
              CN_BAILEYS_ESTADO baileysEstado, CN_BAILEYS_NUMERO baileysNumero,
              CN_FCA_ESTADO fcaEstado, CN_FCA_USUARIO fcaUsuario,
              CASE WHEN CN_FCA_APPSTATE IS NOT NULL AND LEN(CN_FCA_APPSTATE) > 0 THEN 1 ELSE 0 END fcaAppStateConfigurado,
-             CN_IGP_ESTADO igpEstado, CN_IGP_USUARIO igpUsuario
+             CN_IGP_ESTADO igpEstado, CN_IGP_USUARIO igpUsuario,
+             CN_ES_CANAL_CRM esCanalCrm
       FROM dbo.CCO_CANALES ORDER BY CN_ID`);
     const base = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || '';
     const tk = tenantKeyDe(req);
     res.json({ success: true, data: r.recordset.map((c) => ({
       ...c,
-      habilitado: !!c.habilitado, webhookSuscrito: !!c.webhookSuscrito,
+      habilitado: !!c.habilitado, webhookSuscrito: !!c.webhookSuscrito, esCanalCrm: !!c.esCanalCrm,
       accessTokenConfigurado: !!c.accessTokenConfigurado, appSecretConfigurado: !!c.appSecretConfigurado,
       webhookUrl: `${base}/api/cc/webhook/${tk}/${c.id}`,
     })) });
@@ -148,6 +154,7 @@ exports.updateCanal = async (req, res) => {
     // son almacenes distintos: CCO_CANALES vs CCO_CANAL_AGENTE_SESION), así
     // que el admin debe volver a vincular tras cambiar de modo.
     const modoSesion = b.modoSesion === 'individual' ? 'individual' : (b.modoSesion === 'compartido' ? 'compartido' : ex.CN_MODO_SESION);
+    const modoAsignacion = ['campania', 'auto', 'manual'].includes(b.modoAsignacion) ? b.modoAsignacion : (ex.CN_MODO_ASIGNACION || 'campania');
     await p.request()
       .input('id', sql.Int, req.params.id)
       .input('nombre', sql.NVarChar(120), b.nombre ?? ex.CN_NOMBRE)
@@ -155,16 +162,24 @@ exports.updateCanal = async (req, res) => {
       .input('grupo', sql.Int, b.grupoId != null ? b.grupoId : ex.CN_GRUPO_ID)
       .input('camp', sql.Int, b.campaniaId != null ? b.campaniaId : ex.CN_CAMPANIA_ID)
       .input('modo', sql.NVarChar(20), modoSesion)
+      .input('modoAsig', sql.NVarChar(12), modoAsignacion)
       .input('page', sql.NVarChar(60), b.metaPageId != null ? b.metaPageId : ex.CN_META_PAGE_ID)
       .input('biz', sql.NVarChar(60), b.metaBusinessId != null ? b.metaBusinessId : ex.CN_META_BUSINESS_ID)
       .input('tok', sql.NVarChar(600), accessToken || null)
       .input('sec', sql.NVarChar(200), appSecret || null)
       .input('vt', sql.NVarChar(100), b.verifyToken != null ? b.verifyToken : ex.CN_VERIFY_TOKEN)
+      .input('crm', sql.Bit, b.esCanalCrm != null ? !!b.esCanalCrm : !!ex.CN_ES_CANAL_CRM)
       .query(`UPDATE dbo.CCO_CANALES SET
         CN_NOMBRE=@nombre, CN_HABILITADO=@hab, CN_GRUPO_ID=@grupo, CN_CAMPANIA_ID=@camp, CN_MODO_SESION=@modo,
+        CN_MODO_ASIGNACION=@modoAsig,
         CN_META_PAGE_ID=@page, CN_META_BUSINESS_ID=@biz, CN_ACCESS_TOKEN=@tok,
-        CN_APP_SECRET=@sec, CN_VERIFY_TOKEN=@vt, CN_FECHA_ACTUALIZACION=GETDATE()
+        CN_APP_SECRET=@sec, CN_VERIFY_TOKEN=@vt, CN_ES_CANAL_CRM=@crm, CN_FECHA_ACTUALIZACION=GETDATE()
         WHERE CN_ID=@id`);
+    // Solo un canal puede ser el del CRM: si este se marcó, desmarca los demás.
+    if (b.esCanalCrm) {
+      await p.request().input('id', sql.Int, req.params.id)
+        .query(`UPDATE dbo.CCO_CANALES SET CN_ES_CANAL_CRM=0 WHERE CN_ID<>@id AND CN_ES_CANAL_CRM=1`);
+    }
     res.json({ success: true });
   } catch (e) {
     console.error('ccConfig.updateCanal:', e.message);
@@ -292,6 +307,23 @@ exports.cerrarBaileys = async (req, res) => {
     res.json({ success: true, message: 'Sesión cerrada' });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Trae los chats/mensajes previos a la vinculación (lo que el teléfono ya
+// tenía sincronizado) y los crea como interacciones cerradas en AGYDA —
+// operación pesada disparada a mano (no automática al vincular, ver
+// baileysManager.importarHistorial), solo un admin la puede ejecutar.
+exports.importarHistorialBaileys = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { usuarioId, error } = await resolverCanalYUsuario(p, req, 'whatsapp_baileys');
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+    const resultado = await baileysManager.importarHistorial(req.params.id, tenantKeyDe(req), usuarioId);
+    res.json({ success: true, data: resultado });
+  } catch (e) {
+    console.error('ccConfig.importarHistorialBaileys:', e.message);
+    res.status(500).json({ success: false, message: `No se pudo importar el historial: ${e.message}` });
   }
 };
 
@@ -435,6 +467,35 @@ function esGestor(req) {
   return esAdmin(req);
 }
 
+// null = gestor/admin (sin filtro, ve todas las campañas). Array (posiblemente
+// vacío) = agente normal, filtrar por esos IDs — mismo criterio que getMisSkills.
+async function campaniasVisiblesPara(req, p) {
+  if (esGestor(req)) return null;
+  const uid = usuarioIdDe(req);
+  if (!uid) return [];
+  const r = await p.request().input('u', sql.Int, uid).query(`
+    SELECT DISTINCT c.CM2_ID id
+    FROM dbo.CCO_GRUPO_AGENTES ga
+    JOIN dbo.CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID AND g.CG_ACTIVO = 1
+    JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = g.CG_CAMPANIA_ID
+    WHERE ga.CGA_USUARIO_ID = @u AND ga.CGA_ACTIVO = 1`);
+  return r.recordset.map((row) => row.id);
+}
+
+// Busca el postulante y verifica que su campaña sea visible para quien pide —
+// usado por tipificar/notas para no exponer datos de campañas ajenas al agente.
+async function postulanteAutorizado(req, p, postulanteId) {
+  const r = await p.request().input('id', sql.Int, postulanteId)
+    .query('SELECT CP_ID id, CP_TELEFONO telefono, CP_CAMPANIA_ID campaniaId FROM dbo.CCO_CAMPANIA_POSTULANTES WHERE CP_ID = @id');
+  const row = r.recordset[0];
+  if (!row) return { error: 404 };
+  if (!esGestor(req)) {
+    const visibles = await campaniasVisiblesPara(req, p);
+    if (!visibles.includes(row.campaniaId)) return { error: 403 };
+  }
+  return { row };
+}
+
 exports.listCampanias = async (req, res) => {
   try {
     const p = await pool(req);
@@ -446,7 +507,7 @@ exports.listCampanias = async (req, res) => {
       SELECT c.CM2_ID id, c.CM2_NOMBRE nombre, c.CM2_DESCRIPCION descripcion,
         c.CM2_MAX_CHATS_POR_AGENTE maxChatsPorAgente, c.CM2_ACTIVO activo,
         c.CM2_SLUG slug, c.CM2_CONTACTO_FACEBOOK_URL contactoFacebookUrl, c.CM2_CONTACTO_INSTAGRAM_URL contactoInstagramUrl,
-        c.CM2_CONTACTO_TELEFONO contactoTelefono,
+        c.CM2_CONTACTO_TELEFONO contactoTelefono, c.CM2_MODO_ASIGNACION modoAsignacion,
         (SELECT COUNT(*) FROM dbo.CCO_CANALES cn WHERE cn.CN_CAMPANIA_ID = c.CM2_ID) canalesCount,
         (SELECT COUNT(*) FROM dbo.CCO_GRUPOS g WHERE g.CG_CAMPANIA_ID = c.CM2_ID AND g.CG_ACTIVO = 1) skillsCount,
         (SELECT COUNT(DISTINCT ga.CGA_USUARIO_ID) FROM dbo.CCO_GRUPO_AGENTES ga
@@ -489,8 +550,10 @@ exports.updateCampania = async (req, res) => {
       .input('m', sql.Int, b.maxChatsPorAgente ?? null)
       .input('fb', sql.NVarChar(300), b.contactoFacebookUrl ?? null).input('ig', sql.NVarChar(300), b.contactoInstagramUrl ?? null)
       .input('tel', sql.NVarChar(40), b.contactoTelefono ?? null)
+      .input('modoAsig', sql.NVarChar(12), ['global', 'auto', 'manual'].includes(b.modoAsignacion) ? b.modoAsignacion : null)
       .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_NOMBRE = ISNULL(@n, CM2_NOMBRE), CM2_DESCRIPCION = @d, CM2_MAX_CHATS_POR_AGENTE = @m,
-              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig, CM2_CONTACTO_TELEFONO = @tel WHERE CM2_ID = @id`);
+              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig, CM2_CONTACTO_TELEFONO = @tel,
+              CM2_MODO_ASIGNACION = ISNULL(@modoAsig, CM2_MODO_ASIGNACION) WHERE CM2_ID = @id`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -523,6 +586,15 @@ exports.asignarSupervisorACampania = async (req, res) => {
     await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.body?.usuarioId)
       .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u)
               INSERT INTO dbo.CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@c, @u);`);
+    const info = await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.body?.usuarioId).query(`
+      SELECT (SELECT CM2_NOMBRE FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'asignar-supervisor-campania',
+      entidadId: req.params.id,
+      detalle: { campaniaId: Number(req.params.id), campaniaNombre: info.recordset[0]?.campaniaNombre, supervisorId: req.body?.usuarioId, supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -530,8 +602,17 @@ exports.quitarSupervisorDeCampania = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    const info = await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.params.usuarioId).query(`
+      SELECT (SELECT CM2_NOMBRE FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
     await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.params.usuarioId)
       .query(`DELETE FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-campania',
+      entidadId: req.params.id,
+      detalle: { campaniaId: Number(req.params.id), campaniaNombre: info.recordset[0]?.campaniaNombre, supervisorId: Number(req.params.usuarioId), supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -641,6 +722,15 @@ exports.asignarSupervisorAGrupo = async (req, res) => {
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId)
       .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u)
               INSERT INTO dbo.CCO_GRUPO_SUPERVISORES (GS_GRUPO_ID, GS_SUPERVISOR_ID) VALUES (@g, @u);`);
+    const info = await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId).query(`
+      SELECT (SELECT CG_NOMBRE FROM dbo.CCO_GRUPOS WHERE CG_ID = @g) grupoNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'asignar-supervisor-skill',
+      entidadId: req.params.grupoId,
+      detalle: { grupoId: Number(req.params.grupoId), grupoNombre: info.recordset[0]?.grupoNombre, supervisorId: req.body?.usuarioId, supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -648,8 +738,17 @@ exports.quitarSupervisorDeGrupo = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    const info = await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId).query(`
+      SELECT (SELECT CG_NOMBRE FROM dbo.CCO_GRUPOS WHERE CG_ID = @g) grupoNombre,
+             (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId)
       .query(`DELETE FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u`);
+    await logAudit(p, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-skill',
+      entidadId: req.params.grupoId,
+      detalle: { grupoId: Number(req.params.grupoId), grupoNombre: info.recordset[0]?.grupoNombre, supervisorId: Number(req.params.usuarioId), supervisorNombre: info.recordset[0]?.supervisorNombre },
+      ip: req.ip,
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };
@@ -978,5 +1077,208 @@ exports.exportarTipificacionesCampania = async (req, res) => {
   } catch (e) {
     console.error('ccConfig.exportarTipificacionesCampania:', e.message);
     res.status(500).json({ success: false, message: 'Error al generar el Excel' });
+  }
+};
+
+// ── Gestión de postulantes (transversal a campañas) ──────────────────────
+// Listado global — no por campaña — con buscador y la tipificación más
+// reciente de cada postulante. Un agente solo ve postulantes de las campañas
+// que tiene asignadas (CCO_GRUPO_AGENTES); un gestor/admin ve todos.
+// Campañas para el selector del alta manual — un agente solo ve las suyas
+// (mismo criterio que campaniasVisiblesPara), un gestor/admin ve todas las activas.
+exports.listCampaniasParaPostulante = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const visibles = await campaniasVisiblesPara(req, p);
+    if (Array.isArray(visibles) && visibles.length === 0) return res.json({ success: true, data: [] });
+
+    const request = p.request();
+    let whereCampania = '';
+    if (Array.isArray(visibles)) {
+      const params = visibles.map((id, i) => { request.input(`c${i}`, sql.Int, id); return `@c${i}`; });
+      whereCampania = `AND CM2_ID IN (${params.join(',')})`;
+    }
+    const r = await request.query(`SELECT CM2_ID id, CM2_NOMBRE nombre FROM dbo.CCO_CAMPANIAS WHERE CM2_ACTIVO = 1 ${whereCampania} ORDER BY CM2_NOMBRE`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) {
+    console.error('ccConfig.listCampaniasParaPostulante:', e.message);
+    res.status(500).json({ success: false, message: 'Error al listar campañas' });
+  }
+};
+
+// Alta manual de postulante desde Gestión de postulantes — mismas reglas de
+// validación que registrarPostulantePublico, pero autenticado y verificando
+// que la campaña elegida sea visible para quien lo crea.
+exports.crearPostulanteManual = async (req, res) => {
+  try {
+    const b = req.body || {};
+    const nombre = String(b.nombre || '').trim();
+    const telefono = String(b.telefono || '').replace(/\D/g, '');
+    const campaniaId = Number(b.campaniaId);
+
+    if (!nombre || !telefono || !campaniaId) {
+      return res.status(400).json({ success: false, message: 'Nombre, teléfono y campaña son obligatorios' });
+    }
+    if (telefono.length < 10) return res.status(400).json({ success: false, message: 'Teléfono inválido' });
+
+    const p = await pool(req);
+    if (!esGestor(req)) {
+      const visibles = await campaniasVisiblesPara(req, p);
+      if (!visibles.includes(campaniaId)) return res.status(403).json({ success: false, message: 'No tienes acceso a esa campaña' });
+    }
+
+    const camp = await p.request().input('id', sql.Int, campaniaId).query(`SELECT CM2_ID id FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @id AND CM2_ACTIVO = 1`);
+    if (!camp.recordset.length) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
+
+    const r = await p.request()
+      .input('c', sql.Int, campaniaId)
+      .input('n', sql.NVarChar(200), nombre.slice(0, 200))
+      .input('t', sql.NVarChar(20), telefono.slice(0, 20))
+      .query(`INSERT INTO dbo.CCO_CAMPANIA_POSTULANTES (CP_CAMPANIA_ID, CP_NOMBRE, CP_TELEFONO)
+              OUTPUT INSERTED.CP_ID id
+              VALUES (@c, @n, @t)`);
+
+    res.status(201).json({ success: true, data: { id: r.recordset[0].id } });
+  } catch (e) {
+    console.error('ccConfig.crearPostulanteManual:', e.message);
+    res.status(500).json({ success: false, message: 'Error al crear el postulante' });
+  }
+};
+
+exports.listPostulantesGestion = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const visibles = await campaniasVisiblesPara(req, p);
+    if (Array.isArray(visibles) && visibles.length === 0) {
+      return res.json({ success: true, data: [], total: 0 });
+    }
+
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 50));
+    const offset = (page - 1) * pageSize;
+
+    const request = p.request();
+    let whereCampania = '';
+    if (Array.isArray(visibles)) {
+      const params = visibles.map((id, i) => {
+        request.input(`c${i}`, sql.Int, id);
+        return `@c${i}`;
+      });
+      whereCampania = `AND cp.CP_CAMPANIA_ID IN (${params.join(',') || 'NULL'})`;
+    }
+
+    let whereBusqueda = '';
+    if (q) {
+      request.input('q', sql.NVarChar(100), `%${q}%`);
+      whereBusqueda = 'AND (cp.CP_NOMBRE LIKE @q OR cp.CP_TELEFONO LIKE @q)';
+    }
+
+    const baseFrom = `
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+      WHERE 1 = 1 ${whereCampania} ${whereBusqueda}`;
+
+    const totalRs = await request.query(`SELECT COUNT(*) total ${baseFrom}`);
+
+    const dataRequest = p.request();
+    if (Array.isArray(visibles)) visibles.forEach((id, i) => dataRequest.input(`c${i}`, sql.Int, id));
+    if (q) dataRequest.input('q', sql.NVarChar(100), `%${q}%`);
+    dataRequest.input('offset', sql.Int, offset).input('pageSize', sql.Int, pageSize);
+
+    const dataRs = await dataRequest.query(`
+      SELECT cp.CP_ID id, cp.CP_NOMBRE nombre, cp.CP_TELEFONO telefono, cp.CP_CORREO correo,
+             cp.CP_FECHA_REGISTRO fechaRegistro, cp.CP_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre,
+             ult.WLT_TIPIFICACION tipificacion, ult.WLT_OBSERVACIONES observaciones, ult.WLT_FECHA tipificacionFecha
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+      OUTER APPLY (
+        SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_FECHA
+        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+        ORDER BY wlt.WLT_FECHA DESC
+      ) ult
+      WHERE 1 = 1 ${whereCampania} ${whereBusqueda}
+      ORDER BY cp.CP_FECHA_REGISTRO DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
+
+    res.json({ success: true, data: dataRs.recordset, total: totalRs.recordset[0].total });
+  } catch (e) {
+    console.error('ccConfig.listPostulantesGestion:', e.message);
+    res.status(500).json({ success: false, message: 'Error al listar postulantes' });
+  }
+};
+
+exports.tipificarPostulante = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { row, error } = await postulanteAutorizado(req, p, req.params.id);
+    if (error) return res.status(error).json({ success: false, message: error === 404 ? 'Postulante no encontrado' : 'No autorizado' });
+
+    const { tipificacion, observaciones } = req.body || {};
+    const codigos = TIPIFICACIONES_LLAMADA.map((t) => t.codigo);
+    if (!codigos.includes(tipificacion)) {
+      return res.status(400).json({ success: false, message: 'Tipificación inválida' });
+    }
+    const obs = String(observaciones ?? '').slice(0, 500);
+
+    await p.request()
+      .input('tel', sql.NVarChar(20), row.telefono)
+      .input('tip', sql.NVarChar(20), tipificacion)
+      .input('obs', sql.NVarChar(500), obs || null)
+      .input('pid', sql.Int, row.id)
+      .query(`INSERT INTO dbo.WEBPHONE_LLAMADAS_TIPIFICADAS
+                (WLT_TELEFONO, WLT_TIPIFICACION, WLT_OBSERVACIONES, WLT_POSTULANTE_ID)
+              VALUES (@tel, @tip, @obs, @pid)`);
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error('ccConfig.tipificarPostulante:', e.message);
+    res.status(500).json({ success: false, message: 'Error al guardar la tipificación' });
+  }
+};
+
+exports.listNotasPostulante = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { error } = await postulanteAutorizado(req, p, req.params.id);
+    if (error) return res.status(error).json({ success: false, message: error === 404 ? 'Postulante no encontrado' : 'No autorizado' });
+
+    const r = await p.request().input('id', sql.Int, req.params.id).query(`
+      SELECT PN_ID id, PN_USUARIO_ID usuarioId, PN_USUARIO_NOMBRE usuarioNombre, PN_NOTA nota, PN_FECHA fecha
+      FROM dbo.CCO_POSTULANTE_NOTAS WHERE PN_POSTULANTE_ID = @id ORDER BY PN_FECHA DESC`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) {
+    console.error('ccConfig.listNotasPostulante:', e.message);
+    res.status(500).json({ success: false, message: 'Error al listar notas' });
+  }
+};
+
+exports.crearNotaPostulante = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { error } = await postulanteAutorizado(req, p, req.params.id);
+    if (error) return res.status(error).json({ success: false, message: error === 404 ? 'Postulante no encontrado' : 'No autorizado' });
+
+    const nota = String(req.body?.nota || '').trim().slice(0, 1000);
+    if (!nota) return res.status(400).json({ success: false, message: 'La nota no puede estar vacía' });
+
+    const uid = usuarioIdDe(req);
+    const nombre = req.user?.nombre || req.user?.username || null;
+
+    const r = await p.request()
+      .input('pid', sql.Int, req.params.id)
+      .input('uid', sql.Int, uid)
+      .input('nombre', sql.NVarChar(200), nombre)
+      .input('nota', sql.NVarChar(1000), nota)
+      .query(`INSERT INTO dbo.CCO_POSTULANTE_NOTAS (PN_POSTULANTE_ID, PN_USUARIO_ID, PN_USUARIO_NOMBRE, PN_NOTA)
+              OUTPUT INSERTED.PN_ID id
+              VALUES (@pid, @uid, @nombre, @nota)`);
+
+    res.status(201).json({ success: true, data: { id: r.recordset[0].id, usuarioId: uid, usuarioNombre: nombre, nota, fecha: new Date() } });
+  } catch (e) {
+    console.error('ccConfig.crearNotaPostulante:', e.message);
+    res.status(500).json({ success: false, message: 'Error al guardar la nota' });
   }
 };

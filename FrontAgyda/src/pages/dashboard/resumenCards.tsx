@@ -200,18 +200,19 @@ function QuejasResumen() {
   const { data } = useQuery({
     queryKey: ['quejas-resumen'],
     queryFn: async () => {
-      const { data } = await api.get('/quejas')
-      const list = arr<{ estado?: string; estatus?: string }>(data, 'quejas')
+      // Fase 9: Quejas es un tipo de Caso.
+      const { data } = await api.get('/atencion-cliente/casos', { params: { tipo: 'queja' } })
+      const list = arr<{ estatus?: string }>(data, 'data')
       const abiertas = list.filter((q) => {
-        const e = (q.estado ?? q.estatus ?? '').toLowerCase()
-        return e !== 'cerrada' && e !== 'resuelta' && e !== 'cerrado'
+        const e = (q.estatus ?? '').toLowerCase()
+        return e !== 'resuelto' && e !== 'cerrado'
       })
       return { total: list.length, abiertas: abiertas.length }
     },
     staleTime: 60_000,
   })
   return (
-    <CardShell titulo="Quejas y sugerencias" Icon={MessageSquareWarning} to="/quejas" verLabel="Ver quejas" tono="rose">
+    <CardShell titulo="Quejas y sugerencias" Icon={MessageSquareWarning} to="/atencion-cliente/casos?tipo=queja" verLabel="Ver quejas" tono="rose">
       <BigStat value={data?.abiertas ?? 0} label="quejas abiertas" tono="rose"
         hint={data ? `${data.total} en total` : ''} />
     </CardShell>
@@ -641,7 +642,7 @@ export const RESUMEN_CARDS: ResumenCardDef[] = [
   { id: 'r-tickets', titulo: 'Resumen de Tickets', descripcion: 'Tickets abiertos y sin asignar.', categoria: 'Operación', moduleKey: 'tickets', size: { w: 3, h: 3 }, Icon: Ticket, render: () => <TicketsResumen /> },
   { id: 'r-proyectos', titulo: 'Resumen de Proyectos', descripcion: 'Proyectos activos de tu empresa.', categoria: 'Operación', moduleKey: 'proyectos', size: { w: 3, h: 3 }, Icon: FolderKanban, render: () => <ProyectosResumen /> },
   { id: 'r-encuestas', titulo: 'Encuestas pendientes', descripcion: 'Encuestas que te falta responder.', categoria: 'Contenido', moduleKey: 'encuestas', size: { w: 3, h: 4 }, Icon: ClipboardList, render: () => <EncuestasResumen /> },
-  { id: 'r-quejas', titulo: 'Quejas abiertas', descripcion: 'Quejas y sugerencias sin resolver.', categoria: 'Operación', moduleKey: 'quejas', size: { w: 3, h: 3 }, Icon: MessageSquareWarning, render: () => <QuejasResumen /> },
+  { id: 'r-quejas', titulo: 'Quejas abiertas', descripcion: 'Quejas y sugerencias sin resolver.', categoria: 'Operación', moduleKey: 'atencion-cliente', size: { w: 3, h: 3 }, Icon: MessageSquareWarning, render: () => <QuejasResumen /> },
   { id: 'r-legal', titulo: 'Legal — por firmar', descripcion: 'Documentos legales que requieren tu firma.', categoria: 'Contenido', moduleKey: 'legal', size: { w: 3, h: 3 }, Icon: Scale, render: () => <LegalesResumen /> },
   { id: 'r-reglamento', titulo: 'Reglamento interno', descripcion: 'Estado de aceptación del reglamento.', categoria: 'Personas', moduleKey: 'reglamento', size: { w: 3, h: 3 }, Icon: BookOpenCheck, render: () => <ReglamentoResumen /> },
   { id: 'r-livechat', titulo: 'Chat en vivo — cola', descripcion: 'Conversaciones activas asignadas a ti.', categoria: 'Operación', moduleKey: 'livechat', size: { w: 3, h: 3 }, Icon: Headset, render: () => <LivechatResumen /> },

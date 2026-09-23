@@ -1,13 +1,21 @@
-export type TipoNodoFlujo = 'respuesta' | 'etiqueta' | 'nodo_arbol' | 'campania'
+export type TipoNodoFlujo = 'respuesta' | 'etiqueta' | 'nodo_arbol' | 'campania' | 'captura_lead'
+
+export type GeneraLead = 'contacto' | 'oportunidad' | 'ninguno'
 
 export interface FlujoRespuesta {
   id: number
   codigo: string
   texto: string
   botones: string[]
+  keywords: string[]
   activa: boolean
+  esEntrada?: boolean
+  genera: GeneraLead | null
+  categoria: string | null
   posX: number | null
   posY: number | null
+  /** Última vez editado desde el Constructor de flujo (o desde Conversación). */
+  fechaActualizacion: string | null
 }
 
 export interface FlujoEtiqueta {
@@ -16,8 +24,12 @@ export interface FlujoEtiqueta {
   tipoAccion: string
   campaniaId: number | null
   activa: boolean
+  genera: GeneraLead | null
+  /** true si escala a una campaña que ya no existe/está desactivada. */
+  roto?: boolean
   posX: number | null
   posY: number | null
+  fechaActualizacion: string | null
 }
 
 export interface FlujoNodoArbol {
@@ -26,8 +38,10 @@ export interface FlujoNodoArbol {
   texto: string
   tipoNodo: string
   activa: boolean
+  genera: GeneraLead | null
   posX: number | null
   posY: number | null
+  fechaActualizacion: string | null
 }
 
 export interface FlujoCampania {
@@ -44,6 +58,7 @@ export interface FlujoConexion {
   destinoId: number
   etiqueta: string | null
   esOpcionArbol?: boolean
+  esAutomatica?: boolean
 }
 
 export interface FlujoCompleto {
@@ -51,6 +66,8 @@ export interface FlujoCompleto {
   etiquetas: FlujoEtiqueta[]
   nodosArbol: FlujoNodoArbol[]
   campanias: FlujoCampania[]
+  capturaLead: boolean
+  automaticasPendientes: number
   conexiones: FlujoConexion[]
 }
 
@@ -75,15 +92,25 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
   const campanias = Array.isArray(raw.campanias) ? raw.campanias : []
   const conexiones = Array.isArray(raw.conexiones) ? raw.conexiones : []
 
+  const genera = (v: unknown): GeneraLead | null =>
+    v === 'contacto' || v === 'oportunidad' || v === 'ninguno' ? v : null
+
   return {
+    capturaLead: parseBool(raw.capturaLead, false),
+    automaticasPendientes: Number(raw.automaticasPendientes ?? 0),
     respuestas: (respuestas as Record<string, unknown>[]).map((r) => ({
       id: Number(pick(r, 'id') ?? 0),
       codigo: String(pick(r, 'codigo') ?? ''),
       texto: String(pick(r, 'texto') ?? ''),
       botones: Array.isArray(r.botones) ? (r.botones as string[]) : [],
+      keywords: Array.isArray(r.keywords) ? (r.keywords as string[]) : [],
       activa: parseBool(pick(r, 'activa'), true),
+      esEntrada: parseBool(pick(r, 'esEntrada'), false),
+      genera: genera(pick(r, 'genera')),
+      categoria: pick(r, 'categoria') != null ? String(pick(r, 'categoria')) : null,
       posX: pick(r, 'posX') != null ? Number(pick(r, 'posX')) : null,
       posY: pick(r, 'posY') != null ? Number(pick(r, 'posY')) : null,
+      fechaActualizacion: pick(r, 'fechaActualizacion') != null ? String(pick(r, 'fechaActualizacion')) : null,
     })),
     etiquetas: (etiquetas as Record<string, unknown>[]).map((e) => ({
       id: Number(pick(e, 'id') ?? 0),
@@ -91,8 +118,11 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       tipoAccion: String(pick(e, 'tipoAccion') ?? 'respuesta'),
       campaniaId: pick(e, 'campaniaId') != null ? Number(pick(e, 'campaniaId')) : null,
       activa: parseBool(pick(e, 'activa'), true),
+      genera: genera(pick(e, 'genera')),
+      roto: parseBool(pick(e, 'roto'), false),
       posX: pick(e, 'posX') != null ? Number(pick(e, 'posX')) : null,
       posY: pick(e, 'posY') != null ? Number(pick(e, 'posY')) : null,
+      fechaActualizacion: pick(e, 'fechaActualizacion') != null ? String(pick(e, 'fechaActualizacion')) : null,
     })),
     nodosArbol: (nodosArbol as Record<string, unknown>[]).map((n) => ({
       id: Number(pick(n, 'id') ?? 0),
@@ -100,8 +130,10 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       texto: String(pick(n, 'texto') ?? ''),
       tipoNodo: String(pick(n, 'tipoNodo') ?? 'pregunta'),
       activa: parseBool(pick(n, 'activa'), true),
+      genera: genera(pick(n, 'genera')),
       posX: pick(n, 'posX') != null ? Number(pick(n, 'posX')) : null,
       posY: pick(n, 'posY') != null ? Number(pick(n, 'posY')) : null,
+      fechaActualizacion: pick(n, 'fechaActualizacion') != null ? String(pick(n, 'fechaActualizacion')) : null,
     })),
     campanias: (campanias as Record<string, unknown>[]).map((c) => ({
       id: Number(pick(c, 'id') ?? 0),
@@ -116,6 +148,7 @@ export function parseFlujoCompleto(raw: Record<string, unknown>): FlujoCompleto 
       destinoId: Number(pick(c, 'destinoId') ?? 0),
       etiqueta: pick(c, 'etiqueta') ? String(pick(c, 'etiqueta')) : null,
       esOpcionArbol: parseBool(pick(c, 'esOpcionArbol'), false),
+      esAutomatica: parseBool(pick(c, 'esAutomatica'), false),
     })),
   }
 }

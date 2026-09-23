@@ -9,6 +9,11 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 // Lectura pública — la usa el widget de chat de la página pública para construir el diccionario.
 router.get('/respuestas/publicas', chatbotController.getRespuestasPublicas);
 router.get('/etiquetas-menu/publicas', chatbotController.getEtiquetasMenuPublicas);
+router.get('/config/publica', chatbotController.getConfigPublica);
+// Telemetría del widget (fire-and-forget, sin auth).
+router.post('/feedback', chatbotController.postFeedback);
+router.post('/sin-match', chatbotController.postSinMatch);
+router.post('/evento', chatbotController.postEvento);
 
 // Árbol de decisión — público (authenticateTokenOptional asocia el usuario si
 // está logueado, sin exigirlo: lo usan tanto el widget público como el interno).
@@ -28,6 +33,11 @@ router.delete('/arbol/opciones/:id', authenticateToken, requireActionAccess('con
 // Gestión — requiere sesión + permiso de acción sobre el módulo 'chatbot'.
 router.get('/respuestas', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getRespuestas);
 router.get('/leads', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getLeads);
+router.get('/categorias', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getCategorias);
+router.get('/config', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getConfig);
+router.put('/config', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.updateConfig);
+router.get('/rendimiento', authenticateToken, requireActionAccess('chatbot', 'ver'), chatbotController.getRendimiento);
+router.patch('/sin-match/:id/resolver', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.resolverSinMatch);
 router.post('/respuestas', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'crear'), chatbotController.createRespuesta);
 router.put('/respuestas/:pk', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.updateRespuesta);
 router.patch('/respuestas/:pk/activa', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotController.toggleActiva);
@@ -45,5 +55,10 @@ router.get('/flujo', authenticateToken, requireActionAccess('chatbot', 'ver'), c
 router.put('/flujo/posicion/:tipo/:id', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.updatePosicion);
 router.post('/flujo/conexiones', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.createConexion);
 router.delete('/flujo/conexiones/:id', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.deleteConexion);
+// Crear / editar / borrar cajas sin salir del lienzo (Camino A).
+router.post('/flujo/materializar', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.materializarFlujo);
+router.post('/flujo/nodos', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'crear'), chatbotFlujoController.createNodo);
+router.patch('/flujo/nodos/:tipo/:id', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'editar'), chatbotFlujoController.updateNodo);
+router.delete('/flujo/nodos/:tipo/:id', authenticateToken, verificarRol(['AD']), requireActionAccess('chatbot', 'eliminar'), chatbotFlujoController.deleteNodo);
 
 module.exports = router;

@@ -18,6 +18,33 @@ async function getConfig(pool) {
   }
 }
 
+// Resuelve el modo de asignación efectivo de una interacción en cascada:
+//   canal ('auto'|'manual' mandan; 'campania' delega)
+//     -> campaña ('auto'|'manual' mandan; 'global' delega)
+//       -> global CCO_CONFIG.CF_MODO_ASIGNACION (default 'auto')
+// Devuelve 'auto' | 'manual'. Ante cualquier duda/error -> 'auto' (no rompe
+// el flujo actual).
+async function modoAsignacionEfectivo(pool, { canalId, campaniaId }) {
+  try {
+    if (canalId) {
+      const c = await pool.request().input('id', sql.Int, canalId)
+        .query('SELECT CN_MODO_ASIGNACION m FROM dbo.CCO_CANALES WHERE CN_ID = @id');
+      const m = c.recordset[0] && c.recordset[0].m;
+      if (m === 'auto' || m === 'manual') return m;
+    }
+    if (campaniaId) {
+      const c = await pool.request().input('id', sql.Int, campaniaId)
+        .query('SELECT CM2_MODO_ASIGNACION m FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @id');
+      const m = c.recordset[0] && c.recordset[0].m;
+      if (m === 'auto' || m === 'manual') return m;
+    }
+    const cfg = await getConfig(pool);
+    return cfg.CF_MODO_ASIGNACION === 'manual' ? 'manual' : 'auto';
+  } catch (_) {
+    return 'auto';
+  }
+}
+
 // Devuelve { usuarioId, nombre } del agente disponible con menos interacciones
 // activas dentro del grupo/skill dado, o null.
 async function buscarAgenteDisponible(pool, { grupoId, campaniaId, maxGlobal = 4 } = {}) {
@@ -106,11 +133,19 @@ async function asignarInteraccion(pool, tenantKey, interaccion, agente) {
 // Intenta asignar UNA interacción entrante (recién creada, aún en_cola).
 async function rutearInteraccion(pool, tenantKey, interaccionId) {
   const r = await pool.request().input('id', sql.Int, interaccionId).query(`
-    SELECT CI_ID as id, CI_TIPO as tipo, CI_GRUPO_ID as grupoId, CI_CAMPANIA_ID as campaniaId,
+    SELECT CI_ID as id, CI_TIPO as tipo, CI_CANAL_ID as canalId, CI_GRUPO_ID as grupoId, CI_CAMPANIA_ID as campaniaId,
            CI_CLIENTE_NOMBRE as clienteNombre, CI_ESTADO as estado
     FROM dbo.CCO_INTERACCIONES WHERE CI_ID = @id`);
   const it = r.recordset[0];
   if (!it || it.estado !== 'en_cola') return null;
+
+  // Modo manual: no se auto-asigna — queda en cola para que un agente la jale.
+  const modo = await modoAsignacionEfectivo(pool, { canalId: it.canalId, campaniaId: it.campaniaId });
+  if (modo === 'manual') {
+    emitir(tenantKey, 'supervisores', 'cc:cola_cambio', {});
+    try { socketService.getIO(tenantKey || DEFAULT_TENANT).emit('cc:nueva_en_cola', { interaccionId: it.id }); } catch (_) {}
+    return null;
+  }
 
   const cfg = await getConfig(pool);
   const agente = await buscarAgenteDisponible(pool, {
@@ -131,12 +166,15 @@ async function intentarAsignarSiguienteEnCola(pool, tenantKey = DEFAULT_TENANT) 
   // varias interacciones en cola pueden ir a distintos grupos: iterar la cola FIFO
   // y para cada una buscar agente de su grupo hasta que no haya más asignables.
   const cola = await pool.request().query(`
-    SELECT CI_ID as id, CI_TIPO as tipo, CI_GRUPO_ID as grupoId, CI_CAMPANIA_ID as campaniaId,
+    SELECT CI_ID as id, CI_TIPO as tipo, CI_CANAL_ID as canalId, CI_GRUPO_ID as grupoId, CI_CAMPANIA_ID as campaniaId,
            CI_CLIENTE_NOMBRE as clienteNombre
     FROM dbo.CCO_INTERACCIONES
     WHERE CI_ESTADO = 'en_cola'
     ORDER BY CI_TICKET ASC, CI_ID ASC`);
   for (const it of cola.recordset) {
+    // Las de modo manual las jala un agente a mano — no se auto-asignan aquí.
+    const modo = await modoAsignacionEfectivo(pool, { canalId: it.canalId, campaniaId: it.campaniaId });
+    if (modo === 'manual') continue;
     const agente = await buscarAgenteDisponible(pool, {
       grupoId: it.grupoId, campaniaId: it.campaniaId,
       maxGlobal: cfg.CF_MAX_INTERACCIONES_POR_AGENTE || 4,
@@ -149,6 +187,7 @@ async function intentarAsignarSiguienteEnCola(pool, tenantKey = DEFAULT_TENANT) 
 
 module.exports = {
   getConfig,
+  modoAsignacionEfectivo,
   buscarAgenteDisponible,
   rutearInteraccion,
   intentarAsignarSiguienteEnCola,

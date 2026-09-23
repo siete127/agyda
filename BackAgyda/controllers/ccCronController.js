@@ -41,16 +41,32 @@ async function runTenant(tenantKey) {
     // 2) Reasignación de cola (por si un agente quedó disponible sin trigger).
     await ccRouting.intentarAsignarSiguienteEnCola(pool, tenantKey).catch(() => {});
 
-    // 3) Autocierre por inactividad del cliente.
+    // 3) Autocierre por inactividad del cliente. Se le asigna la
+    // tipificación "En proceso" de la campaña de esa interacción (si existe
+    // y está activa) — pedido 2026-09-09: antes quedaba sin tipificar, y el
+    // agente no siempre alcanza a tipificarla antes de que el cliente se
+    // quede callado y el sistema la cierre solo. Búsqueda por NOMBRE exacto
+    // (no un ID fijo, porque cada campaña tiene su propio catálogo) — si esa
+    // campaña no tiene ninguna tipificación activa llamada así, se deja
+    // igual que antes (sin tipificar), sin inventar ninguna.
     const inactivas = await pool.request().input('min', sql.Int, autocierreMin).query(`
-      SELECT CI_ID id, CI_AGENTE_ID agenteId
+      SELECT CI_ID id, CI_AGENTE_ID agenteId, CI_CAMPANIA_ID campaniaId
       FROM dbo.CCO_INTERACCIONES
       WHERE CI_ESTADO = 'activa'
         AND CI_FECHA_ULTIMO_MSJ_CLIENTE IS NOT NULL
         AND DATEDIFF(MINUTE, CI_FECHA_ULTIMO_MSJ_CLIENTE, GETDATE()) > @min`);
     for (const it of inactivas.recordset) {
-      await pool.request().input('id', sql.Int, it.id).query(`
+      let tipEnProceso = null;
+      if (it.campaniaId) {
+        const tip = await pool.request().input('c', sql.Int, it.campaniaId).query(`
+          SELECT TOP 1 CT_ID id FROM dbo.CCO_TIPIFICACIONES
+          WHERE CT_ACTIVO = 1 AND CT_NOMBRE = N'En proceso' AND (CT_CAMPANIA_ID = @c OR CT_CAMPANIA_ID IS NULL)
+          ORDER BY CASE WHEN CT_CAMPANIA_ID = @c THEN 0 ELSE 1 END`);
+        tipEnProceso = tip.recordset[0]?.id || null;
+      }
+      await pool.request().input('id', sql.Int, it.id).input('tip', sql.Int, tipEnProceso).query(`
         UPDATE dbo.CCO_INTERACCIONES SET CI_ESTADO = 'cerrada', CI_FECHA_CIERRE = GETDATE(),
+          CI_TIPIFICACION_ID = ISNULL(CI_TIPIFICACION_ID, @tip),
           CI_COMENTARIO_CIERRE = N'Cerrada automáticamente por inactividad del cliente'
         WHERE CI_ID = @id`);
       if (it.agenteId) {

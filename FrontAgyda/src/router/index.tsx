@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 const CRMPublicPage = lazy(() => import('@/pages/ventas/CRMPublicPage'))
+const FormularioPublicoPage = lazy(() => import('@/pages/contact-center/FormularioPublicoPage'))
 import { AppLayout } from '@/layouts/AppLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { VentasLayout } from '@/layouts/VentasLayout'
@@ -8,6 +9,7 @@ import { PortalClienteLayout } from '@/layouts/PortalClienteLayout'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RoleRoute } from './RoleRoute'
 import { ModuleRoute } from './ModuleRoute'
+import { RedirectTab } from './RedirectTab'
 import { LoginPage } from '@/pages/login/LoginPage'
 import { AuthBridgePage } from '@/pages/login/AuthBridgePage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
@@ -29,10 +31,11 @@ const lz = <T extends { [K in N]: React.ComponentType<any> }, N extends string>(
 ) => lazy(() => fn().then((m) => ({ default: m[name] })))
 
 // Páginas lazy — cada una genera su propio chunk
-const PortalClientePrincipalPage = lz(() => import('@/pages/portal-cliente/PortalClientePrincipalPage'), 'PortalClientePrincipalPage')
 const PortalClienteReunionesPage = lz(() => import('@/pages/portal-cliente/PortalClienteReunionesPage'), 'PortalClienteReunionesPage')
 const PortalClienteAtencionPage = lz(() => import('@/pages/portal-cliente/PortalClienteAtencionPage'), 'PortalClienteAtencionPage')
 const PortalClienteCanalesPage = lz(() => import('@/pages/portal-cliente/PortalClienteCanalesPage'), 'PortalClienteCanalesPage')
+// Facturas: diseño de la rama de Betty, reconectado al servicio real de
+// main (portalCliente.service.ts) en vez de a datos mock.
 const PortalClienteFacturasPage = lz(() => import('@/pages/portal-cliente/PortalClienteFacturasPage'), 'PortalClienteFacturasPage')
 import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
@@ -62,8 +65,8 @@ const WebphonePage             = lz(() => import('@/pages/webphone/WebphonePage'
 const NotificacionesPage       = lz(() => import('@/pages/notificaciones/NotificacionesPage'),       'NotificacionesPage')
 const MusicaPage               = lz(() => import('@/pages/musica/MusicaPage'),                         'MusicaPage')
 const VentasPage               = lz(() => import('@/pages/ventas/VentasPage'),                          'VentasPage')
-const QuejasPage               = lz(() => import('@/pages/quejas/QuejasPage'),                             'QuejasPage')
-const QuejasDashboardPage      = lz(() => import('@/pages/quejas/QuejasDashboardPage'),                    'QuejasDashboardPage')
+// Quejas / Consultas / Aclaraciones / Incidencias sueltas: unificadas en "Casos"
+// (Fase 9). Las rutas viejas redirigen a /atencion-cliente/casos.
 const AsistenciaReportePage    = lz(() => import('@/pages/asistencia/AsistenciaReportePage'),              'AsistenciaReportePage')
 const MiAsistenciaPage         = lz(() => import('@/pages/asistencia/MiAsistenciaPage'),                   'MiAsistenciaPage')
 const ReglamentoPage           = lz(() => import('@/pages/reglamento/ReglamentoPage'),                     'ReglamentoPage')
@@ -127,22 +130,18 @@ const SupervisoresPage              = lz(() => import('@/pages/supervisores/Supe
 const TiemposPage                   = lz(() => import('@/pages/tiempos/TiemposPage'),           'TiemposPage')
 const KpisOperacionesPage           = lz(() => import('@/pages/kpis-operaciones/KpisOperacionesPage'), 'KpisOperacionesPage')
 const MetasPage                     = lz(() => import('@/pages/metas/MetasPage'),               'MetasPage')
-const ReportesDiariosPage           = lz(() => import('@/pages/reportes-diarios/ReportesDiariosPage'), 'ReportesDiariosPage')
+const SuiteReportesPage             = lz(() => import('@/pages/suite-reportes/SuiteReportesPage'), 'SuiteReportesPage')
 const AsesoresPage                  = lz(() => import('@/pages/asesores/AsesoresPage'),         'AsesoresPage')
 const TecnologiaPage                = lz(() => import('@/pages/tecnologia/TecnologiaPage'),    'TecnologiaPage')
 const InternetRedesPage             = lz(() => import('@/pages/internet-redes/InternetRedesPage'), 'InternetRedesPage')
 const RespaldosPage                 = lz(() => import('@/pages/respaldos/RespaldosPage'),       'RespaldosPage')
 const SistemasPage                  = lz(() => import('@/pages/sistemas/SistemasPage'),         'SistemasPage')
 const AtencionClientePage           = lz(() => import('@/pages/atencion-cliente/AtencionClientePage'), 'AtencionClientePage')
-const ConsultasPage                 = lz(() => import('@/pages/atencion-cliente/ConsultasPage'),  'ConsultasPage')
-const AclaracionesPage              = lz(() => import('@/pages/atencion-cliente/AclaracionesPage'), 'AclaracionesPage')
-const SeguimientoPage                = lz(() => import('@/pages/atencion-cliente/SeguimientoPage'), 'SeguimientoPage')
-const SatisfaccionPage               = lz(() => import('@/pages/atencion-cliente/SatisfaccionPage'), 'SatisfaccionPage')
-const RetencionPage                  = lz(() => import('@/pages/atencion-cliente/RetencionPage'), 'RetencionPage')
-const ClientesListaPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientesListaPage'), 'ClientesListaPage')
+// Módulo "Seguimiento de clientes": una sola pantalla con pestañas que colapsa
+// Casos / Agenda / Ofertas / Satisfacción / Retención / Mi agenda + la lista de
+// clientes. Las rutas viejas redirigen (RedirectTab preserva el query).
+const SeguimientoClientesPage        = lz(() => import('@/pages/atencion-cliente/SeguimientoClientesPage'), 'SeguimientoClientesPage')
 const ClientePerfilPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientePerfilPage'), 'ClientePerfilPage')
-const MisTareasPage                  = lz(() => import('@/pages/atencion-cliente/MisTareasPage'), 'MisTareasPage')
-const IncidenciasPage                = lz(() => import('@/pages/atencion-cliente/IncidenciasPage'), 'IncidenciasPage')
 const ClientesDashboardPage          = lz(() => import('@/pages/atencion-cliente/ClientesDashboardPage'), 'ClientesDashboardPage')
 const RHPage                        = lz(() => import('@/pages/rh/RHPage'),                    'RHPage')
 const PortalAreasPage               = lz(() => import('@/pages/portal-areas/PortalAreasPage'),  'PortalAreasPage')
@@ -160,6 +159,7 @@ const EvaluacionDesempenoPage       = lz(() => import('@/pages/evaluacion-desemp
 const ChatbotPage                   = lz(() => import('@/pages/chatbot/ChatbotPage'),            'ChatbotPage')
 const LivechatPage                  = lz(() => import('@/pages/livechat/LivechatPage'),          'default')
 const ContactCenterPage             = lz(() => import('@/pages/contact-center/ContactCenterPage'), 'default')
+const PostulantesPage                = lz(() => import('@/pages/contact-center/PostulantesPage'), 'default')
 
 const Loader = () => (
   <div className="flex h-full items-center justify-center min-h-[40vh]">
@@ -173,6 +173,11 @@ export const router = createBrowserRouter([
 
   // Ruta pública — se abre desde Vicidial sin sesión de intranet
   { path: '/crm', element: <Suspense fallback={<div />}><CRMPublicPage /></Suspense> },
+
+  // Formularios de Atención en modo EXTERNO — misma idea que /crm de arriba,
+  // pero para un formulario dinámico configurado desde Contact Center >
+  // Formularios de Atención > pestaña "Publicación".
+  { path: '/formulario-publico/:token', element: <Suspense fallback={<div />}><FormularioPublicoPage /></Suspense> },
 
   // Portal del cliente (acceso público con token)
   { path: '/portal', element: <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>}><CRMPortalPage /></Suspense> },
@@ -217,6 +222,11 @@ export const router = createBrowserRouter([
           { path: '/portal-cliente/reuniones/historial', element: wrap(<ProximamentePage titulo="Historial de reuniones" />) },
           { path: '/portal-cliente/atencion', element: wrap(<PortalClienteAtencionPage />) },
           { path: '/portal-cliente/atencion/nueva', element: wrap(<ProximamentePage titulo="Nueva solicitud" />) },
+          // "Canales / Mis campañas" queda pendiente: no existe hoy ninguna
+          // relación real entre un cliente (CRM_CONTACTOS) y una campaña del
+          // Contact Center (CCO_CAMPANIAS) — ver plan de portal del cliente.
+          // La página ya tiene diseño propio (contacto/soporte, no campañas),
+          // se deja activa mientras se decide si conecta a datos reales.
           { path: '/portal-cliente/canales', element: wrap(<PortalClienteCanalesPage />) },
           { path: '/portal-cliente/facturas', element: wrap(<PortalClienteFacturasPage />) },
         ],
@@ -241,7 +251,7 @@ export const router = createBrowserRouter([
           { element: <ModuleRoute moduleKey="mensajeria" />,          children: [{ path: '/mensajeria',       element: wrap(<MensajeriaPage />) }] },
           { element: <ModuleRoute moduleKey="vacaciones" />,          children: [{ path: '/vacaciones',       element: wrap(<VacacionesPage />) }] },
           { element: <ModuleRoute moduleKey="calendario" />,          children: [{ path: '/calendario',       element: wrap(<CalendarioPage />) }] },
-          { element: <ModuleRoute moduleKey="quejas" />,              children: [{ path: '/quejas',           element: wrap(<QuejasPage />) }] },
+          { path: '/quejas', element: <Navigate to="/atencion-cliente/clientes?tab=casos&tipo=queja" replace /> }, // Quejas viven en Casos, dentro del módulo unificado
           { element: <ModuleRoute moduleKey="reglamento" />,          children: [{ path: '/reglamento',       element: wrap(<ReglamentoPage />) }] },
           { element: <ModuleRoute moduleKey="drive" />,               children: [{ path: '/drive',            element: wrap(<DrivePage />) }] },
           { element: <ModuleRoute moduleKey="organigrama" />,         children: [{ path: '/organigrama',      element: wrap(<OrganigramaPage />) }] },
@@ -259,7 +269,7 @@ export const router = createBrowserRouter([
           {
             element: <RoleRoute allowedRoles={['AD']} />,
             children: [
-              { element: <ModuleRoute moduleKey="quejas" />,    children: [{ path: '/quejas/dashboard', element: wrap(<QuejasDashboardPage />) }] },
+              { path: '/quejas/dashboard', element: <Navigate to="/atencion-cliente/clientes/dashboard" replace /> }, // Fase 8
               { element: <ModuleRoute moduleKey="asistencia" />, children: [{ path: '/asistencia',      element: wrap(<AsistenciaReportePage />) }] },
               { element: <ModuleRoute moduleKey="nomina" />,    children: [{ path: '/nomina',           element: wrap(<NominaPage />) }] },
             ],
@@ -331,7 +341,8 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/tiempos', element: wrap(<TiemposPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/kpis', element: wrap(<KpisOperacionesPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/metas', element: wrap(<MetasPage />) }] },
-              { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/reportes-diarios', element: wrap(<ReportesDiariosPage />) }] },
+              { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/suite-reportes', element: wrap(<SuiteReportesPage />) }] },
+              { path: '/operaciones/reportes-diarios', element: <Navigate to="/operaciones/suite-reportes" replace /> },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/asesores', element: wrap(<AsesoresPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/:subSlug', element: wrap(<AreaSubModuloPage areaKey="operaciones" />) }] },
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia',       element: wrap(<TecnologiaPage />) }] },
@@ -340,16 +351,22 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia/sistemas', element: wrap(<SistemasPage />) }] },
               { element: <ModuleRoute moduleKey="tecnologia" />,      children: [{ path: '/tecnologia/:subSlug', element: wrap(<AreaSubModuloPage areaKey="ti" />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente', element: wrap(<AtencionClientePage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/consultas', element: wrap(<ConsultasPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/aclaraciones', element: wrap(<AclaracionesPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/seguimiento', element: wrap(<SeguimientoPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/satisfaccion', element: wrap(<SatisfaccionPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/retencion', element: wrap(<RetencionPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes', element: wrap(<ClientesListaPage />) }] },
+              // Módulo unificado con pestañas.
+              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes', element: wrap(<SeguimientoClientesPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes/dashboard', element: wrap(<ClientesDashboardPage />) }] },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/clientes/:id', element: wrap(<ClientePerfilPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/mis-tareas', element: wrap(<MisTareasPage />) }] },
-              { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/incidencias', element: wrap(<IncidenciasPage />) }] },
+              // Rutas viejas → pestaña del módulo, preservando el query (deep-links).
+              { path: '/atencion-cliente/casos', element: <RedirectTab tab="casos" /> },
+              { path: '/atencion-cliente/agenda', element: <RedirectTab tab="agenda" /> },
+              { path: '/atencion-cliente/ofertas', element: <RedirectTab tab="ofertas" /> },
+              { path: '/atencion-cliente/satisfaccion', element: <RedirectTab tab="satisfaccion" /> },
+              { path: '/atencion-cliente/retencion', element: <RedirectTab tab="retencion" /> },
+              { path: '/atencion-cliente/mis-tareas', element: <RedirectTab tab="mi-agenda" /> },
+              { path: '/atencion-cliente/mi-agenda', element: <RedirectTab tab="mi-agenda" /> },
+              { path: '/atencion-cliente/seguimiento', element: <RedirectTab tab="casos" extra={{ estatus: 'abiertos' }} /> },
+              { path: '/atencion-cliente/consultas', element: <RedirectTab tab="casos" extra={{ tipo: 'consulta' }} /> },
+              { path: '/atencion-cliente/aclaraciones', element: <RedirectTab tab="casos" extra={{ tipo: 'aclaracion' }} /> },
+              { path: '/atencion-cliente/incidencias', element: <RedirectTab tab="casos" extra={{ tipo: 'incidencia' }} /> },
               { element: <ModuleRoute moduleKey="atencion-cliente" />, children: [{ path: '/atencion-cliente/:subSlug', element: wrap(<AreaSubModuloPage areaKey="atencion-cliente" />) }] },
               { element: <ModuleRoute moduleKey="rh-area" />,         children: [{ path: '/rh',               element: wrap(<RHPage />) }] },
               { element: <ModuleRoute moduleKey="rh-area" />,         children: [{ path: '/rh/reclutamiento', element: wrap(<ReclutamientoPage />) }] },
@@ -368,10 +385,15 @@ export const router = createBrowserRouter([
             children: [{ path: '/webphone', element: wrap(<WebphonePage />) }],
           },
           {
-            element: <RoleRoute allowedRoles={['AD', 'CC']} />,
+            element: <RoleRoute allowedRoles={['AD', 'TI', 'CC']} />,
             children: [
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
-              { element: <ModuleRoute moduleKey="contact-center" />, children: [{ path: '/contact-center', element: wrap(<ContactCenterPage />) }] },
+              { element: <ModuleRoute moduleKey="contact-center" />, children: [
+                { path: '/contact-center', element: wrap(<ContactCenterPage />) },
+              ] },
+              { element: <ModuleRoute moduleKey="postulantes" />, children: [
+                { path: '/contact-center/postulantes', element: wrap(<PostulantesPage />) },
+              ] },
             ],
           },
           {

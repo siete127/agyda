@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
-  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download,
+  ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft, History,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -13,6 +13,10 @@ import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, 
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
+import { TIPIFICACIONES_LLAMADA } from '@/constants/tipificacionesLlamada'
+import { NotasPostulanteModal } from './NotasPostulanteModal'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-ink-secondary'
@@ -131,20 +135,20 @@ export function CCCanalesTab() {
 function CanalCard({ canal, grupos, campanias, onChanged }: any) {
   const [form, setForm] = useState({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
-    modoSesion: canal.modoSesion ?? 'compartido',
+    modoSesion: canal.modoSesion ?? 'compartido', modoAsignacion: canal.modoAsignacion ?? 'campania', esCanalCrm: !!canal.esCanalCrm,
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
   const dirty =
     form.nombre !== canal.nombre || form.habilitado !== canal.habilitado ||
     form.grupoId !== (canal.grupoId ?? '') || form.campaniaId !== (canal.campaniaId ?? '') ||
-    form.modoSesion !== (canal.modoSesion ?? 'compartido') ||
+    form.modoSesion !== (canal.modoSesion ?? 'compartido') || form.modoAsignacion !== (canal.modoAsignacion ?? 'campania') || form.esCanalCrm !== !!canal.esCanalCrm ||
     form.metaPageId !== (canal.metaPageId ?? '') || form.metaBusinessId !== (canal.metaBusinessId ?? '') ||
     form.verifyToken !== (canal.verifyToken ?? '') || !!form.accessToken || !!form.appSecret
 
   const resetForm = () => setForm({
     nombre: canal.nombre, habilitado: canal.habilitado, grupoId: canal.grupoId ?? '', campaniaId: canal.campaniaId ?? '',
-    modoSesion: canal.modoSesion ?? 'compartido',
+    modoSesion: canal.modoSesion ?? 'compartido', modoAsignacion: canal.modoAsignacion ?? 'campania', esCanalCrm: !!canal.esCanalCrm,
     metaPageId: canal.metaPageId ?? '', metaBusinessId: canal.metaBusinessId ?? '', verifyToken: canal.verifyToken ?? '',
     accessToken: '', appSecret: '',
   })
@@ -153,7 +157,7 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
     mutationFn: () => ccService.updateCanal(canal.id, {
       nombre: form.nombre, habilitado: form.habilitado,
       grupoId: form.grupoId || null, campaniaId: form.campaniaId || null,
-      modoSesion: form.modoSesion,
+      modoSesion: form.modoSesion, modoAsignacion: form.modoAsignacion, esCanalCrm: form.esCanalCrm,
       metaPageId: form.metaPageId, metaBusinessId: form.metaBusinessId, verifyToken: form.verifyToken,
       ...(form.accessToken ? { accessToken: form.accessToken } : {}),
       ...(form.appSecret ? { appSecret: form.appSecret } : {}),
@@ -182,6 +186,12 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
             <TipoIcono className="h-4.5 w-4.5" />
           </div>
           <p className="truncate font-bold text-ink">{CANAL_LABEL[canal.tipo as CCCanalTipo]} — {canal.nombre}</p>
+          {canal.modoAsignacion === 'manual' && (
+            <span className="flex-shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[0.62rem] font-bold text-amber-700">Manual</span>
+          )}
+          {canal.modoAsignacion === 'auto' && (
+            <span className="flex-shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[0.62rem] font-semibold text-blue-600">Auto</span>
+          )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-3">
           <label className="flex items-center gap-2 text-xs font-medium text-ink-tertiary">
@@ -206,6 +216,23 @@ function CanalCard({ canal, grupos, campanias, onChanged }: any) {
             <select className={field} value={form.campaniaId} onChange={(e) => setForm({ ...form, campaniaId: e.target.value })}>
               <option value="">—</option>{campanias.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select></label>
+          <label className="block"><span className={label}>Asignación</span>
+            <select className={field} value={form.modoAsignacion} onChange={(e) => setForm({ ...form, modoAsignacion: e.target.value })}>
+              <option value="campania">Seguir la campaña</option>
+              <option value="auto">Automática</option>
+              <option value="manual">Manual — los agentes jalan de la cola</option>
+            </select></label>
+          {(canal.tipo === 'whatsapp_baileys' || canal.tipo === 'whatsapp') && (
+            <label className="flex items-start gap-2 text-xs font-medium text-ink-tertiary sm:col-span-2">
+              <Switch checked={form.esCanalCrm} onChange={(v) => setForm({ ...form, esCanalCrm: v })} />
+              <span>
+                Usar para recordatorios del CRM
+                <span className="mt-0.5 block font-normal text-ink-tertiary/70">
+                  Los recordatorios de citas, pagos y renovaciones se enviarán por WhatsApp desde este canal (además del correo).
+                </span>
+              </span>
+            </label>
+          )}
           {esNoOficial && (
             <label className="block sm:col-span-2">
               <span className={label}>Modo de conexión</span>
@@ -316,6 +343,16 @@ function BaileysQRPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged
     onSuccess: () => { setEstado('desconectado'); setQrDataUrl(null); setNumero(null); toast.success('Sesión cerrada'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
   })
+  const importarHistorial = useMutation({
+    mutationFn: () => ccService.importarHistorialBaileys(canal.id, usuarioId),
+    onSuccess: (r) => {
+      const d = r.data
+      const extra = d.quedanMasPorRevisar ? ' — quedan más conversaciones, dale click de nuevo para seguir' : ''
+      toast.success(`${d.chatsConsultados} conversación(es) revisada(s), ${d.mensajesInsertados} mensaje(s) nuevo(s) agregado(s)${d.chatsConError ? `, ${d.chatsConError} sin respuesta` : ''}${extra}`)
+      onChanged()
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo importar el historial'),
+  })
 
   return (
     <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
@@ -348,10 +385,18 @@ function BaileysQRPanel({ canal, onChanged, usuarioId }: { canal: any; onChanged
           </button>
         )}
         {estado === 'conectado' && (
-          <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
-            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
-            <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <button
+              onClick={() => importarHistorial.mutate()}
+              disabled={importarHistorial.isPending}
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-sm hover:bg-gray-50 disabled:opacity-50">
+              {importarHistorial.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />} Importar historial
+            </button>
+            <button onClick={() => cerrar.mutate()} disabled={cerrar.isPending}
+              className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50">
+              <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -707,18 +752,28 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
   const delC = useMutation({ mutationFn: () => ccService.deleteCampania(campania.id), onSuccess: onChanged })
 
   return (
-    <button type="button" onClick={onAbrir} className={clsx(cardBare, 'block w-full text-left transition hover:border-violet-200')}>
+    <div
+      role="button" tabIndex={0} onClick={onAbrir}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir() } }}
+      className={clsx(cardBare, 'block w-full cursor-pointer text-left transition hover:border-violet-200')}
+    >
       <div className="flex items-center justify-between gap-3 px-5 py-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <p className="truncate text-sm font-bold uppercase tracking-wide text-ink">{campania.nombre}</p>
           <span className="flex-shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[0.65rem] font-semibold text-emerald-700">Activa</span>
+          {campania.modoAsignacion === 'manual' && (
+            <span className="flex-shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[0.62rem] font-bold text-amber-700">Manual</span>
+          )}
+          {campania.modoAsignacion === 'auto' && (
+            <span className="flex-shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[0.62rem] font-semibold text-blue-600">Auto</span>
+          )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-4 text-[0.72rem] text-ink-tertiary">
           <span className="hidden items-center gap-1.5 sm:flex"><Users className="h-3.5 w-3.5" /> {campania.agentesCount} Agentes</span>
           <span className="hidden items-center gap-1.5 sm:flex"><Plug className="h-3.5 w-3.5" /> {campania.canalesCount} Canales</span>
           <span className="hidden items-center gap-1.5 sm:flex"><Layers className="h-3.5 w-3.5" /> {campania.skillsCount} Skills</span>
           <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setMenuAbierto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50">
+            <button type="button" onClick={() => setMenuAbierto((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50">
               <MoreVertical className="h-4 w-4" />
             </button>
             {menuAbierto && (
@@ -726,6 +781,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
                 <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
                 <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-card py-1 shadow-lg">
                   <button
+                    type="button"
                     onClick={() => { setMenuAbierto(false); delC.mutate() }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-red-500 hover:bg-red-50"
                   >
@@ -738,7 +794,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
           <ChevronRight className="h-4 w-4 flex-shrink-0" />
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -871,6 +927,222 @@ function PostulantesDeCampaniaPanel({ campania }: any) {
   )
 }
 
+/* ═══ Gestión de postulantes (transversal a campañas asignadas) ═══
+   Apartado nuevo, independiente de PostulantesDeCampaniaPanel (que sigue
+   siendo el listado simple dentro del detalle de cada campaña). Este ve
+   postulantes de TODAS las campañas visibles para el usuario sin elegir
+   campaña primero — el backend ya filtra por agente vs. gestor/admin. */
+const TIPIFICACION_BADGE = 'inline-flex items-center rounded-full px-2.5 py-1 text-[0.7rem] font-semibold'
+
+export function CCPostulantesGestionTab() {
+  const [q, setQ] = useState('')
+  const [qDebounced, setQDebounced] = useState('')
+  const [page, setPage] = useState(1)
+  const [notasDe, setNotasDe] = useState<number | null>(null)
+  const [nuevoOpen, setNuevoOpen] = useState(false)
+  const pageSize = 20
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    const t = setTimeout(() => { setQDebounced(q); setPage(1) }, 350)
+    return () => clearTimeout(t)
+  }, [q])
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['cc-postulantes-gestion', qDebounced, page],
+    queryFn: () => ccService.getPostulantesGestion({ q: qDebounced || undefined, page, pageSize }),
+  })
+
+  const postulantes = data?.data ?? []
+  const total = data?.total ?? 0
+  const totalPaginas = Math.max(1, Math.ceil(total / pageSize))
+
+  const tipificar = useMutation({
+    mutationFn: ({ id, tipificacion }: { id: number; tipificacion: string }) =>
+      ccService.tipificarPostulante(id, { tipificacion }),
+    onSuccess: () => {
+      toast.success('Tipificación actualizada')
+      qc.invalidateQueries({ queryKey: ['cc-postulantes-gestion'] })
+    },
+    onError: () => toast.error('No se pudo actualizar la tipificación'),
+  })
+
+  return (
+    <div className="space-y-4">
+      <Header icon={ClipboardList} titulo="Gestión de postulantes" subtitulo="Busca, tipifica y da seguimiento a los postulantes de tus campañas asignadas." />
+
+      <div className={clsx(card, 'flex items-center gap-2.5')}>
+        <Search className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por nombre o teléfono..."
+          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
+        />
+        <button
+          type="button"
+          onClick={() => setNuevoOpen(true)}
+          className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white transition hover:bg-violet-700"
+        >
+          <Plus className="h-3.5 w-3.5" /> Nuevo postulante
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className={clsx(card, 'flex items-center justify-center py-10 text-ink-tertiary')}><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : postulantes.length === 0 ? (
+        <div className={clsx(card, 'py-10 text-center text-sm text-ink-tertiary')}>
+          {qDebounced ? 'Sin resultados para tu búsqueda.' : 'No tienes postulantes visibles todavía.'}
+        </div>
+      ) : (
+        <div className={clsx(cardBare, 'overflow-x-auto')}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+                <th className="px-4 py-3">Nombre</th>
+                <th className="px-4 py-3">Teléfono</th>
+                <th className="px-4 py-3">Campaña</th>
+                <th className="px-4 py-3">Tipificación</th>
+                <th className="px-4 py-3">Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {postulantes.map((p) => (
+                <tr key={p.id} className="border-b border-gray-50 last:border-0">
+                  <td className="px-4 py-3 font-semibold text-ink">{p.nombre}</td>
+                  <td className="px-4 py-3 text-ink-secondary">
+                    <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-tertiary" /> {p.telefono}</span>
+                  </td>
+                  <td className="px-4 py-3 text-ink-secondary">{p.campaniaNombre}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={p.tipificacion ?? ''}
+                        onChange={(e) => e.target.value && tipificar.mutate({ id: p.id, tipificacion: e.target.value })}
+                        className={clsx(TIPIFICACION_BADGE, p.tipificacion ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-ink-tertiary', 'cursor-pointer border-0 outline-none')}
+                      >
+                        <option value="" disabled>Sin tipificar</option>
+                        {TIPIFICACIONES_LLAMADA.map((t) => (
+                          <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {p.tipificacionFecha && (
+                      <p className="mt-1 text-[0.65rem] text-ink-tertiary">
+                        {new Date(p.tipificacionFecha).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setNotasDe(p.id)}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[0.72rem] font-semibold text-ink-secondary transition hover:bg-gray-50"
+                    >
+                      <StickyNote className="h-3.5 w-3.5" /> Notas
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-[0.75rem] text-ink-tertiary">
+          <p>{total} postulante{total === 1 ? '' : 's'} · página {page} de {totalPaginas}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 font-semibold disabled:opacity-40"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPaginas}
+              onClick={() => setPage((p) => Math.min(totalPaginas, p + 1))}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 font-semibold disabled:opacity-40"
+            >
+              Siguiente <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {notasDe !== null && (
+        <NotasPostulanteModal postulanteId={notasDe} onClose={() => setNotasDe(null)} />
+      )}
+
+      {nuevoOpen && (
+        <NuevoPostulanteModal
+          onClose={() => setNuevoOpen(false)}
+          onCreado={() => {
+            setNuevoOpen(false)
+            qc.invalidateQueries({ queryKey: ['cc-postulantes-gestion'] })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function NuevoPostulanteModal({ onClose, onCreado }: { onClose: () => void; onCreado: () => void }) {
+  const [nombre, setNombre] = useState('')
+  const [telefono, setTelefono] = useState('')
+  const [campaniaId, setCampaniaId] = useState<number | ''>('')
+
+  const { data: campanias = [], isLoading: cargandoCampanias } = useQuery({
+    queryKey: ['cc-campanias-para-postulante'],
+    queryFn: () => ccService.getCampaniasParaPostulante(),
+  })
+
+  const crear = useMutation({
+    mutationFn: () => ccService.crearPostulante({ nombre: nombre.trim(), telefono: telefono.trim(), campaniaId: Number(campaniaId) }),
+    onSuccess: () => { toast.success('Postulante creado'); onCreado() },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg || 'No se pudo crear el postulante')
+    },
+  })
+
+  const valido = nombre.trim().length > 0 && telefono.replace(/\D/g, '').length >= 10 && campaniaId !== ''
+
+  return (
+    <Modal isOpen onClose={onClose} title="Nuevo postulante" size="sm">
+      <div className="space-y-3">
+        <div>
+          <label className={label}>Nombre</label>
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={field} placeholder="Nombre completo" />
+        </div>
+        <div>
+          <label className={label}>Teléfono</label>
+          <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={field} placeholder="10 dígitos" maxLength={20} />
+        </div>
+        <div>
+          <label className={label}>Campaña</label>
+          {cargandoCampanias ? (
+            <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-ink-tertiary" /></div>
+          ) : (
+            <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className={field}>
+              <option value="">Selecciona una campaña...</option>
+              {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button isLoading={crear.isPending} disabled={!valido} onClick={() => crear.mutate()}>Crear</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 /* ═══ Contacto público de la campaña ═══
    Datos que muestran páginas externas (ej. contacto.html de la postulación
    de Totis) vía el endpoint sin auth GET /publico/campanias/:slug/contacto —
@@ -879,9 +1151,11 @@ function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChange
   const [form, setForm] = useState({
     slug: campania.slug ?? '', telefono: campania.contactoTelefono ?? '',
     facebookUrl: campania.contactoFacebookUrl ?? '', instagramUrl: campania.contactoInstagramUrl ?? '',
+    modoAsignacion: campania.modoAsignacion ?? 'global',
   })
   const dirty = form.slug !== (campania.slug ?? '') || form.telefono !== (campania.contactoTelefono ?? '') ||
-    form.facebookUrl !== (campania.contactoFacebookUrl ?? '') || form.instagramUrl !== (campania.contactoInstagramUrl ?? '')
+    form.facebookUrl !== (campania.contactoFacebookUrl ?? '') || form.instagramUrl !== (campania.contactoInstagramUrl ?? '') ||
+    form.modoAsignacion !== (campania.modoAsignacion ?? 'global')
 
   const guardar = useMutation({
     mutationFn: () => ccService.updateCampania(campania.id, {
@@ -889,8 +1163,9 @@ function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChange
       contactoTelefono: form.telefono.trim() || null,
       contactoFacebookUrl: form.facebookUrl.trim() || null,
       contactoInstagramUrl: form.instagramUrl.trim() || null,
+      modoAsignacion: form.modoAsignacion,
     }),
-    onSuccess: () => { toast.success('Contacto guardado'); onChanged() },
+    onSuccess: () => { toast.success('Guardado'); onChanged() },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al guardar'),
   })
 
@@ -904,6 +1179,16 @@ function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChange
         solo se captura lo que no sale de ningún canal (teléfono de llamadas, y Facebook/Instagram si Messenger/
         Instagram no oficiales no tienen un perfil público al que enlazar).
       </p>
+
+      <label className="block">
+        <span className={label}>Asignación de conversaciones</span>
+        <select className={field} value={form.modoAsignacion} onChange={(e) => setForm({ ...form, modoAsignacion: e.target.value })}>
+          <option value="global">Seguir la configuración global</option>
+          <option value="auto">Automática — el sistema asigna a un agente</option>
+          <option value="manual">Manual — los agentes jalan de la cola</option>
+        </select>
+        <span className="mt-0.5 block text-[0.65rem] text-gray-400">Un canal de esta campaña puede sobreescribir esto.</span>
+      </label>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
@@ -1155,7 +1440,7 @@ function AsignacionAgentesSkill({ grupoId, onChanged }: { grupoId: number; onCha
 // campaña, CC_CAMPANIAS_SUPERVISORES) o "skill" (un solo grupo, más granular,
 // CCO_GRUPO_SUPERVISORES) — ambas tablas comparten la misma forma de fila
 // { usuarioId, nombre }, así que la UI y el hook de mutación son idénticos.
-function AsignacionSupervisores({ nivel, id, onChanged }: { nivel: 'campania' | 'skill'; id: number; onChanged?: () => void }) {
+export function AsignacionSupervisores({ nivel, id, onChanged }: { nivel: 'campania' | 'skill'; id: number; onChanged?: () => void }) {
   const qc = useQueryClient()
   const queryKey = [nivel === 'campania' ? 'cc-supervisores-campania' : 'cc-supervisores-grupo', id]
   const { data: asignados = [] } = useQuery({
@@ -1391,6 +1676,12 @@ export function CCConfigTab() {
         {num('autocierreInactividadMin', 'Autocierre por inactividad (min)', 'Cierra la interacción si el cliente no responde')}
         <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Mensaje de bienvenida</span>
           <input className={field} value={form.msgBienvenida} onChange={(e) => setForm({ ...form, msgBienvenida: e.target.value })} /></label>
+        <label className="block sm:col-span-2"><span className="mb-1 block text-[0.7rem] font-semibold text-gray-500">Modo de asignación por defecto</span>
+          <select className={field} value={form.modoAsignacion ?? 'auto'} onChange={(e) => setForm({ ...form, modoAsignacion: e.target.value })}>
+            <option value="auto">Automática — el sistema asigna a un agente disponible</option>
+            <option value="manual">Manual — las conversaciones caen a la cola y los agentes las jalan</option>
+          </select>
+          <span className="mt-0.5 block text-[0.65rem] text-gray-400">Cada campaña y cada canal puede sobreescribir esto.</span></label>
       </div>
       <div className="flex justify-end">
         <button onClick={() => guardar.mutate()} disabled={guardar.isPending} className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50">

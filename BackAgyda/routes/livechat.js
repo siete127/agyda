@@ -52,6 +52,7 @@ router.put('/config', authenticateToken, requireActionAccess('livechat', 'config
 
 // Historial de conversaciones cerradas + export CSV.
 router.get('/historial', authenticateToken, requireActionAccess('livechat', 'ver'), livechatController.getHistorial);
+router.get('/historial/rating-por-agente', authenticateToken, requireActionAccess('livechat', 'ver'), livechatController.getHistorialRatingPorAgente);
 router.get('/historial/export', authenticateToken, requireActionAccess('livechat', 'ver'), livechatController.exportHistorialCsv);
 
 // Campañas — administración completa requiere 'gestionar-campanas'; el catálogo

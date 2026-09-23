@@ -3065,6 +3065,30 @@
 
             const CHAT_STORAGE_KEY = 'ardabytec-chat-lead';
 
+            // Token de sesión del widget (por pestaña) — sirve para agrupar la
+            // telemetría de feedback sin identificar al visitante.
+            const CHAT_SESION_KEY = 'ardabytec-chat-sesion';
+            let sesionToken = null;
+            try {
+                sesionToken = sessionStorage.getItem(CHAT_SESION_KEY);
+                if (!sesionToken) {
+                    sesionToken = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+                    sessionStorage.setItem(CHAT_SESION_KEY, sesionToken);
+                }
+            } catch (e) { sesionToken = String(Date.now()); }
+
+            // Telemetría fire-and-forget: nunca bloquea ni rompe la conversación.
+            function enviarTelemetria(path, payload) {
+                try {
+                    fetch(path, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        keepalive: true,
+                    }).catch(() => {});
+                } catch (e) { /* noop */ }
+            }
+
             const TEXTOS = {
                 es: {
                     saludo: '¡Hola! 👋 Soy el asistente virtual de ARDABYTEC. ¿En qué puedo ayudarte hoy?',
@@ -3086,6 +3110,7 @@
                     pedirConfirmacion: (nombre, contacto, empresaCargo, presupuesto) => `Perfecto. Voy a compartir tus datos con nuestro equipo:\n\n👤 ${nombre}\n📞 ${contacto}${empresaCargo ? `\n🏢 ${empresaCargo}` : ''}${presupuesto ? `\n💰 ${presupuesto}` : ''}\n\n¿Está todo correcto? Escribe "sí" para confirmar o "no" para corregir.`,
                     enviando: 'Enviando tus datos...',
                     enviado: '¡Listo! Un asesor de ARDABYTEC te contactará muy pronto. Gracias por escribirnos. 🙌',
+                    enviadoConsulta: '¡Listo! Registré tu consulta. Un asesor de ARDABYTEC te contactará. Gracias por escribirnos. 🙌',
                     errorEnvio: 'Hubo un problema enviando tus datos. Por favor intenta de nuevo en unos minutos, o escríbenos directo a través del formulario de contacto.',
                     reiniciar: 'Sin problema, empecemos de nuevo. ¿A qué correo o teléfono te contactamos?',
                     placeholder: 'Escribe tu mensaje...',
@@ -3094,6 +3119,7 @@
                     liveChatCerrado: 'El agente cerró la conversación. Si necesitas algo más, aquí estoy. 🙂',
                     liveChatSugerencia: 'Parece que no estoy resolviendo tu duda. ¿Quieres hablar con un agente?',
                     liveChatAsignado: (nombre) => `¡${nombre || 'Un agente'} se unió a la conversación! 👋`,
+                    liveChatEnCola: 'Sigues en la fila para un agente. Si prefieres, puedes dejar tus datos.',
                     liveChatSalirCola: 'Prefiero dejar mis datos',
                     liveChatPedirRating: 'Antes de irte, ¿cómo calificarías la atención que recibiste?',
                     liveChatOpcionesRating: ['⭐ 1', '⭐⭐ 2', '⭐⭐⭐ 3', '⭐⭐⭐⭐ 4', '⭐⭐⭐⭐⭐ 5'],
@@ -3123,6 +3149,7 @@
                     pedirConfirmacion: (nombre, contacto, empresaCargo, presupuesto) => `Great. I\'ll share your details with our team:\n\n👤 ${nombre}\n📞 ${contacto}${empresaCargo ? `\n🏢 ${empresaCargo}` : ''}${presupuesto ? `\n💰 ${presupuesto}` : ''}\n\nIs everything correct? Type "yes" to confirm or "no" to fix it.`,
                     enviando: 'Sending your info...',
                     enviado: 'All set! An ARDABYTEC advisor will reach out soon. Thanks for writing to us. 🙌',
+                    enviadoConsulta: 'All set! I logged your question. An ARDABYTEC advisor will reach out. Thanks for writing to us. 🙌',
                     errorEnvio: 'There was a problem sending your info. Please try again in a few minutes, or reach us through the contact form.',
                     reiniciar: 'No problem, let\'s start again. What email or phone number should we reach you at?',
                     placeholder: 'Type your message...',
@@ -3131,6 +3158,7 @@
                     liveChatCerrado: 'The agent closed the conversation. Let me know if you need anything else. 🙂',
                     liveChatSugerencia: 'Looks like I\'m not solving your question. Would you like to talk to an agent?',
                     liveChatAsignado: (nombre) => `${nombre || 'An agent'} joined the conversation! 👋`,
+                    liveChatEnCola: 'You are still in line for an agent. If you prefer, you can leave your details.',
                     liveChatSalirCola: 'I\'d rather leave my details',
                     liveChatPedirRating: 'Before you go, how would you rate the support you received?',
                     liveChatOpcionesRating: ['⭐ 1', '⭐⭐ 2', '⭐⭐⭐ 3', '⭐⭐⭐⭐ 4', '⭐⭐⭐⭐⭐ 5'],
@@ -3142,8 +3170,46 @@
                 },
             };
 
+            // Config del bot que AGYDA controla (saludo, regla de escalamiento).
+            // Se rellena con cargarBotConfig(); hasta entonces valen los TEXTOS
+            // hardcodeados de abajo como fallback.
+            let botConfig = null;
+
             function t() {
-                return TEXTOS[currentLang] || TEXTOS.es;
+                const base = TEXTOS[currentLang] || TEXTOS.es;
+                if (!botConfig) return base;
+                const es = currentLang === 'en';
+                const esReal = currentLang === 'es';
+                return {
+                    ...base,
+                    saludo: (es ? botConfig.saludoEn : botConfig.saludoEs) || base.saludo,
+                    liveChatSugerencia: (es ? botConfig.sugerenciaEscalarEn : botConfig.sugerenciaEscalarEs) || base.liveChatSugerencia,
+                    // Fase 6 (Constructor de flujo, "Captura de lead"): antes fijos en
+                    // TEXTOS.pedirNombre/pedirContacto, ahora editables desde AGYDA.
+                    pedirNombre: (esReal ? botConfig.pedirNombreEs : botConfig.pedirNombreEn) || base.pedirNombre,
+                    pedirContacto: (nombre) => {
+                        const plantilla = (esReal ? botConfig.pedirContactoEs : botConfig.pedirContactoEn) || null;
+                        return plantilla ? plantilla.replace('{nombre}', nombre) : base.pedirContacto(nombre);
+                    },
+                };
+            }
+
+            // Nº de "no entendí" seguidos antes de ofrecer un agente (configurable).
+            function turnosParaEscalar() {
+                const n = parseInt(botConfig && botConfig.turnosSinMatchParaEscalar, 10);
+                return Number.isFinite(n) && n > 0 ? n : 3;
+            }
+
+            async function cargarBotConfig() {
+                if (botConfig) return;
+                try {
+                    const res = await fetch('/api/chatbot/config/publica');
+                    const json = await res.json();
+                    botConfig = json && json.data ? json.data : json;
+                } catch (e) {
+                    console.warn('No se pudo cargar la config del chatbot, se usan los textos por defecto:', e);
+                    botConfig = null;
+                }
             }
 
             let diccionario = [];
@@ -3233,7 +3299,10 @@
             // --- Estado de la conversación ---
             let estado = 'explorar'; // explorar | pedir_nombre | pedir_contacto | pedir_empresa | pedir_presupuesto | confirmar | arbol_diagnostico
             let turnosSinLead = 0;
-            let leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
+            let interactuoRegistrado = false;  // Fase 3: evita re-contar el hito 'interactuo' del embudo
+            // generaOportunidad: se pone true si el visitante pasó por un nodo
+            // marcado 'oportunidad' o dio un presupuesto numérico (Fase 2).
+            let leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null, generaOportunidad: false };
             let chatIniciado = false;
             let arbolSesionToken = null; // token de CHATBOT_SESIONES mientras estado === 'arbol_diagnostico'
             let ultimoNodoArbol = null; // último nodo mostrado, para resolver el opcionId elegido
@@ -3256,7 +3325,7 @@
                     sessionStorage.setItem(CHAT_ESTADO_KEY, JSON.stringify({
                         estado, leadData, turnosSinLead, quickRepliesTipo, mensajes,
                         liveChatConversacionId, liveChatRatingConversacionId, liveChatRatingElegido,
-                        chatIniciado, panelAbierto: panel.classList.contains('active'),
+                        chatIniciado, interactuoRegistrado, panelAbierto: panel.classList.contains('active'),
                     }));
                 } catch (e) { /* almacenamiento no disponible (modo privado, cuota llena): sin persistencia, no rompe el chat */ }
             }
@@ -3362,6 +3431,7 @@
                         empresa: leadData.empresa || undefined,
                         cargo: leadData.cargo || undefined,
                         presupuesto: leadData.presupuestoValor != null ? leadData.presupuestoValor : undefined,
+                        generaOportunidad: leadData.generaOportunidad === true,
                         resumen: Array.from(messagesEl.querySelectorAll('.chat-bubble'))
                             .map(b => b.textContent).join(' | ').slice(0, 1500),
                     };
@@ -3373,7 +3443,11 @@
                     const json = await res.json().catch(() => ({}));
                     if (!res.ok || json.ok === false) throw new Error(json.mensaje || 'Error al enviar');
                     enviadoOk = true;
-                    await botDice(() => t().enviado, 500);
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'lead_enviado', sesionToken });
+                    // Si el backend no creó oportunidad (era solo una consulta o
+                    // el contacto ya tenía una abierta), el mensaje lo refleja.
+                    const soloConsulta = json.creoOportunidad === false;
+                    await botDice(() => (soloConsulta ? t().enviadoConsulta : t().enviado), 500);
                     try { sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ enviado: true })); } catch (e) {}
                 } catch (e) {
                     await botDice(() => t().errorEnvio, 400);
@@ -3382,7 +3456,7 @@
                 // Si el envío falló, se conserva leadData (nombre/contacto ya capturados) para no
                 // volver a pedirlos en el siguiente intento — solo se limpia tras un envío exitoso.
                 if (enviadoOk) {
-                    leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null };
+                    leadData = { nombre: '', email: '', telefono: '', interes: '', empresa: '', cargo: '', empresaCargo: '', presupuestoLabel: '', presupuestoValor: null, generaOportunidad: false };
                 }
                 await mostrarMenuInicial();
             }
@@ -3423,7 +3497,7 @@
                 if (liveChatSocket) return liveChatSocket;
                 liveChatSocket = io();
                 liveChatSocket.on('receive_livechat_message', (msg) => {
-                    if (!msg || msg.conversacionId !== liveChatConversacionId) return;
+                    if (!msg || Number(msg.conversacionId) !== Number(liveChatConversacionId)) return;
                     // 'sistema' incluido a propósito: es como llega el motivo cuando el
                     // agente cierra el chat ("El agente cerró la conversación. Motivo: ...")
                     // y avisos de transferencia — antes solo se mostraban mensajes del
@@ -3433,16 +3507,17 @@
                     }
                 });
                 liveChatSocket.on('livechat:conversacion_tomada', (payload) => {
-                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    if (!payload || Number(payload.conversacionId) !== Number(liveChatConversacionId)) return;
                     if (estado === 'chat_vivo_cola') {
                         detenerPollingCola();
                         estado = 'chat_vivo';
                         botDice(() => t().liveChatAsignado(payload.agenteNombre || ''), 300);
                         setQuickReplies([]);
+                        guardarEstadoChat();
                     }
                 });
                 liveChatSocket.on('livechat:conversacion_cerrada', (payload) => {
-                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    if (!payload || Number(payload.conversacionId) !== Number(liveChatConversacionId)) return;
                     finalizarChatVivo(() => t().liveChatCerrado);
                 });
                 // El agente cerró desde su lado (motivo incluido) — el backend ya manda
@@ -3452,7 +3527,7 @@
                 // sin esto la conversación quedaba en 'pendiente_rating' para siempre y
                 // nunca llegaba al Historial (LC_ESTADO solo pasa a 'cerrada' al calificar).
                 liveChatSocket.on('livechat:pendiente_calificacion', (payload) => {
-                    if (!payload || payload.conversacionId !== liveChatConversacionId) return;
+                    if (!payload || Number(payload.conversacionId) !== Number(liveChatConversacionId)) return;
                     iniciarCalificacion(payload.conversacionId);
                 });
                 return liveChatSocket;
@@ -3522,15 +3597,36 @@
                 detenerPollingCola();
                 liveChatColaPollTimer = setInterval(async () => {
                     if (!liveChatConversacionId || estado !== 'chat_vivo_cola') { detenerPollingCola(); return; }
-                    try {
-                        const res = await fetch(`/api/livechat/conversaciones/${liveChatConversacionId}/cola`);
-                        const json = await res.json().catch(() => ({}));
-                        if (json.success && json.data && json.data.enCola === false) {
-                            // Ya no está en cola: o fue asignado (el socket lo maneja) o se cerró.
-                            detenerPollingCola();
+                    await verificarSiFuiTomado();
+                }, 8000);
+            }
+
+            // Consulta el estado real de la conversación: si un agente ya la tomó
+            // (el evento por socket pudo perderse), pasa a 'chat_vivo'. Devuelve
+            // true si quedó en chat_vivo.
+            async function verificarSiFuiTomado() {
+                if (!liveChatConversacionId) return false;
+                try {
+                    const res = await fetch(`/api/livechat/conversaciones/${liveChatConversacionId}/cola`);
+                    const json = await res.json().catch(() => ({}));
+                    const d = json && json.data;
+                    if (!d) return false;
+                    if (d.enCola === false && (d.estado === 'activa' || d.estado === 'pendiente_tipificacion')) {
+                        detenerPollingCola();
+                        if (estado !== 'chat_vivo') {
+                            estado = 'chat_vivo';
+                            setQuickReplies([]);
+                            await botDice(() => t().liveChatAsignado(''), 200);
+                            guardarEstadoChat();
                         }
-                    } catch (e) {}
-                }, 15000);
+                        return true;
+                    }
+                    if (d.enCola === false && d.estado === 'cerrada') {
+                        detenerPollingCola();
+                        finalizarChatVivo(() => t().liveChatCerrado);
+                    }
+                } catch (e) {}
+                return false;
             }
 
             // Punto de entrada real de "Hablar con alguien": antes solo llamaba a
@@ -3558,6 +3654,7 @@
             // configurada, el visitante espera con posición visible; si no, cae a captura de lead.
             async function iniciarChatEnVivo(motivo, campania) {
                 setQuickReplies([]);
+                enviarTelemetria('/api/chatbot/evento', { tipo: 'escalo_humano', sesionToken });
                 await botDice(() => t().liveChatConectando, 300);
                 try {
                     const res = await fetch('/api/livechat/conversaciones', {
@@ -3615,6 +3712,7 @@
             // como quick-replies (mismo widget visual, ruteo propio vía avanzarArbol).
             async function mostrarNodoArbol(nodo) {
                 ultimoNodoArbol = nodo;
+                if (nodo.genera === 'oportunidad') leadData.generaOportunidad = true;
                 addBubble(nodo.texto, 'bot');
                 if (nodo.opciones && nodo.opciones.length) {
                     setQuickReplies(nodo.opciones.map(o => o.texto), null);
@@ -3627,6 +3725,7 @@
 
             async function iniciarArbolDiagnostico() {
                 setQuickReplies([]);
+                enviarTelemetria('/api/chatbot/evento', { tipo: 'abrio_arbol', sesionToken });
                 try {
                     const res = await fetch('/api/chatbot/arbol/sesiones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
                     const json = await res.json().catch(() => ({}));
@@ -3703,6 +3802,10 @@
             async function handleUserMessage(mensajeCrudo) {
                 const mensaje = String(mensajeCrudo || '').trim();
                 if (!mensaje) return;
+                if (!interactuoRegistrado) {
+                    interactuoRegistrado = true;
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'interactuo', sesionToken });
+                }
                 try {
                     await handleUserMessageInterno(mensaje);
                 } finally {
@@ -3738,16 +3841,49 @@
                 return false;
             }
 
+            // Añade una fila discreta de 👍/👎 bajo la última respuesta del bot.
+            // Un solo voto por respuesta mostrada; al votar, la fila se reemplaza
+            // por un "¡Gracias!".
+            function agregarFeedbackRespuesta(respuestaPk) {
+                if (!respuestaPk) return;
+                const fila = document.createElement('div');
+                fila.className = 'chat-feedback-row';
+                fila.style.cssText = 'display:flex;gap:6px;align-items:center;margin:-2px 0 6px 2px;font-size:12px;color:#9CA3AF;';
+                const pregunta = document.createElement('span');
+                pregunta.textContent = currentLang === 'en' ? 'Was this helpful?' : '¿Te sirvió?';
+                const votar = (util) => {
+                    enviarTelemetria('/api/chatbot/feedback', { respuestaPk, util, sesionToken });
+                    fila.textContent = currentLang === 'en' ? 'Thanks!' : '¡Gracias!';
+                };
+                const btnSi = document.createElement('button');
+                btnSi.type = 'button'; btnSi.textContent = '👍';
+                btnSi.style.cssText = 'background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px;';
+                btnSi.addEventListener('click', () => votar(true));
+                const btnNo = document.createElement('button');
+                btnNo.type = 'button'; btnNo.textContent = '👎';
+                btnNo.style.cssText = 'background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px;';
+                btnNo.addEventListener('click', () => votar(false));
+                fila.append(pregunta, btnSi, btnNo);
+                messagesEl.appendChild(fila);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+
             // Muestra el texto de una Respuesta y arma sus quick-replies: prioriza
             // los botones reales conectados en Flujo Visual (botonesFlujo) sobre el
             // campo de texto libre 'botones' (modo viejo, sin destino real) — si hay
             // conexiones de flujo, esas ganan.
             async function mostrarRespuesta(match) {
                 await botDice(() => (currentLang === 'en' && match.textoEn) ? match.textoEn : match.textoEs, 500);
-                if (match.senalInteres) {
+                // Si este nodo genera oportunidad, el lead que se capture después
+                // será oportunidad; 'contacto'/'ninguno' -> solo contacto.
+                if (match.genera === 'oportunidad') leadData.generaOportunidad = true;
+                if (match.senalInteres && match.genera !== 'ninguno') {
                     botonesFlujoActuales = [];
                     await iniciarCapturaLead(match.id);
-                } else if (match.botonesFlujo && match.botonesFlujo.length) {
+                    return;
+                }
+                agregarFeedbackRespuesta(match.pk);
+                if (match.botonesFlujo && match.botonesFlujo.length) {
                     botonesFlujoActuales = match.botonesFlujo;
                     setQuickReplies(match.botonesFlujo.map((b) => (currentLang === 'en' && b.textoEn) ? b.textoEn : b.texto), null);
                 } else if (match.botones && match.botones.length) {
@@ -3777,7 +3913,17 @@
                 // fijo, así el admin puede renombrar/reordenar sin romper el despacho.
                 if (estado === 'explorar') {
                     const etiqueta = resolverEtiquetaPorTexto(mensaje);
-                    if (etiqueta && await ejecutarAccionBoton({ accion: etiqueta.tipo, campaniaToken: etiqueta.campaniaToken, grupoId: etiqueta.grupoId }, textoEtiqueta(etiqueta))) return;
+                    if (etiqueta) {
+                        // Destino fijado en el Constructor de flujo -> gana sobre
+                        // la resolución por texto.
+                        if (etiqueta.destinoRespuestaPk) {
+                            await cargarDiccionario();
+                            const destino = diccionario.find((r) => r.pk === etiqueta.destinoRespuestaPk);
+                            if (destino) { await mostrarRespuesta(destino); return; }
+                        }
+                        if (etiqueta.destinoNodoArbolId) { await iniciarArbolDiagnostico(); return; }
+                        if (await ejecutarAccionBoton({ accion: etiqueta.tipo, campaniaToken: etiqueta.campaniaToken, grupoId: etiqueta.grupoId }, textoEtiqueta(etiqueta))) return;
+                    }
                     // tipo === 'respuesta' sin conexión de flujo real: cae al buscador
                     // de diccionario de abajo, igual que un botón de siempre.
                 }
@@ -3788,10 +3934,18 @@
                 }
 
                 if (estado === 'chat_vivo_cola') {
-                    if (normalizar(mensaje) === normalizar(t().liveChatSalirCola)) {
+                    const m = normalizar(mensaje);
+                    const quiereSalir = m === normalizar(t().liveChatSalirCola)
+                        || ['salir', 'cancelar', 'ya no', 'dejar mis datos', 'prefiero dejar mis datos', 'quit', 'cancel', 'exit'].includes(m);
+                    if (quiereSalir) {
                         await salirDeLaCola();
                         return;
                     }
+                    // Puede que un agente ya te haya tomado sin que el evento
+                    // llegara — verifica el estado antes de descartar el mensaje.
+                    const tomado = await verificarSiFuiTomado();
+                    if (tomado) { await handleUserMessageInterno(mensaje); return; }
+                    await botDice(() => t().liveChatEnCola, 300);
                     setQuickReplies([t().liveChatSalirCola], null);
                     return;
                 }
@@ -3835,6 +3989,7 @@
                 // iniciarChatEnVivoConDatos).
                 if (estado === 'pedir_nombre_livechat') {
                     leadData.nombre = mensaje.slice(0, 150);
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'dio_dato', sesionToken });
                     estado = 'pedir_contacto_livechat';
                     await botDice(() => t().pedirContacto(leadData.nombre), 450);
                     return;
@@ -3857,6 +4012,7 @@
 
                 if (estado === 'pedir_nombre') {
                     leadData.nombre = mensaje.slice(0, 150);
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'dio_dato', sesionToken });
                     estado = 'pedir_contacto';
                     await botDice(() => t().pedirContacto(leadData.nombre), 450);
                     return;
@@ -3897,6 +4053,8 @@
                     if (idx >= 0) {
                         leadData.presupuestoLabel = rangos[idx] === rangos[rangos.length - 1] ? '' : rangos[idx];
                         leadData.presupuestoValor = PRESUPUESTO_VALORES[idx];
+                        // Dar un rango de inversión concreto = intención comercial.
+                        if (leadData.presupuestoValor != null) leadData.generaOportunidad = true;
                     } else {
                         // Texto libre: se guarda como etiqueta pero sin valor numérico confiable.
                         leadData.presupuestoLabel = mensaje.slice(0, 100);
@@ -3931,8 +4089,11 @@
                     await mostrarRespuesta(match);
                 } else {
                     turnosSinLead++;
+                    // Registra la pregunta que el bot no supo contestar — alimenta
+                    // el panel "Preguntas sin respuesta" de AGYDA.
+                    enviarTelemetria('/api/chatbot/sin-match', { texto: mensaje });
                     await botDice(() => t().sinMatch, 450);
-                    if (turnosSinLead >= 3) {
+                    if (turnosSinLead >= turnosParaEscalar()) {
                         turnosSinLead = 0;
                         await botDice(() => t().liveChatSugerencia, 400);
                         setQuickReplies([t().sugerenciaHablarConAlguien], null);
@@ -3948,7 +4109,8 @@
                 toggleBtn.setAttribute('aria-expanded', 'true');
                 if (!chatIniciado) {
                     chatIniciado = true;
-                    await cargarDiccionario();
+                    enviarTelemetria('/api/chatbot/evento', { tipo: 'abrio', sesionToken });
+                    await Promise.all([cargarDiccionario(), cargarBotConfig()]);
                     await botDice(() => t().saludo, 350);
                     await mostrarMenuInicial();
                 }
@@ -3973,6 +4135,7 @@
                 estado = guardado.estado || 'explorar';
                 leadData = guardado.leadData || leadData;
                 turnosSinLead = guardado.turnosSinLead || 0;
+                interactuoRegistrado = !!guardado.interactuoRegistrado;
                 quickRepliesTipo = guardado.quickRepliesTipo || null;
                 liveChatConversacionId = guardado.liveChatConversacionId || null;
                 liveChatRatingConversacionId = guardado.liveChatRatingConversacionId || null;
@@ -3980,6 +4143,9 @@
                 chatIniciado = !!guardado.chatIniciado;
 
                 (guardado.mensajes || []).forEach(m => addBubble(m.texto, m.tipo));
+
+                // Config del bot: relevante si el visitante sigue conversando tras recargar.
+                cargarBotConfig();
 
                 if (quickRepliesTipo === 'menu') await mostrarMenuInicial();
                 else if (quickRepliesTipo === 'presupuesto') setQuickReplies(t().rangosPresupuesto, 'presupuesto');

@@ -770,7 +770,14 @@ exports.getMisConversaciones = async (req, res) => {
 
     let where = '(LC_AGENTE_ID = @agenteId)';
     if (estado === 'esperando') {
-      where = `(LC_ESTADO = 'esperando' AND LC_AGENTE_ID IS NULL)`;
+      // Solo la cola de los skills a los que el agente sigue asignado HOY —
+      // mismo bug/fix que ccInteraccionesController.list (2026-09-11): antes
+      // mostraba TODA la cola global sin importar campaña/skill.
+      where = `(LC_ESTADO = 'esperando' AND LC_AGENTE_ID IS NULL
+        AND (LC_GRUPO_ID IS NULL OR EXISTS (
+          SELECT 1 FROM dbo.LIVECHAT_GRUPO_AGENTES lga
+          WHERE lga.LGA_GRUPO_ID = LC_GRUPO_ID AND lga.LGA_USUARIO_ID = @agenteId AND lga.LGA_ACTIVO = 1
+        )))`;
     } else if (estado) {
       where = '(LC_AGENTE_ID = @agenteId AND LC_ESTADO = @estado)';
     }
@@ -1522,13 +1529,21 @@ exports.transferirConversacion = async (req, res) => {
 
 // Autenticado — historial de conversaciones cerradas, con filtros opcionales.
 async function buildHistorialQuery(req) {
-  const { agenteId, fechaDesde, fechaHasta, texto } = req.query;
+  const { agenteId, fechaDesde, fechaHasta, texto, campaniaId, grupoId } = req.query;
   const condiciones = [`LC_ESTADO = 'cerrada'`];
   const inputs = [];
 
   if (agenteId) {
     condiciones.push('LC_AGENTE_ID = @agenteId');
     inputs.push(['agenteId', sql.Int, Number(agenteId)]);
+  }
+  if (campaniaId) {
+    condiciones.push('LC_CAMPANIA_ID = @campaniaId');
+    inputs.push(['campaniaId', sql.Int, Number(campaniaId)]);
+  }
+  if (grupoId) {
+    condiciones.push('LC_GRUPO_ID = @grupoId');
+    inputs.push(['grupoId', sql.Int, Number(grupoId)]);
   }
   if (fechaDesde) {
     condiciones.push('LC_FECHA_INICIO >= @fechaDesde');
@@ -1563,6 +1578,36 @@ exports.getHistorial = async (req, res) => {
     res.json({ success: true, data: result.recordset });
   } catch (error) {
     console.error('Error obteniendo historial de livechat:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Autenticado — calificación promedio y total de conversaciones cerradas por
+// agente, respetando los mismos filtros (fecha/campaña/skill/texto) que el
+// historial — para el resumen que se muestra arriba de la lista.
+exports.getHistorialRatingPorAgente = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const { where, inputs } = await buildHistorialQuery(req);
+
+    const request = pool.request();
+    inputs.forEach(([name, type, value]) => request.input(name, type, value));
+
+    const result = await request.query(`
+      SELECT
+        LC_AGENTE_ID as agenteId,
+        LC_AGENTE_NOMBRE as agenteNombre,
+        COUNT(*) as totalConversaciones,
+        SUM(CASE WHEN LC_RATING IS NOT NULL THEN 1 ELSE 0 END) as totalCalificadas,
+        AVG(CAST(LC_RATING AS FLOAT)) as ratingPromedio
+      FROM dbo.LIVECHAT_CONVERSACIONES
+      WHERE ${where} AND LC_AGENTE_ID IS NOT NULL
+      GROUP BY LC_AGENTE_ID, LC_AGENTE_NOMBRE
+      ORDER BY ratingPromedio DESC
+    `);
+    res.json({ success: true, data: result.recordset });
+  } catch (error) {
+    console.error('Error obteniendo rating por agente:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

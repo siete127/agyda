@@ -179,11 +179,19 @@ function CCChatPanel({ interaccionId, onClosed }: { interaccionId: number; onClo
 
   useEffect(() => {
     const s = getSocket()
-    s.emit('join_livechat_conversation', { conversacionId: `cc-${interaccionId}` })
+    // Mismo bug que CCChatPanel.tsx (ver comentario ahí): se unía a
+    // `livechat:cc-{id}`, una sala que nadie del lado de Contact Center emite
+    // (ccRouting.emitir usa `cc:interaccion:{id}`, vía `join_interaccion`) —
+    // este chat vivía 100% del polling de 5s.
+    s.emit('join_interaccion', { interaccionId })
     const h = () => qc.invalidateQueries({ queryKey: ['cc-inter-detalle', interaccionId] })
     s.on('cc:mensaje', h)
     s.on('cc:interaccion_cerrada', h)
-    return () => { s.off('cc:mensaje', h); s.off('cc:interaccion_cerrada', h) }
+    return () => {
+      s.off('cc:mensaje', h)
+      s.off('cc:interaccion_cerrada', h)
+      s.emit('leave_interaccion', { interaccionId })
+    }
   }, [interaccionId, qc])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [inter?.mensajes?.length])

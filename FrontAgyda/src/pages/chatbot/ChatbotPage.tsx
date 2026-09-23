@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Pencil, Trash2, Eye, EyeOff, MessageSquare, RefreshCw, Tag, Sparkles,
-  LayoutList, LayoutDashboard, ListChecks, Power, Users, DollarSign, ExternalLink, GitBranch,
+  Plus, Pencil, Trash2, Eye, EyeOff, MessageSquare, RefreshCw, Sparkles,
+  LayoutDashboard, ListChecks, Power, Users, DollarSign, ExternalLink, GitBranch,
   ListOrdered, GripVertical, MessageCircle, Megaphone, Workflow, X, Loader2, Check,
+  Search, ChevronRight, ChevronDown, FolderOpen, Hand, MessagesSquare, ArrowRight, Map as MapIcon,
 } from 'lucide-react'
 import { chatbotService } from '@/services/chatbot.service'
 import { ccService } from '@/services/cc.service'
@@ -13,7 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Spinner } from '@/components/ui/Spinner'
-import type { RespuestaChatbot, EtiquetaMenuChatbot, TipoEtiquetaMenu } from '@/types/chatbot.types'
+import type { RespuestaChatbot, EtiquetaMenuChatbot, TipoEtiquetaMenu, ChatbotConfig } from '@/types/chatbot.types'
 import { ArbolDiagnosticoTab } from './ArbolDiagnosticoTab'
 import { FlujoVisualTab } from './FlujoVisualTab'
 import { clsx } from 'clsx'
@@ -22,6 +23,12 @@ import toast from 'react-hot-toast'
 function splitList(text: string): string[] {
   return text.split(',').map((s) => s.trim()).filter(Boolean)
 }
+
+function normaliza(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+const SIN_CATEGORIA = '__sin__'
 
 function formatFechaHora(iso: string | null) {
   if (!iso) return '—'
@@ -36,29 +43,44 @@ function formatMoneda(valor: number | null) {
 }
 
 /* ── Formulario crear/editar respuesta ── */
-function RespuestaFormModal({ respuesta, onClose }: { respuesta?: RespuestaChatbot; onClose: () => void }) {
+function RespuestaFormModal({ respuesta, categoriaInicial, keywordsIniciales, onClose }: {
+  respuesta?: RespuestaChatbot
+  categoriaInicial?: string
+  keywordsIniciales?: string
+  onClose: () => void
+}) {
   const qc = useQueryClient()
   const isEdit = !!respuesta
 
+  const { data: categorias = [] } = useQuery({
+    queryKey: ['chatbot-categorias'],
+    queryFn: () => chatbotService.getCategorias(),
+  })
+
   const [form, setForm] = useState({
-    id: respuesta?.id ?? '',
-    keywords: (respuesta?.keywords ?? []).join(', '),
+    titulo: respuesta?.titulo ?? '',
+    categoria: respuesta?.categoria ?? categoriaInicial ?? '',
+    keywords: respuesta?.keywords?.join(', ') ?? keywordsIniciales ?? '',
     textoEs: respuesta?.textoEs ?? '',
     textoEn: respuesta?.textoEn ?? '',
     botones: (respuesta?.botones ?? []).join(', '),
     senalInteres: respuesta?.senalInteres ?? false,
+    genera: (respuesta?.genera ?? '') as '' | 'contacto' | 'oportunidad' | 'ninguno',
     orden: respuesta?.orden ?? 0,
   })
+  const [nuevaCategoria, setNuevaCategoria] = useState('')
 
-  const canSave = form.id.trim().length > 0 && form.textoEs.trim().length > 0 && splitList(form.keywords).length > 0
+  const canSave = form.textoEs.trim().length > 0 && splitList(form.keywords).length > 0
 
   const buildPayload = () => ({
-    id: form.id.trim(),
+    titulo: form.titulo.trim() || null,
+    categoria: (nuevaCategoria.trim() || form.categoria.trim()) || null,
     keywords: splitList(form.keywords),
     textoEs: form.textoEs.trim(),
     textoEn: form.textoEn.trim() || null,
     botones: splitList(form.botones),
     senalInteres: form.senalInteres,
+    genera: form.genera || null,
     orden: Number(form.orden) || 0,
   })
 
@@ -69,6 +91,7 @@ function RespuestaFormModal({ respuesta, onClose }: { respuesta?: RespuestaChatb
         : chatbotService.create(buildPayload()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chatbot-respuestas'] })
+      qc.invalidateQueries({ queryKey: ['chatbot-categorias'] })
       toast.success(isEdit ? 'Respuesta actualizada' : 'Respuesta creada')
       onClose()
     },
@@ -81,16 +104,40 @@ function RespuestaFormModal({ respuesta, onClose }: { respuesta?: RespuestaChatb
   return (
     <Modal isOpen onClose={onClose} title={isEdit ? 'Editar respuesta' : 'Nueva respuesta'} size="lg">
       <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Id de la intención</label>
-          <input
-            value={form.id}
-            onChange={(e) => setForm((f) => ({ ...f, id: e.target.value.trim().replace(/\s+/g, '_').toLowerCase() }))}
-            className="field"
-            placeholder="ej. soporte_precio"
-            disabled={isEdit}
-          />
-          {isEdit && <p className="mt-1 text-[0.68rem] text-gray-400">El id no se puede cambiar una vez creada la respuesta.</p>}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Título</label>
+            <input
+              value={form.titulo}
+              onChange={(e) => setForm((f) => ({ ...f, titulo: e.target.value }))}
+              className="field"
+              placeholder="ej. Costo de un proyecto"
+              maxLength={120}
+            />
+            {!isEdit && <p className="mt-1 text-[0.68rem] text-gray-400">El id técnico se genera solo a partir del título.</p>}
+            {isEdit && <p className="mt-1 text-[0.68rem] text-gray-400">id técnico: <code className="text-gray-500">{respuesta!.id}</code></p>}
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Categoría</label>
+            <select
+              value={form.categoria}
+              onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
+              className="field"
+            >
+              <option value="">Sin categoría</option>
+              {categorias.map((c) => <option key={c.categoria} value={c.categoria}>{c.categoria}</option>)}
+              {form.categoria && !categorias.some((c) => c.categoria === form.categoria) && (
+                <option value={form.categoria}>{form.categoria}</option>
+              )}
+            </select>
+            <input
+              value={nuevaCategoria}
+              onChange={(e) => setNuevaCategoria(e.target.value)}
+              className="field mt-1.5 text-sm"
+              placeholder="…o escribe una categoría nueva"
+              maxLength={60}
+            />
+          </div>
         </div>
 
         <div>
@@ -158,6 +205,28 @@ function RespuestaFormModal({ respuesta, onClose }: { respuesta?: RespuestaChatb
             </label>
           </div>
         </div>
+
+        {form.senalInteres && (
+          <div className="rounded-lg bg-gray-50 p-2.5">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+              Al dejar sus datos aquí, el bot crea…
+            </label>
+            <select
+              value={form.genera}
+              onChange={(e) => setForm((f) => ({ ...f, genera: e.target.value as typeof f.genera }))}
+              className="field text-sm"
+            >
+              <option value="">Sin especificar (solo contacto)</option>
+              <option value="contacto">Solo un contacto (dudas / info)</option>
+              <option value="oportunidad">Contacto + oportunidad de venta</option>
+              <option value="ninguno">Nada (no pedir datos)</option>
+            </select>
+            <p className="mt-1 text-[0.66rem] text-gray-400">
+              "Oportunidad" solo cuando el visitante muestra intención de compra. Un presupuesto dado en la
+              conversación también genera oportunidad.
+            </p>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
@@ -578,7 +647,132 @@ function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label
   )
 }
 
-/* ── Dashboard: métricas del diccionario + leads capturados desde el CRM ── */
+/* ── Respuestas que fallan + preguntas sin match (Fase 2) ── */
+function RendimientoCalidad() {
+  const qc = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const [crearDesde, setCrearDesde] = useState<{ texto: string; id: number } | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['chatbot-rendimiento'],
+    queryFn: () => chatbotService.getRendimiento(),
+  })
+
+  const resolver = useMutation({
+    mutationFn: (id: number) => chatbotService.resolverSinMatch(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['chatbot-rendimiento'] }) },
+  })
+
+  if (isLoading) return <div className="flex justify-center py-8"><Spinner size="sm" /></div>
+
+  const conFeedback = (data?.respuestas ?? []).filter((r) => r.noUtiles > 0)
+  const sinMatch = data?.sinMatch ?? []
+  const embudo = data?.embudo ?? []
+  const embudoMax = Math.max(1, ...embudo.map((e) => e.sesiones))
+
+  return (
+    <>
+      {embudo.length > 0 && embudo[0].sesiones > 0 && (
+        <div className="card overflow-hidden">
+          <div className="border-b border-gray-100 px-4 py-2.5">
+            <p className="text-[0.78rem] font-bold text-gray-700">Embudo de conversación</p>
+            <p className="text-[0.68rem] text-gray-400">Sesiones distintas por hito, últimos 30 días</p>
+          </div>
+          <div className="space-y-2 px-4 py-3">
+            {embudo.map((e) => {
+              const pct = embudo[0].sesiones ? Math.round((e.sesiones / embudo[0].sesiones) * 100) : 0
+              return (
+                <div key={e.tipo} className="flex items-center gap-3">
+                  <span className="w-32 flex-shrink-0 text-[0.75rem] text-gray-600">{e.label}</span>
+                  <div className="h-4 flex-1 overflow-hidden rounded bg-gray-100">
+                    <div
+                      className="h-full rounded bg-brand/70"
+                      style={{ width: `${Math.max(2, (e.sesiones / embudoMax) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-20 flex-shrink-0 text-right text-[0.72rem] font-semibold text-gray-700">
+                    {e.sesiones} · {pct}%
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="card overflow-hidden">
+          <div className="border-b border-gray-100 px-4 py-2.5">
+            <p className="text-[0.78rem] font-bold text-gray-700">Respuestas que fallan</p>
+            <p className="text-[0.68rem] text-gray-400">Ordenadas por votos 👎 del visitante</p>
+          </div>
+          {conFeedback.length === 0 ? (
+            <p className="py-10 text-center text-[0.78rem] text-gray-400">Sin votos negativos todavía</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {conFeedback.map((r) => (
+                <div key={r.pk} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <p className="min-w-0 truncate text-[0.8rem] font-medium text-gray-700">{r.titulo || r.id}</p>
+                  <div className="flex flex-shrink-0 items-center gap-3 text-[0.72rem]">
+                    <span className="text-emerald-600">👍 {r.utiles}</span>
+                    <span className="font-bold text-red-500">👎 {r.noUtiles}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="border-b border-gray-100 px-4 py-2.5">
+            <p className="text-[0.78rem] font-bold text-gray-700">Preguntas sin respuesta</p>
+            <p className="text-[0.68rem] text-gray-400">Lo que la gente escribió y el bot no supo contestar</p>
+          </div>
+          {sinMatch.length === 0 ? (
+            <p className="py-10 text-center text-[0.78rem] text-gray-400">Sin preguntas pendientes 🎉</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {sinMatch.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-[0.8rem] text-gray-700">"{s.texto}"</p>
+                    <p className="text-[0.66rem] text-gray-400">{s.veces} vez{s.veces !== 1 ? 'ces' : ''}</p>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex flex-shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => setCrearDesde({ texto: s.texto, id: s.id })}
+                        className="rounded-lg border border-gray-200 px-2 py-1 text-[0.68rem] font-semibold text-brand hover:border-brand"
+                      >
+                        Crear respuesta
+                      </button>
+                      <button
+                        onClick={() => resolver.mutate(s.id)}
+                        title="Descartar"
+                        className="rounded-lg p-1 text-gray-300 hover:bg-gray-100 hover:text-gray-500"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {crearDesde && (
+        <RespuestaFormModal
+          keywordsIniciales={crearDesde.texto}
+          onClose={() => { resolver.mutate(crearDesde.id); setCrearDesde(null) }}
+        />
+      )}
+    </>
+  )
+}
+
+/* ── Rendimiento: métricas + calidad + leads capturados desde el CRM ── */
 function DashboardTab() {
   const { data: respuestas = [], isLoading: isLoadingRespuestas } = useQuery({
     queryKey: ['chatbot-respuestas'],
@@ -608,6 +802,8 @@ function DashboardTab() {
             <StatCard icon={Sparkles} label="Con señal de interés" value={respuestasConSenal} />
             <StatCard icon={Users} label="Leads capturados" value={leads.length} />
           </div>
+
+          <RendimientoCalidad />
 
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Leads generados por el chatbot</h3>
@@ -674,36 +870,422 @@ function DashboardTab() {
   )
 }
 
-/* ── Página principal ── */
-export function ChatbotPage() {
+/* ════════════════════════════════════════════════════════
+   SECCIÓN 1 — CONVERSACIÓN
+   Saludo + Menú inicial + Temas + Diagnóstico guiado, en el
+   orden en que el bot conversa. Reemplaza las pestañas
+   Respuestas / Menú del Widget / Árbol de Diagnóstico.
+════════════════════════════════════════════════════════ */
+
+function BloqueColapsable({ icon: Icon, titulo, resumen, defaultOpen = true, children }: {
+  icon: React.ElementType
+  titulo: string
+  resumen?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [abierto, setAbierto] = useState(defaultOpen)
+  return (
+    <div className="card overflow-hidden">
+      <button
+        onClick={() => setAbierto((a) => !a)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/60 transition-colors"
+      >
+        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-gray-800">{titulo}</p>
+          {resumen && <p className="text-xs text-gray-400 truncate">{resumen}</p>}
+        </div>
+        {abierto ? <ChevronDown className="h-4 w-4 flex-shrink-0 text-gray-300" /> : <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-300" />}
+      </button>
+      {abierto && <div className="border-t border-gray-100 px-4 py-4">{children}</div>}
+    </div>
+  )
+}
+
+function SaludoSection() {
   const qc = useQueryClient()
   const isAdmin = useIsAdmin()
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['chatbot-config'],
+    queryFn: () => chatbotService.getConfig(),
+  })
+  const [borrador, setBorrador] = useState<Partial<ChatbotConfig>>({})
+  const editado = borrador.saludoEs !== undefined || borrador.saludoEn !== undefined
 
-  const [tab, setTab] = useState<'respuestas' | 'menu' | 'dashboard' | 'arbol' | 'flujo'>('respuestas')
-  const [showCrear, setShowCrear] = useState(false)
+  const guardar = useMutation({
+    mutationFn: () => chatbotService.updateConfig(borrador),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chatbot-config'] })
+      setBorrador({})
+      toast.success('Saludo actualizado')
+    },
+    onError: () => toast.error('No se pudo guardar el saludo'),
+  })
+
+  if (isLoading || !config) return <div className="flex justify-center py-6"><Spinner size="sm" /></div>
+
+  const saludoEs = borrador.saludoEs ?? config.saludoEs
+  const saludoEn = borrador.saludoEn ?? config.saludoEn
+
+  return (
+    <BloqueColapsable icon={Hand} titulo="Saludo" resumen={config.saludoEs} defaultOpen={false}>
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Español</label>
+          <textarea
+            value={saludoEs}
+            onChange={(e) => setBorrador((b) => ({ ...b, saludoEs: e.target.value }))}
+            rows={2}
+            className="field resize-none text-sm"
+            disabled={!isAdmin}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Inglés</label>
+          <textarea
+            value={saludoEn}
+            onChange={(e) => setBorrador((b) => ({ ...b, saludoEn: e.target.value }))}
+            rows={2}
+            className="field resize-none text-sm"
+            disabled={!isAdmin}
+          />
+        </div>
+        {isAdmin && editado && (
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setBorrador({})}>Descartar</Button>
+            <Button size="sm" isLoading={guardar.isPending} onClick={() => guardar.mutate()}>Guardar saludo</Button>
+          </div>
+        )}
+      </div>
+    </BloqueColapsable>
+  )
+}
+
+function TemaCard({ r, onEditar, onEliminar }: {
+  r: RespuestaChatbot
+  onEditar: () => void
+  onEliminar: () => void
+}) {
+  const isAdmin = useIsAdmin()
+  const qc = useQueryClient()
+  const activaMut = useMutation({
+    mutationFn: ({ pk, activa }: { pk: number; activa: boolean }) => chatbotService.toggleActiva(pk, activa),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chatbot-respuestas'] }),
+    onError: () => toast.error('Error al cambiar el estado'),
+  })
+  return (
+    <div className={clsx('rounded-xl border border-gray-200/70 bg-card p-3', !r.activa && 'opacity-60')}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[0.82rem] font-bold text-gray-800">{r.titulo || r.id}</p>
+            {r.senalInteres && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[0.6rem] font-semibold">
+                <Sparkles className="h-2.5 w-2.5" /> señal de interés
+              </span>
+            )}
+            {!r.activa && <span className="rounded-full bg-gray-100 text-gray-500 px-1.5 py-0.5 text-[0.6rem] font-semibold">Pausada</span>}
+          </div>
+          <p className="mt-1 text-[0.8rem] text-gray-600 line-clamp-2">{r.textoEs}</p>
+          <p className="mt-1 text-[0.68rem] text-gray-400">
+            Responde a: {r.keywords.slice(0, 4).join(', ')}{r.keywords.length > 4 ? ` +${r.keywords.length - 4}` : ''}
+          </p>
+          {r.botones.length > 0 && (
+            <p className="mt-0.5 flex items-center gap-1 text-[0.68rem] text-gray-400">
+              <ArrowRight className="h-3 w-3" /> botones: {r.botones.join(' · ')}
+            </p>
+          )}
+        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={() => activaMut.mutate({ pk: r.pk, activa: !r.activa })} title={r.activa ? 'Pausar' : 'Activar'}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              {r.activa ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+            <button onClick={onEditar} title="Editar" className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={onEliminar} title="Eliminar" className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TemasSection() {
+  const isAdmin = useIsAdmin()
+  const qc = useQueryClient()
+  const [busqueda, setBusqueda] = useState('')
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
+  const [crearEn, setCrearEn] = useState<string | null>(null)  // categoría o '' para crear
   const [editando, setEditando] = useState<RespuestaChatbot | null>(null)
   const [confirmEliminar, setConfirmEliminar] = useState<RespuestaChatbot | null>(null)
 
-  const { data: respuestas = [], isLoading, refetch, isRefetching } = useQuery({
+  const { data: respuestas = [], isLoading } = useQuery({
     queryKey: ['chatbot-respuestas'],
     queryFn: () => chatbotService.getAll(),
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['chatbot-respuestas'] })
-
   const eliminarMut = useMutation({
     mutationFn: (pk: number) => chatbotService.delete(pk),
-    onSuccess: () => { invalidate(); toast.success('Respuesta eliminada') },
-    onError: () => toast.error('Error al eliminar la respuesta'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['chatbot-respuestas'] }); toast.success('Respuesta eliminada') },
+    onError: () => toast.error('Error al eliminar'),
   })
 
-  const activaMut = useMutation({
-    mutationFn: ({ pk, activa }: { pk: number; activa: boolean }) => chatbotService.toggleActiva(pk, activa),
-    onSuccess: invalidate,
-    onError: () => toast.error('Error al cambiar el estado'),
+  const grupos = useMemo(() => {
+    const q = normaliza(busqueda.trim())
+    const filtradas = q
+      ? respuestas.filter((r) =>
+          normaliza(`${r.titulo ?? ''} ${r.id} ${r.textoEs} ${r.keywords.join(' ')}`).includes(q))
+      : respuestas
+    const map = new Map<string, RespuestaChatbot[]>()
+    for (const r of filtradas) {
+      const cat = r.categoria?.trim() || SIN_CATEGORIA
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(r)
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === SIN_CATEGORIA) return 1
+      if (b === SIN_CATEGORIA) return -1
+      return a.localeCompare(b)
+    })
+  }, [respuestas, busqueda])
+
+  const toggle = (cat: string) => setAbiertas((prev) => {
+    const next = new Set(prev)
+    if (next.has(cat)) next.delete(cat)
+    else next.add(cat)
+    return next
   })
 
-  const ordenadas = [...respuestas].sort((a, b) => a.orden - b.orden || a.pk - b.pk)
+  if (isLoading) return <div className="flex justify-center py-6"><Spinner size="sm" /></div>
+
+  return (
+    <BloqueColapsable
+      icon={MessagesSquare}
+      titulo="Temas"
+      resumen={`${respuestas.length} respuestas en ${grupos.length} categoría${grupos.length !== 1 ? 's' : ''}`}
+    >
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar tema o palabra clave…"
+              className="w-full rounded-lg border border-gray-200 bg-card pl-9 pr-3 py-1.5 text-sm outline-none focus:border-brand"
+            />
+          </div>
+          {isAdmin && (
+            <Button size="sm" onClick={() => setCrearEn('')}>
+              <Plus className="h-3.5 w-3.5" /> Nueva
+            </Button>
+          )}
+        </div>
+
+        {grupos.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">Sin resultados</p>
+        ) : grupos.map(([cat, items]) => {
+          const esSinCat = cat === SIN_CATEGORIA
+          const abierta = abiertas.has(cat) || !!busqueda.trim()
+          return (
+            <div key={cat} className={clsx('rounded-xl border', esSinCat ? 'border-amber-200 bg-amber-50/40' : 'border-gray-200')}>
+              <button onClick={() => toggle(cat)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+                {abierta ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+                <FolderOpen className={clsx('h-3.5 w-3.5', esSinCat ? 'text-amber-500' : 'text-gray-400')} />
+                <span className="text-[0.8rem] font-bold text-gray-700">
+                  {esSinCat ? 'Sin categoría' : cat}
+                </span>
+                <span className="text-[0.7rem] text-gray-400">({items.length})</span>
+                {esSinCat && <span className="ml-1 text-[0.65rem] font-semibold text-amber-600">organiza estas</span>}
+              </button>
+              {abierta && (
+                <div className="space-y-2 px-3 pb-3">
+                  {items.map((r) => (
+                    <TemaCard
+                      key={r.pk}
+                      r={r}
+                      onEditar={() => setEditando(r)}
+                      onEliminar={() => setConfirmEliminar(r)}
+                    />
+                  ))}
+                  {isAdmin && !esSinCat && (
+                    <button onClick={() => setCrearEn(cat)} className="text-[0.72rem] font-semibold text-brand hover:underline">
+                      + Nueva respuesta en "{cat}"
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {crearEn !== null && <RespuestaFormModal categoriaInicial={crearEn || undefined} onClose={() => setCrearEn(null)} />}
+      {editando && <RespuestaFormModal respuesta={editando} onClose={() => setEditando(null)} />}
+      <ConfirmDialog
+        isOpen={confirmEliminar !== null}
+        onClose={() => setConfirmEliminar(null)}
+        onConfirm={() => { if (confirmEliminar) eliminarMut.mutate(confirmEliminar.pk) }}
+        title="Eliminar respuesta"
+        message={`¿Eliminar "${confirmEliminar?.titulo || confirmEliminar?.id}"? Dejará de mostrarse en el chatbot público.`}
+        confirmLabel="Eliminar"
+        isPending={eliminarMut.isPending}
+      />
+    </BloqueColapsable>
+  )
+}
+
+function DiagnosticoSection() {
+  const [editor, setEditor] = useState(false)
+  return (
+    <BloqueColapsable icon={GitBranch} titulo="Diagnóstico guiado" resumen="Árbol de preguntas que puede resolver, escalar a chat o crear un ticket" defaultOpen={false}>
+      {editor ? (
+        <ArbolDiagnosticoTab />
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[0.8rem] text-gray-500">
+            El visitante lo abre desde el menú inicial (botón "Diagnóstico guiado").
+          </p>
+          <Button size="sm" variant="ghost" onClick={() => setEditor(true)}>
+            <Pencil className="h-3.5 w-3.5" /> Editar el árbol
+          </Button>
+        </div>
+      )}
+    </BloqueColapsable>
+  )
+}
+
+function ConversacionTab() {
+  return (
+    <div className="space-y-3">
+      <SaludoSection />
+      <BloqueColapsable icon={ListOrdered} titulo="Menú inicial" resumen="Botones que ve el visitante al abrir el chat">
+        <MenuTab />
+      </BloqueColapsable>
+      <TemasSection />
+      <DiagnosticoSection />
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════════════════
+   SECCIÓN 2 — ESCALAMIENTO (Fase 4)
+   Reglas de paso a un agente humano, hoy repartidas entre el
+   HTML del widget y el modal de etiquetas.
+════════════════════════════════════════════════════════ */
+
+function EscalamientoTab() {
+  const qc = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['chatbot-config'],
+    queryFn: () => chatbotService.getConfig(),
+  })
+  const [borrador, setBorrador] = useState<Partial<ChatbotConfig>>({})
+  const editado = Object.keys(borrador).length > 0
+
+  const guardar = useMutation({
+    mutationFn: () => chatbotService.updateConfig(borrador),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chatbot-config'] })
+      setBorrador({})
+      toast.success('Reglas de escalamiento actualizadas')
+    },
+    onError: () => toast.error('No se pudo guardar'),
+  })
+
+  if (isLoading || !config) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+
+  const val = (k: keyof ChatbotConfig) => borrador[k] ?? config[k]
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500">
+        Cuándo y cómo el bot ofrece pasar la conversación a un agente humano. El widget lee estos valores
+        al iniciar; si algo falla usa los valores por defecto.
+      </p>
+
+      <div className="card p-4 space-y-4">
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Ofrecer un agente después de…
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={val('turnosSinMatchParaEscalar')}
+              onChange={(e) => setBorrador((b) => ({ ...b, turnosSinMatchParaEscalar: e.target.value }))}
+              className="field w-20"
+              disabled={!isAdmin}
+            />
+            <span className="text-sm text-gray-500">respuestas seguidas sin entender al visitante</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Mensaje al ofrecer el agente — Español
+          </label>
+          <textarea
+            value={val('sugerenciaEscalarEs')}
+            onChange={(e) => setBorrador((b) => ({ ...b, sugerenciaEscalarEs: e.target.value }))}
+            rows={2}
+            className="field resize-none text-sm"
+            disabled={!isAdmin}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+            Mensaje al ofrecer el agente — Inglés
+          </label>
+          <textarea
+            value={val('sugerenciaEscalarEn')}
+            onChange={(e) => setBorrador((b) => ({ ...b, sugerenciaEscalarEn: e.target.value }))}
+            rows={2}
+            className="field resize-none text-sm"
+            disabled={!isAdmin}
+          />
+        </div>
+
+        {isAdmin && editado && (
+          <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+            <Button variant="ghost" size="sm" onClick={() => setBorrador({})}>Descartar</Button>
+            <Button size="sm" isLoading={guardar.isPending} onClick={() => guardar.mutate()}>Guardar</Button>
+          </div>
+        )}
+      </div>
+
+      <div className="card p-4">
+        <p className="text-[0.8rem] font-bold text-gray-700">Campañas de Chat en Vivo</p>
+        <p className="mt-1 text-[0.72rem] text-gray-500">
+          Las campañas que atienden el chat escalado se configuran al crear un botón de menú de tipo
+          "Escalar a campaña", en la pestaña Conversación → Menú inicial. El detalle (SLA, tipificaciones,
+          motivos de cierre) se afina en Configuración → Contact Center.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+const TABS = [
+  { key: 'conversacion' as const, label: 'Conversación', icon: MessagesSquare },
+  { key: 'escalamiento' as const, label: 'Escalamiento', icon: Users },
+  { key: 'rendimiento' as const, label: 'Rendimiento', icon: LayoutDashboard },
+]
+
+/* ── Página principal ── */
+export function ChatbotPage() {
+  const [tab, setTab] = useState<'conversacion' | 'escalamiento' | 'rendimiento' | 'mapa'>('conversacion')
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -712,159 +1294,49 @@ export function ChatbotPage() {
           <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-brand" /> Chatbot
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">{respuestas.length} respuesta{respuestas.length !== 1 ? 's' : ''} en el diccionario del widget público</p>
+          <p className="text-xs text-gray-500 mt-0.5">Configura cómo conversa el asistente de la página pública</p>
         </div>
-        {tab === 'respuestas' && (
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => refetch()} isLoading={isRefetching}>
-              <RefreshCw className="h-3.5 w-3.5" /> Actualizar
-            </Button>
-            {isAdmin && (
-              <Button size="sm" onClick={() => setShowCrear(true)}>
-                <Plus className="h-3.5 w-3.5" /> Nueva respuesta
-              </Button>
-            )}
-          </div>
-        )}
+        <button
+          onClick={() => setTab('mapa')}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+            tab === 'mapa' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-500 hover:border-brand/40 hover:text-brand',
+          )}
+        >
+          <MapIcon className="h-3.5 w-3.5" /> Constructor de flujo
+        </button>
       </div>
 
       <div className="flex gap-1 border-b border-gray-100">
-        <button
-          onClick={() => setTab('respuestas')}
-          className={clsx(
-            'flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
-            tab === 'respuestas' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700',
-          )}
-        >
-          <LayoutList className="h-3.5 w-3.5" /> Respuestas
-        </button>
-        <button
-          onClick={() => setTab('menu')}
-          className={clsx(
-            'flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
-            tab === 'menu' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700',
-          )}
-        >
-          <ListOrdered className="h-3.5 w-3.5" /> Menú del Widget
-        </button>
-        <button
-          onClick={() => setTab('dashboard')}
-          className={clsx(
-            'flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
-            tab === 'dashboard' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700',
-          )}
-        >
-          <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
-        </button>
-        <button
-          onClick={() => setTab('arbol')}
-          className={clsx(
-            'flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
-            tab === 'arbol' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700',
-          )}
-        >
-          <GitBranch className="h-3.5 w-3.5" /> Árbol de Diagnóstico
-        </button>
-        <button
-          onClick={() => setTab('flujo')}
-          className={clsx(
-            'flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
-            tab === 'flujo' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700',
-          )}
-        >
-          <Workflow className="h-3.5 w-3.5" /> Flujo Visual
-        </button>
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
+              tab === key ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700',
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" /> {label}
+          </button>
+        ))}
       </div>
 
-      {tab === 'flujo' ? <FlujoVisualTab /> : tab === 'arbol' ? <ArbolDiagnosticoTab /> : tab === 'menu' ? <MenuTab /> : tab === 'dashboard' ? <DashboardTab /> : isLoading ? (
-        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-      ) : ordenadas.length === 0 ? (
-        <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
-          <MessageSquare className="h-8 w-8" />
-          <p className="text-sm">Aún no hay respuestas configuradas</p>
-        </div>
-      ) : (
+      {tab === 'mapa' ? (
         <div className="space-y-3">
-          {ordenadas.map((r) => (
-            <div key={r.pk} className={clsx('card p-4 flex flex-col gap-2.5', !r.activa && 'opacity-60')}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <code className="text-xs font-mono font-semibold text-brand bg-brand/10 rounded px-1.5 py-0.5">{r.id}</code>
-                    {r.senalInteres && (
-                      <span className="flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-2 py-0.5 text-[0.65rem] font-semibold">
-                        <Sparkles className="h-3 w-3" /> señal de interés
-                      </span>
-                    )}
-                    <span className={clsx(
-                      'rounded-full px-2 py-0.5 text-[0.65rem] font-semibold',
-                      r.activa ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500',
-                    )}>
-                      {r.activa ? 'Activa' : 'Pausada'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-800 mt-1.5">{r.textoEs}</p>
-                </div>
-
-                {isAdmin && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => activaMut.mutate({ pk: r.pk, activa: !r.activa })}
-                      title={r.activa ? 'Pausar' : 'Activar'}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                    >
-                      {r.activa ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
-                    <button
-                      onClick={() => setEditando(r)}
-                      title="Editar"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setConfirmEliminar(r)}
-                      title="Eliminar"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-1.5">
-                {r.keywords.map((k) => (
-                  <span key={k} className="flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[0.68rem] text-gray-600">
-                    <Tag className="h-2.5 w-2.5" /> {k}
-                  </span>
-                ))}
-              </div>
-
-              {r.botones.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1 border-t border-gray-100">
-                  {r.botones.map((b) => (
-                    <span key={b} className="rounded-lg border border-gray-200 px-2 py-0.5 text-[0.68rem] text-gray-500">{b}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          <p className="text-xs text-gray-500">
+            El flujo completo del bot como un lienzo: crea nodos, edítalos con doble clic y conéctalos arrastrando.
+            Es el mismo contenido que las listas de Conversación.
+          </p>
+          <FlujoVisualTab />
         </div>
+      ) : tab === 'rendimiento' ? (
+        <DashboardTab />
+      ) : tab === 'escalamiento' ? (
+        <EscalamientoTab />
+      ) : (
+        <ConversacionTab />
       )}
-
-      {showCrear && <RespuestaFormModal onClose={() => setShowCrear(false)} />}
-      {editando && <RespuestaFormModal respuesta={editando} onClose={() => setEditando(null)} />}
-
-      <ConfirmDialog
-        isOpen={confirmEliminar !== null}
-        onClose={() => setConfirmEliminar(null)}
-        onConfirm={() => { if (confirmEliminar) eliminarMut.mutate(confirmEliminar.pk) }}
-        title="Eliminar respuesta"
-        message={`¿Seguro que deseas eliminar la respuesta "${confirmEliminar?.id}"? Dejará de mostrarse en el chatbot público.`}
-        confirmLabel="Eliminar"
-        isPending={eliminarMut.isPending}
-      />
     </div>
   )
 }

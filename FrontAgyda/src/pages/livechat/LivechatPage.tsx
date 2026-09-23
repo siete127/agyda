@@ -936,12 +936,16 @@ export default function LivechatPage() {
     // Equivalentes de Contact Center — mismo tratamiento: nueva interacción
     // asignada, nueva en cola, o actividad en cualquiera (mensaje/cierre).
     socket.on('cc:nueva_interaccion', handleNuevaEnCola)
+    // Interacción que entró en modo MANUAL: no se asignó a nadie, cae a la
+    // cola visible para todos — misma alerta que 'nueva_en_cola'.
+    socket.on('cc:nueva_en_cola', handleNuevaEnCola)
     socket.on('cc:mensaje', handleActividad)
     socket.on('cc:actividad', handleActividad)
     socket.on('cc:interaccion_cerrada', handleActividad)
     return () => {
       socket.off('livechat:nueva_conversacion', handleNuevaAsignada)
       socket.off('livechat:nueva_en_cola', handleNuevaEnCola)
+      socket.off('cc:nueva_en_cola', handleNuevaEnCola)
       socket.off('livechat:actividad_conversacion', handleActividad)
       socket.off('cc:nueva_interaccion', handleNuevaEnCola)
       socket.off('cc:mensaje', handleActividad)

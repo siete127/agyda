@@ -177,7 +177,7 @@ exports.createCampania = async (req, res) => {
     if (!nombre || !plantillaId) {
       return res.status(400).json({ success: false, message: 'Nombre y plantilla son requeridos' });
     }
-    const filtroVal = ['todos', 'tag', 'manual'].includes(filtro) ? filtro : 'todos';
+    const filtroVal = emailMarketingService.FILTROS_VALIDOS.includes(filtro) ? filtro : 'todos';
     if (filtroVal === 'tag' && !filtroTag) {
       return res.status(400).json({ success: false, message: 'Falta el tag para el filtro por tag' });
     }
@@ -215,7 +215,7 @@ exports.contarDestinatarios = async (req, res) => {
     const { filtro, filtroTag, contactosIds } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
     const destinatarios = await emailMarketingService.resolverDestinatarios(pool, {
-      filtro: ['todos', 'tag', 'manual'].includes(filtro) ? filtro : 'todos',
+      filtro: emailMarketingService.FILTROS_VALIDOS.includes(filtro) ? filtro : 'todos',
       filtroTag,
       contactosIds: JSON.stringify(contactosIds || []),
     });

@@ -1036,8 +1036,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_TICKETS_SERVICIO_
 
 -- Canal por el que se originó el ticket. Valores usados en JS (sin CHECK
 -- constraint, para no requerir migración si se agrega un canal nuevo):
--- 'portal' | 'chatbot' | 'chat_en_vivo' | 'tecnico' | 'api'. NULL en tickets
--- históricos creados antes de esta columna.
+-- 'portal' | 'chatbot' | 'chat_en_vivo' | 'tecnico' | 'api' | 'web_publica'.
+-- NULL en tickets históricos creados antes de esta columna.
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='TICKETS' AND COLUMN_NAME='CANAL_ORIGEN')
   ALTER TABLE dbo.TICKETS ADD CANAL_ORIGEN NVARCHAR(20) NULL;
 
@@ -1407,6 +1407,20 @@ END
       UPDATE dbo.TICKETS_SLA_REGLAS SET TSR_PRIORIDAD = 'P2' WHERE TSR_PRIORIDAD = 'ALTA';
       UPDATE dbo.TICKETS_SLA_REGLAS SET TSR_PRIORIDAD = 'P3' WHERE TSR_PRIORIDAD = 'MEDIA';
       UPDATE dbo.TICKETS_SLA_REGLAS SET TSR_PRIORIDAD = 'P4' WHERE TSR_PRIORIDAD = 'BAJA';
+    `);
+
+    // Usuario "sistema" usado como SOLICITANTE_ID de los tickets creados por el
+    // formulario público anónimo del sitio institucional (ver
+    // publicTicketController.js) — un visitante web no tiene cuenta en
+    // NEUS_USUARIOS, así que sus tickets se asocian a este usuario fijo,
+    // inactivo (no puede iniciar sesión), y sus datos de contacto reales se
+    // guardan al inicio de la descripción del ticket.
+    await pool.request().batch(`
+IF NOT EXISTS (SELECT 1 FROM dbo.NEUS_USUARIOS WHERE NEUS_USUARIO = 'sistema.web.publica')
+BEGIN
+  INSERT INTO dbo.NEUS_USUARIOS (NEUS_NOMBRES, NEUS_USUARIO, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE)
+  VALUES ('Solicitud Web Pública', 'sistema.web.publica', 'CL', 0, 0, 0);
+END
     `);
 
     logger.info('✅ Esquema de tickets asegurado/actualizado');
@@ -2005,6 +2019,19 @@ BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ES_CLIENTE BIT NOT NULL
     CONSTRAINT DF_CRM_CONTACTOS_ES_CLIENTE DEFAULT (0);
 END`,
+    // Anti-spam de la alerta de inactividad de cliente (clienteAgendaCronController):
+    // sello de la última vez que se avisó "este cliente lleva N días sin contacto".
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_ULTIMA_ALERTA_INACTIVIDAD')
+BEGIN
+  ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ULTIMA_ALERTA_INACTIVIDAD DATETIME NULL;
+END`,
+    // Vincula el contacto/cliente con su login de portal (NEUS_USUARIOS,
+    // NEUS_TIPOUSUARIO='CL') cuando se le da acceso al portal-cliente desde
+    // altaCliente — sin FK física, mismo estilo que CONT_RESPONSABLE_ID.
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_NEUS_ID')
+BEGIN
+  ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_NEUS_ID INT NULL;
+END`,
     `IF OBJECT_ID('dbo.CRM_ACTIVIDADES', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.CRM_ACTIVIDADES (
@@ -2035,6 +2062,12 @@ BEGIN
   );
   CREATE INDEX IX_CRM_INT_OPO ON dbo.CRM_INTERACCIONES(INT_OPO_ID);
 END`,
+    // Dedup del lead del chatbot / formulario web: buscar contacto existente por
+    // correo o teléfono. Filtrados — no pesan sobre filas sin ese dato.
+    `IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CRM_CONTACTOS_CORREO' AND object_id = OBJECT_ID('dbo.CRM_CONTACTOS'))
+  CREATE INDEX IX_CRM_CONTACTOS_CORREO ON dbo.CRM_CONTACTOS(CONT_CORREO) WHERE CONT_CORREO IS NOT NULL;`,
+    `IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CRM_CONTACTOS_TELEFONO' AND object_id = OBJECT_ID('dbo.CRM_CONTACTOS'))
+  CREATE INDEX IX_CRM_CONTACTOS_TELEFONO ON dbo.CRM_CONTACTOS(CONT_TELEFONO) WHERE CONT_TELEFONO IS NOT NULL;`,
   ];
   for (const batch of batches) {
     try {
@@ -2044,6 +2077,139 @@ END`,
     }
   }
   logger.info('✅ Esquema CRM asegurado/actualizado');
+}
+
+// Catálogos administrables de Clientes (Configuración → CRM → Clientes): Tipos,
+// Segmentos, Categorías, Industrias, Clasificaciones — mismo shape simple que
+// TICKET_CLASIFICACIONES (ver ensureTiAreaSchema/catalogosTiController): clave
+// inmutable + nombre editable + orden + activa (soft-delete). Etiquetas es
+// multi-valor por contacto, así que además lleva su tabla puente.
+async function ensureCrmCatalogosClienteSchema(pool) {
+  const CATALOGOS = [
+    { tabla: 'CRM_TIPOS_CLIENTE', prefijo: 'TIP' },
+    { tabla: 'CRM_SEGMENTOS', prefijo: 'SEG' },
+    { tabla: 'CRM_CATEGORIAS_CLIENTE', prefijo: 'CAT' },
+    { tabla: 'CRM_INDUSTRIAS', prefijo: 'IND' },
+    { tabla: 'CRM_CLASIFICACIONES_CLIENTE', prefijo: 'CLC' },
+    { tabla: 'CRM_ETIQUETAS', prefijo: 'ETQ' },
+    // Tipo de acceso al portal-cliente (ej. Reclutamiento, Facturación,
+    // Completo) — solo aplica a contactos con CONT_NEUS_ID (con login).
+    { tabla: 'CRM_TIPOS_ACCESO_PORTAL', prefijo: 'TAP' },
+  ];
+  for (const { tabla, prefijo } of CATALOGOS) {
+    try {
+      await pool.request().batch(`
+        IF OBJECT_ID('dbo.${tabla}', 'U') IS NULL
+        BEGIN
+          CREATE TABLE dbo.${tabla} (
+            ${prefijo}_ID INT IDENTITY(1,1) PRIMARY KEY,
+            ${prefijo}_CLAVE NVARCHAR(30) NOT NULL,
+            ${prefijo}_NOMBRE NVARCHAR(100) NOT NULL,
+            ${prefijo}_ORDEN INT NOT NULL DEFAULT 0,
+            ${prefijo}_ACTIVA BIT NOT NULL DEFAULT 1,
+            CONSTRAINT UQ_${tabla}_CLAVE UNIQUE (${prefijo}_CLAVE)
+          );
+        END
+      `);
+    } catch (err) {
+      console.warn(`⚠️ CrmCatalogosClienteSchema (${tabla}):`, err.message);
+    }
+  }
+
+  // Columnas de selección única en CRM_CONTACTOS (sin FK física, mismo estilo
+  // que CONT_RESPONSABLE_ID, para no acoplar el borrado del catálogo).
+  const COLUMNAS_FK = [
+    'CONT_TIPO_CLIENTE_ID', 'CONT_SEGMENTO_ID', 'CONT_CATEGORIA_ID', 'CONT_INDUSTRIA_ID', 'CONT_CLASIFICACION_ID',
+    'CONT_TIPO_ACCESO_ID',
+  ];
+  for (const col of COLUMNAS_FK) {
+    try {
+      await pool.request().batch(`
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = '${col}')
+        BEGIN
+          ALTER TABLE dbo.CRM_CONTACTOS ADD ${col} INT NULL;
+        END
+      `);
+    } catch (err) {
+      console.warn(`⚠️ CrmContactosCatalogoFk (${col}):`, err.message);
+    }
+  }
+
+  // Etiquetas es multi-valor por contacto → tabla puente.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_CONTACTOS_ETIQUETAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CRM_CONTACTOS_ETIQUETAS (
+          CCE_CONTACTO_ID INT NOT NULL,
+          CCE_ETIQUETA_ID INT NOT NULL,
+          CONSTRAINT PK_CRM_CONTACTOS_ETIQUETAS PRIMARY KEY (CCE_CONTACTO_ID, CCE_ETIQUETA_ID)
+        );
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmContactosEtiquetasSchema:', err.message);
+  }
+
+  // Migración: CONT_TIPO_CLIENTE (texto libre, ya en uso) se preserva; se
+  // migran sus valores distintos a CRM_TIPOS_CLIENTE como semilla, y se
+  // backfillea CONT_TIPO_CLIENTE_ID para no perder el dato ya capturado.
+  try {
+    await pool.request().batch(`
+      INSERT INTO dbo.CRM_TIPOS_CLIENTE (TIP_CLAVE, TIP_NOMBRE, TIP_ORDEN)
+      SELECT LOWER(REPLACE(REPLACE(LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), ' ', '_'), '.', '')), LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), 0
+      FROM (SELECT DISTINCT CONT_TIPO_CLIENTE FROM dbo.CRM_CONTACTOS WHERE CONT_TIPO_CLIENTE IS NOT NULL AND LTRIM(RTRIM(CONT_TIPO_CLIENTE)) <> '') t
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.CRM_TIPOS_CLIENTE tc
+        WHERE tc.TIP_CLAVE = LOWER(REPLACE(REPLACE(LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), ' ', '_'), '.', ''))
+      );
+    `);
+    await pool.request().batch(`
+      UPDATE c SET c.CONT_TIPO_CLIENTE_ID = tc.TIP_ID
+      FROM dbo.CRM_CONTACTOS c
+      INNER JOIN dbo.CRM_TIPOS_CLIENTE tc
+        ON tc.TIP_CLAVE = LOWER(REPLACE(REPLACE(LTRIM(RTRIM(c.CONT_TIPO_CLIENTE)), ' ', '_'), '.', ''))
+      WHERE c.CONT_TIPO_CLIENTE_ID IS NULL AND c.CONT_TIPO_CLIENTE IS NOT NULL AND LTRIM(RTRIM(c.CONT_TIPO_CLIENTE)) <> '';
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmTiposClienteMigracion:', err.message);
+  }
+
+  logger.info('✅ Esquema de catálogos de Clientes (CRM) asegurado');
+}
+
+// Portal público del cliente (acceso por token, sin login). La tabla se creaba
+// solo en routes/crmSetup.js (endpoint manual); aquí se asegura al arrancar para
+// que exista en cada tenant sin correr ese setup a mano.
+async function ensureCrmPortalSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_PORTAL_TOKENS', 'U') IS NULL
+      CREATE TABLE dbo.CRM_PORTAL_TOKENS (
+        PT_ID          INT IDENTITY(1,1) PRIMARY KEY,
+        PT_CONTACTO_ID INT NOT NULL,
+        PT_TOKEN       NVARCHAR(100) NOT NULL UNIQUE,
+        PT_EMAIL       NVARCHAR(300) NOT NULL,
+        PT_ACTIVO      BIT DEFAULT 1,
+        PT_EXPIRA      DATETIME NULL,
+        PT_FECHA       DATETIME DEFAULT GETDATE()
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmPortalTokensSchema:', err.message);
+  }
+
+  // Telemetría: cuándo abrió el cliente su portal por última vez.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_PORTAL_TOKENS') AND name = 'PT_ULTIMA_APERTURA')
+        ALTER TABLE dbo.CRM_PORTAL_TOKENS ADD PT_ULTIMA_APERTURA DATETIME NULL;
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmPortalTokensUltimaAperturaSchema:', err.message);
+  }
+
+  logger.info('✅ Esquema de portal del cliente asegurado');
 }
 
 // Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
@@ -3367,6 +3533,32 @@ async function ensureIncentivosSchema(pool) {
   }
 }
 
+// Ventas: fórmulas de comisión definidas por el admin — mismo patrón que
+// VENTAS_INCENTIVOS_REGLAS (ver ensureIncentivosSchema), pero el resultado
+// reemplaza el monto de comisión mostrado en el CRM (antes leído de
+// NOMINA_COMISIONES) en vez de sumarse como bono aparte.
+async function ensureComisionesReglasSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.VENTAS_COMISIONES_REGLAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.VENTAS_COMISIONES_REGLAS (
+          VCR_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          VCR_NOMBRE          NVARCHAR(150)   NOT NULL,
+          VCR_FORMULA         NVARCHAR(1000)  NOT NULL,
+          VCR_ORDEN           INT             NOT NULL DEFAULT 0,
+          VCR_ACTIVA          BIT             NOT NULL DEFAULT 1,
+          VCR_CREADO_POR      SMALLINT        NULL,
+          VCR_FECHA_CREACION  DATETIME        NOT NULL DEFAULT GETDATE()
+        );
+        CREATE INDEX IX_VCR_ORDEN ON dbo.VENTAS_COMISIONES_REGLAS(VCR_ORDEN);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ ComisionesReglasSchema:', err.message);
+  }
+}
+
 // Operaciones / Call Center: campañas y asignación de bases
 async function ensureCallCenterSchema(pool) {
   try {
@@ -3827,6 +4019,58 @@ async function ensureClienteSeguimientoSchema(pool) {
   } catch (err) {
     console.warn('⚠️ CliTareasTipoSchema:', err.message);
   }
+
+  // Recordatorio de agenda: una tarea con TAR_FECHA_HORA (fecha + hora exacta) es
+  // el recordatorio; TAR_RECORDAR_MIN_ANTES = minutos antes para el aviso previo.
+  // Los dos BIT evitan que el cron (clienteAgendaCronController) repita la misma
+  // alerta — se resetean a 0 cuando updateTarea cambia la fecha.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_FECHA_HORA')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_FECHA_HORA DATETIME NULL;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_RECORDAR_MIN_ANTES')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_RECORDAR_MIN_ANTES INT NULL;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_ALERTA_PREVIA_NOTIF')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_ALERTA_PREVIA_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_TAREAS') AND name = 'TAR_ALERTA_VENCE_NOTIF')
+        ALTER TABLE dbo.CLI_TAREAS ADD TAR_ALERTA_VENCE_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CLI_TAREAS_ALERTAS' AND object_id = OBJECT_ID('dbo.CLI_TAREAS'))
+        CREATE INDEX IX_CLI_TAREAS_ALERTAS ON dbo.CLI_TAREAS(TAR_ESTATUS, TAR_FECHA_HORA, TAR_FECHA_VENCIMIENTO) WHERE TAR_ACTIVO = 1;
+    `);
+    // Al agregar las columnas por primera vez, marcar como ya notificado todo lo
+    // que está completado/cancelado o venció hace más de una semana, para que la
+    // primera corrida del cron no dispare una avalancha de avisos retroactivos.
+    await pool.request().batch(`
+      UPDATE dbo.CLI_TAREAS
+      SET TAR_ALERTA_PREVIA_NOTIF = 1, TAR_ALERTA_VENCE_NOTIF = 1
+      WHERE (TAR_ALERTA_PREVIA_NOTIF = 0 OR TAR_ALERTA_VENCE_NOTIF = 0)
+        AND (
+          TAR_ESTATUS IN ('completada','cancelada')
+          OR COALESCE(TAR_FECHA_HORA, CAST(TAR_FECHA_VENCIMIENTO AS DATETIME)) < DATEADD(DAY, -7, GETDATE())
+        );
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliTareasAgendaSchema:', err.message);
+  }
+
+  // Sello de cuándo se avisó la "próxima fecha de seguimiento" de la bitácora,
+  // para que el cron no repita el aviso.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_SEGUIMIENTOS') AND name = 'SEG_ALERTA_PROXIMA_NOTIF')
+        ALTER TABLE dbo.CLI_SEGUIMIENTOS ADD SEG_ALERTA_PROXIMA_NOTIF DATETIME NULL;
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliSeguimientosAlertaProximaSchema:', err.message);
+  }
 }
 
 // Gestión de incidencias de cliente — Fase 5 del módulo "Seguimiento de
@@ -3899,6 +4143,28 @@ async function ensureClienteIncidenciasSchema(pool) {
     console.warn('⚠️ CliIncidenciasFechaCompromisoSchema:', err.message);
   }
 
+  // Motor de SLA activo (clienteIncidenciasSlaCronController): estos BIT evitan
+  // que el cron repita el aviso de "SLA en riesgo" / "SLA vencido". Al agregarse
+  // por primera vez, se marcan como ya notificado las incidencias ya cerradas.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_INCIDENCIAS') AND name = 'INC_SLA_RIESGO_NOTIF')
+        ALTER TABLE dbo.CLI_INCIDENCIAS ADD INC_SLA_RIESGO_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLI_INCIDENCIAS') AND name = 'INC_SLA_VENCIDO_NOTIF')
+        ALTER TABLE dbo.CLI_INCIDENCIAS ADD INC_SLA_VENCIDO_NOTIF BIT NOT NULL DEFAULT 0;
+    `);
+    await pool.request().batch(`
+      UPDATE dbo.CLI_INCIDENCIAS
+      SET INC_SLA_RIESGO_NOTIF = 1, INC_SLA_VENCIDO_NOTIF = 1
+      WHERE (INC_SLA_RIESGO_NOTIF = 0 OR INC_SLA_VENCIDO_NOTIF = 0)
+        AND INC_ESTATUS IN ('resuelto','cerrado');
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliIncidenciasSlaNotifSchema:', err.message);
+  }
+
   try {
     await pool.request().batch(`
       IF OBJECT_ID('dbo.CLI_INCIDENCIAS_COMENTARIOS', 'U') IS NULL
@@ -3949,6 +4215,302 @@ async function ensureClienteIncidenciasSchema(pool) {
     `);
   } catch (err) {
     console.warn('⚠️ CliIncidenciasEvidenciasSchema:', err.message);
+  }
+}
+
+// "Caso" unificado (Fase 1 del rediseño de Atención al Cliente): reemplaza
+// gradualmente a Consulta/Aclaración/Queja/Incidencia con una sola entidad con
+// CASO_TIPO. Molde directo de ensureClienteIncidenciasSchema — mismo patrón de
+// folio/prioridad/SLA/estatus/evidencias cifradas. Las tablas viejas (CONSULTAS,
+// ACLARACIONES, QUEJAS, CLI_INCIDENCIAS) NO se tocan aquí; esta fase solo crea
+// el esquema nuevo, vacío. CASO_ORIGEN_TABLA/CASO_ORIGEN_ID + el índice único
+// filtrado IX_CASOS_ORIGEN son lo que hace idempotente la migración de datos
+// (fase siguiente): un mismo registro origen nunca se inserta dos veces.
+async function ensureCasosSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS (
+          CASO_ID                  INT IDENTITY(1,1) PRIMARY KEY,
+          CASO_FOLIO                NVARCHAR(20) NOT NULL,
+          CASO_TIPO                 NVARCHAR(20) NOT NULL,
+          CASO_CONTACTO_ID          INT NULL,
+          CASO_CLIENTE_NOMBRE_LIBRE NVARCHAR(200) NULL,
+          CASO_TITULO               NVARCHAR(200) NOT NULL,
+          CASO_DESCRIPCION          NVARCHAR(MAX) NULL,
+          CASO_CATEGORIA            NVARCHAR(50) NULL,
+          CASO_REFERENCIA           NVARCHAR(100) NULL,
+          CASO_PRIORIDAD            NVARCHAR(20) NOT NULL DEFAULT 'media',
+          CASO_SLA_HORAS            INT NULL,
+          CASO_FECHA_LIMITE_SLA     DATETIME NULL,
+          CASO_ESTATUS              NVARCHAR(20) NOT NULL DEFAULT 'pendiente',
+          CASO_ORIGEN               NVARCHAR(20) NOT NULL DEFAULT 'manual',
+          CASO_ASIGNADO_A           INT NULL,
+          CASO_CREADO_POR           INT NULL,
+          CASO_FECHA_CREACION       DATETIME NOT NULL DEFAULT GETDATE(),
+          CASO_FECHA_RESOLUCION     DATETIME NULL,
+          CASO_ACTIVO               BIT NOT NULL DEFAULT 1,
+          CASO_SOLUCION_PROPUESTA   NVARCHAR(MAX) NULL,
+          CASO_FECHA_COMPROMISO     DATE NULL,
+          CASO_SLA_RIESGO_NOTIF     BIT NOT NULL DEFAULT 0,
+          CASO_SLA_VENCIDO_NOTIF    BIT NOT NULL DEFAULT 0,
+          CASO_ORIGEN_TABLA         NVARCHAR(20) NULL,
+          CASO_ORIGEN_ID            INT NULL,
+          CONSTRAINT UQ_CASOS_FOLIO UNIQUE (CASO_FOLIO)
+        );
+        CREATE INDEX IX_CASOS_CONTACTO ON dbo.CASOS(CASO_CONTACTO_ID);
+        CREATE INDEX IX_CASOS_ESTATUS ON dbo.CASOS(CASO_ESTATUS) WHERE CASO_ACTIVO = 1;
+        CREATE INDEX IX_CASOS_TIPO ON dbo.CASOS(CASO_TIPO);
+        CREATE UNIQUE INDEX IX_CASOS_ORIGEN ON dbo.CASOS(CASO_ORIGEN_TABLA, CASO_ORIGEN_ID) WHERE CASO_ORIGEN_TABLA IS NOT NULL;
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS_COMENTARIOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS_COMENTARIOS (
+          CCO_ID           INT IDENTITY(1,1) PRIMARY KEY,
+          CCO_CASO_ID      INT NOT NULL,
+          CCO_COMENTARIO   NVARCHAR(MAX) NOT NULL,
+          CCO_USUARIO_ID   INT NULL,
+          CCO_FECHA        DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_CCO_CASO FOREIGN KEY (CCO_CASO_ID) REFERENCES dbo.CASOS(CASO_ID)
+        );
+        CREATE INDEX IX_CASOS_COMENTARIOS_CASO ON dbo.CASOS_COMENTARIOS(CCO_CASO_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosComentariosSchema:', err.message);
+  }
+
+  // Evidencias — misma estructura cifrada AES-256-GCM que CLI_INCIDENCIAS_EVIDENCIAS
+  // (utils/cryptoDocs.js, misma EXPEDIENTE_ENCRYPTION_KEY), abierta a nivel de
+  // esquema a cualquier CASO_TIPO aunque hoy la UI solo la use para 'incidencia'.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS_EVIDENCIAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS_EVIDENCIAS (
+          EVI_ID               INT IDENTITY(1,1) PRIMARY KEY,
+          EVI_CASO_ID          INT NOT NULL,
+          EVI_NOMBRE_ORIGINAL  NVARCHAR(255) NOT NULL,
+          EVI_MIME_TYPE        NVARCHAR(100) NULL,
+          EVI_TAMANO_BYTES     BIGINT NOT NULL,
+          EVI_DESCRIPCION      NVARCHAR(500) NULL,
+          EVI_ENCRYPTED_DATA   VARBINARY(MAX) NOT NULL,
+          EVI_CONTENT_HASH     CHAR(64) NOT NULL,
+          EVI_ENC_ALGO         NVARCHAR(30) NOT NULL DEFAULT 'aes-256-gcm',
+          EVI_ENC_IV           VARBINARY(12) NOT NULL,
+          EVI_ENC_TAG          VARBINARY(16) NOT NULL,
+          EVI_KEY_ID           NVARCHAR(50) NULL,
+          EVI_SUBIDO_POR       INT NULL,
+          EVI_FECHA_SUBIDA     DATETIME NOT NULL DEFAULT GETDATE(),
+          EVI_ACTIVO           BIT NOT NULL DEFAULT 1,
+          CONSTRAINT FK_EVI_CASO FOREIGN KEY (EVI_CASO_ID) REFERENCES dbo.CASOS(CASO_ID)
+        );
+        CREATE INDEX IX_CASOS_EVIDENCIAS_CASO ON dbo.CASOS_EVIDENCIAS(EVI_CASO_ID, EVI_ACTIVO);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosEvidenciasSchema:', err.message);
+  }
+
+  // Acción correctiva — molde de QUEJAS_ACCION_CORRECTIVA, igualmente abierta a
+  // nivel de esquema a cualquier tipo de caso (hoy la UI solo la usa para 'queja').
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CASOS_ACCION_CORRECTIVA', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CASOS_ACCION_CORRECTIVA (
+          AC_ID                INT IDENTITY(1,1) PRIMARY KEY,
+          AC_CASO_ID           INT NOT NULL,
+          AC_REDACTOR_ID       INT NOT NULL,
+          AC_REDACTOR_NOMBRE   NVARCHAR(200) NULL,
+          AC_DESCRIPCION       NVARCHAR(MAX) NOT NULL,
+          AC_RESPONSABLE       NVARCHAR(200) NOT NULL,
+          AC_FECHA_COMPROMISO  DATE NOT NULL,
+          AC_ESTADO            NVARCHAR(30) NOT NULL DEFAULT 'pendiente',
+          AC_FECHA_REGISTRO    DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT UQ_CASOS_ACCION_CORRECTIVA_CASO UNIQUE (AC_CASO_ID),
+          CONSTRAINT FK_AC_CASO FOREIGN KEY (AC_CASO_ID) REFERENCES dbo.CASOS(CASO_ID)
+        );
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CasosAccionCorrectivaSchema:', err.message);
+  }
+}
+
+// Citas y tratamientos del cliente (CRM Cliente — Fase 1). Molde de
+// ensureCasosSchema / ensureClienteSeguimientoSchema. Entidad "Cita" propia
+// (modalidad videollamada/telefónica/genérica, estado agendada→confirmada→
+// asistió/no-asistió, recordatorio configurable por cita) que reemplaza el uso
+// aproximado de CLI_TAREAS para agendar; "Tratamiento" agrupa citas en una serie
+// de sesiones con progreso y nota de evolución por sesión. Nada de esto toca
+// tablas existentes.
+async function ensureCitasSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_TRATAMIENTOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_TRATAMIENTOS (
+          TRAT_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          TRAT_CONTACTO_ID     INT NOT NULL,
+          TRAT_NOMBRE          NVARCHAR(200) NOT NULL,
+          TRAT_DESCRIPCION     NVARCHAR(MAX) NULL,
+          TRAT_TOTAL_SESIONES  INT NULL,
+          TRAT_ESTATUS         NVARCHAR(20) NOT NULL DEFAULT 'activo',
+          TRAT_ASIGNADO_A      INT NULL,
+          TRAT_CREADO_POR      INT NULL,
+          TRAT_FECHA_INICIO    DATE NULL,
+          TRAT_FECHA_CREACION  DATETIME NOT NULL DEFAULT GETDATE(),
+          TRAT_ACTIVO          BIT NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IX_CLI_TRAT_CONTACTO ON dbo.CLI_TRATAMIENTOS(TRAT_CONTACTO_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliTratamientosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_CITAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_CITAS (
+          CITA_ID                    INT IDENTITY(1,1) PRIMARY KEY,
+          CITA_CONTACTO_ID           INT NOT NULL,
+          CITA_TRATAMIENTO_ID        INT NULL,
+          CITA_NUMERO_SESION         INT NULL,
+          CITA_MODALIDAD             NVARCHAR(20) NOT NULL DEFAULT 'videollamada',
+          CITA_TITULO                NVARCHAR(200) NOT NULL,
+          CITA_MOTIVO                NVARCHAR(MAX) NULL,
+          CITA_FECHA_HORA            DATETIME NOT NULL,
+          CITA_DURACION_MIN          INT NOT NULL DEFAULT 30,
+          CITA_ENLACE                NVARCHAR(500) NULL,
+          CITA_TELEFONO              NVARCHAR(30) NULL,
+          CITA_ESTATUS               NVARCHAR(20) NOT NULL DEFAULT 'agendada',
+          CITA_CONFIRMADA_POR_CLIENTE BIT NOT NULL DEFAULT 0,
+          CITA_FECHA_CONFIRMACION    DATETIME NULL,
+          CITA_RECORDAR_MIN_ANTES    NVARCHAR(60) NULL,
+          CITA_ALERTA_24H_NOTIF      BIT NOT NULL DEFAULT 0,
+          CITA_ALERTA_1H_NOTIF       BIT NOT NULL DEFAULT 0,
+          CITA_ASIGNADO_A            INT NULL,
+          CITA_CREADO_POR            INT NULL,
+          CITA_FECHA_CREACION        DATETIME NOT NULL DEFAULT GETDATE(),
+          CITA_NOTA_RESULTADO        NVARCHAR(MAX) NULL,
+          CITA_ACTIVO                BIT NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IX_CLI_CITAS_CONTACTO ON dbo.CLI_CITAS(CITA_CONTACTO_ID);
+        CREATE INDEX IX_CLI_CITAS_FECHA ON dbo.CLI_CITAS(CITA_FECHA_HORA) WHERE CITA_ACTIVO = 1;
+        CREATE INDEX IX_CLI_CITAS_TRATAMIENTO ON dbo.CLI_CITAS(CITA_TRATAMIENTO_ID);
+        CREATE INDEX IX_CLI_CITAS_ESTATUS ON dbo.CLI_CITAS(CITA_ESTATUS) WHERE CITA_ACTIVO = 1;
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliCitasSchema:', err.message);
+  }
+
+  // Solicitudes de cambio del cliente desde el portal (reprogramar/cancelar).
+  // El equipo las aprueba desde el CRM; el portal nunca reagenda por sí mismo.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_CITAS_SOLICITUDES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_CITAS_SOLICITUDES (
+          SOL_ID                INT IDENTITY(1,1) PRIMARY KEY,
+          SOL_CITA_ID           INT NOT NULL,
+          SOL_TIPO              NVARCHAR(20) NOT NULL,
+          SOL_FECHA_PROPUESTA   DATETIME NULL,
+          SOL_MOTIVO            NVARCHAR(500) NULL,
+          SOL_ESTATUS           NVARCHAR(20) NOT NULL DEFAULT 'pendiente',
+          SOL_RESUELTA_POR      INT NULL,
+          SOL_FECHA_RESOLUCION  DATETIME NULL,
+          SOL_FECHA             DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_SOL_CITA FOREIGN KEY (SOL_CITA_ID) REFERENCES dbo.CLI_CITAS(CITA_ID)
+        );
+        CREATE INDEX IX_CLI_CITAS_SOL_CITA ON dbo.CLI_CITAS_SOLICITUDES(SOL_CITA_ID);
+        CREATE INDEX IX_CLI_CITAS_SOL_ESTATUS ON dbo.CLI_CITAS_SOLICITUDES(SOL_ESTATUS);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliCitasSolicitudesSchema:', err.message);
+  }
+
+  // Bitácora de recordatorios de cita enviados — alimenta el reporte de
+  // efectividad (Fase 7) y sirve de guardia anti-repetición para umbrales de
+  // anticipación arbitrarios (además de los BIT rápidos de CLI_CITAS).
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_CITAS_RECORD_LOG', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_CITAS_RECORD_LOG (
+          LOG_ID          INT IDENTITY(1,1) PRIMARY KEY,
+          LOG_CITA_ID     INT NOT NULL,
+          LOG_CANAL       NVARCHAR(20) NOT NULL,
+          LOG_UMBRAL_MIN  INT NULL,
+          LOG_RESULTADO   NVARCHAR(20) NOT NULL DEFAULT 'enviado',
+          LOG_DETALLE     NVARCHAR(300) NULL,
+          LOG_FECHA       DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_LOG_CITA FOREIGN KEY (LOG_CITA_ID) REFERENCES dbo.CLI_CITAS(CITA_ID)
+        );
+        CREATE INDEX IX_CLI_CITAS_RECORD_LOG_CITA ON dbo.CLI_CITAS_RECORD_LOG(LOG_CITA_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliCitasRecordLogSchema:', err.message);
+  }
+}
+
+// Ofertas a segmento de clientes (CRM Cliente — Fase 8). Campaña simple: se
+// arma un mensaje, se elige un segmento (tags / estatus / tipo de cliente) y
+// se envía por correo + WhatsApp de una vez, con registro de cada envío.
+async function ensureOfertasSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_OFERTAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CRM_OFERTAS (
+          OF_ID            INT IDENTITY(1,1) PRIMARY KEY,
+          OF_TITULO        NVARCHAR(200) NOT NULL,
+          OF_MENSAJE       NVARCHAR(MAX) NOT NULL,
+          OF_SEGMENTO_JSON NVARCHAR(MAX) NULL,
+          OF_CANALES       NVARCHAR(60) NOT NULL DEFAULT 'correo',
+          OF_ESTATUS       NVARCHAR(20) NOT NULL DEFAULT 'borrador',
+          OF_CREADA_POR    INT NULL,
+          OF_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+          OF_FECHA_ENVIO   DATETIME NULL
+        );
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmOfertasSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_OFERTAS_ENVIOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CRM_OFERTAS_ENVIOS (
+          OE_ID          INT IDENTITY(1,1) PRIMARY KEY,
+          OE_OFERTA_ID   INT NOT NULL,
+          OE_CONTACTO_ID INT NOT NULL,
+          OE_CANAL       NVARCHAR(20) NOT NULL,
+          OE_RESULTADO   NVARCHAR(20) NOT NULL DEFAULT 'enviado',
+          OE_DETALLE     NVARCHAR(300) NULL,
+          OE_FECHA       DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_OE_OFERTA FOREIGN KEY (OE_OFERTA_ID) REFERENCES dbo.CRM_OFERTAS(OF_ID)
+        );
+        CREATE INDEX IX_CRM_OFERTAS_ENVIOS_OFERTA ON dbo.CRM_OFERTAS_ENVIOS(OE_OFERTA_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmOfertasEnviosSchema:', err.message);
   }
 }
 
@@ -5032,15 +5594,23 @@ async function ensureAllSchemas(pool) {
   await ensureLivechatSchema(pool);
   await ensureLivechatCampanasSchema(pool);
   await ensureContactCenterSchema(pool);
+  await ensureSupervisorAlarmasSchema(pool);
+  await ensureSupervisorSusurrosSchema(pool);
+  await ensureSupervisorNotificacionesSchema(pool);
+  await ensureSupervisorVistasSchema(pool);
   await ensureWebphoneTipificacionesSchema(pool);
+  await ensurePostulanteNotasSchema(pool);
+  await ensureFormulariosAtencionSchema(pool);
   await ensureQrCodesSchema(pool);
   await ensureChatbotSchema(pool);
   await ensureMensajeriaSchema(pool);
   await ensureEncuestasSchema(pool);
   await ensureEncuestaSatisfaccionClienteSeed(pool);
   await ensureCrmSchema(pool);
+  await ensureCrmCatalogosClienteSchema(pool);
   await ensureCrmCotizacionesSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
+  await ensureCrmPortalSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
@@ -5052,11 +5622,15 @@ async function ensureAllSchemas(pool) {
   await ensureFinanzasSchema(pool);
   await ensureVentasMetasSchema(pool);
   await ensureIncentivosSchema(pool);
+  await ensureComisionesReglasSchema(pool);
   await ensureCallCenterSchema(pool);
   await ensureTiAreaSchema(pool);
   await ensureAtencionClienteSchema(pool);
   await ensureClienteSeguimientoSchema(pool);
   await ensureClienteIncidenciasSchema(pool);
+  await ensureCasosSchema(pool);
+  await ensureCitasSchema(pool);
+  await ensureOfertasSchema(pool);
   await ensureClienteFechasSchema(pool);
   await ensureRhAreaSchema(pool);
   await ensureDecisionesSchema(pool);
@@ -5801,6 +6375,98 @@ BEGIN
   CREATE INDEX IX_CHATBOT_RESPUESTAS_ACTIVA ON dbo.CHATBOT_RESPUESTAS(RESP_ACTIVA, RESP_ORDEN);
 END
 
+-- Fase 1 reorg UX: agrupar las respuestas por categoría y darles un título
+-- legible (el id técnico deja de escribirse a mano, se autogenera del título).
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_CATEGORIA') IS NULL
+  ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_CATEGORIA NVARCHAR(60) NULL;
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_TITULO') IS NULL
+  ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_TITULO NVARCHAR(120) NULL;
+
+-- Fase 2 (contacto vs oportunidad): qué crea el bot cuando el visitante deja
+-- sus datos habiendo pasado por este nodo. 'contacto' (default) solo registra
+-- el contacto; 'oportunidad' además abre una oportunidad; NULL = hereda el
+-- comportamiento de RESP_SENAL_INTERES (contacto).
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_GENERA') IS NULL
+  ALTER TABLE dbo.CHATBOT_RESPUESTAS ADD RESP_GENERA NVARCHAR(15) NULL;
+IF COL_LENGTH('dbo.CHATBOT_NODOS', 'NODO_GENERA') IS NULL
+  ALTER TABLE dbo.CHATBOT_NODOS ADD NODO_GENERA NVARCHAR(15) NULL;
+IF COL_LENGTH('dbo.CHATBOT_ETIQUETAS_MENU', 'ETQ_GENERA') IS NULL
+  ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD ETQ_GENERA NVARCHAR(15) NULL;
+
+-- Fecha de última edición desde el Constructor de flujo — CHATBOT_RESPUESTAS
+-- ya tenía RESP_FECHA_ACTUALIZACION; se completa para etiqueta/nodo_arbol.
+-- NULL = nunca editado desde ahí (no se retroalimenta con datos viejos).
+IF COL_LENGTH('dbo.CHATBOT_ETIQUETAS_MENU', 'ETQ_FECHA_ACTUALIZACION') IS NULL
+  ALTER TABLE dbo.CHATBOT_ETIQUETAS_MENU ADD ETQ_FECHA_ACTUALIZACION DATETIME NULL;
+IF COL_LENGTH('dbo.CHATBOT_NODOS', 'NODO_FECHA_ACTUALIZACION') IS NULL
+  ALTER TABLE dbo.CHATBOT_NODOS ADD NODO_FECHA_ACTUALIZACION DATETIME NULL;
+
+-- Migración conservadora: las respuestas con señal de interés hoy generan
+-- oportunidad SIEMPRE. Se bajan todas a 'contacto' salvo que el admin ya las
+-- haya reclasificado. Nadie pierde captura, pero deja de crear oportunidades
+-- de gente que solo preguntó "quiénes somos". EXEC para resolución diferida
+-- del nombre de la columna recién agregada en este mismo batch.
+IF COL_LENGTH('dbo.CHATBOT_RESPUESTAS', 'RESP_GENERA') IS NOT NULL
+  EXEC('UPDATE dbo.CHATBOT_RESPUESTAS SET RESP_GENERA = ''contacto'' WHERE RESP_GENERA IS NULL AND RESP_SENAL_INTERES = 1');
+
+-- Config clave/valor del chatbot: saludo, reglas de escalamiento, rangos de
+-- presupuesto, horario. El widget público la lee de /api/chatbot/config/publica
+-- con fallback a los valores hardcodeados si falla.
+IF OBJECT_ID('dbo.CHATBOT_CONFIG', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_CONFIG (
+    CFG_CLAVE  NVARCHAR(60)  NOT NULL PRIMARY KEY,
+    CFG_VALOR  NVARCHAR(MAX) NULL,
+    CFG_FECHA  DATETIME      NOT NULL DEFAULT GETDATE()
+  );
+END
+
+-- Fase 2: telemetría de calidad del bot.
+-- Feedback 👍/👎 que el visitante deja bajo una respuesta enlatada.
+IF OBJECT_ID('dbo.CHATBOT_FEEDBACK', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_FEEDBACK (
+    FBK_ID           INT IDENTITY(1,1) PRIMARY KEY,
+    FBK_RESP_PK      INT           NOT NULL,
+    FBK_SESION_TOKEN NVARCHAR(80)  NULL,
+    FBK_UTIL         BIT           NOT NULL,
+    FBK_FECHA        DATETIME      NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_CHATBOT_FEEDBACK_RESP FOREIGN KEY (FBK_RESP_PK) REFERENCES dbo.CHATBOT_RESPUESTAS(RESP_PK) ON DELETE CASCADE
+  );
+  CREATE INDEX IX_CHATBOT_FEEDBACK_RESP ON dbo.CHATBOT_FEEDBACK(FBK_RESP_PK, FBK_UTIL);
+END
+
+-- Preguntas del visitante que NO hicieron match con ninguna respuesta —
+-- la lista de qué falta cubrir. UPSERT por texto normalizado.
+IF OBJECT_ID('dbo.CHATBOT_SIN_MATCH', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_SIN_MATCH (
+    SNM_ID            INT IDENTITY(1,1) PRIMARY KEY,
+    SNM_TEXTO_NORM    NVARCHAR(300)  NOT NULL,
+    SNM_TEXTO_EJEMPLO NVARCHAR(500)  NULL,
+    SNM_VECES         INT            NOT NULL DEFAULT (1),
+    SNM_ULTIMA_FECHA  DATETIME       NOT NULL DEFAULT GETDATE(),
+    SNM_RESUELTO      BIT            NOT NULL DEFAULT (0),
+    CONSTRAINT UQ_CHATBOT_SIN_MATCH_TEXTO UNIQUE (SNM_TEXTO_NORM)
+  );
+  CREATE INDEX IX_CHATBOT_SIN_MATCH_PEND ON dbo.CHATBOT_SIN_MATCH(SNM_RESUELTO, SNM_VECES DESC);
+END
+
+-- Fase 3: eventos de sesión para el embudo de conversación. Filas pequeñas,
+-- 1 por hito. El widget los dispara fire-and-forget. Un mismo (token, tipo)
+-- puede repetirse; el embudo cuenta sesiones DISTINCT por tipo.
+IF OBJECT_ID('dbo.CHATBOT_EVENTOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CHATBOT_EVENTOS (
+    EVT_ID           INT IDENTITY(1,1) PRIMARY KEY,
+    EVT_SESION_TOKEN NVARCHAR(80)  NOT NULL,
+    EVT_TIPO         NVARCHAR(30)  NOT NULL,
+    EVT_FECHA        DATETIME      NOT NULL DEFAULT GETDATE()
+  );
+  CREATE INDEX IX_CHATBOT_EVENTOS_TIPO_FECHA ON dbo.CHATBOT_EVENTOS(EVT_TIPO, EVT_FECHA);
+  CREATE INDEX IX_CHATBOT_EVENTOS_SESION ON dbo.CHATBOT_EVENTOS(EVT_SESION_TOKEN);
+END
+
 -- Árbol de decisión básico (sin IA/NLU): nodos de pregunta con opciones que
 -- llevan a otro nodo, o a una acción terminal (resolver, escalar a chat, crear ticket).
 IF OBJECT_ID('dbo.CHATBOT_NODOS', 'U') IS NULL
@@ -6393,6 +7059,11 @@ BEGIN
   ALTER TABLE dbo.CCO_CANALES ADD CONSTRAINT CK_CCO_CANALES_MODO_SESION
     CHECK (CN_MODO_SESION IN ('compartido','individual'));
 END`,
+    // CRM Cliente — Fase 6: marca el canal de WhatsApp que usan los
+    // recordatorios del CRM (citas, pagos, renovaciones). Si ninguno está
+    // marcado, crmWhatsappService toma el primer WhatsApp conectado.
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_ES_CANAL_CRM') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_ES_CANAL_CRM BIT NOT NULL DEFAULT 0;`,
     // Una fila por (canal, agente) cuando CN_MODO_SESION='individual' — mismo
     // shape de columnas de estado que ya vive en CCO_CANALES para cada tipo no
     // oficial (Baileys/FCA/IGP), pero aquí multiplicado por agente en vez de
@@ -6597,6 +7268,17 @@ CREATE TABLE dbo.CCO_CONFIG (
 );`,
     `IF OBJECT_ID('dbo.CCO_CONFIG', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CCO_CONFIG)
 INSERT INTO dbo.CCO_CONFIG (CF_MSG_BIENVENIDA) VALUES (N'Hola, en un momento te atendemos.');`,
+    // Modo de asignación (cascada canal -> campaña -> global). Default
+    // 'manual' (2026-09-11, alineado con lo que pidió el equipo): toda
+    // conversación nueva cae a Bandeja de espera y el agente la jala a
+    // mano; solo las campañas/canales que de verdad necesiten reparto
+    // automático lo prenden explícitamente con 'auto'.
+    `IF COL_LENGTH('dbo.CCO_CONFIG', 'CF_MODO_ASIGNACION') IS NULL
+  ALTER TABLE dbo.CCO_CONFIG ADD CF_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CF_MODO_ASIGNACION DEFAULT 'manual';`,
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_MODO_ASIGNACION') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CM2_MODO_ASIGNACION DEFAULT 'global';`,
+    `IF COL_LENGTH('dbo.CCO_CANALES', 'CN_MODO_ASIGNACION') IS NULL
+  ALTER TABLE dbo.CCO_CANALES ADD CN_MODO_ASIGNACION NVARCHAR(12) NOT NULL CONSTRAINT DF_CN_MODO_ASIGNACION DEFAULT 'campania';`,
     `IF OBJECT_ID('dbo.CCO_AGENTE_ESTADO', 'U') IS NULL
 CREATE TABLE dbo.CCO_AGENTE_ESTADO (
   CAE_USUARIO_ID INT NOT NULL PRIMARY KEY,
@@ -6657,6 +7339,166 @@ CREATE INDEX IX_CCO_CP_CAMPANIA ON dbo.CCO_CAMPANIA_POSTULANTES(CP_CAMPANIA_ID);
   logger.info('✅ Esquema de Contact Center omnicanal asegurado');
 }
 
+// Alarmas del módulo Supervisor (/operaciones/supervisores) — Fase 1 del
+// plan de evolución basado en PSUP de Mitrol: CSA_ALARMAS define umbrales
+// configurables por tipo (agente/skill), CSA_ALARMA_INSTANCIAS es el estado
+// vivo de cada objeto evaluado (agente o skill/grupo) contra esa alarma. Se
+// evalúan con el mismo cron que ya corre para Contact Center
+// (ccCronController) — mismo patrón: 'en_alarma' -> 'atendida' (con
+// comentario) -> 'fin_alarma' (la condición dejó de cumplirse, se cierra sola).
+function ensureSupervisorAlarmasSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_ALARMAS (
+  CSA_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSA_NOMBRE NVARCHAR(120) NOT NULL,
+  CSA_TIPO NVARCHAR(20) NOT NULL, -- 'agente_pausa' | 'skill_cola'
+  CSA_UMBRAL_MINUTOS INT NOT NULL,
+  CSA_ACTIVA BIT NOT NULL DEFAULT (1),
+  CSA_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT CK_CSA_TIPO CHECK (CSA_TIPO IN ('agente_pausa','skill_cola'))
+);`,
+    // Semilla de las dos alarmas del plan (Fase 1) si la tabla quedó vacía —
+    // umbral por default editable después, no hay UI de alta todavía.
+    `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CSA_ALARMAS)
+INSERT INTO dbo.CSA_ALARMAS (CSA_NOMBRE, CSA_TIPO, CSA_UMBRAL_MINUTOS) VALUES
+  (N'Agente en pausa prolongada', 'agente_pausa', 20),
+  (N'Chats en cola sin asignar', 'skill_cola', 5);`,
+    `IF OBJECT_ID('dbo.CSA_ALARMA_INSTANCIAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_ALARMA_INSTANCIAS (
+  CSI_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSI_ALARMA_ID INT NOT NULL,
+  CSI_OBJETO_TIPO NVARCHAR(20) NOT NULL, -- 'agente' | 'skill'
+  CSI_OBJETO_ID INT NOT NULL, -- NEUS_ID del agente, o CG_ID del skill
+  CSI_OBJETO_NOMBRE NVARCHAR(160) NULL, -- snapshot para no hacer join en el listado
+  CSI_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('en_alarma'), -- 'en_alarma' | 'atendida' | 'fin_alarma'
+  CSI_FECHA_INICIO DATETIME NOT NULL DEFAULT GETDATE(),
+  CSI_FECHA_ATENDIDA DATETIME NULL,
+  CSI_ATENDIDA_POR INT NULL,
+  CSI_COMENTARIO NVARCHAR(500) NULL,
+  CSI_FECHA_FIN DATETIME NULL,
+  CONSTRAINT FK_CSI_ALARMA FOREIGN KEY (CSI_ALARMA_ID) REFERENCES dbo.CSA_ALARMAS(CSA_ID),
+  CONSTRAINT CK_CSI_ESTADO CHECK (CSI_ESTADO IN ('en_alarma','atendida','fin_alarma'))
+);`,
+    `IF OBJECT_ID('dbo.CSA_ALARMA_INSTANCIAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CSI_ABIERTAS')
+CREATE INDEX IX_CSI_ABIERTAS ON dbo.CSA_ALARMA_INSTANCIAS(CSI_ALARMA_ID, CSI_OBJETO_TIPO, CSI_OBJETO_ID, CSI_ESTADO);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Alarmas de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Alarmas del Supervisor asegurado');
+  })();
+}
+
+// Susurros (Coaching) del supervisor hacia el agente durante un chat en vivo
+// — Fase 1, punto 3.1 del plan de evolución del Supervisor. Se guardan
+// separados de CCO_MENSAJES a propósito: esa tabla solo admite emisor
+// 'cliente'|'agente'|'sistema' porque ES la conversación real con el
+// cliente, y un susurro NUNCA debe poder mezclarse ahí ni llegar al cliente
+// por error. Se entregan en vivo por Socket.IO (sala cc:susurro:{id}).
+function ensureSupervisorSusurrosSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_SUSURROS', 'U') IS NULL
+CREATE TABLE dbo.CSA_SUSURROS (
+  CSU_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSU_INTERACCION_ID INT NOT NULL,
+  CSU_SUPERVISOR_ID INT NOT NULL,
+  CSU_SUPERVISOR_NOMBRE NVARCHAR(160) NULL,
+  CSU_CONTENIDO NVARCHAR(1000) NOT NULL,
+  CSU_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CSU_INTERACCION FOREIGN KEY (CSU_INTERACCION_ID) REFERENCES dbo.CCO_INTERACCIONES(CI_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CSA_SUSURROS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CSU_INTERACCION')
+CREATE INDEX IX_CSU_INTERACCION ON dbo.CSA_SUSURROS(CSU_INTERACCION_ID, CSU_FECHA);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Susurros de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Susurros del Supervisor asegurado');
+  })();
+}
+
+// Notificaciones del supervisor a agentes — Fase 2, punto 3.3 del plan de
+// evolución basado en PSUP. Dos tipos: 'informativa' (el agente la puede
+// cerrar cuando quiera) y 'obligatoria' (bloquea su pantalla hasta que la
+// cierra — como las notificaciones "obligatorias" del manual de Mitrol).
+// El alcance decide a quién llega: 'agente' (un NEUS_ID puntual), 'skill'
+// (CG_ID, resuelto contra CCO_GRUPO_AGENTES activos), 'campania' (CM2_ID,
+// resuelto contra los grupos de esa campaña) o 'todos'. CSA_NOTIFICACION_
+// LECTURAS guarda quién ya la cerró — así un agente que se conecta después
+// de enviada la ve pendiente igual (no depende solo del push por socket).
+function ensureSupervisorNotificacionesSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_NOTIFICACIONES', 'U') IS NULL
+CREATE TABLE dbo.CSA_NOTIFICACIONES (
+  CSN_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSN_TIPO NVARCHAR(20) NOT NULL, -- 'informativa' | 'obligatoria'
+  CSN_ALCANCE NVARCHAR(20) NOT NULL, -- 'agente' | 'skill' | 'campania' | 'todos'
+  CSN_ALCANCE_ID INT NULL, -- NEUS_ID/CG_ID/CM2_ID según CSN_ALCANCE; NULL si 'todos'
+  CSN_MENSAJE NVARCHAR(1000) NOT NULL,
+  CSN_AUTOR_ID INT NOT NULL,
+  CSN_AUTOR_NOMBRE NVARCHAR(160) NULL,
+  CSN_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CSN_FECHA_VENCIMIENTO DATETIME NULL, -- opcional: deja de mostrarse sola después de esta fecha
+  CONSTRAINT CK_CSN_TIPO CHECK (CSN_TIPO IN ('informativa','obligatoria')),
+  CONSTRAINT CK_CSN_ALCANCE CHECK (CSN_ALCANCE IN ('agente','skill','campania','todos'))
+);`,
+    `IF OBJECT_ID('dbo.CSA_NOTIFICACION_LECTURAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_NOTIFICACION_LECTURAS (
+  CSNL_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSNL_NOTIFICACION_ID INT NOT NULL,
+  CSNL_USUARIO_ID INT NOT NULL,
+  CSNL_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CSNL_NOTIF FOREIGN KEY (CSNL_NOTIFICACION_ID) REFERENCES dbo.CSA_NOTIFICACIONES(CSN_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CSNL_NOTIF_USUARIO UNIQUE (CSNL_NOTIFICACION_ID, CSNL_USUARIO_ID)
+);`,
+    `IF OBJECT_ID('dbo.CSA_NOTIFICACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CSN_FECHA')
+CREATE INDEX IX_CSN_FECHA ON dbo.CSA_NOTIFICACIONES(CSN_FECHA_CREACION);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Notificaciones de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Notificaciones del Supervisor asegurado');
+  })();
+}
+
+// Vistas guardadas / personalización de columnas — Fase 3, punto 3.6 del
+// plan basado en PSUP. Alcance acotado: qué columnas se ven en las tablas
+// del módulo Supervisor (Productividad, Comparador), guardado por usuario y
+// por tabla — no reordenamiento ni filtros complejos, esas tablas tienen
+// columnas fijas en el código y reescribirlas a un motor dinámico completo
+// no lo justifica este punto. Una fila por (usuario, tabla); CSV_COLUMNAS es
+// JSON con el array de claves de columna visibles.
+function ensureSupervisorVistasSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CSA_VISTAS_COLUMNAS', 'U') IS NULL
+CREATE TABLE dbo.CSA_VISTAS_COLUMNAS (
+  CSV_ID INT IDENTITY(1,1) PRIMARY KEY,
+  CSV_USUARIO_ID INT NOT NULL,
+  CSV_TABLA NVARCHAR(40) NOT NULL, -- 'productividad' | 'comparador_agentes' | 'comparador_campanias'
+  CSV_COLUMNAS NVARCHAR(1000) NOT NULL, -- JSON array de claves de columna visibles
+  CSV_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT UQ_CSV_USUARIO_TABLA UNIQUE (CSV_USUARIO_ID, CSV_TABLA)
+);`,
+  ];
+  return (async () => {
+    for (const q of stmts) {
+      try { await pool.request().query(q); }
+      catch (err) { console.warn('⚠️ Vistas de columnas de Supervisor schema:', err.message); }
+    }
+    logger.info('✅ Esquema de Vistas guardadas del Supervisor asegurado');
+  })();
+}
+
 // Tipificación de llamadas del Webphone (pantalla-llamada, el "Web Form" que
 // VICIdial abre como iframe en el navegador del agente al conectar la
 // llamada) — catálogo fijo de disposiciones + observaciones libres. Vive
@@ -6684,6 +7526,358 @@ CREATE INDEX IX_WLT_TELEFONO ON dbo.WEBPHONE_LLAMADAS_TIPIFICADAS(WLT_TELEFONO);
     catch (err) { console.warn('⚠️ Webphone tipificaciones schema:', err.message); }
   }
   logger.info('✅ Esquema de tipificación de llamadas (Webphone) asegurado');
+}
+
+// Bitácora de notas por postulante — usada por "Gestión de postulantes" del
+// Contact Center. PN_USUARIO_NOMBRE se desnormaliza para no depender de un
+// JOIN a usuarios al listar.
+async function ensurePostulanteNotasSchema(pool) {
+  const stmts = [
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NULL
+CREATE TABLE dbo.CCO_POSTULANTE_NOTAS (
+  PN_ID INT IDENTITY(1,1) PRIMARY KEY,
+  PN_POSTULANTE_ID INT NOT NULL,
+  PN_USUARIO_ID INT NOT NULL,
+  PN_USUARIO_NOMBRE NVARCHAR(200) NULL,
+  PN_NOTA NVARCHAR(1000) NOT NULL,
+  PN_FECHA DATETIME NOT NULL DEFAULT GETDATE()
+);`,
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_CCO_PN_POSTULANTE')
+ALTER TABLE dbo.CCO_POSTULANTE_NOTAS
+  ADD CONSTRAINT FK_CCO_PN_POSTULANTE FOREIGN KEY (PN_POSTULANTE_ID)
+    REFERENCES dbo.CCO_CAMPANIA_POSTULANTES(CP_ID);`,
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_NOTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_PN_POSTULANTE')
+CREATE INDEX IX_CCO_PN_POSTULANTE ON dbo.CCO_POSTULANTE_NOTAS(PN_POSTULANTE_ID);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Postulante notas schema:', err.message); }
+  }
+  logger.info('✅ Esquema de notas de postulante asegurado');
+}
+
+// ── Formularios de Atención (Contact Center) ────────────────────────────
+// Constructor dinámico de formularios usados durante una interacción
+// omnicanal: Formulario -> Versión (inmutable al publicar) -> Secciones ->
+// Campos (+ Opciones estáticas) -> Asignación a Campaña+Canal. Prefijo
+// "CCF_" para no colisionar con CCO_* (Contact Center core) ni con FORM_*
+// si algún día existiera otro módulo de formularios ajeno a Contact Center.
+//
+// Reglas de diseño (ver también ccFormulariosController.js):
+// - Empresa/tenant NO lleva columna propia: el aislamiento ya lo da el pool
+//   de conexión por empresa (databaseService.getPool), igual que el resto
+//   de CCO_*. Una fila de estas tablas SIEMPRE vive en la BD de una sola
+//   empresa.
+// - Una CCF_FORM_VERSIONES en estado 'publicado' nunca se modifica: para
+//   cambiar algo se clona a una versión nueva en 'borrador'. Las respuestas
+//   históricas (Entrega 3, CCO_INTERACCION_FORM_RESPUESTAS) guardan el
+//   FV_ID exacto usado, no el formulario "vigente".
+// - Las respuestas NO generan una columna SQL por campo dinámico (Entrega 3):
+//   se guardan tipadas (texto/número/fecha/booleano/json) contra FC_ID.
+async function ensureFormulariosAtencionSchema(pool) {
+  const stmts = [
+    // Cabecera del formulario — agrupa versiones, no se edita contenido aquí.
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORMULARIOS (
+  FR_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FR_CODIGO NVARCHAR(60) NOT NULL,
+  FR_NOMBRE NVARCHAR(200) NOT NULL,
+  FR_DESCRIPCION NVARCHAR(MAX) NULL,
+  FR_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('borrador'),
+  FR_ACTIVO BIT NOT NULL DEFAULT 1,
+  FR_CREADO_POR INT NULL,
+  FR_CREADO_POR_NOMBRE NVARCHAR(160) NULL,
+  FR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  FR_ACTUALIZADO_POR INT NULL,
+  FR_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT CK_CCF_FR_ESTADO CHECK (FR_ESTADO IN ('borrador','publicado','inactivo','archivado'))
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCF_FR_CODIGO')
+CREATE UNIQUE INDEX UQ_CCF_FR_CODIGO ON dbo.CCF_FORMULARIOS(FR_CODIGO);`,
+
+    // Modo del formulario: 'interno' (default, comportamiento original — el
+    // agente lo llena desde la bandeja del Contact Center, con su sesión
+    // normal) o 'externo' (se expone además en una URL pública sin login,
+    // pensada para que VICIdial la abra directo al conectar una llamada,
+    // mismo espíritu que /crm?cliente=&agente=&agenteId= ya usado hoy). El
+    // token se genera solo cuando se activa modo externo (ver
+    // ccFormulariosController.setModoFormulario) — nunca antes, para no
+    // regalar URLs públicas de formularios que nunca se pensaron para eso.
+    `IF COL_LENGTH('dbo.CCF_FORMULARIOS', 'FR_MODO') IS NULL
+  ALTER TABLE dbo.CCF_FORMULARIOS ADD FR_MODO NVARCHAR(10) NOT NULL DEFAULT ('interno');`,
+    `IF COL_LENGTH('dbo.CCF_FORMULARIOS', 'FR_TOKEN_PUBLICO') IS NULL
+  ALTER TABLE dbo.CCF_FORMULARIOS ADD FR_TOKEN_PUBLICO NVARCHAR(64) NULL;`,
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CCF_FR_MODO')
+BEGIN
+  ALTER TABLE dbo.CCF_FORMULARIOS ADD CONSTRAINT CK_CCF_FR_MODO CHECK (FR_MODO IN ('interno','externo'));
+END`,
+    `IF OBJECT_ID('dbo.CCF_FORMULARIOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCF_FR_TOKEN_PUBLICO')
+CREATE UNIQUE INDEX UQ_CCF_FR_TOKEN_PUBLICO ON dbo.CCF_FORMULARIOS(FR_TOKEN_PUBLICO) WHERE FR_TOKEN_PUBLICO IS NOT NULL;`,
+
+    // Versión: la unidad real de contenido. FV_NUMERO es correlativo por
+    // formulario (1, 2, 3...). Solo una versión por formulario puede estar
+    // 'publicado' a la vez (se valida en el controller, no aquí, porque
+    // requiere lógica de "despublicar la anterior" en la misma transacción).
+    `IF OBJECT_ID('dbo.CCF_FORM_VERSIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_VERSIONES (
+  FV_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FV_FORMULARIO_ID INT NOT NULL,
+  FV_NUMERO INT NOT NULL,
+  FV_ESTADO NVARCHAR(20) NOT NULL DEFAULT ('borrador'),
+  FV_ROWVERSION ROWVERSION,
+  FV_CREADO_POR INT NULL,
+  FV_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  FV_PUBLICADO_POR INT NULL,
+  FV_PUBLICADO_POR_NOMBRE NVARCHAR(160) NULL,
+  FV_FECHA_PUBLICACION DATETIME NULL,
+  CONSTRAINT CK_CCF_FV_ESTADO CHECK (FV_ESTADO IN ('borrador','publicado','inactivo','archivado')),
+  CONSTRAINT FK_CCF_FV_FORMULARIO FOREIGN KEY (FV_FORMULARIO_ID) REFERENCES dbo.CCF_FORMULARIOS(FR_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CCF_FV_FORM_NUMERO UNIQUE (FV_FORMULARIO_ID, FV_NUMERO)
+);`,
+    // FV_ROWVERSION habilita optimistic locking real (SQL Server ROWVERSION,
+    // valor binario que cambia automático en cada UPDATE de la fila) — el
+    // constructor manda el rowversion que tenía al abrir el borrador, y el
+    // UPDATE falla si alguien más ya lo cambió mientras tanto (ver
+    // ccFormulariosController.actualizarVersion).
+    `IF OBJECT_ID('dbo.CCF_FORM_VERSIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FV_FORMULARIO')
+CREATE INDEX IX_CCF_FV_FORMULARIO ON dbo.CCF_FORM_VERSIONES(FV_FORMULARIO_ID);`,
+
+    // Sección: agrupador visual dentro de una versión.
+    `IF OBJECT_ID('dbo.CCF_FORM_SECCIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_SECCIONES (
+  FS_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FS_VERSION_ID INT NOT NULL,
+  FS_CODIGO NVARCHAR(60) NULL,
+  FS_TITULO NVARCHAR(200) NOT NULL,
+  FS_DESCRIPCION NVARCHAR(MAX) NULL,
+  FS_ORDEN INT NOT NULL DEFAULT 0,
+  FS_VISIBLE BIT NOT NULL DEFAULT 1,
+  FS_COLAPSABLE BIT NOT NULL DEFAULT 0,
+  FS_ESTADO_INICIAL_COLAPSADO BIT NOT NULL DEFAULT 0,
+  FS_CONFIG_JSON NVARCHAR(MAX) NULL,
+  CONSTRAINT FK_CCF_FS_VERSION FOREIGN KEY (FS_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_SECCIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FS_VERSION')
+CREATE INDEX IX_CCF_FS_VERSION ON dbo.CCF_FORM_SECCIONES(FS_VERSION_ID, FS_ORDEN);`,
+
+    // Campo: la unidad atómica del formulario. FC_TIPO se resuelve en el
+    // frontend contra un registry de componentes (ComponentRegistry), nunca
+    // un switch disperso. FC_CATALOGO_FUENTE + FC_CATALOGO_CONFIG_JSON
+    // describen de dónde salen las opciones cuando FC_TIPO usa catálogo
+    // (ver CatalogProvider en el frontend, Entrega 2).
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPOS', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_CAMPOS (
+  FC_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FC_SECCION_ID INT NOT NULL,
+  FC_CODIGO NVARCHAR(80) NOT NULL,
+  FC_TIPO NVARCHAR(30) NOT NULL,
+  FC_ETIQUETA NVARCHAR(200) NOT NULL,
+  FC_DESCRIPCION NVARCHAR(MAX) NULL,
+  FC_PLACEHOLDER NVARCHAR(200) NULL,
+  FC_AYUDA NVARCHAR(500) NULL,
+  FC_OBLIGATORIO BIT NOT NULL DEFAULT 0,
+  FC_SOLO_LECTURA BIT NOT NULL DEFAULT 0,
+  FC_VISIBLE BIT NOT NULL DEFAULT 1,
+  FC_VALOR_PREDETERMINADO NVARCHAR(MAX) NULL,
+  FC_ORDEN INT NOT NULL DEFAULT 0,
+  FC_ANCHO NVARCHAR(20) NOT NULL DEFAULT ('completo'),
+  FC_LONGITUD_MIN INT NULL,
+  FC_LONGITUD_MAX INT NULL,
+  FC_VALOR_MIN DECIMAL(18,4) NULL,
+  FC_VALOR_MAX DECIMAL(18,4) NULL,
+  FC_REGEX NVARCHAR(300) NULL,
+  FC_CATALOGO_FUENTE NVARCHAR(30) NULL,
+  FC_CATALOGO_CONFIG_JSON NVARCHAR(MAX) NULL,
+  FC_CONFIG_JSON NVARCHAR(MAX) NULL,
+  CONSTRAINT CK_CCF_FC_ANCHO CHECK (FC_ANCHO IN ('completo','medio','tercio')),
+  CONSTRAINT FK_CCF_FC_SECCION FOREIGN KEY (FC_SECCION_ID) REFERENCES dbo.CCF_FORM_SECCIONES(FS_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPOS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FC_SECCION')
+CREATE INDEX IX_CCF_FC_SECCION ON dbo.CCF_FORM_CAMPOS(FC_SECCION_ID, FC_ORDEN);`,
+
+    // Opciones estáticas (lista desplegable, radio, checkbox, multiselección)
+    // cuando FC_CATALOGO_FUENTE es NULL o 'estatico'.
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPO_OPCIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_CAMPO_OPCIONES (
+  FO_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FO_CAMPO_ID INT NOT NULL,
+  FO_VALOR NVARCHAR(200) NOT NULL,
+  FO_ETIQUETA NVARCHAR(200) NOT NULL,
+  FO_ORDEN INT NOT NULL DEFAULT 0,
+  FO_ACTIVO BIT NOT NULL DEFAULT 1,
+  CONSTRAINT FK_CCF_FO_CAMPO FOREIGN KEY (FO_CAMPO_ID) REFERENCES dbo.CCF_FORM_CAMPOS(FC_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_CAMPO_OPCIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FO_CAMPO')
+CREATE INDEX IX_CCF_FO_CAMPO ON dbo.CCF_FORM_CAMPO_OPCIONES(FO_CAMPO_ID, FO_ORDEN);`,
+
+    // Reglas dinámicas (Entrega 2: motor de reglas evaluado en el
+    // DynamicFormRenderer). Se guardan como filas simples condición->acción
+    // en vez de un único JSON gigante, para poder auditarlas/listarlas
+    // individualmente en el constructor.
+    `IF OBJECT_ID('dbo.CCF_FORM_REGLAS', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_REGLAS (
+  FL_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FL_VERSION_ID INT NOT NULL,
+  FL_NOMBRE NVARCHAR(200) NULL,
+  FL_ORDEN INT NOT NULL DEFAULT 0,
+  FL_ACTIVO BIT NOT NULL DEFAULT 1,
+  FL_CAMPO_ORIGEN_ID INT NOT NULL,
+  FL_OPERADOR NVARCHAR(20) NOT NULL,
+  FL_VALOR_COMPARACION NVARCHAR(MAX) NULL,
+  FL_ACCION NVARCHAR(30) NOT NULL,
+  FL_CAMPO_DESTINO_ID INT NULL,
+  FL_SECCION_DESTINO_ID INT NULL,
+  FL_VALOR_ACCION NVARCHAR(MAX) NULL,
+  CONSTRAINT CK_CCF_FL_OPERADOR CHECK (FL_OPERADOR IN ('eq','ne','gt','lt','gte','lte','contains','not_contains','empty','not_empty','in','not_in')),
+  CONSTRAINT CK_CCF_FL_ACCION CHECK (FL_ACCION IN ('show_field','hide_field','require_field','optional_field','enable_field','disable_field','set_value','clear_value','show_section','hide_section','load_catalog')),
+  CONSTRAINT FK_CCF_FL_VERSION FOREIGN KEY (FL_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FL_CAMPO_ORIGEN FOREIGN KEY (FL_CAMPO_ORIGEN_ID) REFERENCES dbo.CCF_FORM_CAMPOS(FC_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_REGLAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FL_VERSION')
+CREATE INDEX IX_CCF_FL_VERSION ON dbo.CCF_FORM_REGLAS(FL_VERSION_ID);`,
+
+    // Asignación: Campaña (+ Canal opcional) -> Versión publicada. Un NULL en
+    // FA_CANAL_ID = aplica a todos los canales de esa campaña que no tengan
+    // una asignación más específica (estrategia de resolución determinista:
+    // ver ccFormulariosController.resolverAsignacion — primero intenta
+    // canal exacto, si no hay cae al NULL "cualquier canal" de la campaña).
+    // El índice filtrado único evita 2 asignaciones ACTIVAS ambiguas para el
+    // mismo par (campaña, canal).
+    `IF OBJECT_ID('dbo.CCF_FORM_ASIGNACIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_ASIGNACIONES (
+  FA_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FA_CAMPANIA_ID INT NOT NULL,
+  FA_CANAL_ID INT NULL,
+  FA_FORM_VERSION_ID INT NOT NULL,
+  FA_ACTIVO BIT NOT NULL DEFAULT 1,
+  FA_CREADO_POR INT NULL,
+  FA_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCF_FA_CAMPANIA FOREIGN KEY (FA_CAMPANIA_ID) REFERENCES dbo.CCO_CAMPANIAS(CM2_ID),
+  CONSTRAINT FK_CCF_FA_CANAL FOREIGN KEY (FA_CANAL_ID) REFERENCES dbo.CCO_CANALES(CN_ID),
+  CONSTRAINT FK_CCF_FA_VERSION FOREIGN KEY (FA_FORM_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_ASIGNACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_CCF_FA_CAMPANIA_CANAL_ACTIVA')
+CREATE UNIQUE INDEX UQ_CCF_FA_CAMPANIA_CANAL_ACTIVA ON dbo.CCF_FORM_ASIGNACIONES(FA_CAMPANIA_ID, FA_CANAL_ID) WHERE FA_ACTIVO = 1;`,
+    `IF OBJECT_ID('dbo.CCF_FORM_ASIGNACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FA_VERSION')
+CREATE INDEX IX_CCF_FA_VERSION ON dbo.CCF_FORM_ASIGNACIONES(FA_FORM_VERSION_ID);`,
+
+    // Tipificaciones permitidas por formulario: restringe, para las
+    // interacciones que usaron ESTE formulario, cuáles de las tipificaciones
+    // de la(s) campaña(s) asignadas son válidas al cerrar (ver
+    // ccFormulariosController.listTipificacionesDeCampanias/
+    // listTipificacionesPermitidas). Vive a nivel de FORMULARIO (no de
+    // versión): la restricción de tipificaciones es una decisión de negocio
+    // sobre el formulario como concepto, no algo que deba re-configurarse en
+    // cada nueva versión. Sin filas para un formulario = todas las
+    // tipificaciones de sus campañas asignadas son válidas (compatibilidad,
+    // mismo criterio que getUserAllowedActions en moduleAccess.js).
+    `IF OBJECT_ID('dbo.CCF_FORM_TIPIFICACIONES', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_TIPIFICACIONES (
+  FT_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FT_FORMULARIO_ID INT NOT NULL,
+  FT_TIPIFICACION_ID INT NOT NULL,
+  CONSTRAINT FK_CCF_FT_FORMULARIO FOREIGN KEY (FT_FORMULARIO_ID) REFERENCES dbo.CCF_FORMULARIOS(FR_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FT_TIPIFICACION FOREIGN KEY (FT_TIPIFICACION_ID) REFERENCES dbo.CCO_TIPIFICACIONES(CT_ID) ON DELETE CASCADE,
+  CONSTRAINT UQ_CCF_FT_FORM_TIPIF UNIQUE (FT_FORMULARIO_ID, FT_TIPIFICACION_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_TIPIFICACIONES', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FT_FORMULARIO')
+CREATE INDEX IX_CCF_FT_FORMULARIO ON dbo.CCF_FORM_TIPIFICACIONES(FT_FORMULARIO_ID);`,
+
+    // Respuestas capturadas por el agente (o desde el modo externo) durante
+    // una atención real — una fila por campo respondido. Tipada en vez de
+    // un solo NVARCHAR(MAX) por fila (ver objetivo de reportería del
+    // diseño original): cada respuesta llena UNA sola de las 4 columnas de
+    // valor según FC_TIPO, para que se pueda filtrar/agrupar por reportes
+    // sin tener que deserializar nada. FIR_VERSION_ID se guarda aparte de
+    // FIR_CAMPO_ID a propósito: aunque el campo ya "sabe" su versión via
+    // FK, guardarlo aquí también deja la fila autocontenida para reportería
+    // aunque el formulario se reestructure después.
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_FORM_RESPUESTAS', 'U') IS NULL
+CREATE TABLE dbo.CCF_INTERACCION_FORM_RESPUESTAS (
+  FIR_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FIR_INTERACCION_ID INT NOT NULL,
+  FIR_VERSION_ID INT NOT NULL,
+  FIR_CAMPO_ID INT NOT NULL,
+  FIR_VALOR_TEXTO NVARCHAR(MAX) NULL,
+  FIR_VALOR_NUMERO DECIMAL(18,4) NULL,
+  FIR_VALOR_FECHA DATETIME NULL,
+  FIR_VALOR_BOOLEANO BIT NULL,
+  FIR_VALOR_JSON NVARCHAR(MAX) NULL,
+  FIR_CREADO_POR INT NULL,
+  FIR_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
+  FIR_ACTUALIZADO_POR INT NULL,
+  FIR_FECHA_ACTUALIZACION DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCF_FIR_INTERACCION FOREIGN KEY (FIR_INTERACCION_ID) REFERENCES dbo.CCO_INTERACCIONES(CI_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FIR_VERSION FOREIGN KEY (FIR_VERSION_ID) REFERENCES dbo.CCF_FORM_VERSIONES(FV_ID),
+  CONSTRAINT FK_CCF_FIR_CAMPO FOREIGN KEY (FIR_CAMPO_ID) REFERENCES dbo.CCF_FORM_CAMPOS(FC_ID),
+  CONSTRAINT UQ_CCF_FIR_INTERACCION_CAMPO UNIQUE (FIR_INTERACCION_ID, FIR_CAMPO_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_FORM_RESPUESTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FIR_INTERACCION')
+CREATE INDEX IX_CCF_FIR_INTERACCION ON dbo.CCF_INTERACCION_FORM_RESPUESTAS(FIR_INTERACCION_ID);`,
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_FORM_RESPUESTAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FIR_CAMPO')
+CREATE INDEX IX_CCF_FIR_CAMPO ON dbo.CCF_INTERACCION_FORM_RESPUESTAS(FIR_CAMPO_ID);`,
+
+    // Catálogo de acciones sugeridas DESPUÉS de guardar un registro del
+    // formulario — arquitectura desacoplada de ejecutores (como pedía el
+    // diseño original: CREATE_FOLLOWUP, SEND_WHATSAPP, etc.) pero sin
+    // integrar proveedores externos todavía. Por ahora cada acción es una
+    // sugerencia visual que el agente marca como hecha manualmente (ver
+    // CCF_INTERACCION_ACCIONES_EJECUTADAS) — el "handler" real que dispare
+    // un WhatsApp/webhook de verdad es un paso posterior, ejecutado fuera de
+    // la transacción de guardado (outbox), cuando se conecte un proveedor.
+    `IF OBJECT_ID('dbo.CCF_FORM_ACCIONES_POST', 'U') IS NULL
+CREATE TABLE dbo.CCF_FORM_ACCIONES_POST (
+  FAP_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FAP_FORMULARIO_ID INT NOT NULL,
+  FAP_TIPO NVARCHAR(30) NOT NULL,
+  FAP_ETIQUETA NVARCHAR(200) NOT NULL,
+  FAP_DESCRIPCION NVARCHAR(500) NULL,
+  FAP_ORDEN INT NOT NULL DEFAULT 0,
+  FAP_ACTIVO BIT NOT NULL DEFAULT 1,
+  CONSTRAINT CK_CCF_FAP_TIPO CHECK (FAP_TIPO IN ('create_followup','return_to_queue','send_whatsapp','send_sms','send_email','call_webhook','change_customer_status','change_stage','custom')),
+  CONSTRAINT FK_CCF_FAP_FORMULARIO FOREIGN KEY (FAP_FORMULARIO_ID) REFERENCES dbo.CCF_FORMULARIOS(FR_ID) ON DELETE CASCADE
+);`,
+    `IF OBJECT_ID('dbo.CCF_FORM_ACCIONES_POST', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FAP_FORMULARIO')
+CREATE INDEX IX_CCF_FAP_FORMULARIO ON dbo.CCF_FORM_ACCIONES_POST(FAP_FORMULARIO_ID);`,
+
+    // Bitácora de qué acción se marcó/ejecutó para qué interacción — el
+    // agente la tilda manualmente en el modal de "después de guardar"; si en
+    // el futuro un handler real la dispara sola, escribe aquí igual.
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS', 'U') IS NULL
+CREATE TABLE dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS (
+  FAE_ID INT IDENTITY(1,1) PRIMARY KEY,
+  FAE_INTERACCION_ID INT NOT NULL,
+  FAE_ACCION_ID INT NOT NULL,
+  FAE_USUARIO_ID INT NULL,
+  FAE_FECHA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCF_FAE_INTERACCION FOREIGN KEY (FAE_INTERACCION_ID) REFERENCES dbo.CCO_INTERACCIONES(CI_ID) ON DELETE CASCADE,
+  CONSTRAINT FK_CCF_FAE_ACCION FOREIGN KEY (FAE_ACCION_ID) REFERENCES dbo.CCF_FORM_ACCIONES_POST(FAP_ID)
+);`,
+    `IF OBJECT_ID('dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCF_FAE_INTERACCION')
+CREATE INDEX IX_CCF_FAE_INTERACCION ON dbo.CCF_INTERACCION_ACCIONES_EJECUTADAS(FAE_INTERACCION_ID);`,
+  ];
+  for (const q of stmts) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ Formularios de Atención schema:', err.message); }
+  }
+  logger.info('✅ Esquema de Formularios de Atención asegurado');
 }
 
 // Email Marketing: campañas de correo masivo sobre los contactos que ya existen
@@ -7115,6 +8309,24 @@ END
 `);
   } catch (err) {
     console.warn('⚠️ ClienteProductosServiciosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS (
+    CCPS_ID               INT IDENTITY(1,1) PRIMARY KEY,
+    CCPS_CONT_ID          INT NOT NULL,
+    CCPS_PS_ID            INT NOT NULL,
+    CCPS_FECHA_ASIGNACION DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_CRM_CONTACTO_PS UNIQUE (CCPS_CONT_ID, CCPS_PS_ID)
+  );
+  CREATE INDEX IX_CCPS_CONTACTO ON dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS(CCPS_CONT_ID);
+END
+`);
+  } catch (err) {
+    console.warn('⚠️ CrmContactoProductosServiciosSchema:', err.message);
   }
 
   // Columnas fiscales (costo + claves SAT) para poder cotizar y facturar.

@@ -5,7 +5,7 @@ async function getNodo(pool, codigoONodoId) {
   const rs = await pool.request()
     .input('val', esNumero ? sql.Int : sql.NVarChar, esNumero ? Number(codigoONodoId) : codigoONodoId)
     .query(`
-      SELECT NODO_ID as id, NODO_CODIGO as codigo, NODO_TEXTO as texto, NODO_TIPO as tipo, NODO_CATEGORIA_ID as categoriaId
+      SELECT NODO_ID as id, NODO_CODIGO as codigo, NODO_TEXTO as texto, NODO_TIPO as tipo, NODO_CATEGORIA_ID as categoriaId, NODO_GENERA as genera
       FROM CHATBOT_NODOS
       WHERE NODO_ACTIVO = 1 AND ${esNumero ? 'NODO_ID = @val' : 'NODO_CODIGO = @val'}
     `);

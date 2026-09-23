@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Briefcase, FileText, X, Users } from 'lucide-react'
+import { Briefcase, FileText, X, Users, UserCheck, Package, ChevronDown, PackagePlus } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { api } from '@/lib/axios'
 import { crmService } from '@/services/crm.service'
+import { productoServicioService } from '@/services/productoServicio.service'
+import { CLIENTE_ESTATUS_COLORES, type ClienteEstatusColor } from '@/types/crm.types'
+import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import type { CRMOportunidad } from '@/types/crm.types'
+
+const RECURRENCIA_LABEL: Record<string, string> = { MENSUAL: '/mes', ANUAL: '/año', UNICO: 'único' }
 
 type Rol = 'lider' | 'miembro' | 'revisor'
 interface Integrante { nombre: string; rol: Rol }
@@ -27,6 +32,29 @@ export function CRMGenerarProyectoModal({
   const [integrantes, setIntegrantes] = useState<Integrante[]>(
     opo.asignadoNombre ? [{ nombre: opo.asignadoNombre, rol: 'lider' }] : []
   )
+
+  // Alta de cliente en el mismo flujo. Solo aplica si la oportunidad tiene un
+  // contacto; el backend ignora el alta si ese contacto ya es cliente formal.
+  const puedeAlta = opo.contactoId != null
+  const [darDeAlta, setDarDeAlta] = useState(puedeAlta)
+  const [tipoCliente, setTipoCliente] = useState('')
+  const [productosServiciosIds, setProductosServiciosIds] = useState<number[]>([])
+  const [seleccionPS, setSeleccionPS] = useState('')
+  const [responsableCliente, setResponsableCliente] = useState('')
+  const [estatusCliente, setEstatusCliente] = useState<ClienteEstatusColor>('verde')
+
+  const { data: usuariosSimple } = useUsuariosSimple()
+
+  const { data: catalogoPS = [] } = useQuery({
+    queryKey: ['productos-servicios', 'activos'],
+    queryFn: () => productoServicioService.getAll(),
+  })
+  const disponiblesPS = catalogoPS.filter((c) => c.activo && !productosServiciosIds.includes(c.id))
+  const agregarPS = (id: number) => {
+    setProductosServiciosIds((prev) => [...prev, id])
+    setSeleccionPS('')
+  }
+  const quitarPS = (id: number) => setProductosServiciosIds((prev) => prev.filter((v) => v !== id))
 
   const { data: usuarios = [] } = useQuery({
     queryKey: ['usuarios-asignables'],
@@ -59,9 +87,21 @@ export function CRMGenerarProyectoModal({
     setIntegrantes((prev) => prev.map((i) => (i.nombre === nombreUsuario ? { ...i, rol } : i)))
 
   const crear = useMutation({
-    mutationFn: () => crmService.generarProyecto(opo.id, nombre.trim(), integrantes),
+    mutationFn: () => crmService.generarProyecto(
+      opo.id,
+      nombre.trim(),
+      integrantes,
+      puedeAlta && darDeAlta
+        ? {
+            tipoCliente: tipoCliente || undefined,
+            productosServiciosIds: productosServiciosIds.length ? productosServiciosIds : undefined,
+            responsableId: responsableCliente ? Number(responsableCliente) : undefined,
+            estatusCliente,
+          }
+        : undefined,
+    ),
     onSuccess: (data) => {
-      toast.success('Proyecto creado')
+      toast.success(data.altaCliente ? 'Cliente dado de alta y proyecto creado' : 'Proyecto creado')
       onCreated(data.proyectoId)
     },
     onError: (e: unknown) => {
@@ -78,7 +118,9 @@ export function CRMGenerarProyectoModal({
             <Briefcase className="h-4 w-4 text-white" />
           </div>
           <div>
-            <p className="text-[0.95rem] font-bold text-white leading-tight">¿Crear proyecto de seguimiento?</p>
+            <p className="text-[0.95rem] font-bold text-white leading-tight">
+              {puedeAlta && darDeAlta ? 'Convertir en cliente y crear proyecto' : '¿Crear proyecto de seguimiento?'}
+            </p>
             <p className="text-[0.7rem] text-white/70 mt-0.5">
               Se generará en Proyectos con 2 tareas iniciales: "Seguimiento al cliente" y "Preparar propuesta"
             </p>
@@ -98,6 +140,111 @@ export function CRMGenerarProyectoModal({
             autoFocus
           />
         </div>
+
+        {puedeAlta && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={darDeAlta}
+                onChange={(e) => setDarDeAlta(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-[0.8rem] font-semibold text-gray-700 flex items-center gap-1.5">
+                <UserCheck className="h-3.5 w-3.5 text-brand" />
+                También dar de alta como cliente
+              </span>
+            </label>
+            <p className="mt-1 ml-6 text-[0.68rem] text-gray-400">
+              Marca el contacto de la oportunidad como cliente formal, con seguimiento inicial y tarea de bienvenida.
+              Si ya es cliente, este paso se omite.
+            </p>
+
+            {darDeAlta && (
+              <div className="mt-3 ml-6 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Tipo de cliente</label>
+                  <input value={tipoCliente} onChange={(e) => setTipoCliente(e.target.value)} className="field-input text-sm" placeholder="Persona física / moral…" maxLength={50} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Ejecutivo responsable</label>
+                  <select value={responsableCliente} onChange={(e) => setResponsableCliente(e.target.value)} className="field-input text-sm">
+                    <option value="">Sin asignar</option>
+                    {usuariosSimple?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1 block text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Producto o servicio contratado</label>
+
+                  {productosServiciosIds.length > 0 && (
+                    <div className="mb-2 space-y-1">
+                      {productosServiciosIds.map((id) => {
+                        const ps = catalogoPS.find((c) => c.id === id)
+                        if (!ps) return null
+                        return (
+                          <div key={id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5">
+                            <span className="flex items-center gap-1.5 text-[0.78rem] font-medium text-gray-700 truncate">
+                              <Package className="h-3.5 w-3.5 text-brand flex-shrink-0" />
+                              {ps.nombre}
+                              {ps.precio > 0 && <span className="text-[0.68rem] text-gray-400">${ps.precio.toLocaleString('es-MX')}{RECURRENCIA_LABEL[ps.recurrencia]}</span>}
+                            </span>
+                            <button type="button" onClick={() => quitarPS(id)} className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        value={seleccionPS}
+                        onChange={(e) => setSeleccionPS(e.target.value)}
+                        className="field-input w-full appearance-none text-sm pr-8"
+                      >
+                        <option value="">Selecciona un producto o servicio…</option>
+                        {disponiblesPS.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre}{c.precio > 0 ? ` — $${c.precio.toLocaleString('es-MX')}${RECURRENCIA_LABEL[c.recurrencia]}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!seleccionPS}
+                      onClick={() => seleccionPS && agregarPS(Number(seleccionPS))}
+                      className="inline-flex items-center gap-1 rounded-lg bg-brand/10 px-3 py-1.5 text-[0.75rem] font-semibold text-brand transition-colors hover:bg-brand/20 disabled:opacity-40"
+                    >
+                      <PackagePlus className="h-3.5 w-3.5" /> Agregar
+                    </button>
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1 block text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Estatus</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CLIENTE_ESTATUS_COLORES.map((c) => (
+                      <button
+                        key={c.key}
+                        type="button"
+                        onClick={() => setEstatusCliente(c.key)}
+                        className={clsx(
+                          'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[0.68rem] font-semibold transition-colors',
+                          estatusCliente === c.key ? `${c.bg} ${c.text} border-transparent` : 'border-gray-200 text-gray-400',
+                        )}
+                      >
+                        <span className={clsx('h-1.5 w-1.5 rounded-full', c.dot)} /> {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="field-label flex items-center gap-1.5">
@@ -172,7 +319,8 @@ export function CRMGenerarProyectoModal({
             disabled={!nombre.trim() || crear.isPending}
             className="flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-[0.78rem] font-bold text-white disabled:opacity-50 hover:bg-brand-dark transition-colors"
           >
-            {crear.isPending && <Spinner size="sm" />} Crear proyecto
+            {crear.isPending && <Spinner size="sm" />}
+            {puedeAlta && darDeAlta ? 'Crear cliente y proyecto' : 'Crear proyecto'}
           </button>
         </div>
       </div>

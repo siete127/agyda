@@ -12,6 +12,32 @@ const norm = <T>(data: unknown, parse: (r: Record<string, unknown>) => T): T[] =
   return (arr as Record<string, unknown>[]).map(parse)
 }
 
+// Vista comercial de solo lectura que trae el expediente del cliente: sus
+// oportunidades del pipeline con las cotizaciones de cada una.
+export interface ExpedienteCotizacion {
+  id: number
+  opoId: number
+  folio: string | null
+  titulo: string | null
+  estatus: 'borrador' | 'enviada' | 'aprobada' | 'rechazada' | 'facturada'
+  total: number | null
+  semaforo: string | null
+  fecha: string | null
+  fechaVto: string | null
+}
+export interface ExpedienteOportunidad {
+  id: number
+  nombre: string
+  etapa: 'prospecto' | 'contactado' | 'propuesta' | 'negociacion' | 'ganado' | 'perdido'
+  valor: number | null
+  prioridad: 0 | 1 | 2 | 3
+  fecha: string | null
+  fechaCierre: string | null
+  proyectoId: number | null
+  asignadoNombre: string | null
+  cotizaciones: ExpedienteCotizacion[]
+}
+
 export const crmService = {
   // ── Contactos ──
   getContactos: async (q?: string): Promise<CRMContacto[]> => {
@@ -32,24 +58,36 @@ export const crmService = {
   },
 
   // ── Clientes (Atención al Cliente, sobre CRM_CONTACTOS) ──
-  // Sin filtro esCliente: muestra TODOS los contactos del CRM compartido con
-  // Ventas — los que aún no tienen alta formal se distinguen en la UI y se
-  // completan al editar su ficha (crmContactosController.altaCliente).
+  // conSeguimiento=1: solo contactos que ya "entraron" al radar de Atención
+  // al Cliente — cliente dado de alta o con una oportunidad ya convertida a
+  // proyecto (ver crmContactosController.getAll). Antes traía TODO el CRM
+  // sin filtrar, incluidos contactos sueltos del formulario web que nunca
+  // pasaron por el flujo de alta/generar-proyecto.
   getClientes: async (q?: string): Promise<CRMContacto[]> => {
-    const { data } = await api.get('/crm/contactos', { params: { ...(q ? { q } : {}) } })
+    const { data } = await api.get('/crm/contactos', { params: { conSeguimiento: '1', ...(q ? { q } : {}) } })
     return norm(data?.data ?? data, parseCRMContacto)
   },
   altaCliente: async (id: number, body: {
     tipoCliente?: string; direccion?: string; productoServicio?: string; responsableId?: number
     estatusCliente?: string; medioContacto?: string; observacionesIniciales?: string
+    tipoClienteId?: number; segmentoId?: number; categoriaId?: number; industriaId?: number
+    clasificacionId?: number; etiquetaIds?: number[]
+    generarAccesoPortal?: boolean; passwordPortal?: string; tipoAccesoId?: number; enviarInvitacion?: boolean
   }) => {
     const { data } = await api.put(`/crm/contactos/${id}/alta-cliente`, body)
     return data
   },
-  getExpediente: async (id: number): Promise<CRMContacto & { conteos: { documentos: number; pagos: number; encuestas: number } }> => {
+  getExpediente: async (id: number): Promise<CRMContacto & {
+    conteos: { documentos: number; pagos: number; encuestas: number; oportunidades: number }
+    oportunidades: ExpedienteOportunidad[]
+  }> => {
     const { data } = await api.get(`/crm/contactos/${id}/expediente`)
     const raw = data?.data ?? data
-    return { ...parseCRMContacto(raw), conteos: raw.conteos }
+    return {
+      ...parseCRMContacto(raw),
+      conteos: raw.conteos,
+      oportunidades: Array.isArray(raw.oportunidades) ? raw.oportunidades : [],
+    }
   },
 
   // ── Oportunidades ──
@@ -69,8 +107,17 @@ export const crmService = {
     const { data } = await api.delete(`/crm/oportunidades/${id}`)
     return data
   },
-  generarProyecto: (opoId: number, nombreProyecto: string, miembros: { nombre: string; rol: 'lider' | 'miembro' | 'revisor' }[]) =>
-    api.post(`/crm/oportunidades/${opoId}/generar-proyecto`, { nombreProyecto, miembros }).then(r => r.data as { success: boolean; proyectoId: number }),
+  generarProyecto: (
+    opoId: number,
+    nombreProyecto: string,
+    miembros: { nombre: string; rol: 'lider' | 'miembro' | 'revisor' }[],
+    datosCliente?: {
+      tipoCliente?: string; productosServiciosIds?: number[]; responsableId?: number
+      estatusCliente?: string; observacionesIniciales?: string
+    },
+  ) =>
+    api.post(`/crm/oportunidades/${opoId}/generar-proyecto`, { nombreProyecto, miembros, datosCliente })
+      .then(r => r.data as { success: boolean; proyectoId: number; altaCliente?: boolean; contactoId?: number | null }),
   getActividades: async (opoId: number): Promise<CRMActividad[]> => {
     const { data } = await api.get(`/crm/oportunidades/${opoId}/actividades`)
     return norm(data?.data ?? data, parseCRMActividad)

@@ -1,3 +1,27 @@
+export interface ReglaComision {
+  id: number
+  nombre: string
+  formula: string
+  orden: number
+  activa: boolean
+}
+
+export interface CrearReglaComisionPayload {
+  nombre: string
+  formula: string
+}
+
+export interface ActualizarReglaComisionPayload {
+  nombre: string
+  formula: string
+  activa: boolean
+}
+
+export interface DesgloseComision {
+  nombre: string
+  monto: number
+}
+
 export interface AsesorComisiones {
   nombre: string
   neusId: number | null
@@ -9,6 +33,7 @@ export interface AsesorComisiones {
   metaUnidades: number | null
   metaMonto: number | null
   pctCumplimiento: number | null
+  desglose: DesgloseComision[]
 }
 
 export interface QuincenaCubierta {
@@ -26,6 +51,7 @@ export interface KpisComisiones {
   periodo: string
   quincenasCubiertas: QuincenaCubierta[]
   rangoProvisional: RangoProvisional | null
+  reglas: ReglaComision[]
   asesores: AsesorComisiones[]
   totales: {
     ventasNomina: number

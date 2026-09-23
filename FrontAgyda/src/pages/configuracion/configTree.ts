@@ -577,15 +577,7 @@ export const CONFIG_TREE: ConfigNode[] = [
     description: 'Clientes, prospectos, pipeline y automatizaciones comerciales',
     children: [
       {
-        key: 'clientes-crm', label: 'Clientes',
-        children: [
-          { key: 'tipos-cliente-crm', label: 'Tipos' },
-          { key: 'segmentos-crm', label: 'Segmentos' },
-          { key: 'categorias-cliente-crm', label: 'Categorías' },
-          { key: 'industrias-crm', label: 'Industrias' },
-          { key: 'clasificaciones-crm', label: 'Clasificaciones' },
-          { key: 'etiquetas-cliente-crm', label: 'Etiquetas' },
-        ],
+        key: 'clientes-crm', label: 'Clientes', screen: 'clientes-crm-resumen',
       },
       { key: 'prospectos', label: 'Prospectos' },
       { key: 'fuentes-lead', label: 'Fuentes de lead' },
@@ -595,6 +587,16 @@ export const CONFIG_TREE: ConfigNode[] = [
         children: [
           { key: 'ventas', label: 'Margen e IVA', screen: 'ventas' },
           { key: 'facturacion', label: 'Facturación (emisor, CSD, PAC)', screen: 'facturacion' },
+        ],
+      },
+      {
+        key: 'comercial-config', label: 'Metas, comisiones e incentivos',
+        children: [
+          { key: 'metas-config', label: 'Metas', screen: 'metas-config' },
+          { key: 'comisiones-config', label: 'Comisiones', screen: 'comisiones-config' },
+          { key: 'incentivos-config', label: 'Incentivos', screen: 'incentivos-config' },
+          { key: 'prospeccion-config', label: 'Prospección', screen: 'prospeccion-config' },
+          { key: 'email-marketing-config', label: 'Email Marketing', screen: 'email-marketing-config' },
         ],
       },
       {
@@ -653,6 +655,8 @@ export const CONFIG_TREE: ConfigNode[] = [
         key: 'omnicanal', label: 'Configuraciones del módulo de Asesor',
         children: [
           { key: 'cc-skills', label: 'Campañas y skills', screen: 'cc-skills' },
+          { key: 'cc-formularios', label: 'Formularios de Atención', screen: 'cc-formularios' },
+          { key: 'cc-postulantes', label: 'Gestión de postulantes', screen: 'cc-postulantes' },
           { key: 'cc-config', label: 'SLA, ACW y horario', screen: 'cc-config' },
           { key: 'cc-simulador', label: 'Simulador de prueba', screen: 'cc-simulador' },
         ],

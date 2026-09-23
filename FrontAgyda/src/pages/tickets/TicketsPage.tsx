@@ -981,7 +981,7 @@ function VistaKanban({ tickets, onOpen }: { tickets: Ticket[]; onOpen: (t: Ticke
 }
 
 /* ── Tarjeta de ticket (grid) ── */
-function TicketCard({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
+function TicketCard({ ticket }: { ticket: Ticket }) {
   const fmtFecha = (iso: string | null) => {
     if (!iso) return null
     return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -989,9 +989,8 @@ function TicketCard({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) 
   const fechaCreacion = fmtFecha(ticket.fechaCreacion)
 
   return (
-    <button
-      onClick={onOpen}
-      className="group flex flex-col items-center gap-2.5 rounded-2xl border border-surface-border bg-card px-4 py-5 text-center transition-colors hover:border-brand/30"
+    <div
+      className="group flex flex-col items-center gap-2.5 rounded-2xl border border-surface-border bg-card px-4 py-5 text-center transition-colors"
     >
       <span className="text-[0.65rem] font-mono font-bold text-ink-tertiary">#{ticket.id}</span>
 
@@ -1027,7 +1026,7 @@ function TicketCard({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) 
         {ticket.rating !== null && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />}
         <MessageCircle className="h-3.5 w-3.5" />
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -1822,7 +1821,7 @@ function formatDuracion(minutos: number | null) {
   return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
-function TablaTickets({ tickets }: { tickets: Ticket[] }) {
+function TablaTickets({ tickets, onOpen }: { tickets: Ticket[]; onOpen: (t: Ticket) => void }) {
   return (
     <div className="rounded-2xl border border-surface-border bg-card overflow-x-auto">
       <table className="w-full text-[0.78rem]">
@@ -1843,7 +1842,11 @@ function TablaTickets({ tickets }: { tickets: Ticket[] }) {
         </thead>
         <tbody className="divide-y divide-surface-border/60">
           {tickets.map((t) => (
-            <tr key={t.id} className="hover:bg-surface transition-colors">
+            <tr
+              key={t.id}
+              onClick={() => onOpen(t)}
+              className="cursor-pointer hover:bg-surface transition-colors"
+            >
               <td className="px-4 py-2.5 text-ink-tertiary font-mono text-[0.7rem]">#{t.id}</td>
               <td className="px-4 py-2.5 max-w-[220px]">
                 <span className="font-medium text-ink line-clamp-1">{t.titulo}</span>
@@ -2094,7 +2097,7 @@ export function TicketsPage() {
                 key={e}
                 onClick={() => {
                   setFiltroEstado(e)
-                  if (vista === 'productividad') setVista('lista')
+                  if (vista === 'productividad') setVista('tabla')
                 }}
                 className={clsx(
                   'whitespace-nowrap rounded-full px-3 py-1 text-[0.72rem] font-semibold transition-all',
@@ -2218,7 +2221,7 @@ export function TicketsPage() {
               ? `${tickets.length} tickets`
               : `${filtered.length} de ${tickets.length} tickets`}
           </p>
-          <TablaTickets tickets={filtered} />
+          <TablaTickets tickets={filtered} onOpen={(t) => setSelected(t)} />
         </>
       ) : vista === 'kanban' ? (
         <VistaKanban tickets={filtered} onOpen={(t) => setSelected(t)} />
@@ -2230,7 +2233,7 @@ export function TicketsPage() {
               : `${filtered.length} de ${tickets.length} tickets`}
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filtered.map((t) => <TicketCard key={t.id} ticket={t} onOpen={() => setSelected(t)} />)}
+            {filtered.map((t) => <TicketCard key={t.id} ticket={t} />)}
           </div>
         </div>
       )}

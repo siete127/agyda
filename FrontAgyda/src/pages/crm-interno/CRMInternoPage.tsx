@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
@@ -635,6 +636,7 @@ function OportunidadDrawer({
   onUpdated: () => void
 }) {
   const qc   = useQueryClient()
+  const navigate = useNavigate()
   const user = useCurrentUser()
   const { can } = useActionAccess()
   const [etapa, setEtapa]         = useState<CRMEtapa>(opo.etapa)
@@ -816,15 +818,22 @@ function OportunidadDrawer({
           </div>
 
           {opo.proyectoId ? (
-            <div className="flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[0.75rem] font-semibold text-indigo-700">
+            <button
+              onClick={() => navigate(`/proyectos?id=${opo.proyectoId}`)}
+              className="flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[0.75rem] font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 cursor-pointer"
+            >
               <Briefcase className="h-3.5 w-3.5" /> Proyecto vinculado (#{opo.proyectoId})
-            </div>
-          ) : opo.etapa === 'propuesta' && (
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          ) : (
             <button
               onClick={() => setShowGenerarProyecto(true)}
               className="flex items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-[0.75rem] font-semibold text-gray-500 hover:border-brand/40 hover:text-brand transition-colors"
             >
-              <Briefcase className="h-3.5 w-3.5" /> Generar proyecto de seguimiento
+              <Briefcase className="h-3.5 w-3.5" />
+              {contactoActual && !contactoActual.esCliente
+                ? 'Convertir en cliente y crear proyecto'
+                : 'Generar proyecto de seguimiento'}
             </button>
           )}
 

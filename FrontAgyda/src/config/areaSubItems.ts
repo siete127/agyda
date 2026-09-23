@@ -60,7 +60,7 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'metas', label: 'Metas', kind: 'link', linkTo: '/operaciones/metas', description: 'Metas operativas del Call Center.' },
     { slug: 'tiempos', label: 'Tiempos', kind: 'link', linkTo: '/operaciones/tiempos', description: 'Tiempos de llamada y disponibilidad.' },
     { slug: 'kpis', label: 'KPIs', kind: 'link', linkTo: '/operaciones/kpis', description: 'Indicadores clave de operaciones.' },
-    { slug: 'reportes-diarios', label: 'Reportes diarios', kind: 'link', linkTo: '/operaciones/reportes-diarios', description: 'Reportes diarios de operación.' },
+    { slug: 'suite-reportes', label: 'Suite de reportes', kind: 'link', linkTo: '/operaciones/suite-reportes', description: 'Catálogo de reportes de operación y definiciones RDL.' },
   ],
   calidad: [
     { slug: 'monitoreo-llamadas', label: 'Monitoreo de llamadas', kind: 'placeholder', description: 'Monitoreo en vivo y grabado de llamadas.' },
@@ -89,17 +89,13 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'respaldos', label: 'Respaldos', kind: 'link', linkTo: '/tecnologia/respaldos', description: 'Estado y calendario de respaldos.' },
     { slug: 'mantenimiento', label: 'Mantenimiento', kind: 'link', linkTo: '/tecnologia', description: 'Mantenimientos preventivos y correctivos.' },
   ],
+  // Fase 8: Consultas / Aclaraciones / Quejas / Incidencias unificadas en "Casos".
+  // Todas las pantallas viven como pestañas dentro de "Seguimiento de clientes".
   'atencion-cliente': [
-    { slug: 'atencion', label: 'Atención', kind: 'link', linkTo: '/atencion-cliente/consultas', description: 'Registro general de atención a clientes.' },
-    { slug: 'consultas', label: 'Consultas', kind: 'link', linkTo: '/atencion-cliente/consultas', description: 'Consultas recibidas de clientes.' },
-    { slug: 'quejas', label: 'Quejas', kind: 'link', linkTo: '/quejas', description: 'Registro y seguimiento de quejas.' },
-    { slug: 'aclaraciones', label: 'Aclaraciones', kind: 'link', linkTo: '/atencion-cliente/aclaraciones', description: 'Aclaraciones solicitadas por clientes.' },
-    { slug: 'seguimiento', label: 'Seguimiento', kind: 'link', linkTo: '/atencion-cliente/seguimiento', description: 'Seguimiento de casos abiertos.' },
-    { slug: 'satisfaccion', label: 'Satisfacción', kind: 'link', linkTo: '/atencion-cliente/satisfaccion', description: 'Encuestas y medición de satisfacción.' },
-    { slug: 'retencion', label: 'Retención', kind: 'link', linkTo: '/atencion-cliente/retencion', description: 'Clientes en riesgo y acciones de retención.' },
-    { slug: 'clientes', label: 'Seguimiento de clientes', kind: 'link', linkTo: '/atencion-cliente/clientes', description: 'Expediente y seguimiento de clientes.' },
-    { slug: 'mis-tareas', label: 'Mis Tareas', kind: 'link', linkTo: '/atencion-cliente/mis-tareas', description: 'Tareas de clientes asignadas a ti.' },
-    { slug: 'incidencias', label: 'Incidencias', kind: 'link', linkTo: '/atencion-cliente/incidencias', description: 'Gestión de incidencias de clientes.' },
+    { slug: 'clientes', label: 'Seguimiento de clientes', kind: 'link', linkTo: '/atencion-cliente/clientes', description: 'Clientes, casos, agenda, ofertas, satisfacción y retención en un solo lugar.' },
+    { slug: 'casos', label: 'Casos', kind: 'link', linkTo: '/atencion-cliente/clientes?tab=casos', description: 'Consultas, aclaraciones, quejas e incidencias.' },
+    { slug: 'agenda', label: 'Agenda', kind: 'link', linkTo: '/atencion-cliente/clientes?tab=agenda', description: 'Citas y sesiones de tratamiento.' },
+    { slug: 'ofertas', label: 'Ofertas', kind: 'link', linkTo: '/atencion-cliente/clientes?tab=ofertas', description: 'Campañas a segmentos por correo y WhatsApp.' },
     { slug: 'dashboard-clientes', label: 'Dashboard de Clientes', kind: 'link', linkTo: '/atencion-cliente/clientes/dashboard', description: 'Métricas y reportes de clientes.' },
   ],
   legal: [

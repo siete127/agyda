@@ -1848,12 +1848,417 @@ async function sendTicketNuevoGrupoEmail({ ticketId, titulo, area, prioridad, so
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Seguimiento activo a clientes — correos de los crons de agenda / SLA de
+   incidencias / inactividad, y la invitación al portal del cliente.
+   Todos comparten el shell HTML de 600px (mismo look que sendAlertaFechaImportanteEmail).
+═══════════════════════════════════════════════════════════════════════════ */
+
+// Shell HTML común: gradiente en el header, cuerpo, footer de "correo automático".
+function _shellSeguimiento({ titulo, gradiente = '#1B4FD8 0%,#0D1B3E 100%', saludo, cuerpoHtml, ctaHtml = '' }) {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${titulo}</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+  <table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f4f4f4;">
+    <tr><td align="center" style="padding:40px 0;">
+      <table role="presentation" style="width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+        <tr><td style="background:linear-gradient(135deg,${gradiente});padding:30px;text-align:center;border-radius:8px 8px 0 0;">
+          <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:600;">${titulo}</h1>
+        </td></tr>
+        <tr><td style="padding:30px;">
+          ${saludo ? `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">${saludo}</p>` : ''}
+          ${cuerpoHtml}
+          ${ctaHtml}
+        </td></tr>
+        <tr><td style="background-color:#f8f9fa;padding:20px 30px;text-align:center;border-radius:0 0 8px 8px;border-top:1px solid #e0e0e0;">
+          <p style="margin:0;color:#999;font-size:12px;line-height:1.5;">AGYDA ArdaBytec • Este es un correo automático, por favor no responder.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+function _datosTabla(filas) {
+  const rows = filas.map(([k, v]) =>
+    `<tr><td style="padding:6px 0;color:#666;font-size:13px;width:35%;"><strong>${k}:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${v ?? '—'}</td></tr>`
+  ).join('');
+  return `<table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f8f9fa;border-radius:6px;margin:16px 0;">
+    <tr><td style="padding:18px;"><table role="presentation" style="width:100%;border-collapse:collapse;">${rows}</table></td></tr>
+  </table>`;
+}
+
+const _PRIORIDAD_LABEL = { baja: 'Baja', media: 'Media', alta: 'Alta', urgente: 'Urgente', critica: 'Crítica' };
+const _TIPO_FECHA_LABEL_PORTAL = { contrato: 'Contrato', servicio: 'Servicio', mantenimiento: 'Mantenimiento', cumpleanos: 'Cumpleaños', personalizada: 'Fecha' };
+
+// Recordatorio de tarea de cliente — aviso previo ("en X min/horas") o al vencer.
+async function sendRecordatorioTareaEmail({ asignadoNombre, asignadoCorreo, titulo, tipo, prioridad, contactoNombre, fechaHora, fase }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendRecordatorioTareaEmail] SMTP no configurado. Email simulado'); return; }
+    if (!asignadoCorreo) return;
+
+    const esPrevia = fase === 'previa';
+    const cuando = fechaHora ? new Date(fechaHora).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'sin fecha';
+    const encabezado = esPrevia ? '⏰ Recordatorio de tarea' : '🔔 Tarea vencida';
+    const html = _shellSeguimiento({
+      titulo: encabezado,
+      gradiente: esPrevia ? '#1B4FD8 0%,#0D1B3E 100%' : '#DC2626 0%,#7F1D1D 100%',
+      saludo: `Hola ${asignadoNombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">${esPrevia ? 'Tienes una tarea programada próximamente:' : 'Tienes una tarea que ya venció y sigue pendiente:'}</p>` +
+        _datosTabla([
+          ['Tarea', titulo],
+          ['Cliente', contactoNombre],
+          ['Prioridad', _PRIORIDAD_LABEL[prioridad] || prioridad],
+          [esPrevia ? 'Programada para' : 'Venció', cuando],
+        ]),
+    });
+    const text = `${encabezado}\nTarea: ${titulo}\nCliente: ${contactoNombre || '-'}\n${esPrevia ? 'Programada para' : 'Venció'}: ${cuando}`;
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: asignadoCorreo,
+      subject: esPrevia ? `Recordatorio: ${titulo}` : `Tarea vencida: ${titulo}`,
+      text, html,
+    });
+    logger.debug(`✅ [sendRecordatorioTareaEmail] Enviado a ${asignadoCorreo}`);
+  } catch (err) {
+    console.error('❌ [sendRecordatorioTareaEmail] Error general:', err?.message || err);
+  }
+}
+
+// Próxima fecha de seguimiento de la bitácora llegó a hoy.
+async function sendProximaFechaSeguimientoEmail({ usuarioNombre, usuarioCorreo, contactoNombre, proximaFecha, motivo, acuerdos }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendProximaFechaSeguimientoEmail] SMTP no configurado. Email simulado'); return; }
+    if (!usuarioCorreo) return;
+
+    const fechaFmt = proximaFecha ? new Date(`${proximaFecha}T00:00:00`).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' }) : 'hoy';
+    const html = _shellSeguimiento({
+      titulo: '📞 Seguimiento pendiente',
+      saludo: `Hola ${usuarioNombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Tienes un seguimiento programado con <strong>${contactoNombre}</strong> para hoy:</p>` +
+        _datosTabla([
+          ['Cliente', contactoNombre],
+          ['Fecha', fechaFmt],
+          ['Motivo', motivo],
+          ['Acuerdos previos', acuerdos],
+        ]),
+    });
+    const text = `Seguimiento pendiente hoy con ${contactoNombre}\nFecha: ${fechaFmt}\nMotivo: ${motivo || '-'}`;
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: usuarioCorreo,
+      subject: `Seguimiento pendiente hoy: ${contactoNombre}`,
+      text, html,
+    });
+    logger.debug(`✅ [sendProximaFechaSeguimientoEmail] Enviado a ${usuarioCorreo}`);
+  } catch (err) {
+    console.error('❌ [sendProximaFechaSeguimientoEmail] Error general:', err?.message || err);
+  }
+}
+
+// SLA de una incidencia de cliente en riesgo o vencido.
+async function sendIncidenciaSlaEmail({ nombre, correo, folio, titulo, contactoNombre, prioridad, fechaLimiteSla, nivel }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendIncidenciaSlaEmail] SMTP no configurado. Email simulado'); return; }
+    if (!correo) return;
+
+    const esVencido = nivel === 'vencido';
+    const limiteFmt = fechaLimiteSla ? new Date(fechaLimiteSla).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+    const html = _shellSeguimiento({
+      titulo: esVencido ? `🚨 SLA VENCIDO — ${folio}` : `⚠️ SLA en riesgo — ${folio}`,
+      gradiente: esVencido ? '#DC2626 0%,#7F1D1D 100%' : '#D97706 0%,#78350F 100%',
+      saludo: `Hola ${nombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">${esVencido ? 'Una incidencia superó su tiempo de resolución y fue escalada:' : 'Una incidencia está cerca de superar su tiempo de resolución:'}</p>` +
+        _datosTabla([
+          ['Folio', folio],
+          ['Título', titulo],
+          ['Cliente', contactoNombre],
+          ['Prioridad', _PRIORIDAD_LABEL[prioridad] || prioridad],
+          ['Límite de SLA', limiteFmt],
+        ]),
+    });
+    const text = `${esVencido ? 'SLA VENCIDO' : 'SLA en riesgo'} — incidencia ${folio}\nTítulo: ${titulo}\nCliente: ${contactoNombre || '-'}\nLímite: ${limiteFmt}`;
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: correo,
+      subject: esVencido ? `SLA VENCIDO: incidencia ${folio}` : `SLA en riesgo: incidencia ${folio}`,
+      text, html,
+    });
+    logger.debug(`✅ [sendIncidenciaSlaEmail] Enviado a ${correo}`);
+  } catch (err) {
+    console.error('❌ [sendIncidenciaSlaEmail] Error general:', err?.message || err);
+  }
+}
+
+// Cliente sin ningún registro de seguimiento en N días — aviso a su responsable.
+async function sendClienteInactivoEmail({ responsableNombre, responsableCorreo, contactoNombre, diasSinContacto, ultimoSeguimiento }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendClienteInactivoEmail] SMTP no configurado. Email simulado'); return; }
+    if (!responsableCorreo) return;
+
+    const ultimoFmt = ultimoSeguimiento ? new Date(ultimoSeguimiento).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' }) : 'nunca';
+    const html = _shellSeguimiento({
+      titulo: `😴 Cliente sin seguimiento`,
+      gradiente: '#D97706 0%,#78350F 100%',
+      saludo: `Hola ${responsableNombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">El cliente <strong>${contactoNombre}</strong> lleva <strong>${diasSinContacto} días</strong> sin ningún registro de seguimiento. Conviene retomar el contacto.</p>` +
+        _datosTabla([
+          ['Cliente', contactoNombre],
+          ['Días sin contacto', String(diasSinContacto)],
+          ['Último seguimiento', ultimoFmt],
+        ]),
+    });
+    const text = `Cliente sin seguimiento: ${contactoNombre} (${diasSinContacto} días)\nÚltimo seguimiento: ${ultimoFmt}`;
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: responsableCorreo,
+      subject: `Cliente sin seguimiento: ${contactoNombre} (${diasSinContacto} días)`,
+      text, html,
+    });
+    logger.debug(`✅ [sendClienteInactivoEmail] Enviado a ${responsableCorreo}`);
+  } catch (err) {
+    console.error('❌ [sendClienteInactivoEmail] Error general:', err?.message || err);
+  }
+}
+
+// Invitación al portal del cliente (reemplaza el nodemailer inline del controller).
+async function sendInvitacionPortalEmail({ nombre, correo, link }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendInvitacionPortalEmail] SMTP no configurado. Email simulado'); return; }
+    if (!correo) return;
+
+    const html = _shellSeguimiento({
+      titulo: '🔑 Tu acceso al portal',
+      saludo: `Hola ${nombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Te damos acceso a tu portal, donde puedes revisar el estado de tus proyectos, tus cotizaciones, documentos, pagos próximos y tus solicitudes.</p>`,
+      ctaHtml: `<p style="text-align:center;margin:24px 0;"><a href="${link}" style="background:#1B4FD8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Ver mi portal</a></p>
+        <p style="color:#999;font-size:12px;text-align:center;">Este enlace es válido por 30 días.</p>`,
+    });
+    const text = `Tu acceso al portal\n${link}\n\nEste enlace es válido por 30 días.`;
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: correo,
+      subject: 'Tu acceso al portal de seguimiento',
+      text, html,
+    });
+    logger.debug(`✅ [sendInvitacionPortalEmail] Enviado a ${correo}`);
+  } catch (err) {
+    console.error('❌ [sendInvitacionPortalEmail] Error general:', err?.message || err);
+  }
+}
+
+// Invitación con credenciales de login al sistema (portal-cliente,
+// NEUS_USUARIOS tipo 'CL') — distinto de sendInvitacionPortalEmail (esa es
+// una liga con token sin contraseña, para el portal de cotizaciones/
+// documentos). Esta sí incluye usuario/contraseña porque es un login real.
+async function sendInvitacionAccesoSistemaEmail({ nombre, correo, usuario, password, link }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendInvitacionAccesoSistemaEmail] SMTP no configurado. Email simulado'); return; }
+    if (!correo) return;
+
+    const html = _shellSeguimiento({
+      titulo: '🔑 Tu acceso al sistema',
+      saludo: `Hola ${nombre || ''},`,
+      cuerpoHtml: `
+        <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Te dimos acceso a tu portal en el sistema. Estos son tus datos de acceso:</p>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 8px 0;">
+          <tr><td style="padding:8px 0;color:#666;font-size:13px;">Usuario</td><td style="padding:8px 0;color:#111;font-size:14px;font-weight:600;">${usuario}</td></tr>
+          ${password ? `<tr><td style="padding:8px 0;color:#666;font-size:13px;">Contraseña</td><td style="padding:8px 0;color:#111;font-size:14px;font-weight:600;">${password}</td></tr>` : ''}
+        </table>
+        ${password ? '<p style="color:#999;font-size:12px;margin:0 0 16px 0;">Te recomendamos cambiar tu contraseña al iniciar sesión.</p>' : ''}
+      `,
+      ctaHtml: `<p style="text-align:center;margin:24px 0;"><a href="${link}" style="background:#1B4FD8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Entrar al sistema</a></p>`,
+    });
+    const text = `Tu acceso al sistema\nUsuario: ${usuario}${password ? `\nContraseña: ${password}` : ''}\n\n${link}`;
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: correo,
+      subject: 'Tu acceso al sistema',
+      text, html,
+    });
+    logger.debug(`✅ [sendInvitacionAccesoSistemaEmail] Enviado a ${correo}`);
+  } catch (err) {
+    console.error('❌ [sendInvitacionAccesoSistemaEmail] Error general:', err?.message || err);
+  }
+}
+
+// ── Citas del cliente (CRM Cliente — Fase 2) ────────────────────────────────
+const _MODALIDAD_CITA_LABEL = { videollamada: 'Videollamada', telefonica: 'Llamada telefónica', generica: 'Cita' };
+
+async function sendRecordatorioCitaEmail({ contactoNombre, contactoCorreo, titulo, modalidad, fechaHora, duracionMin, enlace, telefono }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendRecordatorioCitaEmail] SMTP no configurado. Email simulado'); return; }
+    if (!contactoCorreo) return;
+
+    const cuando = fechaHora ? new Date(fechaHora).toLocaleString('es-MX', { dateStyle: 'full', timeStyle: 'short' }) : 'por confirmar';
+    // Tiempo real que falta (no el umbral del cron, que puede diferir si la cita
+    // se creó tarde). Se calcula desde la fecha de la cita.
+    const minsFaltan = fechaHora ? Math.max(0, Math.round((new Date(fechaHora).getTime() - Date.now()) / 60000)) : null;
+    const antic = minsFaltan == null ? ''
+      : minsFaltan >= 2880 ? `en ${Math.round(minsFaltan / 1440)} días`
+      : minsFaltan >= 1440 ? 'mañana'
+      : minsFaltan >= 60 ? `en ${Math.round(minsFaltan / 60)} h`
+      : `en ${minsFaltan} min`;
+    const modalLabel = _MODALIDAD_CITA_LABEL[modalidad] || 'Cita';
+    const filas = [
+      ['Cita', titulo],
+      ['Modalidad', modalLabel],
+      ['Fecha y hora', cuando],
+      ['Duración', `${duracionMin || 30} min`],
+    ];
+    if (modalidad === 'telefonica' && telefono) filas.push(['Teléfono', telefono]);
+    const ctaHtml = (modalidad === 'videollamada' && enlace)
+      ? `<p style="text-align:center;margin:24px 0;"><a href="${enlace}" style="background:#1B4FD8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Unirme a la videollamada</a></p>`
+      : '';
+
+    const html = _shellSeguimiento({
+      titulo: '📅 Recordatorio de cita',
+      saludo: `Hola ${contactoNombre || ''},`,
+      cuerpoHtml: `<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Te recordamos tu próxima cita con nosotros${antic ? ` (${antic})` : ''}:</p>` + _datosTabla(filas),
+      ctaHtml,
+    });
+    const text = `Recordatorio de cita\n${titulo}\n${modalLabel}\n${cuando} (${duracionMin || 30} min)` +
+      (modalidad === 'videollamada' && enlace ? `\nEnlace: ${enlace}` : '') +
+      (modalidad === 'telefonica' && telefono ? `\nTeléfono: ${telefono}` : '');
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: contactoCorreo,
+      subject: `Recordatorio: ${titulo}`,
+      text, html,
+    });
+    logger.debug(`✅ [sendRecordatorioCitaEmail] Enviado a ${contactoCorreo}`);
+  } catch (err) {
+    console.error('❌ [sendRecordatorioCitaEmail] Error general:', err?.message || err);
+  }
+}
+
+// HTML de una oferta de campaña (CRM Cliente — Fase 8). Reusa el shell del módulo.
+function _ofertaHtml(titulo, mensaje) {
+  return _shellSeguimiento({
+    titulo: `🎁 ${titulo}`,
+    saludo: 'Hola,',
+    cuerpoHtml: `<div style="color:#333;font-size:15px;line-height:1.6;white-space:pre-wrap;">${String(mensaje || '').replace(/</g, '&lt;')}</div>`,
+  });
+}
+
+// Aviso de una solicitud creada por un visitante anónimo desde el formulario
+// público del sitio institucional (ver publicTicketController.js). Mismo
+// patrón que sendTicketNuevoGrupoEmail, pero con el contacto real del
+// visitante (no un usuario interno) y su propio módulo configurable
+// ('web_publica') para que el admin pueda elegir un grupo de destinatarios
+// distinto al de los tickets internos.
+async function sendSolicitudWebPublicaEmail({ ticketId, titulo, descripcion, contactoNombre, contactoEmail, contactoTelefono, tenantKey }) {
+  logger.debug('📧 [sendSolicitudWebPublicaEmail] Iniciando para ticket:', ticketId);
+
+  try {
+    if (!mailer) {
+      console.warn('⚠️ [sendSolicitudWebPublicaEmail] SMTP no configurado. Email simulado');
+      return;
+    }
+
+    const baseRoot = EMAIL_BASE_URL.replace(/\/$/, '').replace(/\/api$/, '');
+    const verUrl = `${baseRoot}/tickets`;
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Nueva solicitud web</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+  <table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f4f4f4;">
+    <tr>
+      <td align="center" style="padding:40px 0;">
+        <table role="presentation" style="width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#1565C0 0%,#0D47A1 100%);padding:24px 30px;border-radius:8px 8px 0 0;color:#fff;text-align:center;">
+              <h1 style="margin:0;font-size:22px;font-weight:600;">🌐 Nueva solicitud desde el sitio web #${ticketId}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:30px;">
+              <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Un visitante anónimo del sitio público envió una solicitud de soporte:</p>
+              <table role="presentation" style="width:100%;border-collapse:collapse;background-color:#f8f9fa;border-radius:6px;margin:16px 0;">
+                <tr><td style="padding:18px;">
+                  <table role="presentation" style="width:100%;border-collapse:collapse;">
+                    <tr><td style="padding:6px 0;color:#666;font-size:13px;width:35%;"><strong>📌 Título:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${titulo}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>👤 Nombre:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${contactoNombre || '-'}</td></tr>
+                    ${contactoEmail ? `<tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>✉️ Correo:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${contactoEmail}</td></tr>` : ''}
+                    ${contactoTelefono ? `<tr><td style="padding:6px 0;color:#666;font-size:13px;"><strong>📞 Teléfono:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;">${contactoTelefono}</td></tr>` : ''}
+                    <tr><td style="padding:6px 0;color:#666;font-size:13px;vertical-align:top;"><strong>📝 Descripción:</strong></td><td style="padding:6px 0;color:#333;font-size:13px;white-space:pre-wrap;">${descripcion || '-'}</td></tr>
+                  </table>
+                </td></tr>
+              </table>
+              <div style="margin:24px 0;text-align:center;">
+                <a href="${verUrl}" style="background:#1565C0;color:#fff;text-decoration:none;padding:12px 22px;border-radius:6px;font-weight:600;display:inline-block;">🌐 Ver en AGYDA</a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f9fa;padding:16px 24px;text-align:center;border-radius:0 0 8px 8px;border-top:1px solid #e0e0e0;">
+              <p style="margin:0;color:#999;font-size:11px;line-height:1.5;">AGYDA ArdaBytec • Este es un correo automático, por favor no responder.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    const text = `Nueva solicitud desde el sitio web #${ticketId}\nTítulo: ${titulo}\nNombre: ${contactoNombre || '-'}\n${contactoEmail ? `Correo: ${contactoEmail}\n` : ''}${contactoTelefono ? `Teléfono: ${contactoTelefono}\n` : ''}Descripción: ${descripcion || '-'}\n\nVer en AGYDA: ${verUrl}`;
+    const fromWithName = `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`;
+
+    const { getDestinatariosCorreo, getDestinatariosTelegram, getDestinatariosUsuarios } = require('../controllers/notificacionesCorreoController');
+    const destinatarios = await getDestinatariosCorreo('web_publica', tenantKey);
+
+    for (const rcpt of destinatarios) {
+      try {
+        await mailer.sendMail({
+          from: fromWithName,
+          sender: EMAIL_FROM,
+          replyTo: contactoEmail || EMAIL_FROM,
+          to: rcpt,
+          subject: `Nueva solicitud web #${ticketId} - ${titulo}`,
+          text,
+          html,
+        });
+      } catch (err) {
+        console.error(`❌ [sendSolicitudWebPublicaEmail] Error enviando a ${rcpt}:`, err?.message);
+      }
+    }
+
+    // Telegram — mismo aviso, texto plano.
+    const chatIds = await getDestinatariosTelegram('web_publica', tenantKey);
+    if (chatIds.length) {
+      const telegramService = require('./telegramService');
+      const texto = `🌐 <b>Nueva solicitud desde el sitio web #${ticketId}</b>\n\n📌 Título: ${titulo}\n👤 Nombre: ${contactoNombre || '-'}\n${contactoEmail ? `✉️ Correo: ${contactoEmail}\n` : ''}${contactoTelefono ? `📞 Teléfono: ${contactoTelefono}\n` : ''}\n🌐 Ver: ${verUrl}`;
+      await telegramService.sendToMany(chatIds, texto);
+    }
+
+    // Push del navegador — mismos destinatarios configurados para el módulo.
+    const pushService = require('./pushService');
+    const destinatariosPush = await getDestinatariosUsuarios('web_publica', tenantKey);
+    if (destinatariosPush.length) {
+      await pushService.enviarAVariosPorTenant(tenantKey, destinatariosPush.map((d) => d.id), {
+        titulo: `Nueva solicitud web #${ticketId}`,
+        cuerpo: `${contactoNombre || 'Un visitante'} envió: ${titulo}`,
+        url: '/tickets',
+        tag: `solicitud-web-${ticketId}`,
+      });
+    }
+  } catch (err) {
+    console.error('❌ [sendSolicitudWebPublicaEmail] Error general:', err);
+  }
+}
+
 module.exports = {
   initialize,
   sendPermisoEmail,
   sendVacacionSolicitudEmail,
   verify,
   sendTestEmail,
+  sendRecordatorioCitaEmail,
+  _ofertaHtml,
   mailer,
   sendCorreoGenerico,
   isMailerListo,
@@ -1865,6 +2270,12 @@ module.exports = {
   sendRecordatorioPagoEmail,
   sendAlertaVencimientoProximo,
   sendAlertaFechaImportanteEmail,
+  sendRecordatorioTareaEmail,
+  sendProximaFechaSeguimientoEmail,
+  sendIncidenciaSlaEmail,
+  sendClienteInactivoEmail,
+  sendInvitacionPortalEmail,
+  sendInvitacionAccesoSistemaEmail,
   sendEncuestaSeguimientoEmail,
   sendRatRevisionPendienteEmail,
   sendCumplimientoVencimientoEmail,
@@ -1873,5 +2284,6 @@ module.exports = {
   sendReporteIndicadoresEmail,
   sendTicketNotificacionEmail,
   sendTicketNuevoGrupoEmail,
+  sendSolicitudWebPublicaEmail,
   getTransporteActivo,
 };

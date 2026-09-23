@@ -1,7 +1,7 @@
 const sql = require('mssql');
 const cron = require('node-cron');
 const databaseService = require('../services/databaseService');
-const clienteIncidencias = require('./clienteIncidenciasController');
+const casoController = require('./casoController');
 const { listTenants } = require('../config/tenants');
 
 // Mismas listas que crmEncuestasSeguimientoController.js — duplicadas aquí a
@@ -95,7 +95,9 @@ async function clasificarEncuestasRespondidasTenant(tenantKey) {
 
         let incidenciaId = null;
         if (clasificacion === 'necesita_mejora') {
-          const creada = await clienteIncidencias.crearIncidenciaAutomatica({
+          // Fase 6: crea un Caso tipo 'incidencia' en vez de CLI_INCIDENCIAS.
+          const creada = await casoController.crearCasoAutomatico({
+            tipo: 'incidencia',
             contactoId: ces.contactoId,
             titulo: `Encuesta de satisfacción negativa — ${ces.contactoNombre}`,
             descripcion: `El cliente respondió negativamente a la encuesta "${ces.encuestaTitulo}".`,

@@ -39,6 +39,17 @@ export const ESTATUS_TAREA_CONFIG: Record<EstatusTarea, { label: string; bg: str
   cancelada:   { label: 'Cancelada',   bg: 'bg-red-50',     text: 'text-red-600',    dot: 'bg-red-400' },
 }
 
+// Minutos "avísame antes" para el recordatorio de agenda de una tarea con hora.
+export const RECORDATORIO_OPCIONES: { value: number; label: string }[] = [
+  { value: 0,    label: 'Al momento' },
+  { value: 5,    label: '5 minutos antes' },
+  { value: 15,   label: '15 minutos antes' },
+  { value: 30,   label: '30 minutos antes' },
+  { value: 60,   label: '1 hora antes' },
+  { value: 120,  label: '2 horas antes' },
+  { value: 1440, label: '1 día antes' },
+]
+
 export interface CliSeguimiento {
   id: number
   contactoId: number
@@ -64,10 +75,26 @@ export interface CliTarea {
   asignadoA: number | null
   asignadoNombre: string | null
   fechaVencimiento: string | null
+  fechaHora: string | null
+  recordarMinAntes: number | null
   estatus: EstatusTarea
   creadoPor: number | null
   fechaCreacion: string
   fechaCompletada: string | null
+}
+
+export interface AgendaSeguimiento {
+  seguimientoId: number
+  contactoId: number
+  contactoNombre: string
+  proximaFecha: string
+  motivo: string | null
+  acuerdos: string | null
+}
+
+export interface MiAgenda {
+  tareas: CliTarea[]
+  seguimientos: AgendaSeguimiento[]
 }
 
 export type HistorialTipo = 'seguimiento' | 'tarea' | 'pago' | 'encuesta' | 'incidencia' | 'renovacion' | 'documento'
@@ -123,6 +150,7 @@ export function parseCliSeguimiento(raw: Record<string, unknown>): CliSeguimient
 }
 
 export function parseCliTarea(raw: Record<string, unknown>): CliTarea {
+  const recordar = pick(raw, 'recordarMinAntes')
   return {
     id:               Number(pick(raw, 'id')),
     contactoId:       Number(pick(raw, 'contactoId')),
@@ -134,9 +162,22 @@ export function parseCliTarea(raw: Record<string, unknown>): CliTarea {
     asignadoA:        pick(raw, 'asignadoA') as number | null,
     asignadoNombre:   pick(raw, 'asignadoNombre') as string | null,
     fechaVencimiento: pick(raw, 'fechaVencimiento') as string | null,
+    fechaHora:        pick(raw, 'fechaHora') as string | null,
+    recordarMinAntes: recordar == null ? null : Number(recordar),
     estatus:          (pick(raw, 'estatus') as EstatusTarea) ?? 'pendiente',
     creadoPor:        pick(raw, 'creadoPor') as number | null,
     fechaCreacion:    String(pick(raw, 'fechaCreacion') ?? ''),
     fechaCompletada:  pick(raw, 'fechaCompletada') as string | null,
+  }
+}
+
+export function parseAgendaSeguimiento(raw: Record<string, unknown>): AgendaSeguimiento {
+  return {
+    seguimientoId:  Number(pick(raw, 'seguimientoId')),
+    contactoId:     Number(pick(raw, 'contactoId')),
+    contactoNombre: String(pick(raw, 'contactoNombre') ?? ''),
+    proximaFecha:   String(pick(raw, 'proximaFecha') ?? ''),
+    motivo:         pick(raw, 'motivo') as string | null,
+    acuerdos:       pick(raw, 'acuerdos') as string | null,
   }
 }

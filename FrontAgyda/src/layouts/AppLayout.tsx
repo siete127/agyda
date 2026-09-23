@@ -8,6 +8,8 @@ import { ActaRetardosModal } from '@/components/ui/ActaRetardosModal'
 import { ActivoTerminosModal } from '@/components/ui/ActivoTerminosModal'
 import { QuejasAlertBubble } from '@/components/ui/QuejasAlertBubble'
 import { LlamadaEntrantePopup } from '@/components/ui/LlamadaEntrantePopup'
+import { NotificacionSupervisorPopup } from '@/components/ui/NotificacionSupervisorPopup'
+import { AccionRemotaListener } from '@/components/ui/AccionRemotaListener'
 import { MensajeriaFloatingBubble } from '@/components/ui/MensajeriaFloatingBubble'
 import { EnlaceFrame } from '@/components/ui/EnlaceFrame'
 import { MascotaFlotante } from '@/components/ui/MascotaFlotante'
@@ -77,6 +79,8 @@ function Layout({ location, showMusic, showMensajeria }: {
       <ActivoTerminosModal />
       <QuejasAlertBubble />
       <LlamadaEntrantePopup />
+      <NotificacionSupervisorPopup />
+      <AccionRemotaListener />
       {showMensajeria && <MensajeriaFloatingBubble />}
       {/* WebphoneFrame NO vive acá — ver ProtectedRoute.tsx. Si viviera en
           AppLayout, entrar a /ventas (que usa VentasLayout, rama hermana en

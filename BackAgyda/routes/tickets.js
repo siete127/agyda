@@ -3,12 +3,19 @@ const router = express.Router();
 const ticketController = require('../controllers/ticketController');
 const ticketSlaCron = require('../controllers/ticketSlaCronController');
 const ticketRecordatoriosCron = require('../controllers/ticketRecordatoriosCronController');
+const publicTicketController = require('../controllers/publicTicketController');
 const { uploadEvidence } = require('../middleware/evidenceUpload');
 const { authenticateToken, verificarRol } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
 
 // Sin sesión: se llama desde un link de calificación que no depende de estar logueado
 router.post('/:id/satisfaccion', ticketController.registrarSatisfaccion);
+
+// Sin sesión: formulario público del sitio institucional (visitante anónimo
+// crea una solicitud de soporte). Ver publicTicketController.js.
+router.get('/solicitud-publica/catalogos', publicTicketController.getCatalogosPublicos);
+router.post('/solicitud-publica/evidencia', publicTicketController.subirEvidenciaPublica);
+router.post('/solicitud-publica', publicTicketController.crearSolicitudPublica);
 
 router.use(authenticateToken);
 

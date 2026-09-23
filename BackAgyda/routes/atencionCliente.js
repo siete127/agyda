@@ -2,9 +2,14 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/atencionClienteController');
 const clienteSeguimiento = require('../controllers/clienteSeguimientoController');
-const clienteIncidencias = require('../controllers/clienteIncidenciasController');
 const clienteFechas = require('../controllers/clienteFechasController');
 const clienteFechasCron = require('../controllers/clienteFechasCronController');
+const clienteAgendaCron = require('../controllers/clienteAgendaCronController');
+const clienteIncSlaCron = require('../controllers/clienteIncidenciasSlaCronController');
+const citaRecordatorioCron = require('../controllers/citaRecordatorioCronController');
+const caso = require('../controllers/casoController');
+const cita = require('../controllers/citaController');
+const oferta = require('../controllers/ofertaController');
 const clienteDashboard = require('../controllers/clienteDashboardController');
 const auth = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
@@ -21,26 +26,65 @@ router.get('/clientes/:id/historial', auth.authenticateToken, requireActionAcces
 
 // ── Clientes: tareas ───────────────────────────────────────────────────────
 router.get('/tareas/mias', auth.authenticateToken, clienteSeguimiento.listTareasMias);
+router.get('/mi-agenda', auth.authenticateToken, clienteSeguimiento.getMiAgenda);
 router.get('/clientes/:id/tareas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteSeguimiento.listTareasByContacto);
 router.post('/clientes/:id/tareas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.createTarea);
 router.patch('/tareas/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.updateTareaEstatus);
+router.patch('/tareas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.updateTarea);
 router.delete('/tareas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-tareas'), clienteSeguimiento.deleteTarea);
+router.post('/agenda/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), clienteAgendaCron.runNow);
 
-// ── Incidencias ─────────────────────────────────────────────────────────────
-router.get('/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.list);
-router.get('/incidencias/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.getById);
-router.post('/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.create);
-router.patch('/incidencias/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.updateEstatus);
-router.patch('/incidencias/:id/solucion', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.updateSolucion);
-router.get('/incidencias/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.listComentarios);
-router.post('/incidencias/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.addComentario);
-router.get('/clientes/:id/incidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteIncidencias.listByContacto);
+// ── Incidencias → unificadas en "Casos" (Fase 9). Solo queda el cron de SLA,
+//    que ahora corre sobre CASOS tipo 'incidencia'. La tabla CLI_INCIDENCIAS y
+//    sus rutas/controlador legacy se eliminaron; la tabla SQL se conserva.
+router.post('/incidencias/sla/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), clienteIncSlaCron.runNow);
 
-// ── Incidencias: evidencias (adjuntos) ────────────────────────────────────
-router.post('/incidencias/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), uploadCrmDocumento.single('file'), clienteIncidencias.subirEvidencia);
-router.get('/incidencias/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.listEvidencias);
-router.get('/incidencias/evidencias/:evidenciaId/download', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-ver'), clienteIncidencias.downloadEvidencia);
-router.delete('/incidencias/evidencias/:evidenciaId', auth.authenticateToken, requireActionAccess('atencion-cliente', 'incidencias-gestionar'), clienteIncidencias.deleteEvidencia);
+// ── Casos (unificado) ─────────────────────────────────────────────────────
+// Reemplaza gradualmente a Consultas/Aclaraciones/Quejas/Incidencias. Para
+// CASO_TIPO='queja', el control de acceso extra (códigos de empleado) se aplica
+// DENTRO del controlador, no aquí — decisión de diseño, ver casoController.js.
+// Rutas específicas ANTES de /casos/:id para que no colisionen.
+router.get('/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.list);
+router.post('/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.create);
+router.get('/casos/evidencias/:evidenciaId/download', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.downloadEvidencia);
+router.delete('/casos/evidencias/:evidenciaId', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.deleteEvidencia);
+router.get('/casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.getById);
+router.delete('/casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.deleteCaso);
+router.patch('/casos/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.updateEstatus);
+router.patch('/casos/:id/solucion', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.updateSolucion);
+router.get('/casos/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.listComentarios);
+router.post('/casos/:id/comentarios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.addComentario);
+router.get('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.listEvidencias);
+router.post('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), uploadCrmDocumento.single('file'), caso.subirEvidencia);
+router.get('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.getAccionCorrectiva);
+router.post('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.createAccionCorrectiva);
+router.get('/clientes/:id/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), caso.listByContacto);
+
+// ── Citas y tratamientos (CRM Cliente) ───────────────────────────────────────
+// Rutas específicas ANTES de /citas/:id para que no colisionen.
+router.get('/citas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.list);
+router.post('/citas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.create);
+router.get('/citas/solicitudes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.listSolicitudes);
+router.patch('/citas/solicitudes/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.resolverSolicitud);
+router.post('/citas/recordatorios/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), citaRecordatorioCron.runNow);
+router.get('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.getById);
+router.patch('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.update);
+router.delete('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.remove);
+router.patch('/citas/:id/estatus', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.updateEstatus);
+router.post('/citas/:id/cancelar', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.cancelar);
+router.get('/clientes/:id/citas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), cita.listByContacto);
+router.get('/tratamientos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.listTratamientos);
+router.post('/tratamientos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.createTratamiento);
+router.get('/tratamientos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.getTratamiento);
+router.patch('/tratamientos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.updateTratamiento);
+router.post('/tratamientos/:id/sesiones', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.addSesion);
+
+// ── Ofertas a segmento de clientes (CRM Cliente) ─────────────────────────────
+router.get('/ofertas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.list);
+router.post('/ofertas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.create);
+router.post('/ofertas/preview-segmento', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.previewSegmento);
+router.post('/ofertas/:id/enviar', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.enviar);
+router.get('/ofertas/:id/envios', auth.authenticateToken, requireActionAccess('atencion-cliente', 'ofertas-gestionar'), oferta.getEnvios);
 
 // ── Renovaciones y fechas importantes ────────────────────────────────────────
 router.get('/clientes/:id/fechas-importantes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), clienteFechas.listByContacto);

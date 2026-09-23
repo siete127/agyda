@@ -708,8 +708,9 @@ exports.getTicketById = async (req, res) => {
 // los distintos puntos de entrada (portal, chatbot, chat en vivo, técnico)
 // la reusen sin duplicar código, siguiendo el mismo patrón que escalarTicketInterno.
 // 'api' se conserva en la lista solo por compatibilidad con tickets históricos
-// creados por la API pública ya retirada.
-const CANALES_ORIGEN_VALIDOS = ['portal', 'chatbot', 'chat_en_vivo', 'tecnico', 'api'];
+// creados por la API pública ya retirada. 'web_publica' es el formulario
+// anónimo del sitio institucional (ver publicTicketController.js).
+const CANALES_ORIGEN_VALIDOS = ['portal', 'chatbot', 'chat_en_vivo', 'tecnico', 'api', 'web_publica'];
 
 async function crearTicketInterno(pool, {
   solicitanteId, area, titulo, descripcion, prioridad, categoria, asignadoA,

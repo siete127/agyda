@@ -57,6 +57,13 @@ export interface CCMensaje {
 // CCSesionAgenteCanal y ccService.listSesionesAgentesCanal.
 export type CCModoSesion = 'compartido' | 'individual'
 
+// Cómo se reparten las conversaciones que entran por este nivel.
+// Canal: 'campania' hereda de su campaña. Campaña: 'global' hereda del CCO_CONFIG.
+// 'auto' = el sistema asigna; 'manual' = queda en cola y los agentes la jalan.
+export type CCModoAsignacionCanal = 'campania' | 'auto' | 'manual'
+export type CCModoAsignacionCampania = 'global' | 'auto' | 'manual'
+export type CCModoAsignacionGlobal = 'auto' | 'manual'
+
 export interface CCCanal {
   id: number
   tipo: CCCanalTipo
@@ -65,6 +72,8 @@ export interface CCCanal {
   grupoId: number | null
   campaniaId: number | null
   modoSesion: CCModoSesion
+  modoAsignacion?: CCModoAsignacionCanal
+  esCanalCrm?: boolean
   metaPageId: string | null
   metaBusinessId: string | null
   verifyToken: string | null
@@ -116,6 +125,7 @@ export interface CCCampania {
   contactoTelefono: string | null
   contactoFacebookUrl: string | null
   contactoInstagramUrl: string | null
+  modoAsignacion?: CCModoAsignacionCampania
 }
 
 // Registrado desde la página pública de postulación (ej. registro.html de
@@ -127,6 +137,35 @@ export interface CCPostulante {
   correo: string | null
   redesSociales: string | null
   fechaRegistro: string
+}
+
+// Fila del listado transversal de "Gestión de postulantes" — el mismo
+// postulante pero con la campaña a la que pertenece y su tipificación más
+// reciente (si alguna vez se le registró una llamada tipificada).
+export interface CCPostulanteGestion {
+  id: number
+  nombre: string
+  telefono: string
+  correo: string | null
+  fechaRegistro: string
+  campaniaId: number
+  campaniaNombre: string
+  tipificacion: string | null
+  observaciones: string | null
+  tipificacionFecha: string | null
+}
+
+export interface CCPostulanteNota {
+  id: number
+  usuarioId: number
+  usuarioNombre: string | null
+  nota: string
+  fecha: string
+}
+
+export interface CCCampaniaSimple {
+  id: number
+  nombre: string
 }
 
 export interface CCGrupo {
@@ -209,6 +248,7 @@ export interface CCConfig {
   horarioInicio: string
   horarioFin: string
   diasSemana: string
+  modoAsignacion: CCModoAsignacionGlobal
 }
 
 export interface CCMetricas {

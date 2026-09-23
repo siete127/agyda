@@ -81,6 +81,8 @@ app.use('/intranet/Evidencia', express.static(process.env.EVIDENCIA_UPLOAD_DIR |
 app.use('/intranet/Perfil', express.static(process.env.PROFILE_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Perfil'));
 app.use('/intranet/Portadas', express.static(process.env.PORTADA_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/Portadas'));
 app.use('/intranet/ArdaWiki', express.static(process.env.KB_IMAGEN_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/ArdaWiki'));
+// Definiciones .rdl / .rdlc de la Suite de Reportes (Contact Center)
+app.use('/suite-reportes', express.static(process.env.RDL_UPLOAD_DIR || 'C:/inetpub/wwwroot/intranet/intranet/SuiteReportes'));
 // Instalador y script del agente de monitoreo de red (descarga sin auth — el
 // script no contiene secretos; la API key la pega el instalador en la PC).
 app.use('/agente-red', express.static(path.join(__dirname, 'tools', 'agente-red')));
@@ -104,9 +106,9 @@ app.use('/api/comentarios', require('./routes/comentarios'));
 app.use('/api/proyectos', require('./routes/proyectos'));
 app.use('/api/tareas', require('./routes/tareas'));
 app.use('/api/permisos', require('./routes/permisos'));
-app.use('/api/quejas', require('./routes/quejas'));
-app.use('/api/consultas', require('./routes/consultas'));
-app.use('/api/aclaraciones', require('./routes/aclaraciones'));
+// Quejas / Consultas / Aclaraciones: unificadas en "Casos" (rutas en
+// /api/atencion-cliente/casos). Fase 9 del rediseño — controladores y rutas
+// legacy eliminados; las tablas SQL se conservan como respaldo histórico.
 app.use('/api/seguimiento', require('./routes/seguimiento'));
 app.use('/api/encuestas', require('./routes/encuestas'));
 app.use('/api/nomina',   require('./routes/nomina'));
@@ -168,6 +170,7 @@ app.use('/api/incapacidades', require('./routes/incapacidades'));
 app.use('/api/evaluacion-desempeno', require('./routes/evaluacionDesempeno'));
 app.use('/api/auditoria', require('./routes/auditoria'));
 app.use('/api/crm',      require('./routes/crm'));
+app.use('/api/portal-cliente', require('./routes/portalCliente'));
 app.use('/api/crm-setup', require('./routes/crmSetup'));
 app.use('/api/crm-accesos', require('./routes/crmAccesos'));
 app.use('/api/vacantes', require('./routes/vacantes'));
@@ -189,6 +192,11 @@ app.use('/api/mensajeria', require('./routes/mensajeria'));
 
 // CRM: arrancar cron de automatizaciones
 require('./controllers/crmAutomatizacionesController');
+// Seguimiento a clientes: crons de agenda (tareas/seguimientos/inactividad) y de
+// SLA de incidencias — también se cargan al montar routes/atencionCliente.js,
+// esto es respaldo.
+require('./controllers/clienteAgendaCronController');
+require('./controllers/clienteIncidenciasSlaCronController');
 app.use('/api/eventos', require('./routes/calendario'));
 // app.use('/api/mundial', require('./routes/mundial'));
 
@@ -285,6 +293,28 @@ socketService.initialize(server);
       logger.info('✅ Base de datos inicializada');
     } catch (err) {
       logger.error('❌ Error inicializando BD:', err.message);
+    }
+
+    // Las sesiones de WhatsApp (Baileys) solo viven en memoria del proceso —
+    // tras cualquier reinicio del backend, la BD sigue diciendo 'conectado'
+    // pero no hay socket real escuchando hasta reconectar. Ver
+    // baileysManager.reconectarSesionesGuardadas para el detalle del bug.
+    //
+    // BAILEYS_DISABLE_AUTORECONNECT=1 (usado en .env.qa): back-agyda-qa corre
+    // el mismo código contra la MISMA base de datos y la MISMA carpeta de
+    // credenciales en disco que producción (BackAgyda/baileys_sessions/) —
+    // si ambos procesos reconectan el mismo canal, compiten por la sesión de
+    // WhatsApp (WhatsApp solo permite una conexión activa a la vez) y cada
+    // uno pisa CN_BAILEYS_ESTADO con lo que ve en su propia memoria, dejando
+    // el estado real oscilando sin control entre 'conectado'/'esperando_qr'.
+    if (process.env.BAILEYS_DISABLE_AUTORECONNECT === '1') {
+      logger.warn('⚠️ Baileys: auto-reconexión deshabilitada en este proceso (BAILEYS_DISABLE_AUTORECONNECT=1)');
+    } else {
+      try {
+        await require('./services/canalesBaileys/baileysManager').reconectarSesionesGuardadas();
+      } catch (err) {
+        logger.error('❌ Error reconectando sesiones de Baileys:', err.message);
+      }
     }
   }
 

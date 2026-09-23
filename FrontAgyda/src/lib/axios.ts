@@ -10,6 +10,20 @@ export const api = axios.create({
   withCredentials: true,
 })
 
+// Cliente para endpoints públicos sin sesión (ej. formularios en modo
+// 'externo' para VICIdial, /q/:token de QR). A propósito NO comparte los
+// interceptores de `api` de arriba: esas páginas pueden abrirse en un
+// navegador/iframe sin ninguna sesión de AGYDA, y un 401/403 de otra
+// petición en vuelo no debe redirigir esta pestaña a /login.
+export const apiPublico = axios.create({
+  baseURL: '/api',
+  timeout: 30_000,
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  },
+})
+
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('auth_token')

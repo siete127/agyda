@@ -30,6 +30,20 @@ export interface CRMContacto {
   medioContacto: string | null
   observacionesIniciales: string | null
   esCliente: boolean
+  tipoClienteId: number | null
+  tipoClienteNombre: string | null
+  segmentoId: number | null
+  segmentoNombre: string | null
+  categoriaId: number | null
+  categoriaNombre: string | null
+  industriaId: number | null
+  industriaNombre: string | null
+  clasificacionId: number | null
+  clasificacionNombre: string | null
+  etiquetas: { id: number; nombre: string }[]
+  neusId: number | null
+  tipoAccesoId: number | null
+  tipoAccesoNombre: string | null
 }
 
 export interface CRMOportunidad {
@@ -117,6 +131,20 @@ export function parseCRMContacto(raw: Record<string, unknown>): CRMContacto {
     medioContacto:           pick(raw, 'medioContacto', 'CONT_MEDIO_CONTACTO') as string | null,
     observacionesIniciales:  pick(raw, 'observacionesIniciales', 'CONT_OBSERVACIONES_INICIALES') as string | null,
     esCliente:               Boolean(pick(raw, 'esCliente', 'CONT_ES_CLIENTE') ?? false),
+    tipoClienteId:           pick(raw, 'tipoClienteId', 'CONT_TIPO_CLIENTE_ID') as number | null,
+    tipoClienteNombre:       pick(raw, 'tipoClienteNombre') as string | null,
+    segmentoId:              pick(raw, 'segmentoId', 'CONT_SEGMENTO_ID') as number | null,
+    segmentoNombre:          pick(raw, 'segmentoNombre') as string | null,
+    categoriaId:             pick(raw, 'categoriaId', 'CONT_CATEGORIA_ID') as number | null,
+    categoriaNombre:         pick(raw, 'categoriaNombre') as string | null,
+    industriaId:             pick(raw, 'industriaId', 'CONT_INDUSTRIA_ID') as number | null,
+    industriaNombre:         pick(raw, 'industriaNombre') as string | null,
+    clasificacionId:         pick(raw, 'clasificacionId', 'CONT_CLASIFICACION_ID') as number | null,
+    clasificacionNombre:     pick(raw, 'clasificacionNombre') as string | null,
+    etiquetas:               Array.isArray(raw.etiquetas) ? raw.etiquetas as { id: number; nombre: string }[] : [],
+    neusId:                  pick(raw, 'neusId', 'CONT_NEUS_ID') as number | null,
+    tipoAccesoId:            pick(raw, 'tipoAccesoId', 'CONT_TIPO_ACCESO_ID') as number | null,
+    tipoAccesoNombre:        pick(raw, 'tipoAccesoNombre') as string | null,
   }
 }
 

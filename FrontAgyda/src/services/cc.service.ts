@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
   CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
-  CCPostulante, CCMiSkill,
+  CCPostulante, CCMiSkill, CCPostulanteGestion, CCPostulanteNota, CCCampaniaSimple,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -23,6 +23,8 @@ export const ccService = {
   },
   cerrar: (id: number, body: { motivoCierreId?: number; tipificacionId?: number; comentario?: string }) =>
     api.post(`/contact-center/interacciones/${id}/cerrar`, body).then((r) => r.data),
+  retipificar: (id: number, body: { tipificacionId: number; comentario?: string }) =>
+    api.post(`/contact-center/interacciones/${id}/retipificar`, body).then((r) => r.data),
   transferir: (id: number, body: { nuevoAgenteId?: number; nuevoGrupoId?: number }) =>
     api.post(`/contact-center/interacciones/${id}/transferir`, body).then((r) => r.data),
   agentesTransferibles: (id: number) => d<CCAgenteEstado[]>(api.get(`/contact-center/interacciones/${id}/agentes-transferibles`)),
@@ -46,6 +48,10 @@ export const ccService = {
   historial: (filtros: Record<string, string | number>) => d<CCInteraccion[]>(api.get('/contact-center/historial', { params: filtros })),
   metricas: () => d<CCMetricas>(api.get('/contact-center/metricas')),
   runCron: () => api.post('/contact-center/cron/run').then((r) => r.data),
+  susurrar: (id: number, contenido: string) =>
+    api.post(`/contact-center/interacciones/${id}/susurrar`, { contenido }).then((r) => r.data),
+  tomarSupervisor: (id: number) =>
+    api.post(`/contact-center/interacciones/${id}/tomar-supervisor`).then((r) => r.data),
 
   // ── Config: canales ──
   getCanales: () => d<CCCanal[]>(api.get('/contact-center/canales')),
@@ -63,6 +69,12 @@ export const ccService = {
   estadoBaileys: (id: number, usuarioId?: number) =>
     api.get(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/estado`).then((r) => r.data as { success: boolean; data: { estado: string; qrDataUrl: string | null; numero: string | null } }),
   cerrarBaileys: (id: number, usuarioId?: number) => api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/cerrar`).then((r) => r.data),
+  // Extiende hacia atrás el historial de las conversaciones que YA existen
+  // en AGYDA para este canal — Baileys no permite traer chats completamente
+  // nuevos sin reconectar el socket (lo que dispara un conflicto del lado
+  // de WhatsApp), así que solo alarga conversaciones con al menos 1 mensaje.
+  importarHistorialBaileys: (id: number, usuarioId?: number) =>
+    api.post(`/contact-center/canales/${id}${usuarioId ? `/baileys/agente/${usuarioId}` : '/baileys'}/importar-historial`).then((r) => r.data as { success: boolean; data: { chatsConsultados: number; mensajesInsertados: number; chatsConError: number; quedanMasPorRevisar: boolean } }),
 
   // ── Messenger vía FCA (no oficial, vinculación pegando appstate.json) ──
   vincularFca: (id: number, appState: string, usuarioId?: number) =>
@@ -98,6 +110,19 @@ export const ccService = {
     const token = useAuthStore.getState().token
     return `/api/contact-center/campanias/${campaniaId}/tipificaciones-excel${token ? `?token=${encodeURIComponent(token)}` : ''}`
   },
+
+  // ── Gestión de postulantes (transversal a campañas asignadas) ──
+  getPostulantesGestion: (params: { q?: string; page?: number; pageSize?: number }) =>
+    api.get<{ data: CCPostulanteGestion[]; total: number }>('/contact-center/postulantes', { params })
+      .then((r) => r.data.data ? r.data : { data: [], total: 0 }),
+  tipificarPostulante: (postulanteId: number, body: { tipificacion: string; observaciones?: string }) =>
+    api.post(`/contact-center/postulantes/${postulanteId}/tipificacion`, body).then((r) => r.data),
+  getNotasPostulante: (postulanteId: number) => d<CCPostulanteNota[]>(api.get(`/contact-center/postulantes/${postulanteId}/notas`)),
+  crearNotaPostulante: (postulanteId: number, nota: string) =>
+    d<CCPostulanteNota>(api.post(`/contact-center/postulantes/${postulanteId}/notas`, { nota })),
+  getCampaniasParaPostulante: () => d<CCCampaniaSimple[]>(api.get('/contact-center/postulantes/campanias')),
+  crearPostulante: (body: { nombre: string; telefono: string; campaniaId: number }) =>
+    api.post('/contact-center/postulantes', body).then((r) => r.data),
 
   getGrupos: (campaniaId?: number) => d<CCGrupo[]>(api.get('/contact-center/grupos', { params: campaniaId ? { campaniaId } : {} })),
   createGrupo: (body: { campaniaId: number; nombre: string; descripcion?: string; icono?: string }) => api.post('/contact-center/grupos', body).then((r) => r.data),
