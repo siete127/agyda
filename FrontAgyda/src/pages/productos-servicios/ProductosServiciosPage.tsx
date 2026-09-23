@@ -15,6 +15,8 @@ import {
 import { SatClaveInput } from '@/components/ui/SatClaveInput'
 
 const RECURRENCIA_LABEL: Record<ProductoServicioRecurrencia, string> = {
+  SEMANAL: 'Semanal',
+  QUINCENAL: 'Quincenal',
   MENSUAL: 'Mensual',
   ANUAL: 'Anual',
   UNICO: 'Único pago',

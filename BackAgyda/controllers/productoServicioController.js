@@ -2,7 +2,7 @@ const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 
 const TIPOS = ['PRODUCTO', 'SERVICIO'];
-const RECURRENCIAS = ['MENSUAL', 'ANUAL', 'UNICO'];
+const RECURRENCIAS = ['SEMANAL', 'QUINCENAL', 'MENSUAL', 'ANUAL', 'UNICO'];
 
 function parseTipo(v) {
   const t = String(v || '').toUpperCase();

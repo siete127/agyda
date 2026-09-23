@@ -2244,6 +2244,10 @@ async function ensureSolicitudFiscalSchema(pool) {
     ['CL_REGIMEN_FISCAL', 'NVARCHAR(10) NULL'],
     ['CL_USO_CFDI', 'NVARCHAR(10) NULL'],
     ['CL_CORREO_FACTURACION', 'NVARCHAR(300) NULL'],
+    // Texto libre — sin campo estructurado propio para tipo de persona,
+    // puesto del contacto, método de pago o días de crédito; se anotan aquí
+    // en vez de agregar 4 columnas más para un dato que hoy nadie más consulta.
+    ['CL_OBSERVACIONES', 'NVARCHAR(1000) NULL'],
   ];
   for (const [col, tipo] of columnasClientes) {
     try {

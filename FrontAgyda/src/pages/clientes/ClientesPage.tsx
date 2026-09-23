@@ -15,9 +15,11 @@ import toast from 'react-hot-toast'
 import { productoServicioService, type ProductoServicioRecurrencia } from '@/services/productoServicio.service'
 
 const RECURRENCIA_LABEL: Record<ProductoServicioRecurrencia, string> = {
-  MENSUAL: 'Mensual', ANUAL: 'Anual', UNICO: 'Pago único',
+  SEMANAL: 'Semanal', QUINCENAL: 'Quincenal', MENSUAL: 'Mensual', ANUAL: 'Anual', UNICO: 'Pago único',
 }
 const RECURRENCIA_CHIP: Record<ProductoServicioRecurrencia, string> = {
+  SEMANAL: 'bg-amber-100 text-amber-700',
+  QUINCENAL: 'bg-teal-100 text-teal-700',
   MENSUAL: 'bg-blue-100 text-blue-700',
   ANUAL: 'bg-violet-100 text-violet-700',
   UNICO: 'bg-gray-100 text-gray-600',
@@ -134,6 +136,7 @@ interface Cliente {
   calle: string
   colonia: string
   cp: string
+  observaciones: string
   activo: boolean
   fechaRegistro: string
   neusId: number | null
@@ -154,6 +157,7 @@ function parseCliente(r: Record<string, unknown>): Cliente {
     calle: s(['calle', 'CL_CALLE', 'street']),
     colonia: s(['colonia', 'CL_COLONIA']),
     cp: s(['cp', 'CL_CP', 'codigoPostal', 'zipCode']),
+    observaciones: s(['observaciones', 'CL_OBSERVACIONES']),
     activo: Boolean(r['activo'] ?? r['CL_ACTIVO'] ?? true),
     fechaRegistro: s(['fechaRegistro', 'CL_FECHA_REGISTRO', 'createdAt']),
     neusId: r['neusId'] != null ? Number(r['neusId']) : null,
@@ -164,7 +168,7 @@ function parseCliente(r: Record<string, unknown>): Cliente {
 
 const EMPTY_FORM = {
   empresa: '', nombre: '', rfc: '', telefono: '',
-  correo: '', ciudad: '', calle: '', colonia: '', cp: '',
+  correo: '', ciudad: '', calle: '', colonia: '', cp: '', observaciones: '',
 }
 
 /* ── Productos/servicios contratados (solo al editar un cliente existente) ── */
@@ -296,6 +300,7 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
     empresa: cliente.empresa, nombre: cliente.nombre, rfc: cliente.rfc,
     telefono: cliente.telefono, correo: cliente.correo, ciudad: cliente.ciudad,
     calle: cliente.calle, colonia: cliente.colonia, cp: cliente.cp,
+    observaciones: cliente.observaciones,
   } : { ...EMPTY_FORM })
   const [accesoActivo, setAccesoActivo] = useState(cliente?.accesoActivo ?? false)
   const [passwordPortal, setPasswordPortal] = useState('')
@@ -382,6 +387,18 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
                   </div>
                 </div>
               ))}
+              <div className="col-span-2">
+                <label className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-gray-500">
+                  <FileText className="h-3 w-3 text-violet-400" /> Observaciones
+                </label>
+                <textarea
+                  value={form.observaciones}
+                  onChange={(e) => setForm({ ...form, observaciones: e.target.value })}
+                  placeholder="Notas libres: tipo de persona, puesto del contacto, método de pago, días de crédito…"
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-[0.85rem] text-gray-900 placeholder-gray-400 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
+                />
+              </div>
             </div>
           </div>
 

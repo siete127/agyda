@@ -203,7 +203,8 @@ exports.getClientes = async (req, res) => {
         CL.CL_NUM_INT as numInt,
         CL.CL_COLONIA as colonia,
         CL.CL_CP as cp,
-        CL.CL_PAIS as pais
+        CL.CL_PAIS as pais,
+        CL.CL_OBSERVACIONES as observaciones
       FROM CLIENTES CL
       LEFT JOIN NEUS_USUARIOS NU ON NU.NEUS_ID = CL.NEUS_ID
       ORDER BY CL.CL_EMPRESA ASC, CL.CL_NOMBRE ASC
@@ -232,7 +233,8 @@ exports.createCliente = async (req, res) => {
       colonia,
       cp,
       rfc,
-      pais
+      pais,
+      observaciones
     } = req.body;
 
     if ((!empresa || empresa.toString().trim() === '') && (!nombre || nombre.toString().trim() === '')) {
@@ -323,11 +325,12 @@ exports.createCliente = async (req, res) => {
         .input('numInt', sql.NVarChar, numInt || null)
         .input('colonia', sql.NVarChar, colonia || null)
         .input('cp', sql.NVarChar, cp || null)
-        .input('pais', sql.NVarChar, pais || null);
+        .input('pais', sql.NVarChar, pais || null)
+        .input('observaciones', sql.NVarChar, observaciones || null);
 
       const insertClienteResult = await insReq.query(`
-        INSERT INTO CLIENTES (NEUS_ID, CL_EMPRESA, CL_RFC, CL_NOMBRE, CL_TELEFONO, CL_CIUDAD, CL_CORREO, CL_ACTIVO, CL_FECHA_REGISTRO, CL_CALLE, CL_NUM_EXT, CL_NUM_INT, CL_COLONIA, CL_CP, CL_PAIS)
-        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais);
+        INSERT INTO CLIENTES (NEUS_ID, CL_EMPRESA, CL_RFC, CL_NOMBRE, CL_TELEFONO, CL_CIUDAD, CL_CORREO, CL_ACTIVO, CL_FECHA_REGISTRO, CL_CALLE, CL_NUM_EXT, CL_NUM_INT, CL_COLONIA, CL_CP, CL_PAIS, CL_OBSERVACIONES)
+        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais, @observaciones);
         SELECT SCOPE_IDENTITY() as id;
       `);
 
@@ -399,6 +402,7 @@ exports.updateCliente = async (req, res) => {
       pais,
       activarAcceso,
       enviarInvitacion,
+      observaciones,
     } = req.body;
 
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -454,6 +458,7 @@ exports.updateCliente = async (req, res) => {
         .input('colonia', sql.NVarChar, colonia || null)
         .input('cp', sql.NVarChar, cp || null)
         .input('pais', sql.NVarChar, pais || null)
+        .input('observaciones', sql.NVarChar, observaciones || null)
         .query(`
           UPDATE CLIENTES SET
             CL_EMPRESA = COALESCE(@empresa, CL_EMPRESA),
@@ -468,6 +473,7 @@ exports.updateCliente = async (req, res) => {
             CL_COLONIA = COALESCE(@colonia, CL_COLONIA),
             CL_CP = COALESCE(@cp, CL_CP),
             CL_PAIS = COALESCE(@pais, CL_PAIS),
+            CL_OBSERVACIONES = COALESCE(@observaciones, CL_OBSERVACIONES),
             CL_ACTIVO = CASE WHEN @activo IS NULL THEN CL_ACTIVO ELSE @activo END
           WHERE CL_ID = @id
         `);
