@@ -1,6 +1,6 @@
 import { api } from '@/lib/axios'
 import type {
-  SupervisorAsignacion, PanelSupervisor, ProductividadAgente, HistorialAsignacion, AlarmaInstancia,
+  SupervisorAsignacion, PanelSupervisor, ProductividadAgente, HistorialAsignacion, AlarmaInstancia, AlarmaConfig,
   NotificacionTipo, NotificacionAlcance, NotificacionPendiente, NotificacionEnviada, ComparadorData,
   HistoricoSlaData,
 } from '@/types/supervisores.types'
@@ -41,6 +41,23 @@ export const supervisoresService = {
 
   async atenderAlarma(id: number, comentario?: string): Promise<void> {
     await api.post(`/operaciones/supervisores/alarmas/${id}/atender`, { comentario })
+  },
+
+  async getAlarmasConfig(): Promise<AlarmaConfig[]> {
+    const { data } = await api.get('/operaciones/supervisores/alarmas/config')
+    return (data?.data ?? []) as AlarmaConfig[]
+  },
+
+  async crearAlarmaConfig(body: { nombre: string; tipo: string; umbralMinutos: number; campaniaId: number | null }): Promise<void> {
+    await api.post('/operaciones/supervisores/alarmas/config', body)
+  },
+
+  async actualizarAlarmaConfig(id: number, body: { nombre?: string; umbralMinutos?: number; activa?: boolean }): Promise<void> {
+    await api.patch(`/operaciones/supervisores/alarmas/config/${id}`, body)
+  },
+
+  async eliminarAlarmaConfig(id: number): Promise<void> {
+    await api.delete(`/operaciones/supervisores/alarmas/config/${id}`)
   },
 
   async crearNotificacion(body: { tipo: NotificacionTipo; alcance: NotificacionAlcance; alcanceId?: number; mensaje: string }): Promise<void> {

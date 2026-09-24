@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   Users, UserCheck, Clock, BarChart3, Plus, Trash2, Coffee, History,
   ChevronRight, ChevronLeft, Layers, MessageCircle, Circle, PowerOff, MinusCircle,
-  AlertTriangle, CheckCircle2, Megaphone, RefreshCw, LogOut, TrendingUp,
+  AlertTriangle, CheckCircle2, Megaphone, RefreshCw, LogOut, TrendingUp, Settings2,
 } from 'lucide-react'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { api } from '@/lib/axios'
@@ -20,6 +20,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import {
   TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente, type ProductividadAgente,
   NOTIFICACION_ALCANCE_LABELS, type NotificacionTipo, type NotificacionAlcance, type AlarmaInstancia,
+  ALARMA_TIPO_LABELS, type AlarmaTipo,
 } from '@/types/supervisores.types'
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
@@ -1427,9 +1428,139 @@ function AlarmaCard({
   )
 }
 
+/* ── Modal: configurar alarmas (umbral en minutos y campaña a la que
+   aplican) — cada campaña opera distinto, así que además de las 2 alarmas
+   globales por default se puede crear una específica de campaña con su
+   propio umbral, que la reemplaza para esa campaña (ver evaluarAlarma en el
+   backend: una alarma de campaña tiene prioridad sobre la global del mismo
+   tipo). ── */
+function ConfigurarAlarmasModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
+  const [creando, setCreando] = useState(false)
+  const [tipo, setTipo] = useState<AlarmaTipo>('agente_pausa')
+  const [campaniaId, setCampaniaId] = useState<number | ''>('')
+  const [umbralMinutos, setUmbralMinutos] = useState(15)
+
+  const { data: config = [], isLoading } = useQuery({
+    queryKey: ['supervisores-alarmas-config'],
+    queryFn: () => supervisoresService.getAlarmasConfig(),
+  })
+  const { data: panel } = useQuery({
+    queryKey: ['supervisores-mi-panel'],
+    queryFn: () => supervisoresService.getMiPanel(),
+  })
+
+  const invalidar = () => {
+    qc.invalidateQueries({ queryKey: ['supervisores-alarmas-config'] })
+    qc.invalidateQueries({ queryKey: ['supervisores-alarmas'] })
+  }
+
+  const crear = useMutation({
+    mutationFn: () => supervisoresService.crearAlarmaConfig({
+      nombre: `${ALARMA_TIPO_LABELS[tipo]}${campaniaId ? '' : ' (global)'}`,
+      tipo, umbralMinutos, campaniaId: campaniaId || null,
+    }),
+    onSuccess: () => { toast.success('Alarma creada'); setCreando(false); setCampaniaId(''); setUmbralMinutos(15); invalidar() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo crear la alarma'),
+  })
+  const actualizar = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: { umbralMinutos?: number; activa?: boolean } }) => supervisoresService.actualizarAlarmaConfig(id, body),
+    onSuccess: () => invalidar(),
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo actualizar'),
+  })
+  const eliminar = useMutation({
+    mutationFn: (id: number) => supervisoresService.eliminarAlarmaConfig(id),
+    onSuccess: () => { toast.success('Alarma eliminada'); invalidar() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo eliminar'),
+  })
+
+  return (
+    <Modal isOpen onClose={onClose} title="Configurar alarmas" size="lg">
+      <div className="space-y-4">
+        <p className="text-xs text-gray-500">
+          Cada campaña puede tener su propio umbral. Una alarma de campaña reemplaza a la global del mismo tipo, solo para esa campaña.
+        </p>
+
+        {isLoading ? (
+          <div className="flex justify-center py-10"><Spinner /></div>
+        ) : (
+          <div className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+            {config.map((a) => (
+              <div key={a.id} className="flex items-center gap-3 px-3 py-2.5">
+                <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', a.activa ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-400')}>
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800">{ALARMA_TIPO_LABELS[a.tipo]}</p>
+                  <p className="text-xs text-gray-500">{a.campaniaNombre ?? 'Todas las campañas (global)'}</p>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  value={a.umbralMinutos}
+                  onChange={(e) => actualizar.mutate({ id: a.id, body: { umbralMinutos: Number(e.target.value) || 1 } })}
+                  className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-right text-xs outline-none focus:border-brand"
+                />
+                <span className="text-xs text-gray-400">min</span>
+                <button
+                  onClick={() => actualizar.mutate({ id: a.id, body: { activa: !a.activa } })}
+                  title={a.activa ? 'Desactivar' : 'Activar'}
+                  className={clsx('rounded-full px-2 py-0.5 text-[0.65rem] font-semibold', a.activa ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500')}
+                >
+                  {a.activa ? 'Activa' : 'Inactiva'}
+                </button>
+                <button onClick={() => eliminar.mutate(a.id)} title="Eliminar" className="text-gray-300 hover:text-red-500">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {creando ? (
+          <div className="space-y-3 rounded-xl border border-gray-100 p-3">
+            <div className="flex flex-wrap gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-500">Tipo</label>
+                <select value={tipo} onChange={(e) => setTipo(e.target.value as AlarmaTipo)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-brand">
+                  {(Object.keys(ALARMA_TIPO_LABELS) as AlarmaTipo[]).map((t) => <option key={t} value={t}>{ALARMA_TIPO_LABELS[t]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-500">Campaña</label>
+                <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-brand">
+                  <option value="">Todas (global)</option>
+                  {(panel?.campanias ?? []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-500">Umbral (minutos)</label>
+                <input
+                  type="number" min={1} value={umbralMinutos}
+                  onChange={(e) => setUmbralMinutos(Number(e.target.value) || 1)}
+                  className="w-24 rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-brand"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setCreando(false)}>Cancelar</Button>
+              <Button size="sm" onClick={() => crear.mutate()} disabled={crear.isPending}>Crear alarma</Button>
+            </div>
+          </div>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => setCreando(true)}>
+            <Plus className="h-3.5 w-3.5" /> Nueva alarma
+          </Button>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 function AlarmasTab() {
   const qc = useQueryClient()
   const [comentarios, setComentarios] = useState<Record<number, string>>({})
+  const [configAbierta, setConfigAbierta] = useState(false)
 
   const { data: instancias = [], isLoading } = useQuery({
     queryKey: ['supervisores-alarmas'],
@@ -1443,27 +1574,48 @@ function AlarmasTab() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo atender la alarma'),
   })
 
-  if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-
   const enAlarma = instancias.filter((i) => i.estado === 'en_alarma')
   const atendidas = instancias.filter((i) => i.estado === 'atendida')
 
+  const BotonConfigurar = (
+    <div className="flex justify-end">
+      <Button size="sm" variant="secondary" onClick={() => setConfigAbierta(true)}>
+        <Settings2 className="h-3.5 w-3.5" /> Configurar alarmas
+      </Button>
+    </div>
+  )
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {BotonConfigurar}
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+        {configAbierta && <ConfigurarAlarmasModal onClose={() => setConfigAbierta(false)} />}
+      </div>
+    )
+  }
+
   if (instancias.length === 0) {
     return (
-      <div className="card flex flex-col items-center gap-3 py-20 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
-          <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+      <div className="space-y-4">
+        {BotonConfigurar}
+        <div className="card flex flex-col items-center gap-3 py-20 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+            <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Todo en orden</p>
+            <p className="mt-0.5 text-xs text-gray-400">No hay alarmas activas en tus campañas ahora mismo</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-800">Todo en orden</p>
-          <p className="mt-0.5 text-xs text-gray-400">No hay alarmas activas en tus campañas ahora mismo</p>
-        </div>
+        {configAbierta && <ConfigurarAlarmasModal onClose={() => setConfigAbierta(false)} />}
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
+      {BotonConfigurar}
       <div className="grid grid-cols-2 gap-3 sm:max-w-md">
         <div className={clsx('card flex items-center gap-3 p-3', enAlarma.length > 0 && 'border-red-200 bg-red-50/40')}>
           <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg', enAlarma.length > 0 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400')}>
@@ -1497,6 +1649,7 @@ function AlarmasTab() {
           />
         ))}
       </div>
+      {configAbierta && <ConfigurarAlarmasModal onClose={() => setConfigAbierta(false)} />}
     </div>
   )
 }

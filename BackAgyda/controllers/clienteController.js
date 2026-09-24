@@ -209,7 +209,8 @@ exports.getClientes = async (req, res) => {
         C.CONT_NUM_INT as numInt,
         C.CONT_COLONIA as colonia,
         C.CONT_CP as cp,
-        C.CONT_PAIS as pais
+        C.CONT_PAIS as pais,
+        C.CONT_OBSERVACIONES as observaciones
       FROM CRM_CONTACTOS C
       LEFT JOIN NEUS_USUARIOS NU ON NU.NEUS_ID = C.CONT_NEUS_ID
       WHERE C.CONT_ES_CLIENTE = 1
@@ -239,7 +240,8 @@ exports.createCliente = async (req, res) => {
       colonia,
       cp,
       rfc,
-      pais
+      pais,
+      observaciones
     } = req.body;
 
     if ((!empresa || empresa.toString().trim() === '') && (!nombre || nombre.toString().trim() === '')) {
@@ -330,11 +332,12 @@ exports.createCliente = async (req, res) => {
         .input('numInt', sql.NVarChar, numInt || null)
         .input('colonia', sql.NVarChar, colonia || null)
         .input('cp', sql.NVarChar, cp || null)
-        .input('pais', sql.NVarChar, pais || null);
+        .input('pais', sql.NVarChar, pais || null)
+        .input('observaciones', sql.NVarChar, observaciones || null);
 
       const insertClienteResult = await insReq.query(`
-        INSERT INTO CRM_CONTACTOS (CONT_NEUS_ID, CONT_EMPRESA, CONT_RFC, CONT_NOMBRE, CONT_TELEFONO, CONT_CIUDAD, CONT_CORREO, CONT_ACTIVO, CONT_FECHA, CONT_CALLE, CONT_NUM_EXT, CONT_NUM_INT, CONT_COLONIA, CONT_CP, CONT_PAIS, CONT_ES_CLIENTE)
-        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais, 1);
+        INSERT INTO CRM_CONTACTOS (CONT_NEUS_ID, CONT_EMPRESA, CONT_RFC, CONT_NOMBRE, CONT_TELEFONO, CONT_CIUDAD, CONT_CORREO, CONT_ACTIVO, CONT_FECHA, CONT_CALLE, CONT_NUM_EXT, CONT_NUM_INT, CONT_COLONIA, CONT_CP, CONT_PAIS, CONT_OBSERVACIONES, CONT_ES_CLIENTE)
+        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais, @observaciones, 1);
         SELECT SCOPE_IDENTITY() as id;
       `);
 
@@ -403,6 +406,7 @@ exports.updateCliente = async (req, res) => {
       pais,
       activarAcceso,
       enviarInvitacion,
+      observaciones,
     } = req.body;
 
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -458,6 +462,7 @@ exports.updateCliente = async (req, res) => {
         .input('colonia', sql.NVarChar, colonia || null)
         .input('cp', sql.NVarChar, cp || null)
         .input('pais', sql.NVarChar, pais || null)
+        .input('observaciones', sql.NVarChar, observaciones || null)
         .query(`
           UPDATE CRM_CONTACTOS SET
             CONT_EMPRESA = COALESCE(@empresa, CONT_EMPRESA),
@@ -472,6 +477,7 @@ exports.updateCliente = async (req, res) => {
             CONT_COLONIA = COALESCE(@colonia, CONT_COLONIA),
             CONT_CP = COALESCE(@cp, CONT_CP),
             CONT_PAIS = COALESCE(@pais, CONT_PAIS),
+            CONT_OBSERVACIONES = COALESCE(@observaciones, CONT_OBSERVACIONES),
             CONT_ACTIVO = CASE WHEN @activo IS NULL THEN CONT_ACTIVO ELSE @activo END
           WHERE CONT_ID = @id
         `);

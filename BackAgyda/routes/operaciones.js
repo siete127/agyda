@@ -26,6 +26,13 @@ router.get('/supervisores/historico-sla', auth.authenticateToken, controller.get
 router.get('/supervisores/alarmas', auth.authenticateToken, supervisorAlarmas.listInstancias);
 router.post('/supervisores/alarmas/:id/atender', auth.authenticateToken, supervisorAlarmas.atenderInstancia);
 
+// Configuración de alarmas (umbral y campaña) — permiso validado dentro del
+// controlador: AD/TI sin restricción, supervisor solo sobre sus campañas.
+router.get('/supervisores/alarmas/config', auth.authenticateToken, supervisorAlarmas.listConfig);
+router.post('/supervisores/alarmas/config', auth.authenticateToken, supervisorAlarmas.crearConfig);
+router.patch('/supervisores/alarmas/config/:id', auth.authenticateToken, supervisorAlarmas.actualizarConfig);
+router.delete('/supervisores/alarmas/config/:id', auth.authenticateToken, supervisorAlarmas.eliminarConfig);
+
 // Notificaciones a agentes (Fase 2, 3.3) — cualquier usuario autenticado
 // puede consultar/cerrar SUS pendientes; crear y ver el historial de
 // enviadas se restringe por dentro del controlador (AD/TI o supervisor de

@@ -11,10 +11,14 @@ async function main() {
   await transaction.begin();
 
   try {
+    // CL_OBSERVACIONES solo existe donde ya corrió su esquema (ensureSolicitudFiscalSchema).
+    const conObs = (await transaction.request().query(
+      `SELECT COL_LENGTH('dbo.CLIENTES', 'CL_OBSERVACIONES') AS n`)).recordset[0].n !== null;
     const clientes = (await transaction.request().query(`
       SELECT CL_ID, NEUS_ID, CL_EMPRESA, CL_NOMBRE, CL_TELEFONO, CL_CORREO, CL_CIUDAD, CL_ACTIVO,
              CL_FECHA_REGISTRO, CL_RFC, CL_CALLE, CL_NUM_EXT, CL_NUM_INT, CL_COLONIA, CL_CP, CL_PAIS,
-             CL_RAZON_SOCIAL, CL_REGIMEN_FISCAL, CL_USO_CFDI, CL_CORREO_FACTURACION
+             CL_RAZON_SOCIAL, CL_REGIMEN_FISCAL, CL_USO_CFDI, CL_CORREO_FACTURACION,
+             ${conObs ? 'CL_OBSERVACIONES' : 'CAST(NULL AS NVARCHAR(1000)) AS CL_OBSERVACIONES'}
       FROM CLIENTES
     `)).recordset;
 
@@ -59,6 +63,7 @@ async function main() {
           .input('cp', sql.NVarChar, cl.CL_CP || null)
           .input('pais', sql.NVarChar, cl.CL_PAIS || null)
           .input('neusId', sql.Int, cl.NEUS_ID || null)
+          .input('observaciones', sql.NVarChar, cl.CL_OBSERVACIONES || null)
           .query(`
             UPDATE CRM_CONTACTOS SET
               CONT_EMPRESA = COALESCE(CONT_EMPRESA, @empresa),
@@ -78,6 +83,7 @@ async function main() {
               CONT_CP = COALESCE(CONT_CP, @cp),
               CONT_PAIS = COALESCE(CONT_PAIS, @pais),
               CONT_NEUS_ID = COALESCE(CONT_NEUS_ID, @neusId),
+              CONT_OBSERVACIONES = COALESCE(CONT_OBSERVACIONES, @observaciones),
               CONT_ES_CLIENTE = 1
             WHERE CONT_ID = @id
           `);
@@ -103,17 +109,18 @@ async function main() {
           .input('colonia', sql.NVarChar, cl.CL_COLONIA || null)
           .input('cp', sql.NVarChar, cl.CL_CP || null)
           .input('pais', sql.NVarChar, cl.CL_PAIS || null)
+          .input('observaciones', sql.NVarChar, cl.CL_OBSERVACIONES || null)
           .query(`
             INSERT INTO CRM_CONTACTOS (
               CONT_NEUS_ID, CONT_EMPRESA, CONT_NOMBRE, CONT_TELEFONO, CONT_CIUDAD, CONT_CORREO,
               CONT_ACTIVO, CONT_FECHA, CONT_RFC, CONT_RAZON_SOCIAL, CONT_REGIMEN_FISCAL, CONT_USO_CFDI,
               CONT_CORREO_FACTURACION, CONT_CALLE, CONT_NUM_EXT, CONT_NUM_INT, CONT_COLONIA, CONT_CP, CONT_PAIS,
-              CONT_ES_CLIENTE
+              CONT_OBSERVACIONES, CONT_ES_CLIENTE
             ) VALUES (
               @neusId, @empresa, @nombre, @telefono, @ciudad, @correo,
               @activo, @fecha, @rfc, @razonSocial, @regimenFiscal, @usoCfdi,
               @correoFacturacion, @calle, @numExt, @numInt, @colonia, @cp, @pais,
-              1
+              @observaciones, 1
             );
             SELECT SCOPE_IDENTITY() as id;
           `);
