@@ -28,7 +28,7 @@ const PRIORIDAD_DOT: Record<string, string> = {
   baja:  'bg-emerald-500',
 }
 
-const ESTADO_ICON: Record<ProyectoEstado, React.ElementType> = {
+const ESTADO_ICON: Record<ProyectoEstado, React.ComponentType<{ className?: string }>> = {
   Activo:     CheckCircle2,
   Pausado:    Clock,
   Completado: Circle,

@@ -23,7 +23,7 @@ import { decisionesService } from '@/services/decisiones.service'
 const FILTROS_USUARIO_ID = new Set(['oeResponsableId', 'akResponsableId', 'deSolicitanteId', 'deAprobadorId'])
 const FILTRO_TIPO_DECISION_ID = 'deTipoId'
 
-const FUENTE_ICONO: Record<FuenteReporte, React.ElementType> = {
+const FUENTE_ICONO: Record<FuenteReporte, React.ComponentType<{ className?: string }>> = {
   okr: Target,
   kpis: Gauge,
   decisiones: Gavel,
@@ -497,7 +497,7 @@ export function ReportesEjecutivosPage() {
     setTab('generador')
   }
 
-  const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
+  const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: 'generador', label: 'Generador', icon: LayoutGrid },
     { key: 'plantillas', label: 'Mis plantillas', icon: BookMarked },
   ]

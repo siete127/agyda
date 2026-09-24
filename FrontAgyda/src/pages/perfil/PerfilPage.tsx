@@ -115,7 +115,7 @@ const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: s
 /* ── Pestañas del expediente personal (movidas desde el módulo Expediente) ── */
 type ExpTab = 'persona' | 'contacto' | 'adicionales' | 'familiares' | 'formacion' | 'talento'
 
-const EXPEDIENTE_TABS: { key: ExpTab; label: string; icon: React.ElementType; color: string }[] = [
+const EXPEDIENTE_TABS: { key: ExpTab; label: string; icon: React.ComponentType<{ className?: string }>; color: string }[] = [
   { key: 'persona',     label: 'Persona',     icon: UserCircle2,    color: 'indigo'  },
   { key: 'contacto',    label: 'Contacto',    icon: Phone,          color: 'emerald' },
   { key: 'adicionales', label: 'Adicionales', icon: Shirt,          color: 'amber'   },
@@ -134,7 +134,7 @@ const EXP_TAB_COLORS: Record<string, { active: string; icon: string }> = {
 }
 
 /* ── Dato label/valor: separados por línea fina, label izquierda / valor derecha ── */
-function DatoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | null }) {
+function DatoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string | null }) {
   const disponible = !!value
   return (
     <div className="flex items-center justify-between gap-3 border-b border-surface-border/70 py-2.5 last:border-0 last:pb-0">
@@ -150,7 +150,7 @@ function DatoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
 }
 
 /* ── Documento del bloque "Documentos y expediente" ── */
-function DocumentoItem({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+function DocumentoItem({ icon: Icon, label }: { icon: React.ComponentType<{ className?: string }>; label: string }) {
   return (
     <div className="flex items-center gap-2.5 rounded-xl border border-surface-border px-3 py-2.5">
       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-surface">

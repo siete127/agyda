@@ -21,7 +21,7 @@ import { direccionGeneralService as dgService } from '@/services/direccionGenera
 
 const currentPeriodo = new Date().toISOString().slice(0, 7)
 
-const AREA_ICONS: Record<AreaKey, React.ElementType> = {
+const AREA_ICONS: Record<AreaKey, React.ComponentType<{ className?: string }>> = {
   'direccion-general': Building2,
   rh: Users,
   finanzas: DollarSign,

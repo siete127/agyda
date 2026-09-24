@@ -2101,7 +2101,7 @@ function KpiCard({
   value: string | number
   sub?: string
   color: 'blue' | 'green' | 'red' | 'amber'
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
 }) {
   const palette = {
     blue:  { wrap: 'bg-blue-50 border-blue-200',   icon: 'text-blue-500',   val: 'text-blue-700' },

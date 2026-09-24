@@ -33,7 +33,7 @@ import { CARD_CATALOG_INDEX } from './cardCatalog'
 /* ─── Empresa ───────────────────────────────────────────────── */
 type EmpresaKey = 'mision' | 'vision' | 'valores' | 'legales'
 
-const EMPRESA_ITEMS: { label: string; icon: React.ElementType; key: EmpresaKey }[] = [
+const EMPRESA_ITEMS: { label: string; icon: React.ComponentType<{ className?: string }>; key: EmpresaKey }[] = [
   { label: 'Misión',    icon: Target, key: 'mision'  },
   { label: 'Visión',    icon: Eye,    key: 'vision'  },
   { label: 'Valores',   icon: Heart,  key: 'valores' },
@@ -574,7 +574,7 @@ export function DashboardPage() {
               { img: '/icons/organigrama.gif',  label: 'Organigrama',  to: '/organigrama' },
               { icon: HardDrive,                label: 'Drive',        to: '/drive'       },
               { icon: Music2,                   label: 'Música',       to: '/musica'      },
-            ] as { icon?: React.ElementType; img?: string; label: string; to: string }[]).map((m) => (
+            ] as { icon?: React.ComponentType<{ className?: string }>; img?: string; label: string; to: string }[]).map((m) => (
               <button key={m.label} onClick={() => navigate(m.to)}
                 className="group flex flex-col items-center gap-1.5 rounded-xl p-2.5 transition-colors hover:bg-brand-light">
                 {m.img ? (

@@ -12,7 +12,7 @@ function formatMoney(n: number) {
 
 interface DetalleTarjeta {
   key: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   titulo: string
   linkTo: string
   metricas: { label: string; value: string | number }[]

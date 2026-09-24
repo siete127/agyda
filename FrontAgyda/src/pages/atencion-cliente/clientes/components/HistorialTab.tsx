@@ -7,7 +7,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { clienteSeguimientoService } from '@/services/clienteSeguimiento.service'
 import { HISTORIAL_TIPO_LABEL, type HistorialTipo } from '@/types/clienteSeguimiento.types'
 
-const TIPO_ICONO: Record<HistorialTipo, React.ElementType> = {
+const TIPO_ICONO: Record<HistorialTipo, React.ComponentType<{ className?: string }>> = {
   seguimiento: History, tarea: ClipboardList, pago: DollarSign, encuesta: Smile,
   incidencia: AlertOctagon, renovacion: CalendarClock, documento: FileText,
 }

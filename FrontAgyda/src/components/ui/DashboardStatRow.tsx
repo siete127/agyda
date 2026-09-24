@@ -11,7 +11,7 @@ const TONE_CLASSES: Record<StatTone, { bg: string; text: string }> = {
 
 export interface DashboardStat {
   key: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   label: string
   value: string | number
   tone?: StatTone

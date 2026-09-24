@@ -228,7 +228,7 @@ function PostulantesModal({ vacante, onClose }: { vacante: Vacante; onClose: () 
 }
 
 /* ── Tarjeta de métrica del dashboard ── */
-function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: number | string }) {
+function StatCard({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number | string }) {
   return (
     <div className="card p-4 flex items-center gap-3">
       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">

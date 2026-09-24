@@ -42,7 +42,7 @@ function Field({ label, icon, children }: { label: string; icon: React.ReactNode
 }
 
 function CardSeccion({ icon: Icon, titulo, subtitulo, children, anchor }: {
-  icon: React.ElementType; titulo: string; subtitulo: string; children: React.ReactNode; anchor: string
+  icon: React.ComponentType<{ className?: string }>; titulo: string; subtitulo: string; children: React.ReactNode; anchor: string
 }) {
   return (
     <section id={anchor} className="scroll-mt-4 rounded-2xl border border-gray-100 bg-card p-5 shadow-card">

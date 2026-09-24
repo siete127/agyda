@@ -575,7 +575,7 @@ function ContenidoPageContent() {
     { key: 'publicadas', icon: Newspaper, label: 'Publicadas este mes', value: resumen?.publicadasMes ?? 0, tone: 'success' },
   ]
 
-  const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
+  const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: 'todas', label: 'Todas', icon: Clock },
     { key: 'redaccion', label: 'En redacción', icon: PenLine },
     { key: 'revision', label: 'En revisión', icon: Eye },

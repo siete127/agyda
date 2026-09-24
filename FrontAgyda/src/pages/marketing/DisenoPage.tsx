@@ -623,7 +623,7 @@ function DisenoPageContent() {
     { key: 'entregadas', icon: Check, label: 'Entregadas este mes', value: resumen?.entregadasMes ?? 0, tone: 'success' },
   ]
 
-  const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
+  const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: 'disponibles', label: 'Disponibles', icon: Inbox },
     { key: 'mias', label: 'Mis solicitudes', icon: Send },
     { key: 'asignadas', label: 'Asignadas a mí', icon: Briefcase },

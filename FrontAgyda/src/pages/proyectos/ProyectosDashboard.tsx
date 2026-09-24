@@ -144,7 +144,7 @@ function TimelineTiempos({ items }: { items: ProyectoTiempo[] }) {
 }
 
 /* ── Stat tile simple ── */
-function StatTile({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: string | number; tone: 'brand' | 'warn' | 'critical' }) {
+function StatTile({ icon: Icon, label, value, tone }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string | number; tone: 'brand' | 'warn' | 'critical' }) {
   const toneClasses = {
     brand: 'bg-brand/10 text-brand',
     warn: 'bg-amber-100 text-amber-600',

@@ -7,7 +7,7 @@ import { personalizacionService, type HeaderButton } from '@/services/personaliz
 
 type Key = HeaderButton['key']
 
-const META: Record<Key, { icon: React.ElementType; nota: string }> = {
+const META: Record<Key, { icon: React.ComponentType<{ className?: string }>; nota: string }> = {
   contingencia: { icon: Headset, nota: 'Marcador de contingencia (por defecto abre Azul1)' },
   marcador: { icon: Headset, nota: 'Marcador principal (por defecto abre el servidor VICIdial)' },
 }

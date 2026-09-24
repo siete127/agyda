@@ -7,7 +7,7 @@ import { clsx } from 'clsx'
 export interface TabItem<K extends string = string> {
   key: K
   label: string
-  icon?: React.ElementType
+  icon?: React.ComponentType<{ className?: string }>
   badge?: number | string
 }
 

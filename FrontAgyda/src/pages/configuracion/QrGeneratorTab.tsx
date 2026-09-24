@@ -9,7 +9,7 @@ import type { QrEntorno, QrModo } from '@/types/qrGenerator.types'
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2 text-sm outline-none focus:border-violet-500'
 const card = 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card'
 
-const MODO_INFO: Record<QrModo, { label: string; icon: React.ElementType; desc: string }> = {
+const MODO_INFO: Record<QrModo, { label: string; icon: React.ComponentType<{ className?: string }>; desc: string }> = {
   url: { label: 'URL', icon: Globe, desc: 'El QR abre la página web que indiques.' },
   llamada_directa: { label: 'Llamada directa', icon: Phone, desc: 'El QR ofrece marcar el número directo, sin pasar por ningún servidor — no hay métricas.' },
   llamada_medible: { label: 'Llamada medible', icon: PhoneCall, desc: 'El QR abre una página intermedia que registra cuántos vieron, intentaron llamar y confirmaron la llamada.' },

@@ -85,7 +85,7 @@ function PresetMockup({ p }: { p: ThemePreset }) {
   )
 }
 
-const MODOS: { key: Theme; label: string; icon: React.ElementType; desc: string; mockup: 'light' | 'dark' | 'split' }[] = [
+const MODOS: { key: Theme; label: string; icon: React.ComponentType<{ className?: string }>; desc: string; mockup: 'light' | 'dark' | 'split' }[] = [
   { key: 'light',  label: 'Claro',      icon: Sun,               desc: 'Siempre claro',                 mockup: 'light' },
   { key: 'dark',   label: 'Oscuro',     icon: Moon,              desc: 'Siempre oscuro',                mockup: 'dark' },
   { key: 'system', label: 'Automático', icon: MonitorSmartphone, desc: 'Sigue el tema del dispositivo', mockup: 'split' },

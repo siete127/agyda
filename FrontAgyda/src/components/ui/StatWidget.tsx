@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
 
 interface StatWidgetProps {
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   label: string
   value: string | number
   iconBg?: string

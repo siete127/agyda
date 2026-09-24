@@ -41,7 +41,7 @@ function parseSolicitudDetalle(r: Record<string, unknown>): SolicitudDetalle {
   }
 }
 
-const ESTADO_CONFIG: Record<string, { label: string; cls: string; Icon: React.ElementType }> = {
+const ESTADO_CONFIG: Record<string, { label: string; cls: string; Icon: React.ComponentType<{ className?: string }> }> = {
   PENDIENTE: { label: 'Pendiente', cls: 'bg-yellow-100 text-yellow-700', Icon: Clock },
   APROBADA:  { label: 'Aprobada',  cls: 'bg-emerald-100 text-emerald-700', Icon: CheckCircle },
   RECHAZADA: { label: 'Rechazada', cls: 'bg-red-100 text-red-700', Icon: XCircle },
@@ -391,7 +391,7 @@ function GrupoArea({ tipo, agentes, onSelect, onAsignarPool, onQuitarPool, asign
 
 function StatCard({ label, value, sub, icon: Icon, color }: {
   label: string; value: string | number; sub?: string
-  icon: React.ElementType; color: string
+  icon: React.ComponentType<{ className?: string }>; color: string
 }) {
   return (
     <div className="card p-4 flex items-center gap-3">

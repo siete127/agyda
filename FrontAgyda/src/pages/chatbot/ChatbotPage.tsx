@@ -240,7 +240,7 @@ function RespuestaFormModal({ respuesta, categoriaInicial, keywordsIniciales, on
 }
 
 /* ── Menú del widget: botones que ve el visitante al abrir el chat público ── */
-const TIPO_INFO: Record<TipoEtiquetaMenu, { label: string; icon: React.ElementType; desc: string }> = {
+const TIPO_INFO: Record<TipoEtiquetaMenu, { label: string; icon: React.ComponentType<{ className?: string }>; desc: string }> = {
   respuesta: { label: 'Respuesta del diccionario', icon: MessageCircle, desc: 'Dispara la respuesta enlatada cuyas palabras clave coincidan con este texto.' },
   escalar_campania: { label: 'Escalar a campaña', icon: Megaphone, desc: 'Pide nombre y contacto, y escala directo a Chat en Vivo con la campaña elegida.' },
   escalar_generico: { label: 'Escalar (sin campaña)', icon: Users, desc: 'Pide nombre y contacto, y escala a Chat en Vivo sin campaña específica — un agente cualquiera lo puede tomar.' },
@@ -633,7 +633,7 @@ function MenuTab() {
 }
 
 /* ── Tarjeta de métrica del dashboard ── */
-function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: number | string }) {
+function StatCard({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number | string }) {
   return (
     <div className="card p-4 flex items-center gap-3">
       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
@@ -878,7 +878,7 @@ function DashboardTab() {
 ════════════════════════════════════════════════════════ */
 
 function BloqueColapsable({ icon: Icon, titulo, resumen, defaultOpen = true, children }: {
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   titulo: string
   resumen?: string
   defaultOpen?: boolean

@@ -904,7 +904,7 @@ function NominaConfig() {
 }
 
 /* ── Stat tile ── */
-function StatTile({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: string; tone: 'brand' | 'warn' | 'critical' | 'success' }) {
+function StatTile({ icon: Icon, label, value, tone }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; tone: 'brand' | 'warn' | 'critical' | 'success' }) {
   const toneClasses = {
     brand: 'bg-brand/10 text-brand',
     warn: 'bg-amber-100 text-amber-600',

@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 
 interface SectionCardProps {
   title: string
-  icon?: React.ElementType
+  icon?: React.ComponentType<{ className?: string }>
   barColor?: string
   action?: { label: string; to?: string; onClick?: () => void }
   className?: string

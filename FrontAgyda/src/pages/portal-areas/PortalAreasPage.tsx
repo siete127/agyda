@@ -6,7 +6,7 @@ import {
 import { AREA_KEYS, AREA_LABELS, type AreaKey } from '@/config/areas'
 import { AREA_SUB_ITEMS } from '@/config/areaSubItems'
 
-const AREA_ICONS: Record<AreaKey, React.ElementType> = {
+const AREA_ICONS: Record<AreaKey, React.ComponentType<{ className?: string }>> = {
   'direccion-general': LayoutDashboard,
   rh: UsersRound,
   finanzas: Wallet,

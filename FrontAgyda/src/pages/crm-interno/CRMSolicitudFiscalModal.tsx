@@ -28,7 +28,7 @@ export function CRMSolicitudFiscalModal({
   })
 
   return (
-    <Modal onClose={onClose}>
+    <Modal isOpen onClose={onClose}>
       <div className="w-full max-w-sm p-5">
         <div className="flex items-center gap-2 mb-1">
           <div className="rounded-lg bg-violet-50 p-2 text-violet-600">

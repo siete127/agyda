@@ -11,7 +11,7 @@ const field =
   'outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15'
 
 function Card({ icon: Icon, titulo, subtitulo, children }: {
-  icon: React.ElementType; titulo: string; subtitulo: string; children: React.ReactNode
+  icon: React.ComponentType<{ className?: string }>; titulo: string; subtitulo: string; children: React.ReactNode
 }) {
   return (
     <section className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">

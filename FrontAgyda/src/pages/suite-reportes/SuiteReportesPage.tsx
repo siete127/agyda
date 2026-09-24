@@ -1506,7 +1506,7 @@ function RdlView({
   )
 }
 
-function MiniStat({ label, value, icon: Icon }: { label: string; value: number; icon: React.ElementType }) {
+function MiniStat({ label, value, icon: Icon }: { label: string; value: number; icon: React.ComponentType<{ className?: string }> }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-card p-3 shadow-card">
       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">

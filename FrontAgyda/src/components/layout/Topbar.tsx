@@ -102,7 +102,7 @@ export function Topbar() {
   // Estilo + gate por rol de cada botón. `gate` decide si el usuario puede verlo
   // (además de `visible` en la config: un admin puede ocultar un botón, pero el
   // rol sigue restringiendo quién lo ve aunque esté visible).
-  const BUTTON_STYLE: Record<string, { className: string; icon: React.ElementType; gate: boolean }> = {
+  const BUTTON_STYLE: Record<string, { className: string; icon: React.ComponentType<{ className?: string }>; gate: boolean }> = {
     contingencia: {
       className: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
       icon: Headset, gate: canUseMarcador,

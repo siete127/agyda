@@ -1,6 +1,6 @@
 import { Trash2 } from 'lucide-react'
 
-export function SeccionCard({ icon: Icon, titulo, subtitulo, children }: { icon: React.ElementType; titulo: string; subtitulo?: string; children: React.ReactNode }) {
+export function SeccionCard({ icon: Icon, titulo, subtitulo, children }: { icon: React.ComponentType<{ className?: string }>; titulo: string; subtitulo?: string; children: React.ReactNode }) {
   return (
     <div className="card p-5">
       <div className="flex items-center gap-2 mb-1">

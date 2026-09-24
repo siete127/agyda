@@ -62,7 +62,7 @@ function parseSolicitud(r: Record<string, unknown>): Solicitud {
   }
 }
 
-const ESTADO_CONFIG: Record<string, { label: string; cls: string; Icon: React.ElementType }> = {
+const ESTADO_CONFIG: Record<string, { label: string; cls: string; Icon: React.ComponentType<{ className?: string }> }> = {
   PENDIENTE:  { label: 'Pendiente',  cls: 'bg-yellow-100 text-yellow-700',   Icon: Clock },
   APROBADA:   { label: 'Aprobada',   cls: 'bg-emerald-100 text-emerald-700', Icon: CheckCircle },
   RECHAZADA:  { label: 'Rechazada',  cls: 'bg-red-100 text-red-700',         Icon: XCircle },

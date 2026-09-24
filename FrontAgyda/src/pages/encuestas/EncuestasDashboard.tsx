@@ -64,7 +64,7 @@ function parseResumen(data: unknown): ResumenDashboard {
   }
 }
 
-function StatTile({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: string | number; tone: 'brand' | 'success' | 'warn' }) {
+function StatTile({ icon: Icon, label, value, tone }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string | number; tone: 'brand' | 'success' | 'warn' }) {
   const toneClasses = {
     brand: 'bg-brand/10 text-brand',
     success: 'bg-emerald-100 text-emerald-600',

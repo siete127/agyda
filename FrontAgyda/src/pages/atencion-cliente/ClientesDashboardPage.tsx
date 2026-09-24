@@ -47,7 +47,7 @@ function Sparkline({ tone, seed = 0 }: { tone: Tone; seed?: number }) {
 }
 
 function KpiCard({ icon: Icon, label, value, tone, seed }: {
-  icon: React.ElementType; label: string; value: string | number; tone: Tone; seed: number
+  icon: React.ComponentType<{ className?: string }>; label: string; value: string | number; tone: Tone; seed: number
 }) {
   const c = TONE[tone]
   return (
@@ -71,7 +71,7 @@ function KpiCard({ icon: Icon, label, value, tone, seed }: {
 }
 
 function MiniStat({ icon: Icon, label, value, tone }: {
-  icon: React.ElementType; label: string; value: string | number; tone: Tone
+  icon: React.ComponentType<{ className?: string }>; label: string; value: string | number; tone: Tone
 }) {
   const c = TONE[tone]
   return (
@@ -88,7 +88,7 @@ function MiniStat({ icon: Icon, label, value, tone }: {
 }
 
 function SectionCard({ icon: Icon, title, tone, onVerTodos, children }: {
-  icon: React.ElementType; title: string; tone: Tone; onVerTodos?: () => void; children: React.ReactNode
+  icon: React.ComponentType<{ className?: string }>; title: string; tone: Tone; onVerTodos?: () => void; children: React.ReactNode
 }) {
   const c = TONE[tone]
   return (
@@ -110,7 +110,7 @@ function SectionCard({ icon: Icon, title, tone, onVerTodos, children }: {
 }
 
 function PromoStrip({ icon: Icon, title, text, onClick }: {
-  icon: React.ElementType; title: string; text: string; onClick?: () => void
+  icon: React.ComponentType<{ className?: string }>; title: string; text: string; onClick?: () => void
 }) {
   return (
     <button
@@ -175,7 +175,7 @@ export function ClientesDashboardPage() {
     ? data.seguimientosVencidos + data.tareasVencidas + data.pagosVencidos + data.incidenciasAbiertas
     : 0
 
-  const kpis: { icon: React.ElementType; label: string; value: (d: ClienteDashboardData) => string | number; tone: Tone }[] = [
+  const kpis: { icon: React.ComponentType<{ className?: string }>; label: string; value: (d: ClienteDashboardData) => string | number; tone: Tone }[] = [
     { icon: Users, label: 'Clientes totales', value: (d) => d.clientesTotal, tone: 'brand' },
     { icon: UserPlus, label: 'Clientes nuevos', value: (d) => d.clientesNuevos, tone: 'success' },
     { icon: CheckCircle2, label: 'Clientes activos', value: (d) => d.clientesActivos, tone: 'success' },

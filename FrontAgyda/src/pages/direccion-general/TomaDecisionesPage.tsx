@@ -852,7 +852,7 @@ export function TomaDecisionesPage() {
     XLSX.writeFile(wb, 'toma_decisiones.xlsx')
   }
 
-  const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
+  const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: 'por-aprobar', label: 'Por aprobar', icon: Inbox },
     { key: 'mias', label: 'Mis solicitudes', icon: Send },
     { key: 'todas', label: 'Todas', icon: Clock },

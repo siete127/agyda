@@ -15,7 +15,7 @@ type Categoria = 'dura' | 'blanda' | 'idioma' | 'herramienta' | 'metodologia' | 
 interface TalentoItem { id: number; nombre: string; nivel: string }
 type TalentoData = Record<Categoria, TalentoItem[]>
 
-const CATEGORIAS: { key: Categoria; label: string; icon: React.ElementType; descripcion: string }[] = [
+const CATEGORIAS: { key: Categoria; label: string; icon: React.ComponentType<{ className?: string }>; descripcion: string }[] = [
   { key: 'dura', label: 'Habilidades duras', icon: Wrench, descripcion: 'Habilidades técnicas que refieren a capacidades especializadas en un campo específico, como programación, contabilidad o diseño gráfico.' },
   { key: 'blanda', label: 'Habilidades blandas', icon: HandHeart, descripcion: 'Capacidades personales y de comunicación que ayudan a interactuar y colaborar eficazmente con otros.' },
   { key: 'idioma', label: 'Idiomas', icon: Languages, descripcion: 'Capacidad de comunicarse en diferentes idiomas: hablar, leer, escribir y comprender.' },
@@ -51,7 +51,7 @@ function AgregarModal({ categoria, label, onClose }: { categoria: Categoria; lab
 }
 
 function CategoriaCard({ categoria, label, icon: Icon, descripcion, items }: {
-  categoria: Categoria; label: string; icon: React.ElementType; descripcion: string; items: TalentoItem[]
+  categoria: Categoria; label: string; icon: React.ComponentType<{ className?: string }>; descripcion: string; items: TalentoItem[]
 }) {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)

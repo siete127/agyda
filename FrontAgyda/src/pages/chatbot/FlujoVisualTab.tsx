@@ -59,7 +59,7 @@ const COLOR_SWIMLANE = [
 // nodo_arbol usa fuchsia (no violet): sky-700 y violet-700 caen casi en el
 // mismo matiz frío y se confunden en cajas pequeñas — fuchsia se distingue
 // mucho mejor de sky a simple vista, sin depender solo del ícono.
-const ESTILO_TIPO: Record<TipoNodoFlujo, { icon: React.ElementType; clases: string }> = {
+const ESTILO_TIPO: Record<TipoNodoFlujo, { icon: React.ComponentType<{ className?: string }>; clases: string }> = {
   respuesta: { icon: MessageCircle, clases: 'border-sky-400 bg-sky-500/10 text-sky-700' },
   etiqueta: { icon: Radio, clases: 'border-brand bg-brand/10 text-brand' },
   nodo_arbol: { icon: Workflow, clases: 'border-fuchsia-400 bg-fuchsia-500/10 text-fuchsia-700' },
