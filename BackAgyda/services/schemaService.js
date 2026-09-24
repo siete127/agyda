@@ -7762,6 +7762,35 @@ CREATE INDEX IX_WLT_TELEFONO ON dbo.WEBPHONE_LLAMADAS_TIPIFICADAS(WLT_TELEFONO);
     try { await pool.request().query(q); }
     catch (err) { console.warn('⚠️ Webphone tipificaciones schema:', err.message); }
   }
+
+  // Vista: última tipificación de cada postulante, sea que haya quedado
+  // ligada por WLT_POSTULANTE_ID (match exacto) o solo por los últimos 10
+  // dígitos del teléfono (llamada del webphone sin sesión, antes de que
+  // existiera el postulante o sin ese vínculo). Centraliza un JOIN + regla
+  // de "más reciente" que antes vivía copiado (con las mismas 3 líneas de
+  // RIGHT/REPLACE) en 7 queries distintas entre ccConfigController.js y
+  // operacionesController.js — de haber que cambiar el criterio de match,
+  // ahora es un solo lugar.
+  try {
+    await pool.request().query(`
+IF OBJECT_ID('dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION', 'V') IS NOT NULL
+  DROP VIEW dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION`);
+    await pool.request().query(`
+CREATE VIEW dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION AS
+SELECT cp.CP_ID AS postulanteId, ult.WLT_TIPIFICACION AS tipificacion,
+       ult.WLT_OBSERVACIONES AS observaciones, ult.WLT_EXTENSION AS extension,
+       ult.WLT_FECHA AS fecha, ult.WLT_TELEFONO AS telefono
+FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+OUTER APPLY (
+  SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_EXTENSION, wlt.WLT_FECHA, wlt.WLT_TELEFONO
+  FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
+  WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
+     OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
+  ORDER BY wlt.WLT_FECHA DESC
+) ult`);
+  } catch (err) {
+    console.warn('⚠️ Vista VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION:', err.message);
+  }
   logger.info('✅ Esquema de tipificación de llamadas (Webphone) asegurado');
 }
 

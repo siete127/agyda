@@ -1130,17 +1130,11 @@ async function _queryReportePostulantes(pool, desde, hasta) {
   const tipificadosRs = await pool.request()
     .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
     .query(`
-      SELECT ult.WLT_TIPIFICACION tipificacion, COUNT(*) total
+      SELECT ult.tipificacion, COUNT(*) total
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
-      OUTER APPLY (
-        SELECT TOP 1 wlt.WLT_TIPIFICACION
-        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
-        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
-           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
-        ORDER BY wlt.WLT_FECHA DESC
-      ) ult
+      LEFT JOIN dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION ult ON ult.postulanteId = cp.CP_ID
       WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
-      GROUP BY ult.WLT_TIPIFICACION`);
+      GROUP BY ult.tipificacion`);
   const porTipificacion = tipificadosRs.recordset.map((r) => ({
     tipificacion: r.tipificacion || null,
     etiqueta: r.tipificacion ? (TIPIFICACIONES_LLAMADA_LABEL[r.tipificacion] || r.tipificacion) : 'Sin tipificar',
@@ -1161,15 +1155,9 @@ async function _queryReportePostulantes(pool, desde, hasta) {
     .query(`
       SELECT COUNT(*) total
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
-      OUTER APPLY (
-        SELECT TOP 1 wlt.WLT_TIPIFICACION
-        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
-        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
-           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
-        ORDER BY wlt.WLT_FECHA DESC
-      ) ult
+      LEFT JOIN dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION ult ON ult.postulanteId = cp.CP_ID
       WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
-        AND ult.WLT_TIPIFICACION IS NULL`);
+        AND ult.tipificacion IS NULL`);
 
   const sinTipListaRs = await pool.request()
     .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
@@ -1178,15 +1166,9 @@ async function _queryReportePostulantes(pool, desde, hasta) {
              DATEDIFF(DAY, cp.CP_FECHA_REGISTRO, GETDATE()) diasEsperando
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
       JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
-      OUTER APPLY (
-        SELECT TOP 1 wlt.WLT_TIPIFICACION
-        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
-        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
-           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
-        ORDER BY wlt.WLT_FECHA DESC
-      ) ult
+      LEFT JOIN dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION ult ON ult.postulanteId = cp.CP_ID
       WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
-        AND ult.WLT_TIPIFICACION IS NULL
+        AND ult.tipificacion IS NULL
       ORDER BY cp.CP_FECHA_REGISTRO ASC`);
 
   return {
@@ -1229,18 +1211,12 @@ async function exportarReportePostulantes(req, res) {
         SELECT
           cp.CP_NOMBRE postulante,
           cp.CP_TELEFONO telefono,
-          ult.WLT_TIPIFICACION tipificacion,
-          ult.WLT_OBSERVACIONES observaciones,
-          ult.WLT_EXTENSION extension,
-          ult.WLT_FECHA fecha
+          ult.tipificacion,
+          ult.observaciones,
+          ult.extension,
+          ult.fecha
         FROM dbo.CCO_CAMPANIA_POSTULANTES cp
-        OUTER APPLY (
-          SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_EXTENSION, wlt.WLT_FECHA
-          FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
-          WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
-             OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
-          ORDER BY wlt.WLT_FECHA DESC
-        ) ult
+        LEFT JOIN dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION ult ON ult.postulanteId = cp.CP_ID
         WHERE cp.CP_FECHA_REGISTRO >= @desde AND cp.CP_FECHA_REGISTRO < DATEADD(DAY, 1, @hasta)
         ORDER BY cp.CP_FECHA_REGISTRO DESC`);
 

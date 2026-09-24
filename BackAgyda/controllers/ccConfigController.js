@@ -971,6 +971,15 @@ exports.getContactoPublicoCampania = async (req, res) => {
 // interna donde reclutamiento revisa quién se ha registrado.
 const DIAS_CONTACTO_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'cualquiera'];
 const MEDIOS_CONTACTO_VALIDOS = ['whatsapp', 'messenger', 'instagram', 'llamada'];
+// Mismas etiquetas que DIA_CONTACTO_LABEL/MEDIO_CONTACTO_LABEL en
+// ContactCenterTabs.tsx — solo se usan al exportar a Excel.
+const DIAS_CONTACTO_LABEL = {
+  lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves',
+  viernes: 'Viernes', sabado: 'Sábado', cualquiera: 'Cualquier día',
+};
+const MEDIOS_CONTACTO_LABEL = {
+  whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram', llamada: 'Llamada',
+};
 
 exports.registrarPostulantePublico = async (req, res) => {
   try {
@@ -994,6 +1003,21 @@ exports.registrarPostulantePublico = async (req, res) => {
     const camp = await p.request().input('slug', sql.NVarChar(80), String(req.params.slug || '').toLowerCase())
       .query(`SELECT CM2_ID id FROM dbo.CCO_CAMPANIAS WHERE CM2_SLUG = @slug AND CM2_ACTIVO = 1`);
     if (!camp.recordset.length) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
+    const campaniaId = camp.recordset[0].id;
+
+    // Deduplicación: mismo teléfono + misma campaña en las últimas 24h se
+    // trata como el mismo registro (doble tap en "Enviar", recarga de
+    // página, reintento del navegador) en vez de crear una fila nueva cada
+    // vez — el rate limit de la ruta ya frena abuso más agresivo que esto.
+    const dup = await p.request()
+      .input('c', sql.Int, campaniaId)
+      .input('t', sql.NVarChar(20), telefono.slice(0, 20))
+      .query(`SELECT TOP 1 CP_ID id FROM dbo.CCO_CAMPANIA_POSTULANTES
+              WHERE CP_CAMPANIA_ID = @c AND CP_TELEFONO = @t AND CP_FECHA_REGISTRO >= DATEADD(HOUR, -24, GETDATE())
+              ORDER BY CP_FECHA_REGISTRO DESC`);
+    if (dup.recordset.length) {
+      return res.status(201).json({ success: true, message: 'Postulación registrada', id: dup.recordset[0].id, yaRegistrado: true });
+    }
 
     const redesTexto = redesSociales
       .filter((r) => r && typeof r.usuario === 'string' && r.usuario.trim())
@@ -1003,8 +1027,8 @@ exports.registrarPostulantePublico = async (req, res) => {
 
     const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim().slice(0, 50);
 
-    await p.request()
-      .input('c', sql.Int, camp.recordset[0].id)
+    const ins = await p.request()
+      .input('c', sql.Int, campaniaId)
       .input('n', sql.NVarChar(200), nombre.slice(0, 200))
       .input('t', sql.NVarChar(20), telefono.slice(0, 20))
       .input('co', sql.NVarChar(200), correo)
@@ -1015,9 +1039,10 @@ exports.registrarPostulantePublico = async (req, res) => {
       .input('mc', sql.NVarChar(20), medioContacto)
       .query(`INSERT INTO dbo.CCO_CAMPANIA_POSTULANTES
                 (CP_CAMPANIA_ID, CP_NOMBRE, CP_TELEFONO, CP_CORREO, CP_REDES_SOCIALES, CP_IP, CP_DIA_CONTACTO, CP_HORA_CONTACTO, CP_MEDIO_CONTACTO)
+              OUTPUT INSERTED.CP_ID
               VALUES (@c, @n, @t, @co, @rs, @ip, @dc, @hc, @mc)`);
 
-    res.status(201).json({ success: true, message: 'Postulación registrada' });
+    res.status(201).json({ success: true, message: 'Postulación registrada', id: ins.recordset[0].CP_ID });
   } catch (e) {
     console.error('ccConfig.registrarPostulantePublico:', e.message);
     res.status(500).json({ success: false, message: 'Error al registrar la postulación' });
@@ -1156,25 +1181,20 @@ exports.crearPostulanteManual = async (req, res) => {
   }
 };
 
-exports.listPostulantesGestion = async (req, res) => {
-  try {
-    const p = await pool(req);
-    const visibles = await campaniasVisiblesPara(req, p);
-    if (Array.isArray(visibles) && visibles.length === 0) {
-      return res.json({ success: true, data: [], total: 0 });
-    }
+// Arma los WHERE/params compartidos entre listPostulantesGestion y
+// exportarPostulantesGestion, para que "lo que ves" y "lo que exportas" sean
+// siempre exactamente el mismo conjunto de filas.
+async function filtrosPostulantesGestion(req, p) {
+  const visibles = await campaniasVisiblesPara(req, p);
+  const q = String(req.query.q || '').trim().slice(0, 100);
+  const campaniaId = parseInt(req.query.campaniaId, 10) || null;
+  const tipificacion = String(req.query.tipificacion || '').trim().slice(0, 20);
+  // "pendientes=1": la pestaña "Pendientes por contactar" — trae los que
+  // tienen alguna preferencia/recordatorio de contacto capturado.
+  const soloPendientes = req.query.pendientes === '1';
+  const codigosValidos = TIPIFICACIONES_LLAMADA.map((t) => t.codigo);
 
-    const q = String(req.query.q || '').trim().slice(0, 100);
-    // "pendientes=1": la pestaña "Pendientes por contactar" — trae TODOS los
-    // que tienen alguna preferencia/recordatorio de contacto capturado y
-    // todavía sin tipificar (nadie los marcó como ya contactados), sin la
-    // paginación de 20 del listado general.
-    const soloPendientes = req.query.pendientes === '1';
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const pageSize = soloPendientes ? 1000 : Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 50));
-    const offset = soloPendientes ? 0 : (page - 1) * pageSize;
-
-    const request = p.request();
+  const armar = (request) => {
     let whereCampania = '';
     if (Array.isArray(visibles)) {
       const params = visibles.map((id, i) => {
@@ -1182,6 +1202,10 @@ exports.listPostulantesGestion = async (req, res) => {
         return `@c${i}`;
       });
       whereCampania = `AND cp.CP_CAMPANIA_ID IN (${params.join(',') || 'NULL'})`;
+    }
+    if (campaniaId) {
+      request.input('campaniaFiltro', sql.Int, campaniaId);
+      whereCampania += ' AND cp.CP_CAMPANIA_ID = @campaniaFiltro';
     }
 
     let whereBusqueda = '';
@@ -1194,16 +1218,49 @@ exports.listPostulantesGestion = async (req, res) => {
       ? `AND (cp.CP_DIA_CONTACTO IS NOT NULL OR cp.CP_HORA_CONTACTO IS NOT NULL OR cp.CP_MEDIO_CONTACTO IS NOT NULL OR cp.CP_RECORDAR_FECHA_HORA IS NOT NULL)`
       : '';
 
-    const baseFrom = `
+    // 'sin_tipificar' es un pseudo-valor (no vive en el catálogo de
+    // tipificaciones) para poder filtrar justo lo que la pantalla necesita
+    // resaltar: a quién nadie le ha dado seguimiento todavía.
+    let whereTipificacion = '';
+    if (tipificacion === 'sin_tipificar') {
+      whereTipificacion = 'AND ult.tipificacion IS NULL';
+    } else if (tipificacion && codigosValidos.includes(tipificacion)) {
+      request.input('tipFiltro', sql.NVarChar(20), tipificacion);
+      whereTipificacion = 'AND ult.tipificacion = @tipFiltro';
+    }
+
+    return { whereCampania, whereBusqueda, wherePendientes, whereTipificacion };
+  };
+
+  return { visibles, soloPendientes, armar };
+}
+
+exports.listPostulantesGestion = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { visibles, soloPendientes, armar } = await filtrosPostulantesGestion(req, p);
+    if (Array.isArray(visibles) && visibles.length === 0) {
+      return res.json({ success: true, data: [], total: 0 });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize, 10) || (soloPendientes ? 50 : 20)));
+    const offset = (page - 1) * pageSize;
+
+    // El filtro por tipificación depende de OUTER APPLY (columna calculada),
+    // así que el conteo/listado usan la misma subquery en vez del JOIN plano
+    // que tenía antes — necesario para poder filtrar "sin tipificar" en SQL.
+    const countRequest = p.request();
+    const wCount = armar(countRequest);
+    const totalRs = await countRequest.query(`
+      SELECT COUNT(*) total
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
       JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
-      WHERE 1 = 1 ${whereCampania} ${whereBusqueda} ${wherePendientes}`;
-
-    const totalRs = await request.query(`SELECT COUNT(*) total ${baseFrom}`);
+      LEFT JOIN dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION ult ON ult.postulanteId = cp.CP_ID
+      WHERE 1 = 1 ${wCount.whereCampania} ${wCount.whereBusqueda} ${wCount.wherePendientes} ${wCount.whereTipificacion}`);
 
     const dataRequest = p.request();
-    if (Array.isArray(visibles)) visibles.forEach((id, i) => dataRequest.input(`c${i}`, sql.Int, id));
-    if (q) dataRequest.input('q', sql.NVarChar(100), `%${q}%`);
+    const wData = armar(dataRequest);
     dataRequest.input('offset', sql.Int, offset).input('pageSize', sql.Int, pageSize);
 
     const dataRs = await dataRequest.query(`
@@ -1211,17 +1268,11 @@ exports.listPostulantesGestion = async (req, res) => {
              cp.CP_FECHA_REGISTRO fechaRegistro, cp.CP_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre,
              cp.CP_DIA_CONTACTO diaContacto, cp.CP_HORA_CONTACTO horaContacto, cp.CP_MEDIO_CONTACTO medioContacto,
              cp.CP_RECORDAR_FECHA_HORA recordarFechaHora,
-             ult.WLT_TIPIFICACION tipificacion, ult.WLT_OBSERVACIONES observaciones, ult.WLT_FECHA tipificacionFecha
+             ult.tipificacion, ult.observaciones, ult.fecha tipificacionFecha
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
       JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
-      OUTER APPLY (
-        SELECT TOP 1 wlt.WLT_TIPIFICACION, wlt.WLT_OBSERVACIONES, wlt.WLT_FECHA
-        FROM dbo.WEBPHONE_LLAMADAS_TIPIFICADAS wlt
-        WHERE wlt.WLT_POSTULANTE_ID = cp.CP_ID
-           OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
-        ORDER BY wlt.WLT_FECHA DESC
-      ) ult
-      WHERE 1 = 1 ${whereCampania} ${whereBusqueda} ${wherePendientes}
+      LEFT JOIN dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION ult ON ult.postulanteId = cp.CP_ID
+      WHERE 1 = 1 ${wData.whereCampania} ${wData.whereBusqueda} ${wData.wherePendientes} ${wData.whereTipificacion}
       ORDER BY ${soloPendientes ? 'ISNULL(cp.CP_RECORDAR_FECHA_HORA, cp.CP_FECHA_REGISTRO) ASC' : 'cp.CP_FECHA_REGISTRO DESC'}
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
 
@@ -1229,6 +1280,61 @@ exports.listPostulantesGestion = async (req, res) => {
   } catch (e) {
     console.error('ccConfig.listPostulantesGestion:', e.message);
     res.status(500).json({ success: false, message: 'Error al listar postulantes' });
+  }
+};
+
+// Mismo filtro que listPostulantesGestion (campaña/búsqueda/tipificación/
+// pendientes) pero sin paginar, exportado a Excel — para que "lo que ves en
+// pantalla" sea exactamente lo que se descarga, sin tener que ir a
+// Configuración → campaña a exportar solo tipificaciones.
+exports.exportarPostulantesGestion = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { visibles, armar } = await filtrosPostulantesGestion(req, p);
+    if (Array.isArray(visibles) && visibles.length === 0) {
+      return res.status(404).json({ success: false, message: 'No hay postulantes visibles para exportar' });
+    }
+
+    const request = p.request();
+    const w = armar(request);
+    const r = await request.query(`
+      SELECT cp.CP_NOMBRE nombre, cp.CP_TELEFONO telefono, cp.CP_CORREO correo,
+             c.CM2_NOMBRE campania, cp.CP_FECHA_REGISTRO fechaRegistro,
+             cp.CP_DIA_CONTACTO diaContacto, cp.CP_HORA_CONTACTO horaContacto, cp.CP_MEDIO_CONTACTO medioContacto,
+             cp.CP_RECORDAR_FECHA_HORA recordarFechaHora,
+             ult.tipificacion, ult.observaciones, ult.fecha tipificacionFecha
+      FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+      JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
+      LEFT JOIN dbo.VW_CCO_POSTULANTE_ULTIMA_TIPIFICACION ult ON ult.postulanteId = cp.CP_ID
+      WHERE 1 = 1 ${w.whereCampania} ${w.whereBusqueda} ${w.wherePendientes} ${w.whereTipificacion}
+      ORDER BY cp.CP_FECHA_REGISTRO DESC`);
+
+    const filas = r.recordset.map((row) => ({
+      Nombre: row.nombre,
+      Teléfono: row.telefono,
+      Correo: row.correo || '',
+      Campaña: row.campania,
+      'Fecha registro': row.fechaRegistro ? new Date(row.fechaRegistro).toLocaleString('es-MX') : '',
+      'Día preferido': DIAS_CONTACTO_LABEL[row.diaContacto] || row.diaContacto || '',
+      'Hora preferida': row.horaContacto || '',
+      'Medio preferido': MEDIOS_CONTACTO_LABEL[row.medioContacto] || row.medioContacto || '',
+      Recordatorio: row.recordarFechaHora ? new Date(row.recordarFechaHora).toLocaleString('es-MX') : '',
+      Tipificación: row.tipificacion ? (TIPIFICACIONES_LLAMADA_LABEL[row.tipificacion] || row.tipificacion) : 'Sin tipificar',
+      Observaciones: row.observaciones || '',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filas.length ? filas : [{ Nombre: '' }]);
+    ws['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Postulantes');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="postulantes.xlsx"');
+    res.send(buffer);
+  } catch (e) {
+    console.error('ccConfig.exportarPostulantesGestion:', e.message);
+    res.status(500).json({ success: false, message: 'Error al generar el Excel' });
   }
 };
 
@@ -1258,6 +1364,49 @@ exports.tipificarPostulante = async (req, res) => {
   } catch (e) {
     console.error('ccConfig.tipificarPostulante:', e.message);
     res.status(500).json({ success: false, message: 'Error al guardar la tipificación' });
+  }
+};
+
+// Tipifica varios postulantes de una sola vez (bulk action de "Gestión de
+// postulantes") — mismo criterio de autorización que tipificarPostulante,
+// pero fila por fila: un ID inválido o de una campaña no visible para el
+// agente no aborta el lote completo, solo se reporta en "omitidos".
+exports.tipificarPostulantesBulk = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { ids, tipificacion } = req.body || {};
+    const codigos = TIPIFICACIONES_LLAMADA.map((t) => t.codigo);
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Selecciona al menos un postulante' });
+    }
+    if (ids.length > 200) {
+      return res.status(400).json({ success: false, message: 'Máximo 200 postulantes por lote' });
+    }
+    if (!codigos.includes(tipificacion)) {
+      return res.status(400).json({ success: false, message: 'Tipificación inválida' });
+    }
+
+    let actualizados = 0;
+    const omitidos = [];
+    for (const idRaw of ids) {
+      const id = parseInt(idRaw, 10);
+      if (!id) { omitidos.push(idRaw); continue; }
+      const { row, error } = await postulanteAutorizado(req, p, id);
+      if (error) { omitidos.push(id); continue; }
+      await p.request()
+        .input('tel', sql.NVarChar(20), row.telefono)
+        .input('tip', sql.NVarChar(20), tipificacion)
+        .input('pid', sql.Int, row.id)
+        .query(`INSERT INTO dbo.WEBPHONE_LLAMADAS_TIPIFICADAS
+                  (WLT_TELEFONO, WLT_TIPIFICACION, WLT_POSTULANTE_ID)
+                VALUES (@tel, @tip, @pid)`);
+      actualizados++;
+    }
+
+    res.json({ success: true, actualizados, omitidos });
+  } catch (e) {
+    console.error('ccConfig.tipificarPostulantesBulk:', e.message);
+    res.status(500).json({ success: false, message: 'Error al tipificar en lote' });
   }
 };
 
