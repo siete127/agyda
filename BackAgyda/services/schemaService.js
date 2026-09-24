@@ -7197,6 +7197,34 @@ CREATE TABLE dbo.CCO_CAMPANIA_POSTULANTES (
     `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CCO_CP_CAMPANIA')
 CREATE INDEX IX_CCO_CP_CAMPANIA ON dbo.CCO_CAMPANIA_POSTULANTES(CP_CAMPANIA_ID);`,
+    // Preferencia de contacto del postulante: cuándo (día/hora) y por dónde
+    // (WhatsApp/Messenger/Instagram/Llamada) prefiere que le contactemos.
+    // Todo opcional — se agregó después del lanzamiento del form, así que no
+    // puede ser NOT NULL sin default para no romper el INSERT existente.
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NOT NULL
+   AND COL_LENGTH('dbo.CCO_CAMPANIA_POSTULANTES', 'CP_DIA_CONTACTO') IS NULL
+ALTER TABLE dbo.CCO_CAMPANIA_POSTULANTES ADD CP_DIA_CONTACTO NVARCHAR(20) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NOT NULL
+   AND COL_LENGTH('dbo.CCO_CAMPANIA_POSTULANTES', 'CP_HORA_CONTACTO') IS NULL
+ALTER TABLE dbo.CCO_CAMPANIA_POSTULANTES ADD CP_HORA_CONTACTO NVARCHAR(20) NULL;`,
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NOT NULL
+   AND COL_LENGTH('dbo.CCO_CAMPANIA_POSTULANTES', 'CP_MEDIO_CONTACTO') IS NULL
+ALTER TABLE dbo.CCO_CAMPANIA_POSTULANTES ADD CP_MEDIO_CONTACTO NVARCHAR(20) NULL;`,
+    // Recordatorio programado: fecha/hora exacta (DATETIME, no el día/hora
+    // de texto libre de arriba) en la que hay que contactar al postulante.
+    // Un agente/supervisor la fija desde "Gestión de postulantes" — el cron
+    // (ver postulanteRecordatorioCronController.js) la revisa cada 10 min y
+    // dispara la notificación una sola vez (log en CCO_POSTULANTE_RECORD_LOG).
+    `IF OBJECT_ID('dbo.CCO_CAMPANIA_POSTULANTES', 'U') IS NOT NULL
+   AND COL_LENGTH('dbo.CCO_CAMPANIA_POSTULANTES', 'CP_RECORDAR_FECHA_HORA') IS NULL
+ALTER TABLE dbo.CCO_CAMPANIA_POSTULANTES ADD CP_RECORDAR_FECHA_HORA DATETIME NULL;`,
+    `IF OBJECT_ID('dbo.CCO_POSTULANTE_RECORD_LOG', 'U') IS NULL
+CREATE TABLE dbo.CCO_POSTULANTE_RECORD_LOG (
+  LOG_ID INT IDENTITY(1,1) PRIMARY KEY,
+  LOG_POSTULANTE_ID INT NOT NULL,
+  LOG_FECHA_HORA DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT FK_CCO_PRL_POSTULANTE FOREIGN KEY (LOG_POSTULANTE_ID) REFERENCES dbo.CCO_CAMPANIA_POSTULANTES(CP_ID)
+);`,
   ];
   for (const q of stmts) {
     try { await pool.request().query(q); }

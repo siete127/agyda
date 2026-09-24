@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Link2, Plus, Trash2, Check, Loader2, ExternalLink, PictureInPicture2,
-  GripVertical, HelpCircle, ArrowUp, ArrowDown,
+  GripVertical, HelpCircle, ArrowUp, ArrowDown, AppWindow,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -12,6 +12,7 @@ import {
 } from '@/services/personalizacion.service'
 import { useEnlaceFrameStore } from '@/stores/enlaceFrame.store'
 import { ENLACE_ICONOS, ENLACE_ICONO_KEYS } from '@/lib/enlaceTopbarIconos'
+import { abrirEnVentana } from '@/lib/popup'
 
 const COLORES = ['#7C3AED', '#DC2626', '#059669', '#0891B2', '#D97706', '#8B5CF6', '#2563EB', '#DB2777', '#475569']
 
@@ -131,6 +132,7 @@ export function EnlacesTopbarTab() {
   const vistaPrevia = (e: EnlaceTopbar) => {
     if (!/^https?:\/\//i.test(e.url.trim())) { toast.error('Escribe una URL válida primero'); return }
     if (e.modo === 'flotante') abrirFlotante({ id: e.id, label: e.label || 'Enlace', url: e.url, color: e.color })
+    else if (e.modo === 'ventana') abrirEnVentana(e.url, e.id)
     else window.open(e.url, '_blank', 'noopener,noreferrer')
   }
 
@@ -147,8 +149,8 @@ export function EnlacesTopbarTab() {
               <h2 className="text-[1.35rem] font-bold text-gray-900">Enlaces del encabezado</h2>
               <p className="text-[0.82rem] leading-relaxed text-gray-400">
                 Botones extra en la barra superior, junto a Marcador y Contingencia.<br />
-                Cada uno abre su <b className="text-gray-500">URL</b> en una <b className="text-gray-500">pestaña nueva</b> o en un
-                panel flotante que sigue visible al navegar.
+                Cada uno abre su <b className="text-gray-500">URL</b> en una <b className="text-gray-500">pestaña nueva</b>, en una
+                <b className="text-gray-500"> ventana</b> pequeña al costado, o en un panel flotante que sigue visible al navegar.
               </p>
             </div>
           </div>
@@ -158,9 +160,10 @@ export function EnlacesTopbarTab() {
         <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-violet-50/70 px-3.5 py-3 text-[0.78rem] text-gray-500">
           <HelpCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-500" />
           <p>
-            Algunos sitios (Google, bancos, etc.) bloquean ser mostrados dentro de un iframe (X-Frame-Options).<br />
-            Para esos usa el modo <b className="text-gray-600">"Pestaña nueva"</b>. El modo flotante funciona con
-            paneles embebibles (Spotify, dashboards propios, VICIdial…).
+            Algunos sitios (Google, bancos, azul.ardabytec.vip, etc.) bloquean ser mostrados dentro de un iframe (X-Frame-Options).<br />
+            Para esos usa <b className="text-gray-600">"Pestaña nueva"</b> o <b className="text-gray-600">"Ventana"</b> (esta última
+            se puede dejar al costado para ver AGYDA y el sitio al mismo tiempo). El modo flotante solo funciona con
+            paneles embebibles que lo permiten (Spotify, dashboards propios, VICIdial…).
           </p>
         </div>
       </div>
@@ -250,10 +253,11 @@ export function EnlacesTopbarTab() {
                     </div>
 
                     <div>
-                      <Etiqueta hint="Pestaña nueva: abre la URL fuera del sistema. Flotante: la muestra en un panel embebido que sigue visible al navegar.">Modo de apertura</Etiqueta>
+                      <Etiqueta hint="Pestaña nueva: abre la URL fuera del sistema. Ventana: pestaña nueva pero en una ventana pequeña que puedes dejar al costado. Flotante: la muestra en un panel embebido que sigue visible al navegar (no sirve para sitios que bloquean iframes).">Modo de apertura</Etiqueta>
                       <div className="flex gap-2 rounded-lg border border-gray-200 bg-card p-1">
                         {([
                           { key: 'pestana' as EnlaceTopbarModo, label: 'Pestaña nueva', Ico: ExternalLink },
+                          { key: 'ventana' as EnlaceTopbarModo, label: 'Ventana', Ico: AppWindow },
                           { key: 'flotante' as EnlaceTopbarModo, label: 'Flotante', Ico: PictureInPicture2 },
                         ]).map((o) => (
                           <button

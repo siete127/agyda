@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Phone, RefreshCw, Settings, ShieldAlert, ExternalLink, X,
-  Plus, Trash2, Pencil, CheckCircle2, XCircle, Loader2, PictureInPicture2, MonitorX,
+  Plus, Trash2, Pencil, CheckCircle2, XCircle, Loader2, PictureInPicture2, MonitorX, AppWindow,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { api } from '@/lib/axios'
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { parseVista, type VistaWebphone } from '@/components/ui/WebphoneFrame'
 import { configuracionService } from '@/services/configuracion.service'
+import { abrirEnVentana } from '@/lib/popup'
 import toast from 'react-hot-toast'
 
 const VPN_CHECK_TIMEOUT_MS = 5_000
@@ -252,6 +253,15 @@ export function WebphonePage() {
                 </button>
               )}
               {vista && (
+                <button
+                  onClick={() => abrirEnVentana(vista.url, 'webphone-vista')}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+                  title="Abrir en ventana — se puede dejar al costado, sin depender del iframe (útil si el sitio bloquea X-Frame-Options)"
+                >
+                  <AppWindow className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {vista && (
                 <a
                   href={vista.url}
                   target="_blank"
@@ -298,6 +308,15 @@ export function WebphonePage() {
                 className="pointer-events-auto inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-brand-dark transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> Reintentar
+              </button>
+            )}
+            {loadError && vista && (
+              <button
+                onClick={() => abrirEnVentana(vista.url, 'webphone-vista')}
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-md hover:bg-gray-50 transition-colors"
+                title="Puede que el sitio bloquee ser mostrado en un iframe (X-Frame-Options) — ábrelo en una ventana aparte"
+              >
+                <AppWindow className="h-3.5 w-3.5" /> Abrir en ventana
               </button>
             )}
             {vista.requiereVpn && (

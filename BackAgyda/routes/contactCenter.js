@@ -124,6 +124,7 @@ router.get('/postulantes/campanias', authenticateToken, requireActionAccess(MP, 
 router.post('/postulantes/:id/tipificacion', authenticateToken, requireActionAccess(MP, 'tipificar'), cfg.tipificarPostulante);
 router.get('/postulantes/:id/notas', authenticateToken, requireActionAccess(MP, 'notas'), cfg.listNotasPostulante);
 router.post('/postulantes/:id/notas', authenticateToken, requireActionAccess(MP, 'notas'), cfg.crearNotaPostulante);
+router.put('/postulantes/:id/recordatorio', authenticateToken, requireActionAccess(MP, 'ver'), cfg.setRecordatorioPostulante);
 router.get('/campanias/:id/supervisores', authenticateToken, requireActionAccess(M, 'ver'), cfg.getSupervisoresDeCampania);
 router.post('/campanias/:id/supervisores', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.asignarSupervisorACampania);
 router.delete('/campanias/:id/supervisores/:usuarioId', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.quitarSupervisorDeCampania);

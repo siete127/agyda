@@ -196,6 +196,7 @@ require('./controllers/crmAutomatizacionesController');
 // esto es respaldo.
 require('./controllers/clienteAgendaCronController');
 require('./controllers/clienteIncidenciasSlaCronController');
+require('./controllers/postulanteRecordatorioCronController');
 app.use('/api/eventos', require('./routes/calendario'));
 // app.use('/api/mundial', require('./routes/mundial'));
 

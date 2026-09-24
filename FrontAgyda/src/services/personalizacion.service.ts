@@ -46,7 +46,7 @@ export type EnlaceTopbarIcono =
   | 'link' | 'phone' | 'headset' | 'monitor' | 'chart' | 'ticket' | 'mail'
   | 'globe' | 'rocket' | 'grid' | 'bell' | 'calendar' | 'folder' | 'shield' | 'zap'
 
-export type EnlaceTopbarModo = 'pestana' | 'flotante'
+export type EnlaceTopbarModo = 'pestana' | 'flotante' | 'ventana'
 
 export interface EnlaceTopbar {
   id: string

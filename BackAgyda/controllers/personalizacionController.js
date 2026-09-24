@@ -130,7 +130,7 @@ function limpiarMascotaParte(raw, base) {
 }
 
 const ENLACE_ICONOS = ['link', 'phone', 'headset', 'monitor', 'chart', 'ticket', 'mail', 'globe', 'rocket', 'grid', 'bell', 'calendar', 'folder', 'shield', 'zap'];
-const ENLACE_MODOS = ['pestana', 'flotante'];
+const ENLACE_MODOS = ['pestana', 'flotante', 'ventana'];
 
 function limpiarEnlace(raw, i) {
   const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');

@@ -969,6 +969,9 @@ exports.getContactoPublicoCampania = async (req, res) => {
 // Lo consume extra/Postulacion-Ayudantes/registro.html (sin login: cualquiera
 // con el link/QR puede postularse) y, del lado de gestión, la pantalla
 // interna donde reclutamiento revisa quién se ha registrado.
+const DIAS_CONTACTO_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'cualquiera'];
+const MEDIOS_CONTACTO_VALIDOS = ['whatsapp', 'messenger', 'instagram', 'llamada'];
+
 exports.registrarPostulantePublico = async (req, res) => {
   try {
     const b = req.body || {};
@@ -976,6 +979,9 @@ exports.registrarPostulantePublico = async (req, res) => {
     const telefono = String(b.telefono || '').replace(/\D/g, '');
     const correo = b.correo ? String(b.correo).trim().slice(0, 200) : null;
     const redesSociales = Array.isArray(b.redesSociales) ? b.redesSociales : [];
+    const diaContacto = DIAS_CONTACTO_VALIDOS.includes(b.diaContacto) ? b.diaContacto : null;
+    const horaContacto = b.horaContacto ? String(b.horaContacto).trim().slice(0, 20) : null;
+    const medioContacto = MEDIOS_CONTACTO_VALIDOS.includes(b.medioContacto) ? b.medioContacto : null;
 
     if (!nombre || !telefono) {
       return res.status(400).json({ success: false, message: 'Nombre y teléfono son obligatorios' });
@@ -1004,8 +1010,12 @@ exports.registrarPostulantePublico = async (req, res) => {
       .input('co', sql.NVarChar(200), correo)
       .input('rs', sql.NVarChar(sql.MAX), redesTexto)
       .input('ip', sql.NVarChar(50), ip || null)
-      .query(`INSERT INTO dbo.CCO_CAMPANIA_POSTULANTES (CP_CAMPANIA_ID, CP_NOMBRE, CP_TELEFONO, CP_CORREO, CP_REDES_SOCIALES, CP_IP)
-              VALUES (@c, @n, @t, @co, @rs, @ip)`);
+      .input('dc', sql.NVarChar(20), diaContacto)
+      .input('hc', sql.NVarChar(20), horaContacto)
+      .input('mc', sql.NVarChar(20), medioContacto)
+      .query(`INSERT INTO dbo.CCO_CAMPANIA_POSTULANTES
+                (CP_CAMPANIA_ID, CP_NOMBRE, CP_TELEFONO, CP_CORREO, CP_REDES_SOCIALES, CP_IP, CP_DIA_CONTACTO, CP_HORA_CONTACTO, CP_MEDIO_CONTACTO)
+              VALUES (@c, @n, @t, @co, @rs, @ip, @dc, @hc, @mc)`);
 
     res.status(201).json({ success: true, message: 'Postulación registrada' });
   } catch (e) {
@@ -1020,7 +1030,8 @@ exports.listPostulantesCampania = async (req, res) => {
     const p = await pool(req);
     const r = await p.request().input('c', sql.Int, req.params.id).query(`
       SELECT CP_ID id, CP_NOMBRE nombre, CP_TELEFONO telefono, CP_CORREO correo,
-             CP_REDES_SOCIALES redesSociales, CP_FECHA_REGISTRO fechaRegistro
+             CP_REDES_SOCIALES redesSociales, CP_FECHA_REGISTRO fechaRegistro,
+             CP_DIA_CONTACTO diaContacto, CP_HORA_CONTACTO horaContacto, CP_MEDIO_CONTACTO medioContacto
       FROM dbo.CCO_CAMPANIA_POSTULANTES
       WHERE CP_CAMPANIA_ID = @c
       ORDER BY CP_FECHA_REGISTRO DESC`);
@@ -1154,9 +1165,14 @@ exports.listPostulantesGestion = async (req, res) => {
     }
 
     const q = String(req.query.q || '').trim().slice(0, 100);
+    // "pendientes=1": la pestaña "Pendientes por contactar" — trae TODOS los
+    // que tienen alguna preferencia/recordatorio de contacto capturado y
+    // todavía sin tipificar (nadie los marcó como ya contactados), sin la
+    // paginación de 20 del listado general.
+    const soloPendientes = req.query.pendientes === '1';
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 50));
-    const offset = (page - 1) * pageSize;
+    const pageSize = soloPendientes ? 1000 : Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 50));
+    const offset = soloPendientes ? 0 : (page - 1) * pageSize;
 
     const request = p.request();
     let whereCampania = '';
@@ -1174,10 +1190,14 @@ exports.listPostulantesGestion = async (req, res) => {
       whereBusqueda = 'AND (cp.CP_NOMBRE LIKE @q OR cp.CP_TELEFONO LIKE @q)';
     }
 
+    const wherePendientes = soloPendientes
+      ? `AND (cp.CP_DIA_CONTACTO IS NOT NULL OR cp.CP_HORA_CONTACTO IS NOT NULL OR cp.CP_MEDIO_CONTACTO IS NOT NULL OR cp.CP_RECORDAR_FECHA_HORA IS NOT NULL)`
+      : '';
+
     const baseFrom = `
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
       JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
-      WHERE 1 = 1 ${whereCampania} ${whereBusqueda}`;
+      WHERE 1 = 1 ${whereCampania} ${whereBusqueda} ${wherePendientes}`;
 
     const totalRs = await request.query(`SELECT COUNT(*) total ${baseFrom}`);
 
@@ -1189,6 +1209,8 @@ exports.listPostulantesGestion = async (req, res) => {
     const dataRs = await dataRequest.query(`
       SELECT cp.CP_ID id, cp.CP_NOMBRE nombre, cp.CP_TELEFONO telefono, cp.CP_CORREO correo,
              cp.CP_FECHA_REGISTRO fechaRegistro, cp.CP_CAMPANIA_ID campaniaId, c.CM2_NOMBRE campaniaNombre,
+             cp.CP_DIA_CONTACTO diaContacto, cp.CP_HORA_CONTACTO horaContacto, cp.CP_MEDIO_CONTACTO medioContacto,
+             cp.CP_RECORDAR_FECHA_HORA recordarFechaHora,
              ult.WLT_TIPIFICACION tipificacion, ult.WLT_OBSERVACIONES observaciones, ult.WLT_FECHA tipificacionFecha
       FROM dbo.CCO_CAMPANIA_POSTULANTES cp
       JOIN dbo.CCO_CAMPANIAS c ON c.CM2_ID = cp.CP_CAMPANIA_ID
@@ -1199,8 +1221,8 @@ exports.listPostulantesGestion = async (req, res) => {
            OR RIGHT(REPLACE(REPLACE(REPLACE(cp.CP_TELEFONO, ' ', ''), '-', ''), '+', ''), 10) = RIGHT(wlt.WLT_TELEFONO, 10)
         ORDER BY wlt.WLT_FECHA DESC
       ) ult
-      WHERE 1 = 1 ${whereCampania} ${whereBusqueda}
-      ORDER BY cp.CP_FECHA_REGISTRO DESC
+      WHERE 1 = 1 ${whereCampania} ${whereBusqueda} ${wherePendientes}
+      ORDER BY ${soloPendientes ? 'ISNULL(cp.CP_RECORDAR_FECHA_HORA, cp.CP_FECHA_REGISTRO) ASC' : 'cp.CP_FECHA_REGISTRO DESC'}
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
 
     res.json({ success: true, data: dataRs.recordset, total: totalRs.recordset[0].total });
@@ -1280,5 +1302,34 @@ exports.crearNotaPostulante = async (req, res) => {
   } catch (e) {
     console.error('ccConfig.crearNotaPostulante:', e.message);
     res.status(500).json({ success: false, message: 'Error al guardar la nota' });
+  }
+};
+
+// PUT /postulantes/:id/recordatorio — Body: { fechaHora: ISOString | null }.
+// null quita el recordatorio. Al reprogramar se limpia el log de envío para
+// que el cron pueda volver a dispararlo (ver postulanteRecordatorioCronController).
+exports.setRecordatorioPostulante = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const { error } = await postulanteAutorizado(req, p, req.params.id);
+    if (error) return res.status(error).json({ success: false, message: error === 404 ? 'Postulante no encontrado' : 'No autorizado' });
+
+    const fechaHora = req.body?.fechaHora ? new Date(req.body.fechaHora) : null;
+    if (req.body?.fechaHora && Number.isNaN(fechaHora?.getTime())) {
+      return res.status(400).json({ success: false, message: 'Fecha inválida' });
+    }
+
+    await p.request()
+      .input('pid', sql.Int, req.params.id)
+      .input('fh', sql.DateTime, fechaHora)
+      .query(`UPDATE dbo.CCO_CAMPANIA_POSTULANTES SET CP_RECORDAR_FECHA_HORA = @fh WHERE CP_ID = @pid`);
+
+    await p.request().input('pid', sql.Int, req.params.id)
+      .query(`DELETE FROM dbo.CCO_POSTULANTE_RECORD_LOG WHERE LOG_POSTULANTE_ID = @pid`);
+
+    res.json({ success: true, data: { recordarFechaHora: fechaHora } });
+  } catch (e) {
+    console.error('ccConfig.setRecordatorioPostulante:', e.message);
+    res.status(500).json({ success: false, message: 'Error al guardar el recordatorio' });
   }
 };

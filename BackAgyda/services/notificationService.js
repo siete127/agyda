@@ -41,6 +41,7 @@ const PUSH_CONFIG_POR_TIPO = {
   cc_interaccion_asignada:    { titulo: 'AGYDA — Contact Center', url: '/contact-center' },
   cc_sla_riesgo:              { titulo: 'AGYDA — Contact Center', url: '/contact-center' },
   cc_sla_vencido:             { titulo: 'AGYDA — Contact Center', url: '/contact-center' },
+  'postulante-recordatorio-contacto': { titulo: 'AGYDA — Contact Center', url: '/contact-center/postulantes' },
 };
 
 // Tipos que además ameritan correo electrónico al técnico — solo el

@@ -4,12 +4,13 @@ import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
   ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft, History,
+  BellRing, Filter,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { api } from '@/lib/axios'
 import { ccService } from '@/services/cc.service'
-import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, type CCIgpEstado } from '@/types/cc.types'
+import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, type CCIgpEstado, type CCPostulanteGestion } from '@/types/cc.types'
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
@@ -17,6 +18,14 @@ import { TIPIFICACIONES_LLAMADA } from '@/constants/tipificacionesLlamada'
 import { NotasPostulanteModal } from './NotasPostulanteModal'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+
+const DIA_CONTACTO_LABEL: Record<string, string> = {
+  lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves',
+  viernes: 'Viernes', sabado: 'Sábado', cualquiera: 'Cualquier día',
+}
+const MEDIO_CONTACTO_LABEL: Record<string, string> = {
+  whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram', llamada: 'Llamada',
+}
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-ink-secondary'
@@ -935,11 +944,61 @@ function PostulantesDeCampaniaPanel({ campania }: any) {
 const TIPIFICACION_BADGE = 'inline-flex items-center rounded-full px-2.5 py-1 text-[0.7rem] font-semibold'
 
 export function CCPostulantesGestionTab() {
+  const [subvista, setSubvista] = useState<'todos' | 'pendientes'>('todos')
+  const [nuevoOpen, setNuevoOpen] = useState(false)
+  const qc = useQueryClient()
+
+  return (
+    <div className="space-y-4">
+      <Header icon={ClipboardList} titulo="Gestión de postulantes" subtitulo="Busca, tipifica y da seguimiento a los postulantes de tus campañas asignadas." />
+
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex rounded-xl border border-gray-200 bg-card p-1">
+          <button
+            type="button"
+            onClick={() => setSubvista('todos')}
+            className={clsx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.78rem] font-semibold transition-colors', subvista === 'todos' ? 'bg-violet-600 text-white' : 'text-ink-secondary hover:bg-gray-50')}
+          >
+            <ClipboardList className="h-3.5 w-3.5" /> Todos
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubvista('pendientes')}
+            className={clsx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.78rem] font-semibold transition-colors', subvista === 'pendientes' ? 'bg-violet-600 text-white' : 'text-ink-secondary hover:bg-gray-50')}
+          >
+            <BellRing className="h-3.5 w-3.5" /> Pendientes por contactar
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setNuevoOpen(true)}
+          className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white transition hover:bg-violet-700"
+        >
+          <Plus className="h-3.5 w-3.5" /> Nuevo postulante
+        </button>
+      </div>
+
+      {subvista === 'todos' ? <CCPostulantesTodosPanel /> : <CCPostulantesPendientesPanel />}
+
+      {nuevoOpen && (
+        <NuevoPostulanteModal
+          onClose={() => setNuevoOpen(false)}
+          onCreado={() => {
+            setNuevoOpen(false)
+            qc.invalidateQueries({ queryKey: ['cc-postulantes-gestion'] })
+            qc.invalidateQueries({ queryKey: ['cc-postulantes-pendientes'] })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function CCPostulantesTodosPanel() {
   const [q, setQ] = useState('')
   const [qDebounced, setQDebounced] = useState('')
   const [page, setPage] = useState(1)
   const [notasDe, setNotasDe] = useState<number | null>(null)
-  const [nuevoOpen, setNuevoOpen] = useState(false)
   const pageSize = 20
   const qc = useQueryClient()
 
@@ -969,8 +1028,6 @@ export function CCPostulantesGestionTab() {
 
   return (
     <div className="space-y-4">
-      <Header icon={ClipboardList} titulo="Gestión de postulantes" subtitulo="Busca, tipifica y da seguimiento a los postulantes de tus campañas asignadas." />
-
       <div className={clsx(card, 'flex items-center gap-2.5')}>
         <Search className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
         <input
@@ -979,13 +1036,6 @@ export function CCPostulantesGestionTab() {
           placeholder="Buscar por nombre o teléfono..."
           className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
         />
-        <button
-          type="button"
-          onClick={() => setNuevoOpen(true)}
-          className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white transition hover:bg-violet-700"
-        >
-          <Plus className="h-3.5 w-3.5" /> Nuevo postulante
-        </button>
       </div>
 
       {isLoading ? (
@@ -1002,6 +1052,7 @@ export function CCPostulantesGestionTab() {
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Teléfono</th>
                 <th className="px-4 py-3">Campaña</th>
+                <th className="px-4 py-3">Contacto preferido</th>
                 <th className="px-4 py-3">Tipificación</th>
                 <th className="px-4 py-3">Notas</th>
               </tr>
@@ -1014,6 +1065,20 @@ export function CCPostulantesGestionTab() {
                     <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-tertiary" /> {p.telefono}</span>
                   </td>
                   <td className="px-4 py-3 text-ink-secondary">{p.campaniaNombre}</td>
+                  <td className="px-4 py-3 text-ink-secondary">
+                    {p.diaContacto || p.horaContacto || p.medioContacto ? (
+                      <div className="flex flex-col gap-0.5 text-[0.75rem]">
+                        {(p.diaContacto || p.horaContacto) && (
+                          <span>{[DIA_CONTACTO_LABEL[p.diaContacto ?? ''], p.horaContacto].filter(Boolean).join(' · ')}</span>
+                        )}
+                        {p.medioContacto && (
+                          <span className="font-semibold text-violet-600">{MEDIO_CONTACTO_LABEL[p.medioContacto] ?? p.medioContacto}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-ink-tertiary">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <select
@@ -1076,17 +1141,190 @@ export function CCPostulantesGestionTab() {
       {notasDe !== null && (
         <NotasPostulanteModal postulanteId={notasDe} onClose={() => setNotasDe(null)} />
       )}
+    </div>
+  )
+}
 
-      {nuevoOpen && (
-        <NuevoPostulanteModal
-          onClose={() => setNuevoOpen(false)}
-          onCreado={() => {
-            setNuevoOpen(false)
-            qc.invalidateQueries({ queryKey: ['cc-postulantes-gestion'] })
+// ── Pendientes por contactar: postulantes con día/hora/medio preferido o un
+// recordatorio programado, para que el agente vea de un vistazo a quién le
+// falta contactar y cuándo — con filtros por día y por medio de contacto.
+function CCPostulantesPendientesPanel() {
+  const [filtroDia, setFiltroDia] = useState<string>('todos')
+  const [filtroMedio, setFiltroMedio] = useState<string>('todos')
+  const [recordatorioDe, setRecordatorioDe] = useState<CCPostulanteGestion | null>(null)
+  const qc = useQueryClient()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['cc-postulantes-pendientes'],
+    queryFn: () => ccService.getPostulantesGestion({ pendientes: '1' }),
+  })
+
+  const postulantes = data?.data ?? []
+
+  const diasPresentes = Array.from(new Set(postulantes.map((p) => p.diaContacto).filter((d): d is string => Boolean(d))))
+  const mediosPresentes = Array.from(new Set(postulantes.map((p) => p.medioContacto).filter((m): m is string => Boolean(m))))
+
+  const filtrados = postulantes.filter((p) =>
+    (filtroDia === 'todos' || p.diaContacto === filtroDia) &&
+    (filtroMedio === 'todos' || p.medioContacto === filtroMedio),
+  )
+
+  // Vencidos primero (recordatorio ya pasó y sigue sin tipificar), luego por
+  // fecha de recordatorio más próxima — así lo urgente siempre queda arriba.
+  const ahora = Date.now()
+  const ordenados = [...filtrados].sort((a, b) => {
+    const fa = a.recordarFechaHora ? new Date(a.recordarFechaHora).getTime() : Infinity
+    const fb = b.recordarFechaHora ? new Date(b.recordarFechaHora).getTime() : Infinity
+    return fa - fb
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className={clsx(card, 'flex flex-wrap items-center gap-3')}>
+        <div className="flex items-center gap-1.5 text-[0.72rem] font-semibold text-ink-tertiary">
+          <Filter className="h-3.5 w-3.5" /> Filtrar por:
+        </div>
+        <select value={filtroDia} onChange={(e) => setFiltroDia(e.target.value)} className="rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-[0.78rem]">
+          <option value="todos">Cualquier día</option>
+          {diasPresentes.map((d) => <option key={d} value={d}>{DIA_CONTACTO_LABEL[d] ?? d}</option>)}
+        </select>
+        <select value={filtroMedio} onChange={(e) => setFiltroMedio(e.target.value)} className="rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-[0.78rem]">
+          <option value="todos">Cualquier medio</option>
+          {mediosPresentes.map((m) => <option key={m} value={m}>{MEDIO_CONTACTO_LABEL[m] ?? m}</option>)}
+        </select>
+        <span className="ml-auto text-[0.75rem] text-ink-tertiary">{ordenados.length} pendiente{ordenados.length === 1 ? '' : 's'}</span>
+      </div>
+
+      {isLoading ? (
+        <div className={clsx(card, 'flex items-center justify-center py-10 text-ink-tertiary')}><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : ordenados.length === 0 ? (
+        <div className={clsx(card, 'py-10 text-center text-sm text-ink-tertiary')}>
+          No hay postulantes pendientes de contactar con ese filtro.
+        </div>
+      ) : (
+        <div className={clsx(cardBare, 'overflow-x-auto')}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+                <th className="px-4 py-3">Nombre</th>
+                <th className="px-4 py-3">Teléfono</th>
+                <th className="px-4 py-3">Campaña</th>
+                <th className="px-4 py-3">Día / hora preferido</th>
+                <th className="px-4 py-3">Medio</th>
+                <th className="px-4 py-3">Recordatorio</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordenados.map((p) => {
+                const vencido = p.recordarFechaHora ? new Date(p.recordarFechaHora).getTime() <= ahora : false
+                return (
+                  <tr key={p.id} className="border-b border-gray-50 last:border-0">
+                    <td className="px-4 py-3 font-semibold text-ink">{p.nombre}</td>
+                    <td className="px-4 py-3 text-ink-secondary">
+                      <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-tertiary" /> {p.telefono}</span>
+                    </td>
+                    <td className="px-4 py-3 text-ink-secondary">{p.campaniaNombre}</td>
+                    <td className="px-4 py-3 text-ink-secondary">
+                      {(p.diaContacto || p.horaContacto)
+                        ? [DIA_CONTACTO_LABEL[p.diaContacto ?? ''], p.horaContacto].filter(Boolean).join(' · ')
+                        : <span className="text-ink-tertiary">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.medioContacto
+                        ? <span className="font-semibold text-violet-600">{MEDIO_CONTACTO_LABEL[p.medioContacto] ?? p.medioContacto}</span>
+                        : <span className="text-ink-tertiary">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.recordarFechaHora ? (
+                        <span className={clsx('flex items-center gap-1.5 text-[0.78rem] font-semibold', vencido ? 'text-red-600' : 'text-ink-secondary')}>
+                          <BellRing className="h-3.5 w-3.5" />
+                          {new Date(p.recordarFechaHora).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                          {vencido && ' · vencido'}
+                        </span>
+                      ) : (
+                        <span className="text-ink-tertiary">Sin programar</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setRecordatorioDe(p)}
+                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[0.72rem] font-semibold text-ink-secondary transition hover:bg-gray-50"
+                      >
+                        <BellRing className="h-3.5 w-3.5" /> {p.recordarFechaHora ? 'Reprogramar' : 'Recordar'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {recordatorioDe && (
+        <RecordatorioPostulanteModal
+          postulante={recordatorioDe}
+          onClose={() => setRecordatorioDe(null)}
+          onGuardado={() => {
+            setRecordatorioDe(null)
+            qc.invalidateQueries({ queryKey: ['cc-postulantes-pendientes'] })
           }}
         />
       )}
     </div>
+  )
+}
+
+function RecordatorioPostulanteModal({
+  postulante, onClose, onGuardado,
+}: {
+  postulante: CCPostulanteGestion
+  onClose: () => void
+  onGuardado: () => void
+}) {
+  const toLocalInputValue = (iso: string | null) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  const [valor, setValor] = useState(toLocalInputValue(postulante.recordarFechaHora))
+
+  const guardar = useMutation({
+    mutationFn: (fechaHora: string | null) => ccService.setRecordatorioPostulante(postulante.id, fechaHora),
+    onSuccess: () => { toast.success(valor ? 'Recordatorio programado' : 'Recordatorio quitado'); onGuardado() },
+    onError: () => toast.error('No se pudo guardar el recordatorio'),
+  })
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Recordatorio — ${postulante.nombre}`} size="sm">
+      <div className="space-y-3">
+        <div>
+          <label className={label}>Fecha y hora para contactar</label>
+          <input
+            type="datetime-local"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            className={field}
+          />
+          <span className="hint mt-1 block text-[0.7rem] text-ink-tertiary">
+            Notificaremos a los supervisores y agentes de esta campaña cuando llegue esa fecha y hora.
+          </span>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          {postulante.recordarFechaHora && (
+            <Button variant="ghost" onClick={() => guardar.mutate(null)} disabled={guardar.isPending}>Quitar recordatorio</Button>
+          )}
+          <Button onClick={() => guardar.mutate(valor ? new Date(valor).toISOString() : null)} disabled={guardar.isPending || !valor}>
+            {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

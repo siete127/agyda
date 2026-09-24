@@ -153,6 +153,10 @@ export interface CCPostulanteGestion {
   tipificacion: string | null
   observaciones: string | null
   tipificacionFecha: string | null
+  diaContacto: string | null
+  horaContacto: string | null
+  medioContacto: string | null
+  recordarFechaHora: string | null
 }
 
 export interface CCPostulanteNota {

@@ -112,7 +112,7 @@ export const ccService = {
   },
 
   // ── Gestión de postulantes (transversal a campañas asignadas) ──
-  getPostulantesGestion: (params: { q?: string; page?: number; pageSize?: number }) =>
+  getPostulantesGestion: (params: { q?: string; page?: number; pageSize?: number; pendientes?: '1' }) =>
     api.get<{ data: CCPostulanteGestion[]; total: number }>('/contact-center/postulantes', { params })
       .then((r) => r.data.data ? r.data : { data: [], total: 0 }),
   tipificarPostulante: (postulanteId: number, body: { tipificacion: string; observaciones?: string }) =>
@@ -121,6 +121,8 @@ export const ccService = {
   crearNotaPostulante: (postulanteId: number, nota: string) =>
     d<CCPostulanteNota>(api.post(`/contact-center/postulantes/${postulanteId}/notas`, { nota })),
   getCampaniasParaPostulante: () => d<CCCampaniaSimple[]>(api.get('/contact-center/postulantes/campanias')),
+  setRecordatorioPostulante: (postulanteId: number, fechaHora: string | null) =>
+    api.put(`/contact-center/postulantes/${postulanteId}/recordatorio`, { fechaHora }).then((r) => r.data),
   crearPostulante: (body: { nombre: string; telefono: string; campaniaId: number }) =>
     api.post('/contact-center/postulantes', body).then((r) => r.data),
 

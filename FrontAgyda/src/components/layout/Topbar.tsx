@@ -16,6 +16,7 @@ import { personalizacionService } from '@/services/personalizacion.service'
 import { useThemeStore } from '@/stores/theme.store'
 import { useEnlaceFrameStore } from '@/stores/enlaceFrame.store'
 import { ENLACE_ICONOS } from '@/lib/enlaceTopbarIconos'
+import { abrirEnVentana } from '@/lib/popup'
 import { clsx } from 'clsx'
 
 interface SearchResult {
@@ -313,14 +314,16 @@ export function Topbar() {
             en pestaña nueva o en el panel flotante persistente según su modo. */}
         {enlacesVisibles.map((e) => {
           const Icon = ENLACE_ICONOS[e.icono] ?? ENLACE_ICONOS.link
-          const onClick = e.modo === 'flotante'
-            ? () => abrirEnlaceFlotante({ id: e.id, label: e.label, url: e.url, color: e.color })
+          const onClick =
+            e.modo === 'flotante' ? () => abrirEnlaceFlotante({ id: e.id, label: e.label, url: e.url, color: e.color }) :
+            e.modo === 'ventana' ? () => abrirEnVentana(e.url, e.id)
             : () => window.open(e.url, '_blank', 'noopener,noreferrer')
+          const modoLabel = e.modo === 'flotante' ? ' (panel flotante)' : e.modo === 'ventana' ? ' (ventana)' : ''
           return (
             <button
               key={e.id}
               onClick={onClick}
-              title={`${e.label}${e.modo === 'flotante' ? ' (panel flotante)' : ''}`}
+              title={`${e.label}${modoLabel}`}
               className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95"
               style={{ backgroundColor: e.color }}
             >

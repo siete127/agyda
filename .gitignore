@@ -38,3 +38,6 @@ Thumbs.db
 # Backups empaquetados pesados (binarios sin valor de historial en git)
 *.zip
 *.rar
+
+# Respaldos locales de builds de deploy
+/deploy_backups/
