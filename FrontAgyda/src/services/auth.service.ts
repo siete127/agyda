@@ -1,4 +1,4 @@
-import { api, getApiError } from '@/lib/axios'
+import { api, getApiError, esTokenRechazado } from '@/lib/axios'
 import type { User } from '@/types/user.types'
 
 interface LoginRawResponse {
@@ -48,12 +48,17 @@ export const authService = {
     return { user, token }
   },
 
+  // false SOLO si el backend rechazó el token. Si no se pudo preguntar (sin
+  // red, timeout, 5xx mientras el backend se reinicia en un deploy) se da por
+  // válido: el token es un JWT que no depende del proceso, y si de verdad ya
+  // no sirve, la siguiente petición recibe 401/403 y el interceptor cierra
+  // la sesión igual.
   async validate(): Promise<boolean> {
     try {
       const { data } = await api.get('/auth/validate')
-      return Boolean(data?.success)
-    } catch {
-      return false
+      return data?.success !== false
+    } catch (e) {
+      return !esTokenRechazado(e)
     }
   },
 
