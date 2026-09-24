@@ -37,6 +37,7 @@ export interface AgenteEstado {
   grupoNombre: string
   estado: EstadoAgente
   tipoPausa: string | null
+  tipoPausaStatusId?: number | null // tipo de pausa en curso (para su límite)
   pausaDesde: string | null
   ultimaConexion: string | null
 }
@@ -62,6 +63,8 @@ export interface ProductividadAgente {
   capacitacion: number
   permiso: number
   totalPausaMin: number
+  // Minutos por status_id (incluye los tipos de pausa que agregue la empresa).
+  pausasPorTipo?: Record<number, number>
   estado: EstadoAgente
   tipoPausa: string | null
   ultimaConexion: string | null
@@ -106,6 +109,18 @@ export interface AlarmaInstancia {
   fechaAtendida: string | null
   atendidaPor: number | null
   comentario: string | null
+}
+
+// Configuración de una alarma (umbral y campaña) — distinta de las
+// instancias de arriba, que son disparos concretos de esa configuración.
+export interface AlarmaConfig {
+  id: number
+  nombre: string
+  tipo: AlarmaTipo
+  umbralMinutos: number
+  campaniaId: number | null
+  campaniaNombre: string | null
+  activa: boolean
 }
 
 export type NotificacionTipo = 'informativa' | 'obligatoria'

@@ -4,10 +4,28 @@ const dbVentas = require('../config/database_ventas');
 const { upsertKpi } = require('./areasController');
 const { evaluarFormula, validarFormula } = require('../services/formulaService');
 const { getPausasHoyDe } = require('./reportController');
+const pausaTiposService = require('../services/pausaTiposService');
+const personalizacionController = require('./personalizacionController');
 const logger = global.logger || require('../utils/logger');
 
 // Variables disponibles para escribir fórmulas de incentivo (ver formulaService.js).
 const VARIABLES_FORMULA_INCENTIVO = ['ventas', 'meta', 'pctcumplimiento', 'montocomision'];
+// Variables disponibles para escribir fórmulas de comisión — sin `montocomision`
+// porque ahí es lo que la fórmula calcula, no un input.
+const VARIABLES_FORMULA_COMISION = ['ventas', 'meta', 'pctcumplimiento'];
+
+// Definición de "venta contada" (Ventas.estatus) de cada módulo: `uso` =
+// 'metas' | 'comisiones' | 'incentivos', configurable en Configuración → CRM → Ventas (Área) (personalizacionController).
+// La BD de Ventas (plata_prospectPRO, ver getVentasPool) es distinta de la BD de
+// la intranet donde vive INTRANET_PERSONALIZACION, así que el whitelist se arma
+// aquí como fragmento SQL ya sanitizado (solo valores de ESTATUS_VENTA_VALIDOS).
+async function getEstatusContadosSqlIn(tenantKey, uso) {
+  const pool = await databaseService.getPool(tenantKey);
+  const rs = await pool.request().query('SELECT TOP 1 CONFIG_DATA FROM dbo.INTRANET_PERSONALIZACION ORDER BY ID DESC');
+  const stored = rs.recordset.length ? JSON.parse(rs.recordset[0].CONFIG_DATA) : null;
+  const estatusContados = personalizacionController.getEstatusContados(stored, uso);
+  return estatusContados.map((e) => `'${e.replace(/'/g, "''")}'`).join(',');
+}
 
 function periodoActual() {
   return new Date().toISOString().slice(0, 7);
@@ -73,6 +91,7 @@ async function listMetas(req, res) {
     if (metas.length === 0) return res.json({ success: true, data: [] });
 
     const ventasPool = await getVentasPool();
+    const estatusContadosIn = await getEstatusContadosSqlIn(req.user?.empresa, 'metas');
 
     const asesorIds = [...new Set(metas.filter((m) => m.asesorId).map((m) => m.asesorId))];
     const nombrePorId = new Map();
@@ -97,7 +116,7 @@ async function listMetas(req, res) {
       const avanceRs = await ventasPool.request().query(`
         SELECT idUser as asesorId, FORMAT(fecha, 'yyyy-MM') as periodo, COUNT(*) as unidades
         FROM Ventas
-        WHERE estatus IN ('Aprobada', 'Formalizada', 'Formalizado', 'Garantizada')
+        WHERE estatus IN (${estatusContadosIn})
           AND FORMAT(fecha, 'yyyy-MM') IN (${periodos.map((p) => `'${p}'`).join(',')})
         GROUP BY idUser, FORMAT(fecha, 'yyyy-MM')
       `);
@@ -115,7 +134,7 @@ async function listMetas(req, res) {
       const rsAsesor = await ventasPool.request().query(`
         SELECT idUser as asesorId, campaignId as campanaId, CONVERT(varchar(10), fecha, 120) as dia, COUNT(*) as unidades
         FROM Ventas
-        WHERE estatus IN ('Aprobada', 'Formalizada', 'Formalizado', 'Garantizada')
+        WHERE estatus IN (${estatusContadosIn})
           AND CONVERT(varchar(10), fecha, 120) IN (${fechasSql})
         GROUP BY idUser, campaignId, CONVERT(varchar(10), fecha, 120)
       `);
@@ -270,6 +289,8 @@ async function getMisMetas(req, res) {
     const metas = metasRs.recordset;
     if (!metas.length) return res.json({ success: true, data: [] });
 
+    const estatusContadosIn = await getEstatusContadosSqlIn(req.user?.empresa, 'metas');
+
     const campanaNombreRs = asesor.campanaId
       ? await ventasPool.request().input('id', sql.Int, asesor.campanaId).query(`SELECT nombre FROM [Campanas] WHERE id = @id`)
       : { recordset: [] };
@@ -280,7 +301,7 @@ async function getMisMetas(req, res) {
       .input('hoy', sql.NVarChar, hoy)
       .query(`
         SELECT COUNT(*) as unidades FROM Ventas
-        WHERE idUser = @asesorId AND estatus IN ('Aprobada','Formalizada','Formalizado','Garantizada')
+        WHERE idUser = @asesorId AND estatus IN (${estatusContadosIn})
           AND CONVERT(varchar(10), fecha, 120) = @hoy
       `);
     const avanceIndividual = avanceIndividualRs.recordset[0]?.unidades ?? 0;
@@ -291,7 +312,7 @@ async function getMisMetas(req, res) {
           .input('hoy', sql.NVarChar, hoy)
           .query(`
             SELECT COUNT(*) as unidades FROM Ventas
-            WHERE campaignId = @campanaId AND estatus IN ('Aprobada','Formalizada','Formalizado','Garantizada')
+            WHERE campaignId = @campanaId AND estatus IN (${estatusContadosIn})
               AND CONVERT(varchar(10), fecha, 120) = @hoy
           `)
       : { recordset: [{ unidades: 0 }] };
@@ -314,7 +335,7 @@ async function getMisMetas(req, res) {
 }
 
 // GET /api/ventas-area/metas/:id/pausas — desglose de tiempos de pausa de HOY
-// (baño, comida, capacitación, permiso) de la(s) persona(s) de una meta.
+// (todos los tipos de pausa configurados) de la(s) persona(s) de una meta.
 //   - alcance 'asesor'  -> una fila: el asesor de la meta.
 //   - alcance 'campana' -> una fila por cada agente activo de la campaña.
 // Cruza Users (BD de ventas) -> NEUS_USUARIOS por nombre y suma de USUARIO_TIEMPOS.
@@ -322,6 +343,13 @@ async function getMetaPausas(req, res) {
   try {
     const metaId = parseInt(req.params.id, 10);
     if (!metaId) return res.status(400).json({ success: false, message: 'Meta inválida' });
+
+    // Empresa sin el módulo de pausas (reports): no hay pausas que mostrar y el
+    // bloque no debe aparecer.
+    const { getEmpresaModulosBloqueados } = require('../middleware/moduleAccess');
+    if ((await getEmpresaModulosBloqueados(req.user?.empresa)).has('reports')) {
+      return res.json({ success: true, data: { alcance: null, agentes: [], deshabilitado: true } });
+    }
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const metaRs = await pool.request()
@@ -376,18 +404,20 @@ async function getMetaPausas(req, res) {
       return null;
     };
 
+    const tipos = await pausaTiposService.listar(pool);
     const data = [];
     for (const a of agentes) {
       const neusId = resolverNeus(a);
       if (!neusId) {
-        data.push({ agenteId: a.id, nombre: a.nombre, sinRegistro: true, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0, totalSeg: 0 });
+        data.push({ agenteId: a.id, nombre: a.nombre, sinRegistro: true, comidaSeg: 0, banioSeg: 0, capacitacionSeg: 0, permisoSeg: 0, totalSeg: 0, pausasPorTipo: [] });
         continue;
       }
-      const p = await getPausasHoyDe(pool, neusId);
-      const totalSeg = p[2] + p[3] + p[5] + p[6];
+      const p = await getPausasHoyDe(pool, neusId, tipos);
+      const { porTipo, total } = pausaTiposService.desglose(tipos, p);
       data.push({
         agenteId: a.id, nombre: a.nombre, sinRegistro: false,
-        comidaSeg: p[2], banioSeg: p[3], capacitacionSeg: p[5], permisoSeg: p[6], totalSeg,
+        ...pausaTiposService.camposSeg(tipos, p), totalSeg: total,
+        pausasPorTipo: porTipo.map(({ valor, ...t }) => ({ ...t, seg: valor })),
       });
     }
 
@@ -643,7 +673,8 @@ function normalizarNombre(n) {
 // Núcleo compartido entre Comisiones e Incentivos: ventas por asesor del mes (Nómina +
 // provisional) cruzadas contra VENTAS_METAS, con % de cumplimiento. Extraído para que
 // Incentivos aplique sus reglas sobre exactamente el mismo cálculo, sin duplicarlo.
-async function calcularCumplimientoAsesores(periodo, tenantKey) {
+// `uso`: 'comisiones' o 'incentivos' — qué lista de estatus contados aplica al conteo provisional.
+async function calcularCumplimientoAsesores(periodo, tenantKey, uso) {
   const [anio, mes] = periodo.split('-').map(Number);
   const inicioMes = new Date(anio, mes - 1, 1);
   const finMes = new Date(anio, mes, 0);
@@ -693,12 +724,13 @@ async function calcularCumplimientoAsesores(periodo, tenantKey) {
   // 2) Conteo provisional de ventas del tramo del mes aún no calculado en Nómina.
   let provisionalPorAgente = new Map();
   if (rangoSinCubrir) {
+    const estatusContadosIn = await getEstatusContadosSqlIn(tenantKey, uso);
     const provRs = await poolVentas.request()
       .input('desde', sql.Date, rangoSinCubrir.desde)
       .input('hasta', sql.Date, rangoSinCubrir.hasta)
       .query(`
         SELECT u.idUser as id, u.nombreAgente as nombre,
-               SUM(CASE WHEN v.estatus IN ('Aprobada','Formalizada','Formalizado','Garantizada') THEN 1 ELSE 0 END) as ventasProvisionales
+               SUM(CASE WHEN v.estatus IN (${estatusContadosIn}) THEN 1 ELSE 0 END) as ventasProvisionales
         FROM Users u
         LEFT JOIN Ventas v ON v.idUser = u.idUser AND CONVERT(DATE, v.fecha) BETWEEN @desde AND @hasta
         WHERE u.role = 'agente' AND u.Activo = 1
@@ -765,13 +797,46 @@ async function calcularCumplimientoAsesores(periodo, tenantKey) {
   return { periodo, quincenasCubiertas: periodosDelMes.map((p) => ({ id: p.ID, fechaInicio: p.fechaInicio, fechaFin: p.fechaFin })), rangoProvisional: rangoSinCubrir, asesores };
 }
 
-// GET /api/ventas-area/comisiones?periodo=YYYY-MM
+// GET /api/ventas-area/comisiones?periodo=YYYY-MM — el monto de comisión se calcula
+// con las fórmulas activas de VENTAS_COMISIONES_REGLAS (ver bloque de reglas más
+// abajo), sobre el mismo cálculo de ventas/meta que ya usa Incentivos. Ya NO se lee
+// el monto de NOMINA_COMISIONES — Nómina sigue siendo el sistema de pago real, pero
+// esta pantalla del CRM muestra el cálculo configurable.
 async function getKpisComisiones(req, res) {
   try {
     const periodo = (req.query.periodo || periodoActual()).toString();
     if (!/^\d{4}-\d{2}$/.test(periodo)) return res.status(400).json({ success: false, message: 'Periodo inválido (YYYY-MM)' });
 
-    const { quincenasCubiertas, rangoProvisional, asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa);
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const reglasRs = await pool.request().query(`
+      SELECT VCR_ID as id, VCR_NOMBRE as nombre, VCR_FORMULA as formula
+      FROM VENTAS_COMISIONES_REGLAS WHERE VCR_ACTIVA = 1 ORDER BY VCR_ORDEN ASC, VCR_ID ASC
+    `);
+    const reglasActivas = reglasRs.recordset;
+
+    const { quincenasCubiertas, rangoProvisional, asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa, 'comisiones');
+
+    const asesoresConComision = asesores.map((a) => {
+      const variables = {
+        ventas: a.ventasTotal,
+        meta: a.metaUnidades ?? 0,
+        pctcumplimiento: a.pctCumplimiento ?? 0,
+      };
+      const desglose = [];
+      let montoComision = 0;
+      for (const regla of reglasActivas) {
+        try {
+          const monto = evaluarFormula(regla.formula, variables);
+          if (monto > 0) {
+            montoComision += monto;
+            desglose.push({ nombre: regla.nombre, monto });
+          }
+        } catch (err) {
+          logger.warn(`ventasAreaController.getKpisComisiones: fórmula "${regla.nombre}" falló para ${a.nombre}: ${err.message}`);
+        }
+      }
+      return { ...a, montoComision, desglose };
+    });
 
     res.json({
       success: true,
@@ -779,17 +844,120 @@ async function getKpisComisiones(req, res) {
         periodo,
         quincenasCubiertas,
         rangoProvisional,
-        asesores,
+        reglas: reglasActivas,
+        asesores: asesoresConComision,
         totales: {
-          ventasNomina: asesores.reduce((s, f) => s + f.ventasNomina, 0),
-          ventasProvisionales: asesores.reduce((s, f) => s + f.ventasProvisionales, 0),
-          montoComision: asesores.reduce((s, f) => s + f.montoComision, 0),
+          ventasNomina: asesoresConComision.reduce((s, f) => s + f.ventasNomina, 0),
+          ventasProvisionales: asesoresConComision.reduce((s, f) => s + f.ventasProvisionales, 0),
+          montoComision: asesoresConComision.reduce((s, f) => s + f.montoComision, 0),
         },
       },
     });
   } catch (err) {
     logger.error('ventasAreaController.getKpisComisiones', err);
     res.status(500).json({ success: false, message: 'Error al obtener los KPIs de comisiones' });
+  }
+}
+
+/* ── Comisiones: fórmulas de cálculo escritas y editadas por el admin ──
+   Mismo patrón que Incentivos (ver bloque de VENTAS_INCENTIVOS_REGLAS más abajo),
+   pero el resultado reemplaza el monto de comisión mostrado en getKpisComisiones
+   en vez de sumarse como bono aparte. Variables: ventas, meta, pctCumplimiento
+   (sin montoComision — aquí es el output, no un input). */
+
+async function listReglasComision(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT VCR_ID as id, VCR_NOMBRE as nombre, VCR_FORMULA as formula, VCR_ORDEN as orden, VCR_ACTIVA as activa
+      FROM VENTAS_COMISIONES_REGLAS ORDER BY VCR_ORDEN ASC, VCR_ID ASC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (err) {
+    logger.error('ventasAreaController.listReglasComision', err);
+    res.status(500).json({ success: false, message: 'Error al listar las fórmulas de comisión' });
+  }
+}
+
+async function crearReglaComision(req, res) {
+  try {
+    const { nombre, formula } = req.body;
+    if (!nombre || !formula) return res.status(400).json({ success: false, message: 'Nombre y fórmula son requeridos' });
+    try {
+      validarFormula(formula, VARIABLES_FORMULA_COMISION);
+    } catch (formulaErr) {
+      return res.status(400).json({ success: false, message: `Fórmula inválida: ${formulaErr.message}` });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ordenRs = await pool.request().query('SELECT ISNULL(MAX(VCR_ORDEN), 0) + 1 as siguiente FROM VENTAS_COMISIONES_REGLAS');
+    await pool.request()
+      .input('nombre', sql.NVarChar, nombre)
+      .input('formula', sql.NVarChar, formula)
+      .input('orden', sql.Int, ordenRs.recordset[0].siguiente)
+      .input('creadoPor', sql.SmallInt, req.user?.id ?? null)
+      .query(`INSERT INTO VENTAS_COMISIONES_REGLAS (VCR_NOMBRE, VCR_FORMULA, VCR_ORDEN, VCR_CREADO_POR) VALUES (@nombre, @formula, @orden, @creadoPor)`);
+    res.status(201).json({ success: true });
+  } catch (err) {
+    logger.error('ventasAreaController.crearReglaComision', err);
+    res.status(500).json({ success: false, message: 'Error al crear la fórmula de comisión' });
+  }
+}
+
+async function actualizarReglaComision(req, res) {
+  try {
+    const { id } = req.params;
+    const { nombre, formula, activa } = req.body;
+    if (formula) {
+      try {
+        validarFormula(formula, VARIABLES_FORMULA_COMISION);
+      } catch (formulaErr) {
+        return res.status(400).json({ success: false, message: `Fórmula inválida: ${formulaErr.message}` });
+      }
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('nombre', sql.NVarChar, nombre)
+      .input('formula', sql.NVarChar, formula)
+      .input('activa', sql.Bit, activa ? 1 : 0)
+      .query(`
+        UPDATE VENTAS_COMISIONES_REGLAS
+        SET VCR_NOMBRE = @nombre, VCR_FORMULA = @formula, VCR_ACTIVA = @activa
+        WHERE VCR_ID = @id
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('ventasAreaController.actualizarReglaComision', err);
+    res.status(500).json({ success: false, message: 'Error al actualizar la fórmula de comisión' });
+  }
+}
+
+async function eliminarReglaComision(req, res) {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request().input('id', sql.Int, id).query('DELETE FROM VENTAS_COMISIONES_REGLAS WHERE VCR_ID = @id');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('ventasAreaController.eliminarReglaComision', err);
+    res.status(500).json({ success: false, message: 'Error al eliminar la fórmula de comisión' });
+  }
+}
+
+// POST /api/ventas-area/comisiones/reglas/probar — evalúa una fórmula contra valores
+// de ejemplo (sin guardar), para que el admin la pruebe antes de crearla/editarla.
+async function probarFormulaComision(req, res) {
+  try {
+    const { formula, ventas, meta, pctCumplimiento } = req.body;
+    if (!formula) return res.status(400).json({ success: false, message: 'Fórmula requerida' });
+    const resultado = evaluarFormula(formula, {
+      ventas: Number(ventas) || 0,
+      meta: Number(meta) || 0,
+      pctcumplimiento: Number(pctCumplimiento) || 0,
+    });
+    res.json({ success: true, data: { resultado } });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
   }
 }
 
@@ -914,7 +1082,7 @@ async function getKpisIncentivos(req, res) {
     `);
     const reglasActivas = reglasRs.recordset;
 
-    const { asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa);
+    const { asesores } = await calcularCumplimientoAsesores(periodo, req.user?.empresa, 'incentivos');
 
     const asesoresConIncentivo = asesores.map((a) => {
       const variables = {
@@ -967,6 +1135,11 @@ module.exports = {
   getPerfilAsesor,
   getResumenProspeccion,
   getKpisComisiones,
+  listReglasComision,
+  crearReglaComision,
+  actualizarReglaComision,
+  eliminarReglaComision,
+  probarFormulaComision,
   listReglasIncentivo,
   crearReglaIncentivo,
   actualizarReglaIncentivo,

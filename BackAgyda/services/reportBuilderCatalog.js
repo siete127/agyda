@@ -157,7 +157,7 @@ const ORIGENES = {
   /* ═══ Tiempos de agentes ═══ */
   tiempos_agente: {
     label: 'Tiempos de agentes',
-    descripcion: 'Sesiones y pausas por agente (comida, sanitario, capacitación, permiso, en línea): minutos y conteos.',
+    descripcion: 'Sesiones y pausas por agente (todos los tipos de pausa y en línea): minutos y conteos.',
     from: `
       dbo.USUARIO_TIEMPOS ut
       INNER JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = ut.neus_id
@@ -178,7 +178,7 @@ const ORIGENES = {
       minutos:      { label: 'Minutos', expr: DUR_TIEMPO, formato: 'minutos' },
       minutos_prom: { label: 'Minutos promedio', expr: `AVG(CAST(${DUR_TIEMPO_TRAMO} AS float))`, formato: 'decimal' },
       agentes:      { label: 'Agentes', expr: 'COUNT(DISTINCT ut.neus_id)', formato: 'entero' },
-      min_pausa:    { label: 'Minutos en pausa', expr: `SUM(CASE WHEN ut.status_id IN (2,3,5,6) THEN ${DUR_TIEMPO_TRAMO} ELSE 0 END)`, formato: 'minutos' },
+      min_pausa:    { label: 'Minutos en pausa', expr: `SUM(CASE WHEN s.ES_PAUSA = 1 THEN ${DUR_TIEMPO_TRAMO} ELSE 0 END)`, formato: 'minutos' },
       min_online:   { label: 'Minutos en línea', expr: `SUM(CASE WHEN ut.status_id = 1 THEN ${DUR_TIEMPO_TRAMO} ELSE 0 END)`, formato: 'minutos' },
       sesiones_abiertas: { label: 'Sesiones sin cerrar', expr: 'SUM(CASE WHEN ut.fecha_fin IS NULL THEN 1 ELSE 0 END)', formato: 'entero' },
     },

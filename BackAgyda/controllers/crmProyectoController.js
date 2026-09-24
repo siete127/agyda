@@ -150,6 +150,19 @@ exports.generarProyectoDesdeOportunidad = async (req, res) => {
             CONT_ES_CLIENTE = 1
           WHERE CONT_ID = @id AND CONT_ACTIVO = 1
         `);
+
+      const psIds = Array.isArray(dc.productosServiciosIds)
+        ? [...new Set(dc.productosServiciosIds.map((v) => parseInt(v, 10)).filter(Number.isFinite))]
+        : [];
+      for (const psId of psIds) {
+        await new sql.Request(transaction)
+          .input('contId', sql.Int, opo.contactoId)
+          .input('psId', sql.Int, psId)
+          .query(`
+            IF NOT EXISTS (SELECT 1 FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId)
+              INSERT INTO CRM_CONTACTO_PRODUCTOS_SERVICIOS (CCPS_CONT_ID, CCPS_PS_ID) VALUES (@contId, @psId)
+          `);
+      }
     }
 
     await transaction.commit();

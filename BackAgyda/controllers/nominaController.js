@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { logAudit } = require('../services/auditService');
+const { sqlPausas } = require('../services/pausaTiposService');
 
 // Conexión a la BD de ventas para leer ventas aprobadas por quincena.
 // Usa la config centralizada (config/database_ventas.js) — antes este archivo
@@ -551,7 +552,7 @@ exports.calcularNomina = async (req, res) => {
           CAST(fecha_inicio AS date) as dia,
           SUM(ISNULL(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE())), 0)) as minutos_pausa
         FROM USUARIO_TIEMPOS
-        WHERE status_id IN (2,3,5,6)
+        WHERE status_id IN ${sqlPausas('nomina')}
           AND CAST(fecha_inicio AS date) >= @fi
           AND CAST(fecha_inicio AS date) <= @ff
           AND fecha_fin IS NOT NULL

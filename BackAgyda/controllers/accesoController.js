@@ -273,6 +273,7 @@ const ACCIONES_POR_MODULO = {
     { key: 'editar',               nombre: 'Editar cliente',        descripcion: 'Modificar los datos de un cliente' },
     { key: 'eliminar',             nombre: 'Eliminar cliente',      descripcion: 'Borrar un cliente' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+    { key: 'gestionar-portal-roles', nombre: 'Gestionar sub-roles del Portal', descripcion: 'Crear, editar y eliminar los sub-roles (Admin/Supervisor/Apoyo/Agente) que las empresas cliente asignan a sus usuarios del portal' },
   ],
   'productos-servicios': [
     { key: 'ver',      nombre: 'Ver catálogo',              descripcion: 'Consultar productos y servicios' },

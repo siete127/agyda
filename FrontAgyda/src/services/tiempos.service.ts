@@ -1,8 +1,10 @@
 import { api } from '@/lib/axios'
 import type { TiemposAgente, AgenteOpcion } from '@/types/tiempos.types'
+import type { PausaPorTipo } from '@/types/pausaTipos.types'
 
-/* Tiempo de HOY: disponible (jornada − pausas) + desglose de pausas. Emparejado
-   con el reporte de baño/pausas (mismo USUARIO_TIEMPOS, mismo "hoy"). */
+/* Tiempo de HOY: disponible (jornada − pausas que cuentan en Asistencia) +
+   desglose de pausas. Emparejado con el reporte de pausas (mismo
+   USUARIO_TIEMPOS, mismo "hoy"). */
 export interface TiemposHoy {
   sinEntrada: boolean
   jornadaSeg: number
@@ -11,6 +13,8 @@ export interface TiemposHoy {
   banioSeg: number
   capacitacionSeg: number
   permisoSeg: number
+  // Todos los tipos de pausa configurados (incluye los que agregue la empresa).
+  pausasPorTipo?: PausaPorTipo[]
 }
 
 export interface TiemposHoyUsuario extends TiemposHoy {

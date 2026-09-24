@@ -21,4 +21,10 @@ export interface User {
   perfilFotoUrl?: string | null
   perfilPortadaUrl?: string | null
   debeCambiarPassword?: boolean
+  // Portal de Cliente: solo presentes cuando tipoUsuario === 'CL'. Sirven
+  // para gatear UI (el backend revalida en cada request vía requirePortalAction).
+  portalEmpresaContId?: number | null
+  portalEsAncla?: boolean
+  portalSubrolId?: number | null
+  portalSubrolNombre?: string | null
 }

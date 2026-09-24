@@ -1,0 +1,93 @@
+/* Ardabito — contenedor cuadrado (artboard Rive 800x800) que se escala como
+   un único grupo responsive; cada pieza es absoluta dentro de él. */
+.ardabito-root {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+}
+
+/* Sombra de contacto — elipse difuminada bajo donde se apoya (patas/cola),
+   para que el personaje se sienta apoyado y no "flotando". Una sombra
+   negra no se distingue sobre el fondo azul marino ya oscuro, así que en
+   vez de oscurecer usamos un resplandor celeste (mismo tono que el resto
+   de acentos de la pantalla de login) apoyado justo bajo las patas. */
+.ardabito-sombra {
+  position: absolute;
+  left: 52%;
+  top: 90%;
+  width: 62%;
+  height: 8%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(103, 232, 249, 0.55) 0%,
+    rgba(103, 232, 249, 0.25) 45%,
+    rgba(103, 232, 249, 0) 75%
+  );
+  filter: blur(3px);
+  z-index: 0;
+}
+
+.ardabito-pieza {
+  position: absolute;
+  height: auto;
+  max-width: none;
+  user-select: none;
+  /* --tx/--ty vienen del origin real de cada pieza (ver Ardabito.tsx) — no
+     asumir -50%/-50%, cada pieza puede anclarse en un punto distinto. */
+  transform: translate(var(--tx), var(--ty));
+}
+
+/* ── Cabeza — idle tipo respiración: un ciclo simétrico único (sube-baja)
+   cada 1.5s en loop exacto se lee como un metrónomo/robot. Acá el timeline
+   no es simétrico (los picos no caen a distancias iguales ni con la misma
+   curva de ida y vuelta) y el período es más lento — se parece más a una
+   respiración real que a un tic mecánico. */
+@keyframes ardabito-cabeza-idle {
+  0%    { transform: translate(var(--tx), var(--ty)) translateY(0)      rotate(0deg); }
+  16%   { transform: translate(var(--tx), var(--ty)) translateY(-0.08%) rotate(-0.3deg); }
+  34%   { transform: translate(var(--tx), var(--ty)) translateY(-0.19%) rotate(-0.65deg); }
+  48%   { transform: translate(var(--tx), var(--ty)) translateY(-0.05%) rotate(-0.15deg); }
+  63%   { transform: translate(var(--tx), var(--ty)) translateY(0.1%)   rotate(0.35deg); }
+  80%   { transform: translate(var(--tx), var(--ty)) translateY(0.18%)  rotate(0.6deg); }
+  92%   { transform: translate(var(--tx), var(--ty)) translateY(0.06%)  rotate(0.2deg); }
+  100%  { transform: translate(var(--tx), var(--ty)) translateY(0)      rotate(0deg); }
+}
+
+.ardabito-cabeza {
+  animation: ardabito-cabeza-idle 4.6s ease-in-out infinite;
+}
+
+/* ── Pata de saludo — oscilación amortiguada alrededor de su hombro (origin
+   25% 75%), como un péndulo que se va frenando: un primer swing amplio y
+   cada vuelta siguiente es ~la mitad de la anterior, siempre alternando de
+   lado, hasta asentarse exacto en la transformación inicial (para que un
+   segundo saludo en ráfaga no salte). Los ángulos anteriores rebotaban sin
+   un patrón consistente (-6→-14→-9→4→1→-7→-3→2) — eso es lo que se veía
+   "a tirones"/nervioso en vez de un saludo. Una decadencia pareja y
+   predecible es lo que lee como natural. */
+@keyframes ardabito-pata-saludo {
+  0%    { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
+  9%    { transform: translate(var(--tx), var(--ty)) rotate(-5deg); }
+  21%   { transform: translate(var(--tx), var(--ty)) rotate(18deg); }
+  33%   { transform: translate(var(--tx), var(--ty)) rotate(-12deg); }
+  45%   { transform: translate(var(--tx), var(--ty)) rotate(9deg); }
+  57%   { transform: translate(var(--tx), var(--ty)) rotate(-6deg); }
+  69%   { transform: translate(var(--tx), var(--ty)) rotate(3.5deg); }
+  81%   { transform: translate(var(--tx), var(--ty)) rotate(-1.5deg); }
+  92%   { transform: translate(var(--tx), var(--ty)) rotate(0.5deg); }
+  100%  { transform: translate(var(--tx), var(--ty)) rotate(0deg); }
+}
+
+.ardabito-pata {
+  animation: ardabito-pata-saludo 1.9s cubic-bezier(0.37, 0, 0.63, 1) 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ardabito-cabeza,
+  .ardabito-pata {
+    animation: none;
+  }
+}

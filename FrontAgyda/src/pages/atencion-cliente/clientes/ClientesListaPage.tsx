@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Users, Search, Plus, ChevronLeft, Building2, SlidersHorizontal,
-  Sparkles, Loader2, Eye, CheckCircle2, Flame, ClipboardList,
+  Sparkles, Loader2, Eye, CheckCircle2, Flame, ClipboardList, KeyRound,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { crmService } from '@/services/crm.service'
@@ -273,6 +273,25 @@ export function ClientesListaPage({ embedded = false, onAbrirCliente }: {
                   </p>
                 )}
                 {c.productoServicio && <p className="text-xs text-gray-500 truncate">{c.productoServicio}</p>}
+                {(c.tipoClienteNombre || c.segmentoNombre) && (
+                  <div className="flex flex-wrap gap-1">
+                    {c.tipoClienteNombre && (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[0.62rem] font-semibold text-gray-600">
+                        {c.tipoClienteNombre}
+                      </span>
+                    )}
+                    {c.segmentoNombre && (
+                      <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[0.62rem] font-semibold text-indigo-700">
+                        {c.segmentoNombre}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {c.neusId && (
+                  <span className="inline-flex w-fit items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[0.62rem] font-semibold text-blue-700">
+                    <KeyRound className="h-2.5 w-2.5" /> Acceso al sistema{c.tipoAccesoNombre ? `: ${c.tipoAccesoNombre}` : ''}
+                  </span>
+                )}
               </button>
             )
           })}

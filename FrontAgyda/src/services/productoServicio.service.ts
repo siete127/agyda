@@ -1,7 +1,7 @@
 import { api } from '@/lib/axios'
 
 export type ProductoServicioTipo = 'PRODUCTO' | 'SERVICIO'
-export type ProductoServicioRecurrencia = 'MENSUAL' | 'ANUAL' | 'UNICO'
+export type ProductoServicioRecurrencia = 'SEMANAL' | 'QUINCENAL' | 'MENSUAL' | 'ANUAL' | 'UNICO'
 
 export interface ProductoServicio {
   id: number

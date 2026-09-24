@@ -5,6 +5,10 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { personalizacionService, type VentasConfig } from '@/services/personalizacion.service'
 
+// Los estatus de venta contados ya no se editan aquí: cada módulo (Metas,
+// Comisiones, Incentivos) tiene su lista en su propia pantalla.
+type MargenIva = Pick<VentasConfig, 'margen' | 'iva'>
+
 const numCls =
   'w-full rounded-xl border border-gray-200 bg-card px-3.5 py-2.5 text-[0.88rem] text-gray-900 ' +
   'outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15'
@@ -28,7 +32,7 @@ function CardSeccion({ icon: Icon, titulo, subtitulo, children }: {
   )
 }
 
-const DEFAULTS: VentasConfig = {
+const DEFAULTS: MargenIva = {
   margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
   iva: { tasaDefault: 0.16 },
 }
@@ -40,9 +44,9 @@ export function VentasTab() {
     queryFn: () => personalizacionService.get(),
   })
 
-  const [form, setForm] = useState<VentasConfig | null>(null)
-  const [seededFrom, setSeededFrom] = useState<VentasConfig | null>(null)
-  const actual = data?.ventas ?? DEFAULTS
+  const [form, setForm] = useState<MargenIva | null>(null)
+  const [seededFrom, setSeededFrom] = useState<MargenIva | null>(null)
+  const actual: MargenIva = data?.ventas ?? DEFAULTS
   if (data && actual !== seededFrom) {
     setSeededFrom(actual)
     setForm({ margen: { ...actual.margen }, iva: { ...actual.iva } })
@@ -152,6 +156,7 @@ export function VentasTab() {
         <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500" />
         <p className="text-[0.72rem] text-gray-500">
           Esta configuración es propia de esta empresa. El semáforo y el bloqueo aplican en el editor de cotizaciones del CRM.
+          Los estatus de venta contados se configuran en Ventas (Área) → Metas, Comisiones e Incentivos, cada uno con su propia lista.
         </p>
       </div>
 

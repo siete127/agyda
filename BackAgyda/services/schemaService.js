@@ -2014,6 +2014,13 @@ END`,
 BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_OBSERVACIONES_INICIALES NVARCHAR(MAX) NULL;
 END`,
+    // Observaciones libres del cliente (módulo Clientes): tipo de persona,
+    // puesto del contacto, método de pago, días de crédito… Equivale a
+    // CLIENTES.CL_OBSERVACIONES tras la unificación CLIENTES→CRM_CONTACTOS.
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_OBSERVACIONES')
+BEGIN
+  ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_OBSERVACIONES NVARCHAR(1000) NULL;
+END`,
     `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_ES_CLIENTE')
 BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ES_CLIENTE BIT NOT NULL
@@ -2024,6 +2031,13 @@ END`,
     `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_ULTIMA_ALERTA_INACTIVIDAD')
 BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ULTIMA_ALERTA_INACTIVIDAD DATETIME NULL;
+END`,
+    // Vincula el contacto/cliente con su login de portal (NEUS_USUARIOS,
+    // NEUS_TIPOUSUARIO='CL') cuando se le da acceso al portal-cliente desde
+    // altaCliente — sin FK física, mismo estilo que CONT_RESPONSABLE_ID.
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_NEUS_ID')
+BEGIN
+  ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_NEUS_ID INT NULL;
 END`,
     `IF OBJECT_ID('dbo.CRM_ACTIVIDADES', 'U') IS NULL
 BEGIN
@@ -2072,6 +2086,105 @@ END`,
   logger.info('✅ Esquema CRM asegurado/actualizado');
 }
 
+// Catálogos administrables de Clientes (Configuración → CRM → Clientes): Tipos,
+// Segmentos, Categorías, Industrias, Clasificaciones — mismo shape simple que
+// TICKET_CLASIFICACIONES (ver ensureTiAreaSchema/catalogosTiController): clave
+// inmutable + nombre editable + orden + activa (soft-delete). Etiquetas es
+// multi-valor por contacto, así que además lleva su tabla puente.
+async function ensureCrmCatalogosClienteSchema(pool) {
+  const CATALOGOS = [
+    { tabla: 'CRM_TIPOS_CLIENTE', prefijo: 'TIP' },
+    { tabla: 'CRM_SEGMENTOS', prefijo: 'SEG' },
+    { tabla: 'CRM_CATEGORIAS_CLIENTE', prefijo: 'CAT' },
+    { tabla: 'CRM_INDUSTRIAS', prefijo: 'IND' },
+    { tabla: 'CRM_CLASIFICACIONES_CLIENTE', prefijo: 'CLC' },
+    { tabla: 'CRM_ETIQUETAS', prefijo: 'ETQ' },
+    // Tipo de acceso al portal-cliente (ej. Reclutamiento, Facturación,
+    // Completo) — solo aplica a contactos con CONT_NEUS_ID (con login).
+    { tabla: 'CRM_TIPOS_ACCESO_PORTAL', prefijo: 'TAP' },
+  ];
+  for (const { tabla, prefijo } of CATALOGOS) {
+    try {
+      await pool.request().batch(`
+        IF OBJECT_ID('dbo.${tabla}', 'U') IS NULL
+        BEGIN
+          CREATE TABLE dbo.${tabla} (
+            ${prefijo}_ID INT IDENTITY(1,1) PRIMARY KEY,
+            ${prefijo}_CLAVE NVARCHAR(30) NOT NULL,
+            ${prefijo}_NOMBRE NVARCHAR(100) NOT NULL,
+            ${prefijo}_ORDEN INT NOT NULL DEFAULT 0,
+            ${prefijo}_ACTIVA BIT NOT NULL DEFAULT 1,
+            CONSTRAINT UQ_${tabla}_CLAVE UNIQUE (${prefijo}_CLAVE)
+          );
+        END
+      `);
+    } catch (err) {
+      console.warn(`⚠️ CrmCatalogosClienteSchema (${tabla}):`, err.message);
+    }
+  }
+
+  // Columnas de selección única en CRM_CONTACTOS (sin FK física, mismo estilo
+  // que CONT_RESPONSABLE_ID, para no acoplar el borrado del catálogo).
+  const COLUMNAS_FK = [
+    'CONT_TIPO_CLIENTE_ID', 'CONT_SEGMENTO_ID', 'CONT_CATEGORIA_ID', 'CONT_INDUSTRIA_ID', 'CONT_CLASIFICACION_ID',
+    'CONT_TIPO_ACCESO_ID',
+  ];
+  for (const col of COLUMNAS_FK) {
+    try {
+      await pool.request().batch(`
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = '${col}')
+        BEGIN
+          ALTER TABLE dbo.CRM_CONTACTOS ADD ${col} INT NULL;
+        END
+      `);
+    } catch (err) {
+      console.warn(`⚠️ CrmContactosCatalogoFk (${col}):`, err.message);
+    }
+  }
+
+  // Etiquetas es multi-valor por contacto → tabla puente.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_CONTACTOS_ETIQUETAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CRM_CONTACTOS_ETIQUETAS (
+          CCE_CONTACTO_ID INT NOT NULL,
+          CCE_ETIQUETA_ID INT NOT NULL,
+          CONSTRAINT PK_CRM_CONTACTOS_ETIQUETAS PRIMARY KEY (CCE_CONTACTO_ID, CCE_ETIQUETA_ID)
+        );
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmContactosEtiquetasSchema:', err.message);
+  }
+
+  // Migración: CONT_TIPO_CLIENTE (texto libre, ya en uso) se preserva; se
+  // migran sus valores distintos a CRM_TIPOS_CLIENTE como semilla, y se
+  // backfillea CONT_TIPO_CLIENTE_ID para no perder el dato ya capturado.
+  try {
+    await pool.request().batch(`
+      INSERT INTO dbo.CRM_TIPOS_CLIENTE (TIP_CLAVE, TIP_NOMBRE, TIP_ORDEN)
+      SELECT LOWER(REPLACE(REPLACE(LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), ' ', '_'), '.', '')), LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), 0
+      FROM (SELECT DISTINCT CONT_TIPO_CLIENTE FROM dbo.CRM_CONTACTOS WHERE CONT_TIPO_CLIENTE IS NOT NULL AND LTRIM(RTRIM(CONT_TIPO_CLIENTE)) <> '') t
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.CRM_TIPOS_CLIENTE tc
+        WHERE tc.TIP_CLAVE = LOWER(REPLACE(REPLACE(LTRIM(RTRIM(t.CONT_TIPO_CLIENTE)), ' ', '_'), '.', ''))
+      );
+    `);
+    await pool.request().batch(`
+      UPDATE c SET c.CONT_TIPO_CLIENTE_ID = tc.TIP_ID
+      FROM dbo.CRM_CONTACTOS c
+      INNER JOIN dbo.CRM_TIPOS_CLIENTE tc
+        ON tc.TIP_CLAVE = LOWER(REPLACE(REPLACE(LTRIM(RTRIM(c.CONT_TIPO_CLIENTE)), ' ', '_'), '.', ''))
+      WHERE c.CONT_TIPO_CLIENTE_ID IS NULL AND c.CONT_TIPO_CLIENTE IS NOT NULL AND LTRIM(RTRIM(c.CONT_TIPO_CLIENTE)) <> '';
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmTiposClienteMigracion:', err.message);
+  }
+
+  logger.info('✅ Esquema de catálogos de Clientes (CRM) asegurado');
+}
+
 // Portal público del cliente (acceso por token, sin login). La tabla se creaba
 // solo en routes/crmSetup.js (endpoint manual); aquí se asegura al arrancar para
 // que exista en cada tenant sin correr ese setup a mano.
@@ -2104,6 +2217,185 @@ async function ensureCrmPortalSchema(pool) {
   }
 
   logger.info('✅ Esquema de portal del cliente asegurado');
+}
+
+// Solicitud de datos fiscales: un empleado dispara desde una Oportunidad el
+// envío de un link (mismo patrón de token que CRM_PORTAL_TOKENS) para que el
+// propio cliente capture RFC/razón social/régimen fiscal/CFDI sin necesitar
+// login. Al completarse, esos datos se guardan en CLIENTES (no en
+// CRM_CONTACTOS) porque son datos de facturación real.
+async function ensureSolicitudFiscalSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CRM_SOLICITUD_FISCAL_TOKENS', 'U') IS NULL
+      CREATE TABLE dbo.CRM_SOLICITUD_FISCAL_TOKENS (
+        SFT_ID            INT IDENTITY(1,1) PRIMARY KEY,
+        SFT_OPORTUNIDAD_ID INT NOT NULL,
+        SFT_TOKEN         NVARCHAR(100) NOT NULL UNIQUE,
+        SFT_EMAIL         NVARCHAR(300) NOT NULL,
+        SFT_ACTIVO        BIT DEFAULT 1,
+        SFT_COMPLETADO    BIT DEFAULT 0,
+        SFT_EXPIRA        DATETIME NULL,
+        SFT_FECHA         DATETIME DEFAULT GETDATE(),
+        SFT_FECHA_COMPLETADO DATETIME NULL
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ CrmSolicitudFiscalTokensSchema:', err.message);
+  }
+
+  // Columnas fiscales nuevas en CLIENTES — CL_RFC y CL_CP ya existían (se
+  // reutilizan), el resto son campos de facturación que faltaban.
+  const columnasClientes = [
+    ['CL_RAZON_SOCIAL', 'NVARCHAR(300) NULL'],
+    ['CL_REGIMEN_FISCAL', 'NVARCHAR(10) NULL'],
+    ['CL_USO_CFDI', 'NVARCHAR(10) NULL'],
+    ['CL_CORREO_FACTURACION', 'NVARCHAR(300) NULL'],
+    // Texto libre — sin campo estructurado propio para tipo de persona,
+    // puesto del contacto, método de pago o días de crédito; se anotan aquí
+    // en vez de agregar 4 columnas más para un dato que hoy nadie más consulta.
+    ['CL_OBSERVACIONES', 'NVARCHAR(1000) NULL'],
+  ];
+  for (const [col, tipo] of columnasClientes) {
+    try {
+      await pool.request().batch(`
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CLIENTES') AND name = '${col}')
+          ALTER TABLE dbo.CLIENTES ADD ${col} ${tipo};
+      `);
+    } catch (err) {
+      console.warn(`⚠️ ClientesDatosFiscalesSchema (${col}):`, err.message);
+    }
+  }
+
+  // DEPRECADA tras la unificación CLIENTES→CRM_CONTACTOS: originalmente
+  // vinculaba la oportunidad con la tabla legacy CLIENTES una vez completado
+  // el formulario fiscal. Ahora ese vínculo ya existe vía OPO_CONTACTO_ID
+  // (el propio contacto se marca CONT_ES_CLIENTE=1), así que esta columna no
+  // se escribe más. Se deja sin DROP (0 filas la usaban) por si algo externo
+  // llegó a depender de ella.
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_OPORTUNIDADES') AND name = 'OPO_CLIENTE_ID')
+        ALTER TABLE dbo.CRM_OPORTUNIDADES ADD OPO_CLIENTE_ID INT NULL;
+    `);
+  } catch (err) {
+    console.warn('⚠️ OportunidadesClienteIdSchema:', err.message);
+  }
+
+  logger.info('✅ Esquema de solicitud de datos fiscales asegurado');
+}
+
+// Multi-usuario del Portal de Cliente: una empresa cliente (CRM_CONTACTOS con
+// CONT_ES_CLIENTE=1, el contacto "ancla" dueño de todos sus datos de negocio)
+// puede tener varios logins (NEUS_USUARIOS tipo 'CL'), cada uno con un
+// sub-rol (Admin/Supervisor/Apoyo/Agente) que determina qué puede ver/hacer
+// dentro del portal. PORTAL_USUARIOS desacopla "quién puede loguearse" de "a
+// qué empresa pertenece"; PORTAL_ROLES/PORTAL_ROLES_PERMISOS son plantillas
+// de permisos editables, resueltas en tiempo real (no se copian al usuario).
+async function ensurePortalRolesSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.PORTAL_ROLES', 'U') IS NULL
+      CREATE TABLE dbo.PORTAL_ROLES (
+        ROL_ID       INT IDENTITY(1,1) PRIMARY KEY,
+        NOMBRE       NVARCHAR(80)  NOT NULL,
+        DESCRIPCION  NVARCHAR(255) NULL,
+        ES_SISTEMA   BIT           NOT NULL DEFAULT 0,
+        ACTIVO       BIT           NOT NULL DEFAULT 1,
+        CREADO_EN    DATETIME      NOT NULL DEFAULT GETDATE(),
+        CREADO_POR   INT           NULL,
+        CONSTRAINT UQ_PORTAL_ROLES_NOMBRE UNIQUE (NOMBRE)
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalRolesSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.PORTAL_ROLES_PERMISOS', 'U') IS NULL
+      CREATE TABLE dbo.PORTAL_ROLES_PERMISOS (
+        ID          INT IDENTITY(1,1) PRIMARY KEY,
+        ROL_ID      INT           NOT NULL,
+        ACCION_KEY  NVARCHAR(100) NOT NULL,
+        CONSTRAINT UQ_PORTAL_ROLES_PERMISOS UNIQUE (ROL_ID, ACCION_KEY),
+        CONSTRAINT FK_PRP_ROL FOREIGN KEY (ROL_ID) REFERENCES dbo.PORTAL_ROLES(ROL_ID)
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalRolesPermisosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.PORTAL_USUARIOS', 'U') IS NULL
+      CREATE TABLE dbo.PORTAL_USUARIOS (
+        PU_ID           INT IDENTITY(1,1) PRIMARY KEY,
+        PU_NEUS_ID      SMALLINT NOT NULL,
+        PU_CONT_ID      INT NOT NULL,
+        PU_SUBROL_ID    INT NOT NULL,
+        PU_ES_ANCLA     BIT NOT NULL DEFAULT 0,
+        PU_ACTIVO       BIT NOT NULL DEFAULT 1,
+        PU_CREADO_EN    DATETIME NOT NULL DEFAULT GETDATE(),
+        PU_CREADO_POR   INT NULL,
+        CONSTRAINT UQ_PORTAL_USUARIOS_NEUS UNIQUE (PU_NEUS_ID),
+        CONSTRAINT FK_PU_CONT FOREIGN KEY (PU_CONT_ID) REFERENCES dbo.CRM_CONTACTOS(CONT_ID),
+        CONSTRAINT FK_PU_NEUS FOREIGN KEY (PU_NEUS_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID),
+        CONSTRAINT FK_PU_ROL FOREIGN KEY (PU_SUBROL_ID) REFERENCES dbo.PORTAL_ROLES(ROL_ID)
+      );
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalUsuariosSchema:', err.message);
+  }
+
+  try {
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PORTAL_USUARIOS_CONT' AND object_id = OBJECT_ID('dbo.PORTAL_USUARIOS'))
+        CREATE INDEX IX_PORTAL_USUARIOS_CONT ON dbo.PORTAL_USUARIOS(PU_CONT_ID);
+    `);
+  } catch (err) {
+    console.warn('⚠️ PortalUsuariosIndexSchema:', err.message);
+  }
+
+  // Seed de los 4 sub-roles de sistema (solo si la tabla está vacía —
+  // editables después desde el CRUD, con ES_SISTEMA protegiendo nombre/borrado).
+  const PORTAL_ACCIONES_TODAS = [
+    'ver-resumen', 'ver-proyectos', 'ver-cotizaciones', 'ver-facturas', 'descargar-documentos',
+    'ver-citas', 'gestionar-citas', 'ver-incidencias', 'crear-incidencias', 'gestionar-usuarios',
+  ];
+  const PORTAL_ACCIONES_LECTURA = [
+    'ver-resumen', 'ver-proyectos', 'ver-cotizaciones', 'ver-facturas', 'descargar-documentos',
+    'ver-citas', 'ver-incidencias',
+  ];
+  const SEED_ROLES = [
+    { nombre: 'Admin', descripcion: 'Acceso total al portal, incluida la gestión de usuarios de su empresa', acciones: PORTAL_ACCIONES_TODAS },
+    { nombre: 'Supervisor', descripcion: 'Acceso total al portal, sin gestionar usuarios', acciones: PORTAL_ACCIONES_TODAS.filter((a) => a !== 'gestionar-usuarios') },
+    { nombre: 'Apoyo', descripcion: 'Solo lectura, puede crear incidencias', acciones: [...PORTAL_ACCIONES_LECTURA, 'crear-incidencias'] },
+    { nombre: 'Agente', descripcion: 'Solo lectura, sin ninguna acción', acciones: PORTAL_ACCIONES_LECTURA },
+  ];
+  try {
+    const existentes = await pool.request().query(`SELECT COUNT(*) as n FROM PORTAL_ROLES`);
+    if ((existentes.recordset[0]?.n || 0) === 0) {
+      for (const rol of SEED_ROLES) {
+        const insRol = await pool.request()
+          .input('nombre', sql.NVarChar, rol.nombre)
+          .input('descripcion', sql.NVarChar, rol.descripcion)
+          .query(`INSERT INTO PORTAL_ROLES (NOMBRE, DESCRIPCION, ES_SISTEMA, ACTIVO) VALUES (@nombre, @descripcion, 1, 1); SELECT SCOPE_IDENTITY() as id;`);
+        const rolId = insRol.recordset[0].id;
+        for (const accionKey of rol.acciones) {
+          await pool.request()
+            .input('rolId', sql.Int, rolId)
+            .input('accionKey', sql.NVarChar, accionKey)
+            .query(`INSERT INTO PORTAL_ROLES_PERMISOS (ROL_ID, ACCION_KEY) VALUES (@rolId, @accionKey)`);
+        }
+      }
+      logger.info('✅ Sub-roles de sistema del Portal de Cliente sembrados (Admin/Supervisor/Apoyo/Agente)');
+    }
+  } catch (err) {
+    console.warn('⚠️ PortalRolesSeed:', err.message);
+  }
+
+  logger.info('✅ Esquema de roles del Portal de Cliente asegurado');
 }
 
 // Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
@@ -2296,6 +2588,17 @@ CREATE TABLE dbo.NOTA_CREDITO_ITEMS (
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_REGIMEN_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_REGIMEN_FISCAL NVARCHAR(3) NULL;`,
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CP_FISCAL') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CP_FISCAL NVARCHAR(5) NULL;`,
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_USO_CFDI') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_USO_CFDI NVARCHAR(4) NULL;`,
+    // Paridad con la tabla legacy CLIENTES (absorbida por CRM_CONTACTOS): dirección
+    // desglosada + correo de facturación. CONT_CP es el CP de domicilio, distinto
+    // de CONT_CP_FISCAL (5, el que usa el SAT en el CFDI).
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CALLE') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CALLE NVARCHAR(200) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_NUM_EXT') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_NUM_EXT NVARCHAR(20) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_NUM_INT') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_NUM_INT NVARCHAR(20) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_COLONIA') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_COLONIA NVARCHAR(150) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CP') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CP NVARCHAR(10) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_PAIS') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_PAIS NVARCHAR(60) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CIUDAD') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CIUDAD NVARCHAR(120) NULL;`,
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CORREO_FACTURACION') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CORREO_FACTURACION NVARCHAR(200) NULL;`,
   ];
   const facturaCols = [
     `IF COL_LENGTH('dbo.FACTURAS','FAC_SALDO') IS NULL ALTER TABLE dbo.FACTURAS ADD FAC_SALDO DECIMAL(18,2) NULL;`,
@@ -3424,6 +3727,32 @@ async function ensureIncentivosSchema(pool) {
     }
   } catch (err) {
     console.warn('⚠️ IncentivosSchema:', err.message);
+  }
+}
+
+// Ventas: fórmulas de comisión definidas por el admin — mismo patrón que
+// VENTAS_INCENTIVOS_REGLAS (ver ensureIncentivosSchema), pero el resultado
+// reemplaza el monto de comisión mostrado en el CRM (antes leído de
+// NOMINA_COMISIONES) en vez de sumarse como bono aparte.
+async function ensureComisionesReglasSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.VENTAS_COMISIONES_REGLAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.VENTAS_COMISIONES_REGLAS (
+          VCR_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          VCR_NOMBRE          NVARCHAR(150)   NOT NULL,
+          VCR_FORMULA         NVARCHAR(1000)  NOT NULL,
+          VCR_ORDEN           INT             NOT NULL DEFAULT 0,
+          VCR_ACTIVA          BIT             NOT NULL DEFAULT 1,
+          VCR_CREADO_POR      SMALLINT        NULL,
+          VCR_FECHA_CREACION  DATETIME        NOT NULL DEFAULT GETDATE()
+        );
+        CREATE INDEX IX_VCR_ORDEN ON dbo.VENTAS_COMISIONES_REGLAS(VCR_ORDEN);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ ComisionesReglasSchema:', err.message);
   }
 }
 
@@ -5475,9 +5804,12 @@ async function ensureAllSchemas(pool) {
   await ensureEncuestasSchema(pool);
   await ensureEncuestaSatisfaccionClienteSeed(pool);
   await ensureCrmSchema(pool);
+  await ensureCrmCatalogosClienteSchema(pool);
   await ensureCrmCotizacionesSchema(pool);
   await ensureCrmSeguimientoSchema(pool);
   await ensureCrmPortalSchema(pool);
+  await ensureSolicitudFiscalSchema(pool);
+  await ensurePortalRolesSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
@@ -5489,6 +5821,7 @@ async function ensureAllSchemas(pool) {
   await ensureFinanzasSchema(pool);
   await ensureVentasMetasSchema(pool);
   await ensureIncentivosSchema(pool);
+  await ensureComisionesReglasSchema(pool);
   await ensureCallCenterSchema(pool);
   await ensureTiAreaSchema(pool);
   await ensureAtencionClienteSchema(pool);
@@ -5517,6 +5850,9 @@ async function ensureAllSchemas(pool) {
   await ensureFacturacionSchema(pool);
   await ensureActivosSchema(pool);
   await ensureUsuarioTiemposSchema(pool);
+  // Después de STATUS: le agrega las columnas de configuración de pausas.
+  await require('./pausaTiposService').ensureSchema(pool);
+  await require('./enlacesPersonalesService').ensureSchema(pool);
 }
 
 // Expediente extendido (tabs "Persona", "Adicionales", "Familiares", "Formación", "Talento")
@@ -7248,16 +7584,23 @@ CREATE TABLE dbo.CSA_ALARMAS (
   CSA_NOMBRE NVARCHAR(120) NOT NULL,
   CSA_TIPO NVARCHAR(20) NOT NULL, -- 'agente_pausa' | 'skill_cola'
   CSA_UMBRAL_MINUTOS INT NOT NULL,
+  CSA_CAMPANIA_ID INT NULL, -- NULL = alarma global (aplica a toda campaña sin una propia de este tipo)
   CSA_ACTIVA BIT NOT NULL DEFAULT (1),
   CSA_FECHA_CREACION DATETIME NOT NULL DEFAULT GETDATE(),
   CONSTRAINT CK_CSA_TIPO CHECK (CSA_TIPO IN ('agente_pausa','skill_cola'))
 );`,
-    // Semilla de las dos alarmas del plan (Fase 1) si la tabla quedó vacía —
-    // umbral por default editable después, no hay UI de alta todavía.
+    // Migración para BDs creadas antes de que existiera personalización por
+    // campaña — agrega la columna si la tabla ya existía sin ella.
+    `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CSA_ALARMAS') AND name = 'CSA_CAMPANIA_ID')
+ALTER TABLE dbo.CSA_ALARMAS ADD CSA_CAMPANIA_ID INT NULL;`,
+    // Semilla de las dos alarmas globales del plan (Fase 1) si la tabla
+    // quedó vacía — un supervisor puede después crear una específica de
+    // campaña que las sobreescribe (ver resolución en evaluarAlarma).
     `IF OBJECT_ID('dbo.CSA_ALARMAS', 'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CSA_ALARMAS)
-INSERT INTO dbo.CSA_ALARMAS (CSA_NOMBRE, CSA_TIPO, CSA_UMBRAL_MINUTOS) VALUES
-  (N'Agente en pausa prolongada', 'agente_pausa', 20),
-  (N'Chats en cola sin asignar', 'skill_cola', 5);`,
+INSERT INTO dbo.CSA_ALARMAS (CSA_NOMBRE, CSA_TIPO, CSA_UMBRAL_MINUTOS, CSA_CAMPANIA_ID) VALUES
+  (N'Agente en pausa prolongada', 'agente_pausa', 20, NULL),
+  (N'Chats en cola sin asignar', 'skill_cola', 5, NULL);`,
     `IF OBJECT_ID('dbo.CSA_ALARMA_INSTANCIAS', 'U') IS NULL
 CREATE TABLE dbo.CSA_ALARMA_INSTANCIAS (
   CSI_ID INT IDENTITY(1,1) PRIMARY KEY,
@@ -8205,6 +8548,24 @@ END
     console.warn('⚠️ ClienteProductosServiciosSchema:', err.message);
   }
 
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS (
+    CCPS_ID               INT IDENTITY(1,1) PRIMARY KEY,
+    CCPS_CONT_ID          INT NOT NULL,
+    CCPS_PS_ID            INT NOT NULL,
+    CCPS_FECHA_ASIGNACION DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_CRM_CONTACTO_PS UNIQUE (CCPS_CONT_ID, CCPS_PS_ID)
+  );
+  CREATE INDEX IX_CCPS_CONTACTO ON dbo.CRM_CONTACTO_PRODUCTOS_SERVICIOS(CCPS_CONT_ID);
+END
+`);
+  } catch (err) {
+    console.warn('⚠️ CrmContactoProductosServiciosSchema:', err.message);
+  }
+
   // Columnas fiscales (costo + claves SAT) para poder cotizar y facturar.
   const psCols = [
     `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_COSTO') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_COSTO DECIMAL(18,2) NULL;`,
@@ -8560,5 +8921,7 @@ module.exports = {
     ensureMensajeriaSchema,
     ensureEncuestasSchema,
     ensureRolesSchema,
-    ensurePerfilesSchema
+    ensurePerfilesSchema,
+    ensureSolicitudFiscalSchema,
+    ensurePortalRolesSchema
 };

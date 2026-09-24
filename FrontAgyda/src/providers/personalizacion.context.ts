@@ -40,7 +40,11 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
   ventas: {
     margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
     iva: { tasaDefault: 0.16 },
+    estatusContados: ['Aprobada', 'Formalizada', 'Formalizado', 'Garantizada'],
   },
+  // Mismos defaults que personalizacionController (DEFAULT_CONFIG).
+  prospeccion: { ventanaAnalisisDias: 30 },
+  emailMarketing: { emailsPorHoraDefault: 200 },
 }
 
 // Layout por defecto del inicio — el orden/tamaño que ya tenía la portada,
@@ -57,6 +61,7 @@ export const DASHBOARD_DEFAULT: PersonalizacionConfig['dashboard']['cards'] = [
   { id: 'cumpleanos',      x: 8, y: 8, w: 4, h: 3, visible: true },
   { id: 'soporte',         x: 8, y: 11, w: 4, h: 2, visible: true },
   { id: 'accesos-rapidos', x: 0, y: 13, w: 12, h: 3, visible: true },
+  { id: 'r-mis-enlaces',   x: 0, y: 16, w: 12, h: 3, visible: true },
 ]
 
 export const PersonalizacionContext = createContext<PersonalizacionConfig>(DEFAULT_CONFIG)

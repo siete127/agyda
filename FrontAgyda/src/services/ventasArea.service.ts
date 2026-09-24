@@ -1,4 +1,5 @@
 import { api } from '@/lib/axios'
+import type { PausaPorTipo } from '@/types/pausaTipos.types'
 
 export interface VentasAreaDashboard {
   metasDefinidas: number
@@ -42,11 +43,15 @@ export interface MetaPausaAgente {
   capacitacionSeg: number
   permisoSeg: number
   totalSeg: number
+  // Todos los tipos de pausa configurados (incluye los que agregue la empresa).
+  pausasPorTipo?: PausaPorTipo[]
 }
 
 export interface MetaPausas {
   alcance: MetaAlcance
   agentes: MetaPausaAgente[]
+  // La empresa no tiene el módulo de pausas: el bloque no se muestra.
+  deshabilitado?: boolean
 }
 
 export interface AsesorVentas {

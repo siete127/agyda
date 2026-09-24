@@ -11,6 +11,7 @@ import { api } from '@/lib/axios'
 import { SidebarItem } from './SidebarItem'
 import { SidebarFlyout, type FlyoutPosition } from './SidebarFlyout'
 import { ROUTES } from '@/router/routes.config'
+import { NAV_GROUPS } from '@/router/navGroups'
 import { disconnectSocket } from '@/lib/socket'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
 import { personalizacionService } from '@/services/personalizacion.service'
@@ -32,63 +33,9 @@ const BUBBLES = [
   { left: 33, size: 18, opacity: 0.2,  duration: 15, delay: 0.8  },
 ]
 
-// El sidebar se organiza por área de negocio (ver plan "Expansión de la Intranet a las 10 Áreas").
-// El ícono de cada grupo es el del primer moduleKey listado — por eso cada área empieza
-// con su propio moduleKey de área (direccion-general, rh-area, etc.) antes de sus módulos.
-const GROUPS = [
-  {
-    label: 'Principal',
-    keys: ['*', 'noticias', 'mensajeria'],
-  },
-  {
-    label: 'Dirección General',
-    keys: ['direccion-general', 'areas-portal', 'reports'],
-  },
-  {
-    label: 'Recursos Humanos',
-    keys: ['rh-area', 'expedientes', 'nomina', 'vacaciones', 'asistencia-personal', 'asistencia', 'mi-area', 'vacantes', 'encuestas', 'capacitacion', 'incapacidades', 'evaluacion-desempeno'],
-  },
-  {
-    label: 'Finanzas y Administración',
-    keys: ['finanzas', 'gastos'],
-  },
-  {
-    label: 'CRM',
-    keys: ['ventas-area', 'clientes', 'productos-servicios', 'crm', 'email-marketing'],
-  },
-  {
-    label: 'Contact Center',
-    keys: ['contact-center', 'operaciones', 'webphone', 'livechat', 'checklists'],
-  },
-  {
-    label: 'Calidad',
-    keys: ['calidad', 'evaluacion', 'auditoria'],
-  },
-  {
-    label: 'Marketing',
-    keys: ['marketing', 'organigrama', 'chatbot'],
-  },
-  {
-    label: 'Tecnología / TI',
-    keys: ['tecnologia', 'tickets', 'activos', 'staff-ti'],
-  },
-  {
-    label: 'Atención al Cliente',
-    keys: ['atencion-cliente'], // Fase 8: 'quejas' (módulo legacy) retirado — Quejas ahora vive en Casos
-  },
-  {
-    label: 'Legal y Cumplimiento',
-    keys: ['legal', 'reglamento'],
-  },
-  {
-    label: 'Otros',
-    keys: ['drive', 'musica', 'calendario', 'proyectos'],
-  },
-  {
-    label: 'Configuración',
-    keys: ['configuracion'],
-  },
-]
+// El sidebar se organiza por área de negocio. Las secciones viven en
+// router/navGroups.ts, compartidas con el árbol de Configuración.
+const GROUPS = NAV_GROUPS
 
 export function Sidebar() {
   const navigate = useNavigate()

@@ -4,29 +4,121 @@ const corsConfig = require('../config/cors');
 const databaseService = require('./databaseService');
 const sql = require('mssql');
 const { DEFAULT_TENANT } = require('../config/tenants');
+const pausaTiposService = require('./pausaTiposService');
 
 let io;
 
-function makeEmptyBanioState() {
+// status_id del baño en ESTA empresa: el tipo de pausa con clave 'sanitario'
+// (su id cambia entre empresas; ver pausaTiposService).
+const SQL_BANIO = `(SELECT status_id FROM dbo.STATUS WHERE clave = 'sanitario')`;
+
+// ── Baño ─────────────────────────────────────────────────────────────────
+// Los baños son "espacios" configurables (Configuración → Tipos de pausa →
+// Baño → Espacios, tabla STATUS_ESPACIOS): cada uno con género (o mixto),
+// capacidad y las áreas que lo usan. Al entrar se asigna el primer espacio
+// que le corresponde al usuario y tenga lugar. Si ningún espacio le
+// corresponde (su área no tiene baño asignado), la pausa se registra igual
+// pero sin semáforo.
+//
+// Por empresa — dos empresas nunca ven ni afectan el estado de la otra:
+//   espacios  → configuración (caché; null = sin cargar)
+//   ocupantes → Map(userId -> { userId, nombre, genero, area, espacioId, tiempoId, desde })
+const banioByTenant = new Map();
+const usuarioCacheByTenant = new Map(); // tenantKey -> Map(userId -> {genero, nombre, area, ts})
+const USUARIO_CACHE_MS = 10 * 60 * 1000;
+
+function getBanio(tenantKey) {
+  if (!banioByTenant.has(tenantKey)) banioByTenant.set(tenantKey, { espacios: null, ocupantes: new Map() });
+  return banioByTenant.get(tenantKey);
+}
+
+function getUsuarioCache(tenantKey) {
+  if (!usuarioCacheByTenant.has(tenantKey)) usuarioCacheByTenant.set(tenantKey, new Map());
+  return usuarioCacheByTenant.get(tenantKey);
+}
+
+// Sin tabla de espacios (BD que aún no corre el esquema) → los 2 de siempre.
+function espaciosDeRespaldo() {
+  return pausaTiposService.ESPACIOS_DEFAULT.map((e, i) => ({ ...e, id: -(i + 1), statusId: null, orden: i + 1 }));
+}
+
+async function cargarEspacios(tenantKey) {
+  const b = getBanio(tenantKey);
+  try {
+    const pool = await databaseService.getPool(tenantKey);
+    const r = await pool.request().query(`
+      SELECT ESPACIO_ID, STATUS_ID, NOMBRE, GENERO, CAPACIDAD, AREAS, ORDEN
+      FROM dbo.STATUS_ESPACIOS WHERE STATUS_ID IN ${SQL_BANIO}
+      ORDER BY ORDEN, ESPACIO_ID`);
+    b.espacios = r.recordset.length ? r.recordset.map(pausaTiposService.mapEspacio) : espaciosDeRespaldo();
+  } catch (e) {
+    console.warn(`[BAÑO][${tenantKey}] No se pudieron leer los espacios:`, e?.message);
+    b.espacios = espaciosDeRespaldo();
+  }
+  return b;
+}
+
+async function asegurarEspacios(tenantKey) {
+  const b = getBanio(tenantKey);
+  return b.espacios ? b : cargarEspacios(tenantKey);
+}
+
+const ocupantesDe = (b, espacioId) => [...b.ocupantes.values()].filter((o) => o.espacioId === espacioId);
+
+// Espacio para alguien que entra: el primero que le corresponde y tiene lugar.
+//   { espacio }            → entra ahí
+//   { espacio: null }      → le corresponden espacios pero todos están llenos
+//   { sinControl: true }   → ningún espacio le corresponde: entra sin semáforo
+// `forzar` (al reconstruir/reubicar a quien ya está adentro): si todos están
+// llenos, lo deja en el primero que le corresponde aunque se pase del cupo.
+function elegirEspacio(b, genero, area, forzar = false) {
+  const aplican = b.espacios.filter((e) => pausaTiposService.aplicaEspacio(e, genero, area));
+  if (!aplican.length) return { espacio: null, sinControl: true };
+  const libre = aplican.find((e) => ocupantesDe(b, e.id).length < e.capacidad);
+  return { espacio: libre || (forzar ? aplican[0] : null), sinControl: false };
+}
+
+// Estado que se manda a los clientes. `hombres`/`mujeres` es el formato
+// anterior (un baño por género), por compatibilidad con clientes viejos.
+function estadoPublico(b) {
+  const espacios = b.espacios || [];
+  const ids = new Set(espacios.map((e) => e.id));
+  const pub = (o) => ({ userId: o.userId, nombre: o.nombre });
+  const todos = [...b.ocupantes.values()];
+  const legado = (g) => {
+    const o = todos.find((x) => x.genero === g && x.espacioId !== null);
+    return o
+      ? { ocupado: true, porUsuario: o.userId, porNombre: o.nombre, genero: g, tiempoId: o.tiempoId }
+      : { ocupado: false, porUsuario: null, porNombre: null, genero: g, tiempoId: null };
+  };
   return {
-    hombres: { ocupado: false, porUsuario: null, porNombre: null, genero: 'M', tiempoId: null },
-    mujeres: { ocupado: false, porUsuario: null, porNombre: null, genero: 'F', tiempoId: null },
+    espacios: espacios.map((e) => ({
+      id: e.id, nombre: e.nombre, genero: e.genero, capacidad: e.capacidad, areas: e.areas,
+      ocupantes: ocupantesDe(b, e.id).map(pub),
+    })),
+    sinEspacio: todos.filter((o) => o.espacioId === null || !ids.has(o.espacioId)).map(pub),
+    hombres: legado('M'),
+    mujeres: legado('F'),
   };
 }
 
-// Estado del baño y caché de género, uno por empresa — dos empresas nunca
-// deben ver o afectar el estado de la otra.
-const banioStateByTenant = new Map(); // tenantKey -> banioState
-const generoCacheByTenant = new Map(); // tenantKey -> Map(userId -> {genero, nombre})
-
-function getBanioState(tenantKey) {
-  if (!banioStateByTenant.has(tenantKey)) banioStateByTenant.set(tenantKey, makeEmptyBanioState());
-  return banioStateByTenant.get(tenantKey);
+function emitirBanio(tenantKey) {
+  io?.to(`tenant:${tenantKey}`).emit('banio:status', estadoPublico(getBanio(tenantKey)));
 }
 
-function getGeneroCache(tenantKey) {
-  if (!generoCacheByTenant.has(tenantKey)) generoCacheByTenant.set(tenantKey, new Map());
-  return generoCacheByTenant.get(tenantKey);
+// Después de cambiar la configuración: recarga los espacios y reubica a
+// quien esté en un espacio que ya no existe o que ya no le corresponde.
+async function recargarEspacios(tenantKey) {
+  const b = await cargarEspacios(tenantKey);
+  const reubicar = [];
+  for (const o of b.ocupantes.values()) {
+    const e = b.espacios.find((x) => x.id === o.espacioId);
+    if (!e || !pausaTiposService.aplicaEspacio(e, o.genero, o.area)) { o.espacioId = null; reubicar.push(o); }
+  }
+  for (const o of reubicar.sort((x, y) => x.desde - y.desde)) {
+    o.espacioId = elegirEspacio(b, o.genero, o.area, true).espacio?.id ?? null;
+  }
+  emitirBanio(tenantKey);
 }
 
 // Resuelve la empresa de un socket a partir del JWT enviado en el handshake
@@ -94,58 +186,85 @@ function detectarGeneroNombre(nombreCompleto) {
   return 'F'; // fallback femenino
 }
 
-// Obtiene género desde caché o BD (columna NEUS_GENERO). Autoritativo, nunca usa el cliente.
-async function getGeneroUsuario(userId, tenantKey) {
-  const cache = getGeneroCache(tenantKey);
+// Género: NEUS_GENERO si está definido; si no, detección por nombre.
+function generoDe(nombre, generoDb) {
+  const g = (generoDb || '').trim().toUpperCase();
+  return (g === 'M' || g === 'F') ? g : detectarGeneroNombre(nombre);
+}
+const nombreCorto = (nombre) => (nombre || '').trim().split(/\s+/).slice(0, 2).join(' ');
+
+// Género, nombre y área (NEUS_TIPOUSUARIO) desde caché o BD. Autoritativo,
+// nunca usa lo que manda el cliente. La caché vence para tomar cambios de área.
+async function getInfoUsuario(userId, tenantKey) {
+  const cache = getUsuarioCache(tenantKey);
   const key = String(userId);
-  if (cache.has(key)) return cache.get(key);
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.ts < USUARIO_CACHE_MS) return hit;
   try {
     const pool = await databaseService.getPool(tenantKey);
     const r = await pool.request()
       .input('neusId', sql.Int, parseInt(userId) || 0)
-      .query('SELECT TOP 1 NEUS_NOMBRES as nombre, NEUS_GENERO as generoDb FROM NEUS_USUARIOS WHERE NEUS_ID = @neusId');
+      .query('SELECT TOP 1 NEUS_NOMBRES as nombre, NEUS_GENERO as generoDb, NEUS_TIPOUSUARIO as area FROM NEUS_USUARIOS WHERE NEUS_ID = @neusId');
     if (r.recordset.length > 0) {
-      const nombre = r.recordset[0].nombre;
-      const shortName = (nombre || '').trim().split(/\s+/).slice(0, 2).join(' ');
-      // Usar NEUS_GENERO si está definido, sino fallback a detección por nombre
-      const generoDb = (r.recordset[0].generoDb || '').trim().toUpperCase();
-      const genero = (generoDb === 'M' || generoDb === 'F') ? generoDb : detectarGeneroNombre(nombre);
-      cache.set(key, { genero, nombre: shortName });
-      return { genero, nombre: shortName };
+      const u = r.recordset[0];
+      const info = { genero: generoDe(u.nombre, u.generoDb), nombre: nombreCorto(u.nombre), area: String(u.area || '').trim().toUpperCase(), ts: Date.now() };
+      cache.set(key, info);
+      return info;
     }
   } catch (_) {}
-  return null;
+  return hit || null;
 }
 
+// Al arrancar: quién está en el baño según las pausas abiertas. Las de hace
+// más de 4 horas se consideran olvidadas (se cierran al volver a entrar).
 async function reconstituirEstadoBanio(tenantKey) {
   try {
+    const b = await cargarEspacios(tenantKey);
     const pool = await databaseService.getPool(tenantKey);
     const r = await pool.request().query(`
-      SELECT TOP 2 t.neus_id, t.tiempo_id, u.NEUS_NOMBRES as nombre, u.NEUS_GENERO as generoDb
+      SELECT t.neus_id, t.tiempo_id, t.fecha_inicio, u.NEUS_NOMBRES as nombre, u.NEUS_GENERO as generoDb, u.NEUS_TIPOUSUARIO as area
       FROM USUARIO_TIEMPOS t
       JOIN NEUS_USUARIOS u ON u.NEUS_ID = t.neus_id
-      WHERE t.status_id = 3 AND t.fecha_fin IS NULL
-      ORDER BY t.fecha_inicio DESC
+      WHERE t.status_id IN ${SQL_BANIO} AND t.fecha_fin IS NULL
+        AND t.fecha_inicio >= DATEADD(HOUR, -4, GETDATE())
+      ORDER BY t.fecha_inicio ASC
     `);
-    const banioState = makeEmptyBanioState();
-    banioStateByTenant.set(tenantKey, banioState);
+    b.ocupantes = new Map();
     for (const row of r.recordset) {
-      const generoDb = (row.generoDb || '').trim().toUpperCase();
-      const genero = (generoDb === 'M' || generoDb === 'F') ? generoDb : detectarGeneroNombre(row.nombre);
-      const slot = genero === 'F' ? 'mujeres' : 'hombres';
-      if (!banioState[slot].ocupado) {
-        banioState[slot] = {
-          ocupado: true,
-          porUsuario: String(row.neus_id),
-          porNombre: (row.nombre || '').trim().split(/\s+/).slice(0, 2).join(' '),
-          genero,
-          tiempoId: row.tiempo_id,
-        };
-      }
+      const userId = String(row.neus_id);
+      if (b.ocupantes.has(userId)) continue;
+      const genero = generoDe(row.nombre, row.generoDb);
+      const area = String(row.area || '').trim().toUpperCase();
+      b.ocupantes.set(userId, {
+        userId, nombre: nombreCorto(row.nombre), genero, area,
+        espacioId: elegirEspacio(b, genero, area, true).espacio?.id ?? null,
+        tiempoId: row.tiempo_id,
+        desde: new Date(row.fecha_inicio).getTime() || Date.now(),
+      });
     }
   } catch (e) {
     console.warn(`[BAÑO][${tenantKey}] No se pudo reconstituir estado desde BD:`, e?.message);
   }
+}
+
+// Cada minuto: saca de memoria a quien ya no tiene su pausa de baño abierta
+// en la BD (la cerró otra pantalla, un cierre automático, etc.), para que no
+// ocupe un lugar que ya está libre.
+async function depurarOcupantes(tenantKey) {
+  const b = getBanio(tenantKey);
+  const candidatos = [...b.ocupantes.values()].filter((o) => o.tiempoId && Date.now() - o.desde > 15_000);
+  if (!candidatos.length) return;
+  try {
+    const pool = await databaseService.getPool(tenantKey);
+    const r = await pool.request().query(
+      `SELECT DISTINCT neus_id FROM USUARIO_TIEMPOS WHERE status_id IN ${SQL_BANIO} AND fecha_fin IS NULL`);
+    const abiertos = new Set(r.recordset.map((x) => String(x.neus_id)));
+    let cambio = false;
+    for (const o of candidatos) {
+      if (!abiertos.has(o.userId) && b.ocupantes.get(o.userId) === o) { b.ocupantes.delete(o.userId); cambio = true; }
+    }
+    if (cambio) emitirBanio(tenantKey);
+  } catch (_) { /* se reintenta en el siguiente minuto */ }
 }
 
 function initialize(server) {
@@ -164,9 +283,13 @@ function initialize(server) {
   // Reconstituir estado del baño desde BD al arrancar, por cada empresa
   require('../config/tenants').listTenants().forEach(({ key }) => {
     reconstituirEstadoBanio(key).then(() => {
-      console.log(`[BAÑO][${key}] Estado reconstituido:`, JSON.stringify(getBanioState(key)));
+      const b = getBanio(key);
+      console.log(`[BAÑO][${key}] Estado reconstituido: ${b.espacios?.length ?? 0} espacio(s), ${b.ocupantes.size} adentro`);
     });
   });
+  setInterval(() => {
+    for (const [key, b] of banioByTenant) if (b.ocupantes.size) depurarOcupantes(key);
+  }, 60_000).unref();
 
   io.on('connection', (socket) => {
     const tenantKey = resolveTenantFromSocket(socket);
@@ -205,27 +328,40 @@ function initialize(server) {
         const userId = String(payload?.userId ?? '');
         if (!userId || userId === 'null' || userId === 'undefined') return;
 
-        const banioState = getBanioState(tenantKey);
-        const tenantRoom = `tenant:${tenantKey}`;
+        const b = await asegurarEspacios(tenantKey);
 
-        // 1. Obtener género real desde caché/BD — SIEMPRE autoritativo, nunca del cliente
-        const info = await getGeneroUsuario(userId, tenantKey);
-        const generoReal = info?.genero ?? (payload?.genero === 'F' ? 'F' : 'M');
-        const userName   = info?.nombre ?? (payload?.userName ?? 'Alguien');
-        const slotKey    = generoReal === 'F' ? 'mujeres' : 'hombres';
-        const slot       = banioState[slotKey];
+        // 1. Género y área reales desde caché/BD — SIEMPRE autoritativos, nunca del cliente
+        const info = await getInfoUsuario(userId, tenantKey);
+        const genero = info?.genero ?? (payload?.genero === 'F' ? 'F' : 'M');
+        const userName = info?.nombre ?? (payload?.userName ?? 'Alguien');
+        const area = info?.area ?? '';
 
-        logger.info(`[BAÑO][${tenantKey}] toggle userId=${userId} nombre="${userName}" genero=${generoReal} slot.ocupado=${slot.ocupado} slot.porUsuario=${slot.porUsuario}`);
+        // Entrar requiere la acción reports:gestionar-pausas (mismo permiso que
+        // /api/reports/pausa/*). Salir siempre se permite, para que nadie se
+        // quede "adentro" si le quitan el permiso a media pausa.
+        if (!b.ocupantes.has(userId)) {
+          const { getEmpresaModulosBloqueados, getUserAllowedActions } = require('../middleware/moduleAccess');
+          const bloqueados = await getEmpresaModulosBloqueados(tenantKey);
+          const acciones = bloqueados.has('reports') ? new Set() : await getUserAllowedActions(userId, 'reports', tenantKey);
+          if (!acciones.has('*') && !acciones.has('gestionar-pausas')) {
+            logger.warn(`[BAÑO][${tenantKey}] userId=${userId} sin permiso reports:gestionar-pausas — toggle ignorado`);
+            socket.emit('banio:status', estadoPublico(b));
+            return;
+          }
+        }
 
-        // 2. Determinar acción: entrar o salir
-        const yaEstaAdentro = slot.ocupado && slot.porUsuario === userId;
+        // 2. Entrar o salir. Desde aquí no hay awaits: revisar el cupo y
+        //    ocupar el lugar pasa de una sola vez (sin carreras entre dos que
+        //    entran al mismo tiempo).
+        const adentro = b.ocupantes.get(userId);
+        logger.info(`[BAÑO][${tenantKey}] toggle userId=${userId} nombre="${userName}" genero=${genero} area=${area} adentro=${!!adentro}`);
 
-        if (yaEstaAdentro) {
+        if (adentro) {
           // ── SALIR ──────────────────────────────────────────────────────────
-          const tiempoId = slot.tiempoId ?? null;
-          banioState[slotKey] = { ocupado: false, porUsuario: null, porNombre: null, genero: generoReal, tiempoId: null };
-          io.to(tenantRoom).emit('banio:status', banioState);
-          logger.info(`[BAÑO][${tenantKey}] ${userName} salió del baño de ${slotKey}`);
+          const tiempoId = adentro.tiempoId ?? null;
+          b.ocupantes.delete(userId);
+          emitirBanio(tenantKey);
+          logger.info(`[BAÑO][${tenantKey}] ${userName} salió (espacio ${adentro.espacioId ?? 'sin semáforo'})`);
 
           setImmediate(async () => {
             try {
@@ -239,59 +375,62 @@ function initialize(server) {
               } else {
                 await pool.request()
                   .input('neusId', sql.Int, neusIdInt)
-                  .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id = 3 AND fecha_fin IS NULL`);
+                  .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id IN ${SQL_BANIO} AND fecha_fin IS NULL`);
                 logger.info(`[BAÑO][${tenantKey}] Cierre BD fallback neusId=${userId}`);
               }
             } catch (dbErr) { logger.warn(`[BAÑO][${tenantKey}] Error cerrando BD:`, dbErr?.message); }
           });
-
-        } else if (!slot.ocupado) {
-          // ── ENTRAR (slot libre) ────────────────────────────────────────────
-          banioState[slotKey] = { ocupado: true, porUsuario: userId, porNombre: userName, genero: generoReal, tiempoId: null };
-          io.to(tenantRoom).emit('banio:status', banioState);
-          logger.info(`[BAÑO][${tenantKey}] ${userName} entró al baño de ${slotKey}`);
-
-          setImmediate(async () => {
-            try {
-              const pool = await databaseService.getPool(tenantKey);
-              const neusIdInt = parseInt(userId) || 0;
-              // Cerrar cualquier registro previo abierto de este usuario (limpieza defensiva)
-              await pool.request()
-                .input('neusId', sql.Int, neusIdInt)
-                .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id = 3 AND fecha_fin IS NULL`);
-              // Abrir nuevo registro
-              const r = await pool.request()
-                .input('neusId', sql.Int, neusIdInt)
-                .input('statusId', sql.Int, 3)
-                .query(`
-                  DECLARE @ids TABLE (id INT);
-                  INSERT INTO USUARIO_TIEMPOS (neus_id, status_id, fecha_inicio, creado_en)
-                  OUTPUT INSERTED.tiempo_id INTO @ids(id)
-                  VALUES (@neusId, @statusId, GETDATE(), GETDATE());
-                  SELECT id AS tiempoId FROM @ids;
-                `);
-              const tiempoId = r.recordset[0]?.tiempoId ?? null;
-              logger.info(`[BAÑO][${tenantKey}] Inicio BD tiempoId=${tiempoId} userId=${userId}`);
-              // Guardar tiempoId en memoria (solo si este usuario sigue en el slot)
-              if (banioState[slotKey].ocupado && banioState[slotKey].porUsuario === userId) {
-                banioState[slotKey].tiempoId = tiempoId;
-              }
-            } catch (dbErr) { logger.warn(`[BAÑO][${tenantKey}] Error abriendo BD:`, dbErr?.message); }
-          });
-
-        } else {
-          // ── BAÑO OCUPADO POR OTRO — rechazar ──────────────────────────────
-          logger.info(`[BAÑO][${tenantKey}] ${userName} intentó entrar pero está ocupado por ${slot.porNombre}`);
-          // Re-emitir estado actual solo al solicitante para que su UI se sincronice
-          socket.emit('banio:status', banioState);
+          return;
         }
+
+        const { espacio, sinControl } = elegirEspacio(b, genero, area);
+        if (!espacio && !sinControl) {
+          // ── TODOS SUS BAÑOS LLENOS — rechazar ──────────────────────────────
+          logger.info(`[BAÑO][${tenantKey}] ${userName} intentó entrar pero sus baños están llenos`);
+          socket.emit('banio:status', estadoPublico(b));
+          socket.emit('banio:rechazado', { message: 'Los baños que te corresponden están ocupados' });
+          return;
+        }
+
+        // ── ENTRAR ───────────────────────────────────────────────────────────
+        const ocupante = { userId, nombre: userName, genero, area, espacioId: espacio?.id ?? null, tiempoId: null, desde: Date.now() };
+        b.ocupantes.set(userId, ocupante);
+        emitirBanio(tenantKey);
+        logger.info(`[BAÑO][${tenantKey}] ${userName} entró a ${espacio ? `"${espacio.nombre}"` : 'baño sin semáforo (su área no tiene espacio)'}`);
+
+        setImmediate(async () => {
+          try {
+            const pool = await databaseService.getPool(tenantKey);
+            const neusIdInt = parseInt(userId) || 0;
+            // Cerrar cualquier registro previo abierto de este usuario (limpieza defensiva)
+            await pool.request()
+              .input('neusId', sql.Int, neusIdInt)
+              .query(`UPDATE USUARIO_TIEMPOS SET fecha_fin = GETDATE() WHERE neus_id = @neusId AND status_id IN ${SQL_BANIO} AND fecha_fin IS NULL`);
+            // Abrir nuevo registro
+            const r = await pool.request()
+              .input('neusId', sql.Int, neusIdInt)
+              .query(`
+                DECLARE @ids TABLE (id INT);
+                -- Sin creado_en: no existe en todas las BD (donde existe, su DEFAULT lo llena),
+                -- igual que reportController.iniciarPausa.
+                INSERT INTO USUARIO_TIEMPOS (neus_id, status_id, fecha_inicio)
+                OUTPUT INSERTED.tiempo_id INTO @ids(id)
+                SELECT TOP 1 @neusId, s.status_id, GETDATE() FROM dbo.STATUS s WHERE s.status_id IN ${SQL_BANIO};
+                SELECT id AS tiempoId FROM @ids;
+              `);
+            const tiempoId = r.recordset[0]?.tiempoId ?? null;
+            logger.info(`[BAÑO][${tenantKey}] Inicio BD tiempoId=${tiempoId} userId=${userId}`);
+            // Guardar tiempoId en memoria (solo si sigue adentro con esta misma entrada)
+            if (b.ocupantes.get(userId) === ocupante) ocupante.tiempoId = tiempoId;
+          } catch (dbErr) { logger.warn(`[BAÑO][${tenantKey}] Error abriendo BD:`, dbErr?.message); }
+        });
       } catch (e) {
         logger.warn('[BAÑO] Error en banio:toggle:', e?.message || e);
       }
     });
 
-    socket.on('banio:get', () => {
-      socket.emit('banio:status', getBanioState(tenantKey));
+    socket.on('banio:get', async () => {
+      socket.emit('banio:status', estadoPublico(await asegurarEspacios(tenantKey)));
     });
 
     socket.on('disconnect', () => {
@@ -659,5 +798,8 @@ function getIO(tenantKey) {
 
 module.exports = {
   initialize,
-  getIO
+  getIO,
+  // Baño: tras editar sus espacios en Configuración (la empresa como en el socket).
+  recargarEspacios: (tenantKey) => recargarEspacios(String(tenantKey || DEFAULT_TENANT).toLowerCase()),
+  generoDe,
 };

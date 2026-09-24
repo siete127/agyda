@@ -11,6 +11,7 @@ function fmt(s: number): string {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
+// Respaldo si el backend aún no manda `pausasPorTipo`: los 4 tipos por default.
 const TIPOS = [
   { key: 'banioSeg', label: 'Baño', icon: Coffee, tile: 'bg-brand/10 text-brand' },
   { key: 'comidaSeg', label: 'Comida', icon: Utensils, tile: 'bg-amber-100 text-amber-600' },
@@ -19,6 +20,37 @@ const TIPOS = [
 ] as const
 
 function CardAgente({ a }: { a: MetaPausaAgente }) {
+  if (!a.sinRegistro && a.pausasPorTipo) {
+    // Un tile por cada tipo de pausa configurado, con su emoji y color.
+    return (
+      <div className="rounded-2xl border border-gray-100 bg-card p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="truncate text-[0.88rem] font-bold text-gray-900">{a.nombre}</p>
+          <span className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[0.7rem] font-semibold text-gray-500">
+            Total {fmt(a.totalSeg)}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          {a.pausasPorTipo.map((p) => (
+            <div key={p.statusId} className="flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5">
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-base"
+                style={{ background: `${p.color}1F` }}>
+                {p.emoji}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">{p.etiqueta}</p>
+                <p className="text-[0.9rem] font-bold tabular-nums text-gray-800">{fmt(p.seg)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  return <CardAgenteLegacy a={a} />
+}
+
+function CardAgenteLegacy({ a }: { a: MetaPausaAgente }) {
   return (
     <div className="rounded-2xl border border-gray-100 bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -49,8 +81,8 @@ function CardAgente({ a }: { a: MetaPausaAgente }) {
 }
 
 /* Bloque "Tiempo en pausa hoy" que va debajo de la barra de una meta. Muestra el
-   total (baño+comida+capacitación+permiso) y, al hacer clic, abre una tabla de
-   cards con el desglose por persona según el alcance de la meta. */
+   total (todos los tipos de pausa) y, al hacer clic, abre una tabla de cards
+   con el desglose por persona según el alcance de la meta. */
 export function PausasMetaBloque({ metaId, nombreMeta }: { metaId: number; nombreMeta?: string }) {
   const [abierto, setAbierto] = useState(false)
 
@@ -63,6 +95,9 @@ export function PausasMetaBloque({ metaId, nombreMeta }: { metaId: number; nombr
 
   const totalSeg = data?.agentes.reduce((s, a) => s + a.totalSeg, 0) ?? 0
   const nAgentes = data?.agentes.length ?? 0
+
+  // Empresa sin el módulo de pausas: no se muestra el bloque.
+  if (data?.deshabilitado) return null
 
   return (
     <>
@@ -77,7 +112,7 @@ export function PausasMetaBloque({ metaId, nombreMeta }: { metaId: number; nombr
         <div className="min-w-0 flex-1">
           <p className="text-[0.72rem] font-semibold text-gray-700">Tiempo en pausa hoy</p>
           <p className="text-[0.66rem] text-gray-400">
-            Baño, comida, capacitación y permiso
+            Todos los tipos de pausa
             {nAgentes > 1 ? ` · ${nAgentes} agentes` : ''}
           </p>
         </div>

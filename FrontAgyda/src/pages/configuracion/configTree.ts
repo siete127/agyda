@@ -1,16 +1,31 @@
-// Mapa de navegación completo de Configuración — visión objetivo a futuro.
-// La mayoría de los nodos hoy son placeholders ("en construcción"); solo los
-// que tienen `screen` abren una pantalla funcional real. Se agregan
-// implementaciones progresivamente sin tener que rediseñar el árbol.
+import { NAV_GROUPS } from '@/router/navGroups'
+
+// Mapa de navegación completo de Configuración.
+//
+// Estructura: Sección → Módulo → configuraciones del módulo. Las secciones son
+// las mismas del sidebar (router/navGroups.ts), más una sección "General" para
+// lo que no pertenece a un módulo (apariencia, usuarios, sistema…).
+//
+// CATALOGO (abajo) es el inventario de todas las configuraciones, reales y
+// planeadas. CONFIG_TREE (al final del archivo) lo reacomoda por sección y
+// módulo. Solo los nodos con `screen` abren una pantalla funcional real; el
+// resto son "próximamente" y siguen visibles.
 export interface ConfigNode {
   key: string
   label: string
   description?: string
   screen?: string // clave de pantalla real registrada en ConfiguracionPage, si existe
+  moduleKey?: string // módulo del sidebar al que pertenece (filtra por módulos activos de la empresa)
+  // Módulos adicionales que la empresa/usuario debe tener para ver este nodo,
+  // en cualquiera de sus ubicaciones (p. ej. tipos de pausa → 'reports').
+  requiere?: string[]
+  // La pantalla existe pero este módulo todavía no usa la configuración (queda
+  // aquí para cuando se conecte). Aparece en la lista de pendientes.
+  pendiente?: string
   children?: ConfigNode[]
 }
 
-export const CONFIG_TREE: ConfigNode[] = [
+const CATALOGO: ConfigNode[] = [
   {
     key: 'modulos-empresa', label: 'Módulos por Empresa',
     description: 'Activa o desactiva qué módulos ve cada empresa',
@@ -577,15 +592,7 @@ export const CONFIG_TREE: ConfigNode[] = [
     description: 'Clientes, prospectos, pipeline y automatizaciones comerciales',
     children: [
       {
-        key: 'clientes-crm', label: 'Clientes',
-        children: [
-          { key: 'tipos-cliente-crm', label: 'Tipos' },
-          { key: 'segmentos-crm', label: 'Segmentos' },
-          { key: 'categorias-cliente-crm', label: 'Categorías' },
-          { key: 'industrias-crm', label: 'Industrias' },
-          { key: 'clasificaciones-crm', label: 'Clasificaciones' },
-          { key: 'etiquetas-cliente-crm', label: 'Etiquetas' },
-        ],
+        key: 'clientes-crm', label: 'Clientes', screen: 'clientes-crm-resumen',
       },
       { key: 'prospectos', label: 'Prospectos' },
       { key: 'fuentes-lead', label: 'Fuentes de lead' },
@@ -595,6 +602,16 @@ export const CONFIG_TREE: ConfigNode[] = [
         children: [
           { key: 'ventas', label: 'Margen e IVA', screen: 'ventas' },
           { key: 'facturacion', label: 'Facturación (emisor, CSD, PAC)', screen: 'facturacion' },
+        ],
+      },
+      {
+        key: 'comercial-config', label: 'Metas, comisiones e incentivos',
+        children: [
+          { key: 'metas-config', label: 'Metas', screen: 'metas-config' },
+          { key: 'comisiones-config', label: 'Comisiones', screen: 'comisiones-config' },
+          { key: 'incentivos-config', label: 'Incentivos', screen: 'incentivos-config' },
+          { key: 'prospeccion-config', label: 'Prospección', screen: 'prospeccion-config' },
+          { key: 'email-marketing-config', label: 'Email Marketing', screen: 'email-marketing-config' },
         ],
       },
       {
@@ -691,7 +708,7 @@ export const CONFIG_TREE: ConfigNode[] = [
           { key: 'acw', label: 'ACW' },
         ],
       },
-      { key: 'pausas', label: 'Pausas' },
+      { key: 'pausas', label: 'Tipos de pausa', screen: 'pausa-tipos', requiere: ['reports'] },
       { key: 'tipificaciones', label: 'Tipificaciones' },
       { key: 'sla-cc', label: 'SLA' },
       { key: 'prioridades-cc', label: 'Prioridades' },
@@ -1121,15 +1138,269 @@ export const CONFIG_TREE: ConfigNode[] = [
   },
 ]
 
-// Índice plano key -> nodo, para lookup O(1) al seleccionar.
-export const CONFIG_NODE_INDEX: Record<string, ConfigNode> = (() => {
+/* ─────────────────────── Reacomodo: Sección → Módulo ─────────────────────── */
+
+// Índice plano key -> nodo. Avisa si una key se repite (las apariciones
+// compartidas usan keys prefijadas justamente para no chocar).
+function indexar(nodes: ConfigNode[]): Record<string, ConfigNode> {
   const idx: Record<string, ConfigNode> = {}
-  const walk = (nodes: ConfigNode[]) => {
-    for (const n of nodes) {
+  const walk = (ns: ConfigNode[]) => {
+    for (const n of ns) {
+      if (idx[n.key]) console.warn(`configTree: key duplicada '${n.key}'`)
       idx[n.key] = n
       if (n.children) walk(n.children)
     }
   }
-  walk(CONFIG_TREE)
+  walk(nodes)
   return idx
+}
+
+const CATALOGO_INDEX = indexar(CATALOGO)
+
+// Nodo del catálogo por key, con etiqueta opcional. Una key inexistente no
+// rompe la pantalla: se avisa en consola y queda como "próximamente".
+function nodo(key: string, label?: string): ConfigNode {
+  const n = CATALOGO_INDEX[key]
+  if (!n) {
+    console.warn(`configTree: la key '${key}' no existe en CATALOGO`)
+    return { key, label: label ?? key }
+  }
+  return label ? { ...n, label } : n
+}
+
+function nodos(...keys: string[]): ConfigNode[] {
+  return keys.map((k) => nodo(k))
+}
+
+// Hijos de un contenedor del catálogo, para aplanarlo dentro de un módulo.
+function hijosDe(key: string): ConfigNode[] {
+  return nodo(key).children ?? []
+}
+
+// Contenedor del catálogo sin el prefijo numérico ("3.2 Fiscal" → "Fiscal").
+function grupo(key: string, label?: string): ConfigNode {
+  const n = nodo(key)
+  return { ...n, label: label ?? n.label.replace(/^\d+(\.\d+)*\s+/, '') }
+}
+
+function modulo(key: string, label: string, moduleKey: string | undefined, children: ConfigNode[]): ConfigNode {
+  return { key, label, moduleKey, children }
+}
+
+// Una configuración compartida aparece en cada módulo que la usa. La aparición
+// extra es un clon con keys prefijadas (las keys deben ser únicas en el índice)
+// pero con la misma `screen`: es la misma configuración, no una copia.
+function compartida(key: string, en: string): ConfigNode {
+  const clonar = (n: ConfigNode): ConfigNode => ({
+    ...n,
+    key: `${en}:${n.key}`,
+    children: n.children?.map(clonar),
+  })
+  return clonar(nodo(key))
+}
+
+// Lo que no pertenece a un módulo del sidebar.
+const GENERAL: ConfigNode = {
+  key: 'sec-general', label: 'General',
+  description: 'Empresa, apariencia, usuarios, notificaciones, integraciones y sistema',
+  children: [
+    nodo('modulos-empresa'),
+    nodo('apariencia'),
+    nodo('organizacion'),
+    nodo('usuarios-seguridad'),
+    // Mensajería interna vive en Principal → Mensajería.
+    { ...nodo('notificaciones-root'), children: hijosDe('notificaciones-root').filter((c) => c.key !== 'mensajeria-interna') },
+    nodo('integraciones'),
+    nodo('catalogos'),
+    nodo('sistema'),
+    { key: 'herramientas', label: 'Herramientas', children: [nodo('qr-generator')] },
+  ],
+}
+
+// Módulos de cada sección del sidebar (key de NAV_GROUPS). Las secciones sin
+// módulos configurables no se muestran.
+const MODULOS_POR_SECCION: Record<string, ConfigNode[]> = {
+  principal: [
+    modulo('mod-mensajeria', 'Mensajería', 'mensajeria', [nodo('mensajeria-interna', 'Mensajería interna')]),
+  ],
+  'recursos-humanos': [
+    // Tipos de pausa: compartida con Nómina y Contact Center (cada tipo indica en qué módulos cuenta).
+    modulo('mod-asistencia', 'Asistencia', 'asistencia', [compartida('pausas', 'asistencia')]),
+    modulo('mod-nomina', 'Nómina', 'nomina', [compartida('pausas', 'nomina'), ...hijosDe('rrhh-nomina')]),
+  ],
+  'finanzas-administracion': [
+    modulo('mod-finanzas', 'Finanzas', 'finanzas', [
+      {
+        ...compartida('facturacion', 'finanzas'),
+        pendiente: 'Finanzas todavía no usa esta configuración; hoy solo la usa CRM → Oportunidades para timbrar.',
+      },
+      grupo('finanzas', 'Contabilidad'),
+      grupo('fiscal'),
+      grupo('cxc'),
+      grupo('cxp'),
+      grupo('bancos'),
+      grupo('tesoreria'),
+      grupo('presupuestos'),
+    ]),
+    modulo('mod-gastos', 'Gastos', 'gastos', hijosDe('gastos-erp')),
+    // Sin módulo en el sidebar todavía — solo configuración planeada.
+    modulo('mod-compras', 'Compras', undefined, hijosDe('compras')),
+    modulo('mod-inventario', 'Inventario', undefined, hijosDe('inventario')),
+    modulo('mod-proveedores', 'Proveedores', undefined, hijosDe('proveedores')),
+  ],
+  crm: [
+    modulo('mod-ventas-area', 'Ventas (Área)', 'ventas-area', [
+      ...nodos('metas-config', 'comisiones-config', 'incentivos-config', 'prospeccion-config'),
+      grupo('ventas-erp', 'Ventas (ERP)'),
+    ]),
+    modulo('mod-clientes', 'Clientes', 'clientes', [
+      nodo('clientes-crm', 'Catálogos de clientes'),
+      grupo('clientes-erp', 'Clientes (ERP)'),
+    ]),
+    modulo('mod-productos-servicios', 'Productos y Servicios', 'productos-servicios', hijosDe('productos')),
+    modulo('mod-oportunidades', 'Oportunidades', 'crm', [
+      nodo('cotizaciones-facturacion'),
+      ...nodos(
+        'prospectos', 'fuentes-lead', 'campanas-comerciales', 'pipeline', 'oportunidades', 'actividades-crm',
+        'motivos-perdida-crm', 'motivos-cierre-crm', 'sla-seguimiento', 'reglas-asignacion-crm',
+        'campos-personalizados-crm', 'formularios-crm', 'etiquetas-crm', 'automatizaciones-crm',
+        'recordatorios-crm', 'alertas-crm', 'duplicados',
+      ),
+    ]),
+    modulo('mod-email-marketing', 'Email Marketing', 'email-marketing', [
+      nodo('email-marketing-config', 'Configuración de Email Marketing'),
+    ]),
+  ],
+  'contact-center': [
+    modulo('mod-operaciones', 'Asesores y operación', 'operaciones', [
+      ...nodos('cc-skills', 'cc-formularios', 'cc-config', 'pausas', 'cc-simulador'),
+      ...nodos(
+        'campanas-cc', 'colas', 'skills', 'equipos-cc', 'agentes', 'supervisores', 'grupos-cc',
+        'estados-agente', 'tipificaciones', 'sla-cc', 'prioridades-cc', 'routing', 'overflow',
+        'reglas-distribucion', 'maximo-espera', 'abandono', 'callback', 'reintentos-cc',
+        'reciclado-leads', 'horarios-cc', 'festivos-cc', 'limites-concurrencia',
+      ),
+    ]),
+    modulo('mod-postulantes', 'Postulantes', 'postulantes', [nodo('cc-postulantes')]),
+    modulo('mod-webphone', 'Marcador', 'webphone', [
+      ...hijosDe('telefonia'),
+      ...nodos('ivr', 'flujos-llamada', 'grabaciones', 'audios', 'musica-espera'),
+    ]),
+    modulo('mod-livechat', 'Canales digitales', 'livechat', nodos('whatsapp-cc', 'chat-cc', 'email-cc', 'sms-cc')),
+  ],
+  calidad: [
+    modulo('mod-auditoria', 'Auditoría', 'auditoria', hijosDe('auditoria')),
+  ],
+  'tecnologia-ti': [
+    modulo('mod-tickets', 'Tickets y Mesa de servicio', 'tickets', [
+      ...nodos(
+        'ti-general', 'ti-mesa-servicio', 'ti-categorias', 'ti-campos-personalizados', 'ti-catalogos',
+        'ti-reglas', 'ti-sla', 'ti-kpis', 'ti-escalamientos', 'ti-automatizaciones', 'ti-plantillas',
+        'ti-notificaciones', 'ti-encuestas', 'ti-campania-soporte', 'ti-chat-vivo', 'ti-chatbot',
+        'ti-kb', 'ti-seguridad', 'ti-integraciones',
+      ),
+      ...nodos(
+        'mesa-servicio', 'especialidades', 'reglas-asignacion-ti', 'escalamientos', 'calendarios-soporte',
+        'horarios-ti', 'incidentes', 'problemas', 'solicitudes-ti', 'alertas-ti', 'base-conocimiento',
+      ),
+    ]),
+    modulo('mod-staff-ti', 'Staff TI', 'staff-ti', nodos('ti-tecnicos', 'ti-grupos-soporte', 'grupos-soporte', 'tecnicos-ti')),
+    modulo('mod-activos', 'Activos', 'activos', [
+      grupo('activos-erp', 'Activos fijos'),
+      ...nodos('inventario-ti', 'licencias', 'contratos-ti', 'proveedores-ti'),
+    ]),
+    modulo('mod-tecnologia', 'Tecnología', 'tecnologia', [
+      ...nodos('cambios-ti', 'mantenimiento-ti', 'monitoreo'),
+      grupo('mantenimiento-erp', 'Mantenimiento de equipos'),
+    ]),
+  ],
+  'legal-cumplimiento': [
+    modulo('mod-legal', 'Legal', 'legal', [grupo('contratos-erp', 'Contratos')]),
+  ],
+  otros: [
+    modulo('mod-proyectos', 'Proyectos', 'proyectos', hijosDe('proyectos-erp')),
+  ],
+}
+
+const DESCRIPCION_SECCION: Record<string, string> = {
+  principal: 'Mensajería interna',
+  'recursos-humanos': 'Asistencia, tipos de pausa, nómina y políticas de personal',
+  'finanzas-administracion': 'Facturación, contabilidad, fiscal, bancos, gastos y compras',
+  crm: 'Ventas, clientes, productos, oportunidades y email marketing',
+  'contact-center': 'Asesores, campañas, postulantes, marcador y canales',
+  calidad: 'Auditoría de accesos, cambios y eventos',
+  'tecnologia-ti': 'Mesa de servicio, staff TI, activos y tecnología',
+  'legal-cumplimiento': 'Contratos y cumplimiento',
+  otros: 'Proyectos',
+}
+
+const ARBOL: ConfigNode[] = [
+  GENERAL,
+  ...NAV_GROUPS
+    .filter((g) => MODULOS_POR_SECCION[g.key]?.length)
+    .map((g) => ({
+      key: `sec-${g.key}`,
+      label: g.label,
+      description: DESCRIPCION_SECCION[g.key],
+      children: MODULOS_POR_SECCION[g.key],
+    })),
+]
+
+// Red de seguridad: toda hoja del catálogo que no quedó ubicada en ARBOL va a
+// "Por clasificar", para que ninguna configuración desaparezca del mapa.
+const POR_CLASIFICAR: ConfigNode[] = (() => {
+  const ubicadas = indexar(ARBOL)
+  const fuera: ConfigNode[] = []
+  const walk = (ns: ConfigNode[]) => {
+    for (const n of ns) {
+      if (n.children?.length) walk(n.children)
+      else if (!ubicadas[n.key]) fuera.push(n)
+    }
+  }
+  walk(CATALOGO)
+  if (fuera.length) console.warn('configTree: configuraciones sin ubicar →', fuera.map((n) => n.key))
+  return fuera
+})()
+
+export const CONFIG_TREE: ConfigNode[] = POR_CLASIFICAR.length
+  ? ARBOL.map((s) => (s.key === 'sec-general'
+    ? { ...s, children: [...(s.children ?? []), { key: 'por-clasificar', label: 'Por clasificar', children: POR_CLASIFICAR }] }
+    : s))
+  : ARBOL
+
+// Índice plano key -> nodo, para lookup O(1) al seleccionar.
+export const CONFIG_NODE_INDEX: Record<string, ConfigNode> = indexar(CONFIG_TREE)
+
+export interface UbicacionConfig {
+  key: string
+  ruta: string[] // etiquetas desde la sección hasta el nodo (inclusive)
+}
+
+// Rutas de todas las apariciones de cada nodo del árbol.
+function recorrer(nodes: ConfigNode[], visita: (n: ConfigNode, ruta: string[]) => void, trail: string[] = []) {
+  for (const n of nodes) {
+    const ruta = [...trail, n.label]
+    visita(n, ruta)
+    if (n.children) recorrer(n.children, visita, ruta)
+  }
+}
+
+// Todas las apariciones de cada pantalla real. Una pantalla con más de una
+// aparición es una configuración compartida entre módulos.
+export const UBICACIONES_POR_PANTALLA: Record<string, UbicacionConfig[]> = (() => {
+  const out: Record<string, UbicacionConfig[]> = {}
+  recorrer(CONFIG_TREE, (n, ruta) => {
+    if (n.screen) (out[n.screen] ??= []).push({ key: n.key, ruta })
+  })
+  return out
+})()
+
+// Configuraciones pendientes, con su ubicación: las "próximamente" (hojas sin
+// pantalla) y las que existen pero su módulo aún no usa (`pendiente`).
+export const PENDIENTES: UbicacionConfig[] = (() => {
+  const out: UbicacionConfig[] = []
+  recorrer(CONFIG_TREE, (n, ruta) => {
+    if ((!n.screen && !n.children?.length) || n.pendiente) out.push({ key: n.key, ruta })
+  })
+  return out
 })()

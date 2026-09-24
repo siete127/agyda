@@ -75,9 +75,34 @@ export interface Mascota {
   flotante: MascotaParte & { habilitado: boolean }
 }
 
+export const ESTATUS_VENTA_VALIDOS = [
+  'Prospecto', 'Cotizada', 'Aprobada', 'Formalizada', 'Formalizado', 'Garantizada', 'Cancelada', 'Rechazada',
+] as const
+
+// Módulos que cuentan ventas, cada uno con su propia lista de estatus contados.
+export const USOS_ESTATUS_CONTADOS = [
+  { key: 'metas', label: 'Metas', impacto: 'Avance de las metas por asesor y campaña (y "Mis metas" del asesor).' },
+  { key: 'comisiones', label: 'Comisiones', impacto: 'Ventas provisionales del mes (el tramo que Nómina aún no calcula) usadas en las fórmulas de comisión.' },
+  { key: 'incentivos', label: 'Incentivos', impacto: 'Ventas provisionales del mes (el tramo que Nómina aún no calcula) usadas en las fórmulas de incentivo.' },
+] as const
+
+export type UsoEstatusContados = (typeof USOS_ESTATUS_CONTADOS)[number]['key']
+
 export interface VentasConfig {
   margen: { verdeMin: number; amarilloMin: number; rojoMax: number; requiereOverride: boolean }
   iva: { tasaDefault: number }
+  // Valor general de "venta contada" — el que usa un módulo sin lista propia.
+  estatusContados: string[]
+  // Lista de cada módulo (el backend siempre la devuelve completa, resuelta).
+  estatusContadosPorUso?: Record<UsoEstatusContados, string[]>
+}
+
+export interface ProspeccionConfig {
+  ventanaAnalisisDias: number
+}
+
+export interface EmailMarketingConfig {
+  emailsPorHoraDefault: number
 }
 
 export interface PersonalizacionConfig {
@@ -88,6 +113,8 @@ export interface PersonalizacionConfig {
   enlacesTopbar: EnlaceTopbar[]
   mascota: Mascota
   ventas: VentasConfig
+  prospeccion: ProspeccionConfig
+  emailMarketing: EmailMarketingConfig
 }
 
 export const personalizacionService = {
@@ -118,9 +145,25 @@ export const personalizacionService = {
     return data.data as EnlaceTopbar[]
   },
 
-  async updateVentas(v: VentasConfig): Promise<VentasConfig> {
+  async updateVentas(v: Pick<VentasConfig, 'margen' | 'iva'>): Promise<VentasConfig> {
     const { data } = await api.put('/personalizacion/ventas', v)
     return data.data as VentasConfig
+  },
+
+  // Aplica la lista de estatus contados solo a los módulos elegidos.
+  async updateEstatusContados(estatus: string[], usos: UsoEstatusContados[]): Promise<VentasConfig> {
+    const { data } = await api.put('/personalizacion/ventas/estatus-contados', { estatus, usos })
+    return data.data as VentasConfig
+  },
+
+  async updateProspeccion(p: ProspeccionConfig): Promise<ProspeccionConfig> {
+    const { data } = await api.put('/personalizacion/prospeccion', p)
+    return data.data as ProspeccionConfig
+  },
+
+  async updateEmailMarketing(e: EmailMarketingConfig): Promise<EmailMarketingConfig> {
+    const { data } = await api.put('/personalizacion/email-marketing', e)
+    return data.data as EmailMarketingConfig
   },
 
   async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {

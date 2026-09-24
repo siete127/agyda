@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import { Clock, LogIn, Coffee, ListTree } from 'lucide-react'
 import { tiemposService } from '@/services/tiempos.service'
 import { STATUS_LABELS } from '@/types/tiempos.types'
+import { usePausaTipos } from '@/hooks/usePausaTipos'
 import { Spinner } from '@/components/ui/Spinner'
 
 function hoy() {
@@ -45,6 +46,8 @@ export function TiemposPage() {
     return agentes.length > 0 ? agentes[0].id : ''
   }, [agenteId, agentes])
 
+  // Etiqueta de los tipos de pausa que agregue la empresa (su clave es interna).
+  const { porId: tipoPausaPorId } = usePausaTipos()
   const { data, isLoading } = useQuery({
     queryKey: ['tiempos-agente', agenteSeleccionado, fecha],
     queryFn: () => tiemposService.getTiempos(Number(agenteSeleccionado), fecha),
@@ -123,7 +126,7 @@ export function TiemposPage() {
                   <tr key={s.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                     <td className="px-4 py-2.5">
                       <span className={clsx('inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold', STATUS_COLOR[s.statusClave] ?? STATUS_COLOR.desconocido)}>
-                        {STATUS_LABELS[s.statusClave] ?? s.statusClave}
+                        {STATUS_LABELS[s.statusClave] ?? tipoPausaPorId(s.statusId)?.etiqueta ?? s.statusClave}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-gray-600">{formatHora(s.fechaInicio)}</td>

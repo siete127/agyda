@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Briefcase, FileText, X, Users, UserCheck } from 'lucide-react'
+import { Briefcase, FileText, X, Users, UserCheck, Package, ChevronDown, PackagePlus } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { api } from '@/lib/axios'
 import { crmService } from '@/services/crm.service'
+import { productoServicioService } from '@/services/productoServicio.service'
 import { CLIENTE_ESTATUS_COLORES, type ClienteEstatusColor } from '@/types/crm.types'
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import type { CRMOportunidad } from '@/types/crm.types'
+
+const RECURRENCIA_LABEL: Record<string, string> = { MENSUAL: '/mes', ANUAL: '/año', UNICO: 'único' }
 
 type Rol = 'lider' | 'miembro' | 'revisor'
 interface Integrante { nombre: string; rol: Rol }
@@ -35,11 +38,23 @@ export function CRMGenerarProyectoModal({
   const puedeAlta = opo.contactoId != null
   const [darDeAlta, setDarDeAlta] = useState(puedeAlta)
   const [tipoCliente, setTipoCliente] = useState('')
-  const [productoServicio, setProductoServicio] = useState('')
+  const [productosServiciosIds, setProductosServiciosIds] = useState<number[]>([])
+  const [seleccionPS, setSeleccionPS] = useState('')
   const [responsableCliente, setResponsableCliente] = useState('')
   const [estatusCliente, setEstatusCliente] = useState<ClienteEstatusColor>('verde')
 
   const { data: usuariosSimple } = useUsuariosSimple()
+
+  const { data: catalogoPS = [] } = useQuery({
+    queryKey: ['productos-servicios', 'activos'],
+    queryFn: () => productoServicioService.getAll(),
+  })
+  const disponiblesPS = catalogoPS.filter((c) => c.activo && !productosServiciosIds.includes(c.id))
+  const agregarPS = (id: number) => {
+    setProductosServiciosIds((prev) => [...prev, id])
+    setSeleccionPS('')
+  }
+  const quitarPS = (id: number) => setProductosServiciosIds((prev) => prev.filter((v) => v !== id))
 
   const { data: usuarios = [] } = useQuery({
     queryKey: ['usuarios-asignables'],
@@ -79,7 +94,7 @@ export function CRMGenerarProyectoModal({
       puedeAlta && darDeAlta
         ? {
             tipoCliente: tipoCliente || undefined,
-            productoServicio: productoServicio || undefined,
+            productosServiciosIds: productosServiciosIds.length ? productosServiciosIds : undefined,
             responsableId: responsableCliente ? Number(responsableCliente) : undefined,
             estatusCliente,
           }
@@ -160,7 +175,53 @@ export function CRMGenerarProyectoModal({
                 </div>
                 <div className="col-span-2">
                   <label className="mb-1 block text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Producto o servicio contratado</label>
-                  <input value={productoServicio} onChange={(e) => setProductoServicio(e.target.value)} className="field-input text-sm" maxLength={300} />
+
+                  {productosServiciosIds.length > 0 && (
+                    <div className="mb-2 space-y-1">
+                      {productosServiciosIds.map((id) => {
+                        const ps = catalogoPS.find((c) => c.id === id)
+                        if (!ps) return null
+                        return (
+                          <div key={id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5">
+                            <span className="flex items-center gap-1.5 text-[0.78rem] font-medium text-gray-700 truncate">
+                              <Package className="h-3.5 w-3.5 text-brand flex-shrink-0" />
+                              {ps.nombre}
+                              {ps.precio > 0 && <span className="text-[0.68rem] text-gray-400">${ps.precio.toLocaleString('es-MX')}{RECURRENCIA_LABEL[ps.recurrencia]}</span>}
+                            </span>
+                            <button type="button" onClick={() => quitarPS(id)} className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        value={seleccionPS}
+                        onChange={(e) => setSeleccionPS(e.target.value)}
+                        className="field-input w-full appearance-none text-sm pr-8"
+                      >
+                        <option value="">Selecciona un producto o servicio…</option>
+                        {disponiblesPS.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre}{c.precio > 0 ? ` — $${c.precio.toLocaleString('es-MX')}${RECURRENCIA_LABEL[c.recurrencia]}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!seleccionPS}
+                      onClick={() => seleccionPS && agregarPS(Number(seleccionPS))}
+                      className="inline-flex items-center gap-1 rounded-lg bg-brand/10 px-3 py-1.5 text-[0.75rem] font-semibold text-brand transition-colors hover:bg-brand/20 disabled:opacity-40"
+                    >
+                      <PackagePlus className="h-3.5 w-3.5" /> Agregar
+                    </button>
+                  </div>
                 </div>
                 <div className="col-span-2">
                   <label className="mb-1 block text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Estatus</label>

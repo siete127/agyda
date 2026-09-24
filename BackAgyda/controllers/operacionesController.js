@@ -9,6 +9,7 @@ const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada
 const { RDL_DIR } = require('../middleware/rdlUpload');
 const reportBuilderCatalog = require('../services/reportBuilderCatalog');
 const reportBuilderRunner = require('../services/reportBuilderRunner');
+const pausaTiposService = require('../services/pausaTiposService');
 const logger = global.logger || require('../utils/logger');
 
 async function listCampanias(req, res) {
@@ -116,10 +117,10 @@ async function getDashboard(req, res) {
 
 /* ── Supervisores: asignación a campañas + panel de agentes con estado en vivo ── */
 
-// Estados de pausa según USUARIO_TIEMPOS.status_id — mismo mapeo que el botón
-// real que usa el agente (PerfilMenu.tsx: statusId 3 = Baño, 2 = Comida) y
-// que socketService.js al cerrar la pausa de baño (status_id = 3).
-const PAUSA_LABELS = { 3: 'baño', 2: 'comida', 5: 'capacitación', 6: 'permiso' };
+// Estados de pausa según USUARIO_TIEMPOS.status_id: los tipos de pausa
+// configurables (Configuración → Tipos de pausa) que cuentan en Contact Center.
+// Las etiquetas salen de pausaTiposService.etiquetaPausa.
+const SQL_PAUSAS_CC = pausaTiposService.sqlPausas('contact_center');
 
 async function listSupervisores(req, res) {
   try {
@@ -203,6 +204,7 @@ async function getMiPanel(req, res) {
     const tipoUsuario = (req.user?.tipoUsuario || '').toString().toUpperCase();
     const esAdmin = ['AD', 'TI'].includes(tipoUsuario);
     const pool = await databaseService.getPool(req.user?.empresa);
+    const tipos = await pausaTiposService.listar(pool);
 
     // Campañas visibles: todas si es AD/TI, o solo las asignadas si es supervisor específico.
     // CCO_CAMPANIAS/CCO_GRUPOS/CCO_GRUPO_AGENTES son el catálogo real (el mismo
@@ -246,7 +248,7 @@ async function getMiPanel(req, res) {
     const pausasRs = await pool.request().query(`
       SELECT neus_id as agenteId, status_id as statusId, fecha_inicio as fechaInicio
       FROM USUARIO_TIEMPOS
-      WHERE neus_id IN (${agenteIds.join(',')}) AND fecha_fin IS NULL AND status_id IN (2,3,5,6)
+      WHERE neus_id IN (${agenteIds.join(',')}) AND fecha_fin IS NULL AND status_id IN ${SQL_PAUSAS_CC}
     `);
     const pausaPorAgente = new Map(pausasRs.recordset.map((p) => [p.agenteId, p]));
 
@@ -281,7 +283,8 @@ async function getMiPanel(req, res) {
         grupoId: a.grupoId,
         grupoNombre: a.grupoNombre,
         estado,
-        tipoPausa: pausa ? (PAUSA_LABELS[pausa.statusId] ?? 'pausa') : null,
+        tipoPausa: pausa ? pausaTiposService.etiquetaPausa(tipos, pausa.statusId) : null,
+        tipoPausaStatusId: pausa ? pausa.statusId : null,
         pausaDesde: pausa ? pausa.fechaInicio : null,
         ultimaConexion: est?.ultimaConexion ?? null,
       };
@@ -304,6 +307,7 @@ async function getProductividadDia(req, res) {
     const esAdmin = ['AD', 'TI'].includes(tipoUsuario);
     const fecha = (req.query.fecha || new Date().toISOString().slice(0, 10)).toString();
     const pool = await databaseService.getPool(req.user?.empresa);
+    const tipos = await pausaTiposService.listar(pool);
 
     const campaniasReq = pool.request();
     let campaniasWhere = '';
@@ -335,7 +339,7 @@ async function getProductividadDia(req, res) {
                SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutos
         FROM USUARIO_TIEMPOS
         WHERE neus_id IN (${agenteIds.join(',')})
-          AND status_id IN (2,3,5,6)
+          AND status_id IN ${SQL_PAUSAS_CC}
           AND CAST(fecha_inicio AS date) = @fecha
         GROUP BY neus_id, status_id
       `);
@@ -350,7 +354,7 @@ async function getProductividadDia(req, res) {
                SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutosDia
         FROM USUARIO_TIEMPOS
         WHERE neus_id IN (${agenteIds.join(',')})
-          AND status_id IN (2,3,5,6)
+          AND status_id IN ${SQL_PAUSAS_CC}
           AND CAST(fecha_inicio AS date) >= DATEADD(DAY, -7, CAST(@fecha AS date))
           AND CAST(fecha_inicio AS date) < CAST(@fecha AS date)
         GROUP BY neus_id, CAST(fecha_inicio AS date)
@@ -370,7 +374,7 @@ async function getProductividadDia(req, res) {
     const pausaActivaRs = await pool.request().query(`
       SELECT neus_id as agenteId, status_id as statusId, fecha_inicio as fechaInicio
       FROM USUARIO_TIEMPOS
-      WHERE neus_id IN (${agenteIds.join(',')}) AND fecha_fin IS NULL AND status_id IN (2,3,5,6)
+      WHERE neus_id IN (${agenteIds.join(',')}) AND fecha_fin IS NULL AND status_id IN ${SQL_PAUSAS_CC}
     `);
     const pausaActivaPorAgente = new Map(pausaActivaRs.recordset.map((p) => [p.agenteId, p]));
 
@@ -396,8 +400,11 @@ async function getProductividadDia(req, res) {
         agenteId: id,
         nombre: nombrePorId.get(id) ?? '',
         banio: 0, comida: 0, capacitacion: 0, permiso: 0, totalPausaMin: 0,
+        // Minutos por status_id, incluye los tipos de pausa que agregue la empresa.
+        pausasPorTipo: {},
         estado,
-        tipoPausa: pausaActiva ? (PAUSA_LABELS[pausaActiva.statusId] ?? 'pausa') : null,
+        tipoPausa: pausaActiva ? pausaTiposService.etiquetaPausa(tipos, pausaActiva.statusId) : null,
+        tipoPausaStatusId: pausaActiva ? pausaActiva.statusId : null,
         ultimaConexion: est?.ultimaConexion ?? null,
         avgSemanalMin: avgSemanalPorAgente.get(id) ?? null,
       });
@@ -405,8 +412,9 @@ async function getProductividadDia(req, res) {
     for (const p of pausasRs.recordset) {
       const row = porAgente.get(p.agenteId);
       if (!row) continue;
-      const key = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' }[p.statusId];
+      const key = pausaTiposService.llaveLegacy(tipos, p.statusId);
       if (key) row[key] = p.minutos;
+      row.pausasPorTipo[p.statusId] = p.minutos;
       row.totalPausaMin += p.minutos;
     }
 
@@ -470,7 +478,7 @@ async function getComparador(req, res) {
     const pausasRs = await pool.request().input('fecha', sql.NVarChar, fecha).query(`
       SELECT neus_id as agenteId, SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutos
       FROM USUARIO_TIEMPOS
-      WHERE neus_id IN (${agenteIds.join(',')}) AND status_id IN (2,3,5,6) AND CAST(fecha_inicio AS date) = @fecha
+      WHERE neus_id IN (${agenteIds.join(',')}) AND status_id IN ${SQL_PAUSAS_CC} AND CAST(fecha_inicio AS date) = @fecha
       GROUP BY neus_id
     `);
     const pausaPorAgente = new Map(pausasRs.recordset.map((p) => [p.agenteId, p.minutos]));
@@ -633,6 +641,8 @@ async function getTiemposAgente(req, res) {
     if (!agenteId) return res.status(400).json({ success: false, message: 'agenteId requerido' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    const tipos = await pausaTiposService.listar(pool);
+    const idsPausaCC = new Set(tipos.filter((t) => t.usos.contact_center).map((t) => t.statusId));
     const rs = await pool.request()
       .input('agenteId', sql.Int, agenteId)
       .input('fecha', sql.NVarChar, fecha)
@@ -648,7 +658,7 @@ async function getTiemposAgente(req, res) {
 
     const sesiones = rs.recordset;
     const primeraEntrada = sesiones.length > 0 ? sesiones[0].fechaInicio : null;
-    const minutosEnPausa = sesiones.filter((s) => [2, 3, 5, 6].includes(s.statusId)).reduce((sum, s) => sum + s.minutos, 0);
+    const minutosEnPausa = sesiones.filter((s) => idsPausaCC.has(s.statusId)).reduce((sum, s) => sum + s.minutos, 0);
 
     res.json({
       success: true,
@@ -710,6 +720,7 @@ async function getMiResumenAsesor(req, res) {
     if (!agenteId) return res.status(401).json({ success: false, message: 'No autenticado' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    const tipos = await pausaTiposService.listar(pool);
     const rs = await pool.request()
       .input('agenteId', sql.Int, agenteId)
       .input('fecha', sql.NVarChar, fecha)
@@ -725,14 +736,20 @@ async function getMiResumenAsesor(req, res) {
 
     const sesiones = rs.recordset;
     const primeraEntrada = sesiones.length > 0 ? sesiones[0].fechaInicio : null;
-    const pausaActiva = sesiones.find((s) => [2, 3, 5, 6].includes(s.statusId) && !s.fechaFin);
+    const tiposCC = tipos.filter((t) => t.usos.contact_center);
+    const idsPausaCC = new Set(tiposCC.map((t) => t.statusId));
+    const pausaActiva = sesiones.find((s) => idsPausaCC.has(s.statusId) && !s.fechaFin);
+    // Los 4 tipos por default con llave fija (compatibilidad) + minutos de cada
+    // tipo por status_id, para los tipos que agregue la empresa.
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
-    const TIPO_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
+    const minutosPorStatus = pausaTiposService.mapaEnCero(tiposCC);
     for (const s of sesiones) {
-      const key = TIPO_KEYS[s.statusId];
+      if (!idsPausaCC.has(s.statusId)) continue;
+      const key = pausaTiposService.llaveLegacy(tipos, s.statusId);
       if (key) minutosPorTipo[key] += s.minutos;
+      minutosPorStatus[s.statusId] = (minutosPorStatus[s.statusId] ?? 0) + s.minutos;
     }
-    const minutosEnPausa = Object.values(minutosPorTipo).reduce((a, b) => a + b, 0);
+    const minutosEnPausa = Object.values(minutosPorStatus).reduce((a, b) => a + b, 0);
 
     res.json({
       success: true,
@@ -741,9 +758,11 @@ async function getMiResumenAsesor(req, res) {
         fecha,
         primeraEntrada,
         estado: pausaActiva ? 'pausa' : 'disponible',
-        tipoPausaActual: pausaActiva ? (TIPO_KEYS[pausaActiva.statusId] ?? null) : null,
+        tipoPausaActual: pausaActiva ? (pausaTiposService.llaveLegacy(tipos, pausaActiva.statusId) ?? pausaTiposService.etiquetaPausa(tipos, pausaActiva.statusId)) : null,
         minutosEnPausa,
         minutosPorTipo,
+        minutosPorStatus,
+        tiposPausa: tiposCC.map(({ statusId, etiqueta, emoji, color }) => ({ statusId, etiqueta, emoji, color })),
         sesiones,
       },
     });
@@ -868,6 +887,7 @@ async function getReporteDiario(req, res) {
   try {
     const fecha = (req.query.fecha || new Date().toISOString().slice(0, 10)).toString();
     const pool = await databaseService.getPool(req.user?.empresa);
+    const tipos = await pausaTiposService.listar(pool);
 
     const asignadoRs = await pool.request()
       .input('fecha', sql.NVarChar, fecha)
@@ -899,14 +919,16 @@ async function getReporteDiario(req, res) {
       .query(`
         SELECT status_id as statusId, SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutos
         FROM USUARIO_TIEMPOS
-        WHERE CAST(fecha_inicio AS date) = @fecha AND status_id IN (2,3,5,6)
+        WHERE CAST(fecha_inicio AS date) = @fecha AND status_id IN ${SQL_PAUSAS_CC}
         GROUP BY status_id
       `);
-    const PAUSA_KEYS = { 3: 'banio', 2: 'comida', 5: 'capacitacion', 6: 'permiso' };
     const minutosPorTipo = { banio: 0, comida: 0, capacitacion: 0, permiso: 0 };
+    // Minutos por status_id (incluye los tipos de pausa que agregue la empresa).
+    const minutosPorStatus = pausaTiposService.mapaEnCero(tipos.filter((t) => t.usos.contact_center));
     for (const p of pausasPorTipoRs.recordset) {
-      const key = PAUSA_KEYS[p.statusId];
+      const key = pausaTiposService.llaveLegacy(tipos, p.statusId);
       if (key) minutosPorTipo[key] = p.minutos;
+      minutosPorStatus[p.statusId] = p.minutos;
     }
 
     const rankingRs = await pool.request()
@@ -916,7 +938,7 @@ async function getReporteDiario(req, res) {
                SUM(DATEDIFF(MINUTE, ut.fecha_inicio, ISNULL(ut.fecha_fin, GETDATE()))) as minutosPausa
         FROM USUARIO_TIEMPOS ut
         INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = ut.neus_id
-        WHERE CAST(ut.fecha_inicio AS date) = @fecha AND ut.status_id IN (2,3,5,6)
+        WHERE CAST(ut.fecha_inicio AS date) = @fecha AND ut.status_id IN ${SQL_PAUSAS_CC}
         GROUP BY ut.neus_id, u.NEUS_NOMBRES
         ORDER BY minutosPausa DESC
       `);
@@ -930,6 +952,8 @@ async function getReporteDiario(req, res) {
         agentesTrabajaron,
         porCampania: porCampaniaRs.recordset,
         minutosPorTipo,
+        minutosPorStatus,
+        tiposPausa: tipos.filter((t) => t.usos.contact_center).map(({ statusId, etiqueta, emoji, color }) => ({ statusId, etiqueta, emoji, color })),
         rankingPausas: rankingRs.recordset,
       },
     });
@@ -1372,7 +1396,7 @@ async function getKpis(req, res) {
       const pausasActivasRs = await pool.request().query(`
         SELECT COUNT(DISTINCT neus_id) as total
         FROM USUARIO_TIEMPOS
-        WHERE neus_id IN (${agenteIds.join(',')}) AND fecha_fin IS NULL AND status_id IN (2,3,5,6)
+        WHERE neus_id IN (${agenteIds.join(',')}) AND fecha_fin IS NULL AND status_id IN ${SQL_PAUSAS_CC}
       `);
       agentesEnPausa = pausasActivasRs.recordset[0].total;
 
@@ -1380,7 +1404,7 @@ async function getKpis(req, res) {
         SELECT AVG(minutos * 1.0) as promedio FROM (
           SELECT neus_id, SUM(DATEDIFF(MINUTE, fecha_inicio, ISNULL(fecha_fin, GETDATE()))) as minutos
           FROM USUARIO_TIEMPOS
-          WHERE neus_id IN (${agenteIds.join(',')}) AND status_id IN (2,3,5,6) AND CAST(fecha_inicio AS date) = CAST(GETDATE() AS date)
+          WHERE neus_id IN (${agenteIds.join(',')}) AND status_id IN ${SQL_PAUSAS_CC} AND CAST(fecha_inicio AS date) = CAST(GETDATE() AS date)
           GROUP BY neus_id
         ) t
       `);

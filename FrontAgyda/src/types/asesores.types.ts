@@ -12,7 +12,8 @@ export interface MiResumenAsesor {
   fecha: string
   primeraEntrada: string | null
   estado: 'disponible' | 'pausa'
-  tipoPausaActual: 'banio' | 'comida' | 'capacitacion' | 'permiso' | null
+  // 'banio' | 'comida' | 'capacitacion' | 'permiso', o la etiqueta de un tipo de pausa agregado por la empresa
+  tipoPausaActual: string | null
   minutosEnPausa: number
   minutosPorTipo: {
     banio: number
@@ -20,6 +21,10 @@ export interface MiResumenAsesor {
     capacitacion: number
     permiso: number
   }
+  // Minutos por status_id y los tipos de pausa que cuentan en Contact Center
+  // (incluye los que agregue la empresa).
+  minutosPorStatus?: Record<number, number>
+  tiposPausa?: { statusId: number; etiqueta: string; emoji: string; color: string }[]
   sesiones: SesionAsesor[]
 }
 

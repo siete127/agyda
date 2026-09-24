@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   Users, UserCheck, Clock, BarChart3, Plus, Trash2, Coffee, History,
   ChevronRight, ChevronLeft, Layers, MessageCircle, Circle, PowerOff, MinusCircle,
-  AlertTriangle, CheckCircle2, Megaphone, RefreshCw, LogOut, TrendingUp,
+  AlertTriangle, CheckCircle2, Megaphone, RefreshCw, LogOut, TrendingUp, Settings2,
 } from 'lucide-react'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { api } from '@/lib/axios'
@@ -20,6 +20,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import {
   TIPO_PAUSA_LABELS, ESTADO_AGENTE_LABELS, type AgenteEstado, type EstadoAgente, type ProductividadAgente,
   NOTIFICACION_ALCANCE_LABELS, type NotificacionTipo, type NotificacionAlcance, type AlarmaInstancia,
+  ALARMA_TIPO_LABELS, type AlarmaTipo,
 } from '@/types/supervisores.types'
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
@@ -28,9 +29,16 @@ import { Eye, Radio, LogIn } from 'lucide-react'
 import type { CCMensaje } from '@/types/cc.types'
 import { getSocket } from '@/lib/socket'
 import { useColumnasVisibles } from '@/hooks/useColumnasVisibles'
+import { usePausaTipos } from '@/hooks/usePausaTipos'
+import { limitePausa, llaveLegacy, type PausaTipo } from '@/types/pausaTipos.types'
 import { SelectorColumnas } from '@/components/ui/SelectorColumnas'
 
 interface Usuario { id: number; nombre: string; tipoUsuario: string }
+
+// Minutos transcurridos desde `iso` (0 si no hay fecha) — mismo criterio que formatDuracion.
+function minutosDesde(iso: string | null) {
+  return iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 60000) : 0
+}
 
 function formatDuracion(iso: string | null) {
   if (!iso) return ''
@@ -49,11 +57,20 @@ const ESTADO_ESTILOS: Record<EstadoAgente, { card: string; iconBg: string; dot: 
   desconectado: { card: 'border-gray-200 bg-gray-50/60 opacity-75', iconBg: 'bg-gray-100 text-gray-400', dot: 'bg-gray-300', icon: (p) => <PowerOff {...p} /> },
 }
 
-function estadoTexto(agente: AgenteEstado) {
-  if (agente.estado === 'pausa') {
-    return <>En {TIPO_PAUSA_LABELS[agente.tipoPausa ?? ''] ?? agente.tipoPausa} · {formatDuracion(agente.pausaDesde)}</>
-  }
-  return ESTADO_AGENTE_LABELS[agente.estado]
+// Estado del agente; si está en una pausa con límite por pausa (modo 'visita')
+// y ya lo excedió —con el límite de Contact Center si tiene uno propio—, se
+// marca en rojo.
+function EstadoTexto({ agente }: { agente: AgenteEstado }) {
+  const { porId } = usePausaTipos()
+  if (agente.estado !== 'pausa') return <>{ESTADO_AGENTE_LABELS[agente.estado]}</>
+  const tipo = porId(agente.tipoPausaStatusId)
+  const limite = tipo?.limiteModo === 'visita' ? limitePausa(tipo, '', 'contact_center') : null
+  const excedido = limite !== null && minutosDesde(agente.pausaDesde) > limite
+  return (
+    <span className={clsx(excedido && 'font-semibold text-red-600')} title={excedido ? `Excede el límite de ${limite} min` : undefined}>
+      En {TIPO_PAUSA_LABELS[agente.tipoPausa ?? ''] ?? agente.tipoPausa} · {formatDuracion(agente.pausaDesde)}{excedido && ' ⚠️'}
+    </span>
+  )
 }
 
 /* ── Fila de chat asignado (nivel 4: chats de un agente) — clic abre el visor de solo lectura ── */
@@ -221,7 +238,7 @@ function AgenteRow({ agente, chatsActivos, expandido, onClick }: { agente: Agent
       </div>
       <div className="min-w-0 flex-1 flex items-baseline gap-2">
         <p className="text-sm font-semibold text-gray-900 truncate">{agente.nombre}</p>
-        <p className="text-xs text-gray-500 truncate">{estadoTexto(agente)}</p>
+        <p className="text-xs text-gray-500 truncate"><EstadoTexto agente={agente} /></p>
       </div>
       {chatsActivos > 0 && (
         <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-semibold text-brand">
@@ -444,7 +461,7 @@ function PanelEnVivoTab() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900 truncate">{agenteSeleccionado.nombre}</p>
-                <p className="text-xs text-gray-500">{estadoTexto(agenteSeleccionado)}</p>
+                <p className="text-xs text-gray-500"><EstadoTexto agente={agenteSeleccionado} /></p>
               </div>
               <AccionesRemotasAgente agenteId={agenteSeleccionado.agenteId} />
             </div>
@@ -555,19 +572,21 @@ function PanelEnVivoTab() {
 }
 
 /* ── Tab: Productividad del día ── */
-const PAUSA_COLORES: Record<'banio' | 'comida' | 'capacitacion' | 'permiso', { bar: string; dot: string; label: string }> = {
-  banio: { bar: 'bg-blue-400', dot: 'bg-blue-400', label: 'Baño' },
-  comida: { bar: 'bg-orange-400', dot: 'bg-orange-400', label: 'Comida' },
-  capacitacion: { bar: 'bg-violet-400', dot: 'bg-violet-400', label: 'Capacitación' },
-  permiso: { bar: 'bg-emerald-400', dot: 'bg-emerald-400', label: 'Permiso' },
-}
-
 function hoyISO() {
   return new Date().toISOString().slice(0, 10)
 }
 
+
 /* ── Barras apiladas: minutos en pausa por agente, coloreadas por tipo ── */
 function GraficoPausasPorAgente({ productividad }: { productividad: ProductividadAgente[] }) {
+  // Los tipos de pausa que cuentan en Contact Center, con su color configurado.
+  const tiposCC = usePausaTipos().tipos.filter((t) => t.usos.contact_center)
+  // Respaldo si el backend aún no manda `pausasPorTipo`: la llave fija de los
+  // 4 tipos por default (por clave; su status_id cambia entre empresas).
+  const minutosDe = (p: ProductividadAgente, t: PausaTipo) => {
+    const llave = llaveLegacy(t)
+    return p.pausasPorTipo?.[t.statusId] ?? (llave ? p[llave] : 0)
+  }
   const conPausas = productividad.filter((p) => p.totalPausaMin > 0)
   if (conPausas.length === 0) {
     return (
@@ -585,10 +604,10 @@ function GraficoPausasPorAgente({ productividad }: { productividad: Productivida
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-900">Minutos en pausa por agente</p>
         <div className="flex flex-wrap items-center gap-3">
-          {(Object.keys(PAUSA_COLORES) as (keyof typeof PAUSA_COLORES)[]).map((k) => (
-            <span key={k} className="flex items-center gap-1.5 text-[0.68rem] text-gray-500">
-              <span className={clsx('h-2 w-2 rounded-full', PAUSA_COLORES[k].dot)} />
-              {PAUSA_COLORES[k].label}
+          {tiposCC.map((t) => (
+            <span key={t.statusId} className="flex items-center gap-1.5 text-[0.68rem] text-gray-500">
+              <span className="h-2 w-2 rounded-full" style={{ background: t.color }} />
+              {t.etiqueta}
             </span>
           ))}
         </div>
@@ -598,15 +617,15 @@ function GraficoPausasPorAgente({ productividad }: { productividad: Productivida
           <div key={p.agenteId} className="flex items-center gap-3">
             <p className="w-36 flex-shrink-0 truncate text-xs font-medium text-gray-700">{p.nombre}</p>
             <div className="flex h-5 flex-1 overflow-hidden rounded-full bg-gray-100">
-              {(['banio', 'comida', 'capacitacion', 'permiso'] as const).map((k) => {
-                const minutos = p[k]
+              {tiposCC.map((t) => {
+                const minutos = minutosDe(p, t)
                 if (minutos <= 0) return null
                 return (
                   <div
-                    key={k}
-                    className={clsx('h-full transition-all', PAUSA_COLORES[k].bar)}
-                    style={{ width: `${(minutos / maxMin) * 100}%` }}
-                    title={`${PAUSA_COLORES[k].label}: ${minutos} min`}
+                    key={t.statusId}
+                    className="h-full transition-all"
+                    style={{ width: `${(minutos / maxMin) * 100}%`, background: t.color }}
+                    title={`${t.etiqueta}: ${minutos} min`}
                   />
                 )
               })}
@@ -640,6 +659,20 @@ function ComparativoSemanal({ p }: { p: ProductividadAgente }) {
     )}>
       {arriba ? '↑' : '↓'} {Math.abs(diferencia)} min <span className="font-normal opacity-70">vs. {p.avgSemanalMin} min</span>
     </span>
+  )
+}
+
+// Minutos del día de un tipo de pausa; en rojo si pasa su límite diario
+// (modo 'diario') de Contact Center. Un límite "por pausa" no se puede evaluar
+// con el total del día, así que ahí no se marca.
+function CeldaMinutos({ minutos, tipo }: { minutos: number; tipo?: PausaTipo }) {
+  const limite = tipo?.limiteModo === 'diario' ? limitePausa(tipo, '', 'contact_center') : null
+  const excedido = limite !== null && minutos > limite
+  return (
+    <td className={clsx('px-4 py-2.5 font-mono tabular-nums', excedido ? 'font-semibold text-red-600' : 'text-gray-600')}
+      title={excedido ? `Excede el límite diario de ${limite} min` : undefined}>
+      {minutos} min{excedido && ' ⚠️'}
+    </td>
   )
 }
 
@@ -878,6 +911,12 @@ function ProductividadTab() {
   const [fecha, setFecha] = useState(hoyISO())
   const esHoy = fecha === hoyISO()
   const { visibles, toggle, esVisible } = useColumnasVisibles('productividad', COLUMNAS_PRODUCTIVIDAD)
+  // Tipos de pausa que cuentan en Contact Center. Los 4 por default tienen su
+  // columna (en el selector); los que agregue la empresa, una columna propia.
+  const { tipos: tiposPausa } = usePausaTipos()
+  const tiposCC = tiposPausa.filter((t) => t.usos.contact_center)
+  const tiposExtra = tiposCC.filter((t) => !llaveLegacy(t))
+  const tipoDe = (llave: string) => tiposPausa.find((t) => llaveLegacy(t) === llave)
 
   const { data: productividad = [], isLoading } = useQuery({
     queryKey: ['supervisores-productividad', fecha],
@@ -952,6 +991,9 @@ function ProductividadTab() {
                   {esVisible('comida') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Comida</th>}
                   {esVisible('capacitacion') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Capacitación</th>}
                   {esVisible('permiso') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Permiso</th>}
+                  {tiposExtra.map((t) => (
+                    <th key={t.statusId} className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">{t.emoji} {t.etiqueta}</th>
+                  ))}
                   {esVisible('totalPausaMin') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Total pausas</th>}
                   {esVisible('avgSemanal') && <th className="px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Vs. promedio semanal</th>}
                 </tr>
@@ -993,10 +1035,13 @@ function ProductividadTab() {
                             </span>
                           </td>
                         )}
-                        {esVisible('banio') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.banio} min</td>}
-                        {esVisible('comida') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.comida} min</td>}
-                        {esVisible('capacitacion') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.capacitacion} min</td>}
-                        {esVisible('permiso') && <td className="px-4 py-2.5 font-mono tabular-nums text-gray-600">{p.permiso} min</td>}
+                        {esVisible('banio') && <CeldaMinutos minutos={p.banio} tipo={tipoDe('banio')} />}
+                        {esVisible('comida') && <CeldaMinutos minutos={p.comida} tipo={tipoDe('comida')} />}
+                        {esVisible('capacitacion') && <CeldaMinutos minutos={p.capacitacion} tipo={tipoDe('capacitacion')} />}
+                        {esVisible('permiso') && <CeldaMinutos minutos={p.permiso} tipo={tipoDe('permiso')} />}
+                        {tiposExtra.map((t) => (
+                          <CeldaMinutos key={t.statusId} minutos={p.pausasPorTipo?.[t.statusId] ?? 0} tipo={t} />
+                        ))}
                         {esVisible('totalPausaMin') && (
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
@@ -1208,7 +1253,7 @@ function EstatusTab() {
                   </div>
                   <div className="min-w-0 flex-1 flex items-baseline gap-2">
                     <p className="text-sm font-semibold text-gray-900 truncate">{a.nombre}</p>
-                    <p className="text-xs text-gray-500 truncate">{estadoTexto(a)}</p>
+                    <p className="text-xs text-gray-500 truncate"><EstadoTexto agente={a} /></p>
                   </div>
                   <p className="flex-shrink-0 text-[0.68rem] text-gray-400">
                     {nombreCampania.get(a.campaniaId) ?? ''} · {nombreSkill.get(a.grupoId) ?? ''}
@@ -1383,9 +1428,139 @@ function AlarmaCard({
   )
 }
 
+/* ── Modal: configurar alarmas (umbral en minutos y campaña a la que
+   aplican) — cada campaña opera distinto, así que además de las 2 alarmas
+   globales por default se puede crear una específica de campaña con su
+   propio umbral, que la reemplaza para esa campaña (ver evaluarAlarma en el
+   backend: una alarma de campaña tiene prioridad sobre la global del mismo
+   tipo). ── */
+function ConfigurarAlarmasModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
+  const [creando, setCreando] = useState(false)
+  const [tipo, setTipo] = useState<AlarmaTipo>('agente_pausa')
+  const [campaniaId, setCampaniaId] = useState<number | ''>('')
+  const [umbralMinutos, setUmbralMinutos] = useState(15)
+
+  const { data: config = [], isLoading } = useQuery({
+    queryKey: ['supervisores-alarmas-config'],
+    queryFn: () => supervisoresService.getAlarmasConfig(),
+  })
+  const { data: panel } = useQuery({
+    queryKey: ['supervisores-mi-panel'],
+    queryFn: () => supervisoresService.getMiPanel(),
+  })
+
+  const invalidar = () => {
+    qc.invalidateQueries({ queryKey: ['supervisores-alarmas-config'] })
+    qc.invalidateQueries({ queryKey: ['supervisores-alarmas'] })
+  }
+
+  const crear = useMutation({
+    mutationFn: () => supervisoresService.crearAlarmaConfig({
+      nombre: `${ALARMA_TIPO_LABELS[tipo]}${campaniaId ? '' : ' (global)'}`,
+      tipo, umbralMinutos, campaniaId: campaniaId || null,
+    }),
+    onSuccess: () => { toast.success('Alarma creada'); setCreando(false); setCampaniaId(''); setUmbralMinutos(15); invalidar() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo crear la alarma'),
+  })
+  const actualizar = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: { umbralMinutos?: number; activa?: boolean } }) => supervisoresService.actualizarAlarmaConfig(id, body),
+    onSuccess: () => invalidar(),
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo actualizar'),
+  })
+  const eliminar = useMutation({
+    mutationFn: (id: number) => supervisoresService.eliminarAlarmaConfig(id),
+    onSuccess: () => { toast.success('Alarma eliminada'); invalidar() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo eliminar'),
+  })
+
+  return (
+    <Modal isOpen onClose={onClose} title="Configurar alarmas" size="lg">
+      <div className="space-y-4">
+        <p className="text-xs text-gray-500">
+          Cada campaña puede tener su propio umbral. Una alarma de campaña reemplaza a la global del mismo tipo, solo para esa campaña.
+        </p>
+
+        {isLoading ? (
+          <div className="flex justify-center py-10"><Spinner /></div>
+        ) : (
+          <div className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+            {config.map((a) => (
+              <div key={a.id} className="flex items-center gap-3 px-3 py-2.5">
+                <div className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', a.activa ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-400')}>
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800">{ALARMA_TIPO_LABELS[a.tipo]}</p>
+                  <p className="text-xs text-gray-500">{a.campaniaNombre ?? 'Todas las campañas (global)'}</p>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  value={a.umbralMinutos}
+                  onChange={(e) => actualizar.mutate({ id: a.id, body: { umbralMinutos: Number(e.target.value) || 1 } })}
+                  className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-right text-xs outline-none focus:border-brand"
+                />
+                <span className="text-xs text-gray-400">min</span>
+                <button
+                  onClick={() => actualizar.mutate({ id: a.id, body: { activa: !a.activa } })}
+                  title={a.activa ? 'Desactivar' : 'Activar'}
+                  className={clsx('rounded-full px-2 py-0.5 text-[0.65rem] font-semibold', a.activa ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500')}
+                >
+                  {a.activa ? 'Activa' : 'Inactiva'}
+                </button>
+                <button onClick={() => eliminar.mutate(a.id)} title="Eliminar" className="text-gray-300 hover:text-red-500">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {creando ? (
+          <div className="space-y-3 rounded-xl border border-gray-100 p-3">
+            <div className="flex flex-wrap gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-500">Tipo</label>
+                <select value={tipo} onChange={(e) => setTipo(e.target.value as AlarmaTipo)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-brand">
+                  {(Object.keys(ALARMA_TIPO_LABELS) as AlarmaTipo[]).map((t) => <option key={t} value={t}>{ALARMA_TIPO_LABELS[t]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-500">Campaña</label>
+                <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-brand">
+                  <option value="">Todas (global)</option>
+                  {(panel?.campanias ?? []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-500">Umbral (minutos)</label>
+                <input
+                  type="number" min={1} value={umbralMinutos}
+                  onChange={(e) => setUmbralMinutos(Number(e.target.value) || 1)}
+                  className="w-24 rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-brand"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setCreando(false)}>Cancelar</Button>
+              <Button size="sm" onClick={() => crear.mutate()} disabled={crear.isPending}>Crear alarma</Button>
+            </div>
+          </div>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => setCreando(true)}>
+            <Plus className="h-3.5 w-3.5" /> Nueva alarma
+          </Button>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 function AlarmasTab() {
   const qc = useQueryClient()
   const [comentarios, setComentarios] = useState<Record<number, string>>({})
+  const [configAbierta, setConfigAbierta] = useState(false)
 
   const { data: instancias = [], isLoading } = useQuery({
     queryKey: ['supervisores-alarmas'],
@@ -1399,27 +1574,48 @@ function AlarmasTab() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo atender la alarma'),
   })
 
-  if (isLoading) return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-
   const enAlarma = instancias.filter((i) => i.estado === 'en_alarma')
   const atendidas = instancias.filter((i) => i.estado === 'atendida')
 
+  const BotonConfigurar = (
+    <div className="flex justify-end">
+      <Button size="sm" variant="secondary" onClick={() => setConfigAbierta(true)}>
+        <Settings2 className="h-3.5 w-3.5" /> Configurar alarmas
+      </Button>
+    </div>
+  )
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {BotonConfigurar}
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+        {configAbierta && <ConfigurarAlarmasModal onClose={() => setConfigAbierta(false)} />}
+      </div>
+    )
+  }
+
   if (instancias.length === 0) {
     return (
-      <div className="card flex flex-col items-center gap-3 py-20 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
-          <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+      <div className="space-y-4">
+        {BotonConfigurar}
+        <div className="card flex flex-col items-center gap-3 py-20 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+            <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Todo en orden</p>
+            <p className="mt-0.5 text-xs text-gray-400">No hay alarmas activas en tus campañas ahora mismo</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-800">Todo en orden</p>
-          <p className="mt-0.5 text-xs text-gray-400">No hay alarmas activas en tus campañas ahora mismo</p>
-        </div>
+        {configAbierta && <ConfigurarAlarmasModal onClose={() => setConfigAbierta(false)} />}
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
+      {BotonConfigurar}
       <div className="grid grid-cols-2 gap-3 sm:max-w-md">
         <div className={clsx('card flex items-center gap-3 p-3', enAlarma.length > 0 && 'border-red-200 bg-red-50/40')}>
           <div className={clsx('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg', enAlarma.length > 0 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400')}>
@@ -1453,6 +1649,7 @@ function AlarmasTab() {
           />
         ))}
       </div>
+      {configAbierta && <ConfigurarAlarmasModal onClose={() => setConfigAbierta(false)} />}
     </div>
   )
 }

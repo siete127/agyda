@@ -24,6 +24,8 @@ const DASHBOARD_CARD_IDS = [
   'r-reglamento', 'r-livechat', 'r-pausas', 'r-vacaciones', 'r-capacitacion',
   'r-incapacidades', 'r-noticias', 'r-vacantes', 'r-ventas',
   'r-tiempos-equipo', 'r-metas-ventas',
+  // Personales
+  'r-mis-enlaces',
 ];
 
 const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];
@@ -76,9 +78,23 @@ const DEFAULT_CONFIG = {
   // defecto. El semáforo compara el margen global de la cotización contra estos
   // umbrales; si cae en ROJO y `requiereOverride` está activo, guardar/aprobar
   // exige el permiso crm:cotizacion-override-margen.
+  // `estatusContados` es la definición única y compartida de "venta contada" —
+  // la consumen Metas, Comisiones e Incentivos (ventasAreaController) en vez de
+  // cada uno traer su propio whitelist hardcodeado.
   ventas: {
     margen: { verdeMin: 25, amarilloMin: 15, rojoMax: 15, requiereOverride: true },
     iva: { tasaDefault: 0.16 },
+    estatusContados: ['Aprobada', 'Formalizada', 'Formalizado', 'Garantizada'],
+  },
+  // Prospección (ventas-area) — ventana usada para "gestiones recientes" y
+  // "tipos de gestión más comunes" en el dashboard de prospección.
+  prospeccion: {
+    ventanaAnalisisDias: 30,
+  },
+  // Email Marketing — throttle por defecto al crear una campaña (el usuario
+  // puede ajustarlo por campaña; esto es solo el valor sugerido).
+  emailMarketing: {
+    emailsPorHoraDefault: 200,
   },
 };
 
@@ -86,6 +102,17 @@ function clamp(n, min, max, fallback) {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
   return Math.min(Math.max(v, min), max);
+}
+
+const ESTATUS_VENTA_VALIDOS = ['Prospecto', 'Cotizada', 'Aprobada', 'Formalizada', 'Formalizado', 'Garantizada', 'Cancelada', 'Rechazada'];
+
+// Módulos que cuentan ventas con su propia lista de estatus. Si un módulo no
+// tiene lista propia usa `estatusContados` (el valor general, y el único que
+// existía antes de separarlos).
+const USOS_ESTATUS_CONTADOS = ['metas', 'comisiones', 'incentivos'];
+
+function limpiarListaEstatus(lista) {
+  return Array.isArray(lista) ? lista.filter((e) => ESTATUS_VENTA_VALIDOS.includes(e)) : [];
 }
 
 // Normaliza la rama `ventas` con clamps coherentes (verde >= amarillo >= rojo).
@@ -99,6 +126,16 @@ function limpiarVentas(raw) {
   let verdeMin = clamp(mg.verdeMin, 0, 100, D.margen.verdeMin);
   if (amarilloMin < rojoMax) amarilloMin = rojoMax;
   if (verdeMin < amarilloMin) verdeMin = amarilloMin;
+  const estatusContados = Array.isArray(m.estatusContados)
+    ? limpiarListaEstatus(m.estatusContados)
+    : D.estatusContados;
+  const general = estatusContados.length > 0 ? estatusContados : D.estatusContados;
+  const porUsoRaw = m.estatusContadosPorUso && typeof m.estatusContadosPorUso === 'object' ? m.estatusContadosPorUso : {};
+  const estatusContadosPorUso = {};
+  for (const uso of USOS_ESTATUS_CONTADOS) {
+    const lista = limpiarListaEstatus(porUsoRaw[uso]);
+    estatusContadosPorUso[uso] = lista.length > 0 ? lista : general;
+  }
   return {
     margen: {
       verdeMin,
@@ -107,7 +144,21 @@ function limpiarVentas(raw) {
       requiereOverride: mg.requiereOverride !== false,
     },
     iva: { tasaDefault: clamp(iva.tasaDefault, 0, 1, D.iva.tasaDefault) },
+    estatusContados: general,
+    estatusContadosPorUso,
   };
+}
+
+function limpiarProspeccion(raw) {
+  const D = DEFAULT_CONFIG.prospeccion;
+  const m = raw && typeof raw === 'object' ? raw : {};
+  return { ventanaAnalisisDias: Math.round(clamp(m.ventanaAnalisisDias, 1, 365, D.ventanaAnalisisDias)) };
+}
+
+function limpiarEmailMarketing(raw) {
+  const D = DEFAULT_CONFIG.emailMarketing;
+  const m = raw && typeof raw === 'object' ? raw : {};
+  return { emailsPorHoraDefault: Math.round(clamp(m.emailsPorHoraDefault, 1, 10000, D.emailsPorHoraDefault)) };
 }
 
 // Config de margen que consume crmCotizacionesController (evita duplicar defaults).
@@ -115,6 +166,17 @@ exports.calcMargenConfig = function calcMargenConfig(config) {
   const v = limpiarVentas(config?.ventas);
   return { ...v.margen, tasaIvaDefault: v.iva.tasaDefault };
 };
+
+// Definición de "venta contada" — la consume ventasAreaController en vez de
+// traer su propio whitelist hardcodeado. `uso` ('metas' | 'comisiones' |
+// 'incentivos') devuelve la lista de ese módulo; sin `uso`, la general.
+exports.getEstatusContados = function getEstatusContados(config, uso) {
+  const v = limpiarVentas(config?.ventas);
+  return (uso && v.estatusContadosPorUso[uso]) || v.estatusContados;
+};
+
+exports.ESTATUS_VENTA_VALIDOS = ESTATUS_VENTA_VALIDOS;
+exports.USOS_ESTATUS_CONTADOS = USOS_ESTATUS_CONTADOS;
 
 const MASCOTA_MOVIMIENTOS = ['ninguno', 'flotar', 'saludar', 'latir', 'balanceo'];
 const MASCOTA_VELOCIDADES = ['lenta', 'normal', 'rapida'];
@@ -147,6 +209,9 @@ function limpiarEnlace(raw, i) {
   };
 }
 
+// Reutilizado por los enlaces personales de cada usuario (enlacesPersonalesController).
+exports.limpiarEnlace = limpiarEnlace;
+
 function mergeConfig(stored) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   if (!stored || typeof stored !== 'object') return base;
@@ -166,6 +231,8 @@ function mergeConfig(stored) {
       ? stored.enlacesTopbar.map(limpiarEnlace).filter(Boolean)
       : base.enlacesTopbar,
     ventas: limpiarVentas(stored.ventas),
+    prospeccion: limpiarProspeccion(stored.prospeccion),
+    emailMarketing: limpiarEmailMarketing(stored.emailMarketing),
     mascota: (() => {
       const m = stored.mascota && typeof stored.mascota === 'object' ? stored.mascota : {};
       // Migración desde el formato viejo (una sola mascota con `modo`).
@@ -363,11 +430,13 @@ exports.updateInstitucional = async (req, res) => {
 
 // PUT /api/personalizacion/ventas
 // Body: { margen: { verdeMin, amarilloMin, rojoMax, requiereOverride }, iva: { tasaDefault } }
+// Se fusiona con lo guardado: lo que no venga en el body (p. ej. los estatus
+// contados por módulo, que tienen su propio endpoint) se conserva.
 exports.updateVentas = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const config = await readConfig(pool);
-    config.ventas = limpiarVentas(req.body);
+    config.ventas = limpiarVentas({ ...(config.ventas || {}), ...(req.body || {}) });
     await writeConfig(pool, config, req.user?.id);
     await logAudit(pool, {
       userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
@@ -378,6 +447,81 @@ exports.updateVentas = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateVentas', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la configuración comercial' });
+  }
+};
+
+// PUT /api/personalizacion/ventas/estatus-contados
+// Body: { estatus: string[], usos: ('metas' | 'comisiones' | 'incentivos')[] }
+// Aplica la lista solo a los módulos elegidos; los demás conservan la suya.
+// Si se aplica a todos, también pasa a ser el valor general.
+exports.updateEstatusContados = async (req, res) => {
+  try {
+    const estatus = limpiarListaEstatus(req.body?.estatus);
+    const usos = Array.isArray(req.body?.usos) ? req.body.usos.filter((u) => USOS_ESTATUS_CONTADOS.includes(u)) : [];
+    if (estatus.length === 0) return res.status(400).json({ success: false, message: 'Selecciona al menos un estatus' });
+    if (usos.length === 0) return res.status(400).json({ success: false, message: 'Selecciona al menos un módulo' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    const actual = limpiarVentas(config.ventas);
+    const estatusContadosPorUso = { ...actual.estatusContadosPorUso };
+    for (const uso of usos) estatusContadosPorUso[uso] = estatus;
+    const todos = USOS_ESTATUS_CONTADOS.every((u) => usos.includes(u));
+    config.ventas = limpiarVentas({
+      ...actual,
+      estatusContados: todos ? estatus : actual.estatusContados,
+      estatusContadosPorUso,
+    });
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-estatus-contados', detalle: JSON.stringify({ estatus, usos }), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'ventas');
+    return res.json({ success: true, data: config.ventas });
+  } catch (e) {
+    logger.error('personalizacionController.updateEstatusContados', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar los estatus contados' });
+  }
+};
+
+// PUT /api/personalizacion/prospeccion
+// Body: { ventanaAnalisisDias }
+exports.updateProspeccion = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.prospeccion = limpiarProspeccion(req.body);
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-prospeccion', detalle: JSON.stringify(config.prospeccion), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'prospeccion');
+    return res.json({ success: true, data: config.prospeccion });
+  } catch (e) {
+    logger.error('personalizacionController.updateProspeccion', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la configuración de prospección' });
+  }
+};
+
+// PUT /api/personalizacion/email-marketing
+// Body: { emailsPorHoraDefault }
+exports.updateEmailMarketing = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.emailMarketing = limpiarEmailMarketing(req.body);
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-email-marketing', detalle: JSON.stringify(config.emailMarketing), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'emailMarketing');
+    return res.json({ success: true, data: config.emailMarketing });
+  } catch (e) {
+    logger.error('personalizacionController.updateEmailMarketing', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar la configuración de email marketing' });
   }
 };
 
