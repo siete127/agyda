@@ -1503,6 +1503,109 @@ exports.buscarRegistrosCampoBuscadorPublico = async (req, res) => {
   }
 };
 
+// ── Prellenado por teléfono ──────────────────────────────────────────────
+// GET /api/contact-center/formularios-publico/:token/prellenar?telefono=
+// Con solo el número, busca el registro más reciente de esa persona en las
+// campañas del formulario y devuelve sus datos personales para llenar el
+// formulario. Fuentes, en orden:
+//   1) interacciones (su teléfono de cliente o un campo tipo 'telefono' del
+//      formulario): se copian sus respuestas a los campos de la versión
+//      actual con el MISMO código — así un formulario duplicado (mismos
+//      códigos) aprovecha lo capturado en el original;
+//   2) postulantes del formulario web: solo nombre completo y correo.
+// Solo campos de identidad (TIPOS_PRELLENABLES): fechas, horario, estatus,
+// etc. son de cada contacto nuevo y no se arrastran. Se compara por los
+// últimos 10 dígitos (hay números guardados con 521 o con símbolos).
+const TIPOS_PRELLENABLES = new Set(['texto_corto', 'texto_largo', 'telefono', 'email']);
+const sqlSoloDigitos = (col) =>
+  `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(${col}, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
+
+async function _prellenarPorTelefono(p, formularioId, versionId, telefono) {
+  const digitos = String(telefono || '').replace(/\D/g, '');
+  if (digitos.length < 10) return null;
+  const tel10 = digitos.slice(-10);
+  const { campaniaIds } = await _campaniasYCanalesDelFormulario(p, formularioId);
+  if (!campaniaIds.length) return null;
+  const campIn = campaniaIds.map(Number).filter(Number.isInteger).join(',');
+
+  const campos = (await p.request().input('v', sql.Int, versionId).query(`
+    SELECT c.FC_ID id, c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta
+    FROM dbo.CCF_FORM_CAMPOS c JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
+    WHERE s.FS_VERSION_ID = @v`)).recordset;
+
+  const inter = (await p.request().input('t', sql.NVarChar(10), tel10).query(`
+    SELECT TOP 1 i.CI_ID id, i.CI_CLIENTE_NOMBRE nombre, i.CI_FECHA_INICIO fecha, t.CT_NOMBRE estatus
+    FROM dbo.CCO_INTERACCIONES i
+    LEFT JOIN dbo.CCO_TIPIFICACIONES t ON t.CT_ID = i.CI_TIPIFICACION_ID
+    WHERE i.CI_CAMPANIA_ID IN (${campIn}) AND (
+      RIGHT(${sqlSoloDigitos('i.CI_CLIENTE_TELEFONO')}, 10) = @t
+      OR EXISTS (
+        SELECT 1 FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+        JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = r.FIR_CAMPO_ID
+        WHERE r.FIR_INTERACCION_ID = i.CI_ID AND c.FC_TIPO = 'telefono'
+          AND RIGHT(${sqlSoloDigitos('r.FIR_VALOR_TEXTO')}, 10) = @t))
+    ORDER BY i.CI_ID DESC`)).recordset[0];
+
+  if (inter) {
+    const resp = (await p.request().input('i', sql.Int, inter.id).query(`
+      SELECT c.FC_CODIGO codigo, c.FC_TIPO tipo, r.FIR_VALOR_TEXTO texto
+      FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+      JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = r.FIR_CAMPO_ID
+      WHERE r.FIR_INTERACCION_ID = @i`)).recordset;
+    const valores = {};
+    for (const c of campos) {
+      if (!TIPOS_PRELLENABLES.has(c.tipo)) continue;
+      const r = resp.find((x) => x.codigo === c.codigo && TIPOS_PRELLENABLES.has(x.tipo) && x.texto);
+      if (r) valores[c.id] = String(r.texto).trim();
+    }
+    // Nombre completo para mostrar: el armado de apellidos + nombres si existe.
+    const parte = (re) => resp.find((x) => re.test(x.codigo) && x.texto)?.texto?.trim();
+    const armado = [parte(/paterno/i), parte(/materno/i), parte(/^nombres?$/i)].filter(Boolean).join(' ');
+    return {
+      origen: 'interaccion',
+      nombre: armado || (inter.nombre ? String(inter.nombre).trim() : null),
+      fecha: inter.fecha,
+      estatus: inter.estatus ? String(inter.estatus).trim() : null,
+      valores,
+    };
+  }
+
+  const post = (await p.request().input('t', sql.NVarChar(10), tel10).query(`
+    SELECT TOP 1 CP_NOMBRE nombre, CP_CORREO correo, CP_FECHA_REGISTRO fecha
+    FROM dbo.CCO_CAMPANIA_POSTULANTES
+    WHERE CP_CAMPANIA_ID IN (${campIn}) AND RIGHT(${sqlSoloDigitos('CP_TELEFONO')}, 10) = @t
+    ORDER BY CP_ID DESC`)).recordset[0];
+  if (post) {
+    const valores = {};
+    // Un solo campo de nombre: se llena. Si el formulario separa apellidos y
+    // nombres, el nombre completo no se reparte (no hay forma confiable de
+    // saber dónde corta cada parte): solo se muestra como referencia.
+    const estructurado = campos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`));
+    const campoNombre = !estructurado && campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`));
+    if (campoNombre && post.nombre) valores[campoNombre.id] = String(post.nombre).trim();
+    const campoCorreo = campos.find((c) => c.tipo === 'email');
+    if (campoCorreo && post.correo) valores[campoCorreo.id] = String(post.correo).trim();
+    return { origen: 'postulante', nombre: post.nombre ? String(post.nombre).trim() : null, fecha: post.fecha, estatus: null, valores };
+  }
+  return { origen: null, nombre: null, fecha: null, estatus: null, valores: {} };
+}
+
+exports.prellenarPorTelefonoPublico = async (req, res) => {
+  try {
+    const r = await _resolverFormularioPublico(req.params.token);
+    if (!r) return res.status(404).json({ success: false, message: 'Formulario no disponible' });
+    const version = await r.pool.request().input('id', sql.Int, r.formularioId)
+      .query(`SELECT TOP 1 FV_ID id FROM dbo.CCF_FORM_VERSIONES WHERE FV_FORMULARIO_ID = @id AND FV_ESTADO = 'publicado' ORDER BY FV_NUMERO DESC`);
+    if (!version.recordset.length) return res.status(404).json({ success: false, message: 'Este formulario no tiene una versión publicada' });
+    const data = await _prellenarPorTelefono(r.pool, r.formularioId, version.recordset[0].id, req.query.telefono);
+    if (!data) return res.status(400).json({ success: false, message: 'Teléfono incompleto (mínimo 10 dígitos)' });
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('ccFormularios.prellenarPorTelefonoPublico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al buscar el teléfono' });
+  }
+};
+
 // POST /api/contact-center/formularios-publico/:token/buscador/registrar
 // Mismo comportamiento que crearRegistroCampoBuscador, pero el "agente" no
 // sale de req.user (no hay sesión) sino del body — agenteId/agenteNombre,

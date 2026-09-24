@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Search, Plus, Save, X, Phone, User, Check } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { ccFormularioPublicoService } from '@/services/ccFormularios.service'
-import type { CCFormPublicoCampo, CCFormPublicoSeccion, CCFormBuscadorResultado, CCFormAccionPost } from '@/types/ccFormularios.types'
+import type { CCFormPublicoCampo, CCFormPublicoSeccion, CCFormBuscadorResultado, CCFormAccionPost, CCFormPrellenado } from '@/types/ccFormularios.types'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-gray-500'
@@ -36,74 +36,93 @@ export default function FormularioPublicoPage() {
     queryFn: () => ccFormularioPublicoService.listCanalesDisponibles(token!),
     enabled: !!token,
   })
-  // Screen-pop: mismo espíritu que CRMPublicPage.tsx — VICIdial solo manda
-  // el teléfono del que llama (?cliente=), nunca su nombre. Buscamos ese
-  // teléfono en el histórico de la campaña (mismas fuentes que el campo
-  // 'buscador': postulantes + interacciones) para traer el nombre real si
-  // ya existe un registro previo con ese número.
-  const { data: matchCliente } = useQuery({
-    queryKey: ['ccf-publico-screenpop', token, cliente],
-    queryFn: () => ccFormularioPublicoService.buscar(token!, cliente),
-    enabled: !!token && !!cliente,
-    select: (rs) => rs[0] ?? null,
-  })
-
   const [valores, setValores] = useState<Record<number, unknown>>({})
-  const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState(cliente)
   const [resultado, setResultado] = useState<{ interaccionId: number; acciones: CCFormAccionPost[] } | null>(null)
 
   const setValor = (campoId: number, valor: unknown) => setValores((v) => ({ ...v, [campoId]: valor }))
 
-  // Precarga los campos "Nombre"/"Teléfono" del formulario en cuanto se
-  // resuelven la definición y (si aplica) el match del screen-pop — sin
-  // tocar la estructura del formulario: detecta el campo por TIPO
-  // (telefono / primer texto_corto), no por un código específico, para que
-  // funcione igual en cualquier formulario externo, no solo en este.
+  // Campos detectados por TIPO/etiqueta, no por un código fijo, para que
+  // funcione igual en cualquier formulario externo.
+  const campos = def?.secciones.flatMap((s) => s.campos) ?? []
+  const campoTelefono = campos.find((c) => c.tipo === 'telefono')
+  // Ese campo (p. ej. "Telefono Interesado") repetiría el Teléfono de arriba:
+  // no se muestra, pero se llena solo con él y se guarda igual (lo usan la
+  // página de Registros, la búsqueda por teléfono y los reportes).
+  const ocultos = new Set(campoTelefono ? [campoTelefono.id] : [])
+  // Si el formulario separa Apellido paterno/Apellido materno/Nombre(s), un
+  // nombre completo (buscador, postulante web) no se reparte entre ellos: no
+  // hay forma confiable de saber dónde corta cada parte.
+  const tieneNombreEstructurado = campos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`))
+  const campoNombre = tieneNombreEstructurado ? undefined : campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
+    ?? campos.find((c) => c.tipo === 'texto_corto')
+
+  // ── Prellenado por teléfono ──
+  // Con solo el número (10 dígitos), se buscan sus datos de un registro
+  // previo en la campaña y se llenan nombre, apellidos, etc. Lo que llenó el
+  // prellenado se recuerda: si cambian el número, se reemplaza por los datos
+  // de la nueva persona, pero nunca se pisa lo que el agente ya escribió.
+  const prellenadoRef = useRef<Record<number, string>>({})
+  const ultimoBuscadoRef = useRef('')
+  const prellenar = useMutation({
+    mutationFn: (tel: string) => ccFormularioPublicoService.prellenar(token!, tel),
+    onSuccess: (d) => {
+      const anterior = prellenadoRef.current
+      setValores((v) => {
+        const next = { ...v }
+        const ids = new Set([...Object.keys(anterior), ...Object.keys(d.valores)].map(Number))
+        for (const id of ids) {
+          if (id === campoTelefono?.id) continue // el teléfono lo pone el agente
+          const actual = next[id]
+          const intacto = actual === undefined || actual === '' || actual === anterior[id]
+          if (intacto) next[id] = d.valores[id] ?? ''
+        }
+        return next
+      })
+      prellenadoRef.current = d.valores
+    },
+  })
+  const tel10 = (tel: string) => tel.replace(/\D/g, '').slice(-10)
+  const buscarSiCompleto = (tel: string) => {
+    if (tel.replace(/\D/g, '').length < 10 || tel10(tel) === ultimoBuscadoRef.current) return
+    ultimoBuscadoRef.current = tel10(tel)
+    prellenar.mutate(tel)
+  }
+  const cambiarTelefono = (tel: string) => {
+    setClienteTelefono(tel)
+    if (campoTelefono) setValor(campoTelefono.id, tel)
+    buscarSiCompleto(tel)
+  }
+  const telBuscado = prellenar.variables ? tel10(prellenar.variables) : ''
+
+  // Screen-pop: VICIdial manda el teléfono del que llama (?cliente=). En
+  // cuanto hay definición se copia al campo teléfono (ajuste de estado en
+  // render, no en un efecto) y se busca a la persona.
+  const [telefonoInicialPuesto, setTelefonoInicialPuesto] = useState(false)
+  if (def && !telefonoInicialPuesto) {
+    setTelefonoInicialPuesto(true)
+    if (cliente && campoTelefono) setValores((v) => ({ ...v, [campoTelefono.id]: cliente }))
+  }
   useEffect(() => {
-    if (!def) return
-    const campos = def.secciones.flatMap((s) => s.campos)
-    const campoTelefono = campos.find((c) => c.tipo === 'telefono')
-    // Si el formulario separa Apellido paterno/Apellido materno/Nombre(s) en
-    // campos independientes, no se reparte el nombre completo entre ellos
-    // (no hay forma confiable de saber dónde corta cada parte) — solo se
-    // precarga clienteNombre, que sí llega completo a CI_CLIENTE_NOMBRE.
-    const tieneNombreEstructurado = campos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`))
-    const campoNombre = tieneNombreEstructurado ? undefined : campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
-      ?? campos.find((c) => c.tipo === 'texto_corto')
-
-    setValores((v) => {
-      const next = { ...v }
-      if (campoTelefono && next[campoTelefono.id] === undefined && cliente) next[campoTelefono.id] = cliente
-      if (campoNombre && next[campoNombre.id] === undefined && matchCliente?.clienteNombre) next[campoNombre.id] = matchCliente.clienteNombre
-      return next
-    })
-    if (matchCliente?.clienteNombre && !clienteNombre) setClienteNombre(matchCliente.clienteNombre)
+    if (def && cliente) buscarSiCompleto(cliente)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [def, matchCliente, cliente])
+  }, [def, cliente])
 
-  const camposCapturables = (def?.secciones.flatMap((s) => s.campos) ?? []).filter((c) => !['titulo', 'separador', 'buscador'].includes(c.tipo))
+  const camposCapturables = campos.filter((c) => !['titulo', 'separador', 'buscador'].includes(c.tipo))
   const faltantes = camposCapturables.filter((c) => c.obligatorio && !valores[c.id] && valores[c.id] !== 0)
 
   // Al elegir un resultado del campo 'buscador' (mismo criterio que el panel
   // interno) — el canal no se vuelca aquí porque en modo externo no hay
   // selector visible de canal: siempre se usa canales[0] al guardar.
   const usarResultadoBuscador = (r: CCFormBuscadorResultado) => {
-    if (r.clienteNombre) setClienteNombre(r.clienteNombre)
-    if (r.clienteTelefono) setClienteTelefono(r.clienteTelefono)
-    const campos = def?.secciones.flatMap((s) => s.campos) ?? []
-    const tieneNombreEstructurado = campos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`))
-    const campoNombre = tieneNombreEstructurado ? undefined : campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`))
-      ?? campos.find((c) => c.tipo === 'texto_corto')
-    const campoTelefono = campos.find((c) => c.tipo === 'telefono')
+    if (r.clienteTelefono) cambiarTelefono(r.clienteTelefono)
     if (campoNombre && r.clienteNombre) setValor(campoNombre.id, r.clienteNombre)
-    if (campoTelefono && r.clienteTelefono) setValor(campoTelefono.id, r.clienteTelefono)
   }
 
   const guardar = useMutation({
     mutationFn: () => ccFormularioPublicoService.guardarRespuestas(token!, def!.versionId, {
       respuestas: camposCapturables.filter((c) => valores[c.id] !== undefined).map((c) => ({ campoId: c.id, valor: valores[c.id] as any })),
-      clienteNombre: clienteNombre || undefined,
+      // Sin nombre aparte: el backend lo arma de los campos (apellidos + nombres).
       clienteTelefono: clienteTelefono || undefined,
       canalId: canales[0]?.id,
       agenteId,
@@ -150,24 +169,31 @@ export default function FormularioPublicoPage() {
 
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-5 rounded-xl border border-gray-100 bg-gray-50 p-3.5">
-            <p className="mb-2 text-[0.72rem] font-semibold text-gray-500">Datos del cliente (se guardan con el registro)</p>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <label><span className={label}>Nombre</span><input className={field} value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} /></label>
-              <label><span className={label}>Teléfono</span><input className={field} value={clienteTelefono} onChange={(e) => setClienteTelefono(e.target.value)} /></label>
-            </div>
+            <label>
+              <span className={label}>Teléfono</span>
+              <div className="relative">
+                <input className={clsx(field, 'pr-9')} value={clienteTelefono} inputMode="tel" autoFocus
+                  placeholder="10 dígitos — si ya está registrado, se llenan sus datos"
+                  onChange={(e) => cambiarTelefono(e.target.value)} />
+                {prellenar.isPending && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-violet-500" />}
+              </div>
+            </label>
+            {prellenar.data && !prellenar.isPending && telBuscado && tel10(clienteTelefono) === telBuscado && (
+              <AvisoPrellenado d={prellenar.data} faltaNombre={tieneNombreEstructurado} />
+            )}
           </div>
 
           <div className="space-y-5">
             {def.secciones.map((s) => (
               <SeccionPublica key={s.id} seccion={s} token={token!} formularioId={def.formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
-                valores={valores} onChange={setValor} onSeleccionarBuscador={usarResultadoBuscador} />
+                valores={valores} onChange={setValor} onSeleccionarBuscador={usarResultadoBuscador} ocultos={ocultos} />
             ))}
           </div>
 
           <div className="mt-5 border-t border-gray-100 pt-4">
             {!!faltantes.length && (
               <p className="mb-2 text-[0.72rem] font-medium text-amber-600">
-                Pendientes: {faltantes.map((c) => c.etiqueta).join(', ')}
+                Pendientes: {faltantes.map((c) => (c.id === campoTelefono?.id ? 'Teléfono' : c.etiqueta)).join(', ')}
               </p>
             )}
             {!canales.length && (
@@ -182,6 +208,30 @@ export default function FormularioPublicoPage() {
       </div>
     </div>
   )
+}
+
+// Qué encontró el prellenado por teléfono.
+function AvisoPrellenado({ d, faltaNombre }: { d: CCFormPrellenado; faltaNombre: boolean }) {
+  const fecha = d.fecha ? new Date(d.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : null
+  if (d.origen === 'interaccion') {
+    return (
+      <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[0.75rem] text-emerald-800">
+        <b>Ya registrado:</b> {d.nombre ?? 'sin nombre'}
+        {fecha && <> · último contacto {fecha}</>}
+        {d.estatus && <> · {d.estatus}</>}
+        <span className="block text-emerald-700/80">Se llenaron sus datos; revísalos antes de guardar.</span>
+      </p>
+    )
+  }
+  if (d.origen === 'postulante') {
+    return (
+      <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-[0.75rem] text-blue-800">
+        <b>Se registró en la página web</b> como {d.nombre ?? 'sin nombre'}{fecha && <> ({fecha})</>}.
+        {faltaNombre && <span className="block text-blue-700/80">Captura sus apellidos y nombre(s) por separado.</span>}
+      </p>
+    )
+  }
+  return <p className="mt-2 text-[0.72rem] text-gray-400">Número nuevo: no hay registros previos con este teléfono.</p>
 }
 
 // Pantalla que reemplaza el formulario justo después de guardar — mismo
@@ -232,17 +282,18 @@ function AccionesPostGuardadoPantalla({ interaccionId, acciones }: { interaccion
   )
 }
 
-function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador }: {
+function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador, ocultos }: {
   seccion: CCFormPublicoSeccion; token: string; formularioId: number; cliente: string; agenteId: number | null; agenteNombre: string
   valores: Record<number, unknown>; onChange: (campoId: number, valor: unknown) => void
   onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
+  ocultos?: Set<number> // campos que se llenan solos desde arriba (no se muestran, sí se guardan)
 }) {
   return (
     <div>
       <p className="mb-0.5 text-sm font-bold text-gray-900">{seccion.titulo}</p>
       {seccion.descripcion && <p className="mb-3 text-[0.78rem] text-gray-500">{seccion.descripcion}</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {seccion.campos.map((c) => (
+        {seccion.campos.filter((c) => !ocultos?.has(c.id)).map((c) => (
           <div key={c.id} className={c.ancho === 'completo' || c.tipo === 'buscador' ? 'sm:col-span-2' : ''}>
             <CampoPublico campo={c} token={token} formularioId={formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
               valor={valores[c.id]} onChange={(v) => onChange(c.id, v)} onSeleccionarBuscador={onSeleccionarBuscador} />

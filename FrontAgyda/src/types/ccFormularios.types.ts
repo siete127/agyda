@@ -87,6 +87,17 @@ export interface CCFormRegistros {
   registros: CCFormRegistro[]
 }
 
+// GET /contact-center/formularios-publico/:token/prellenar?telefono= —
+// registro previo de esa persona. `valores` va por id de campo de la versión
+// actual (solo datos de identidad: nombre, apellidos, teléfono, correo…).
+export interface CCFormPrellenado {
+  origen: 'interaccion' | 'postulante' | null
+  nombre: string | null
+  fecha: string | null
+  estatus: string | null
+  valores: Record<number, string>
+}
+
 export interface CCFormularioDetalle extends CCFormulario {
   versiones: CCFormVersionResumen[]
 }

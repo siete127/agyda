@@ -241,6 +241,7 @@ router.get('/formularios-publico/:token', forms.getFormularioPublico);
 router.get('/formularios-publico/:token/canales-disponibles', forms.listCanalesDisponiblesPublico);
 router.get('/formularios-publico/:token/opciones-catalogo', forms.getOpcionesCatalogoDinamicoPublico);
 router.get('/formularios-publico/:token/buscador', forms.buscarRegistrosCampoBuscadorPublico);
+router.get('/formularios-publico/:token/prellenar', forms.prellenarPorTelefonoPublico);
 router.post('/formularios-publico/:token/buscador/registrar', forms.crearRegistroCampoBuscadorPublico);
 router.post('/formularios-publico/:token/versiones/:versionId/respuestas', forms.guardarRespuestasPublico);
 
