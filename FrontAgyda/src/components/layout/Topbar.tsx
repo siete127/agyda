@@ -41,6 +41,27 @@ const GESTION_MIS_USUARIOS = new Set([
 ])
 const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
 
+// Los formularios externos de Contact Center (/formulario-publico/<token>)
+// están pensados para que VICIdial los abra al conectar una llamada,
+// inyectando ?cliente=&agente=&agenteId= con los datos reales de esa
+// llamada. Un enlace del encabezado es una URL fija sin esos datos —así que
+// si alguien apunta un enlace ahí (para abrirlo manualmente, sin una llamada
+// real de por medio), se completa con el usuario de la sesión de AGYDA en
+// vez de dejar el campo "Asesor" vacío. No toca la URL si ya trae ?agente=
+// (para no pisar un enlace armado a mano con otro agente a propósito), ni si
+// no apunta a /formulario-publico/ (el resto de enlaces no debe verse afectado).
+function urlConAgenteSiAplica(url: string, user: { id: number; nombres: string } | null | undefined): string {
+  if (!user || !url.includes('/formulario-publico/')) return url
+  try {
+    const u = new URL(url)
+    if (u.searchParams.has('agente')) return url
+    u.searchParams.set('agente', user.nombres)
+    u.searchParams.set('agenteId', String(user.id))
+    return u.toString()
+  } catch {
+    return url
+  }
+}
 
 export function Topbar() {
   const { sidebarCollapsed, toggleSidebar, setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
@@ -314,10 +335,11 @@ export function Topbar() {
             en pestaña nueva o en el panel flotante persistente según su modo. */}
         {enlacesVisibles.map((e) => {
           const Icon = ENLACE_ICONOS[e.icono] ?? ENLACE_ICONOS.link
+          const url = urlConAgenteSiAplica(e.url, user)
           const onClick =
-            e.modo === 'flotante' ? () => abrirEnlaceFlotante({ id: e.id, label: e.label, url: e.url, color: e.color }) :
-            e.modo === 'ventana' ? () => abrirEnVentana(e.url, e.id)
-            : () => window.open(e.url, '_blank', 'noopener,noreferrer')
+            e.modo === 'flotante' ? () => abrirEnlaceFlotante({ id: e.id, label: e.label, url, color: e.color }) :
+            e.modo === 'ventana' ? () => abrirEnVentana(url, e.id)
+            : () => window.open(url, '_blank', 'noopener,noreferrer')
           const modoLabel = e.modo === 'flotante' ? ' (panel flotante)' : e.modo === 'ventana' ? ' (ventana)' : ''
           return (
             <button
