@@ -164,11 +164,10 @@ async function registrarIngresoFinanzas(pool, { clienteNombre, folioFactura, mon
 async function registrarPago(tenantKey, facturaId, datos) {
   const pool = await databaseService.getPool(tenantKey);
   const fr = await pool.request().input('id', sql.Int, facturaId)
-    .query(`SELECT f.*, ISNULL(c.CONT_NOMBRE, c2.CL_NOMBRE) clienteNombre,
+    .query(`SELECT f.*, c.CONT_NOMBRE clienteNombre,
                    c.CONT_RFC rfc, c.CONT_RAZON_SOCIAL razon, c.CONT_REGIMEN_FISCAL reg, c.CONT_CP_FISCAL cp
             FROM dbo.FACTURAS f
             LEFT JOIN dbo.CRM_CONTACTOS c ON c.CONT_ID = f.FAC_CLIENTE_ID
-            LEFT JOIN dbo.CLIENTES c2 ON c2.CL_ID = f.FAC_CLIENTE_ID
             WHERE f.FAC_ID = @id`);
   const f = fr.recordset[0];
   if (!f) throw new Error('Factura no encontrada');

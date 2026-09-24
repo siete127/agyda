@@ -3,7 +3,42 @@ import type {
   PortalResumen, PortalProyecto, PortalCotizacion, PortalFactura, PortalDocumento, PortalCita, PortalIncidencia,
 } from '@/types/portalCliente.types'
 
+export interface PortalUsuario {
+  id: number
+  neusId: number
+  esAncla: boolean
+  activo: boolean
+  creadoEn: string
+  nombre: string
+  usuario: string
+  loginActivo: boolean
+  subrolId: number
+  subrolNombre: string
+}
+
 export const portalClienteService = {
+  async getMisAcciones(): Promise<string[]> {
+    const { data } = await api.get('/portal-cliente/mis-acciones')
+    return (data?.data ?? []) as string[]
+  },
+  async getSubrolesDisponibles(): Promise<{ id: number; nombre: string }[]> {
+    const { data } = await api.get('/portal-cliente/subroles-disponibles')
+    return (data?.data ?? []) as { id: number; nombre: string }[]
+  },
+  async getUsuarios(): Promise<PortalUsuario[]> {
+    const { data } = await api.get('/portal-cliente/usuarios')
+    return (data?.data ?? []) as PortalUsuario[]
+  },
+  async crearUsuario(body: { nombre: string; correo: string; password?: string; subrolId: number }): Promise<{ neusId: number }> {
+    const { data } = await api.post('/portal-cliente/usuarios', body)
+    return data?.data
+  },
+  async actualizarUsuario(id: number, body: { subrolId?: number; activo?: boolean }): Promise<void> {
+    await api.put(`/portal-cliente/usuarios/${id}`, body)
+  },
+  async eliminarUsuario(id: number): Promise<void> {
+    await api.delete(`/portal-cliente/usuarios/${id}`)
+  },
   async getResumen(): Promise<PortalResumen> {
     const { data } = await api.get('/portal-cliente/resumen')
     return data?.data as PortalResumen

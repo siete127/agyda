@@ -5,12 +5,24 @@ const casoController = require('./casoController');
 const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
 const notificationService = require('../services/notificationService');
 const { sanitizeFilename, decryptBuffer } = require('../utils/cryptoDocs');
+const { getPortalRolAcciones } = require('../middleware/portalCliente');
 
 // Portal del cliente (login real, NEUS_TIPOUSUARIO='CL') — mismo shape de
 // datos que crmPortalController.js (el portal por liga/token), pero
 // identificando al contacto vía requirePortalCliente (req.contacto) en vez
 // de un token de query/body. Separado en un endpoint por sección en vez de
 // un solo blob, para que cada pantalla del portal pueda refrescar la suya.
+
+// GET /mis-acciones — acciones del sub-rol del usuario logueado, para que el
+// frontend gatee botones/secciones por acción (no por nombre de rol).
+exports.getMisAcciones = async (req, res) => {
+  try {
+    const acciones = await getPortalRolAcciones(req.contacto.subrolId, req.user?.empresa);
+    res.json({ success: true, data: Array.from(acciones) });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
 
 // GET /resumen — KPIs + actividad reciente para "Principal".
 exports.getResumen = async (req, res) => {

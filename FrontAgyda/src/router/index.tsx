@@ -38,6 +38,7 @@ const PortalClienteCanalesPage = lz(() => import('@/pages/portal-cliente/PortalC
 // Facturas: diseño de la rama de Betty, reconectado al servicio real de
 // main (portalCliente.service.ts) en vez de a datos mock.
 const PortalClienteFacturasPage = lz(() => import('@/pages/portal-cliente/PortalClienteFacturasPage'), 'PortalClienteFacturasPage')
+const PortalClienteUsuariosPage = lz(() => import('@/pages/portal-cliente/PortalClienteUsuariosPage'), 'PortalClienteUsuariosPage')
 import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
 const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        'TicketsPage')
@@ -232,6 +233,7 @@ export const router = createBrowserRouter([
           // se deja activa mientras se decide si conecta a datos reales.
           { path: '/portal-cliente/canales', element: wrap(<PortalClienteCanalesPage />) },
           { path: '/portal-cliente/facturas', element: wrap(<PortalClienteFacturasPage />) },
+          { path: '/portal-cliente/usuarios', element: wrap(<PortalClienteUsuariosPage />) },
         ],
       },
 

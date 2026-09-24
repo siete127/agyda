@@ -36,7 +36,7 @@ exports.solicitar = async (req, res) => {
     const opoRs = await pool.request()
       .input('id', sql.Int, opoId)
       .query(`
-        SELECT o.OPO_ID as id, o.OPO_NOMBRE as nombre, o.OPO_CLIENTE_ID as clienteId,
+        SELECT o.OPO_ID as id, o.OPO_NOMBRE as nombre, o.OPO_CONTACTO_ID as contactoId,
                c.CONT_NOMBRE as contactoNombre, c.CONT_EMPRESA as contactoEmpresa, c.CONT_CORREO as contactoCorreo
         FROM CRM_OPORTUNIDADES o
         LEFT JOIN CRM_CONTACTOS c ON c.CONT_ID = o.OPO_CONTACTO_ID
@@ -74,8 +74,8 @@ exports.solicitar = async (req, res) => {
   }
 };
 
-// Público: valida el token y regresa los catálogos + datos precargados si
-// el cliente ya existe (OPO_CLIENTE_ID ya vinculado).
+// Público: valida el token y regresa los catálogos + datos precargados del
+// contacto que generó la oportunidad (si ya tiene datos fiscales cargados).
 exports.getDatos = async (req, res) => {
   try {
     const { token } = req.query;
@@ -86,19 +86,19 @@ exports.getDatos = async (req, res) => {
 
     const opoRs = await pool.request()
       .input('id', sql.Int, tk.oportunidadId)
-      .query(`SELECT OPO_NOMBRE as nombre, OPO_CLIENTE_ID as clienteId FROM CRM_OPORTUNIDADES WHERE OPO_ID=@id`);
+      .query(`SELECT OPO_NOMBRE as nombre, OPO_CONTACTO_ID as contactoId FROM CRM_OPORTUNIDADES WHERE OPO_ID=@id`);
     const opo = opoRs.recordset[0];
 
     let cliente = null;
-    if (opo?.clienteId) {
+    if (opo?.contactoId) {
       const clRs = await pool.request()
-        .input('id', sql.Int, opo.clienteId)
+        .input('id', sql.Int, opo.contactoId)
         .query(`
-          SELECT CL_ID as id, CL_EMPRESA as empresa, CL_RFC as rfc, CL_RAZON_SOCIAL as razonSocial,
-                 CL_REGIMEN_FISCAL as regimenFiscal, CL_USO_CFDI as usoCfdi, CL_CP as cp,
-                 CL_CALLE as calle, CL_NUM_EXT as numExt, CL_NUM_INT as numInt, CL_COLONIA as colonia,
-                 CL_CIUDAD as ciudad, CL_PAIS as pais, CL_CORREO_FACTURACION as correoFacturacion
-          FROM CLIENTES WHERE CL_ID=@id
+          SELECT CONT_ID as id, CONT_EMPRESA as empresa, CONT_RFC as rfc, CONT_RAZON_SOCIAL as razonSocial,
+                 CONT_REGIMEN_FISCAL as regimenFiscal, CONT_USO_CFDI as usoCfdi, CONT_CP_FISCAL as cp,
+                 CONT_CALLE as calle, CONT_NUM_EXT as numExt, CONT_NUM_INT as numInt, CONT_COLONIA as colonia,
+                 CONT_CIUDAD as ciudad, CONT_PAIS as pais, CONT_CORREO_FACTURACION as correoFacturacion
+          FROM CRM_CONTACTOS WHERE CONT_ID=@id
         `);
       cliente = clRs.recordset[0] || null;
     }
@@ -118,8 +118,10 @@ exports.getDatos = async (req, res) => {
   }
 };
 
-// Público: recibe el formulario y hace INSERT o UPDATE en CLIENTES según si
-// la oportunidad ya tenía un cliente vinculado.
+// Público: recibe el formulario y actualiza CRM_CONTACTOS. Promueve el
+// contacto que generó la oportunidad (OPO_CONTACTO_ID) a cliente formal en
+// vez de crear un registro nuevo — solo si la oportunidad no tuviera
+// contacto (caso raro) se inserta uno.
 exports.enviar = async (req, res) => {
   try {
     const { token, empresa, rfc, razonSocial, regimenFiscal, usoCfdi, cp, calle, numExt, numInt, colonia, ciudad, pais, correoFacturacion } = req.body || {};
@@ -135,7 +137,7 @@ exports.enviar = async (req, res) => {
 
     const opoRs = await pool.request()
       .input('id', sql.Int, tk.oportunidadId)
-      .query(`SELECT OPO_CLIENTE_ID as clienteId FROM CRM_OPORTUNIDADES WHERE OPO_ID=@id`);
+      .query(`SELECT OPO_CONTACTO_ID as contactoId FROM CRM_OPORTUNIDADES WHERE OPO_ID=@id`);
     const opo = opoRs.recordset[0];
 
     const transaction = new sql.Transaction(pool);
@@ -143,11 +145,11 @@ exports.enviar = async (req, res) => {
       await transaction.begin();
 
       const campos = { empresa, rfc, razonSocial, regimenFiscal, usoCfdi, cp, calle, numExt, numInt, colonia, ciudad, pais, correoFacturacion: correoFacturacion || tk.email };
-      let clienteId = opo?.clienteId || null;
+      let contactoId = opo?.contactoId || null;
 
-      if (clienteId) {
+      if (contactoId) {
         await transaction.request()
-          .input('id', sql.Int, clienteId)
+          .input('id', sql.Int, contactoId)
           .input('empresa', sql.NVarChar, campos.empresa || null)
           .input('rfc', sql.NVarChar, campos.rfc)
           .input('razonSocial', sql.NVarChar, campos.razonSocial)
@@ -162,18 +164,19 @@ exports.enviar = async (req, res) => {
           .input('pais', sql.NVarChar, campos.pais || null)
           .input('correoFacturacion', sql.NVarChar, campos.correoFacturacion)
           .query(`
-            UPDATE CLIENTES SET
-              CL_EMPRESA=ISNULL(@empresa, CL_EMPRESA), CL_RFC=@rfc, CL_RAZON_SOCIAL=@razonSocial,
-              CL_REGIMEN_FISCAL=@regimenFiscal, CL_USO_CFDI=@usoCfdi, CL_CP=@cp,
-              CL_CALLE=ISNULL(@calle, CL_CALLE), CL_NUM_EXT=ISNULL(@numExt, CL_NUM_EXT),
-              CL_NUM_INT=ISNULL(@numInt, CL_NUM_INT), CL_COLONIA=ISNULL(@colonia, CL_COLONIA),
-              CL_CIUDAD=ISNULL(@ciudad, CL_CIUDAD), CL_PAIS=ISNULL(@pais, CL_PAIS),
-              CL_CORREO_FACTURACION=@correoFacturacion
-            WHERE CL_ID=@id
+            UPDATE CRM_CONTACTOS SET
+              CONT_EMPRESA=ISNULL(@empresa, CONT_EMPRESA), CONT_RFC=@rfc, CONT_RAZON_SOCIAL=@razonSocial,
+              CONT_REGIMEN_FISCAL=@regimenFiscal, CONT_USO_CFDI=@usoCfdi, CONT_CP_FISCAL=@cp,
+              CONT_CALLE=ISNULL(@calle, CONT_CALLE), CONT_NUM_EXT=ISNULL(@numExt, CONT_NUM_EXT),
+              CONT_NUM_INT=ISNULL(@numInt, CONT_NUM_INT), CONT_COLONIA=ISNULL(@colonia, CONT_COLONIA),
+              CONT_CIUDAD=ISNULL(@ciudad, CONT_CIUDAD), CONT_PAIS=ISNULL(@pais, CONT_PAIS),
+              CONT_CORREO_FACTURACION=@correoFacturacion, CONT_ES_CLIENTE=1
+            WHERE CONT_ID=@id
           `);
       } else {
         const insRs = await transaction.request()
           .input('empresa', sql.NVarChar, campos.empresa || campos.razonSocial)
+          .input('nombre', sql.NVarChar, campos.razonSocial)
           .input('rfc', sql.NVarChar, campos.rfc)
           .input('razonSocial', sql.NVarChar, campos.razonSocial)
           .input('regimenFiscal', sql.NVarChar, campos.regimenFiscal)
@@ -187,18 +190,18 @@ exports.enviar = async (req, res) => {
           .input('pais', sql.NVarChar, campos.pais || null)
           .input('correoFacturacion', sql.NVarChar, campos.correoFacturacion)
           .query(`
-            INSERT INTO CLIENTES (CL_EMPRESA, CL_RFC, CL_RAZON_SOCIAL, CL_REGIMEN_FISCAL, CL_USO_CFDI, CL_CP,
-              CL_CALLE, CL_NUM_EXT, CL_NUM_INT, CL_COLONIA, CL_CIUDAD, CL_PAIS, CL_CORREO_FACTURACION, CL_ACTIVO, CL_FECHA_REGISTRO)
-            VALUES (@empresa, @rfc, @razonSocial, @regimenFiscal, @usoCfdi, @cp,
-              @calle, @numExt, @numInt, @colonia, @ciudad, @pais, @correoFacturacion, 1, GETDATE());
+            INSERT INTO CRM_CONTACTOS (CONT_NOMBRE, CONT_EMPRESA, CONT_RFC, CONT_RAZON_SOCIAL, CONT_REGIMEN_FISCAL, CONT_USO_CFDI, CONT_CP_FISCAL,
+              CONT_CALLE, CONT_NUM_EXT, CONT_NUM_INT, CONT_COLONIA, CONT_CIUDAD, CONT_PAIS, CONT_CORREO_FACTURACION, CONT_ACTIVO, CONT_FECHA, CONT_ES_CLIENTE)
+            VALUES (@nombre, @empresa, @rfc, @razonSocial, @regimenFiscal, @usoCfdi, @cp,
+              @calle, @numExt, @numInt, @colonia, @ciudad, @pais, @correoFacturacion, 1, GETDATE(), 1);
             SELECT SCOPE_IDENTITY() as id;
           `);
-        clienteId = insRs.recordset[0]?.id || null;
+        contactoId = insRs.recordset[0]?.id || null;
 
         await transaction.request()
           .input('opoId', sql.Int, tk.oportunidadId)
-          .input('clienteId', sql.Int, clienteId)
-          .query(`UPDATE CRM_OPORTUNIDADES SET OPO_CLIENTE_ID=@clienteId WHERE OPO_ID=@opoId`);
+          .input('contactoId', sql.Int, contactoId)
+          .query(`UPDATE CRM_OPORTUNIDADES SET OPO_CONTACTO_ID=@contactoId WHERE OPO_ID=@opoId`);
       }
 
       await transaction.request()
@@ -206,7 +209,7 @@ exports.enviar = async (req, res) => {
         .query(`UPDATE CRM_SOLICITUD_FISCAL_TOKENS SET SFT_COMPLETADO=1, SFT_FECHA_COMPLETADO=GETDATE(), SFT_ACTIVO=0 WHERE SFT_ID=@id`);
 
       await transaction.commit();
-      res.json({ success: true, message: 'Datos fiscales recibidos correctamente', data: { clienteId } });
+      res.json({ success: true, message: 'Datos fiscales recibidos correctamente', data: { contactoId } });
     } catch (txErr) {
       try { await transaction.rollback(); } catch (rErr) { /* ignore */ }
       throw txErr;
