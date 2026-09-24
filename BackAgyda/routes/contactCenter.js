@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const { requireActionAccess } = require('../middleware/moduleAccess');
 const { uploadCcMedia } = require('../middleware/ccMediaUpload');
+const { postulanteFormRateLimit } = require('../middleware/publicFormRateLimit');
 const inter = require('../controllers/ccInteraccionesController');
 const cfg = require('../controllers/ccConfigController');
 const sim = require('../controllers/ccSimuladorController');
@@ -15,7 +16,7 @@ const M = 'contact-center';
 // una campaña (número de WhatsApp conectado + URLs de Facebook/Instagram
 // capturadas a mano). Nunca expone tokens, credenciales, ni el CM2_ID interno.
 router.get('/publico/campanias/:slug/contacto', cfg.getContactoPublicoCampania);
-router.post('/publico/campanias/:slug/postulantes', cfg.registrarPostulantePublico);
+router.post('/publico/campanias/:slug/postulantes', postulanteFormRateLimit, cfg.registrarPostulantePublico);
 
 // Formulario de Atención en modo EXTERNO — se resuelve por FR_TOKEN_PUBLICO,
 // sin JWT (pensado para que VICIdial abra la URL directo al conectar una
@@ -119,8 +120,10 @@ router.get('/campanias/:id/tipificaciones-excel', authenticateToken, requireActi
 // acciones granulares, otorgable independientemente en Permisos.
 const MP = 'postulantes';
 router.get('/postulantes', authenticateToken, requireActionAccess(MP, 'ver'), cfg.listPostulantesGestion);
+router.get('/postulantes/excel', authenticateToken, requireActionAccess(MP, 'ver'), cfg.exportarPostulantesGestion);
 router.post('/postulantes', authenticateToken, requireActionAccess(MP, 'crear'), cfg.crearPostulanteManual);
 router.get('/postulantes/campanias', authenticateToken, requireActionAccess(MP, 'ver'), cfg.listCampaniasParaPostulante);
+router.post('/postulantes/tipificacion-bulk', authenticateToken, requireActionAccess(MP, 'tipificar'), cfg.tipificarPostulantesBulk);
 router.post('/postulantes/:id/tipificacion', authenticateToken, requireActionAccess(MP, 'tipificar'), cfg.tipificarPostulante);
 router.get('/postulantes/:id/notas', authenticateToken, requireActionAccess(MP, 'notas'), cfg.listNotasPostulante);
 router.post('/postulantes/:id/notas', authenticateToken, requireActionAccess(MP, 'notas'), cfg.crearNotaPostulante);

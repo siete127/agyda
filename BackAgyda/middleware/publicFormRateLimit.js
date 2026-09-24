@@ -15,4 +15,16 @@ const leadFormRateLimit = rateLimit({
   message: { ok: false, mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos.' },
 });
 
-module.exports = { leadFormRateLimit };
+// Mismo criterio para el formulario público de postulación (Totis y
+// cualquier otra campaña con registro abierto): sin límite, nada impedía que
+// el mismo formulario se reenviara en loop y llenara CCO_CAMPANIA_POSTULANTES
+// de filas duplicadas.
+const postulanteFormRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Demasiados intentos. Intenta de nuevo en unos minutos.' },
+});
+
+module.exports = { leadFormRateLimit, postulanteFormRateLimit };
