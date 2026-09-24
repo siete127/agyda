@@ -25,6 +25,12 @@
                 <p>Completa tus datos para registrarte</p>
             </div>
 
+            <div class="wizard-progress">
+                <span class="step-dot is-active" data-dot="1"></span>
+                <span class="step-dot" data-dot="2"></span>
+                <span class="step-dot" data-dot="3"></span>
+            </div>
+
             <div id="registroAlert" class="alert alert-error" style="display:none;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                 <span id="registroAlertText">Completa los campos obligatorios.</span>
@@ -36,32 +42,210 @@
             </div>
 
             <form id="registroForm" novalidate>
-                <div class="form-field">
-                    <label for="regNombre">Nombre completo <span class="required">*</span></label>
-                    <input type="text" id="regNombre" class="input" placeholder="Ej. Juan Pérez López" autocomplete="name" required>
+
+                <!-- Honeypot: campo invisible para personas. Si llega lleno, es un bot. -->
+                <div class="hp-field" aria-hidden="true">
+                    <label for="regWebsite">No llenar este campo</label>
+                    <input type="text" id="regWebsite" name="website" tabindex="-1" autocomplete="off">
                 </div>
 
-                <div class="form-field">
-                    <label for="regTelefono">Teléfono <span class="required">*</span></label>
-                    <input type="tel" id="regTelefono" class="input" placeholder="Ej. 55 1234 5678" autocomplete="tel" required>
-                </div>
+                <!-- Paso 1: lo mínimo para registrar -->
+                <section class="wizard-step is-active" data-step="1">
+                    <p class="wizard-step-title">Paso 1 de 3 · Tus datos</p>
+                    <p class="wizard-step-subtitle">Solo necesitamos tu nombre y teléfono para registrarte.</p>
 
-                <button type="submit" class="btn-primary">
-                    Enviar postulación
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                </button>
+                    <div class="form-field">
+                        <label for="regNombre">Nombre completo <span class="required">*</span></label>
+                        <input type="text" id="regNombre" class="input" placeholder="Ej. Juan Pérez López" autocomplete="name" required>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="regTelefono">Teléfono <span class="required">*</span></label>
+                        <input type="tel" id="regTelefono" class="input" placeholder="55 1234 5678" autocomplete="tel" inputmode="numeric" maxlength="13" required>
+                        <span class="hint" id="regTelefonoHint"></span>
+                    </div>
+
+                    <div class="wizard-nav">
+                        <button type="button" class="btn-primary" data-next>
+                            Continuar
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Paso 2: opcional, se puede saltar -->
+                <section class="wizard-step" data-step="2">
+                    <p class="wizard-step-title">Paso 2 de 3 · Correo y redes (opcional)</p>
+                    <p class="wizard-step-subtitle">Si tienes, nos ayuda a contactarte más fácil. Puedes saltarlo.</p>
+
+                    <div class="form-field">
+                        <label for="regCorreo">Correo electrónico</label>
+                        <input type="email" id="regCorreo" class="input" placeholder="tucorreo@ejemplo.com" autocomplete="email">
+                    </div>
+
+                    <div class="form-field">
+                        <label>Redes sociales</label>
+                        <div class="redes-chips" id="redesChips"></div>
+                        <div id="redesUsuarios"></div>
+                        <span class="hint">Toca la red que uses y escribe tu usuario o enlace.</span>
+                    </div>
+
+                    <div class="wizard-nav">
+                        <button type="button" class="btn-secondary" data-prev>Atrás</button>
+                        <button type="button" class="btn-primary" data-next>
+                            Continuar
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Paso 3: preferencia de contacto, también opcional -->
+                <section class="wizard-step" data-step="3">
+                    <p class="wizard-step-title">Paso 3 de 3 · ¿Cuándo te contactamos?</p>
+                    <p class="wizard-step-subtitle">Opcional — si no eliges nada, te contactamos en cuanto podamos.</p>
+
+                    <div class="form-field">
+                        <label>¿Por dónde prefieres que te contactemos?</label>
+                        <select id="regMedioContacto" class="input">
+                            <option value="">Sin preferencia</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="messenger">Messenger</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="llamada">Llamada</option>
+                        </select>
+                    </div>
+
+                    <div class="form-field" style="display:flex; gap:12px;">
+                        <div style="flex:1;">
+                            <label for="regDiaContacto">Día para contactarte</label>
+                            <select id="regDiaContacto" class="input">
+                                <option value="">Sin preferencia</option>
+                                <option value="lunes">Lunes</option>
+                                <option value="martes">Martes</option>
+                                <option value="miercoles">Miércoles</option>
+                                <option value="jueves">Jueves</option>
+                                <option value="viernes">Viernes</option>
+                                <option value="sabado">Sábado</option>
+                                <option value="cualquiera">Cualquier día</option>
+                            </select>
+                        </div>
+                        <div style="flex:1;">
+                            <label for="regHoraContacto">Hora aproximada</label>
+                            <input type="time" id="regHoraContacto" class="input">
+                        </div>
+                    </div>
+
+                    <div class="wizard-nav">
+                        <button type="button" class="btn-secondary" data-prev>Atrás</button>
+                        <button type="submit" class="btn-primary" id="submitBtn">
+                            <span id="submitBtnText">Enviar postulación</span>
+                            <svg id="submitBtnIcon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
+                    </div>
+                </section>
             </form>
         </div>
     </main>
 
     <script>
+        // --- WIZARD: navegación entre pasos ---
+        const steps = Array.from(document.querySelectorAll('.wizard-step'));
+        const dots = Array.from(document.querySelectorAll('.step-dot'));
+        let pasoActual = 1;
+
+        function irAPaso(n) {
+            pasoActual = n;
+            steps.forEach((s) => s.classList.toggle('is-active', Number(s.dataset.step) === n));
+            dots.forEach((d) => {
+                const num = Number(d.dataset.dot);
+                d.classList.toggle('is-active', num === n);
+                d.classList.toggle('is-done', num < n);
+            });
+        }
+
+        document.querySelectorAll('[data-next]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (pasoActual === 1 && !validarPaso1()) return;
+                irAPaso(Math.min(3, pasoActual + 1));
+            });
+        });
+        document.querySelectorAll('[data-prev]').forEach((btn) => {
+            btn.addEventListener('click', () => irAPaso(Math.max(1, pasoActual - 1)));
+        });
+
+        function validarPaso1() {
+            const nombre = document.getElementById('regNombre').value.trim();
+            const digitos = document.getElementById('regTelefono').value.replace(/\D/g, '');
+            if (!nombre) {
+                mostrarError('Escribe tu nombre completo.');
+                return false;
+            }
+            if (digitos.length < 10) {
+                mostrarError('Ingresa un teléfono válido (10 dígitos).');
+                return false;
+            }
+            ocultarAlertas();
+            return true;
+        }
+
+        // --- MÁSCARA DE TELÉFONO: "55 1234 5678" mientras se escribe ---
+        const telInput = document.getElementById('regTelefono');
+        const telHint = document.getElementById('regTelefonoHint');
+        telInput.addEventListener('input', () => {
+            const digitos = telInput.value.replace(/\D/g, '').slice(0, 10);
+            let formateado = digitos;
+            if (digitos.length > 2) formateado = `${digitos.slice(0, 2)} ${digitos.slice(2)}`;
+            if (digitos.length > 6) formateado = `${digitos.slice(0, 2)} ${digitos.slice(2, 6)} ${digitos.slice(6)}`;
+            telInput.value = formateado;
+            telHint.textContent = digitos.length > 0 && digitos.length < 10 ? `Faltan ${10 - digitos.length} dígitos` : '';
+        });
+
+        // --- REDES SOCIALES: chips con input que aparece solo si está activo ---
+        const REDES_OPCIONES = ['Facebook', 'Instagram', 'WhatsApp', 'TikTok'];
+        const redesChips = document.getElementById('redesChips');
+        const redesUsuarios = document.getElementById('redesUsuarios');
+        const redesActivas = new Map();
+
+        REDES_OPCIONES.forEach((red) => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'red-chip';
+            chip.textContent = red;
+            chip.addEventListener('click', () => toggleRed(red, chip));
+            redesChips.appendChild(chip);
+        });
+
+        function toggleRed(red, chip) {
+            if (redesActivas.has(red)) {
+                redesActivas.get(red).wrapper.remove();
+                redesActivas.delete(red);
+                chip.classList.remove('is-activo');
+                return;
+            }
+            const wrapper = document.createElement('div');
+            wrapper.className = 'form-field red-chip-usuario';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'input';
+            input.placeholder = `Tu usuario o enlace de ${red}`;
+            wrapper.appendChild(input);
+            redesUsuarios.appendChild(wrapper);
+            redesActivas.set(red, { wrapper, input });
+            chip.classList.add('is-activo');
+            input.focus();
+        }
+
+        function getRedesSociales() {
+            return Array.from(redesActivas.entries())
+                .map(([red, { input }]) => ({ red, usuario: input.value.trim() }))
+                .filter((r) => r.usuario !== '');
+        }
+
         // --- REGISTRO ---
-        // Envía nombre/teléfono al backend real de AGYDA/Omnicanal (misma
-        // campaña "totis" que ya consume contacto.html) y solo entonces
+        // Envía nombre/teléfono/correo/redes al backend real de AGYDA/Omnicanal
+        // (misma campaña "totis" que ya consume contacto.html) y solo entonces
         // redirige — si el guardado falla, el postulante se entera en vez de
-        // perder sus datos en silencio. Correo y redes sociales se quitaron
-        // del formulario (solo se pide lo mínimo); el backend los sigue
-        // aceptando como opcionales si algún día se reactivan.
+        // perder sus datos en silencio.
         const API_BASE = 'https://agyda.ardabytec.vip';
         const CAMPANIA_SLUG = 'totis';
 
@@ -69,46 +253,66 @@
         const registroAlert = document.getElementById('registroAlert');
         const registroAlertText = document.getElementById('registroAlertText');
         const registroSuccess = document.getElementById('registroSuccess');
-        const submitBtn = registroForm.querySelector('button[type="submit"]');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitBtnText = document.getElementById('submitBtnText');
+        const submitBtnIcon = document.getElementById('submitBtnIcon');
+
+        function mostrarError(msg) {
+            registroSuccess.style.display = 'none';
+            registroAlertText.textContent = msg;
+            registroAlert.style.display = 'flex';
+        }
+        function ocultarAlertas() {
+            registroAlert.style.display = 'none';
+            registroSuccess.style.display = 'none';
+        }
 
         registroForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const nombre = document.getElementById('regNombre').value.trim();
-            const telefono = document.getElementById('regTelefono').value.trim();
+            ocultarAlertas();
 
-            registroAlert.style.display = 'none';
-            registroSuccess.style.display = 'none';
-
-            if (!nombre || !telefono) {
-                registroAlertText.textContent = 'Nombre y teléfono son obligatorios.';
-                registroAlert.style.display = 'flex';
+            // Honeypot: si un bot llenó este campo oculto, se finge éxito sin
+            // pegarle al backend — no hay que darle pistas de que fue detectado.
+            if (document.getElementById('regWebsite').value.trim() !== '') {
+                registroSuccess.style.display = 'flex';
                 return;
             }
 
+            const nombre = document.getElementById('regNombre').value.trim();
+            const telefono = document.getElementById('regTelefono').value.trim();
+            const correo = document.getElementById('regCorreo').value.trim();
+            const redesSociales = getRedesSociales();
+            const medioContacto = document.getElementById('regMedioContacto').value;
+            const diaContacto = document.getElementById('regDiaContacto').value;
+            const horaContacto = document.getElementById('regHoraContacto').value;
+
             const telefonoDigitos = telefono.replace(/\D/g, '');
-            if (telefonoDigitos.length < 10) {
-                registroAlertText.textContent = 'Ingresa un teléfono válido (al menos 10 dígitos).';
-                registroAlert.style.display = 'flex';
+            if (!nombre || telefonoDigitos.length < 10) {
+                irAPaso(1);
+                mostrarError('Revisa tu nombre y teléfono antes de enviar.');
                 return;
             }
 
             submitBtn.disabled = true;
+            submitBtnText.textContent = 'Enviando...';
+            submitBtnIcon.outerHTML = '<span class="spinner-inline" id="submitBtnIcon"></span>';
             try {
                 const resp = await fetch(`${API_BASE}/api/contact-center/publico/campanias/${CAMPANIA_SLUG}/postulantes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nombre, telefono: telefonoDigitos }),
+                    body: JSON.stringify({ nombre, telefono: telefonoDigitos, correo, redesSociales, medioContacto, diaContacto, horaContacto }),
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok || !data.success) {
                     throw new Error(data.message || 'No se pudo registrar la postulación.');
                 }
                 registroSuccess.style.display = 'flex';
-                window.location.href = 'contacto.html';
+                submitBtnText.textContent = '¡Listo!';
+                setTimeout(() => { window.location.href = 'contacto.html'; }, 1400);
             } catch (err) {
-                registroAlertText.textContent = err.message || 'Ocurrió un error al enviar tu postulación. Intenta de nuevo.';
-                registroAlert.style.display = 'flex';
+                mostrarError(err.message || 'Ocurrió un error al enviar tu postulación. Intenta de nuevo.');
                 submitBtn.disabled = false;
+                submitBtnText.textContent = 'Enviar postulación';
             }
         });
     </script>

@@ -739,6 +739,124 @@ textarea.input {
 }
 
 /* ==========================================
+   WIZARD DE PASOS (registro de postulación)
+   ========================================== */
+.wizard-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+
+.wizard-progress .step-dot {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--borde);
+  transition: background-color 0.25s ease;
+}
+
+.wizard-progress .step-dot.is-done,
+.wizard-progress .step-dot.is-active {
+  background: var(--verde);
+}
+
+.wizard-step {
+  display: none;
+}
+
+.wizard-step.is-active {
+  display: block;
+}
+
+.wizard-step-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--texto-principal);
+  margin-bottom: 3px;
+}
+
+.wizard-step-subtitle {
+  font-size: 12.5px;
+  color: var(--texto-secundario);
+  margin-bottom: 18px;
+}
+
+.wizard-nav {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.wizard-nav .btn-secondary,
+.wizard-nav .btn-primary {
+  width: auto;
+  flex: 1;
+}
+
+/* Chips de redes sociales — reemplaza las filas select+input+borrar: un
+   toggle por red y, solo si está activo, un input de usuario/enlace. Menos
+   fricción para quien solo tiene una red (el caso más común). */
+.redes-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.red-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1.5px solid var(--borde);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  background: var(--bg-body);
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.red-chip.is-activo {
+  border-color: var(--verde);
+  background: rgba(124, 185, 40, 0.1);
+  color: var(--verde-oscuro);
+}
+
+.red-chip-usuario {
+  margin-bottom: 10px;
+}
+
+.red-chip-usuario:last-child {
+  margin-bottom: 0;
+}
+
+/* Campo honeypot: invisible para personas, visible para bots que rellenan
+   todos los inputs del formulario sin importar cómo estén ocultos. */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.spinner-inline {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: var(--blanco);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================
    RESPONSIVE
    ========================================== */
 @media (max-width: 480px) {
