@@ -1166,6 +1166,7 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
   const [opcionesTexto, setOpcionesTexto] = useState((campoExistente?.opciones ?? []).map((o) => o.etiqueta).join('\n'))
   const configExistente = (() => { try { return campoExistente?.configJson ? JSON.parse(campoExistente.configJson) : {} } catch { return {} } })()
   const [autocompletar, setAutocompletar] = useState<Autocompletar>(configExistente.autocompletar ?? '')
+  const [mostrarUltimo, setMostrarUltimo] = useState<boolean>(!!configExistente.mostrarUltimo)
   const [catalogoFuente, setCatalogoFuente] = useState(campoExistente?.catalogoFuente || 'estatico')
 
   // Vista previa en vivo de las opciones que va a traer una fuente
@@ -1185,9 +1186,15 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
         : TIPOS_CON_OPCIONES.includes(tipo)
           ? opcionesTexto.split('\n').map((s) => s.trim()).filter(Boolean).map((v, i) => ({ valor: v, etiqueta: v, orden: i }))
           : undefined
+      // Se conservan las demás opciones que ya tuviera el campo; solo se
+      // ajustan las que se editan aquí.
+      const configJson: Record<string, unknown> = { ...configExistente }
+      if (autocompletar) configJson.autocompletar = autocompletar
+      else delete configJson.autocompletar
+      if (mostrarUltimo) configJson.mostrarUltimo = true
+      else delete configJson.mostrarUltimo
       const body: any = {
-        codigo, tipo, etiqueta, obligatorio, orden, opciones,
-        configJson: autocompletar ? { autocompletar } : {},
+        codigo, tipo, etiqueta, obligatorio, orden, opciones, configJson,
       }
       if (tipo === 'catalogo') body.catalogoFuente = catalogoFuente
       return campoExistente ? ccFormulariosService.updateCampo(campoExistente.id, body) : ccFormulariosService.createCampo(seccionId, body)
@@ -1221,6 +1228,19 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
             ))}
           </select>
           {autocompletar && <span className="mt-0.5 block text-[0.68rem] text-ink-tertiary">El agente puede corregirlo a mano si no marcas "Solo lectura".</span>}
+        </label>
+      )}
+
+      {!['titulo', 'separador', 'buscador', 'telefono'].includes(tipo) && (
+        <label className="flex items-start gap-2 text-[0.78rem] text-ink-secondary">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-violet-600" checked={mostrarUltimo}
+            onChange={(e) => setMostrarUltimo(e.target.checked)} />
+          <span>
+            Mostrar el último valor guardado
+            <span className="block text-[0.68rem] text-ink-tertiary">
+              En el formulario externo, al escribir el teléfono de alguien ya registrado, aparece arriba de este campo lo último que se guardó (no se llena solo).
+            </span>
+          </span>
         </label>
       )}
 

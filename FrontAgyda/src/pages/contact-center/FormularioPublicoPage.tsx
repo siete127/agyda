@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Search, Plus, Save, X, Phone, User, Check } from 'lucide-react'
+import { Loader2, Search, Plus, Save, X, Phone, User, Check, PhoneCall, RefreshCw, History } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { ccFormularioPublicoService } from '@/services/ccFormularios.service'
-import type { CCFormPublicoCampo, CCFormPublicoSeccion, CCFormBuscadorResultado, CCFormAccionPost, CCFormPrellenado } from '@/types/ccFormularios.types'
+import type { CCFormPublicoCampo, CCFormPublicoSeccion, CCFormBuscadorResultado, CCFormAccionPost, CCFormPrellenado, CCFormPendienteGrupo, CCFormHistorialItem } from '@/types/ccFormularios.types'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-gray-500'
@@ -156,20 +156,24 @@ export default function FormularioPublicoPage() {
     return <AccionesPostGuardadoPantalla interaccionId={resultado.interaccionId} acciones={resultado.acciones} />
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="mx-auto max-w-2xl px-4">
-        <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-          <p className="text-base font-bold text-gray-900">{def.nombre}</p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[0.75rem] text-gray-500">
-            {cliente && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {cliente}</span>}
-            {agenteNombre && <span className="flex items-center gap-1"><User className="h-3.5 w-3.5" /> {agenteNombre}</span>}
-          </div>
-        </div>
+  // Lo encontrado por teléfono aplica solo mientras el número siga siendo el buscado.
+  const hallazgo = prellenar.data && !prellenar.isPending && telBuscado && tel10(clienteTelefono) === telBuscado ? prellenar.data : null
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <div className="mb-5 rounded-xl border border-gray-100 bg-gray-50 p-3.5">
-            <label>
+  // Formato horizontal: una sola tarjeta ancha; arriba el título y el
+  // teléfono, en medio los campos en columnas, abajo pendientes + guardar.
+  return (
+    <div className="min-h-screen bg-gray-50 py-6">
+      <div className="mx-auto max-w-6xl px-4">
+        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-3 border-b border-gray-100 p-4">
+            <div className="min-w-[180px] flex-1">
+              <p className="text-base font-bold text-gray-900">{def.nombre}</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[0.75rem] text-gray-500">
+                {cliente && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {cliente}</span>}
+                {agenteNombre && <span className="flex items-center gap-1"><User className="h-3.5 w-3.5" /> {agenteNombre}</span>}
+              </div>
+            </div>
+            <label className="w-full sm:w-80">
               <span className={label}>Teléfono</span>
               <div className="relative">
                 <input className={clsx(field, 'pr-9')} value={clienteTelefono} inputMode="tel" autoFocus
@@ -178,34 +182,210 @@ export default function FormularioPublicoPage() {
                 {prellenar.isPending && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-violet-500" />}
               </div>
             </label>
-            {prellenar.data && !prellenar.isPending && telBuscado && tel10(clienteTelefono) === telBuscado && (
-              <AvisoPrellenado d={prellenar.data} faltaNombre={tieneNombreEstructurado} />
+            {hallazgo && (
+              <div className="w-full lg:w-auto lg:max-w-sm lg:flex-1 lg:pt-5">
+                <AvisoPrellenado d={hallazgo} faltaNombre={tieneNombreEstructurado} />
+              </div>
             )}
           </div>
 
-          <div className="space-y-5">
+          {!!hallazgo?.historial?.length && <HistorialPersona items={hallazgo.historial} />}
+
+          <div className="space-y-5 p-5">
             {def.secciones.map((s) => (
               <SeccionPublica key={s.id} seccion={s} token={token!} formularioId={def.formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
-                valores={valores} onChange={setValor} onSeleccionarBuscador={usarResultadoBuscador} ocultos={ocultos} />
+                valores={valores} onChange={setValor} onSeleccionarBuscador={usarResultadoBuscador} ocultos={ocultos}
+                ultimos={hallazgo?.ultimos} />
             ))}
           </div>
 
-          <div className="mt-5 border-t border-gray-100 pt-4">
-            {!!faltantes.length && (
-              <p className="mb-2 text-[0.72rem] font-medium text-amber-600">
-                Pendientes: {faltantes.map((c) => (c.id === campoTelefono?.id ? 'Teléfono' : c.etiqueta)).join(', ')}
-              </p>
-            )}
-            {!canales.length && (
-              <p className="mb-2 text-[0.72rem] font-medium text-amber-600">Este formulario no tiene ningún canal disponible.</p>
-            )}
+          <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 px-5 py-3.5">
+            <div className="min-w-0 flex-1 text-[0.72rem] font-medium text-amber-600">
+              {!!faltantes.length && <p>Pendientes: {faltantes.map((c) => (c.id === campoTelefono?.id ? 'Teléfono' : c.etiqueta)).join(', ')}</p>}
+              {!canales.length && <p>Este formulario no tiene ningún canal disponible.</p>}
+            </div>
             <button onClick={() => guardar.mutate()} disabled={!!faltantes.length || !canales.length || guardar.isPending}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50 sm:w-auto">
               {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar registro
             </button>
           </div>
         </div>
+
+        <PanelPendientes token={token!} telefonoActual={tel10(clienteTelefono)}
+          onElegir={(tel) => { cambiarTelefono(tel); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
       </div>
+    </div>
+  )
+}
+
+// ── Panel "Pendientes por contactar" ──
+// A quién llamar según el último registro de cada persona (ver
+// _pendientesPorContactar en el backend). "Cargar" pone su teléfono arriba,
+// así se llenan sus datos y el agente registra el nuevo estatus.
+const GRUPOS_PENDIENTES: { key: CCFormPendienteGrupo; label: string; ayuda: string; activo: string; chip: string }[] = [
+  { key: 'confirmar', label: 'Por confirmar', ayuda: 'Cita agendada que aún no se confirma', activo: 'border-violet-500 bg-violet-600 text-white', chip: 'bg-violet-100 text-violet-700' },
+  { key: 'recordar', label: 'Recordar hoy / mañana', ayuda: 'Cita confirmada para hoy o mañana', activo: 'border-emerald-500 bg-emerald-600 text-white', chip: 'bg-emerald-100 text-emerald-700' },
+  { key: 'vencida', label: 'Vencidas sin confirmar', ayuda: 'La fecha ya pasó sin confirmarse: reagendar', activo: 'border-amber-500 bg-amber-500 text-white', chip: 'bg-amber-100 text-amber-800' },
+]
+
+function diaSiguiente(dia: string): string {
+  const [y, m, d] = dia.split('-').map(Number)
+  const f = new Date(y, m - 1, d + 1)
+  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`
+}
+function fmtDiaCorto(dia: string): string {
+  const [y, m, d] = dia.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' })
+}
+
+function PanelPendientes({ token, telefonoActual, onElegir }: { token: string; telefonoActual: string; onElegir: (telefono: string) => void }) {
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ['ccf-publico-pendientes', token],
+    queryFn: () => ccFormularioPublicoService.pendientes(token),
+    refetchInterval: 60_000,
+  })
+  const [elegido, setElegido] = useState<CCFormPendienteGrupo | null>(null)
+  if (!data?.disponible) return null
+
+  const cuenta = (g: CCFormPendienteGrupo) => data.pendientes.filter((p) => p.grupo === g).length
+  // Sin elección: el primer grupo que tenga a alguien.
+  const grupo = elegido ?? GRUPOS_PENDIENTES.find((g) => cuenta(g.key))?.key ?? 'confirmar'
+  const info = GRUPOS_PENDIENTES.find((g) => g.key === grupo)!
+  const filas = data.pendientes.filter((p) => p.grupo === grupo)
+  const hoy = data.hoy ?? ''
+  const manana = hoy ? diaSiguiente(hoy) : ''
+  const tel10 = (t: string | null) => (t ?? '').replace(/\D/g, '').slice(-10)
+
+  return (
+    <div className="mt-4 rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3">
+        <div className="mr-2 flex items-center gap-2">
+          <PhoneCall className="h-4 w-4 text-violet-500" />
+          <p className="text-sm font-bold text-gray-900">Pendientes por contactar</p>
+        </div>
+        {GRUPOS_PENDIENTES.map((g) => (
+          <button key={g.key} onClick={() => setElegido(g.key)} title={g.ayuda}
+            className={clsx('rounded-xl border px-3 py-1 text-[0.75rem] font-semibold transition-colors',
+              grupo === g.key ? g.activo : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+            {g.label} <span className="ml-0.5 opacity-80">({cuenta(g.key)})</span>
+          </button>
+        ))}
+        <button onClick={() => refetch()} title="Actualizar"
+          className={clsx('ml-auto flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50', isFetching && 'animate-spin')}>
+          <RefreshCw className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <p className="px-4 pt-2 text-[0.7rem] text-gray-400">{info.ayuda}. «Cargar» pone su teléfono arriba y llena sus datos.</p>
+
+      {!filas.length ? (
+        <p className="px-4 py-8 text-center text-[0.8rem] text-gray-400">Nadie pendiente en este grupo.</p>
+      ) : (
+        <div className="max-h-[360px] overflow-auto px-2 pb-2">
+          <table className="w-full text-[0.78rem]">
+            <thead className="sticky top-0 bg-white">
+              <tr className="text-left text-[0.66rem] font-semibold uppercase tracking-wide text-gray-400">
+                <th className="px-2 py-2">Asistencia</th>
+                <th className="px-2 py-2">Horario</th>
+                <th className="px-2 py-2">Nombre</th>
+                <th className="px-2 py-2">Teléfono</th>
+                <th className="px-2 py-2">Puesto</th>
+                <th className="px-2 py-2">Estatus</th>
+                <th className="px-2 py-2">Asesor</th>
+                <th className="px-2 py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filas.map((p) => {
+                const actual = !!telefonoActual && tel10(p.telefono) === telefonoActual
+                const esHoy = p.fechaAsistencia === hoy
+                const esManana = p.fechaAsistencia === manana
+                return (
+                  <tr key={p.interaccionId} className={clsx(actual ? 'bg-violet-50' : 'hover:bg-gray-50')}>
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      <span className={clsx('rounded-md px-1.5 py-0.5 text-[0.7rem] font-bold',
+                        esHoy ? 'bg-emerald-100 text-emerald-700' : esManana ? 'bg-amber-100 text-amber-800' : info.chip)}>
+                        {esHoy ? 'Hoy' : esManana ? 'Mañana' : fmtDiaCorto(p.fechaAsistencia)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1.5 font-mono">{p.horario ?? '—'}</td>
+                    <td className="px-2 py-1.5 font-semibold text-gray-800">{p.nombre ?? '—'}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 font-mono text-gray-600">{p.telefono ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-gray-600">{p.puesto ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-gray-600">{p.estatus ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-gray-600">{p.asesor ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      <button onClick={() => p.telefono && onElegir(p.telefono)} disabled={!p.telefono || actual}
+                        className="rounded-lg border border-violet-200 px-2.5 py-1 text-[0.72rem] font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-40">
+                        {actual ? 'Cargado' : 'Cargar'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Historial de la persona ──
+// Todos sus contactos (en esta y en otras postulaciones), del más reciente al
+// más viejo. Guardar el formulario agrega un seguimiento nuevo: no se borra
+// nada de lo anterior.
+function HistorialPersona({ items }: { items: CCFormHistorialItem[] }) {
+  const [abierto, setAbierto] = useState(true)
+  const [todos, setTodos] = useState(false)
+  const visibles = todos ? items : items.slice(0, 5)
+  const fmtFecha = (f: string) => new Date(f).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const otras = items.filter((h) => !h.estaPostulacion).length
+  return (
+    <div className="border-b border-gray-100 bg-gray-50/60 px-4 py-3">
+      <button onClick={() => setAbierto((v) => !v)} className="flex w-full items-center gap-2 text-left">
+        <History className="h-4 w-4 text-violet-500" />
+        <span className="text-[0.8rem] font-bold text-gray-800">Historial</span>
+        <span className="text-[0.72rem] text-gray-500">
+          {items.length} contacto{items.length !== 1 ? 's' : ''}{otras ? ` · ${otras} en otras postulaciones` : ''}
+        </span>
+        <span className="ml-auto text-[0.7rem] font-semibold text-violet-600">{abierto ? 'Ocultar' : 'Ver'}</span>
+      </button>
+      {abierto && (
+        <div className="mt-2 overflow-x-auto rounded-xl border border-gray-100 bg-white">
+          <table className="w-full text-[0.75rem]">
+            <thead>
+              <tr className="text-left text-[0.64rem] font-semibold uppercase tracking-wide text-gray-400">
+                <th className="px-2.5 py-1.5">Fecha</th>
+                <th className="px-2.5 py-1.5">Postulación</th>
+                <th className="px-2.5 py-1.5">Estatus</th>
+                <th className="px-2.5 py-1.5">Cita</th>
+                <th className="px-2.5 py-1.5">Canal</th>
+                <th className="px-2.5 py-1.5">Asesor</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {visibles.map((h) => (
+                <tr key={`${h.origen}-${h.id}`} className={clsx(!h.estaPostulacion && 'text-gray-400')}>
+                  <td className="whitespace-nowrap px-2.5 py-1.5">{fmtFecha(h.fecha)}</td>
+                  <td className="px-2.5 py-1.5">
+                    {h.postulacion}
+                    {!h.estaPostulacion && <span className="ml-1 rounded bg-gray-100 px-1 text-[0.62rem] text-gray-500">otra postulación</span>}
+                  </td>
+                  <td className="px-2.5 py-1.5 font-semibold">{h.estatus ?? '—'}</td>
+                  <td className="whitespace-nowrap px-2.5 py-1.5">{h.asistencia ? `${fmtDiaCorto(h.asistencia)}${h.horario ? ` · ${h.horario}` : ''}` : '—'}</td>
+                  <td className="px-2.5 py-1.5">{h.canal ?? '—'}</td>
+                  <td className="px-2.5 py-1.5">{h.asesor ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {items.length > 5 && (
+            <button onClick={() => setTodos((v) => !v)} className="w-full border-t border-gray-100 py-1.5 text-[0.7rem] font-semibold text-violet-600 hover:bg-gray-50">
+              {todos ? 'Ver menos' : `Ver los ${items.length}`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -215,23 +395,24 @@ function AvisoPrellenado({ d, faltaNombre }: { d: CCFormPrellenado; faltaNombre:
   const fecha = d.fecha ? new Date(d.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : null
   if (d.origen === 'interaccion') {
     return (
-      <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[0.75rem] text-emerald-800">
+      <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[0.75rem] text-emerald-800">
         <b>Ya registrado:</b> {d.nombre ?? 'sin nombre'}
         {fecha && <> · último contacto {fecha}</>}
+        {d.postulacion && <> en {d.postulacion}</>}
         {d.estatus && <> · {d.estatus}</>}
-        <span className="block text-emerald-700/80">Se llenaron sus datos; revísalos antes de guardar.</span>
+        <span className="block text-emerald-700/80">Se llenaron sus datos. Al guardar se agrega un seguimiento nuevo a su historial.</span>
       </p>
     )
   }
   if (d.origen === 'postulante') {
     return (
-      <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-[0.75rem] text-blue-800">
+      <p className="rounded-lg bg-blue-50 px-3 py-2 text-[0.75rem] text-blue-800">
         <b>Se registró en la página web</b> como {d.nombre ?? 'sin nombre'}{fecha && <> ({fecha})</>}.
         {faltaNombre && <span className="block text-blue-700/80">Captura sus apellidos y nombre(s) por separado.</span>}
       </p>
     )
   }
-  return <p className="mt-2 text-[0.72rem] text-gray-400">Número nuevo: no hay registros previos con este teléfono.</p>
+  return <p className="text-[0.72rem] text-gray-400">Número nuevo: no hay registros previos con este teléfono.</p>
 }
 
 // Pantalla que reemplaza el formulario justo después de guardar — mismo
@@ -282,23 +463,37 @@ function AccionesPostGuardadoPantalla({ interaccionId, acciones }: { interaccion
   )
 }
 
-function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador, ocultos }: {
+// Tipos que necesitan todo el ancho; el resto se reparte en columnas.
+const TIPOS_ANCHO_COMPLETO = new Set(['texto_largo', 'buscador', 'titulo', 'separador', 'multiseleccion', 'checkbox', 'radio', 'firma', 'archivo', 'imagen'])
+
+function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador, ocultos, ultimos }: {
   seccion: CCFormPublicoSeccion; token: string; formularioId: number; cliente: string; agenteId: number | null; agenteNombre: string
   valores: Record<number, unknown>; onChange: (campoId: number, valor: unknown) => void
   onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
   ocultos?: Set<number> // campos que se llenan solos desde arriba (no se muestran, sí se guardan)
+  ultimos?: Record<number, string> // último valor guardado de esa persona (referencia, no se llena)
 }) {
   return (
     <div>
       <p className="mb-0.5 text-sm font-bold text-gray-900">{seccion.titulo}</p>
       {seccion.descripcion && <p className="mb-3 text-[0.78rem] text-gray-500">{seccion.descripcion}</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {seccion.campos.filter((c) => !ocultos?.has(c.id)).map((c) => (
-          <div key={c.id} className={c.ancho === 'completo' || c.tipo === 'buscador' ? 'sm:col-span-2' : ''}>
-            <CampoPublico campo={c} token={token} formularioId={formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
-              valor={valores[c.id]} onChange={(v) => onChange(c.id, v)} onSeleccionarBuscador={onSeleccionarBuscador} />
-          </div>
-        ))}
+      {/* 4 columnas en pantalla ancha; items-end alinea las cajas aunque un campo
+          traiga arriba la referencia del último valor guardado. */}
+      <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+        {seccion.campos.filter((c) => !ocultos?.has(c.id)).map((c) => {
+          const ultimo = ultimos?.[c.id]
+          return (
+            <div key={c.id} className={TIPOS_ANCHO_COMPLETO.has(c.tipo) ? 'sm:col-span-2 lg:col-span-4' : ''}>
+              {ultimo && (
+                <p className="mb-1 truncate rounded-md bg-amber-50 px-2 py-0.5 text-[0.68rem] text-amber-800" title={`Último guardado: ${ultimo}`}>
+                  Último guardado: <b>{ultimo}</b>
+                </p>
+              )}
+              <CampoPublico campo={c} token={token} formularioId={formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
+                valor={valores[c.id]} onChange={(v) => onChange(c.id, v)} onSeleccionarBuscador={onSeleccionarBuscador} />
+            </div>
+          )
+        })}
       </div>
     </div>
   )

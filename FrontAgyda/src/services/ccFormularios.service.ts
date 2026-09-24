@@ -4,7 +4,7 @@ import type {
   CCFormCampoInput, CCFormTipoCampo, CCFormTipificacionesDelFormulario, CCFormInteraccionBuscada,
   CCFormBuscadorResultado, CCFormCanalDisponible, CCFormModo, CCFormPublicoDefinicion,
   CCFormAccionPost, CCFormAccionTipo, CCFormRespuestaInput, CCFormGuardarRespuestasResultado,
-  CCFormOpcion, CCFormRegistros, CCFormPrellenado,
+  CCFormOpcion, CCFormRegistros, CCFormPrellenado, CCFormPendientes,
 } from '@/types/ccFormularios.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -118,6 +118,9 @@ export const ccFormularioPublicoService = {
   prellenar: (token: string, telefono: string) =>
     apiPublico.get(`/contact-center/formularios-publico/${token}/prellenar`, { params: { telefono } })
       .then((r) => r.data.data as CCFormPrellenado),
+  // A quién llamar para confirmar/recordar/reagendar su cita.
+  pendientes: (token: string) =>
+    apiPublico.get(`/contact-center/formularios-publico/${token}/pendientes`).then((r) => r.data.data as CCFormPendientes),
   registrar: (token: string, body: {
     clienteNombre?: string; clienteTelefono?: string; canalId: number; agenteId?: number | null; agenteNombre?: string | null; comentario?: string
   }) => apiPublico.post(`/contact-center/formularios-publico/${token}/buscador/registrar`, body).then((r) => r.data),

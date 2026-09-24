@@ -1503,91 +1503,222 @@ exports.buscarRegistrosCampoBuscadorPublico = async (req, res) => {
   }
 };
 
-// ── Prellenado por teléfono ──────────────────────────────────────────────
+// ── Persona por teléfono: prellenado + historial ─────────────────────────
 // GET /api/contact-center/formularios-publico/:token/prellenar?telefono=
-// Con solo el número, busca el registro más reciente de esa persona en las
-// campañas del formulario y devuelve sus datos personales para llenar el
-// formulario. Fuentes, en orden:
-//   1) interacciones (su teléfono de cliente o un campo tipo 'telefono' del
-//      formulario): se copian sus respuestas a los campos de la versión
-//      actual con el MISMO código — así un formulario duplicado (mismos
-//      códigos) aprovecha lo capturado en el original;
-//   2) postulantes del formulario web: solo nombre completo y correo.
-// Solo campos de identidad (TIPOS_PRELLENABLES): fechas, horario, estatus,
-// etc. son de cada contacto nuevo y no se arrastran. Se compara por los
-// últimos 10 dígitos (hay números guardados con 521 o con símbolos).
+// Un postulante se reconoce por su teléfono (últimos 10 dígitos: hay números
+// guardados con 521 o con símbolos) en TODA la empresa, no solo en la campaña
+// de este formulario: si vuelve a postularse (otra vacante, otra campaña) se
+// reutilizan sus datos y se ve su historial completo.
+//   valores   → datos de identidad (nombre, apellidos, correo, identificador…)
+//               de su registro más reciente con formulario, copiados al campo
+//               de ESTA versión con el mismo código o, si ese formulario usa
+//               otros códigos, con el mismo "rol" (_rolDeCampo).
+//   ultimos   → campos con configJson.mostrarUltimo: su último valor en ESTA
+//               postulación (campañas del formulario); el estatus o canal de
+//               otra campaña no aplican aquí.
+//   historial → todos sus contactos (interacciones de cualquier formulario o
+//               canal y registros del formulario web de postulantes), del más
+//               reciente al más viejo. Guardar el formulario agrega uno nuevo:
+//               el seguimiento no borra lo anterior.
+// Fechas, horario, estatus, etc. son de cada contacto y nunca se prellenan.
 const TIPOS_PRELLENABLES = new Set(['texto_corto', 'texto_largo', 'telefono', 'email']);
+const ROLES_IDENTIDAD = new Set(['paterno', 'materno', 'nombres', 'nombre', 'correo', 'identificador']);
+const MAX_HISTORIAL = 50;
 const sqlSoloDigitos = (col) =>
   `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(${col}, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
 
-async function _prellenarPorTelefono(p, formularioId, versionId, telefono) {
+// Qué dato es un campo, por su tipo y código/etiqueta (nunca por un código
+// fijo), para relacionar formularios distintos entre sí.
+function _rolDeCampo(c) {
+  const t = `${c.codigo || ''} ${c.etiqueta || ''}`.toLowerCase();
+  if (c.tipo === 'telefono') return 'telefono';
+  if (c.tipo === 'email') return 'correo';
+  if (c.tipo === 'usuario_agente') return 'asesor';
+  if (c.tipo === 'catalogo' && c.catalogoFuente === 'tipificaciones_campania') return 'estatus';
+  if (c.tipo === 'fecha' && /asist|cita/.test(t)) return 'asistencia';
+  if (c.tipo === 'texto_corto' && /paterno/.test(t)) return 'paterno';
+  if (c.tipo === 'texto_corto' && /materno/.test(t)) return 'materno';
+  if (c.tipo === 'texto_corto' && /^nombres?\b|nombre\(s\)/.test(t)) return 'nombres';
+  if (/identif|folio|id_postulante/.test(t)) return 'identificador';
+  if (/horario|hour|\bhora\b/.test(t)) return 'horario';
+  if (/canal|channel/.test(t)) return 'canal';
+  if (/puesto|place|vacante/.test(t)) return 'puesto';
+  if (c.tipo === 'texto_corto' && /nombre|interesado/.test(t)) return 'nombre';
+  return null;
+}
+
+async function _personaPorTelefono(p, formularioId, versionId, telefono) {
   const digitos = String(telefono || '').replace(/\D/g, '');
   if (digitos.length < 10) return null;
   const tel10 = digitos.slice(-10);
   const { campaniaIds } = await _campaniasYCanalesDelFormulario(p, formularioId);
-  if (!campaniaIds.length) return null;
-  const campIn = campaniaIds.map(Number).filter(Number.isInteger).join(',');
+  const deEstaPostulacion = (campaniaId) => campaniaIds.includes(Number(campaniaId));
 
   const campos = (await p.request().input('v', sql.Int, versionId).query(`
-    SELECT c.FC_ID id, c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta
+    SELECT c.FC_ID id, c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta,
+           c.FC_CATALOGO_FUENTE catalogoFuente, c.FC_CONFIG_JSON configJson
     FROM dbo.CCF_FORM_CAMPOS c JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
     WHERE s.FS_VERSION_ID = @v`)).recordset;
+  const muestraUltimo = (c) => { try { return !!JSON.parse(c.configJson || '{}').mostrarUltimo; } catch { return false; } };
 
-  const inter = (await p.request().input('t', sql.NVarChar(10), tel10).query(`
-    SELECT TOP 1 i.CI_ID id, i.CI_CLIENTE_NOMBRE nombre, i.CI_FECHA_INICIO fecha, t.CT_NOMBRE estatus
-    FROM dbo.CCO_INTERACCIONES i
-    LEFT JOIN dbo.CCO_TIPIFICACIONES t ON t.CT_ID = i.CI_TIPIFICACION_ID
-    WHERE i.CI_CAMPANIA_ID IN (${campIn}) AND (
-      RIGHT(${sqlSoloDigitos('i.CI_CLIENTE_TELEFONO')}, 10) = @t
-      OR EXISTS (
-        SELECT 1 FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
-        JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = r.FIR_CAMPO_ID
-        WHERE r.FIR_INTERACCION_ID = i.CI_ID AND c.FC_TIPO = 'telefono'
-          AND RIGHT(${sqlSoloDigitos('r.FIR_VALOR_TEXTO')}, 10) = @t))
-    ORDER BY i.CI_ID DESC`)).recordset[0];
-
-  if (inter) {
-    const resp = (await p.request().input('i', sql.Int, inter.id).query(`
-      SELECT c.FC_CODIGO codigo, c.FC_TIPO tipo, r.FIR_VALOR_TEXTO texto
+  // 1) Sus interacciones, en cualquier campaña. Manda el teléfono capturado
+  //    en el formulario: CI_CLIENTE_TELEFONO llegó a quedar con el número de
+  //    la persona anterior (la página vieja tenía un segundo teléfono que no
+  //    se limpiaba); solo si el registro no trae teléfono en el formulario se
+  //    usa el de la interacción.
+  const inters = (await p.request().input('t', sql.NVarChar(10), tel10).input('max', sql.Int, MAX_HISTORIAL).query(`
+    WITH ids AS (
+      SELECT r.FIR_INTERACCION_ID id
       FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
       JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = r.FIR_CAMPO_ID
-      WHERE r.FIR_INTERACCION_ID = @i`)).recordset;
-    const valores = {};
-    for (const c of campos) {
-      if (!TIPOS_PRELLENABLES.has(c.tipo)) continue;
-      const r = resp.find((x) => x.codigo === c.codigo && TIPOS_PRELLENABLES.has(x.tipo) && x.texto);
-      if (r) valores[c.id] = String(r.texto).trim();
+      WHERE c.FC_TIPO = 'telefono' AND RIGHT(${sqlSoloDigitos('r.FIR_VALOR_TEXTO')}, 10) = @t
+      UNION
+      SELECT i.CI_ID FROM dbo.CCO_INTERACCIONES i
+      WHERE RIGHT(${sqlSoloDigitos('i.CI_CLIENTE_TELEFONO')}, 10) = @t
+        AND NOT EXISTS (
+          SELECT 1 FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+          JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = r.FIR_CAMPO_ID
+          WHERE r.FIR_INTERACCION_ID = i.CI_ID AND c.FC_TIPO = 'telefono'
+            AND LEN(${sqlSoloDigitos('r.FIR_VALOR_TEXTO')}) >= 10)
+    )
+    SELECT TOP (@max) i.CI_ID id, i.CI_CAMPANIA_ID campaniaId, ca.CM2_NOMBRE campania, i.CI_FECHA_INICIO fecha,
+           i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_AGENTE_NOMBRE agenteNombre, cn.CN_NOMBRE canalNombre,
+           t.CT_NOMBRE tipificacion,
+           (SELECT TOP 1 fr.FR_NOMBRE FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+              JOIN dbo.CCF_FORM_VERSIONES v ON v.FV_ID = r.FIR_VERSION_ID
+              JOIN dbo.CCF_FORMULARIOS fr ON fr.FR_ID = v.FV_FORMULARIO_ID
+            WHERE r.FIR_INTERACCION_ID = i.CI_ID) formulario
+    FROM ids JOIN dbo.CCO_INTERACCIONES i ON i.CI_ID = ids.id
+    LEFT JOIN dbo.CCO_CAMPANIAS ca ON ca.CM2_ID = i.CI_CAMPANIA_ID
+    LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+    LEFT JOIN dbo.CCO_TIPIFICACIONES t ON t.CT_ID = i.CI_TIPIFICACION_ID
+    ORDER BY i.CI_ID DESC`)).recordset;
+
+  // 2) Sus respuestas de formulario, con el valor ya legible y su "rol".
+  const porInteraccion = new Map(); // CI_ID -> [{ codigo, rol, tipo, texto, legible }]
+  if (inters.length) {
+    const idsIn = inters.map((x) => Number(x.id)).filter(Number.isInteger).join(',');
+    const resp = (await p.request().query(`
+      SELECT r.FIR_INTERACCION_ID iid, c.FC_ID campoId, c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta,
+             c.FC_CATALOGO_FUENTE catalogoFuente, r.FIR_VALOR_TEXTO texto, r.FIR_VALOR_NUMERO numero,
+             r.FIR_VALOR_FECHA fecha, r.FIR_VALOR_BOOLEANO booleano, r.FIR_VALOR_JSON json
+      FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+      JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = r.FIR_CAMPO_ID
+      WHERE r.FIR_INTERACCION_ID IN (${idsIn})`)).recordset;
+    const opcionesPorCampo = new Map();
+    const tipificaciones = new Map();
+    if (resp.length) {
+      const campoIds = [...new Set(resp.map((x) => Number(x.campoId)))].join(',');
+      for (const o of (await p.request().query(`
+        SELECT FO_CAMPO_ID campoId, FO_VALOR valor, FO_ETIQUETA etiqueta FROM dbo.CCF_FORM_CAMPO_OPCIONES
+        WHERE FO_CAMPO_ID IN (${campoIds})`)).recordset) {
+        if (!opcionesPorCampo.has(o.campoId)) opcionesPorCampo.set(o.campoId, new Map());
+        opcionesPorCampo.get(o.campoId).set(String(o.valor), o.etiqueta);
+      }
+      const ctIds = [...new Set(resp.filter((x) => x.catalogoFuente === 'tipificaciones_campania')
+        .map((x) => Number(x.texto ?? x.numero)).filter((n) => Number.isInteger(n) && n > 0))];
+      if (ctIds.length) {
+        for (const x of (await p.request().query(`SELECT CT_ID id, CT_NOMBRE nombre FROM dbo.CCO_TIPIFICACIONES WHERE CT_ID IN (${ctIds.join(',')})`)).recordset) {
+          tipificaciones.set(x.id, String(x.nombre).trim());
+        }
+      }
     }
-    // Nombre completo para mostrar: el armado de apellidos + nombres si existe.
-    const parte = (re) => resp.find((x) => re.test(x.codigo) && x.texto)?.texto?.trim();
-    const armado = [parte(/paterno/i), parte(/materno/i), parte(/^nombres?$/i)].filter(Boolean).join(' ');
-    return {
+    for (const x of resp) {
+      if (!porInteraccion.has(x.iid)) porInteraccion.set(x.iid, []);
+      const v = _valorLegible({ id: x.campoId, tipo: x.tipo, catalogoFuente: x.catalogoFuente }, x, opcionesPorCampo, tipificaciones);
+      porInteraccion.get(x.iid).push({
+        codigo: x.codigo, tipo: x.tipo, rol: _rolDeCampo(x),
+        texto: x.texto != null ? String(x.texto).trim() : null,
+        legible: typeof v === 'string' ? v.trim() : v,
+      });
+    }
+  }
+  const deRol = (iid, rol) => (porInteraccion.get(iid) || []).find((x) => x.rol === rol && x.legible)?.legible ?? null;
+  const nombreDe = (iid) => ['paterno', 'materno', 'nombres'].map((r) => deRol(iid, r)).filter(Boolean).join(' ') || deRol(iid, 'nombre');
+
+  // 3) Sus registros en el formulario web de postulantes (cualquier campaña).
+  const webs = (await p.request().input('t', sql.NVarChar(10), tel10).query(`
+    SELECT TOP 20 cp.CP_ID id, cp.CP_CAMPANIA_ID campaniaId, ca.CM2_NOMBRE campania, cp.CP_NOMBRE nombre,
+           cp.CP_CORREO correo, cp.CP_FECHA_REGISTRO fecha
+    FROM dbo.CCO_CAMPANIA_POSTULANTES cp
+    LEFT JOIN dbo.CCO_CAMPANIAS ca ON ca.CM2_ID = cp.CP_CAMPANIA_ID
+    WHERE RIGHT(${sqlSoloDigitos('cp.CP_TELEFONO')}, 10) = @t
+    ORDER BY cp.CP_ID DESC`)).recordset;
+
+  const txt = (v) => (v === null || v === undefined ? null : String(v).trim() || null);
+  const historial = [
+    ...inters.map((i) => ({
       origen: 'interaccion',
-      nombre: armado || (inter.nombre ? String(inter.nombre).trim() : null),
-      fecha: inter.fecha,
-      estatus: inter.estatus ? String(inter.estatus).trim() : null,
-      valores,
-    };
+      id: i.id,
+      fecha: i.fecha,
+      postulacion: txt(i.formulario) || txt(i.campania) || txt(i.canalNombre) || 'Contacto',
+      campania: txt(i.campania),
+      estaPostulacion: deEstaPostulacion(i.campaniaId),
+      nombre: nombreDe(i.id) || txt(i.clienteNombre),
+      estatus: deRol(i.id, 'estatus') || txt(i.tipificacion),
+      asistencia: deRol(i.id, 'asistencia'),
+      horario: deRol(i.id, 'horario'),
+      canal: deRol(i.id, 'canal') || txt(i.canalNombre),
+      puesto: deRol(i.id, 'puesto'),
+      asesor: deRol(i.id, 'asesor') || txt(i.agenteNombre),
+    })),
+    ...webs.map((w) => ({
+      origen: 'web',
+      id: w.id,
+      fecha: w.fecha,
+      postulacion: `Registro web${w.campania ? ` · ${String(w.campania).trim()}` : ''}`,
+      campania: txt(w.campania),
+      estaPostulacion: deEstaPostulacion(w.campaniaId),
+      nombre: txt(w.nombre),
+      estatus: null, asistencia: null, horario: null, canal: 'Página web', puesto: null, asesor: null,
+    })),
+  ].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  // 4) Identidad: su registro más reciente con formulario (cualquier campaña).
+  const valores = {};
+  const fuenteIdentidad = inters.find((i) => (porInteraccion.get(i.id) || []).some((x) => ROLES_IDENTIDAD.has(x.rol) && x.texto));
+  if (fuenteIdentidad) {
+    const resp = porInteraccion.get(fuenteIdentidad.id);
+    for (const c of campos) {
+      if (!TIPOS_PRELLENABLES.has(c.tipo) || muestraUltimo(c) || c.tipo === 'telefono') continue;
+      const rol = _rolDeCampo(c);
+      const r = resp.find((x) => x.codigo === c.codigo && TIPOS_PRELLENABLES.has(x.tipo) && x.texto)
+        ?? (rol && ROLES_IDENTIDAD.has(rol) ? resp.find((x) => x.rol === rol && TIPOS_PRELLENABLES.has(x.tipo) && x.texto) : null);
+      if (r) valores[c.id] = r.texto;
+    }
+  } else if (webs[0]) {
+    // Solo registro web: nombre completo (si el formulario tiene un solo
+    // campo de nombre; no se reparte en apellidos) y correo.
+    for (const c of campos) {
+      const rol = _rolDeCampo(c);
+      if (rol === 'nombre' && webs[0].nombre) valores[c.id] = String(webs[0].nombre).trim();
+      if (rol === 'correo' && webs[0].correo) valores[c.id] = String(webs[0].correo).trim();
+    }
   }
 
-  const post = (await p.request().input('t', sql.NVarChar(10), tel10).query(`
-    SELECT TOP 1 CP_NOMBRE nombre, CP_CORREO correo, CP_FECHA_REGISTRO fecha
-    FROM dbo.CCO_CAMPANIA_POSTULANTES
-    WHERE CP_CAMPANIA_ID IN (${campIn}) AND RIGHT(${sqlSoloDigitos('CP_TELEFONO')}, 10) = @t
-    ORDER BY CP_ID DESC`)).recordset[0];
-  if (post) {
-    const valores = {};
-    // Un solo campo de nombre: se llena. Si el formulario separa apellidos y
-    // nombres, el nombre completo no se reparte (no hay forma confiable de
-    // saber dónde corta cada parte): solo se muestra como referencia.
-    const estructurado = campos.some((c) => /apellido.?paterno|apellido.?materno/i.test(`${c.codigo} ${c.etiqueta}`));
-    const campoNombre = !estructurado && campos.find((c) => c.tipo === 'texto_corto' && /nombre|interesado/i.test(`${c.codigo} ${c.etiqueta}`));
-    if (campoNombre && post.nombre) valores[campoNombre.id] = String(post.nombre).trim();
-    const campoCorreo = campos.find((c) => c.tipo === 'email');
-    if (campoCorreo && post.correo) valores[campoCorreo.id] = String(post.correo).trim();
-    return { origen: 'postulante', nombre: post.nombre ? String(post.nombre).trim() : null, fecha: post.fecha, estatus: null, valores };
+  // 5) "Último guardado" de ESTA postulación, para los campos marcados.
+  const ultimos = {};
+  const fuenteEsta = inters.find((i) => deEstaPostulacion(i.campaniaId) && porInteraccion.has(i.id));
+  if (fuenteEsta) {
+    const resp = porInteraccion.get(fuenteEsta.id);
+    for (const c of campos.filter(muestraUltimo)) {
+      const rol = _rolDeCampo(c);
+      const r = resp.find((x) => x.codigo === c.codigo && x.legible) ?? (rol ? resp.find((x) => x.rol === rol && x.legible) : null);
+      if (r) ultimos[c.id] = r.legible;
+    }
   }
-  return { origen: null, nombre: null, fecha: null, estatus: null, valores: {} };
+
+  const reciente = historial[0] || null;
+  return {
+    origen: inters.length ? 'interaccion' : webs.length ? 'postulante' : null,
+    nombre: (fuenteIdentidad && nombreDe(fuenteIdentidad.id)) || reciente?.nombre || null,
+    fecha: reciente?.fecha ?? null,
+    estatus: reciente?.estatus ?? null,
+    postulacion: reciente?.postulacion ?? null,
+    valores,
+    ultimos,
+    historial,
+  };
 }
 
 exports.prellenarPorTelefonoPublico = async (req, res) => {
@@ -1597,12 +1728,124 @@ exports.prellenarPorTelefonoPublico = async (req, res) => {
     const version = await r.pool.request().input('id', sql.Int, r.formularioId)
       .query(`SELECT TOP 1 FV_ID id FROM dbo.CCF_FORM_VERSIONES WHERE FV_FORMULARIO_ID = @id AND FV_ESTADO = 'publicado' ORDER BY FV_NUMERO DESC`);
     if (!version.recordset.length) return res.status(404).json({ success: false, message: 'Este formulario no tiene una versión publicada' });
-    const data = await _prellenarPorTelefono(r.pool, r.formularioId, version.recordset[0].id, req.query.telefono);
+    const data = await _personaPorTelefono(r.pool, r.formularioId, version.recordset[0].id, req.query.telefono);
     if (!data) return res.status(400).json({ success: false, message: 'Teléfono incompleto (mínimo 10 dígitos)' });
     res.json({ success: true, data });
   } catch (e) {
     console.error('ccFormularios.prellenarPorTelefonoPublico:', e.message);
     res.status(500).json({ success: false, message: 'Error al buscar el teléfono' });
+  }
+};
+
+// ── Pendientes por contactar (citas) ────────────────────────────────────
+// GET /api/contact-center/formularios-publico/:token/pendientes
+// Panel del formulario externo con a quién hay que llamar. Se toma el ÚLTIMO
+// registro de cada persona (por teléfono, últimos 10 dígitos) en las campañas
+// del formulario — de cualquier formulario de la campaña con los mismos
+// códigos de campo, así el duplicado ve lo capturado en el original — y se
+// clasifica por su estatus (tipificación) y su fecha de asistencia:
+//   confirmar → "Cita agendada" con fecha hoy o después
+//   recordar  → "Cita confirmada" con fecha hoy o mañana
+//   vencida   → "Cita agendada" con fecha que ya pasó (para reagendar)
+// Los campos se detectan en la versión publicada por tipo/etiqueta (fecha de
+// asistencia/cita, horario, tipificación, asesor…), no por un código fijo.
+const MAX_PENDIENTES = 300;
+async function _pendientesPorContactar(p, formularioId, versionId) {
+  const { campaniaIds } = await _campaniasYCanalesDelFormulario(p, formularioId);
+  const campos = (await p.request().input('v', sql.Int, versionId).query(`
+    SELECT c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta, c.FC_CATALOGO_FUENTE catalogoFuente
+    FROM dbo.CCF_FORM_CAMPOS c JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
+    WHERE s.FS_VERSION_ID = @v`)).recordset;
+  const busca = (pred) => campos.find((c) => pred(c, `${c.codigo} ${c.etiqueta}`.toLowerCase()))?.codigo ?? null;
+  const cod = {
+    asis: busca((c, t) => c.tipo === 'fecha' && /asist|cita/.test(t)),
+    est: busca((c) => c.tipo === 'catalogo' && c.catalogoFuente === 'tipificaciones_campania'),
+    tel: busca((c) => c.tipo === 'telefono'),
+    hora: busca((_, t) => /horario|hour|\bhora\b/.test(t)),
+    asesor: busca((c) => c.tipo === 'usuario_agente'),
+    pat: busca((c, t) => c.tipo === 'texto_corto' && /paterno/.test(t)),
+    mat: busca((c, t) => c.tipo === 'texto_corto' && /materno/.test(t)),
+    nom: busca((c, t) => c.tipo === 'texto_corto' && /^nombres?\b|nombre\(s\)/.test(t)),
+    puesto: busca((_, t) => /puesto|place|vacante/.test(t)),
+  };
+  if (!campaniaIds.length || !cod.asis || !cod.est) return { disponible: false, hoy: null, pendientes: [] };
+
+  const campIn = campaniaIds.map(Number).filter(Number.isInteger).join(',');
+  const rq = p.request().input('max', sql.Int, MAX_PENDIENTES);
+  for (const [k, v] of Object.entries(cod)) rq.input(`c_${k}`, sql.NVarChar(80), v ?? '__sin_campo__');
+  const r = await rq.query(`
+    WITH r AS (
+      SELECT x.FIR_INTERACCION_ID iid, c.FC_CODIGO cod, x.FIR_VALOR_TEXTO t, x.FIR_VALOR_FECHA f
+      FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS x
+      JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = x.FIR_CAMPO_ID
+      JOIN dbo.CCO_INTERACCIONES i ON i.CI_ID = x.FIR_INTERACCION_ID
+      WHERE i.CI_CAMPANIA_ID IN (${campIn})
+        AND c.FC_CODIGO IN (@c_asis, @c_est, @c_tel, @c_hora, @c_asesor, @c_pat, @c_mat, @c_nom, @c_puesto)
+    ), p AS (
+      SELECT iid,
+        MAX(CASE WHEN cod = @c_asis THEN f END) asis,
+        MAX(CASE WHEN cod = @c_est THEN t END) est,
+        MAX(CASE WHEN cod = @c_tel THEN t END) tel,
+        MAX(CASE WHEN cod = @c_hora THEN t END) hora,
+        MAX(CASE WHEN cod = @c_asesor THEN t END) asesor,
+        MAX(CASE WHEN cod = @c_pat THEN t END) pat,
+        MAX(CASE WHEN cod = @c_mat THEN t END) mat,
+        MAX(CASE WHEN cod = @c_nom THEN t END) nom,
+        MAX(CASE WHEN cod = @c_puesto THEN t END) puesto
+      FROM r GROUP BY iid
+    ), b AS (
+      SELECT p.*, i.CI_FECHA_INICIO fecha, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_AGENTE_NOMBRE agenteNombre,
+             COALESCE(NULLIF(LTRIM(RTRIM(p.tel)), ''), i.CI_CLIENTE_TELEFONO) telefono,
+             COALESCE(TRY_CAST(p.est AS INT), i.CI_TIPIFICACION_ID) tip,
+             RIGHT(${sqlSoloDigitos("COALESCE(NULLIF(LTRIM(RTRIM(p.tel)), ''), i.CI_CLIENTE_TELEFONO)")}, 10) tel10
+      FROM p JOIN dbo.CCO_INTERACCIONES i ON i.CI_ID = p.iid
+    ), u AS (
+      SELECT b.*, ROW_NUMBER() OVER (PARTITION BY tel10 ORDER BY iid DESC) rn FROM b WHERE LEN(tel10) = 10
+    )
+    SELECT TOP (@max) u.iid, u.telefono, u.tel10, u.asis, u.hora, u.asesor, u.pat, u.mat, u.nom, u.puesto,
+           u.fecha, u.clienteNombre, u.agenteNombre, t.CT_NOMBRE estatus,
+           CASE WHEN t.CT_NOMBRE LIKE '%confirm%' THEN 'recordar'
+                WHEN CAST(u.asis AS date) >= CAST(GETDATE() AS date) THEN 'confirmar'
+                ELSE 'vencida' END grupo
+    FROM u JOIN dbo.CCO_TIPIFICACIONES t ON t.CT_ID = u.tip
+    WHERE u.rn = 1 AND u.asis IS NOT NULL AND (
+      (t.CT_NOMBRE LIKE '%agendad%' AND t.CT_NOMBRE NOT LIKE '%confirm%')
+      OR (t.CT_NOMBRE LIKE '%confirm%'
+          AND CAST(u.asis AS date) BETWEEN CAST(GETDATE() AS date) AND DATEADD(DAY, 1, CAST(GETDATE() AS date))))
+    ORDER BY CASE WHEN CAST(u.asis AS date) >= CAST(GETDATE() AS date) THEN 0 ELSE 1 END,
+             CASE WHEN CAST(u.asis AS date) >= CAST(GETDATE() AS date) THEN u.asis END ASC,
+             u.asis DESC, u.hora;
+    SELECT CONVERT(varchar(10), GETDATE(), 23) hoy;`);
+  const txt = (v) => (v === null || v === undefined ? null : String(v).trim() || null);
+  return {
+    disponible: true,
+    hoy: r.recordsets[1][0].hoy,
+    pendientes: r.recordsets[0].map((x) => ({
+      interaccionId: x.iid,
+      grupo: x.grupo,
+      telefono: txt(x.telefono),
+      nombre: [txt(x.pat), txt(x.mat), txt(x.nom)].filter(Boolean).join(' ') || txt(x.clienteNombre),
+      fechaAsistencia: new Date(x.asis).toISOString().slice(0, 10), // fecha sin hora, cortada en UTC
+      horario: txt(x.hora),
+      puesto: txt(x.puesto),
+      estatus: txt(x.estatus),
+      asesor: txt(x.asesor) || txt(x.agenteNombre),
+      ultimoContacto: x.fecha,
+    })),
+  };
+}
+
+exports.pendientesPorContactarPublico = async (req, res) => {
+  try {
+    const r = await _resolverFormularioPublico(req.params.token);
+    if (!r) return res.status(404).json({ success: false, message: 'Formulario no disponible' });
+    const version = await r.pool.request().input('id', sql.Int, r.formularioId)
+      .query(`SELECT TOP 1 FV_ID id FROM dbo.CCF_FORM_VERSIONES WHERE FV_FORMULARIO_ID = @id AND FV_ESTADO = 'publicado' ORDER BY FV_NUMERO DESC`);
+    if (!version.recordset.length) return res.status(404).json({ success: false, message: 'Este formulario no tiene una versión publicada' });
+    res.json({ success: true, data: await _pendientesPorContactar(r.pool, r.formularioId, version.recordset[0].id) });
+  } catch (e) {
+    console.error('ccFormularios.pendientesPorContactarPublico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al obtener los pendientes' });
   }
 };
 

@@ -96,6 +96,49 @@ export interface CCFormPrellenado {
   fecha: string | null
   estatus: string | null
   valores: Record<number, string>
+  // Campos con configJson.mostrarUltimo: su último valor guardado, legible,
+  // para mostrarlo como referencia arriba del campo (no se llena solo).
+  ultimos: Record<number, string>
+  postulacion: string | null // dónde fue su contacto más reciente
+  // Todos sus contactos, en cualquier postulación, del más reciente al más viejo.
+  historial: CCFormHistorialItem[]
+}
+export interface CCFormHistorialItem {
+  origen: 'interaccion' | 'web'
+  id: number
+  fecha: string
+  postulacion: string
+  campania: string | null
+  estaPostulacion: boolean // de las campañas del formulario que se está llenando
+  nombre: string | null
+  estatus: string | null
+  asistencia: string | null // 'YYYY-MM-DD'
+  horario: string | null
+  canal: string | null
+  puesto: string | null
+  asesor: string | null
+}
+
+// GET /contact-center/formularios-publico/:token/pendientes — a quién llamar
+// (último registro de cada persona): confirmar su cita, recordársela o
+// reagendar una que se venció sin confirmar.
+export type CCFormPendienteGrupo = 'confirmar' | 'recordar' | 'vencida'
+export interface CCFormPendiente {
+  interaccionId: number
+  grupo: CCFormPendienteGrupo
+  telefono: string | null
+  nombre: string | null
+  fechaAsistencia: string // 'YYYY-MM-DD'
+  horario: string | null
+  puesto: string | null
+  estatus: string | null
+  asesor: string | null
+  ultimoContacto: string
+}
+export interface CCFormPendientes {
+  disponible: boolean // false si el formulario no tiene fecha de asistencia o estatus
+  hoy: string | null // fecha del servidor, 'YYYY-MM-DD'
+  pendientes: CCFormPendiente[]
 }
 
 export interface CCFormularioDetalle extends CCFormulario {

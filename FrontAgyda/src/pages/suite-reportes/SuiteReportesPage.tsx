@@ -6,8 +6,9 @@ import {
   FolderTree, FileBarChart, Folder, FolderOpen, ChevronRight, Upload, RefreshCw,
   Download, Trash2, Database, Table2, SlidersHorizontal, FileCode2, AlertTriangle,
   CheckCircle2, ClipboardList, Users, BarChart2, X, FolderPlus, Pencil, Shield,
-  Lock, Globe, Check, Wrench, Search, Loader2,
+  Lock, Globe, Check, Wrench, Search, Loader2, CalendarCheck,
 } from 'lucide-react'
+import { RegistrosFormularioVista } from '@/pages/contact-center/RegistrosFormularioPage'
 import { api, getApiError } from '@/lib/axios'
 import { reporteDiarioService } from '@/services/reporteDiario.service'
 import { ccService } from '@/services/cc.service'
@@ -66,6 +67,7 @@ function useUsuarios() {
 const REPORTES_BASE = [
   { id: 'postulantes', carpeta: 'Operación', nombre: 'Reportería de postulantes', descripcion: 'Volumen, tipificación y fugas por rango de fechas.', icon: ClipboardList },
   { id: 'interacciones', carpeta: 'Operación', nombre: 'Interacciones', descripcion: 'Buscador de interacciones cerradas — todas las campañas y canales.', icon: Search },
+  { id: 'registros-formularios', carpeta: 'Operación', nombre: 'Registros de formularios', descripcion: 'Lo capturado en cada formulario: nombre completo, cita, horario, estatus y asesor.', icon: CalendarCheck },
   { id: 'ejecutivo-reclutamiento', carpeta: 'Operación', nombre: 'Reporte Ejecutivo de Reclutamiento', descripcion: 'Embudo, KPIs de conversión y gráficos de un formulario de captación.', icon: BarChart2 },
 ] as const
 
@@ -336,6 +338,7 @@ export function SuiteReportesPage() {
         <main className="flex-1 overflow-y-auto bg-white p-5">
           {sel?.tipo === 'base' && sel.id === 'postulantes' && <ReportePostulantesView />}
           {sel?.tipo === 'base' && sel.id === 'interacciones' && <InteraccionesView />}
+          {sel?.tipo === 'base' && sel.id === 'registros-formularios' && <RegistrosFormularioVista />}
           {sel?.tipo === 'base' && sel.id === 'ejecutivo-reclutamiento' && <ReporteEjecutivoReclutamientoView />}
 
           {sel?.tipo === 'builder' && (
