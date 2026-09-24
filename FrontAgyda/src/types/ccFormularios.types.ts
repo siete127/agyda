@@ -67,6 +67,26 @@ export interface CCFormVersionResumen {
   fechaPublicacion: string | null
 }
 
+// GET /contact-center/formularios/:id/registros — lo capturado en un
+// formulario; `valores` va por código de campo, ya legible (etiqueta de la
+// opción, nombre de la tipificación, fechas 'YYYY-MM-DD').
+export interface CCFormRegistro {
+  interaccionId: number
+  fecha: string
+  estado: string
+  agenteNombre: string | null
+  clienteNombre: string | null
+  clienteTelefono: string | null
+  valores: Record<string, string | null>
+}
+export interface CCFormRegistros {
+  formulario: { id: number; nombre: string }
+  columnas: { codigo: string; etiqueta: string; tipo: string }[]
+  total: number
+  limite: number
+  registros: CCFormRegistro[]
+}
+
 export interface CCFormularioDetalle extends CCFormulario {
   versiones: CCFormVersionResumen[]
 }

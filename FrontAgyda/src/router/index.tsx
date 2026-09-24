@@ -163,6 +163,7 @@ const ChatbotPage                   = lz(() => import('@/pages/chatbot/ChatbotPa
 const LivechatPage                  = lz(() => import('@/pages/livechat/LivechatPage'),          'default')
 const ContactCenterPage             = lz(() => import('@/pages/contact-center/ContactCenterPage'), 'default')
 const PostulantesPage                = lz(() => import('@/pages/contact-center/PostulantesPage'), 'default')
+const RegistrosFormularioPage        = lz(() => import('@/pages/contact-center/RegistrosFormularioPage'), 'default')
 
 const Loader = () => (
   <div className="flex h-full items-center justify-center min-h-[40vh]">
@@ -395,6 +396,7 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="livechat" />, children: [{ path: '/livechat', element: wrap(<LivechatPage />) }] },
               { element: <ModuleRoute moduleKey="contact-center" />, children: [
                 { path: '/contact-center', element: wrap(<ContactCenterPage />) },
+                { path: '/contact-center/registros', element: wrap(<RegistrosFormularioPage />) },
               ] },
               { element: <ModuleRoute moduleKey="postulantes" />, children: [
                 { path: '/contact-center/postulantes', element: wrap(<PostulantesPage />) },

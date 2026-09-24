@@ -219,6 +219,8 @@ router.delete('/formularios-asignaciones/:id', authenticateToken, requireActionA
 router.get('/formularios/:id/tipificaciones', authenticateToken, requireActionAccess(M, 'ver'), forms.listTipificacionesDelFormulario);
 router.put('/formularios/:id/tipificaciones', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.setTipificacionesDelFormulario);
 router.get('/formularios/:id/interacciones', authenticateToken, requireActionAccess(M, 'ver'), forms.buscarInteraccionesDelFormulario);
+// Vista rápida de lo capturado en un formulario (página "Registros de formularios").
+router.get('/formularios/:id/registros', authenticateToken, requireActionAccess(M, 'ver'), forms.listRegistrosDelFormulario);
 
 // Campo tipo 'buscador' dentro del constructor — lo usa el AGENTE en vivo
 // durante una atención real, no el administrador del formulario, por eso va

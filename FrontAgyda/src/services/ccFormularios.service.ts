@@ -4,7 +4,7 @@ import type {
   CCFormCampoInput, CCFormTipoCampo, CCFormTipificacionesDelFormulario, CCFormInteraccionBuscada,
   CCFormBuscadorResultado, CCFormCanalDisponible, CCFormModo, CCFormPublicoDefinicion,
   CCFormAccionPost, CCFormAccionTipo, CCFormRespuestaInput, CCFormGuardarRespuestasResultado,
-  CCFormOpcion,
+  CCFormOpcion, CCFormRegistros,
 } from '@/types/ccFormularios.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -15,6 +15,8 @@ export const ccFormulariosService = {
   listTiposCampo: () => d<CCFormTipoCampo[]>(api.get('/contact-center/formularios/tipos-campo')),
 
   listFormularios: () => d<CCFormulario[]>(api.get('/contact-center/formularios')),
+  // Lo capturado en un formulario, con cada valor ya legible (vista "Registros de formularios").
+  listRegistros: (id: number) => api.get(`/contact-center/formularios/${id}/registros`).then((r) => r.data.data as CCFormRegistros),
   getFormulario: (id: number) => d<CCFormularioDetalle>(api.get(`/contact-center/formularios/${id}`)),
   createFormulario: (body: { nombre: string; codigo?: string; descripcion?: string }) =>
     api.post('/contact-center/formularios', body).then((r) => r.data),

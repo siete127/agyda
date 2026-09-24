@@ -228,8 +228,9 @@ exports.archivarFormulario = async (req, res) => {
 
 // Clonar = nuevo formulario independiente (código distinto) con una copia
 // completa de la versión indicada (secciones + campos + opciones) en
-// 'borrador'. Distinto de "nueva versión" (versionarFormulario), que crea
-// una versión dentro del MISMO formulario.
+// 'borrador', y la misma selección de tipificaciones. Distinto de "nueva
+// versión" (versionarFormulario), que crea una versión dentro del MISMO
+// formulario. body.nombre (opcional) = nombre del nuevo; si no, "<origen> (copia)".
 exports.clonarFormulario = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
@@ -244,7 +245,8 @@ exports.clonarFormulario = async (req, res) => {
         ).recordset[0]?.id;
     if (!versionOrigenId) return res.status(400).json({ success: false, message: 'El formulario origen no tiene versiones' });
 
-    const nombreNuevo = `${origen.recordset[0].nombre} (copia)`;
+    const nombrePedido = String(req.body?.nombre || '').trim().slice(0, 200);
+    const nombreNuevo = nombrePedido || `${origen.recordset[0].nombre} (copia)`;
     const uid = usuarioIdDe(req);
     const uname = usuarioNombreDe(req);
     const tx = new sql.Transaction(p);
@@ -268,8 +270,12 @@ exports.clonarFormulario = async (req, res) => {
                 OUTPUT INSERTED.FR_ID id VALUES (@codigo, @nombre, @desc, @uid, @uname)`);
       const nuevoFormularioId = frRes.recordset[0].id;
       const nuevaVersionId = await _clonarVersionEnTx(tx, versionOrigenId, nuevoFormularioId, 1, uid);
+      // Misma selección de tipificaciones permitidas que el origen.
+      await new sql.Request(tx).input('o', sql.Int, req.params.id).input('n', sql.Int, nuevoFormularioId)
+        .query(`INSERT INTO dbo.CCF_FORM_TIPIFICACIONES (FT_FORMULARIO_ID, FT_TIPIFICACION_ID)
+                SELECT @n, FT_TIPIFICACION_ID FROM dbo.CCF_FORM_TIPIFICACIONES WHERE FT_FORMULARIO_ID = @o`);
       await tx.commit();
-      res.status(201).json({ success: true, data: { id: nuevoFormularioId, versionId: nuevaVersionId } });
+      res.status(201).json({ success: true, data: { id: nuevoFormularioId, versionId: nuevaVersionId, nombre: nombreNuevo, codigo } });
     } catch (e) {
       await tx.rollback();
       throw e;
@@ -1091,6 +1097,148 @@ exports.buscarInteraccionesDelFormulario = async (req, res) => {
   } catch (e) {
     console.error('ccFormularios.buscarInteraccionesDelFormulario:', e.message);
     res.status(500).json({ success: false, message: 'Error al buscar interacciones' });
+  }
+};
+
+// ── Registros capturados en un formulario (vista rápida) ────────────────
+// GET /formularios/:id/registros — un renglón por interacción que usó ESTE
+// formulario (cualquiera de sus versiones), con el valor de cada campo ya
+// legible: opciones de lista/catálogo por su etiqueta, la tipificación por
+// su nombre y las fechas como 'YYYY-MM-DD'. Las fechas se guardan a
+// medianoche UTC (fecha sin hora): se cortan en UTC para que no se recorran
+// un día al mostrarlas en México. Solo los más recientes (MAX_REGISTROS).
+const MAX_REGISTROS = 1000;
+const TIPOS_SIN_VALOR = new Set(['titulo', 'separador', 'buscador']);
+
+function _valorLegible(campo, fila, opcionesPorCampo, tipificaciones) {
+  if (fila.booleano !== null && fila.booleano !== undefined) return fila.booleano ? 'Sí' : 'No';
+  if (fila.fecha) {
+    const d = new Date(fila.fecha);
+    if (Number.isNaN(d.getTime())) return null;
+    return campo?.tipo === 'fecha' ? d.toISOString().slice(0, 10) : d.toISOString();
+  }
+  const etiquetaDe = (v) => {
+    const s = String(v);
+    if (campo?.catalogoFuente === 'tipificaciones_campania') return tipificaciones.get(Number(s)) ?? s;
+    return opcionesPorCampo.get(campo?.id)?.get(s) ?? s;
+  };
+  if (fila.json) {
+    try {
+      const v = JSON.parse(fila.json);
+      return Array.isArray(v) ? v.map(etiquetaDe).join(', ') : (typeof v === 'object' && v !== null ? JSON.stringify(v) : etiquetaDe(v));
+    } catch { return fila.json; }
+  }
+  const crudo = fila.texto ?? (fila.numero !== null && fila.numero !== undefined ? String(Number(fila.numero)) : null);
+  if (crudo === null || crudo === '') return null;
+  return etiquetaDe(crudo);
+}
+
+exports.listRegistrosDelFormulario = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ success: false, message: 'Id inválido' });
+    const p = await pool(req);
+    const fr = await p.request().input('id', sql.Int, id)
+      .query('SELECT FR_ID id, FR_NOMBRE nombre FROM dbo.CCF_FORMULARIOS WHERE FR_ID = @id');
+    if (!fr.recordset.length) return res.status(404).json({ success: false, message: 'Formulario no encontrado' });
+
+    const base = await p.request().input('id', sql.Int, id).input('max', sql.Int, MAX_REGISTROS).query(`
+      SELECT c.FC_ID id, c.FC_CODIGO codigo, c.FC_ETIQUETA etiqueta, c.FC_TIPO tipo, c.FC_CATALOGO_FUENTE catalogoFuente,
+             v.FV_ID versionId, v.FV_NUMERO numero, v.FV_ESTADO estado
+      FROM dbo.CCF_FORM_CAMPOS c
+      JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
+      JOIN dbo.CCF_FORM_VERSIONES v ON v.FV_ID = s.FS_VERSION_ID
+      WHERE v.FV_FORMULARIO_ID = @id
+      ORDER BY v.FV_NUMERO, s.FS_ORDEN, c.FC_ORDEN;
+
+      SELECT o.FO_CAMPO_ID campoId, o.FO_VALOR valor, o.FO_ETIQUETA etiqueta
+      FROM dbo.CCF_FORM_CAMPO_OPCIONES o
+      JOIN dbo.CCF_FORM_CAMPOS c ON c.FC_ID = o.FO_CAMPO_ID
+      JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
+      JOIN dbo.CCF_FORM_VERSIONES v ON v.FV_ID = s.FS_VERSION_ID
+      WHERE v.FV_FORMULARIO_ID = @id;
+
+      SELECT COUNT(DISTINCT r.FIR_INTERACCION_ID) total
+      FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+      JOIN dbo.CCF_FORM_VERSIONES v ON v.FV_ID = r.FIR_VERSION_ID
+      WHERE v.FV_FORMULARIO_ID = @id;
+
+      SELECT TOP (@max) i.CI_ID id, i.CI_FECHA_INICIO fecha, i.CI_AGENTE_NOMBRE agenteNombre,
+             i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono, i.CI_ESTADO estado
+      FROM dbo.CCO_INTERACCIONES i
+      WHERE i.CI_ID IN (
+        SELECT r.FIR_INTERACCION_ID FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+        JOIN dbo.CCF_FORM_VERSIONES v ON v.FV_ID = r.FIR_VERSION_ID
+        WHERE v.FV_FORMULARIO_ID = @id)
+      ORDER BY i.CI_ID DESC;`);
+    const [campos, opciones, [{ total }], interacciones] = base.recordsets;
+
+    // Columnas = campos con valor de la versión publicada más reciente (o la
+    // última); los de versiones anteriores se leen por su mismo código.
+    const versiones = [...new Map(campos.map((c) => [c.versionId, c])).values()];
+    const vCols = [...versiones].reverse().find((v) => v.estado === 'publicado') ?? versiones[versiones.length - 1];
+    const columnas = campos
+      .filter((c) => vCols && c.versionId === vCols.versionId && !TIPOS_SIN_VALOR.has(c.tipo))
+      .map((c) => ({ codigo: c.codigo, etiqueta: c.etiqueta, tipo: c.tipo }));
+    const campoPorId = new Map(campos.map((c) => [c.id, c]));
+    const opcionesPorCampo = new Map();
+    for (const o of opciones) {
+      if (!opcionesPorCampo.has(o.campoId)) opcionesPorCampo.set(o.campoId, new Map());
+      opcionesPorCampo.get(o.campoId).set(String(o.valor), o.etiqueta);
+    }
+
+    let respuestas = [];
+    const tipificaciones = new Map();
+    if (interacciones.length) {
+      const ids = interacciones.map((i) => Number(i.id)).filter(Number.isInteger);
+      const r = await p.request().input('id', sql.Int, id).query(`
+        SELECT r.FIR_INTERACCION_ID interaccionId, r.FIR_CAMPO_ID campoId, r.FIR_VALOR_TEXTO texto, r.FIR_VALOR_NUMERO numero,
+               r.FIR_VALOR_FECHA fecha, r.FIR_VALOR_BOOLEANO booleano, r.FIR_VALOR_JSON json
+        FROM dbo.CCF_INTERACCION_FORM_RESPUESTAS r
+        JOIN dbo.CCF_FORM_VERSIONES v ON v.FV_ID = r.FIR_VERSION_ID
+        WHERE v.FV_FORMULARIO_ID = @id AND r.FIR_INTERACCION_ID IN (${ids.join(',')})`);
+      respuestas = r.recordset;
+      const ctIds = [...new Set(respuestas
+        .filter((x) => campoPorId.get(x.campoId)?.catalogoFuente === 'tipificaciones_campania')
+        .map((x) => Number(x.texto ?? x.numero))
+        .filter((n) => Number.isInteger(n) && n > 0))];
+      if (ctIds.length) {
+        const t = await p.request().query(`SELECT CT_ID id, CT_NOMBRE nombre FROM dbo.CCO_TIPIFICACIONES WHERE CT_ID IN (${ctIds.join(',')})`);
+        for (const x of t.recordset) tipificaciones.set(x.id, String(x.nombre).trim());
+      }
+    }
+
+    const valoresPorInteraccion = new Map();
+    for (const x of respuestas) {
+      const campo = campoPorId.get(x.campoId);
+      if (!campo || TIPOS_SIN_VALOR.has(campo.tipo)) continue;
+      if (!valoresPorInteraccion.has(x.interaccionId)) valoresPorInteraccion.set(x.interaccionId, {});
+      const v = _valorLegible(campo, x, opcionesPorCampo, tipificaciones);
+      const destino = valoresPorInteraccion.get(x.interaccionId);
+      if (v !== null || !(campo.codigo in destino)) destino[campo.codigo] = typeof v === 'string' ? v.trim() : v;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        formulario: fr.recordset[0],
+        columnas,
+        total,
+        limite: MAX_REGISTROS,
+        registros: interacciones.map((i) => ({
+          interaccionId: i.id,
+          fecha: i.fecha,
+          estado: i.estado,
+          agenteNombre: i.agenteNombre ? String(i.agenteNombre).trim() : null,
+          clienteNombre: i.clienteNombre ? String(i.clienteNombre).trim() : null,
+          clienteTelefono: i.clienteTelefono ? String(i.clienteTelefono).trim() : null,
+          valores: valoresPorInteraccion.get(i.id) ?? {},
+        })),
+      },
+    });
+  } catch (e) {
+    console.error('ccFormularios.listRegistrosDelFormulario:', e.message);
+    res.status(500).json({ success: false, message: 'Error al obtener los registros del formulario' });
   }
 };
 
