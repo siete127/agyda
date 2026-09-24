@@ -112,11 +112,30 @@ export const ccService = {
   },
 
   // ── Gestión de postulantes (transversal a campañas asignadas) ──
-  getPostulantesGestion: (params: { q?: string; page?: number; pageSize?: number; pendientes?: '1' }) =>
+  getPostulantesGestion: (params: {
+    q?: string; page?: number; pageSize?: number; pendientes?: '1'
+    campaniaId?: number; tipificacion?: string
+  }) =>
     api.get<{ data: CCPostulanteGestion[]; total: number }>('/contact-center/postulantes', { params })
       .then((r) => r.data.data ? r.data : { data: [], total: 0 }),
   tipificarPostulante: (postulanteId: number, body: { tipificacion: string; observaciones?: string }) =>
     api.post(`/contact-center/postulantes/${postulanteId}/tipificacion`, body).then((r) => r.data),
+  tipificarPostulantesBulk: (ids: number[], tipificacion: string) =>
+    api.post<{ actualizados: number; omitidos: number[] }>('/contact-center/postulantes/tipificacion-bulk', { ids, tipificacion })
+      .then((r) => r.data),
+  // Mismo patrón que tipificacionesExcelUrl: token por querystring porque es
+  // un <a href> de navegador, no una llamada axios — respeta los filtros
+  // activos (campaña/búsqueda/tipificación/pendientes) de la pantalla.
+  postulantesExcelUrl: (params: { q?: string; pendientes?: '1'; campaniaId?: number; tipificacion?: string }) => {
+    const token = useAuthStore.getState().token
+    const qs = new URLSearchParams()
+    if (params.q) qs.set('q', params.q)
+    if (params.pendientes) qs.set('pendientes', params.pendientes)
+    if (params.campaniaId) qs.set('campaniaId', String(params.campaniaId))
+    if (params.tipificacion) qs.set('tipificacion', params.tipificacion)
+    if (token) qs.set('token', token)
+    return `/api/contact-center/postulantes/excel?${qs.toString()}`
+  },
   getNotasPostulante: (postulanteId: number) => d<CCPostulanteNota[]>(api.get(`/contact-center/postulantes/${postulanteId}/notas`)),
   crearNotaPostulante: (postulanteId: number, nota: string) =>
     d<CCPostulanteNota>(api.post(`/contact-center/postulantes/${postulanteId}/notas`, { nota })),

@@ -34,7 +34,7 @@ const card = 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card'
 // cada una con su padding) — CanalCard es el único caso hoy.
 const cardBare = 'rounded-2xl border border-gray-100 bg-card shadow-card'
 
-function Header({ icon: Icon, titulo, subtitulo }: { icon: React.ElementType; titulo: string; subtitulo: string }) {
+function Header({ icon: Icon, titulo, subtitulo }: { icon: React.ComponentType<{ className?: string }>; titulo: string; subtitulo: string }) {
   return (
     <div className={card}>
       <div className="flex items-center gap-3.5">
@@ -50,7 +50,7 @@ function Header({ icon: Icon, titulo, subtitulo }: { icon: React.ElementType; ti
 
 // Icono + color por tipo de canal — mismo lenguaje visual en la card y en el
 // selector "Tipo de canal" del formulario de alta.
-const CANAL_ICONOS: Record<CCCanalTipo, { icon: React.ElementType; bg: string; fg: string }> = {
+const CANAL_ICONOS: Record<CCCanalTipo, { icon: React.ComponentType<{ className?: string }>; bg: string; fg: string }> = {
   whatsapp: { icon: MessageCircle, bg: 'bg-emerald-100', fg: 'text-emerald-600' },
   whatsapp_baileys: { icon: MessageCircle, bg: 'bg-emerald-100', fg: 'text-emerald-600' },
   messenger: { icon: MessageCircle, bg: 'bg-blue-100', fg: 'text-blue-600' },
@@ -998,7 +998,11 @@ function CCPostulantesTodosPanel() {
   const [q, setQ] = useState('')
   const [qDebounced, setQDebounced] = useState('')
   const [page, setPage] = useState(1)
+  const [campaniaFiltro, setCampaniaFiltro] = useState<number | ''>('')
+  const [tipificacionFiltro, setTipificacionFiltro] = useState('')
   const [notasDe, setNotasDe] = useState<number | null>(null)
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
+  const [bulkTipificacion, setBulkTipificacion] = useState('')
   const pageSize = 20
   const qc = useQueryClient()
 
@@ -1007,14 +1011,28 @@ function CCPostulantesTodosPanel() {
     return () => clearTimeout(t)
   }, [q])
 
+  useEffect(() => { setPage(1); setSeleccion(new Set()) }, [campaniaFiltro, tipificacionFiltro])
+
+  const filtros = {
+    q: qDebounced || undefined,
+    campaniaId: campaniaFiltro || undefined,
+    tipificacion: tipificacionFiltro || undefined,
+  }
+
   const { data, isLoading } = useQuery({
-    queryKey: ['cc-postulantes-gestion', qDebounced, page],
-    queryFn: () => ccService.getPostulantesGestion({ q: qDebounced || undefined, page, pageSize }),
+    queryKey: ['cc-postulantes-gestion', qDebounced, page, campaniaFiltro, tipificacionFiltro],
+    queryFn: () => ccService.getPostulantesGestion({ ...filtros, page, pageSize }),
+  })
+
+  const { data: campanias = [] } = useQuery({
+    queryKey: ['cc-campanias-para-postulante'],
+    queryFn: () => ccService.getCampaniasParaPostulante(),
   })
 
   const postulantes = data?.data ?? []
   const total = data?.total ?? 0
   const totalPaginas = Math.max(1, Math.ceil(total / pageSize))
+  const hayFiltrosActivos = Boolean(qDebounced || campaniaFiltro || tipificacionFiltro)
 
   const tipificar = useMutation({
     mutationFn: ({ id, tipificacion }: { id: number; tipificacion: string }) =>
@@ -1026,29 +1044,102 @@ function CCPostulantesTodosPanel() {
     onError: () => toast.error('No se pudo actualizar la tipificación'),
   })
 
+  const tipificarBulk = useMutation({
+    mutationFn: () => ccService.tipificarPostulantesBulk(Array.from(seleccion), bulkTipificacion),
+    onSuccess: (r) => {
+      toast.success(`${r.actualizados} postulante${r.actualizados === 1 ? '' : 's'} tipificado${r.actualizados === 1 ? '' : 's'}${r.omitidos.length ? ` · ${r.omitidos.length} omitido(s)` : ''}`)
+      setSeleccion(new Set())
+      setBulkTipificacion('')
+      qc.invalidateQueries({ queryKey: ['cc-postulantes-gestion'] })
+    },
+    onError: () => toast.error('No se pudo tipificar el lote'),
+  })
+
+  const toggleUno = (id: number) => setSeleccion((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleTodos = () => setSeleccion((prev) =>
+    prev.size === postulantes.length ? new Set() : new Set(postulantes.map((p) => p.id)),
+  )
+
   return (
     <div className="space-y-4">
-      <div className={clsx(card, 'flex items-center gap-2.5')}>
-        <Search className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por nombre o teléfono..."
-          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
-        />
+      <div className={clsx(card, 'flex flex-wrap items-center gap-2.5')}>
+        <div className="flex min-w-[14rem] flex-1 items-center gap-2.5">
+          <Search className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por nombre o teléfono..."
+            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
+          />
+        </div>
+        <select
+          value={campaniaFiltro}
+          onChange={(e) => setCampaniaFiltro(e.target.value ? Number(e.target.value) : '')}
+          className="rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-[0.78rem]"
+        >
+          <option value="">Cualquier campaña</option>
+          {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+        <select
+          value={tipificacionFiltro}
+          onChange={(e) => setTipificacionFiltro(e.target.value)}
+          className="rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-[0.78rem]"
+        >
+          <option value="">Cualquier tipificación</option>
+          <option value="sin_tipificar">Sin tipificar</option>
+          {TIPIFICACIONES_LLAMADA.map((t) => <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>)}
+        </select>
+        <a
+          href={ccService.postulantesExcelUrl(filtros)}
+          className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-ink-secondary transition hover:bg-gray-50"
+        >
+          <Download className="h-3.5 w-3.5" /> Exportar
+        </a>
       </div>
+
+      {seleccion.size > 0 && (
+        <div className={clsx(card, 'flex flex-wrap items-center gap-2.5 border-violet-200 bg-violet-50/60')}>
+          <span className="text-[0.78rem] font-semibold text-violet-700">{seleccion.size} seleccionado{seleccion.size === 1 ? '' : 's'}</span>
+          <select
+            value={bulkTipificacion}
+            onChange={(e) => setBulkTipificacion(e.target.value)}
+            className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-[0.78rem]"
+          >
+            <option value="">Tipificar como...</option>
+            {TIPIFICACIONES_LLAMADA.map((t) => <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>)}
+          </select>
+          <Button
+            variant="primary"
+            disabled={!bulkTipificacion || tipificarBulk.isPending}
+            isLoading={tipificarBulk.isPending}
+            onClick={() => tipificarBulk.mutate()}
+          >
+            Aplicar a selección
+          </Button>
+          <button type="button" onClick={() => setSeleccion(new Set())} className="ml-auto text-[0.75rem] font-semibold text-ink-tertiary hover:text-ink-secondary">
+            Cancelar
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className={clsx(card, 'flex items-center justify-center py-10 text-ink-tertiary')}><Loader2 className="h-5 w-5 animate-spin" /></div>
       ) : postulantes.length === 0 ? (
         <div className={clsx(card, 'py-10 text-center text-sm text-ink-tertiary')}>
-          {qDebounced ? 'Sin resultados para tu búsqueda.' : 'No tienes postulantes visibles todavía.'}
+          {hayFiltrosActivos ? 'Sin resultados para ese filtro.' : 'No tienes postulantes visibles todavía.'}
         </div>
       ) : (
         <div className={clsx(cardBare, 'overflow-x-auto')}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+                <th className="w-10 px-4 py-3">
+                  <input type="checkbox" checked={seleccion.size === postulantes.length} onChange={toggleTodos} className="h-4 w-4 rounded border-gray-300" />
+                </th>
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Teléfono</th>
                 <th className="px-4 py-3">Campaña</th>
@@ -1059,7 +1150,10 @@ function CCPostulantesTodosPanel() {
             </thead>
             <tbody>
               {postulantes.map((p) => (
-                <tr key={p.id} className="border-b border-gray-50 last:border-0">
+                <tr key={p.id} className={clsx('border-b border-gray-50 last:border-0', seleccion.has(p.id) && 'bg-violet-50/40')}>
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={seleccion.has(p.id)} onChange={() => toggleUno(p.id)} className="h-4 w-4 rounded border-gray-300" />
+                  </td>
                   <td className="px-4 py-3 font-semibold text-ink">{p.nombre}</td>
                   <td className="px-4 py-3 text-ink-secondary">
                     <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-tertiary" /> {p.telefono}</span>
@@ -1151,16 +1245,25 @@ function CCPostulantesTodosPanel() {
 function CCPostulantesPendientesPanel() {
   const [filtroDia, setFiltroDia] = useState<string>('todos')
   const [filtroMedio, setFiltroMedio] = useState<string>('todos')
+  const [page, setPage] = useState(1)
   const [recordatorioDe, setRecordatorioDe] = useState<CCPostulanteGestion | null>(null)
   const qc = useQueryClient()
+  const pageSize = 20
+
+  useEffect(() => { setPage(1) }, [filtroDia, filtroMedio])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['cc-postulantes-pendientes'],
-    queryFn: () => ccService.getPostulantesGestion({ pendientes: '1' }),
+    queryKey: ['cc-postulantes-pendientes', page],
+    queryFn: () => ccService.getPostulantesGestion({ pendientes: '1', page, pageSize }),
   })
 
   const postulantes = data?.data ?? []
+  const total = data?.total ?? 0
+  const totalPaginas = Math.max(1, Math.ceil(total / pageSize))
 
+  // Los filtros de día/medio siguen siendo en cliente (sobre la página
+  // actual) — son un afinado rápido de lo que ya se está viendo, no un
+  // filtro de servidor como campaña/tipificación en "Todos".
   const diasPresentes = Array.from(new Set(postulantes.map((p) => p.diaContacto).filter((d): d is string => Boolean(d))))
   const mediosPresentes = Array.from(new Set(postulantes.map((p) => p.medioContacto).filter((m): m is string => Boolean(m))))
 
@@ -1170,13 +1273,14 @@ function CCPostulantesPendientesPanel() {
   )
 
   // Vencidos primero (recordatorio ya pasó y sigue sin tipificar), luego por
-  // fecha de recordatorio más próxima — así lo urgente siempre queda arriba.
-  const ahora = Date.now()
+  // fecha de recordatorio más próxima — el backend ya ordena así, esto solo
+  // re-ordena dentro de la página tras el filtro de día/medio en cliente.
   const ordenados = [...filtrados].sort((a, b) => {
     const fa = a.recordarFechaHora ? new Date(a.recordarFechaHora).getTime() : Infinity
     const fb = b.recordarFechaHora ? new Date(b.recordarFechaHora).getTime() : Infinity
     return fa - fb
   })
+  const ahora = Date.now()
 
   return (
     <div className="space-y-4">
@@ -1192,7 +1296,7 @@ function CCPostulantesPendientesPanel() {
           <option value="todos">Cualquier medio</option>
           {mediosPresentes.map((m) => <option key={m} value={m}>{MEDIO_CONTACTO_LABEL[m] ?? m}</option>)}
         </select>
-        <span className="ml-auto text-[0.75rem] text-ink-tertiary">{ordenados.length} pendiente{ordenados.length === 1 ? '' : 's'}</span>
+        <span className="ml-auto text-[0.75rem] text-ink-tertiary">{total} pendiente{total === 1 ? '' : 's'} en total</span>
       </div>
 
       {isLoading ? (
@@ -1260,6 +1364,30 @@ function CCPostulantesPendientesPanel() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-[0.75rem] text-ink-tertiary">
+          <p>página {page} de {totalPaginas}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 font-semibold disabled:opacity-40"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPaginas}
+              onClick={() => setPage((p) => Math.min(totalPaginas, p + 1))}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 font-semibold disabled:opacity-40"
+            >
+              Siguiente <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
