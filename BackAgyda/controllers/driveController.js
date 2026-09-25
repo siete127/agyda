@@ -317,6 +317,23 @@ exports.uploadArchivo = async (req, res) => {
         } catch (_) {}
       }
     }
+    // Red de seguridad: aunque sí vino un carpetaId válido, multer decide la
+    // carpeta física en base a req.body.carpetaId ANTES de que multipart lo
+    // termine de parsear si el campo del archivo llega antes en el FormData
+    // — con eso, el archivo cae en 'root' pero el registro de abajo queda
+    // con la carpeta correcta (bug real: "archivo físico no encontrado" al
+    // descargar). El frontend ya manda carpetaId antes del archivo, pero
+    // esto cubre cualquier otro cliente/versión que no lo haga.
+    if (carpeta !== null && !isNaN(carpeta) && file && file.filename) {
+      try {
+        const src = path.join(BASE_DIR, 'root', file.filename);
+        if (fs.existsSync(src)) {
+          const destDir = path.join(BASE_DIR, String(carpeta));
+          if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+          fs.renameSync(src, path.join(destDir, file.filename));
+        }
+      } catch (_) {}
+    }
     const usuarioId = getUserId(req) || 0;
     if (!isAD(role)) {
       const permiso = await pool.request()

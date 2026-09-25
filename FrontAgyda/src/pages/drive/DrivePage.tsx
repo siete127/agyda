@@ -540,8 +540,15 @@ export function DrivePage() {
     const file = e.target.files?.[0]
     if (!file) return
     const fd = new FormData()
-    fd.append('archivo', file)
+    // carpetaId ANTES que el archivo: multer.diskStorage.destination (en
+    // driveUpload.js) decide la carpeta física leyendo req.body.carpetaId,
+    // y con multipart/form-data los campos se parsean en el orden en que
+    // llegan — si el archivo va primero, carpetaId aún no existe en ese
+    // momento y el archivo físico siempre cae en la carpeta 'root', aunque
+    // el registro en la base de datos quede con la carpeta correcta (bug
+    // real: "archivo físico no encontrado" al descargar).
     if (carpetaActual) fd.append('carpetaId', String(carpetaActual.id))
+    fd.append('archivo', file)
     try {
       await api.post('/drive/archivos', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       qc.invalidateQueries({ queryKey: ['drive-archivos', carpetaActual?.id] })
