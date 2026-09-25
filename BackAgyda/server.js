@@ -193,6 +193,7 @@ app.get('/p/:codigo', require('./controllers/qrGeneratorController').resolverUrl
 app.use('/api/email-marketing', require('./routes/emailMarketing'));
 app.use('/api/mensajeria', require('./routes/mensajeria'));
 app.use('/api/funciones-usuario', require('./routes/funcionesUsuario'));
+app.use('/api/validaciones', require('./routes/validaciones'));
 
 // CRM: arrancar cron de automatizaciones
 require('./controllers/crmAutomatizacionesController');

@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import {
   Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText,
   Package, LayoutGrid, List, Eye, EyeOff, MoreVertical, Power, X, User, Route, MapPinned, Hash,
-  ShoppingBag, PackagePlus, Save, ChevronDown, Wallet, ArrowUpRight, KeyRound,
+  ShoppingBag, PackagePlus, Save, ChevronDown, Wallet, ArrowUpRight, KeyRound, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
+import { useValidacionCliente, type Aviso } from '@/hooks/useValidacionCliente'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -307,6 +308,21 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
   const [mostrarPassword, setMostrarPassword] = useState(false)
   const [enviarInvitacion, setEnviarInvitacion] = useState(true)
 
+  // Validación de RFC, correo, CP y colonia: solo avisa, nunca bloquea el guardado.
+  const val = useValidacionCliente({ rfc: form.rfc, correo: form.correo, cp: form.cp, colonia: form.colonia })
+  const AVISOS: Record<string, Aviso | null> = { rfc: val.avisoRfc, correo: val.avisoCorreo, cp: val.avisoCp, colonia: val.avisoColonia }
+  // Al reconocer un CP nuevo: llena la ciudad (si está vacía) y la colonia si el CP solo tiene una.
+  const [cpAplicado, setCpAplicado] = useState<string | null>(cliente?.cp ?? null)
+  if (val.datosCp && val.datosCp.cp !== cpAplicado) {
+    const d = val.datosCp
+    setCpAplicado(d.cp)
+    setForm((f) => ({
+      ...f,
+      ciudad: f.ciudad.trim() ? f.ciudad : (d.ciudad || d.municipio || ''),
+      colonia: f.colonia.trim() ? f.colonia : (d.colonias?.length === 1 ? d.colonias[0].nombre : ''),
+    }))
+  }
+
   const guardar = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = { ...form }
@@ -371,22 +387,52 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
               </div>
             )}
             <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-              {campos.map(({ key, label, span, icon: Icon, ph }) => (
-                <div key={key} className={span === 2 ? 'col-span-2' : ''}>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-gray-500">
-                    <Icon className="h-3 w-3 text-violet-400" /> {label}
-                  </label>
-                  <div className="relative">
-                    <Icon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
-                    <input
-                      value={(form as Record<string, string>)[key]}
-                      onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                      placeholder={ph}
-                      className="w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-9 pr-3 text-[0.85rem] text-gray-900 placeholder-gray-400 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
-                    />
+              {campos.map(({ key, label, span, icon: Icon, ph }) => {
+                const aviso = AVISOS[key] ?? null
+                return (
+                  <div key={key} className={span === 2 ? 'col-span-2' : ''}>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-gray-500">
+                      <Icon className="h-3 w-3 text-violet-400" /> {label}
+                    </label>
+                    <div className="relative">
+                      <Icon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
+                      <input
+                        value={(form as Record<string, string>)[key]}
+                        onChange={(e) => setForm({ ...form, [key]: key === 'rfc' ? e.target.value.toUpperCase() : e.target.value })}
+                        placeholder={ph}
+                        list={key === 'colonia' && val.datosCp?.colonias?.length ? 'colonias-del-cp' : undefined}
+                        inputMode={key === 'cp' ? 'numeric' : undefined}
+                        maxLength={key === 'cp' ? 5 : key === 'rfc' ? 13 : undefined}
+                        className={clsx(
+                          'w-full rounded-xl border bg-card py-2.5 pl-9 pr-3 text-[0.85rem] text-gray-900 placeholder-gray-400 outline-none transition focus:ring-2',
+                          aviso?.nivel === 'error' ? 'border-red-300 focus:border-red-400 focus:ring-red-500/15'
+                            : aviso?.nivel === 'aviso' ? 'border-amber-300 focus:border-amber-400 focus:ring-amber-500/15'
+                            : aviso?.nivel === 'ok' ? 'border-emerald-300 focus:border-emerald-400 focus:ring-emerald-500/15'
+                            : 'border-gray-200 focus:border-violet-500 focus:ring-violet-500/15',
+                        )}
+                      />
+                    </div>
+                    {aviso && (
+                      <p className={clsx('mt-1 flex items-start gap-1 text-[0.7rem] leading-snug',
+                        aviso.nivel === 'error' ? 'text-red-600' : aviso.nivel === 'aviso' ? 'text-amber-600' : aviso.nivel === 'ok' ? 'text-emerald-600' : 'text-gray-400')}>
+                        {aviso.nivel === 'ok' ? <CheckCircle2 className="mt-px h-3 w-3 flex-shrink-0" /> : <AlertTriangle className="mt-px h-3 w-3 flex-shrink-0" />}
+                        {aviso.texto}
+                      </p>
+                    )}
+                    {key === 'correo' && val.sugerenciaCorreo && val.sugerenciaCorreo !== form.correo.trim().toLowerCase() && (
+                      <button type="button" onClick={() => setForm({ ...form, correo: val.sugerenciaCorreo! })}
+                        className="mt-1 text-[0.7rem] font-semibold text-violet-600 hover:underline">
+                        ¿Quisiste decir {val.sugerenciaCorreo}?
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
+              {val.datosCp?.colonias?.length ? (
+                <datalist id="colonias-del-cp">
+                  {val.datosCp.colonias.map((c) => <option key={c.nombre} value={c.nombre}>{c.tipo}</option>)}
+                </datalist>
+              ) : null}
               <div className="col-span-2">
                 <label className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-gray-500">
                   <FileText className="h-3 w-3 text-violet-400" /> Observaciones
