@@ -4,6 +4,7 @@ import type {
   CCInteraccion, CCCanal, CCCampania, CCGrupo, CCTipificacion, CCMotivoCierre,
   CCPlantilla, CCAgenteEstado, CCMiEstado, CCConfig, CCMetricas, CCSesionAgenteCanal,
   CCPostulante, CCMiSkill, CCPostulanteGestion, CCPostulanteNota, CCCampaniaSimple,
+  CCCampaniaFormularios,
 } from '@/types/cc.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -103,6 +104,10 @@ export const ccService = {
   createCampania: (body: { nombre: string; descripcion?: string; maxChatsPorAgente?: number }) => api.post('/contact-center/campanias', body).then((r) => r.data),
   updateCampania: (id: number, body: Record<string, unknown>) => api.put(`/contact-center/campanias/${id}`, body).then((r) => r.data),
   deleteCampania: (id: number) => api.delete(`/contact-center/campanias/${id}`).then((r) => r.data),
+  // Ficha de campaña: formularios asignados y el que abre la URL fija del marcador.
+  getFormulariosDeCampania: (id: number) => api.get(`/contact-center/campanias/${id}/formularios`).then((r) => r.data.data as CCCampaniaFormularios),
+  setMarcadorCampania: (id: number, formularioId: number | null) =>
+    api.put(`/contact-center/campanias/${id}/marcador`, { formularioId }).then((r) => r.data),
   getPostulantes: (campaniaId: number) => d<CCPostulante[]>(api.get(`/contact-center/campanias/${campaniaId}/postulantes`)),
   // Descarga directa (no JSON) — mismo patrón que mediaUrl: el token va por
   // querystring porque es un <a href> de navegador, no una llamada de axios.

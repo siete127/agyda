@@ -80,13 +80,14 @@ function tonoEstatus(e: string): string {
 }
 
 // Contenido de la vista, reutilizado tal cual en la Suite de reportes
-// (carpeta Operación → "Registros de formularios").
-export function RegistrosFormularioVista() {
+// (carpeta Operación → "Registros de formularios"). Con `formularioIds` solo
+// se ofrecen esos formularios (apartado de una campaña en la Suite).
+export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: number[] } = {}) {
   const { data: formularios = [], isLoading: cargandoForms } = useQuery({
     queryKey: ['ccf-formularios'],
     queryFn: () => ccFormulariosService.listFormularios(),
   })
-  const publicados = formularios.filter((f) => f.activo && f.versionPublicada != null)
+  const publicados = formularios.filter((f) => f.activo && f.versionPublicada != null && (!formularioIds || formularioIds.includes(f.id)))
   const [elegido, setElegido] = useState<number | null>(leerGuardado)
   // Sin elección guardada (o ya no existe): el publicado más reciente.
   const formId = publicados.some((f) => f.id === elegido)

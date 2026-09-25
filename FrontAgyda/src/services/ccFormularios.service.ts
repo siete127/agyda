@@ -108,6 +108,10 @@ export const ccFormulariosService = {
 // aparte de ccFormulariosService porque conceptualmente es una superficie
 // distinta (consumida por FormularioPublicoPage, nunca por el panel admin).
 export const ccFormularioPublicoService = {
+  // URL fija del marcador por campaña → token del formulario vigente.
+  resolverMarcador: (slug: string) =>
+    apiPublico.get(`/contact-center/formularios-publico/campania/${encodeURIComponent(slug)}`)
+      .then((r) => r.data.data as { token: string; campania: string; formulario: string }),
   getDefinicion: (token: string) =>
     d<CCFormPublicoDefinicion>(apiPublico.get(`/contact-center/formularios-publico/${token}`)),
   listCanalesDisponibles: (token: string) =>

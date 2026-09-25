@@ -71,6 +71,8 @@ export interface ProductividadAgente {
   // Promedio de minutos en pausa por día de los 7 días previos a la fecha
   // consultada (sin incluirla) — null si no hay historial suficiente.
   avgSemanalMin: number | null
+  // Interacciones que cerró ese día en las campañas consultadas.
+  atenciones?: number
 }
 
 export const TIPO_PAUSA_LABELS: Record<string, string> = {

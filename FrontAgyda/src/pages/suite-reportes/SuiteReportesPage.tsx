@@ -22,6 +22,9 @@ import { ProgressBarList } from '@/components/ui/ProgressBarList'
 import { TIPIFICACIONES_LLAMADA_LABEL } from '@/constants/tipificacionesLlamada'
 import { parseRdl, type RdlDefinition } from '@/lib/rdl'
 import { ReportBuilder } from './ReportBuilder'
+import { useSearchParams } from 'react-router-dom'
+import { CarpetaCampanias, EncabezadoCampania, RegistrosDeCampania, ProductividadCampaniaView } from './CampaniasSuite'
+import { REPORTES_CAMPANIA, type ReporteCampaniaId } from './reportesCampania'
 import type { RdlReporte, RdlCarpeta, RdlRol, RbDefinicion, RbReporteGuardado } from '@/types/reporteDiario.types'
 
 function hoy() {
@@ -75,14 +78,28 @@ type SeleccionBase = { tipo: 'base'; id: string }
 type SeleccionRdl = { tipo: 'rdl'; id: number }
 type SeleccionBuilder = { tipo: 'builder' }
 type SeleccionRbGuardado = { tipo: 'rb'; id: number }
-type Seleccion = SeleccionBase | SeleccionRdl | SeleccionBuilder | SeleccionRbGuardado | null
+type SeleccionCampania = { tipo: 'campania'; id: number; reporte: ReporteCampaniaId }
+type Seleccion = SeleccionBase | SeleccionRdl | SeleccionBuilder | SeleccionRbGuardado | SeleccionCampania | null
 
 export function SuiteReportesPage() {
   const qc = useQueryClient()
   const user = useCurrentUser()
   const esAdmin = ['AD', 'TI'].includes((user?.tipoUsuario ?? '').toUpperCase())
 
-  const [sel, setSel] = useState<Seleccion>({ tipo: 'base', id: 'postulantes' })
+  // ?campania=<id>&reporte=<id> (desde la ficha de campaña) abre ese apartado.
+  const [searchParams] = useSearchParams()
+  const [sel, setSel] = useState<Seleccion>(() => {
+    const c = Number(searchParams.get('campania'))
+    const r = searchParams.get('reporte')
+    const rep = REPORTES_CAMPANIA.find((x) => x.id === r)?.id ?? REPORTES_CAMPANIA[0].id
+    return c ? { tipo: 'campania', id: c, reporte: rep } : { tipo: 'base', id: 'postulantes' }
+  })
+  const { data: campanias = [] } = useQuery({
+    queryKey: ['cc-campanias'],
+    queryFn: () => ccService.getCampanias(),
+    staleTime: 60_000,
+  })
+  const campaniaSel = sel?.tipo === 'campania' ? campanias.find((c) => c.id === sel.id) : undefined
   const [subirOpen, setSubirOpen] = useState(false)
   const [nuevaCarpetaOpen, setNuevaCarpetaOpen] = useState(false)
   const [carpetasAbiertas, setCarpetasAbiertas] = useState<Record<string, boolean>>({ 'Operación': true, General: true })
@@ -222,6 +239,11 @@ export function SuiteReportesPage() {
             <div className="flex justify-center py-10"><Spinner /></div>
           ) : (
             <div className="py-1.5">
+              <CarpetaCampanias
+                campanias={campanias}
+                seleccion={sel?.tipo === 'campania' ? { campaniaId: sel.id, reporte: sel.reporte } : null}
+                onSeleccionar={(id, reporte) => setSel({ tipo: 'campania', id, reporte })}
+              />
               {arbol.map(([carpeta, contenido]) => {
                 const abierta = carpetasAbiertas[carpeta] ?? false
                 const total = contenido.base.length + contenido.rdl.length + contenido.rb.length
@@ -340,6 +362,16 @@ export function SuiteReportesPage() {
           {sel?.tipo === 'base' && sel.id === 'interacciones' && <InteraccionesView />}
           {sel?.tipo === 'base' && sel.id === 'registros-formularios' && <RegistrosFormularioVista />}
           {sel?.tipo === 'base' && sel.id === 'ejecutivo-reclutamiento' && <ReporteEjecutivoReclutamientoView />}
+
+          {sel?.tipo === 'campania' && (
+            <div key={`${sel.id}-${sel.reporte}`}>
+              <EncabezadoCampania campania={campaniaSel} reporte={sel.reporte} />
+              {sel.reporte === 'registros' && <RegistrosDeCampania campaniaId={sel.id} />}
+              {sel.reporte === 'interacciones' && <InteraccionesView campaniaId={sel.id} />}
+              {sel.reporte === 'ejecutivo' && <ReporteEjecutivoReclutamientoView campaniaFija={sel.id} />}
+              {sel.reporte === 'productividad' && <ProductividadCampaniaView campaniaId={sel.id} />}
+            </div>
+          )}
 
           {sel?.tipo === 'builder' && (
             <ReportBuilder onGuardar={(def, origen) => setGuardarBuilderOpen({ def, origen })} />
@@ -813,11 +845,12 @@ function colorDeEstatus(estatus: string) {
   return COLOR_ESTATUS[estatus.toLowerCase()] ?? '#6b7280'
 }
 
-function ReporteEjecutivoReclutamientoView() {
+// `campaniaFija`: apartado de una campaña (carpeta Campañas) — sin selector.
+function ReporteEjecutivoReclutamientoView({ campaniaFija }: { campaniaFija?: number } = {}) {
   const qc = useQueryClient()
   const [desde, setDesde] = useState(hace30Dias())
   const [hasta, setHasta] = useState(hoy())
-  const [campaniaId, setCampaniaId] = useState<number | ''>('')
+  const [campaniaId, setCampaniaId] = useState<number | ''>(campaniaFija ?? '')
   const [interaccionAbierta, setInteraccionAbierta] = useState<number | null>(null)
 
   const { data: campanias = [] } = useQuery({
@@ -842,13 +875,15 @@ function ReporteEjecutivoReclutamientoView() {
         <span className="flex items-center gap-1.5 text-[0.72rem] font-semibold uppercase tracking-wide text-ink-tertiary">
           <SlidersHorizontal className="h-3.5 w-3.5" /> Parámetros
         </span>
-        <div>
-          <label className="mb-1 block text-[0.68rem] text-ink-secondary">Campaña</label>
-          <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className="field">
-            <option value="">Selecciona una campaña</option>
-            {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </div>
+        {!campaniaFija && (
+          <div>
+            <label className="mb-1 block text-[0.68rem] text-ink-secondary">Campaña</label>
+            <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className="field">
+              <option value="">Selecciona una campaña</option>
+              {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="mb-1 block text-[0.68rem] text-ink-secondary">Desde</label>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field" max={hasta} />
@@ -1133,7 +1168,8 @@ function ReportePostulantesView() {
 
 /* ══════════ Interacciones — buscador general (todas las campañas/canales) ══════════ */
 
-function InteraccionesView() {
+// `campaniaId`: apartado de una campaña (carpeta Campañas) — solo sus interacciones.
+function InteraccionesView({ campaniaId }: { campaniaId?: number } = {}) {
   const [texto, setTexto] = useState('')
   const [textoBuscado, setTextoBuscado] = useState('')
   const [agenteId, setAgenteId] = useState<number | ''>('')
@@ -1153,6 +1189,7 @@ function InteraccionesView() {
   })
 
   const filtro = {
+    campaniaId,
     texto: textoBuscado || undefined,
     agenteId: agenteId || undefined,
     tipificacionId: tipificacionId || undefined,
@@ -1174,7 +1211,9 @@ function InteraccionesView() {
         <h2 className="flex items-center gap-2 text-base font-bold text-ink">
           <Search className="h-4.5 w-4.5 text-brand" /> Interacciones
         </h2>
-        <p className="text-xs text-gray-500">Interacciones cerradas de todas las campañas y canales — busca por nombre o teléfono del cliente.</p>
+        <p className="text-xs text-gray-500">
+          Interacciones cerradas {campaniaId ? 'de los canales de esta campaña' : 'de todas las campañas y canales'} — busca por nombre o teléfono del cliente.
+        </p>
       </div>
 
       <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3">

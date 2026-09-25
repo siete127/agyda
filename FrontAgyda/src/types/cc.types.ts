@@ -126,6 +126,28 @@ export interface CCCampania {
   contactoFacebookUrl: string | null
   contactoInstagramUrl: string | null
   modoAsignacion?: CCModoAsignacionCampania
+  // Formulario elegido para el marcador (null = automático: el único con URL).
+  marcadorFormularioId?: number | null
+}
+
+// Formularios asignados a una campaña (ficha de campaña) y el del marcador.
+export interface CCCampaniaFormulario {
+  id: number
+  nombre: string
+  modo: 'interno' | 'externo'
+  publicado: boolean
+  abrePorUrl: boolean // externo + publicado + con token: se puede abrir desde el marcador
+  todaLaCampania: boolean // asignado a la campaña sin acotar a canal
+  asignacionCampaniaId: number | null // FA_ID de esa asignación general (para quitarla)
+  canales: { id: number; nombre: string; tipo: string; asignacionId: number }[]
+}
+export interface CCCampaniaFormularios {
+  formularios: CCCampaniaFormulario[]
+  marcador: {
+    formularioId: number | null // el que abre hoy la URL (elegido o automático)
+    elegido: number | null // el guardado en la campaña (null = automático)
+    ruta: string | null // /formulario-publico/c/<slug>, null si la campaña no tiene slug
+  }
 }
 
 // Registrado desde la página pública de postulación (ej. registro.html de

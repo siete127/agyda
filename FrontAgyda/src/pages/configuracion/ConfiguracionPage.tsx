@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from 'react'
-import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus, Share2, ListTodo } from 'lucide-react'
+import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus, Share2, ListTodo, Megaphone, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth.store'
@@ -13,6 +13,7 @@ import { IMPACTO_POR_PANTALLA } from './configCompartidas'
 import { NuevoClienteModal } from '@/pages/atencion-cliente/clientes/NuevoClienteModal'
 import { CATEGORY_STYLES, DEFAULT_CATEGORY_STYLE, countLeaves } from './categoryStyles'
 import { EmpresasTab } from './EmpresasTab'
+import { AsistenteCampania } from './AsistenteCampania'
 import { ModulosEmpresaTab } from './ModulosEmpresaTab'
 import { PermisosTab } from './PermisosTab'
 import { WebphoneVistasTab } from './WebphoneVistasTab'
@@ -212,6 +213,11 @@ export function ConfiguracionPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [verPendientes, setVerPendientes] = useState(false)
+  const [asistenteCampania, setAsistenteCampania] = useState(false)
+  // Alta de campañas: AD/TI (el backend lo exige) con acceso al Contact Center.
+  const rolActual = (usuarioActual?.tipoUsuario ?? '').toUpperCase()
+  const puedeCrearCampania = ['AD', 'TI'].includes(rolActual) && !cargandoModulos && !cargandoAcciones
+    && isAllowed('contact-center') && can('contact-center', 'gestionar-skills')
 
   const q = search.trim().toLowerCase()
   const results = q ? searchResults(tree, q) : []
@@ -312,7 +318,9 @@ export function ConfiguracionPage() {
         />
       </div>
 
-      {q ? (
+      {asistenteCampania ? (
+        <AsistenteCampania onSalir={() => setAsistenteCampania(false)} />
+      ) : q ? (
         <SearchResultsView results={results} onSelect={(n) => navigateToKey(n.key)} />
       ) : verPendientes ? (
         <PendientesView pendientes={pendientes} onBack={goHome} onSelect={navigateToKey} />
@@ -328,7 +336,8 @@ export function ConfiguracionPage() {
           screen={Screen}
         />
       ) : (
-        <HomeView tree={tree} onOpen={openCategory} pendientes={pendientes.length} onVerPendientes={() => setVerPendientes(true)} />
+        <HomeView tree={tree} onOpen={openCategory} pendientes={pendientes.length} onVerPendientes={() => setVerPendientes(true)}
+          onNuevaCampania={puedeCrearCampania ? () => setAsistenteCampania(true) : undefined} />
       )}
     </div>
   )
@@ -336,14 +345,33 @@ export function ConfiguracionPage() {
 
 /* ─────────────────────────── Home: grid de categorías ─────────────────────────── */
 
-function HomeView({ tree, onOpen, pendientes, onVerPendientes }: {
+function HomeView({ tree, onOpen, pendientes, onVerPendientes, onNuevaCampania }: {
   tree: ConfigNode[]
   onOpen: (key: string) => void
   pendientes: number
   onVerPendientes: () => void
+  onNuevaCampania?: () => void
 }) {
   return (
     <div className="space-y-4">
+      {onNuevaCampania && (
+        <button
+          onClick={onNuevaCampania}
+          className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 text-left text-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
+        >
+          <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/15">
+            <Megaphone className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1.5 text-[0.95rem] font-bold">Configurar nueva campaña <Sparkles className="h-4 w-4 text-amber-200" /></p>
+            <p className="mt-0.5 text-[0.75rem] text-white/80">
+              Paso a paso: crea la campaña, sus skills y agentes, canales, formulario, URL del marcador, tipificaciones y supervisores. Los reportes se crean solos.
+            </p>
+          </div>
+          <ChevronRight className="h-5 w-5 flex-shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      )}
       {pendientes > 0 && (
         <button
           onClick={onVerPendientes}

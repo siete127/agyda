@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 const CRMPublicPage = lazy(() => import('@/pages/ventas/CRMPublicPage'))
 const FormularioPublicoPage = lazy(() => import('@/pages/contact-center/FormularioPublicoPage'))
+const MarcadorCampaniaPage = lazy(() => import('@/pages/contact-center/MarcadorCampaniaPage'))
 import { AppLayout } from '@/layouts/AppLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { VentasLayout } from '@/layouts/VentasLayout'
@@ -185,6 +186,7 @@ export const router = createBrowserRouter([
   // Formularios de Atención en modo EXTERNO — misma idea que /crm de arriba,
   // pero para un formulario dinámico configurado desde Contact Center >
   // Formularios de Atención > pestaña "Publicación".
+  { path: '/formulario-publico/c/:slug', element: <Suspense fallback={<div />}><MarcadorCampaniaPage /></Suspense> },
   { path: '/formulario-publico/:token', element: <Suspense fallback={<div />}><FormularioPublicoPage /></Suspense> },
 
   // Portal del cliente (acceso público con token)

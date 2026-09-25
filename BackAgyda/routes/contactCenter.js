@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, verificarRol } = require('../middleware/auth');
 const { requireActionAccess, requireAnyActionAccess } = require('../middleware/moduleAccess');
 const { uploadCcMedia } = require('../middleware/ccMediaUpload');
 const { postulanteFormRateLimit } = require('../middleware/publicFormRateLimit');
@@ -179,6 +179,10 @@ router.get('/formularios/tipos-campo', authenticateToken, requireActionAccess(M,
 // Lectura también desde la Suite de reportes (módulo operaciones).
 const verFormularios = requireAnyActionAccess([[M, 'ver'], ['operaciones', 'ver']]);
 router.get('/formularios', authenticateToken, verFormularios, forms.listFormularios);
+
+// Ficha de campaña: sus formularios y el formulario que abre el marcador.
+router.get('/campanias/:id/formularios', authenticateToken, verFormularios, forms.listFormulariosDeCampania);
+router.put('/campanias/:id/marcador', authenticateToken, verificarRol(['AD', 'TI']), requireActionAccess(M, 'gestionar-skills'), forms.setMarcadorCampania);
 router.post('/formularios', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.createFormulario);
 router.get('/formularios/:id', authenticateToken, requireActionAccess(M, 'ver'), forms.getFormulario);
 router.patch('/formularios/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.updateFormulario);
@@ -239,6 +243,8 @@ router.get('/formularios/:id/opciones-catalogo', authenticateToken, requireActio
 
 // Público (sin auth) — formulario en modo EXTERNO, ver comentario arriba
 // junto a /publico/campanias/:slug/contacto.
+// URL fija del marcador por campaña (antes que /:token/... por si el slug coincide).
+router.get('/formularios-publico/campania/:slug', forms.resolverMarcadorPublico);
 router.get('/formularios-publico/:token', forms.getFormularioPublico);
 router.get('/formularios-publico/:token/canales-disponibles', forms.listCanalesDisponiblesPublico);
 router.get('/formularios-publico/:token/opciones-catalogo', forms.getOpcionesCatalogoDinamicoPublico);

@@ -24,8 +24,11 @@ export const supervisoresService = {
     return data?.data ?? { campanias: [], agentes: [] }
   },
 
-  async getProductividad(fecha?: string): Promise<ProductividadAgente[]> {
-    const { data } = await api.get('/operaciones/supervisores/productividad', { params: fecha ? { fecha } : {} })
+  async getProductividad(fecha?: string, campaniaId?: number): Promise<ProductividadAgente[]> {
+    const params: Record<string, string | number> = {}
+    if (fecha) params.fecha = fecha
+    if (campaniaId) params.campaniaId = campaniaId
+    const { data } = await api.get('/operaciones/supervisores/productividad', { params })
     return (data?.data ?? []) as ProductividadAgente[]
   },
 

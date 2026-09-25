@@ -508,6 +508,7 @@ exports.listCampanias = async (req, res) => {
         c.CM2_MAX_CHATS_POR_AGENTE maxChatsPorAgente, c.CM2_ACTIVO activo,
         c.CM2_SLUG slug, c.CM2_CONTACTO_FACEBOOK_URL contactoFacebookUrl, c.CM2_CONTACTO_INSTAGRAM_URL contactoInstagramUrl,
         c.CM2_CONTACTO_TELEFONO contactoTelefono, c.CM2_MODO_ASIGNACION modoAsignacion,
+        c.CM2_MARCADOR_FORM_ID marcadorFormularioId,
         (SELECT COUNT(*) FROM dbo.CCO_CANALES cn WHERE cn.CN_CAMPANIA_ID = c.CM2_ID) canalesCount,
         (SELECT COUNT(*) FROM dbo.CCO_GRUPOS g WHERE g.CG_CAMPANIA_ID = c.CM2_ID AND g.CG_ACTIVO = 1) skillsCount,
         (SELECT COUNT(DISTINCT ga.CGA_USUARIO_ID) FROM dbo.CCO_GRUPO_AGENTES ga

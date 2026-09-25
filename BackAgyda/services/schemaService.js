@@ -7240,6 +7240,12 @@ CREATE TABLE dbo.CCO_CAMPANIAS (
     // el admin puede cambiarlo después vía updateCampania.
     `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_SLUG') IS NULL
   ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_SLUG NVARCHAR(80) NULL;`,
+    // Formulario que abre el marcador (VICIdial) con la URL fija de la
+    // campaña /formulario-publico/c/<slug>: cambiar el formulario aquí no
+    // obliga a tocar la URL configurada en el marcador. Sin FK porque
+    // CCF_FORMULARIOS se crea después; se valida en ccFormulariosController.
+    `IF COL_LENGTH('dbo.CCO_CAMPANIAS', 'CM2_MARCADOR_FORM_ID') IS NULL
+  ALTER TABLE dbo.CCO_CAMPANIAS ADD CM2_MARCADOR_FORM_ID INT NULL;`,
     `IF OBJECT_ID('dbo.CCO_GRUPOS', 'U') IS NULL
 CREATE TABLE dbo.CCO_GRUPOS (
   CG_ID INT IDENTITY(1,1) PRIMARY KEY,

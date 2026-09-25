@@ -297,9 +297,11 @@ async function getMiPanel(req, res) {
   }
 }
 
-// GET /api/operaciones/supervisores/productividad?fecha=YYYY-MM-DD — minutos en
-// pausa por tipo, por agente, del día indicado (o hoy). Mismo cálculo que ya usa
-// getResumenGeneral en reportController.js, acotado a los agentes de mis campañas.
+// GET /api/operaciones/supervisores/productividad?fecha=YYYY-MM-DD[&campaniaId=] —
+// minutos en pausa por tipo, por agente, del día indicado (o hoy). Mismo cálculo
+// que ya usa getResumenGeneral en reportController.js, acotado a los agentes de
+// mis campañas (o solo a los de campaniaId, si es una de ellas), más las
+// atenciones que cerró cada agente ese día en esas campañas.
 async function getProductividadDia(req, res) {
   try {
     const uid = req.user?.id;
@@ -320,7 +322,9 @@ async function getProductividadDia(req, res) {
         ? 'SELECT CM2_ID as id FROM CCO_CAMPANIAS'
         : `SELECT DISTINCT CS_CAMPANIA_ID as id FROM CC_CAMPANIAS_SUPERVISORES ${campaniasWhere}`
     );
-    const campaniaIds = campaniaIdsRs.recordset.map((c) => c.id);
+    let campaniaIds = campaniaIdsRs.recordset.map((c) => c.id);
+    const campaniaFiltro = Number(req.query.campaniaId) || null;
+    if (campaniaFiltro) campaniaIds = campaniaIds.includes(campaniaFiltro) ? [campaniaFiltro] : [];
     if (campaniaIds.length === 0) return res.json({ success: true, data: [] });
 
     const agentesRs = await pool.request().query(`
@@ -387,6 +391,18 @@ async function getProductividadDia(req, res) {
     `);
     const estadoPorAgente = new Map(estadoRs.recordset.map((e) => [e.agenteId, e]));
 
+    const atencionesRs = await pool.request()
+      .input('fecha', sql.NVarChar, fecha)
+      .query(`
+        SELECT CI_AGENTE_ID as agenteId, COUNT(*) as atenciones
+        FROM CCO_INTERACCIONES
+        WHERE CI_ESTADO = 'cerrada' AND CI_AGENTE_ID IN (${agenteIds.join(',')})
+          AND CI_CAMPANIA_ID IN (${campaniaIds.join(',')})
+          AND CAST(CI_FECHA_CIERRE AS date) = @fecha
+        GROUP BY CI_AGENTE_ID
+      `);
+    const atencionesPorAgente = new Map(atencionesRs.recordset.map((a) => [a.agenteId, a.atenciones]));
+
     const porAgente = new Map();
     for (const id of agenteIds) {
       const pausaActiva = pausaActivaPorAgente.get(id);
@@ -407,6 +423,7 @@ async function getProductividadDia(req, res) {
         tipoPausaStatusId: pausaActiva ? pausaActiva.statusId : null,
         ultimaConexion: est?.ultimaConexion ?? null,
         avgSemanalMin: avgSemanalPorAgente.get(id) ?? null,
+        atenciones: atencionesPorAgente.get(id) ?? 0,
       });
     }
     for (const p of pausasRs.recordset) {

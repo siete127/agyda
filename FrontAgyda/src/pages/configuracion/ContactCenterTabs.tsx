@@ -4,12 +4,15 @@ import {
   Plug, Users, Tags, Gauge, FlaskConical, Layers, Check, Loader2, Plus, Trash2, Copy, QrCode, LogOut,
   MessageCircle, Camera, Globe, X, Save, Megaphone, Target, Headphones, MoreVertical, Pencil, LayoutGrid, List as ListIcon,
   ChevronRight, ArrowLeft as ArrowLeftIcon, ClipboardList, Mail, Phone, UserCog, Download, Search, StickyNote, ChevronLeft, History,
-  BellRing, Filter,
+  BellRing, Filter, FileText, PhoneCall, BarChart3, ExternalLink,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { REPORTES_CAMPANIA } from '@/pages/suite-reportes/reportesCampania'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { api } from '@/lib/axios'
 import { ccService } from '@/services/cc.service'
+import { ccFormulariosService } from '@/services/ccFormularios.service'
 import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, type CCIgpEstado, type CCPostulanteGestion } from '@/types/cc.types'
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { getSocket } from '@/lib/socket'
@@ -813,7 +816,7 @@ function CampaniaCard({ campania, onChanged, onAbrir }: any) {
    la campaña de la que realmente dependen en la BD (CN_CAMPANIA_ID /
    CG_CAMPANIA_ID / CT_CAMPANIA_ID apuntan los 3 al mismo CM2_ID). */
 function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onVolver: () => void; onChanged: () => void }) {
-  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'supervisores' | 'tipificaciones' | 'postulantes' | 'contacto'>('canales')
+  const [seccion, setSeccion] = useState<'canales' | 'skills' | 'formulario' | 'reportes' | 'supervisores' | 'tipificaciones' | 'postulantes' | 'contacto'>('canales')
   const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales() })
   const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
   const canalesDeCampania = canalesTodos.filter((c) => c.campaniaId === campania.id)
@@ -821,6 +824,8 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
   const SECCIONES = [
     { key: 'canales' as const, label: 'Canales', icon: Plug, count: canalesDeCampania.length },
     { key: 'skills' as const, label: 'Skills y agentes', icon: Layers, count: grupos.length },
+    { key: 'formulario' as const, label: 'Formulario y marcador', icon: FileText, count: null },
+    { key: 'reportes' as const, label: 'Reportes', icon: BarChart3, count: null },
     { key: 'supervisores' as const, label: 'Supervisores', icon: UserCog, count: null },
     { key: 'tipificaciones' as const, label: 'Tipificaciones', icon: Tags, count: null },
     { key: 'postulantes' as const, label: 'Postulantes', icon: ClipboardList, count: null },
@@ -860,6 +865,8 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
 
       {seccion === 'canales' && <CanalesDeCampaniaPanel campania={campania} canales={canalesDeCampania} onChanged={onChanged} />}
       {seccion === 'skills' && <SkillsDeCampaniaPanel campania={campania} onChanged={onChanged} />}
+      {seccion === 'formulario' && <FormularioYMarcadorPanel campania={campania} onIrAContacto={() => setSeccion('contacto')} />}
+      {seccion === 'reportes' && <ReportesDeCampaniaPanel campania={campania} />}
       {seccion === 'supervisores' && (
         <div className={card}>
           <p className="mb-3 text-xs text-ink-tertiary">
@@ -872,6 +879,200 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
       {seccion === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
       {seccion === 'postulantes' && <PostulantesDeCampaniaPanel campania={campania} />}
       {seccion === 'contacto' && <ContactoPublicoPanel campania={campania} onChanged={onChanged} />}
+    </div>
+  )
+}
+
+/* ═══ Formulario y marcador ═══
+   Los formularios se asignan a la campaña (y opcionalmente a un canal) desde
+   Configuración → Formularios; aquí se ven juntos y se elige cuál abre el
+   marcador con la URL fija de la campaña (/formulario-publico/c/<slug>). */
+export function FormularioYMarcadorPanel({ campania, onIrAContacto }: { campania: { id: number }; onIrAContacto: () => void }) {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['cc-campania-formularios', campania.id],
+    queryFn: () => ccService.getFormulariosDeCampania(campania.id),
+  })
+  const { data: todosForms = [] } = useQuery({ queryKey: ['ccf-formularios'], queryFn: () => ccFormulariosService.listFormularios() })
+  const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales() })
+  const canalesCamp = canalesTodos.filter((c) => c.campaniaId === campania.id)
+  const publicados = todosForms.filter((f) => f.activo && f.versionPublicada != null)
+  const [nuevoForm, setNuevoForm] = useState('')
+  const [nuevoCanal, setNuevoCanal] = useState('')
+  const invalAsig = () => {
+    qc.invalidateQueries({ queryKey: ['cc-campania-formularios', campania.id] })
+    qc.invalidateQueries({ queryKey: ['ccf-asignaciones'] })
+  }
+  // La API asigna la VERSIÓN publicada (FV_ID); el listado solo trae su número,
+  // así que se resuelve con el detalle — mismo criterio que AsignacionesPanel.
+  const asignar = useMutation({
+    mutationFn: async () => {
+      const detalle = await ccFormulariosService.getFormulario(Number(nuevoForm))
+      const pub = detalle.versiones.find((v) => v.estado === 'publicado')
+      if (!pub) throw new Error('Este formulario no tiene una versión publicada')
+      return ccFormulariosService.createAsignacion({ campaniaId: campania.id, canalId: nuevoCanal ? Number(nuevoCanal) : null, formVersionId: pub.id })
+    },
+    onSuccess: () => { invalAsig(); setNuevoForm(''); setNuevoCanal(''); toast.success('Formulario asignado') },
+    onError: (e: { response?: { data?: { message?: string } }; message?: string }) => toast.error(e?.response?.data?.message ?? e?.message ?? 'Error al asignar'),
+  })
+  const quitar = useMutation({
+    mutationFn: (asignacionId: number) => ccFormulariosService.deleteAsignacion(asignacionId),
+    onSuccess: () => { invalAsig(); toast.success('Asignación quitada') },
+    onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message ?? 'Error al quitar'),
+  })
+  const guardar = useMutation({
+    mutationFn: (formularioId: number | null) => ccService.setMarcadorCampania(campania.id, formularioId),
+    onSuccess: () => { toast.success('Formulario del marcador guardado'); qc.invalidateQueries({ queryKey: ['cc-campania-formularios', campania.id] }) },
+    onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message ?? 'Error al guardar'),
+  })
+  if (isLoading || !data) return <div className={clsx(card, 'flex justify-center')}><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
+
+  const conUrl = data.formularios.filter((f) => f.abrePorUrl)
+  const vigente = data.formularios.find((f) => f.id === data.marcador.formularioId)
+  const urlMarcador = data.marcador.ruta ? `${window.location.origin}${data.marcador.ruta}?cliente=&agente=&agenteId=` : null
+  const copiar = (t: string) => { navigator.clipboard.writeText(t); toast.success('Copiado') }
+
+  return (
+    <div className="space-y-4">
+      <div className={card}>
+        <p className="mb-1 text-sm font-bold text-ink">Formularios de la campaña</p>
+        <p className="mb-3 text-[0.72rem] text-ink-tertiary">
+          Un formulario puede servir para toda la campaña o solo para un canal (si un canal tiene el suyo, ese manda). Se diseñan en
+          Configuración → Contact Center → Formularios; aquí solo se asignan.
+        </p>
+        <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl bg-gray-50 p-3 sm:grid-cols-[2fr_1.5fr_auto] sm:items-end">
+          <label className="block">
+            <span className={label}>Formulario (publicado)</span>
+            <select className={field} value={nuevoForm} onChange={(e) => setNuevoForm(e.target.value)}>
+              <option value="">Elige un formulario…</option>
+              {publicados.map((f) => <option key={f.id} value={f.id}>{f.nombre} #{f.id}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className={label}>Para</span>
+            <select className={field} value={nuevoCanal} onChange={(e) => setNuevoCanal(e.target.value)}>
+              <option value="">Toda la campaña</option>
+              {canalesCamp.map((c) => <option key={c.id} value={c.id}>Solo {c.nombre}</option>)}
+            </select>
+          </label>
+          <button onClick={() => asignar.mutate()} disabled={!nuevoForm || asignar.isPending}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+            {asignar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Asignar
+          </button>
+        </div>
+        {data.formularios.length === 0 ? (
+          <p className="text-sm text-ink-tertiary">Esta campaña todavía no tiene formularios asignados.</p>
+        ) : (
+          <div className="space-y-2">
+            {data.formularios.map((f) => (
+              <div key={f.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 px-3.5 py-2.5">
+                <FileText className="h-4 w-4 flex-shrink-0 text-violet-500" />
+                <span className="text-sm font-semibold text-ink">{f.nombre}</span>
+                <span className="text-[0.68rem] text-ink-tertiary">#{f.id}</span>
+                {f.todaLaCampania && (
+                  <span className="flex items-center gap-1 rounded-full bg-violet-50 py-0.5 pl-2 pr-1 text-[0.65rem] font-semibold text-violet-700">
+                    Toda la campaña
+                    <button title="Quitar" disabled={quitar.isPending} onClick={() => f.asignacionCampaniaId && quitar.mutate(f.asignacionCampaniaId)}
+                      className="rounded-full p-0.5 hover:bg-violet-100"><X className="h-2.5 w-2.5" /></button>
+                  </span>
+                )}
+                {f.canales.map((c) => (
+                  <span key={c.id} className="flex items-center gap-1 rounded-full bg-gray-100 py-0.5 pl-2 pr-1 text-[0.65rem] font-medium text-ink-secondary">
+                    {c.nombre}
+                    <button title="Quitar" disabled={quitar.isPending} onClick={() => quitar.mutate(c.asignacionId)}
+                      className="rounded-full p-0.5 hover:bg-gray-200"><X className="h-2.5 w-2.5" /></button>
+                  </span>
+                ))}
+                <span className={clsx('ml-auto rounded-full px-2 py-0.5 text-[0.65rem] font-semibold',
+                  f.abrePorUrl ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-ink-tertiary')}>
+                  {f.abrePorUrl ? 'Con URL pública' : !f.publicado ? 'Sin versión publicada' : 'Solo interno'}
+                </span>
+                {data.marcador.formularioId === f.id && (
+                  <span className="flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[0.65rem] font-semibold text-blue-700"><PhoneCall className="h-3 w-3" /> Marcador</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={card}>
+        <div className="mb-3 flex items-center gap-2.5">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><PhoneCall className="h-4 w-4" /></div>
+          <div>
+            <p className="text-sm font-bold text-ink">Marcador (VICIdial)</p>
+            <p className="text-[0.72rem] text-ink-tertiary">Una URL fija por campaña: si cambias el formulario aquí, no hay que tocar el marcador.</p>
+          </div>
+        </div>
+
+        <label className="block">
+          <span className={label}>Formulario que abre el marcador</span>
+          <select className={field} value={data.marcador.elegido ?? ''} disabled={guardar.isPending || conUrl.length === 0}
+            onChange={(e) => guardar.mutate(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">Automático{conUrl.length === 1 ? ` (${conUrl[0].nombre})` : ' (solo si hay un único formulario con URL)'}</option>
+            {conUrl.map((f) => <option key={f.id} value={f.id}>{f.nombre} #{f.id}</option>)}
+          </select>
+          {conUrl.length === 0 && (
+            <span className="mt-1 block text-[0.68rem] text-amber-600">Ningún formulario de la campaña tiene URL pública: pon uno en modo Externo y publícalo.</span>
+          )}
+          {conUrl.length > 1 && !data.marcador.elegido && (
+            <span className="mt-1 block text-[0.68rem] text-amber-600">Hay {conUrl.length} formularios con URL: elige cuál abre el marcador.</span>
+          )}
+        </label>
+
+        <div className="mt-4">
+          <p className={label}>URL para el marcador</p>
+          {urlMarcador ? (
+            <>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 break-all rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs ring-1 ring-gray-200">{urlMarcador}</code>
+                <button onClick={() => copiar(urlMarcador)} title="Copiar" className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50 hover:text-violet-600"><Copy className="h-3.5 w-3.5" /></button>
+                {vigente && (
+                  <a href={urlMarcador} target="_blank" rel="noreferrer" title="Probar" className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-gray-50 hover:text-violet-600"><ExternalLink className="h-3.5 w-3.5" /></a>
+                )}
+              </div>
+              <p className="mt-2 text-[0.72rem] text-ink-tertiary">
+                Configúrala en VICIdial como "Web Form Integration" de la campaña, sustituyendo los valores vacíos por sus variables:
+                <code className="mx-1 rounded bg-gray-50 px-1 ring-1 ring-gray-200">cliente</code> (teléfono),
+                <code className="mx-1 rounded bg-gray-50 px-1 ring-1 ring-gray-200">agente</code> (nombre) y
+                <code className="mx-1 rounded bg-gray-50 px-1 ring-1 ring-gray-200">agenteId</code> (ID en AGYDA).
+                {vigente ? <> Hoy abre <b>{vigente.nombre}</b>.</> : <span className="text-amber-600"> Hoy no abre ningún formulario.</span>}
+              </p>
+            </>
+          ) : (
+            <p className="text-[0.72rem] text-amber-600">
+              La campaña no tiene identificador público (slug).{' '}
+              <button onClick={onIrAContacto} className="font-semibold underline">Asígnalo en "Contacto público"</button> para generar la URL.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Accesos directos a los reportes de la campaña en la Suite (apartado
+// "Campañas", que se arma solo con cada campaña activa).
+function ReportesDeCampaniaPanel({ campania }: { campania: { id: number } }) {
+  const navigate = useNavigate()
+  return (
+    <div className={card}>
+      <p className="mb-1 text-sm font-bold text-ink">Reportes de la campaña</p>
+      <p className="mb-3 text-[0.72rem] text-ink-tertiary">
+        En la Suite de reportes, la carpeta "Campañas" tiene un apartado por cada campaña activa con estos reportes ya filtrados.
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {REPORTES_CAMPANIA.map((r) => (
+          <button key={r.id} onClick={() => navigate(`/operaciones/suite-reportes?campania=${campania.id}&reporte=${r.id}`)}
+            className="flex items-start gap-2.5 rounded-xl border border-gray-100 p-3 text-left transition hover:border-violet-200 hover:bg-violet-50/40">
+            <r.icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-500" />
+            <span>
+              <span className="block text-sm font-semibold text-ink">{r.nombre}</span>
+              <span className="block text-[0.7rem] text-ink-tertiary">{r.descripcion}</span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -1595,7 +1796,7 @@ function ContactoPublicoPanel({ campania, onChanged }: { campania: any; onChange
 // Reutiliza CanalCard tal cual (misma edición de Meta/Baileys/FCA/IG que ya
 // existe en la pestaña "Canales" general) — aquí solo se filtra a los de esta
 // campaña y se ofrece crear uno nuevo ya preasignado a ella.
-function CanalesDeCampaniaPanel({ campania, canales, onChanged }: any) {
+export function CanalesDeCampaniaPanel({ campania, canales, onChanged }: any) {
   const qc = useQueryClient()
   const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
   const [nuevoTipo, setNuevoTipo] = useState<CCCanalTipo>('test')
@@ -1658,7 +1859,7 @@ function CanalesDeCampaniaPanel({ campania, canales, onChanged }: any) {
 // Skills de la campaña + asignación de agentes integrada en el flujo (antes
 // "Asignación de agentes" era una pantalla hermana suelta, sin ligar
 // visualmente con la campaña ni el skill al que pertenece cada asignación).
-function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
+export function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
   const qc = useQueryClient()
   const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
   const [nuevoGrupo, setNuevoGrupo] = useState('')
@@ -1882,7 +2083,7 @@ export function AsignacionSupervisores({ nivel, id, onChanged }: { nivel: 'campa
 // Tipificaciones globales + las propias de esta campaña — mismo contrato que
 // ya usa CCTipificacionesTab (getTipificacionesCatalogo/create/delete), solo
 // filtrado y con la campaña preseleccionada al crear una nueva.
-function TipificacionesDeCampaniaPanel({ campania }: any) {
+export function TipificacionesDeCampaniaPanel({ campania }: any) {
   const qc = useQueryClient()
   const { data: tips = [] } = useQuery({ queryKey: ['cc-tip-cat'], queryFn: () => ccService.getTipificacionesCatalogo() })
   const [nueva, setNueva] = useState({ nombre: '', requiereComentario: false })

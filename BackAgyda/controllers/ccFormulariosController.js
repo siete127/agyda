@@ -1420,6 +1420,129 @@ async function _resolverFormularioPublico(token) {
   return null;
 }
 
+// ── Formularios de una campaña y URL fija del marcador ───────────────────
+// Formularios asignados (activos) a la campaña, con el canal al que se
+// acotan (null = toda la campaña) y si se pueden abrir por URL pública.
+async function _formulariosDeCampania(p, campaniaId) {
+  const r = await p.request().input('c', sql.Int, campaniaId).query(`
+    SELECT fa.FA_ID asignacionId, fr.FR_ID id, fr.FR_NOMBRE nombre, fr.FR_MODO modo, fr.FR_TOKEN_PUBLICO tokenPublico,
+           fa.FA_CANAL_ID canalId, cn.CN_NOMBRE canalNombre, cn.CN_TIPO canalTipo,
+           CASE WHEN EXISTS (SELECT 1 FROM dbo.CCF_FORM_VERSIONES pv WHERE pv.FV_FORMULARIO_ID = fr.FR_ID AND pv.FV_ESTADO = 'publicado') THEN 1 ELSE 0 END publicado
+    FROM dbo.CCF_FORM_ASIGNACIONES fa
+    JOIN dbo.CCF_FORM_VERSIONES fv ON fv.FV_ID = fa.FA_FORM_VERSION_ID
+    JOIN dbo.CCF_FORMULARIOS fr ON fr.FR_ID = fv.FV_FORMULARIO_ID
+    LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = fa.FA_CANAL_ID
+    WHERE fa.FA_CAMPANIA_ID = @c AND fa.FA_ACTIVO = 1 AND fr.FR_ACTIVO = 1
+    ORDER BY fr.FR_NOMBRE`);
+  // Una fila por formulario, con la lista de canales a los que está acotado.
+  const porForm = new Map();
+  for (const x of r.recordset) {
+    if (!porForm.has(x.id)) {
+      porForm.set(x.id, {
+        id: x.id, nombre: x.nombre, modo: x.modo, publicado: !!x.publicado,
+        // Solo los externos con token se pueden abrir desde el marcador.
+        abrePorUrl: x.modo === 'externo' && !!x.tokenPublico && !!x.publicado,
+        todaLaCampania: false, asignacionCampaniaId: null, canales: [],
+      });
+    }
+    const f = porForm.get(x.id);
+    if (x.canalId == null) { f.todaLaCampania = true; f.asignacionCampaniaId = x.asignacionId; }
+    else f.canales.push({ id: x.canalId, nombre: x.canalNombre, tipo: x.canalTipo, asignacionId: x.asignacionId });
+  }
+  return [...porForm.values()];
+}
+
+// Formulario que abre el marcador: el elegido en la campaña; si no hay uno
+// elegido y la campaña tiene un solo formulario que se abra por URL, ese.
+async function _formularioDelMarcador(p, campaniaId, elegidoId) {
+  const forms = (await _formulariosDeCampania(p, campaniaId)).filter((f) => f.abrePorUrl);
+  if (elegidoId) return forms.find((f) => f.id === elegidoId) ?? null;
+  return forms.length === 1 ? forms[0] : null;
+}
+
+// GET /api/contact-center/campanias/:id/formularios
+exports.listFormulariosDeCampania = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const id = Number(req.params.id);
+    const camp = await p.request().input('id', sql.Int, id)
+      .query('SELECT CM2_SLUG slug, CM2_MARCADOR_FORM_ID marcadorFormularioId FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @id');
+    if (!camp.recordset.length) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
+    const { slug, marcadorFormularioId } = camp.recordset[0];
+    const formularios = await _formulariosDeCampania(p, id);
+    const marcador = await _formularioDelMarcador(p, id, marcadorFormularioId);
+    res.json({
+      success: true,
+      data: {
+        formularios,
+        marcador: {
+          formularioId: marcador?.id ?? null,
+          elegido: marcadorFormularioId ?? null, // null = automático (único formulario con URL)
+          ruta: slug ? `/formulario-publico/c/${slug}` : null,
+        },
+      },
+    });
+  } catch (e) {
+    console.error('ccFormularios.listFormulariosDeCampania:', e.message);
+    res.status(500).json({ success: false, message: 'Error al obtener los formularios de la campaña' });
+  }
+};
+
+// PUT /api/contact-center/campanias/:id/marcador { formularioId | null }
+exports.setMarcadorCampania = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const id = Number(req.params.id);
+    const formularioId = req.body?.formularioId == null || req.body.formularioId === '' ? null : Number(req.body.formularioId);
+    if (formularioId) {
+      const ok = (await _formulariosDeCampania(p, id)).find((f) => f.id === formularioId);
+      if (!ok) return res.status(400).json({ success: false, message: 'Ese formulario no está asignado a la campaña' });
+      if (!ok.abrePorUrl) return res.status(400).json({ success: false, message: 'El formulario debe estar publicado y en modo externo (con URL pública)' });
+    }
+    await p.request().input('id', sql.Int, id).input('f', sql.Int, formularioId)
+      .query('UPDATE dbo.CCO_CAMPANIAS SET CM2_MARCADOR_FORM_ID = @f WHERE CM2_ID = @id');
+    res.json({ success: true });
+  } catch (e) {
+    console.error('ccFormularios.setMarcadorCampania:', e.message);
+    res.status(500).json({ success: false, message: 'Error al guardar el formulario del marcador' });
+  }
+};
+
+// GET /api/contact-center/formularios-publico/campania/:slug — sin sesión.
+// La URL fija del marcador (/formulario-publico/c/<slug>) llega aquí y se
+// traduce al token del formulario vigente de la campaña. Mismo recorrido de
+// empresas que _resolverFormularioPublico (esta ruta no trae JWT).
+exports.resolverMarcadorPublico = async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').trim().toLowerCase();
+    if (!slug) return res.status(404).json({ success: false, message: 'Campaña no disponible' });
+    const { listTenants } = require('../config/tenants');
+    for (const t of listTenants()) {
+      try {
+        const p = await databaseService.getPool(t.key);
+        const c = await p.request().input('s', sql.NVarChar(80), slug)
+          .query('SELECT CM2_ID id, CM2_NOMBRE nombre, CM2_MARCADOR_FORM_ID elegido FROM dbo.CCO_CAMPANIAS WHERE LOWER(CM2_SLUG) = @s AND CM2_ACTIVO = 1');
+        if (!c.recordset.length) continue;
+        const camp = c.recordset[0];
+        const form = await _formularioDelMarcador(p, camp.id, camp.elegido);
+        if (!form) {
+          const message = camp.elegido
+            ? `El formulario elegido para el marcador de "${camp.nombre}" ya no está disponible (debe estar publicado y en modo externo)`
+            : `Falta elegir en la ficha de la campaña "${camp.nombre}" qué formulario abre el marcador`;
+          return res.status(404).json({ success: false, message });
+        }
+        const tok = await p.request().input('id', sql.Int, form.id)
+          .query('SELECT FR_TOKEN_PUBLICO token FROM dbo.CCF_FORMULARIOS WHERE FR_ID = @id');
+        return res.json({ success: true, data: { token: tok.recordset[0].token, campania: camp.nombre, formulario: form.nombre } });
+      } catch (_) { /* siguiente empresa */ }
+    }
+    res.status(404).json({ success: false, message: 'Campaña no disponible' });
+  } catch (e) {
+    console.error('ccFormularios.resolverMarcadorPublico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al abrir el formulario de la campaña' });
+  }
+};
+
 // GET /api/contact-center/formularios-publico/:token — definición completa
 // de la versión publicada, para que la página pública la renderice sin
 // necesitar sesión. Si el formulario vuelve a modo 'interno', el token dejar
