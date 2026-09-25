@@ -1,6 +1,7 @@
 import { api } from '@/lib/axios'
 import type {
   PortalResumen, PortalProyecto, PortalCotizacion, PortalFactura, PortalDocumento, PortalCita, PortalIncidencia,
+  PortalProductoServicio, PortalCatalogoItem,
 } from '@/types/portalCliente.types'
 
 export interface PortalUsuario {
@@ -39,6 +40,21 @@ export const portalClienteService = {
   async eliminarUsuario(id: number): Promise<void> {
     await api.delete(`/portal-cliente/usuarios/${id}`)
   },
+  async getProductosServicios(): Promise<PortalProductoServicio[]> {
+    const { data } = await api.get('/portal-cliente/productos-servicios')
+    return (data?.data ?? []) as PortalProductoServicio[]
+  },
+  async getCatalogoProductosServicios(): Promise<PortalCatalogoItem[]> {
+    const { data } = await api.get('/portal-cliente/catalogo-productos-servicios')
+    return (data?.data ?? []) as PortalCatalogoItem[]
+  },
+  async solicitarCotizacion(
+    items: { psId: number; cantidad: number; requerimientos?: string }[],
+    fechaContactacion?: string | null
+  ): Promise<{ id: number; folio: string; citaId: number | null }> {
+    const { data } = await api.post('/portal-cliente/solicitar-cotizacion', { items, fechaContactacion })
+    return data?.data
+  },
   async getResumen(): Promise<PortalResumen> {
     const { data } = await api.get('/portal-cliente/resumen')
     return data?.data as PortalResumen
@@ -55,12 +71,36 @@ export const portalClienteService = {
     const { data } = await api.get('/portal-cliente/facturas')
     return (data?.data ?? []) as PortalFactura[]
   },
+  // Blob + link temporal (no un <a href> plano) porque el JWT vive en
+  // localStorage y solo se adjunta vía el interceptor de axios — un <a href>
+  // normal no lo llevaría y la descarga fallaría con 401.
+  async descargarFacturaDocumento(id: number, formato: 'pdf' | 'xml', nombreArchivo: string): Promise<void> {
+    const { data } = await api.get(`/portal-cliente/facturas/${id}/documento/${formato}`, { responseType: 'blob' })
+    const url = URL.createObjectURL(data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nombreArchivo
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
   async getDocumentos(): Promise<PortalDocumento[]> {
     const { data } = await api.get('/portal-cliente/documentos')
     return (data?.data ?? []) as PortalDocumento[]
   },
-  documentoDownloadUrl(id: number): string {
-    return `/api/portal-cliente/documentos/${id}/download`
+  // Blob + link temporal (no un <a href> plano) porque el JWT vive en
+  // localStorage y solo se adjunta vía el interceptor de axios.
+  async descargarDocumento(id: number, nombreArchivo: string): Promise<void> {
+    const { data } = await api.get(`/portal-cliente/documentos/${id}/download`, { responseType: 'blob' })
+    const url = URL.createObjectURL(data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nombreArchivo
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   },
   async getCitas(): Promise<PortalCita[]> {
     const { data } = await api.get('/portal-cliente/citas')

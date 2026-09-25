@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
+import toast from 'react-hot-toast'
 import {
   Receipt, ChevronRight, ChevronDown, ChevronLeft, Search,
   FileText, FileCode, Download, Share2, CreditCard, CheckCircle2,
-  Clock, AlertCircle, RefreshCcw, MoreVertical, X, Lock,
+  Clock, AlertCircle, RefreshCcw, MoreVertical, X, Lock, Loader2,
 } from 'lucide-react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 import { portalClienteService } from '@/services/portalCliente.service'
@@ -13,11 +14,11 @@ import facturaHero from '@/assets/factura-hero.png'
 
 // --- Conectada a datos reales (portalCliente.service.ts -> GET
 // /portal-cliente/facturas). El modelo real hoy solo expone folio, serie,
-// fecha, fecha de timbrado, total, moneda y estatus — no hay UUID CFDI,
-// desglose de conceptos, pagos parciales ni descarga de PDF/XML todavía.
-// Esas secciones se dejan visibles pero deshabilitadas ("no disponible
-// aún") para no prometer una función que el backend no soporta, mientras
-// se conserva el diseño para cuando esos datos existan. ---
+// fecha, fecha de timbrado, total, moneda y estatus — no hay UUID CFDI ni
+// desglose de conceptos/pagos parciales todavía, esas secciones se dejan
+// "no disponible aún". Descargar PDF/XML SÍ está conectado (mismo backend
+// de facturación del panel interno, vía /portal-cliente/facturas/:id/documento/:formato
+// con validación de que la factura pertenezca al contacto autenticado). ---
 
 // El backend normaliza el estatus real de la tabla FACTURAS (pre-factura,
 // timbrada, cancelada, con pago registrado, etc.) — se agrupa aquí en 3
@@ -360,6 +361,19 @@ function DetalleFactura({ f }: { f: PortalFactura }) {
   const [subtab, setSubtab] = useState<(typeof SUBTABS)[number]>('Información')
   const { abierto, setAbierto } = usePopover()
   const grupo = grupoDeEstatus(f.estatus)
+  const timbrada = ['timbrada', 'pagada'].includes(f.estatus.toLowerCase())
+  const [descargando, setDescargando] = useState<'pdf' | 'xml' | null>(null)
+
+  async function descargar(formato: 'pdf' | 'xml') {
+    setDescargando(formato)
+    try {
+      await portalClienteService.descargarFacturaDocumento(f.id, formato, `${f.serie ?? ''}${f.folio ?? f.id}.${formato}`)
+    } catch {
+      toast.error(`No se pudo descargar el ${formato.toUpperCase()}`)
+    } finally {
+      setDescargando(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-card p-5 shadow-card">
@@ -447,20 +461,22 @@ function DetalleFactura({ f }: { f: PortalFactura }) {
         </button>
         <button
           type="button"
-          disabled
-          title="La descarga de PDF estará disponible próximamente"
-          className="flex items-center justify-center gap-1.5 rounded-full border border-surface-border py-2.5 text-xs font-semibold text-ink-tertiary/60 disabled:cursor-not-allowed"
+          disabled={!timbrada || descargando !== null}
+          title={timbrada ? undefined : 'Disponible solo cuando la factura ya está timbrada'}
+          onClick={() => descargar('pdf')}
+          className="flex items-center justify-center gap-1.5 rounded-full border border-surface-border py-2.5 text-xs font-semibold text-ink-secondary hover:bg-surface disabled:cursor-not-allowed disabled:text-ink-tertiary/60 disabled:hover:bg-transparent"
         >
-          <FileText className="h-3.5 w-3.5" />
+          {descargando === 'pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
           Descargar PDF
         </button>
         <button
           type="button"
-          disabled
-          title="La descarga de XML estará disponible próximamente"
-          className="flex items-center justify-center gap-1.5 rounded-full border border-surface-border py-2.5 text-xs font-semibold text-ink-tertiary/60 disabled:cursor-not-allowed"
+          disabled={!timbrada || descargando !== null}
+          title={timbrada ? undefined : 'Disponible solo cuando la factura ya está timbrada'}
+          onClick={() => descargar('xml')}
+          className="flex items-center justify-center gap-1.5 rounded-full border border-surface-border py-2.5 text-xs font-semibold text-ink-secondary hover:bg-surface disabled:cursor-not-allowed disabled:text-ink-tertiary/60 disabled:hover:bg-transparent"
         >
-          <FileCode className="h-3.5 w-3.5" />
+          {descargando === 'xml' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileCode className="h-3.5 w-3.5" />}
           Descargar XML
         </button>
         <button

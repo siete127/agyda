@@ -45,6 +45,13 @@ const CATALOGO: ConfigNode[] = [
     ],
   },
   {
+    key: 'portal-cliente-config', label: 'Portal de Cliente',
+    description: 'Canales de contacto que ven las empresas cliente en su portal',
+    children: [
+      { key: 'canales-portal-config', label: 'Canales de contacto', screen: 'canales-portal-config' },
+    ],
+  },
+  {
     key: 'organizacion', label: 'Organización',
     description: 'Empresas, sucursales, estructura y calendarios corporativos',
     children: [
@@ -1206,6 +1213,7 @@ const GENERAL: ConfigNode = {
   children: [
     nodo('modulos-empresa'),
     nodo('apariencia'),
+    nodo('portal-cliente-config'),
     nodo('organizacion'),
     nodo('usuarios-seguridad'),
     // Mensajería interna vive en Principal → Mensajería.

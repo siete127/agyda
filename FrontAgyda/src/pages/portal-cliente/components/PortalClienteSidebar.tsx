@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Home, Calendar, Headphones, Megaphone, Receipt, Settings, HelpCircle, LogOut,
-  PanelLeftClose, PanelLeftOpen, Users,
+  PanelLeftClose, PanelLeftOpen, Users, Box, FileText, FileSpreadsheet,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
@@ -21,6 +21,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Atención', to: '/portal-cliente/atencion', icon: <Headphones className="h-5 w-5 flex-shrink-0" /> },
   { label: 'Canales', to: '/portal-cliente/canales', icon: <Megaphone className="h-5 w-5 flex-shrink-0" /> },
   { label: 'Facturas', to: '/portal-cliente/facturas', icon: <Receipt className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Cotizaciones', to: '/portal-cliente/cotizaciones', icon: <FileSpreadsheet className="h-5 w-5 flex-shrink-0" />, requiereAccion: 'ver-cotizaciones' },
+  { label: 'Productos', to: '/portal-cliente/productos', icon: <Box className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Documentos', to: '/portal-cliente/documentos', icon: <FileText className="h-5 w-5 flex-shrink-0" />, requiereAccion: 'descargar-documentos' },
   { label: 'Usuarios', to: '/portal-cliente/usuarios', icon: <Users className="h-5 w-5 flex-shrink-0" />, requiereAccion: 'gestionar-usuarios' },
 ]
 

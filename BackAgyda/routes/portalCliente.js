@@ -13,9 +13,13 @@ router.use(authenticateToken, requirePortalCliente);
 router.get('/mis-acciones', ctrl.getMisAcciones);
 
 router.get('/resumen', requirePortalAction('ver-resumen'), ctrl.getResumen);
+router.get('/productos-servicios', requirePortalAction('ver-resumen'), ctrl.getProductosServicios);
+router.get('/catalogo-productos-servicios', requirePortalAction('ver-cotizaciones'), ctrl.getCatalogoProductosServicios);
+router.post('/solicitar-cotizacion', requirePortalAction('ver-cotizaciones'), ctrl.solicitarCotizacion);
 router.get('/proyectos', requirePortalAction('ver-proyectos'), ctrl.getProyectos);
 router.get('/cotizaciones', requirePortalAction('ver-cotizaciones'), ctrl.getCotizaciones);
 router.get('/facturas', requirePortalAction('ver-facturas'), ctrl.getFacturas);
+router.get('/facturas/:id/documento/:formato', requirePortalAction('descargar-documentos'), ctrl.descargarFacturaDocumento);
 router.get('/documentos', requirePortalAction('descargar-documentos'), ctrl.getDocumentos);
 router.get('/documentos/:id/download', requirePortalAction('descargar-documentos'), ctrl.descargarDocumento);
 router.get('/citas', requirePortalAction('ver-citas'), ctrl.getCitas);
