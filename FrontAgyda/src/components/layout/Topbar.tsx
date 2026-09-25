@@ -44,12 +44,14 @@ const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
 // Los formularios externos de Contact Center (/formulario-publico/<token>)
 // están pensados para que VICIdial los abra al conectar una llamada,
 // inyectando ?cliente=&agente=&agenteId= con los datos reales de esa
-// llamada. Un enlace del encabezado es una URL fija sin esos datos —así que
-// si alguien apunta un enlace ahí (para abrirlo manualmente, sin una llamada
-// real de por medio), se completa con el usuario de la sesión de AGYDA en
-// vez de dejar el campo "Asesor" vacío. No toca la URL si ya trae ?agente=
-// (para no pisar un enlace armado a mano con otro agente a propósito), ni si
-// no apunta a /formulario-publico/ (el resto de enlaces no debe verse afectado).
+// llamada. Un enlace del encabezado es una URL fija —así que si alguien
+// apunta un enlace ahí (para abrirlo manualmente, sin una llamada real de
+// por medio), siempre se completa/sobreescribe con el usuario de la sesión
+// de AGYDA que lo abre, aunque la URL guardada ya traiga su propio
+// ?agente= (quien configuró el enlace no puede saber de antemano quién lo
+// va a abrir cada vez — a diferencia de VICIdial, que sí conoce al agente
+// real de cada llamada). No toca la URL si no apunta a /formulario-publico/
+// (el resto de enlaces no debe verse afectado).
 function urlConAgenteSiAplica(url: string, user: { id: number; nombres: string } | null | undefined): string {
   if (!user || !url.includes('/formulario-publico/')) return url
   try {
@@ -57,7 +59,6 @@ function urlConAgenteSiAplica(url: string, user: { id: number; nombres: string }
     // y se devuelve como ruta, para que siga abriéndose donde esté el usuario.
     const interna = url.startsWith('/')
     const u = new URL(url, window.location.origin)
-    if (u.searchParams.has('agente')) return url
     u.searchParams.set('agente', user.nombres)
     u.searchParams.set('agenteId', String(user.id))
     return interna ? `${u.pathname}${u.search}${u.hash}` : u.toString()

@@ -95,26 +95,37 @@ exports.listCarpetas = async (req, res) => {
 exports.listArchivos = async (req, res) => {
   try {
     const role = getUserRole(req);
-    const carpetaId = req.query.carpetaId ? parseInt(req.query.carpetaId) : null;
-    if (carpetaId === null || isNaN(carpetaId)) {
-      return res.status(400).json({ success: false, message: 'carpetaId requerido' });
+    // Sin carpetaId = raíz (mismo criterio que listCarpetas con padreId null,
+    // ver WHERE c.padre_id IS NULL abajo) — antes esto devolvía 400 y la
+    // vista raíz de Drive nunca cargaba archivos ("no me deja descargar":
+    // no había nada listado porque la query fallaba antes de llegar a pintar
+    // la tabla).
+    const carpetaIdRaw = req.query.carpetaId ? parseInt(req.query.carpetaId) : null;
+    if (req.query.carpetaId && isNaN(carpetaIdRaw)) {
+      return res.status(400).json({ success: false, message: 'carpetaId inválido' });
     }
+    const carpetaId = carpetaIdRaw;
+    const filtroCarpeta = carpetaId === null ? 'a.carpeta_id IS NULL' : 'a.carpeta_id=@cid';
     const pool = await databaseService.getPool(req.user?.empresa);
     // AD ve todos los archivos de la carpeta sin validación adicional
     if (isAD(role)) {
-      const rowsAll = await pool.request()
-        .input('cid', sql.Int, carpetaId)
+      const reqAll = pool.request();
+      if (carpetaId !== null) reqAll.input('cid', sql.Int, carpetaId);
+      const rowsAll = await reqAll
         .query(`SELECT a.id, a.nombre, a.carpeta_id AS carpetaId, a.extension, a.tamano, a.ruta,
                         a.fecha_subida AS fechaSubida, a.subido_por AS subidoPor,
                         u.NEUS_NOMBRES AS subidoPorNombre, u.NEUS_USUARIO AS subidoPorUsuario
                 FROM archivo a
                 LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = a.subido_por
-                WHERE a.carpeta_id=@cid ORDER BY a.nombre`);
+                WHERE ${filtroCarpeta} ORDER BY a.nombre`);
       return res.json({ success: true, data: rowsAll.recordset });
     }
-    if (true) {
+    // La raíz no tiene "dueño de carpeta" ni ancestros que validar — cada
+    // usuario no-AD solo ve, ahí, lo que él mismo subió (o le compartieron
+    // directo), igual que en cualquier otra carpeta.
+    const usuarioId = getUserId(req) || 0;
+    if (carpetaId !== null) {
       // Validar acceso: dueño de carpeta o carpeta compartida (directa o ancestro compartido)
-      const usuarioId = getUserId(req) || 0;
       const check = await pool.request()
         .input('cid', sql.Int, carpetaId)
         .input('uid', sql.Int, usuarioId)
@@ -129,34 +140,32 @@ exports.listArchivos = async (req, res) => {
       if (check.recordset.length === 0) {
         return res.status(403).json({ success: false, message: 'Sin permiso para ver archivos' });
       }
-      // Asegurar tabla archivo_compartido (para archivos compartidos directamente)
-      try {
-        await pool.request().query(`IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name='archivo_compartido' AND type='U')
-        BEGIN
-          CREATE TABLE archivo_compartido (
-            id INT IDENTITY(1,1) PRIMARY KEY,
-            archivo_id INT NOT NULL,
-            usuario_id INT NOT NULL,
-            compartido_por INT NOT NULL DEFAULT 0,
-            fecha_compartido DATETIME NOT NULL DEFAULT GETDATE()
-          );
-        END`);
-      } catch (_) {}
-      const rowsUser = await pool.request()
-        .input('cid', sql.Int, carpetaId)
-        .input('uid', sql.Int, usuarioId)
-        .query(`SELECT a.id, a.nombre, a.carpeta_id AS carpetaId, a.extension, a.tamano, a.ruta,
-                        a.fecha_subida AS fechaSubida, a.subido_por AS subidoPor,
-                        u.NEUS_NOMBRES AS subidoPorNombre, u.NEUS_USUARIO AS subidoPorUsuario
-                FROM archivo a
-                LEFT JOIN archivo_compartido ac ON ac.archivo_id = a.id AND ac.usuario_id=@uid
-                LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = a.subido_por
-                WHERE a.carpeta_id=@cid AND (a.subido_por=@uid OR ac.archivo_id IS NOT NULL)
-                ORDER BY a.nombre`);
-      return res.json({ success: true, data: rowsUser.recordset });
     }
-    // No debería llegar aquí por el return anterior, pero fallback vacío.
-    return res.json({ success: true, data: [] });
+    // Asegurar tabla archivo_compartido (para archivos compartidos directamente)
+    try {
+      await pool.request().query(`IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name='archivo_compartido' AND type='U')
+      BEGIN
+        CREATE TABLE archivo_compartido (
+          id INT IDENTITY(1,1) PRIMARY KEY,
+          archivo_id INT NOT NULL,
+          usuario_id INT NOT NULL,
+          compartido_por INT NOT NULL DEFAULT 0,
+          fecha_compartido DATETIME NOT NULL DEFAULT GETDATE()
+        );
+      END`);
+    } catch (_) {}
+    const reqUser = pool.request().input('uid', sql.Int, usuarioId);
+    if (carpetaId !== null) reqUser.input('cid', sql.Int, carpetaId);
+    const rowsUser = await reqUser
+      .query(`SELECT a.id, a.nombre, a.carpeta_id AS carpetaId, a.extension, a.tamano, a.ruta,
+                      a.fecha_subida AS fechaSubida, a.subido_por AS subidoPor,
+                      u.NEUS_NOMBRES AS subidoPorNombre, u.NEUS_USUARIO AS subidoPorUsuario
+              FROM archivo a
+              LEFT JOIN archivo_compartido ac ON ac.archivo_id = a.id AND ac.usuario_id=@uid
+              LEFT JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = a.subido_por
+              WHERE ${filtroCarpeta} AND (a.subido_por=@uid OR ac.archivo_id IS NOT NULL)
+              ORDER BY a.nombre`);
+    return res.json({ success: true, data: rowsUser.recordset });
   } catch (e) {
     console.error('❌ listArchivos:', e);
     res.status(500).json({ success: false, message: 'Error listando archivos' });
