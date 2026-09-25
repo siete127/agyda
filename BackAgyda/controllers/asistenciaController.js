@@ -1374,6 +1374,11 @@ exports.evaluarPosibleBaja = evaluarPosibleBaja;
 // actual. Se usa desde un cron diario porque una falta, a diferencia de un retardo,
 // no dispara ningún evento propio (nadie "marca" una ausencia).
 async function evaluarPosibleBajaTodos(pool, tenantKey) {
+  // A diferencia de los endpoints del panel (get/set config), este cron nunca
+  // pasaba por ensureBajasConfigTable — en un tenant donde nadie entró todavía
+  // a configurar el umbral de bajas, la tabla no existía y el cron fallaba
+  // cada corrida ("Invalid object name 'ASISTENCIA_CONFIG_BAJAS'").
+  await ensureBajasConfigTable(pool);
   const cfgR = await pool.request().query('SELECT TOP 1 * FROM ASISTENCIA_CONFIG_BAJAS ORDER BY ID DESC');
   if (!cfgR.recordset[0]?.ACTIVO) return;
   const empleadosR = await pool.request().query(`

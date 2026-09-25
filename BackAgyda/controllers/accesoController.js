@@ -720,6 +720,7 @@ exports.setUserAccess = async (req, res) => {
         detalle:   { modules },
         ip:        req.ip
       });
+      notifyAccesosUpdated(parseInt(usuarioId), req.user?.empresa);
       return res.json({ success: true, message: 'Accesos actualizados', data: { usuarioId: parseInt(usuarioId), modules } });
     } catch (err) {
       try { await t.rollback(); } catch (_) {}

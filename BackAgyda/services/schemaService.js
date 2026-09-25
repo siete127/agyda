@@ -186,6 +186,30 @@ END
 // Noticias: asegurar columnas nuevas usadas por el backend (portada, imágenes, destacada)
 async function ensureNoticiasSchema(pool) {
   try {
+    // La tabla base nunca tuvo un CREATE aquí — solo existía porque se creó a
+    // mano en la BD original ('intranet'). Cualquier empresa nueva (ver
+    // ensureEmpresasModulosSchema) nacía sin ella y el módulo de Noticias
+    // daba 500 ("Invalid object name") hasta que alguien la creaba a mano.
+    await pool.request().query(`
+IF OBJECT_ID('dbo.INTRANET_NOTICIAS', 'U') IS NULL
+CREATE TABLE dbo.INTRANET_NOTICIAS (
+  NOTI_ID INT IDENTITY(1,1) PRIMARY KEY,
+  NOTI_TITULO NVARCHAR(500) NOT NULL,
+  NOTI_CONTENIDO NVARCHAR(MAX) NOT NULL,
+  NOTI_CATEGORIA NVARCHAR(50) NOT NULL DEFAULT ('Comunicado'),
+  NOTI_IMAGEN_PORTADA NVARCHAR(1000) NULL,
+  NOTI_IMAGENES NVARCHAR(MAX) NULL,
+  NOTI_AUTOR_ID INT NOT NULL,
+  NOTI_AUTOR_NOMBRE NVARCHAR(255) NOT NULL,
+  NOTI_FECHA_CREACION DATETIME NOT NULL DEFAULT (GETDATE()),
+  NOTI_FECHA_ACTUALIZACION DATETIME NULL,
+  NOTI_ACTIVO BIT NOT NULL DEFAULT ((1)),
+  NOTI_DESTACADA BIT NOT NULL DEFAULT ((0)),
+  NOTI_COMENTARIOS_HABILITADOS BIT NOT NULL DEFAULT ((1)),
+  NOTI_PORTADA NVARCHAR(MAX) NULL,
+  NOTI_FOCO NVARCHAR(10) NULL DEFAULT ('center')
+);`);
+
     const batchSql = `
 IF COL_LENGTH('dbo.INTRANET_NOTICIAS', 'NOTI_PORTADA') IS NULL
   ALTER TABLE dbo.INTRANET_NOTICIAS ADD NOTI_PORTADA NVARCHAR(MAX) NULL;
