@@ -18,12 +18,32 @@ const label = 'mb-1.5 block text-[0.72rem] font-semibold text-gray-500'
 // de Ventas. El agente/cliente de los query params se usan como precarga y
 // como identidad para el registro (campo 'buscador' y el guardado general)
 // — no hay login.
+// Respaldo cuando ?agente=/agenteId= llegan vacíos (ej. VICIdial no tiene la
+// URL bien armada con sus propias variables, o alguien abrió el enlace a
+// mano): este formulario es público (sin sesión, ver comentario de arriba),
+// pero vive en el mismo origen que el resto de AGYDA — si quien lo abre ya
+// tiene una sesión activa en otra pestaña, se usa ese usuario como agente en
+// vez de dejar el campo vacío. Nunca pisa lo que VICIdial sí mandó bien.
+function agenteDeSesionActiva(): { nombre: string; id: number } | null {
+  try {
+    const raw = localStorage.getItem('auth-store')
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    const user = parsed?.state?.user
+    if (!user?.id || !user?.nombres) return null
+    return { nombre: String(user.nombres), id: Number(user.id) }
+  } catch {
+    return null
+  }
+}
+
 export default function FormularioPublicoPage() {
   const { token } = useParams<{ token: string }>()
   const [params] = useSearchParams()
   const cliente = params.get('cliente') || ''
-  const agenteNombre = params.get('agente') || ''
-  const agenteId = params.get('agenteId') ? Number(params.get('agenteId')) : null
+  const agenteSesion = agenteDeSesionActiva()
+  const agenteNombre = params.get('agente') || agenteSesion?.nombre || ''
+  const agenteId = params.get('agenteId') ? Number(params.get('agenteId')) : (agenteSesion?.id ?? null)
 
   const { data: def, isLoading, isError } = useQuery({
     queryKey: ['ccf-publico', token],
