@@ -15,7 +15,7 @@ export type CCFormTipoCampo =
   | 'fecha_hora' | 'lista' | 'radio' | 'checkbox' | 'si_no' | 'multiseleccion'
   | 'moneda' | 'porcentaje' | 'url' | 'archivo' | 'imagen' | 'firma' | 'catalogo'
   | 'usuario_agente' | 'sucursal' | 'calculado' | 'oculto' | 'titulo' | 'separador'
-  | 'buscador'
+  | 'buscador' | 'pendientes'
 
 export interface CCFormCanalDisponible {
   id: number
@@ -136,9 +136,20 @@ export interface CCFormPendiente {
   ultimoContacto: string
 }
 export interface CCFormPendientes {
-  disponible: boolean // false si el formulario no tiene fecha de asistencia o estatus
+  disponible: boolean // false si el formulario no tiene campo 'pendientes', fecha de asistencia o estatus
   hoy: string | null // fecha del servidor, 'YYYY-MM-DD'
   pendientes: CCFormPendiente[]
+  // Configuración del campo 'pendientes' (configJson) — ver CCFormPendientesConfig.
+  alcance?: CCFormPendientesAlcance
+  grupos?: CCFormPendienteGrupo[]
+  agente?: string | null // con alcance 'propios': de quién son los pendientes que se ven
+  requiereAgente?: boolean // 'propios' pero la liga no trae agente
+}
+// configJson del campo tipo 'pendientes'.
+export type CCFormPendientesAlcance = 'todos' | 'propios'
+export interface CCFormPendientesConfig {
+  alcance?: CCFormPendientesAlcance
+  grupos?: CCFormPendienteGrupo[]
 }
 
 export interface CCFormularioDetalle extends CCFormulario {

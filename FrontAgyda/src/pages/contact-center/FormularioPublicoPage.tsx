@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Search, Plus, Save, X, Phone, User, Check, PhoneCall, RefreshCw, History } from 'lucide-react'
@@ -108,7 +108,13 @@ export default function FormularioPublicoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [def, cliente])
 
-  const camposCapturables = campos.filter((c) => !['titulo', 'separador', 'buscador'].includes(c.tipo))
+  const camposCapturables = campos.filter((c) => !['titulo', 'separador', 'buscador', 'pendientes'].includes(c.tipo))
+  // Panel "Pendientes por contactar": solo si el formulario tiene ese campo
+  // (constructor → tipo "Pendientes por contactar"); se dibuja en su lugar.
+  const panelPendientes = campos.some((c) => c.tipo === 'pendientes') ? (
+    <PanelPendientes token={token!} telefonoActual={tel10(clienteTelefono)} agente={{ id: agenteId, nombre: agenteNombre }}
+      onElegir={(tel) => { cambiarTelefono(tel); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
+  ) : null
   const faltantes = camposCapturables.filter((c) => c.obligatorio && !valores[c.id] && valores[c.id] !== 0)
 
   // Al elegir un resultado del campo 'buscador' (mismo criterio que el panel
@@ -195,7 +201,7 @@ export default function FormularioPublicoPage() {
             {def.secciones.map((s) => (
               <SeccionPublica key={s.id} seccion={s} token={token!} formularioId={def.formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
                 valores={valores} onChange={setValor} onSeleccionarBuscador={usarResultadoBuscador} ocultos={ocultos}
-                ultimos={hallazgo?.ultimos} />
+                ultimos={hallazgo?.ultimos} panelPendientes={panelPendientes} />
             ))}
           </div>
 
@@ -211,8 +217,6 @@ export default function FormularioPublicoPage() {
           </div>
         </div>
 
-        <PanelPendientes token={token!} telefonoActual={tel10(clienteTelefono)}
-          onElegir={(tel) => { cambiarTelefono(tel); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
       </div>
     </div>
   )
@@ -238,18 +242,23 @@ function fmtDiaCorto(dia: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' })
 }
 
-function PanelPendientes({ token, telefonoActual, onElegir }: { token: string; telefonoActual: string; onElegir: (telefono: string) => void }) {
+function PanelPendientes({ token, telefonoActual, agente, onElegir }: {
+  token: string; telefonoActual: string; agente: { id: number | null; nombre: string }; onElegir: (telefono: string) => void
+}) {
   const { data, isFetching, refetch } = useQuery({
-    queryKey: ['ccf-publico-pendientes', token],
-    queryFn: () => ccFormularioPublicoService.pendientes(token),
+    queryKey: ['ccf-publico-pendientes', token, agente.id, agente.nombre],
+    queryFn: () => ccFormularioPublicoService.pendientes(token, agente),
     refetchInterval: 60_000,
   })
   const [elegido, setElegido] = useState<CCFormPendienteGrupo | null>(null)
   if (!data?.disponible) return null
 
+  // Solo los grupos que el constructor dejó prendidos.
+  const grupos = GRUPOS_PENDIENTES.filter((g) => !data.grupos || data.grupos.includes(g.key))
   const cuenta = (g: CCFormPendienteGrupo) => data.pendientes.filter((p) => p.grupo === g).length
   // Sin elección: el primer grupo que tenga a alguien.
-  const grupo = elegido ?? GRUPOS_PENDIENTES.find((g) => cuenta(g.key))?.key ?? 'confirmar'
+  const grupo = (elegido && grupos.some((g) => g.key === elegido) ? elegido : null)
+    ?? grupos.find((g) => cuenta(g.key))?.key ?? grupos[0]?.key ?? 'confirmar'
   const info = GRUPOS_PENDIENTES.find((g) => g.key === grupo)!
   const filas = data.pendientes.filter((p) => p.grupo === grupo)
   const hoy = data.hoy ?? ''
@@ -257,13 +266,16 @@ function PanelPendientes({ token, telefonoActual, onElegir }: { token: string; t
   const tel10 = (t: string | null) => (t ?? '').replace(/\D/g, '').slice(-10)
 
   return (
-    <div className="mt-4 rounded-2xl border border-gray-100 bg-white shadow-sm">
+    <div className="rounded-2xl border border-gray-100 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3">
         <div className="mr-2 flex items-center gap-2">
           <PhoneCall className="h-4 w-4 text-violet-500" />
           <p className="text-sm font-bold text-gray-900">Pendientes por contactar</p>
+          {data.alcance === 'propios' && data.agente && (
+            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[0.66rem] font-semibold text-violet-700">Solo los de {data.agente}</span>
+          )}
         </div>
-        {GRUPOS_PENDIENTES.map((g) => (
+        {grupos.map((g) => (
           <button key={g.key} onClick={() => setElegido(g.key)} title={g.ayuda}
             className={clsx('rounded-xl border px-3 py-1 text-[0.75rem] font-semibold transition-colors',
               grupo === g.key ? g.activo : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
@@ -275,7 +287,13 @@ function PanelPendientes({ token, telefonoActual, onElegir }: { token: string; t
           <RefreshCw className="h-3.5 w-3.5" />
         </button>
       </div>
-      <p className="px-4 pt-2 text-[0.7rem] text-gray-400">{info.ayuda}. «Cargar» pone su teléfono arriba y llena sus datos.</p>
+      {data.requiereAgente ? (
+        <p className="px-4 py-3 text-[0.75rem] text-amber-700">
+          Este panel muestra a cada asesor solo sus pendientes, pero la liga no trae asesor. Ábrela desde AGYDA (enlace del encabezado) para verlos.
+        </p>
+      ) : (
+        <p className="px-4 pt-2 text-[0.7rem] text-gray-400">{info.ayuda}. «Cargar» pone su teléfono arriba y llena sus datos.</p>
+      )}
 
       {!filas.length ? (
         <p className="px-4 py-8 text-center text-[0.8rem] text-gray-400">Nadie pendiente en este grupo.</p>
@@ -464,15 +482,19 @@ function AccionesPostGuardadoPantalla({ interaccionId, acciones }: { interaccion
 }
 
 // Tipos que necesitan todo el ancho; el resto se reparte en columnas.
-const TIPOS_ANCHO_COMPLETO = new Set(['texto_largo', 'buscador', 'titulo', 'separador', 'multiseleccion', 'checkbox', 'radio', 'firma', 'archivo', 'imagen'])
+const TIPOS_ANCHO_COMPLETO = new Set(['texto_largo', 'buscador', 'pendientes', 'titulo', 'separador', 'multiseleccion', 'checkbox', 'radio', 'firma', 'archivo', 'imagen'])
 
-function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador, ocultos, ultimos }: {
+function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador, ocultos, ultimos, panelPendientes }: {
   seccion: CCFormPublicoSeccion; token: string; formularioId: number; cliente: string; agenteId: number | null; agenteNombre: string
   valores: Record<number, unknown>; onChange: (campoId: number, valor: unknown) => void
   onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
   ocultos?: Set<number> // campos que se llenan solos desde arriba (no se muestran, sí se guardan)
   ultimos?: Record<number, string> // último valor guardado de esa persona (referencia, no se llena)
+  panelPendientes?: ReactNode // lo que se dibuja en el lugar del campo tipo 'pendientes'
 }) {
+  // Una sección que solo tiene el panel no repite su título (el panel trae el suyo).
+  const soloPanel = seccion.campos.every((c) => c.tipo === 'pendientes')
+  if (soloPanel) return <>{panelPendientes}</>
   return (
     <div>
       <p className="mb-0.5 text-sm font-bold text-gray-900">{seccion.titulo}</p>
@@ -482,6 +504,9 @@ function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agent
       <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
         {seccion.campos.filter((c) => !ocultos?.has(c.id)).map((c) => {
           const ultimo = ultimos?.[c.id]
+          if (c.tipo === 'pendientes') {
+            return <div key={c.id} className="sm:col-span-2 lg:col-span-4">{panelPendientes}</div>
+          }
           return (
             <div key={c.id} className={TIPOS_ANCHO_COMPLETO.has(c.tipo) ? 'sm:col-span-2 lg:col-span-4' : ''}>
               {ultimo && (

@@ -6,7 +6,7 @@ const ticketRecordatoriosCron = require('../controllers/ticketRecordatoriosCronC
 const publicTicketController = require('../controllers/publicTicketController');
 const { uploadEvidence } = require('../middleware/evidenceUpload');
 const { authenticateToken, verificarRol } = require('../middleware/auth');
-const { requireActionAccess } = require('../middleware/moduleAccess');
+const { requireActionAccess, requireAnyActionAccess } = require('../middleware/moduleAccess');
 
 // Sin sesión: se llama desde un link de calificación que no depende de estar logueado
 router.post('/:id/satisfaccion', ticketController.registrarSatisfaccion);
@@ -22,8 +22,9 @@ router.use(authenticateToken);
 // Rutas estáticas ANTES de /:id para evitar que Express las intercepte como parámetro
 // Staff TI (catálogo de acciones bajo el módulo 'staff-ti', aunque comparte este archivo)
 router.get('/ti/staff', requireActionAccess('staff-ti', 'ver'), ticketController.getStaffTI);
-// Reasignar área/nivel es una decisión administrativa: solo AD, no cualquiera con acceso a staff-ti
-router.post('/ti/staff', verificarRol(['AD']), ticketController.actualizarStaffTI);
+// Reasignar área/nivel es una decisión administrativa: solo AD, no cualquiera con acceso a staff-ti,
+// y además la acción staff-ti:actualizar o tickets:gestionar-staff-ti (cualquiera de las dos).
+router.post('/ti/staff', verificarRol(['AD']), requireAnyActionAccess([['staff-ti', 'actualizar'], ['tickets', 'gestionar-staff-ti']]), ticketController.actualizarStaffTI);
 
 // Grupos de soporte (nombre descriptivo para AREA+NIVEL)
 router.get('/grupos-soporte', requireActionAccess('tickets', 'ver'), ticketController.getGruposSoporte);

@@ -344,6 +344,10 @@ exports.toggleActivo = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Campo activo requerido' });
     }
     const activoValue = activo === true || activo === 1 || activo === '1';
+    // Nadie se deshabilita a sí mismo (se quedaría fuera sin poder revertirlo).
+    if (!activoValue && String(req.user?.id) === String(id)) {
+      return res.status(400).json({ success: false, message: 'No puedes deshabilitar tu propia cuenta' });
+    }
     const pool = await databaseService.getPool(req.user?.empresa);
     await pool.request()
       .input('id', sql.Int, id)

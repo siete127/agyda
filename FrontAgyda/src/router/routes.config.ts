@@ -69,7 +69,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/configuracion',    label: 'Configuración',   icon: 'Settings',             moduleKey: 'configuracion',    roles: ['AD','TI'],          showInSidebar: true  },
 
   // ── Áreas de la empresa ────────────────────────────────────────────────
-  { path: '/areas',            label: 'Portal de Áreas', icon: 'Building2',            moduleKey: 'areas-portal',      roles: ['AD','TI'],         showInSidebar: true  },
+  { path: '/areas',            label: 'Portal de Áreas', icon: 'Building2',            moduleKey: 'areas-portal',      roles: ['AD','TI'],         showInSidebar: false }, // duplicaba el menú lateral
   { path: '/direccion-general', label: 'Dirección General', icon: 'LayoutDashboard',   moduleKey: 'direccion-general', roles: ['AD'],              showInSidebar: false  },
   { path: '/direccion-general/planeacion-estrategica',    label: 'Planeación Estratégica',       icon: 'Target',        moduleKey: 'direccion-general', roles: ['AD'], showInSidebar: true },
   { path: '/direccion-general/indicadores-empresariales', label: 'Indicadores Empresariales',    icon: 'Gauge',         moduleKey: 'direccion-general', roles: ['AD'], showInSidebar: true },

@@ -20,7 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     key: 'direccion-general',
     label: 'Dirección General',
-    keys: ['direccion-general', 'areas-portal', 'reports'],
+    keys: ['direccion-general', 'reports'],
   },
   {
     key: 'recursos-humanos',

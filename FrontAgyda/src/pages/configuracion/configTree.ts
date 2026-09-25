@@ -19,6 +19,8 @@ export interface ConfigNode {
   // Módulos adicionales que la empresa/usuario debe tener para ver este nodo,
   // en cualquiera de sus ubicaciones (p. ej. tipos de pausa → 'reports').
   requiere?: string[]
+  // Acción de Accesos que el usuario debe tener para ver este nodo: [módulo, acción].
+  accion?: [string, string]
   // La pantalla existe pero este módulo todavía no usa la configuración (queda
   // aquí para cuando se conecte). Aparece en la lista de pendientes.
   pendiente?: string
@@ -81,7 +83,7 @@ const CATALOGO: ConfigNode[] = [
     key: 'usuarios-seguridad', label: 'Usuarios y Seguridad',
     description: 'Cuentas, roles, permisos y políticas de acceso',
     children: [
-      { key: 'usuarios', label: 'Usuarios', screen: 'usuarios' },
+      { key: 'usuarios', label: 'Usuarios', screen: 'usuarios', accion: ['usuarios', 'ver'] },
       { key: 'roles', label: 'Roles', screen: 'roles' },
       { key: 'permisos', label: 'Permisos', screen: 'permisos' },
       { key: 'permisos-modulo', label: 'Permisos por módulo' },

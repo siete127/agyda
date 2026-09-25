@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { createPortal } from 'react-dom'
@@ -315,6 +316,8 @@ function DocTable({ docs, loading, downloadPathFn, onDelete, deletingId, canDele
 
 // ── Pestaña Mi Expediente ─────────────────────────────────────────────────────
 function MiExpedienteTab() {
+  const { can } = useActionAccess()
+  const puedeEditar = can('expedientes', 'editar-propio')
   const [confirmDocId, setConfirmDocId] = useState<number | null>(null)
   const qc = useQueryClient()
 
@@ -363,12 +366,14 @@ function MiExpedienteTab() {
             {isLoading ? '…' : `${documentos.length} documento${documentos.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <label className="cursor-pointer">
-          <input type="file" className="hidden" onChange={subirDoc} />
-          <span className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-[0.73rem] font-semibold text-white hover:bg-brand-muted transition-colors shadow-glow">
-            <Upload className="h-3.5 w-3.5" /> Subir documento
-          </span>
-        </label>
+        {puedeEditar && (
+          <label className="cursor-pointer">
+            <input type="file" className="hidden" onChange={subirDoc} />
+            <span className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-[0.73rem] font-semibold text-white hover:bg-brand-muted transition-colors shadow-glow">
+              <Upload className="h-3.5 w-3.5" /> Subir documento
+            </span>
+          </label>
+        )}
       </div>
 
       <DocTable
@@ -377,7 +382,7 @@ function MiExpedienteTab() {
         downloadPathFn={(id) => `/expedientes/mi/documentos/${id}/download`}
         onDelete={(id) => setConfirmDocId(id)}
         deletingId={eliminarDoc.isPending ? confirmDocId : null}
-        canDelete={true}
+        canDelete={puedeEditar}
       />
 
       <ConfirmDialog
@@ -395,6 +400,8 @@ function MiExpedienteTab() {
 
 // ── Pestaña Expedientes (admin AD) ────────────────────────────────────────────
 function ExpedientesAdminTab() {
+  const { can } = useActionAccess()
+  const puedeGestionar = can('expedientes', 'gestionar-otros')
   const [search, setSearch] = useState('')
   const [selectedUser, setSelectedUser] = useState<UsuarioSimple | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -657,12 +664,14 @@ function ExpedientesAdminTab() {
                   </div>
                 </div>
               </div>
-              <label className="cursor-pointer flex-shrink-0">
-                <input type="file" className="hidden" onChange={subirDoc} />
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-[0.73rem] font-semibold text-white hover:bg-brand-dark transition-colors">
-                  <Upload className="h-3.5 w-3.5" /> Subir documento
-                </span>
-              </label>
+              {puedeGestionar && (
+                <label className="cursor-pointer flex-shrink-0">
+                  <input type="file" className="hidden" onChange={subirDoc} />
+                  <span className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-[0.73rem] font-semibold text-white hover:bg-brand-dark transition-colors">
+                    <Upload className="h-3.5 w-3.5" /> Subir documento
+                  </span>
+                </label>
+              )}
             </div>
 
             <DocTable
@@ -671,8 +680,8 @@ function ExpedientesAdminTab() {
               downloadPathFn={(id) => `/expedientes/documentos/${id}/download`}
               onDelete={(id) => setConfirmDocId(id)}
               deletingId={eliminarDoc.isPending ? confirmDocId : null}
-              canDelete={true}
-              onEnlazar={enlazarCarta}
+              canDelete={puedeGestionar}
+              onEnlazar={puedeGestionar ? enlazarCarta : undefined}
               enlazandoId={enlazandoId}
             />
           </div>
@@ -699,7 +708,12 @@ type TabKey = 'admin' | 'mi'
 export function ExpedientePage() {
   const { user } = useAuthStore()
   const isAdmin = user?.tipoUsuario?.toUpperCase() === 'AD'
-  const [activeTab, setActiveTab] = useState<TabKey>(isAdmin ? 'admin' : 'mi')
+  // Acciones de Accesos: ver-otros (pestaña Expedientes, solo AD) y ver-propio (Mi expediente).
+  const { can } = useActionAccess()
+  const puedeOtros = isAdmin && can('expedientes', 'ver-otros')
+  const puedePropio = can('expedientes', 'ver-propio')
+  const [tabElegida, setActiveTab] = useState<TabKey>(isAdmin ? 'admin' : 'mi')
+  const activeTab: TabKey = tabElegida === 'admin' ? (puedeOtros ? 'admin' : 'mi') : (puedePropio ? 'mi' : 'admin')
 
   const nombreCompleto = user?.nombres ?? 'Mi expediente'
 
@@ -739,7 +753,7 @@ export function ExpedientePage() {
       </div>
 
       {/* Pestañas — solo documentos; los datos personales viven en Mi perfil */}
-      {isAdmin && (
+      {puedeOtros && puedePropio && (
         <div className="flex gap-1 rounded-xl bg-gray-100 p-1 w-fit">
           <button
             onClick={() => setActiveTab('admin')}
@@ -767,8 +781,8 @@ export function ExpedientePage() {
       )}
 
       {/* Contenido */}
-      {activeTab === 'admin' && isAdmin && <ExpedientesAdminTab />}
-      {activeTab === 'mi' && <MiExpedienteTab />}
+      {activeTab === 'admin' && puedeOtros && <ExpedientesAdminTab />}
+      {activeTab === 'mi' && puedePropio && <MiExpedienteTab />}
     </div>
   )
 }

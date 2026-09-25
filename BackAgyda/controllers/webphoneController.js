@@ -3,6 +3,7 @@ const socketService = require('../services/socketService');
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { TIPIFICACIONES_LLAMADA } = require('../utils/tipificacionesLlamada');
+const { getUserAllowedActions, esSuperAdminFijo } = require('../middleware/moduleAccess');
 
 function _parseJsonEnv(name) {
   try {
@@ -234,6 +235,21 @@ async function incomingCall(req, res) {
       postulanteTotis,
       timestamp: new Date().toISOString(),
     };
+
+    // Acción de Accesos webphone:recibir-llamadas: si el agente tiene el módulo
+    // configurado sin ella, no se le avisa (sin configurar = permitido).
+    let puedeRecibir = true;
+    try {
+      if (!esSuperAdminFijo({ user: { id: userId } })) {
+        const acciones = await getUserAllowedActions(userId, 'webphone', req.user?.empresa);
+        puedeRecibir = acciones.has('*') || acciones.has('recibir-llamadas');
+      }
+    } catch (e) {
+      logger.warn('[webphoneController.incomingCall] permisos del agente:', e?.message || e);
+    }
+    if (!puedeRecibir) {
+      return res.json({ success: true, data: { ...payload, entregada: false, motivo: 'sin permiso recibir-llamadas' } });
+    }
 
     try {
       const io = socketService.getIO(req.user?.empresa);

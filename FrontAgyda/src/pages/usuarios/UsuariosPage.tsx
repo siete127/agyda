@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useIsADorTI } from '@/hooks/useAuth'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import { type Usuario, parseUsuario, ROL_COLORS } from './usuario.model'
 import { UsuarioModal } from './UsuarioModal'
 import { UsuarioFichaExpandida } from './UsuarioFichaExpandida'
@@ -42,7 +43,16 @@ export function UsuariosPage() {
   const [selected, setSelected] = useState<Usuario | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Usuario | null>(null)
   const [expandido, setExpandido] = useState<number | null>(null)
-  const puedeEditarFicha = useIsADorTI()
+  // Tipo de usuario (AD/TI) + acciones de Accesos del módulo Usuarios (el backend exige las mismas).
+  const esADorTI = useIsADorTI()
+  const { can } = useActionAccess()
+  const puede = {
+    crear: can('usuarios', 'crear'),
+    editar: esADorTI && can('usuarios', 'editar'),
+    habilitar: can('usuarios', 'habilitar'),
+    eliminar: can('usuarios', 'eliminar'),
+  }
+  const puedeEditarFicha = puede.editar
   const qc = useQueryClient()
 
   const { data: usuarios = [], isLoading, refetch, isRefetching } = useQuery({
@@ -121,9 +131,11 @@ export function UsuariosPage() {
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              <Button onClick={() => { setSelected(null); setShowModal(true) }} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
-                <UserPlus className="h-3.5 w-3.5" /> Nuevo usuario
-              </Button>
+              {puede.crear && (
+                <Button onClick={() => { setSelected(null); setShowModal(true) }} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                  <UserPlus className="h-3.5 w-3.5" /> Nuevo usuario
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -304,23 +316,29 @@ export function UsuariosPage() {
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {tab === 'desactivados' ? (
-                        <button
-                          onClick={() => reactivar.mutate(u.id)}
-                          disabled={reactivar.isPending}
-                          title="Reactivar usuario"
-                          className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[0.72rem] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                        >
-                          <UserCheck className="h-3.5 w-3.5" />
-                          Reactivar
-                        </button>
+                        puede.habilitar && (
+                          <button
+                            onClick={() => reactivar.mutate(u.id)}
+                            disabled={reactivar.isPending}
+                            title="Reactivar usuario"
+                            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[0.72rem] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                          >
+                            <UserCheck className="h-3.5 w-3.5" />
+                            Reactivar
+                          </button>
+                        )
                       ) : (
                         <>
-                          <button onClick={() => { setSelected(u); setShowModal(true) }} className="rounded-xl p-1.5 text-gray-400 hover:text-brand hover:bg-brand/8 transition-colors">
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => setConfirmDelete(u)} className="rounded-xl p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {puede.editar && (
+                            <button onClick={() => { setSelected(u); setShowModal(true) }} className="rounded-xl p-1.5 text-gray-400 hover:text-brand hover:bg-brand/8 transition-colors">
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {puede.eliminar && (
+                            <button onClick={() => setConfirmDelete(u)} className="rounded-xl p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

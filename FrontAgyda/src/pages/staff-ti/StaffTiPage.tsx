@@ -1,65 +1,48 @@
-import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MonitorCheck, AlertCircle, CheckCircle2, XCircle, Wrench } from 'lucide-react'
+import { MonitorCheck, AlertCircle, CheckCircle2, XCircle, Wrench, Layers } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActionAccess } from '@/hooks/useActionAccess'
+import { Avatar } from '@/components/ui/Avatar'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
+// Datos de TI_STAFF_STATUS (GET /tickets/ti/staff): el área real solo puede ser
+// TI o ST, y junto con el nivel decide a qué grupo de soporte se le asignan tickets.
 interface StaffTI {
   id: number
   nombre: string
   puesto?: string
-  area?: string
+  fotoUrl?: string | null
+  area: 'TI' | 'ST'
+  nivel: number
   disponible: boolean
-  foto?: string
+  grupoNombre?: string | null
 }
 
-const AREAS = [
-  'Soporte',
-  'Desarrollo',
-  'Infraestructura',
-  'Base de datos',
-  'Seguridad',
-  'Redes',
+type Cambio = Pick<StaffTI, 'area' | 'nivel' | 'disponible'>
+
+const AREAS: { value: StaffTI['area']; label: string }[] = [
+  { value: 'TI', label: 'Tecnologías de la información (TI)' },
+  { value: 'ST', label: 'Soporte técnico (ST)' },
 ]
-
-function Avatar({ nombre, foto }: { nombre: string; foto?: string }) {
-  if (foto) {
-    return (
-      <img
-        src={foto.startsWith('http') ? foto : `/uploads/${foto}`}
-        alt={nombre}
-        className="h-12 w-12 rounded-2xl object-cover"
-        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-      />
-    )
-  }
-  const initials = nombre.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
-  return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white">
-      {initials}
-    </div>
-  )
-}
+const NIVELES = [1, 2, 3]
 
 function StaffCard({
   miembro,
   canEdit,
-  onToggle,
-  onAreaChange,
+  guardando,
+  onGuardar,
 }: {
   miembro: StaffTI
   canEdit: boolean
-  onToggle: (id: number, val: boolean) => void
-  onAreaChange: (id: number, area: string) => void
+  guardando: boolean
+  onGuardar: (cambio: Partial<Cambio>) => void
 }) {
-  const [editingArea, setEditingArea] = useState(false)
-
   return (
     <div className="card p-4 space-y-4">
       <div className="flex items-center gap-3">
-        <Avatar nombre={miembro.nombre} foto={miembro.foto} />
+        <Avatar src={miembro.fotoUrl} name={miembro.nombre} size="lg" />
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-gray-900 truncate">{miembro.nombre}</h3>
           {miembro.puesto && <p className="text-[0.72rem] text-gray-500 truncate">{miembro.puesto}</p>}
@@ -76,36 +59,50 @@ function StaffCard({
         </span>
       </div>
 
-      {/* Área */}
-      <div className="flex items-center gap-2">
-        <Wrench className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-        {canEdit && editingArea ? (
-          <select
-            defaultValue={miembro.area ?? ''}
-            className="field py-1 text-xs flex-1"
-            autoFocus
-            onBlur={(e) => { onAreaChange(miembro.id, e.target.value); setEditingArea(false) }}
-            onChange={(e) => { onAreaChange(miembro.id, e.target.value); setEditingArea(false) }}
-          >
-            <option value="">Sin área</option>
-            {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        ) : (
-          <span
-            className={clsx('text-xs text-gray-600', canEdit && 'cursor-pointer hover:text-indigo-600 hover:underline')}
-            onClick={() => canEdit && setEditingArea(true)}
-          >
-            {miembro.area || 'Sin área asignada'}
-          </span>
+      {/* Área y nivel */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Wrench className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+          {canEdit ? (
+            <select
+              value={miembro.area}
+              disabled={guardando}
+              className="field py-1 text-xs flex-1"
+              onChange={(e) => onGuardar({ area: e.target.value as StaffTI['area'] })}
+            >
+              {AREAS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </select>
+          ) : (
+            <span className="text-xs text-gray-600">{AREAS.find((a) => a.value === miembro.area)?.label ?? miembro.area}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Layers className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+          {canEdit ? (
+            <select
+              value={miembro.nivel}
+              disabled={guardando}
+              className="field py-1 text-xs flex-1"
+              onChange={(e) => onGuardar({ nivel: Number(e.target.value) })}
+            >
+              {NIVELES.map((n) => <option key={n} value={n}>Nivel {n}</option>)}
+            </select>
+          ) : (
+            <span className="text-xs text-gray-600">Nivel {miembro.nivel}</span>
+          )}
+        </div>
+        {miembro.grupoNombre && (
+          <p className="text-[0.7rem] text-gray-400">Grupo: {miembro.grupoNombre}</p>
         )}
       </div>
 
       {/* Toggle disponibilidad */}
       {canEdit && (
         <button
-          onClick={() => onToggle(miembro.id, !miembro.disponible)}
+          disabled={guardando}
+          onClick={() => onGuardar({ disponible: !miembro.disponible })}
           className={clsx(
-            'w-full rounded-xl py-2 text-xs font-semibold transition-colors',
+            'w-full rounded-xl py-2 text-xs font-semibold transition-colors disabled:opacity-50',
             miembro.disponible
               ? 'bg-red-50 text-red-600 hover:bg-red-100'
               : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
@@ -120,42 +117,55 @@ function StaffCard({
 
 export function StaffTiPage() {
   const user = useAuthStore((s) => s.user)
-  const isTI = user?.tipoUsuario?.toUpperCase() === 'TI'
   const isAdmin = user?.tipoUsuario?.toUpperCase() === 'AD'
-  const canEdit = isTI || isAdmin
+  const { can } = useActionAccess()
+  // El backend (POST /tickets/ti/staff) exige AD y staff-ti:actualizar o tickets:gestionar-staff-ti.
+  const canEdit = isAdmin && (can('staff-ti', 'actualizar') || can('tickets', 'gestionar-staff-ti'))
   const qc = useQueryClient()
 
   const { data: staff = [], isLoading, error } = useQuery<StaffTI[]>({
     queryKey: ['staff-ti'],
     queryFn: async () => {
-      const { data } = await api.get('/usuarios')
-      const all: StaffTI[] = Array.isArray(data) ? data : (data?.data ?? [])
-      return all.filter(
-        (u: StaffTI & { tipoUsuario?: string }) =>
-          (u as unknown as { tipoUsuario?: string }).tipoUsuario?.toUpperCase() === 'TI',
-      )
+      const [rStaff, rUsuarios] = await Promise.all([
+        api.get('/tickets/ti/staff'),
+        // Solo para foto y puesto; si falla, la tarjeta usa iniciales.
+        api.get('/usuarios').catch(() => ({ data: [] })),
+      ])
+      const usuarios = (Array.isArray(rUsuarios.data) ? rUsuarios.data : (rUsuarios.data?.data ?? [])) as Record<string, unknown>[]
+      const porId = new Map(usuarios.map((u) => [Number(u['id']), u]))
+      const lista = (rStaff.data?.data ?? []) as Record<string, unknown>[]
+      return lista.map((s): StaffTI => {
+        const u = porId.get(Number(s['userId']))
+        return {
+          id: Number(s['userId']),
+          nombre: String(s['nombre'] ?? ''),
+          puesto: u ? String(u['puesto'] ?? '') : '',
+          fotoUrl: u ? (u['fotoUrl'] as string | null) : null,
+          area: String(s['area']).toUpperCase() === 'ST' ? 'ST' : 'TI',
+          nivel: Number(s['nivel']) || 1,
+          disponible: s['disponible'] === true || s['disponible'] === 1,
+          grupoNombre: (s['grupoNombre'] as string | null) ?? null,
+        }
+      })
     },
     staleTime: 60_000,
   })
 
-  const toggleDisponible = useMutation({
-    mutationFn: ({ id, disponible }: { id: number; disponible: boolean }) =>
-      api.patch(`/usuarios/${id}`, { disponible }),
-    onSuccess: () => {
+  // El endpoint reescribe área, nivel y disponibilidad juntos: se mandan los tres
+  // con los valores actuales para no pisar lo que no se está cambiando.
+  const guardar = useMutation({
+    mutationFn: ({ miembro, cambio }: { miembro: StaffTI; cambio: Partial<Cambio> }) =>
+      api.post('/tickets/ti/staff', {
+        userId: miembro.id,
+        area: cambio.area ?? miembro.area,
+        nivel: cambio.nivel ?? miembro.nivel,
+        disponible: cambio.disponible ?? miembro.disponible,
+      }),
+    onSuccess: (_, { cambio }) => {
       qc.invalidateQueries({ queryKey: ['staff-ti'] })
-      toast.success('Estado actualizado')
+      toast.success(cambio.disponible !== undefined ? 'Estado actualizado' : 'Staff actualizado')
     },
-    onError: () => toast.error('Error al actualizar estado'),
-  })
-
-  const cambiarArea = useMutation({
-    mutationFn: ({ id, area }: { id: number; area: string }) =>
-      api.patch(`/usuarios/${id}`, { area }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['staff-ti'] })
-      toast.success('Área actualizada')
-    },
-    onError: () => toast.error('Error al actualizar área'),
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al actualizar'),
   })
 
   const disponibles = staff.filter((s) => s.disponible).length
@@ -209,7 +219,7 @@ export function StaffTiPage() {
           </div>
           <div className="text-center">
             <p className="text-sm font-semibold text-gray-700">Sin staff TI registrado</p>
-            <p className="text-xs text-gray-400 mt-0.5">No hay usuarios con tipo TI en el sistema.</p>
+            <p className="text-xs text-gray-400 mt-0.5">No hay usuarios TI o de Soporte técnico en el sistema.</p>
           </div>
         </div>
       ) : (
@@ -219,8 +229,8 @@ export function StaffTiPage() {
               key={m.id}
               miembro={m}
               canEdit={canEdit}
-              onToggle={(id, val) => toggleDisponible.mutate({ id, disponible: val })}
-              onAreaChange={(id, area) => cambiarArea.mutate({ id, area })}
+              guardando={guardar.isPending && guardar.variables?.miembro.id === m.id}
+              onGuardar={(cambio) => guardar.mutate({ miembro: m, cambio })}
             />
           ))}
         </div>

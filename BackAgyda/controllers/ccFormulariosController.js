@@ -54,6 +54,10 @@ const TIPOS_CAMPO_VALIDOS = [
   // se encuentra. No guarda "una respuesta" como los demás campos: el valor
   // que persiste es el CI_ID de la interacción encontrada o creada.
   'buscador',
+  // 'pendientes': panel "Pendientes por contactar" (citas por confirmar,
+  // recordar o reagendar) en el formulario externo. Tampoco guarda valor;
+  // su configJson dice quién ve qué (alcance) y qué grupos se muestran.
+  'pendientes',
 ];
 
 // Fuentes válidas para un campo tipo 'catalogo' — 'estatico' (opciones
@@ -1108,7 +1112,7 @@ exports.buscarInteraccionesDelFormulario = async (req, res) => {
 // medianoche UTC (fecha sin hora): se cortan en UTC para que no se recorran
 // un día al mostrarlas en México. Solo los más recientes (MAX_REGISTROS).
 const MAX_REGISTROS = 1000;
-const TIPOS_SIN_VALOR = new Set(['titulo', 'separador', 'buscador']);
+const TIPOS_SIN_VALOR = new Set(['titulo', 'separador', 'buscador', 'pendientes']);
 
 function _valorLegible(campo, fila, opcionesPorCampo, tipificaciones) {
   if (fila.booleano !== null && fila.booleano !== undefined) return fila.booleano ? 'Sí' : 'No';
@@ -1749,13 +1753,46 @@ exports.prellenarPorTelefonoPublico = async (req, res) => {
 //   vencida   → "Cita agendada" con fecha que ya pasó (para reagendar)
 // Los campos se detectan en la versión publicada por tipo/etiqueta (fecha de
 // asistencia/cita, horario, tipificación, asesor…), no por un código fijo.
+// El panel existe solo si el formulario tiene un campo tipo 'pendientes'; su
+// configJson define:
+//   alcance: 'todos'    → cualquier agente ve todos los pendientes;
+//            'propios'  → cada agente solo los de registros donde él es el
+//                         asesor (el agente de la interacción o, en registros
+//                         viejos sin ese dato, el campo asesor por nombre,
+//                         sin distinguir mayúsculas ni acentos). El agente
+//                         viene en la liga (?agenteId=&agente=): ordena el
+//                         trabajo, no es un control de seguridad.
+//   grupos:  qué grupos se muestran (por defecto los 3).
 const MAX_PENDIENTES = 300;
-async function _pendientesPorContactar(p, formularioId, versionId) {
+const GRUPOS_PENDIENTES = ['confirmar', 'recordar', 'vencida'];
+function _configPendientes(configJson) {
+  let c = {};
+  try { c = JSON.parse(configJson || '{}') || {}; } catch { c = {}; }
+  const grupos = Array.isArray(c.grupos) ? c.grupos.filter((g) => GRUPOS_PENDIENTES.includes(g)) : GRUPOS_PENDIENTES;
+  return { alcance: c.alcance === 'propios' ? 'propios' : 'todos', grupos: grupos.length ? grupos : GRUPOS_PENDIENTES };
+}
+
+async function _pendientesPorContactar(p, formularioId, versionId, agente = {}) {
   const { campaniaIds } = await _campaniasYCanalesDelFormulario(p, formularioId);
   const campos = (await p.request().input('v', sql.Int, versionId).query(`
-    SELECT c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta, c.FC_CATALOGO_FUENTE catalogoFuente
+    SELECT c.FC_CODIGO codigo, c.FC_TIPO tipo, c.FC_ETIQUETA etiqueta, c.FC_CATALOGO_FUENTE catalogoFuente, c.FC_CONFIG_JSON configJson
     FROM dbo.CCF_FORM_CAMPOS c JOIN dbo.CCF_FORM_SECCIONES s ON s.FS_ID = c.FC_SECCION_ID
-    WHERE s.FS_VERSION_ID = @v`)).recordset;
+    WHERE s.FS_VERSION_ID = @v AND c.FC_VISIBLE = 1`)).recordset;
+  const campoPanel = campos.find((c) => c.tipo === 'pendientes');
+  if (!campoPanel) return { disponible: false, hoy: null, pendientes: [] };
+  const config = _configPendientes(campoPanel.configJson);
+
+  // "Solo los suyos": el nombre del agente se toma de NEUS_USUARIOS si viene
+  // su id (más confiable que el texto de la liga); si no, del texto.
+  const agenteId = Number.isInteger(Number(agente.id)) && Number(agente.id) > 0 ? Number(agente.id) : null;
+  let agenteNombre = String(agente.nombre || '').trim() || null;
+  if (agenteId) {
+    const u = (await p.request().input('id', sql.Int, agenteId).query('SELECT NEUS_NOMBRES n FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @id')).recordset[0];
+    if (u?.n) agenteNombre = String(u.n).trim();
+  }
+  if (config.alcance === 'propios' && !agenteId && !agenteNombre) {
+    return { disponible: true, ...config, requiereAgente: true, hoy: null, pendientes: [] };
+  }
   const busca = (pred) => campos.find((c) => pred(c, `${c.codigo} ${c.etiqueta}`.toLowerCase()))?.codigo ?? null;
   const cod = {
     asis: busca((c, t) => c.tipo === 'fecha' && /asist|cita/.test(t)),
@@ -1771,7 +1808,10 @@ async function _pendientesPorContactar(p, formularioId, versionId) {
   if (!campaniaIds.length || !cod.asis || !cod.est) return { disponible: false, hoy: null, pendientes: [] };
 
   const campIn = campaniaIds.map(Number).filter(Number.isInteger).join(',');
-  const rq = p.request().input('max', sql.Int, MAX_PENDIENTES);
+  const rq = p.request().input('max', sql.Int, MAX_PENDIENTES)
+    .input('propios', sql.Bit, config.alcance === 'propios')
+    .input('aid', sql.Int, agenteId)
+    .input('anom', sql.NVarChar(200), agenteNombre);
   for (const [k, v] of Object.entries(cod)) rq.input(`c_${k}`, sql.NVarChar(80), v ?? '__sin_campo__');
   const r = await rq.query(`
     WITH r AS (
@@ -1794,7 +1834,7 @@ async function _pendientesPorContactar(p, formularioId, versionId) {
         MAX(CASE WHEN cod = @c_puesto THEN t END) puesto
       FROM r GROUP BY iid
     ), b AS (
-      SELECT p.*, i.CI_FECHA_INICIO fecha, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_AGENTE_NOMBRE agenteNombre,
+      SELECT p.*, i.CI_FECHA_INICIO fecha, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_AGENTE_NOMBRE agenteNombre, i.CI_AGENTE_ID agenteId,
              COALESCE(NULLIF(LTRIM(RTRIM(p.tel)), ''), i.CI_CLIENTE_TELEFONO) telefono,
              COALESCE(TRY_CAST(p.est AS INT), i.CI_TIPIFICACION_ID) tip,
              RIGHT(${sqlSoloDigitos("COALESCE(NULLIF(LTRIM(RTRIM(p.tel)), ''), i.CI_CLIENTE_TELEFONO)")}, 10) tel10
@@ -1812,6 +1852,11 @@ async function _pendientesPorContactar(p, formularioId, versionId) {
       (t.CT_NOMBRE LIKE '%agendad%' AND t.CT_NOMBRE NOT LIKE '%confirm%')
       OR (t.CT_NOMBRE LIKE '%confirm%'
           AND CAST(u.asis AS date) BETWEEN CAST(GETDATE() AS date) AND DATEADD(DAY, 1, CAST(GETDATE() AS date))))
+      -- "Solo los suyos": el asesor de su registro más reciente es este agente.
+      AND (@propios = 0
+        OR (@aid IS NOT NULL AND u.agenteId = @aid)
+        OR (@anom IS NOT NULL AND LTRIM(RTRIM(COALESCE(NULLIF(LTRIM(RTRIM(u.asesor)), ''), u.agenteNombre))) COLLATE Latin1_General_CI_AI
+                                  = LTRIM(RTRIM(@anom)) COLLATE Latin1_General_CI_AI))
     ORDER BY CASE WHEN CAST(u.asis AS date) >= CAST(GETDATE() AS date) THEN 0 ELSE 1 END,
              CASE WHEN CAST(u.asis AS date) >= CAST(GETDATE() AS date) THEN u.asis END ASC,
              u.asis DESC, u.hora;
@@ -1819,8 +1864,10 @@ async function _pendientesPorContactar(p, formularioId, versionId) {
   const txt = (v) => (v === null || v === undefined ? null : String(v).trim() || null);
   return {
     disponible: true,
+    ...config,
+    agente: config.alcance === 'propios' ? agenteNombre : null,
     hoy: r.recordsets[1][0].hoy,
-    pendientes: r.recordsets[0].map((x) => ({
+    pendientes: r.recordsets[0].filter((x) => config.grupos.includes(x.grupo)).map((x) => ({
       interaccionId: x.iid,
       grupo: x.grupo,
       telefono: txt(x.telefono),
@@ -1842,7 +1889,8 @@ exports.pendientesPorContactarPublico = async (req, res) => {
     const version = await r.pool.request().input('id', sql.Int, r.formularioId)
       .query(`SELECT TOP 1 FV_ID id FROM dbo.CCF_FORM_VERSIONES WHERE FV_FORMULARIO_ID = @id AND FV_ESTADO = 'publicado' ORDER BY FV_NUMERO DESC`);
     if (!version.recordset.length) return res.status(404).json({ success: false, message: 'Este formulario no tiene una versión publicada' });
-    res.json({ success: true, data: await _pendientesPorContactar(r.pool, r.formularioId, version.recordset[0].id) });
+    const agente = { id: req.query.agenteId, nombre: req.query.agente };
+    res.json({ success: true, data: await _pendientesPorContactar(r.pool, r.formularioId, version.recordset[0].id, agente) });
   } catch (e) {
     console.error('ccFormularios.pendientesPorContactarPublico:', e.message);
     res.status(500).json({ success: false, message: 'Error al obtener los pendientes' });

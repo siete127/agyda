@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Coffee, Plus, Pencil, Trash2, Lock, X, DoorOpen } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -6,13 +6,13 @@ import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { EmojiPicker } from '@/components/ui/EmojiPicker'
 import { usePausaTipos, usePausaModulos, PAUSA_TIPOS_QUERY_KEY } from '@/hooks/usePausaTipos'
 import { pausaTiposService } from '@/services/pausaTipos.service'
 import {
   USOS_PAUSA, MODULOS_LIMITE,
   type PausaTipo, type PausaTipoPayload, type UsoPausa, type ModuloLimite,
 } from '@/types/pausaTipos.types'
-import { AlcanceCambioModal } from './AlcanceCambioModal'
 import { PausaEspaciosModal } from './PausaEspaciosModal'
 import { useConfigModulo } from './configUbicacion'
 
@@ -74,8 +74,8 @@ function formDesde(t: PausaTipo | null): FormState {
   }
 }
 
-// Alta/edición de un tipo. Al guardar se pregunta en qué módulos cuenta
-// (AlcanceCambioModal), con el impacto en cada uno.
+// Alta/edición de un tipo, incluidos los módulos en los que cuenta (con el
+// impacto en cada uno).
 function PausaTipoModal({ tipo, usoActual, modulosEmpresa, onClose }: {
   tipo: PausaTipo | null // null = nuevo
   usoActual: UsoPausa | null
@@ -84,8 +84,11 @@ function PausaTipoModal({ tipo, usoActual, modulosEmpresa, onClose }: {
 }) {
   const qc = useQueryClient()
   const [form, setForm] = useState<FormState>(() => formDesde(tipo))
-  const [eligiendoUsos, setEligiendoUsos] = useState(false)
+  // null = sin tocar → se usa la preselección (lo guardado, o el módulo desde el que se abrió).
+  const [usosElegidos, setUsosElegidos] = useState<string[] | null>(null)
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
+  const [emojiAbierto, setEmojiAbierto] = useState(false)
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
 
   const guardar = useMutation({
     mutationFn: (usos: Record<UsoPausa, boolean>) => {
@@ -134,6 +137,11 @@ function PausaTipoModal({ tipo, usoActual, modulosEmpresa, onClose }: {
     u.key,
     modulosEmpresa[u.key] ? keys.includes(u.key) : (tipo?.usos[u.key] ?? false),
   ])) as Record<UsoPausa, boolean>
+  const usosSel = usosElegidos ?? preseleccion
+  // El backend exige al menos un módulo (contando los que la empresa no tiene activos).
+  const algunUso = Object.values(usosDesde(usosSel)).some(Boolean)
+  const toggleUso = (key: string) =>
+    setUsosElegidos(usosSel.includes(key) ? usosSel.filter((k) => k !== key) : [...usosSel, key])
 
   return (
     <>
@@ -145,17 +153,29 @@ function PausaTipoModal({ tipo, usoActual, modulosEmpresa, onClose }: {
               <input className={inputCls} maxLength={60} value={form.etiqueta}
                 onChange={(e) => set('etiqueta', e.target.value)} placeholder="Ej. Junta, Pausa activa…" />
             </label>
-            <label className="block">
+            <div>
               <span className="mb-1 block text-[0.72rem] font-semibold text-gray-500">Emoji</span>
-              <input className={clsx(inputCls, 'text-center')} maxLength={8} value={form.emoji}
-                onChange={(e) => set('emoji', e.target.value)} />
-            </label>
+              <button ref={emojiBtnRef} type="button" title="Elegir emoji"
+                onClick={() => setEmojiAbierto((v) => !v)}
+                className={clsx(inputCls, 'h-[38px] text-center text-lg leading-none', emojiAbierto && 'border-violet-500 ring-2 ring-violet-500/15')}>
+                {form.emoji || '⏸️'}
+              </button>
+            </div>
             <label className="block">
               <span className="mb-1 block text-[0.72rem] font-semibold text-gray-500">Color</span>
               <input type="color" className="h-[38px] w-full cursor-pointer rounded-xl border border-gray-200 bg-card p-1"
                 value={form.color} onChange={(e) => set('color', e.target.value)} />
             </label>
           </div>
+
+          {emojiAbierto && (
+            <EmojiPicker
+              className="w-full shadow-md"
+              anchorRef={emojiBtnRef}
+              onSelect={(e) => { set('emoji', e); setEmojiAbierto(false) }}
+              onClose={() => setEmojiAbierto(false)}
+            />
+          )}
 
           <div>
             <span className="mb-1 block text-[0.72rem] font-semibold text-gray-500">Límite</span>
@@ -223,6 +243,33 @@ function PausaTipoModal({ tipo, usoActual, modulosEmpresa, onClose }: {
             </div>
           )}
 
+          {usosVisibles.length > 0 && (
+            <div>
+              <span className="mb-1 block text-[0.72rem] font-semibold text-gray-500">¿En qué módulos cuenta?</span>
+              <div className="space-y-1.5">
+                {usosVisibles.map((u) => {
+                  const marcado = usosSel.includes(u.key)
+                  return (
+                    <label key={u.key} className={clsx(
+                      'flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2 transition-colors',
+                      marcado ? 'border-violet-300 bg-violet-50/60' : 'border-gray-200 hover:bg-gray-50',
+                    )}>
+                      <input type="checkbox" className="mt-0.5 h-4 w-4 flex-shrink-0 accent-violet-600"
+                        checked={marcado} onChange={() => toggleUso(u.key)} />
+                      <span className="min-w-0">
+                        <span className="block text-[0.8rem] font-semibold text-gray-800">{u.label}</span>
+                        <span className="block text-[0.7rem] text-gray-500">{u.impacto}</span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              {!algunUso && (
+                <p className="mt-1 text-[0.7rem] text-amber-600">Marca al menos un módulo.</p>
+              )}
+            </div>
+          )}
+
           <label className="flex items-center gap-2">
             <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={form.activo}
               disabled={tipo?.controlOcupacion}
@@ -235,28 +282,10 @@ function PausaTipoModal({ tipo, usoActual, modulosEmpresa, onClose }: {
 
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-            <Button onClick={() => setEligiendoUsos(true)} disabled={!puedeGuardar}>Guardar</Button>
+            <Button onClick={() => guardar.mutate(usosDesde(usosSel))} isLoading={guardar.isPending} disabled={!puedeGuardar || !algunUso}>Guardar</Button>
           </div>
         </div>
       </Modal>
-
-      {eligiendoUsos && (
-        <AlcanceCambioModal
-          titulo="¿En qué módulos cuenta esta pausa?"
-          descripcion="El nombre, el color y el límite son los mismos en todos los módulos. Marca en cuáles cuenta esta pausa; en los que no marques se ignora."
-          actual={usoActual && modulosEmpresa[usoActual] ? usoActual : null}
-          preseleccion={preseleccion}
-          pending={guardar.isPending}
-          opciones={usosVisibles.map((u) => ({
-            key: u.key,
-            label: u.label,
-            impacto: u.impacto,
-            valorActual: tipo ? (tipo.usos[u.key] ? 'cuenta' : 'no cuenta') : undefined,
-          }))}
-          onConfirm={(keys) => guardar.mutate(usosDesde(keys))}
-          onClose={() => setEligiendoUsos(false)}
-        />
-      )}
     </>
   )
 }

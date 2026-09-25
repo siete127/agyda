@@ -42,15 +42,19 @@ function espaciosDeRespaldo() {
   return pausaTiposService.ESPACIOS_DEFAULT.map((e, i) => ({ ...e, id: -(i + 1), statusId: null, orden: i + 1 }));
 }
 
+async function leerEspacios(tenantKey) {
+  const pool = await databaseService.getPool(tenantKey);
+  const r = await pool.request().query(`
+    SELECT ESPACIO_ID, STATUS_ID, NOMBRE, GENERO, CAPACIDAD, AREAS, ORDEN
+    FROM dbo.STATUS_ESPACIOS WHERE STATUS_ID IN ${SQL_BANIO}
+    ORDER BY ORDEN, ESPACIO_ID`);
+  return r.recordset.length ? r.recordset.map(pausaTiposService.mapEspacio) : espaciosDeRespaldo();
+}
+
 async function cargarEspacios(tenantKey) {
   const b = getBanio(tenantKey);
   try {
-    const pool = await databaseService.getPool(tenantKey);
-    const r = await pool.request().query(`
-      SELECT ESPACIO_ID, STATUS_ID, NOMBRE, GENERO, CAPACIDAD, AREAS, ORDEN
-      FROM dbo.STATUS_ESPACIOS WHERE STATUS_ID IN ${SQL_BANIO}
-      ORDER BY ORDEN, ESPACIO_ID`);
-    b.espacios = r.recordset.length ? r.recordset.map(pausaTiposService.mapEspacio) : espaciosDeRespaldo();
+    b.espacios = await leerEspacios(tenantKey);
   } catch (e) {
     console.warn(`[BAÑO][${tenantKey}] No se pudieron leer los espacios:`, e?.message);
     b.espacios = espaciosDeRespaldo();
@@ -267,6 +271,19 @@ async function depurarOcupantes(tenantKey) {
   } catch (_) { /* se reintenta en el siguiente minuto */ }
 }
 
+// Cada minuto: si la configuración de baños cambió en la BD, recargarla.
+// recargarEspacios solo lo avisa el proceso que atendió el guardado; otro
+// servidor conectado a la misma BD (p. ej. local vs. producción) no se entera.
+// Si la lectura falla se conserva la configuración actual.
+async function revisarCambiosEspacios(tenantKey) {
+  const b = getBanio(tenantKey);
+  if (!b.espacios) return;
+  try {
+    const nuevos = await leerEspacios(tenantKey);
+    if (JSON.stringify(nuevos) !== JSON.stringify(b.espacios)) await recargarEspacios(tenantKey);
+  } catch (_) { /* se reintenta en el siguiente minuto */ }
+}
+
 function initialize(server) {
   io = new Server(server, {
     cors: {
@@ -288,7 +305,10 @@ function initialize(server) {
     });
   });
   setInterval(() => {
-    for (const [key, b] of banioByTenant) if (b.ocupantes.size) depurarOcupantes(key);
+    for (const [key, b] of banioByTenant) {
+      if (b.ocupantes.size) depurarOcupantes(key);
+      revisarCambiosEspacios(key);
+    }
   }, 60_000).unref();
 
   io.on('connection', (socket) => {

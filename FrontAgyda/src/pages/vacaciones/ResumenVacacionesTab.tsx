@@ -6,6 +6,7 @@ import { Search, RefreshCw, CalendarDays, Users, TrendingDown, CheckCircle2, Clo
 import { clsx } from 'clsx'
 import { Modal } from '@/components/ui/Modal'
 import toast from 'react-hot-toast'
+import { useVacacionesPermisos } from '@/hooks/useVacacionesPermisos'
 
 interface AgenteResumen {
   id: number
@@ -74,6 +75,7 @@ function hoyISO() {
 
 function SolicitudRow({ s, agenteId }: { s: SolicitudDetalle; agenteId: number }) {
   const qc = useQueryClient()
+  const { puedeAprobar } = useVacacionesPermisos()
   const [editando, setEditando] = useState(false)
   const [nuevaFecha, setNuevaFecha] = useState(s.fechaInicio.slice(0, 10))
   const [error, setError] = useState('')
@@ -106,6 +108,7 @@ function SolicitudRow({ s, agenteId }: { s: SolicitudDetalle; agenteId: number }
   })
 
   const abrirEdicion = () => {
+    if (!puedeAprobar) return
     if (!esEditable) {
       setError(`No se puede modificar: esta fecha ya es hoy o ya pasó (${formatFecha(s.fechaInicio)}).`)
       return
@@ -151,7 +154,7 @@ function SolicitudRow({ s, agenteId }: { s: SolicitudDetalle; agenteId: number }
         <div>
           <p className="text-[0.8rem] font-semibold text-gray-800 flex items-center gap-1.5">
             {s.tipoLabel}
-            {esEditable && <Pencil className="h-3 w-3 text-gray-300" />}
+            {puedeAprobar && esEditable && <Pencil className="h-3 w-3 text-gray-300" />}
           </p>
           <p className="text-[0.72rem] text-gray-500">
             {formatFecha(s.fechaInicio)}{s.fechaFin && s.fechaFin !== s.fechaInicio ? ` – ${formatFecha(s.fechaFin)}` : ''}
@@ -283,6 +286,7 @@ function AgenteRow({ a, onSelect, onAsignarPool, onQuitarPool, asignando }: {
   onQuitarPool: (id: number) => void
   asignando: boolean
 }) {
+  const { puedeAprobar } = useVacacionesPermisos()
   return (
     <tr
       onClick={() => onSelect(a)}
@@ -329,7 +333,7 @@ function AgenteRow({ a, onSelect, onAsignarPool, onQuitarPool, asignando }: {
         }
       </td>
       <td className="px-4 py-3">
-        {!a.tienePool ? (
+        {!puedeAprobar ? null : !a.tienePool ? (
           <button
             onClick={(e) => { e.stopPropagation(); onAsignarPool(a.id) }}
             disabled={asignando}

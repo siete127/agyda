@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -133,7 +134,7 @@ function CrearEvalModal({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 // ─── Modal de llenado ─────────────────────────────────────────────────────────
-function EvalFormModal({ evalId, soloLectura, onClose }: { evalId: number; soloLectura: boolean; onClose: () => void }) {
+function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalId: number; soloLectura: boolean; puedeFinalizar: boolean; onClose: () => void }) {
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery<EvalDetalle>({
@@ -434,12 +435,14 @@ function EvalFormModal({ evalId, soloLectura, onClose }: { evalId: number; soloL
                 <Button variant="ghost" isLoading={guardar.isPending} onClick={() => guardar.mutate()}>
                   <Save className="h-3.5 w-3.5" /> Guardar borrador
                 </Button>
-                <Button
-                  onClick={() => setConfirmFinalizar(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-[0.78rem]"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Finalizar evaluación
-                </Button>
+                {puedeFinalizar && (
+                  <Button
+                    onClick={() => setConfirmFinalizar(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-[0.78rem]"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Finalizar evaluación
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -483,6 +486,14 @@ export function EvaluacionCapacitacionPage() {
   const user = useAuthStore((s) => s.user)
   const rol = (user?.tipoUsuario ?? '').toUpperCase()
   const esAD = rol === 'AD'
+  // Acciones de Accesos (módulo 'evaluacion'); escribir además exige AD.
+  const { can } = useActionAccess()
+  const puede = {
+    crear: esAD && can('evaluacion', 'crear'),
+    editar: esAD && can('evaluacion', 'editar'),
+    finalizar: esAD && can('evaluacion', 'finalizar'),
+    eliminar: esAD && can('evaluacion', 'eliminar'),
+  }
 
   const qc = useQueryClient()
   const [showCrear, setShowCrear] = useState(false)
@@ -548,7 +559,7 @@ export function EvaluacionCapacitacionPage() {
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              {esAD && (
+              {puede.crear && (
                 <Button onClick={() => setShowCrear(true)} className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
                   <Plus className="h-3.5 w-3.5" /> Nueva evaluación
                 </Button>
@@ -603,7 +614,7 @@ export function EvaluacionCapacitacionPage() {
           <div className="text-center">
             <p className="text-sm font-semibold text-gray-700">Sin evaluaciones</p>
             <p className="text-xs text-gray-400 mt-0.5">
-              {esAD ? 'Crea la primera evaluación con el botón de arriba' : 'Aún no tienes evaluaciones registradas'}
+              {puede.crear ? 'Crea la primera evaluación con el botón de arriba' : 'Aún no tienes evaluaciones registradas'}
             </p>
           </div>
         </div>
@@ -661,7 +672,7 @@ export function EvaluacionCapacitacionPage() {
                     <td className="px-4 py-3">{calBadge(ev.calificacion)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        {esAD && ev.estado === 'borrador' && (
+                        {puede.eliminar && ev.estado === 'borrador' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setConfirmEliminar(ev.id) }}
                             className="rounded-lg p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors"
@@ -690,7 +701,8 @@ export function EvaluacionCapacitacionPage() {
       {evalAbierta !== null && (
         <EvalFormModal
           evalId={evalAbierta}
-          soloLectura={!esAD}
+          soloLectura={!puede.editar}
+          puedeFinalizar={puede.finalizar}
           onClose={() => setEvalAbierta(null)}
         />
       )}

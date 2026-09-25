@@ -119,8 +119,11 @@ export const ccFormularioPublicoService = {
     apiPublico.get(`/contact-center/formularios-publico/${token}/prellenar`, { params: { telefono } })
       .then((r) => r.data.data as CCFormPrellenado),
   // A quién llamar para confirmar/recordar/reagendar su cita.
-  pendientes: (token: string) =>
-    apiPublico.get(`/contact-center/formularios-publico/${token}/pendientes`).then((r) => r.data.data as CCFormPendientes),
+  // `agente` sirve cuando el campo está configurado como "cada asesor solo los suyos".
+  pendientes: (token: string, agente?: { id: number | null; nombre: string }) =>
+    apiPublico.get(`/contact-center/formularios-publico/${token}/pendientes`, {
+      params: { agenteId: agente?.id ?? undefined, agente: agente?.nombre || undefined },
+    }).then((r) => r.data.data as CCFormPendientes),
   registrar: (token: string, body: {
     clienteNombre?: string; clienteTelefono?: string; canalId: number; agenteId?: number | null; agenteNombre?: string | null; comentario?: string
   }) => apiPublico.post(`/contact-center/formularios-publico/${token}/buscador/registrar`, body).then((r) => r.data),
