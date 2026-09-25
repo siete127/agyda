@@ -8,6 +8,7 @@ import {
   Clock, AlertCircle, RefreshCcw, MoreVertical, X, Lock, Loader2,
 } from 'lucide-react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
+import { PortalBreadcrumb } from '@/pages/portal-cliente/components/PortalBreadcrumb'
 import { portalClienteService } from '@/services/portalCliente.service'
 import type { PortalFactura } from '@/types/portalCliente.types'
 import facturaHero from '@/assets/factura-hero.png'
@@ -53,15 +54,6 @@ function usePopover() {
   return { abierto, setAbierto }
 }
 
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Facturas</span>
-    </div>
-  )
-}
 
 function HeaderFacturas({ totalPendiente, cantidadPendientes, onVerPendientes }: { totalPendiente: number; cantidadPendientes: number; onVerPendientes: () => void }) {
   return (
@@ -534,7 +526,7 @@ export function PortalClienteFacturasPage() {
   if (isLoading) {
     return (
       <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-        <Breadcrumb />
+        <PortalBreadcrumb seccion="Facturas" />
         <div className="h-48 animate-pulse rounded-3xl bg-surface" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="h-24 animate-pulse rounded-2xl bg-surface" />
@@ -548,7 +540,7 @@ export function PortalClienteFacturasPage() {
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-      <Breadcrumb />
+      <PortalBreadcrumb seccion="Facturas" />
       <HeaderFacturas
         totalPendiente={totalPendiente}
         cantidadPendientes={pendientes.length}

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
+import { PortalBreadcrumb } from '@/pages/portal-cliente/components/PortalBreadcrumb'
 import { Ardabito } from '@/components/effects/Ardabito'
 import { personalizacionService } from '@/services/personalizacion.service'
 import canalesHero from '@/assets/canales-hero.png'
@@ -199,15 +200,6 @@ function construirCanales(cfg: import('@/services/personalizacion.service').Cana
   return canales
 }
 
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Canales</span>
-    </div>
-  )
-}
 
 function HeaderCanales({ filasHorario }: { filasHorario: FilaHorario[] }) {
   return (
@@ -371,7 +363,7 @@ export function PortalClienteCanalesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-      <Breadcrumb />
+      <PortalBreadcrumb seccion="Canales" />
       <HeaderCanales filasHorario={construirFilasHorario(data?.canalesPortal)} />
 
       <Reveal index={0} className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_280px]">

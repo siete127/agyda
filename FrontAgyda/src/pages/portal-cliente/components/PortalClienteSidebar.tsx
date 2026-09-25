@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
-  Home, Calendar, Headphones, Megaphone, Receipt, Settings, HelpCircle, LogOut,
+  Home, Calendar, Headphones, Megaphone, Receipt, LogOut,
   PanelLeftClose, PanelLeftOpen, Users, Box, FileText, FileSpreadsheet,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
@@ -83,28 +83,6 @@ export function PortalClienteSidebar({ className }: { className?: string }) {
       </nav>
 
       <div className={clsx('mt-4 flex flex-shrink-0 flex-col gap-2.5 border-t border-white/10 pt-4', collapsed ? 'px-0' : '')}>
-        <NavLink
-          to="/portal-cliente/configuracion"
-          title={collapsed ? 'Configuración' : undefined}
-          className={clsx(
-            'flex items-center gap-3 rounded-full py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60',
-            collapsed ? 'justify-center px-0' : 'px-4'
-          )}
-        >
-          <Settings className="h-5 w-5 flex-shrink-0" />
-          {!collapsed && 'Configuración'}
-        </NavLink>
-        <NavLink
-          to="/portal-cliente/ayuda"
-          title={collapsed ? 'Ayuda y soporte' : undefined}
-          className={clsx(
-            'flex items-center gap-3 rounded-full py-3 text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60',
-            collapsed ? 'justify-center px-0' : 'px-4'
-          )}
-        >
-          <HelpCircle className="h-5 w-5 flex-shrink-0" />
-          {!collapsed && 'Ayuda y soporte'}
-        </NavLink>
         <button
           type="button"
           onClick={() => clearSession()}

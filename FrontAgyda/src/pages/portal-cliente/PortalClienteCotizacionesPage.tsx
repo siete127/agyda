@@ -1,20 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { ChevronRight, FileSpreadsheet, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { FileSpreadsheet, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { portalClienteService } from '@/services/portalCliente.service'
 import type { PortalCotizacion } from '@/types/portalCliente.types'
 import { PortalHero } from './components/PortalHero'
-
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Cotizaciones</span>
-    </div>
-  )
-}
+import { PortalBreadcrumb } from './components/PortalBreadcrumb'
+import cotizacionesHero from '@/assets/cotizaciones-hero.png'
 
 const ESTATUS_INFO: Record<string, { label: string; badge: string; icon: React.ReactNode }> = {
   borrador: { label: 'Solicitada', badge: 'bg-blue-100 text-blue-700', icon: <Clock className="h-3.5 w-3.5" /> },
@@ -55,9 +47,9 @@ export function PortalClienteCotizacionesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-      <Breadcrumb />
+      <PortalBreadcrumb seccion="Cotizaciones" />
 
-      <PortalHero icon={FileSpreadsheet} titulo="Cotizaciones" descripcion="Propuestas que te hemos enviado y su estatus." />
+      <PortalHero icon={FileSpreadsheet} titulo="Cotizaciones" descripcion="Propuestas que te hemos enviado y su estatus." imagen={cotizacionesHero} />
 
       <div className="flex gap-6 overflow-x-auto border-b border-surface-border">
         {FILTROS.map((f) => {

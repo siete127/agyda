@@ -26,6 +26,40 @@ exports.getMisAcciones = async (req, res) => {
   }
 };
 
+// GET /notificaciones — notificaciones reales del usuario del portal logueado
+// (req.user.id es su propio NEUS_ID, igual que para cualquier usuario interno
+// — mismo notificationService, solo que aquí el destinatario es el cliente).
+exports.getNotificaciones = async (req, res) => {
+  try {
+    const notificaciones = await notificationService.listNotifications(req.user.id, false, 30, req.user?.empresa);
+    res.json({ success: true, data: notificaciones });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /notificaciones/:id/marcar-leida
+exports.marcarNotificacionLeida = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'id inválido' });
+    await notificationService.markAsRead(id, req.user?.empresa);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /notificaciones/marcar-todas-leidas
+exports.marcarTodasNotificacionesLeidas = async (req, res) => {
+  try {
+    await notificationService.markAllAsRead(req.user.id, req.user?.empresa);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // GET /resumen — KPIs + actividad reciente para "Principal".
 exports.getResumen = async (req, res) => {
   try {

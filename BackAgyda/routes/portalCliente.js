@@ -11,6 +11,9 @@ const { requirePortalCliente, requirePortalAction } = require('../middleware/por
 router.use(authenticateToken, requirePortalCliente);
 
 router.get('/mis-acciones', ctrl.getMisAcciones);
+router.get('/notificaciones', ctrl.getNotificaciones);
+router.post('/notificaciones/marcar-todas-leidas', ctrl.marcarTodasNotificacionesLeidas);
+router.post('/notificaciones/:id/marcar-leida', ctrl.marcarNotificacionLeida);
 
 router.get('/resumen', requirePortalAction('ver-resumen'), ctrl.getResumen);
 router.get('/productos-servicios', requirePortalAction('ver-resumen'), ctrl.getProductosServicios);

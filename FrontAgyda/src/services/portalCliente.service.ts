@@ -17,10 +17,29 @@ export interface PortalUsuario {
   subrolNombre: string
 }
 
+export interface PortalNotificacion {
+  id: number
+  mensaje: string
+  tipo: string | null
+  leida: boolean
+  fecha: string
+  dataExtra: Record<string, unknown> | null
+}
+
 export const portalClienteService = {
   async getMisAcciones(): Promise<string[]> {
     const { data } = await api.get('/portal-cliente/mis-acciones')
     return (data?.data ?? []) as string[]
+  },
+  async getNotificaciones(): Promise<PortalNotificacion[]> {
+    const { data } = await api.get('/portal-cliente/notificaciones')
+    return (data?.data ?? []) as PortalNotificacion[]
+  },
+  async marcarNotificacionLeida(id: number): Promise<void> {
+    await api.post(`/portal-cliente/notificaciones/${id}/marcar-leida`)
+  },
+  async marcarTodasNotificacionesLeidas(): Promise<void> {
+    await api.post('/portal-cliente/notificaciones/marcar-todas-leidas')
   },
   async getSubrolesDisponibles(): Promise<{ id: number; nombre: string }[]> {
     const { data } = await api.get('/portal-cliente/subroles-disponibles')

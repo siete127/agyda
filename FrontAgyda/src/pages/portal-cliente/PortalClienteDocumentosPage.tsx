@@ -2,20 +2,12 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { ChevronRight, FileText, Download, Loader2, FolderOpen } from 'lucide-react'
+import { FileText, Download, Loader2, FolderOpen } from 'lucide-react'
 import { portalClienteService } from '@/services/portalCliente.service'
 import type { PortalDocumento } from '@/types/portalCliente.types'
 import { PortalHero } from './components/PortalHero'
-
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Documentos</span>
-    </div>
-  )
-}
+import { PortalBreadcrumb } from './components/PortalBreadcrumb'
+import documentosHero from '@/assets/documentos-hero.png'
 
 function formatTamano(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -47,9 +39,9 @@ export function PortalClienteDocumentosPage() {
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-      <Breadcrumb />
+      <PortalBreadcrumb seccion="Documentos" />
 
-      <PortalHero icon={FileText} titulo="Documentos" descripcion="Archivos que hemos compartido contigo." />
+      <PortalHero icon={FileText} titulo="Documentos" descripcion="Archivos que hemos compartido contigo." imagen={documentosHero} />
 
       <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
         {isLoading ? (

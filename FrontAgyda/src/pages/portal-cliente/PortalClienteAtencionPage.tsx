@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
-  Headphones, ChevronRight, ChevronDown, Search, Calendar,
+  Headphones, ChevronDown, Search, Calendar,
   Plus, HelpCircle, MessageCircle,
   FileText, CheckCircle2, XCircle,
   Clock, Tag, AlertTriangle, Send,
 } from 'lucide-react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
+import { PortalBreadcrumb } from '@/pages/portal-cliente/components/PortalBreadcrumb'
 import { Modal } from '@/components/ui/Modal'
 import { portalClienteService } from '@/services/portalCliente.service'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
@@ -25,16 +26,6 @@ import atencionHero from '@/assets/atencion-hero.png'
 function usePopover() {
   const [abierto, setAbierto] = useState(false)
   return { abierto, setAbierto }
-}
-
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Atención</span>
-    </div>
-  )
 }
 
 function HeaderAtencion() {
@@ -444,7 +435,7 @@ export function PortalClienteAtencionPage() {
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-      <Breadcrumb />
+      <PortalBreadcrumb seccion="Atención" />
       <HeaderAtencion />
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-surface-border">

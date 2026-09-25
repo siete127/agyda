@@ -8,6 +8,7 @@ import {
   Check, Search, CalendarClock, FileText, StickyNote, Lock, X,
 } from 'lucide-react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
+import { PortalBreadcrumb } from '@/pages/portal-cliente/components/PortalBreadcrumb'
 import { Modal } from '@/components/ui/Modal'
 import { portalClienteService } from '@/services/portalCliente.service'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
@@ -29,16 +30,6 @@ const SUBTABS = ['Detalles', 'Documentos', 'Notas'] as const
 function usePopover() {
   const [abierto, setAbierto] = useState(false)
   return { abierto, setAbierto }
-}
-
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Reuniones</span>
-    </div>
-  )
 }
 
 function HeaderReuniones() {
@@ -622,7 +613,7 @@ export function PortalClienteReunionesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-      <Breadcrumb />
+      <PortalBreadcrumb seccion="Reuniones" />
       <HeaderReuniones />
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-surface-border">
