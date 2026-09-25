@@ -270,7 +270,8 @@ exports.updateEstatus = async (req, res) => {
 
     // Deuda técnica: si es queja, control por código de empleado.
     const caso = (await pool.request().input('id', sql.Int, id)
-      .query(`SELECT CASO_TIPO as tipo FROM CASOS WHERE CASO_ID=@id AND CASO_ACTIVO=1`)).recordset[0];
+      .query(`SELECT CASO_TIPO as tipo, CASO_FOLIO as folio, CASO_TITULO as titulo, CASO_CONTACTO_ID as contactoId, CASO_ORIGEN as origen
+              FROM CASOS WHERE CASO_ID=@id AND CASO_ACTIVO=1`)).recordset[0];
     if (!caso) return res.status(404).json({ success: false, message: 'Caso no encontrado' });
     if (caso.tipo === 'queja') {
       const err = await verificarPermisoQueja(req, pool, 'gestionar-estatus');
@@ -294,6 +295,24 @@ exports.updateEstatus = async (req, res) => {
       modulo: 'atencion-cliente', accion: 'actualizar-estatus-caso', entidadId: id,
       detalle: { estatus, tipo: caso.tipo }, ip: req.ip,
     });
+
+    // Avisa a los usuarios del Portal de Cliente ligados a este contacto
+    // cuando se resuelve/cierra una solicitud que ellos mismos levantaron.
+    if (esCierre && caso.origen === 'portal' && caso.contactoId) {
+      try {
+        const portalUsers = await pool.request().input('contId', sql.Int, caso.contactoId)
+          .query(`SELECT PU_NEUS_ID as neusId FROM PORTAL_USUARIOS WHERE PU_CONT_ID=@contId AND PU_ACTIVO=1`);
+        for (const pu of portalUsers.recordset) {
+          await notificationService.createNotification({
+            usuarioId: pu.neusId,
+            mensaje: `Tu solicitud ${caso.folio} — ${caso.titulo} fue marcada como ${estatus === 'resuelto' ? 'resuelta' : 'cerrada'}.`,
+            tipo: 'cliente-caso-resuelto',
+            dataExtra: { casoId: id, folio: caso.folio, estatus },
+            tenantKey: req.user?.empresa,
+          });
+        }
+      } catch (e) { console.warn('updateEstatus caso: aviso a portal:', e.message); }
+    }
 
     res.json({ success: true });
   } catch (e) {

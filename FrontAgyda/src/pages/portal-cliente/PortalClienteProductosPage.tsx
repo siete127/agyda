@@ -2,25 +2,17 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Box, ChevronRight, Package, Wrench, DollarSign, Sparkles, X, Loader2, FileSpreadsheet, Check, CalendarClock } from 'lucide-react'
+import { Box, Package, Wrench, DollarSign, Sparkles, X, Loader2, FileSpreadsheet, Check, CalendarClock } from 'lucide-react'
 import { portalClienteService } from '@/services/portalCliente.service'
 import type { PortalProductoServicio, PortalCatalogoItem } from '@/types/portalCliente.types'
 import { PortalHero } from './components/PortalHero'
+import { PortalBreadcrumb } from './components/PortalBreadcrumb'
+import productosHero from '@/assets/productos-hero.png'
 
 const RECURRENCIA_LABEL: Record<string, string> = { MENSUAL: '/mes', ANUAL: '/año', UNICO: 'pago único' }
 
 // Mismo degradado que el pill activo del sidebar del portal (PortalClienteSidebar.tsx).
 const BRAND_GRADIENT = 'bg-gradient-to-br from-[#19b6bc] to-[#00537f]'
-
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Productos</span>
-    </div>
-  )
-}
 
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   return (
@@ -209,9 +201,9 @@ export function PortalClienteProductosPage() {
   return (
     <div className={clsx('mx-auto grid max-w-[1280px] gap-6 transition-[grid-template-columns] duration-300', panelAbierto ? 'lg:grid-cols-[1fr_380px]' : 'lg:grid-cols-1')}>
       <div className="flex min-w-0 flex-col gap-6">
-        <Breadcrumb />
+        <PortalBreadcrumb seccion="Productos" />
 
-        <PortalHero icon={Box} titulo="Productos y servicios contratados" descripcion="Consulta todo lo que tienes contratado con nosotros." />
+        <PortalHero icon={Box} titulo="Productos y servicios contratados" descripcion="Consulta todo lo que tienes contratado con nosotros." imagen={productosHero} />
 
         <div className="flex justify-end">
           <button

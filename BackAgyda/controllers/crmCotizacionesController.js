@@ -3,6 +3,7 @@ const databaseService = require('../services/databaseService')
 const personalizacion = require('./personalizacionController')
 const { getUserAllowedActions } = require('../middleware/moduleAccess')
 const { esSuperAdminFijo } = require('../utils/superAdmin')
+const notificationService = require('../services/notificationService')
 
 async function _getPool(req) { return databaseService.getPool(req?.user?.empresa) }
 
@@ -285,12 +286,35 @@ exports.enviar = async (req, res) => {
       .query(`UPDATE CRM_COTIZACIONES SET COT_ESTATUS='enviada' WHERE COT_ID=@id AND COT_ACTIVO=1`)
     // Registrar interacción
     const cot = await pool.request().input('id', sql.Int, req.params.id)
-      .query(`SELECT COT_OPO_ID as opoId, COT_FOLIO as folio FROM CRM_COTIZACIONES WHERE COT_ID=@id`)
+      .query(`SELECT COT_OPO_ID as opoId, COT_FOLIO as folio, COT_TITULO as titulo FROM CRM_COTIZACIONES WHERE COT_ID=@id`)
     if (cot.recordset[0]) {
+      const { opoId, folio, titulo } = cot.recordset[0]
       await pool.request()
-        .input('opoId', sql.Int, cot.recordset[0].opoId)
-        .input('desc', sql.NVarChar(500), `Cotización ${cot.recordset[0].folio} enviada`)
+        .input('opoId', sql.Int, opoId)
+        .input('desc', sql.NVarChar(500), `Cotización ${folio} enviada`)
         .query(`INSERT INTO CRM_INTERACCIONES(INT_OPO_ID,INT_TIPO,INT_CONTENIDO) VALUES(@opoId,'email',@desc)`)
+
+      // Avisa a los usuarios del Portal de Cliente del contacto dueño de la
+      // oportunidad — es la contraparte de aprobar/rechazar (que dispara el
+      // cliente): aquí es el vendedor quien le informa que ya tiene propuesta.
+      try {
+        const opo = await pool.request().input('id', sql.Int, opoId)
+          .query(`SELECT OPO_CONTACTO_ID as contactoId FROM CRM_OPORTUNIDADES WHERE OPO_ID=@id`)
+        const contactoId = opo.recordset[0]?.contactoId
+        if (contactoId) {
+          const portalUsers = await pool.request().input('contId', sql.Int, contactoId)
+            .query(`SELECT PU_NEUS_ID as neusId FROM PORTAL_USUARIOS WHERE PU_CONT_ID=@contId AND PU_ACTIVO=1`)
+          for (const pu of portalUsers.recordset) {
+            await notificationService.createNotification({
+              usuarioId: pu.neusId,
+              mensaje: `Tienes una nueva cotización disponible: ${folio}${titulo ? ` — ${titulo}` : ''}.`,
+              tipo: 'cliente-cotizacion-enviada',
+              dataExtra: { cotId: Number(req.params.id), folio },
+              tenantKey: req.user?.empresa,
+            })
+          }
+        }
+      } catch (e) { console.warn('enviar cotizacion: aviso a portal:', e.message) }
     }
     res.json({ success: true })
   } catch (e) {

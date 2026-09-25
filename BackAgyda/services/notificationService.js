@@ -236,7 +236,9 @@ const notificationService = {
       const pool = await databaseService.getPool(tenantKey);
       const sql = require('mssql');
       const upperRoles = Array.isArray(roles) ? roles.filter(r => /^[A-Za-z0-9_]+$/.test(r)).map(r => r.toUpperCase()) : [];
-      let usersQuery = `SELECT NEUS_ID as id FROM dbo.NEUS_USUARIOS WHERE ISNULL(NEUS_ACTIVO,1)=1`;
+      // Las noticias son del intranet interno de AGYDA — nunca deben llegar a
+      // clientes externos del Portal de Cliente (NEUS_TIPOUSUARIO='CL').
+      let usersQuery = `SELECT NEUS_ID as id FROM dbo.NEUS_USUARIOS WHERE ISNULL(NEUS_ACTIVO,1)=1 AND UPPER(NEUS_TIPOUSUARIO) <> 'CL'`;
       if (upperRoles.length > 0) {
         const inList = upperRoles.map(r => `'${r}'`).join(',');
         usersQuery += ` AND UPPER(NEUS_TIPOUSUARIO) IN (${inList})`;

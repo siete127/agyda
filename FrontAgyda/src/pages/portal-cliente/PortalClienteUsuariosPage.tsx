@@ -2,21 +2,14 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Users, Plus, ShieldCheck, Power, ChevronRight, Mail, User as UserIcon } from 'lucide-react'
+import { Users, Plus, ShieldCheck, Power, Mail, User as UserIcon } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { portalClienteService, type PortalUsuario } from '@/services/portalCliente.service'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
 import { PortalHero } from './components/PortalHero'
+import { PortalBreadcrumb } from './components/PortalBreadcrumb'
+import usuariosHero from '@/assets/usuarios-hero.png'
 
-function Breadcrumb() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
-      <span>Inicio</span>
-      <ChevronRight className="h-3 w-3" />
-      <span className="font-semibold text-ink">Usuarios</span>
-    </div>
-  )
-}
 
 const SUBROL_COLORES: Record<string, string> = {
   Admin: 'bg-violet-100 text-violet-700',
@@ -188,9 +181,9 @@ export function PortalClienteUsuariosPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <Breadcrumb />
+      <PortalBreadcrumb seccion="Usuarios" />
       <div className="mt-3">
-        <PortalHero icon={Users} titulo="Usuarios de mi empresa" descripcion="Invita a tu equipo y asígnales un sub-rol dentro del portal." />
+        <PortalHero icon={Users} titulo="Usuarios de mi empresa" descripcion="Invita a tu equipo y asígnales un sub-rol dentro del portal." imagen={usuariosHero} posicion="center bottom" />
       </div>
       <div className="mt-4 flex justify-end">
         <button
