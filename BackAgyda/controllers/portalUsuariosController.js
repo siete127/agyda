@@ -3,7 +3,30 @@ const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const { invalidatePortalRolCache } = require('../middleware/portalCliente');
 
+const crypto = require('crypto');
+const { DEFAULT_TENANT } = require('../config/tenants');
+
 const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+
+// Contraseña temporal legible (sin 0/O/1/l que se confunden al dictarla).
+function generarContrasena(largo = 10) {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  return Array.from(crypto.randomBytes(largo), (b) => abc[b % abc.length]).join('');
+}
+
+// Manda el acceso por correo con el enlace directo a la empresa del usuario.
+// Si el correo no sale, se devuelven los datos para que quien invita los
+// entregue a mano: es la única copia de la contraseña generada.
+async function enviarAcceso(req, { nombre, correo, password }) {
+  const tenant = String(req.user?.empresa || DEFAULT_TENANT).toLowerCase();
+  const r = await emailService.sendInvitacionAccesoSistemaEmail({
+    nombre, correo, usuario: correo, password,
+    link: `${BASE_URL}/login?tenant=${encodeURIComponent(tenant)}`,
+  }).catch(() => ({ enviado: false, motivo: 'No se pudo enviar el correo' }));
+  return r?.enviado
+    ? { correoEnviado: true }
+    : { correoEnviado: false, motivo: r?.motivo || 'No se pudo enviar el correo', acceso: { usuario: correo, password } };
+}
 
 // Gestión de usuarios del Portal de Cliente de LA PROPIA empresa
 // (req.contacto.id, el contacto ancla resuelto por requirePortalCliente).
@@ -64,7 +87,7 @@ exports.crear = async (req, res) => {
     try {
       await transaction.begin();
 
-      const neusContra = password ? String(password) : Math.random().toString(36).slice(-10);
+      const neusContra = password ? String(password) : generarContrasena();
       const insUser = await transaction.request()
         .input('nombre', sql.NVarChar, nombre)
         .input('usuario', sql.NVarChar, correo)
@@ -88,15 +111,8 @@ exports.crear = async (req, res) => {
 
       await transaction.commit();
 
-      emailService.sendInvitacionAccesoSistemaEmail({
-        nombre,
-        correo,
-        usuario: correo,
-        password: password || neusContra,
-        link: `${BASE_URL}/login`,
-      }).catch(() => {});
-
-      res.status(201).json({ success: true, data: { neusId } });
+      const envio = await enviarAcceso(req, { nombre, correo, password: neusContra });
+      res.status(201).json({ success: true, data: { neusId, ...envio } });
     } catch (txErr) {
       try { await transaction.rollback(); } catch (e) {}
       throw txErr;
@@ -104,6 +120,40 @@ exports.crear = async (req, res) => {
   } catch (e) {
     console.error('Error creando usuario del portal:', e);
     res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /portal-cliente/usuarios/:id/reenviar-acceso — genera una contraseña
+// nueva y vuelve a mandar el acceso (la invitación se perdió, no llegó, o el
+// usuario olvidó su contraseña). La cuenta principal de la empresa no se toca
+// desde aquí: su acceso lo administra AGYDA.
+exports.reenviarAcceso = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'ID inválido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request()
+      .input('id', sql.Int, id)
+      .input('contId', sql.Int, req.contacto.id)
+      .query(`
+        SELECT pu.PU_NEUS_ID neusId, pu.PU_ES_ANCLA esAncla, pu.PU_ACTIVO activo, nu.NEUS_NOMBRES nombre, nu.NEUS_USUARIO correo
+        FROM PORTAL_USUARIOS pu JOIN NEUS_USUARIOS nu ON nu.NEUS_ID = pu.PU_NEUS_ID
+        WHERE pu.PU_ID = @id AND pu.PU_CONT_ID = @contId`);
+    const u = rs.recordset[0];
+    if (!u) return res.status(404).json({ success: false, message: 'Usuario no encontrado en tu empresa' });
+    if (u.esAncla) return res.status(409).json({ success: false, message: 'El acceso de la cuenta principal lo administra AGYDA' });
+    if (!u.activo) return res.status(409).json({ success: false, message: 'Activa al usuario antes de reenviarle su acceso' });
+
+    const password = generarContrasena();
+    await pool.request().input('neusId', sql.Int, u.neusId).input('contra', sql.NVarChar, password)
+      // Las dos columnas que acepta el login (igual que el cambio de contraseña
+      // del perfil): así la contraseña anterior deja de servir.
+      .query('UPDATE NEUS_USUARIOS SET NEUS_CONTRA = @contra, [password] = @contra WHERE NEUS_ID = @neusId');
+    const envio = await enviarAcceso(req, { nombre: u.nombre, correo: u.correo, password });
+    res.json({ success: true, data: envio });
+  } catch (e) {
+    console.error('Error reenviando acceso del portal:', e);
+    res.status(500).json({ success: false, message: 'No se pudo reenviar el acceso' });
   }
 };
 

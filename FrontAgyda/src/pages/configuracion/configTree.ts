@@ -91,6 +91,8 @@ const CATALOGO: ConfigNode[] = [
     description: 'Cuentas, roles, permisos y políticas de acceso',
     children: [
       { key: 'usuarios', label: 'Usuarios', screen: 'usuarios', accion: ['usuarios', 'ver'] },
+      // Etiquetas de función asignables a cualquier usuario (ej. "Asesor de clientes").
+      { key: 'funciones-usuario', label: 'Funciones de usuarios', screen: 'funciones-usuario', accion: ['usuarios', 'ver'] },
       { key: 'roles', label: 'Roles', screen: 'roles' },
       { key: 'permisos', label: 'Permisos', screen: 'permisos' },
       { key: 'permisos-modulo', label: 'Permisos por módulo' },

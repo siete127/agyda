@@ -2386,10 +2386,11 @@ async function ensurePortalRolesSchema(pool) {
   const PORTAL_ACCIONES_TODAS = [
     'ver-resumen', 'ver-proyectos', 'ver-cotizaciones', 'ver-facturas', 'descargar-documentos',
     'ver-citas', 'gestionar-citas', 'ver-incidencias', 'crear-incidencias', 'gestionar-usuarios',
+    'subir-documentos', 'chatear-asesor',
   ];
   const PORTAL_ACCIONES_LECTURA = [
     'ver-resumen', 'ver-proyectos', 'ver-cotizaciones', 'ver-facturas', 'descargar-documentos',
-    'ver-citas', 'ver-incidencias',
+    'ver-citas', 'ver-incidencias', 'subir-documentos', 'chatear-asesor',
   ];
   const SEED_ROLES = [
     { nombre: 'Admin', descripcion: 'Acceso total al portal, incluida la gestión de usuarios de su empresa', acciones: PORTAL_ACCIONES_TODAS },
@@ -2419,7 +2420,74 @@ async function ensurePortalRolesSchema(pool) {
     console.warn('⚠️ PortalRolesSeed:', err.message);
   }
 
+  // Acciones que se agregaron después del seed: se otorgan UNA vez a todos
+  // los sub-roles existentes (así arrancan activas) y se anotan en
+  // PORTAL_ACCIONES_SEMBRADAS para no volver a otorgarlas si el Admin después
+  // se las quita a algún sub-rol.
+  const ACCIONES_NUEVAS_PARA_TODOS = ['subir-documentos', 'chatear-asesor'];
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.PORTAL_ACCIONES_SEMBRADAS', 'U') IS NULL
+      CREATE TABLE dbo.PORTAL_ACCIONES_SEMBRADAS (
+        ACCION_KEY NVARCHAR(100) NOT NULL PRIMARY KEY,
+        FECHA      DATETIME NOT NULL DEFAULT GETDATE()
+      );
+    `);
+    for (const accion of ACCIONES_NUEVAS_PARA_TODOS) {
+      await pool.request().input('a', sql.NVarChar(100), accion).query(`
+        IF NOT EXISTS (SELECT 1 FROM dbo.PORTAL_ACCIONES_SEMBRADAS WHERE ACCION_KEY = @a)
+        BEGIN
+          INSERT INTO dbo.PORTAL_ROLES_PERMISOS (ROL_ID, ACCION_KEY)
+          SELECT r.ROL_ID, @a FROM dbo.PORTAL_ROLES r
+          WHERE NOT EXISTS (SELECT 1 FROM dbo.PORTAL_ROLES_PERMISOS p WHERE p.ROL_ID = r.ROL_ID AND p.ACCION_KEY = @a);
+          INSERT INTO dbo.PORTAL_ACCIONES_SEMBRADAS (ACCION_KEY) VALUES (@a);
+        END`);
+    }
+  } catch (err) {
+    console.warn('⚠️ PortalAccionesNuevas:', err.message);
+  }
+
   logger.info('✅ Esquema de roles del Portal de Cliente asegurado');
+}
+
+// Funciones de usuario: etiquetas que se asignan a cualquier usuario (sin
+// importar su rol) para marcar que cumple una función en la empresa, p. ej.
+// "Asesor de clientes" = recibe los avisos de clientes del portal que aún no
+// tienen asesor. Las de sistema (ES_SISTEMA) las usa el código por su CLAVE.
+async function ensureFuncionesUsuarioSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.INTRANET_FUNCIONES', 'U') IS NULL
+      CREATE TABLE dbo.INTRANET_FUNCIONES (
+        FUN_ID          INT IDENTITY(1,1) PRIMARY KEY,
+        FUN_CLAVE       NVARCHAR(60)  NOT NULL,
+        FUN_NOMBRE      NVARCHAR(100) NOT NULL,
+        FUN_DESCRIPCION NVARCHAR(300) NULL,
+        FUN_COLOR       VARCHAR(9)    NULL,
+        FUN_ES_SISTEMA  BIT NOT NULL DEFAULT 0,
+        FUN_ACTIVO      BIT NOT NULL DEFAULT 1,
+        FUN_CREADO_EN   DATETIME NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT UQ_INTRANET_FUNCIONES_CLAVE UNIQUE (FUN_CLAVE)
+      );
+      IF OBJECT_ID('dbo.INTRANET_USUARIO_FUNCIONES', 'U') IS NULL
+      CREATE TABLE dbo.INTRANET_USUARIO_FUNCIONES (
+        UF_USUARIO_ID  INT NOT NULL,
+        UF_FUNCION_ID  INT NOT NULL,
+        UF_ASIGNADO_POR INT NULL,
+        UF_FECHA       DATETIME NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT PK_INTRANET_USUARIO_FUNCIONES PRIMARY KEY (UF_USUARIO_ID, UF_FUNCION_ID),
+        CONSTRAINT FK_UF_FUNCION FOREIGN KEY (UF_FUNCION_ID) REFERENCES dbo.INTRANET_FUNCIONES(FUN_ID) ON DELETE CASCADE
+      );
+      IF NOT EXISTS (SELECT 1 FROM dbo.INTRANET_FUNCIONES WHERE FUN_CLAVE = 'asesor-clientes')
+      INSERT INTO dbo.INTRANET_FUNCIONES (FUN_CLAVE, FUN_NOMBRE, FUN_DESCRIPCION, FUN_COLOR, FUN_ES_SISTEMA)
+      VALUES ('asesor-clientes', N'Asesor de clientes',
+              N'Recibe por correo y en AGYDA los avisos de clientes del portal que aún no tienen asesor asignado.',
+              '#7C3AED', 1);
+    `);
+    logger.info('✅ Esquema de funciones de usuario asegurado');
+  } catch (err) {
+    console.warn('⚠️ FuncionesUsuarioSchema:', err.message);
+  }
 }
 
 // Cotizaciones del CRM interno. Estas tablas se venían creando a mano en cada
@@ -5839,6 +5907,7 @@ async function ensureAllSchemas(pool) {
   await ensureCrmPortalSchema(pool);
   await ensureSolicitudFiscalSchema(pool);
   await ensurePortalRolesSchema(pool);
+  await ensureFuncionesUsuarioSchema(pool);
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
@@ -8987,5 +9056,6 @@ module.exports = {
     ensureRolesSchema,
     ensurePerfilesSchema,
     ensureSolicitudFiscalSchema,
-    ensurePortalRolesSchema
+    ensurePortalRolesSchema,
+    ensureFuncionesUsuarioSchema
 };

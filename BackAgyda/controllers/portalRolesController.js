@@ -16,6 +16,8 @@ const PORTAL_ACCIONES = [
   { key: 'ver-cotizaciones', nombre: 'Ver cotizaciones' },
   { key: 'ver-facturas', nombre: 'Ver facturas' },
   { key: 'descargar-documentos', nombre: 'Descargar documentos' },
+  { key: 'subir-documentos', nombre: 'Subir documentos' },
+  { key: 'chatear-asesor', nombre: 'Chatear con mi asesor' },
   { key: 'ver-citas', nombre: 'Ver citas' },
   { key: 'gestionar-citas', nombre: 'Confirmar / solicitar cambio de cita' },
   { key: 'ver-incidencias', nombre: 'Ver incidencias' },

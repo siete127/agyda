@@ -22,6 +22,7 @@ import { WebphoneAsignacionesTab } from './WebphoneAsignacionesTab'
 import { NotificacionesCorreoTab } from './NotificacionesCorreoTab'
 import { MensajeriaConfigTab } from './MensajeriaConfigTab'
 import { UsuariosTab } from './UsuariosTab'
+import { FuncionesUsuarioTab } from './FuncionesUsuarioTab'
 import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
@@ -82,6 +83,7 @@ const SCREENS: Record<string, ComponentType> = {
   'modulos-empresa': ModulosEmpresaTab,
   permisos: PermisosTab,
   usuarios: UsuariosTab,
+  'funciones-usuario': FuncionesUsuarioTab,
   roles: RolesTab,
   perfiles: PerfilesTab,
   'pers-branding': BrandingTab,

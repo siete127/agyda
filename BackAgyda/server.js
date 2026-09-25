@@ -192,6 +192,7 @@ app.get('/q/:token', require('./controllers/qrGeneratorController').landingPubli
 app.get('/p/:codigo', require('./controllers/qrGeneratorController').resolverUrlCorta);
 app.use('/api/email-marketing', require('./routes/emailMarketing'));
 app.use('/api/mensajeria', require('./routes/mensajeria'));
+app.use('/api/funciones-usuario', require('./routes/funcionesUsuario'));
 
 // CRM: arrancar cron de automatizaciones
 require('./controllers/crmAutomatizacionesController');

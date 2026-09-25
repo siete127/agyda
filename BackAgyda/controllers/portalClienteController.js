@@ -422,13 +422,18 @@ exports.getDocumentos = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().input('id', sql.Int, req.contacto.id).query(`
-      SELECT DOC_ID as id, DOC_NOMBRE_ORIGINAL as nombreOriginal, DOC_MIME_TYPE as mimeType,
-             DOC_TAMANO_BYTES as tamanoBytes, DOC_FECHA_SUBIDA as fechaSubida
-      FROM CRM_DOCUMENTOS_CLIENTE
-      WHERE DOC_CONTACTO_ID=@id AND DOC_VISIBLE_PORTAL=1 AND DOC_ACTIVO=1
-      ORDER BY DOC_FECHA_SUBIDA DESC
+      SELECT d.DOC_ID as id, d.DOC_NOMBRE_ORIGINAL as nombreOriginal, d.DOC_MIME_TYPE as mimeType,
+             d.DOC_TAMANO_BYTES as tamanoBytes, d.DOC_FECHA_SUBIDA as fechaSubida, d.DOC_DESCRIPCION as descripcion,
+             -- Enviado por alguien del portal de esta empresa (vs. publicado por su asesor).
+             CASE WHEN EXISTS (SELECT 1 FROM PORTAL_USUARIOS pu WHERE pu.PU_NEUS_ID = d.DOC_SUBIDO_POR AND pu.PU_CONT_ID = @id)
+                  THEN 1 ELSE 0 END as subidoPorCliente,
+             u.NEUS_NOMBRES as subidoPorNombre
+      FROM CRM_DOCUMENTOS_CLIENTE d
+      LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = d.DOC_SUBIDO_POR
+      WHERE d.DOC_CONTACTO_ID=@id AND d.DOC_VISIBLE_PORTAL=1 AND d.DOC_ACTIVO=1
+      ORDER BY d.DOC_FECHA_SUBIDA DESC
     `);
-    res.json({ success: true, data: rs.recordset });
+    res.json({ success: true, data: rs.recordset.map((r) => ({ ...r, subidoPorCliente: !!r.subidoPorCliente })) });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }

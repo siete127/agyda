@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Users, Plus, ShieldCheck, Power, Mail, User as UserIcon } from 'lucide-react'
+import { Users, Plus, ShieldCheck, Power, Mail, User as UserIcon, Send, Copy, AlertTriangle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { portalClienteService, type PortalUsuario } from '@/services/portalCliente.service'
+import { portalClienteService, type PortalUsuario, type PortalResultadoAcceso } from '@/services/portalCliente.service'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
 import { PortalHero } from './components/PortalHero'
 import { PortalBreadcrumb } from './components/PortalBreadcrumb'
@@ -26,10 +26,49 @@ function SubrolBadge({ nombre }: { nombre: string }) {
   )
 }
 
+// Cuando el correo no salió: los datos de acceso para entregarlos a mano.
+// Es la única vez que se ven (la contraseña no se guarda en otro lado legible).
+function AccesoManual({ nombre, resultado, onCerrar }: { nombre: string; resultado: PortalResultadoAcceso; onCerrar: () => void }) {
+  const link = `${window.location.origin}/login`
+  const copiar = (t: string) => { navigator.clipboard.writeText(t); toast.success('Copiado') }
+  const todo = `Acceso al portal\nUsuario: ${resultado.acceso?.usuario}\nContraseña: ${resultado.acceso?.password}\n${link}`
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-2.5 rounded-xl bg-amber-50 p-3 text-amber-800">
+        <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+        <p className="text-[0.8rem]">
+          <b>No se pudo enviar el correo</b>{resultado.motivo ? ` (${resultado.motivo})` : ''}. Comparte estos datos con {nombre} por otro medio:
+          solo se muestran esta vez.
+        </p>
+      </div>
+      {[
+        { label: 'Usuario', valor: resultado.acceso?.usuario ?? '' },
+        { label: 'Contraseña', valor: resultado.acceso?.password ?? '' },
+        { label: 'Enlace', valor: link },
+      ].map((d) => (
+        <div key={d.label}>
+          <p className="mb-1 text-[0.72rem] font-semibold text-ink-secondary">{d.label}</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 break-all rounded-lg bg-surface px-2.5 py-1.5 text-sm ring-1 ring-surface-border">{d.valor}</code>
+            <button onClick={() => copiar(d.valor)} title="Copiar" className="rounded-lg p-1.5 text-ink-tertiary hover:bg-surface hover:text-brand"><Copy className="h-4 w-4" /></button>
+          </div>
+        </div>
+      ))}
+      <div className="flex justify-end gap-2 pt-1">
+        <button onClick={() => copiar(todo)} className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-secondary hover:bg-surface">
+          <Copy className="h-4 w-4" /> Copiar todo
+        </button>
+        <button onClick={onCerrar} className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90">Listo</button>
+      </div>
+    </div>
+  )
+}
+
 function ModalInvitar({ onClose, onCreado }: { onClose: () => void; onCreado: () => void }) {
   const [nombre, setNombre] = useState('')
   const [correo, setCorreo] = useState('')
   const [subrolId, setSubrolId] = useState<number | ''>('')
+  const [sinCorreo, setSinCorreo] = useState<PortalResultadoAcceso | null>(null)
 
   const { data: subroles = [] } = useQuery({
     queryKey: ['portal-subroles-disponibles'],
@@ -38,14 +77,27 @@ function ModalInvitar({ onClose, onCreado }: { onClose: () => void; onCreado: ()
 
   const crear = useMutation({
     mutationFn: () => portalClienteService.crearUsuario({ nombre, correo, subrolId: Number(subrolId) }),
-    onSuccess: () => {
-      toast.success('Usuario invitado — se le envió su acceso por correo')
-      onCreado()
+    onSuccess: (r) => {
+      if (r?.correoEnviado) {
+        toast.success('Usuario invitado — se le envió su acceso por correo')
+        onCreado()
+      } else {
+        toast('Usuario creado, pero el correo no salió', { icon: '⚠️' })
+        setSinCorreo(r)
+      }
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
       toast.error(e?.response?.data?.message || 'No se pudo invitar al usuario')
     },
   })
+
+  if (sinCorreo) {
+    return (
+      <Modal isOpen onClose={onCreado} title="Usuario creado" size="sm">
+        <AccesoManual nombre={nombre} resultado={sinCorreo} onCerrar={onCreado} />
+      </Modal>
+    )
+  }
 
   return (
     <Modal isOpen onClose={onClose} title="Invitar usuario" size="sm">
@@ -115,6 +167,19 @@ function FilaUsuario({ usuario, onCambiado }: { usuario: PortalUsuario; onCambia
     onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message || 'No se pudo actualizar'),
   })
 
+  const [sinCorreo, setSinCorreo] = useState<PortalResultadoAcceso | null>(null)
+  const reenviar = useMutation({
+    mutationFn: () => portalClienteService.reenviarAcceso(usuario.id),
+    onSuccess: (r) => {
+      if (r?.correoEnviado) toast.success(`Se le envió un acceso nuevo a ${usuario.usuario}`)
+      else setSinCorreo(r)
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message || 'No se pudo reenviar el acceso'),
+  })
+  const confirmarReenvio = () => {
+    if (window.confirm(`Se generará una contraseña nueva para ${usuario.nombre} y se le enviará por correo. La anterior dejará de funcionar. ¿Continuar?`)) reenviar.mutate()
+  }
+
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-surface-border bg-card px-4 py-3.5">
       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
@@ -145,6 +210,17 @@ function FilaUsuario({ usuario, onCambiado }: { usuario: PortalUsuario; onCambia
         {usuario.activo ? 'Activo' : 'Inactivo'}
       </span>
 
+      {!usuario.esAncla && usuario.activo && (
+        <button
+          onClick={confirmarReenvio}
+          disabled={reenviar.isPending}
+          title="Reenviar acceso (contraseña nueva por correo)"
+          className="rounded-lg p-1.5 text-ink-tertiary transition-colors hover:bg-surface hover:text-brand disabled:opacity-50"
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      )}
+
       {!usuario.esAncla && (
         <button
           onClick={() => toggleActivo.mutate()}
@@ -153,6 +229,12 @@ function FilaUsuario({ usuario, onCambiado }: { usuario: PortalUsuario; onCambia
         >
           <Power className="h-4 w-4" />
         </button>
+      )}
+
+      {sinCorreo && (
+        <Modal isOpen onClose={() => setSinCorreo(null)} title="Acceso nuevo" size="sm">
+          <AccesoManual nombre={usuario.nombre} resultado={sinCorreo} onCerrar={() => setSinCorreo(null)} />
+        </Modal>
       )}
     </div>
   )

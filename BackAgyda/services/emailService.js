@@ -2081,10 +2081,48 @@ async function sendSolicitudDatosFiscalesEmail({ nombre, correo, link }) {
 // NEUS_USUARIOS tipo 'CL') — distinto de sendInvitacionPortalEmail (esa es
 // una liga con token sin contraseña, para el portal de cotizaciones/
 // documentos). Esta sí incluye usuario/contraseña porque es un login real.
+// Aviso al grupo "Asesor de clientes": un cliente del portal pidió un asesor
+// y todavía no tiene uno asignado (responsable del contacto en el CRM).
+const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function sendClienteSinAsesorEmail({ nombre, correo, clienteNombre, solicitanteNombre, solicitanteCorreo, mensaje, link }) {
+  try {
+    if (!mailer) { console.warn('⚠️ [sendClienteSinAsesorEmail] SMTP no configurado. Email simulado'); return { enviado: false }; }
+    if (!correo) return { enviado: false };
+    const html = _shellSeguimiento({
+      titulo: '🙋 Un cliente pide un asesor',
+      saludo: `Hola ${_esc(nombre || '')},`,
+      cuerpoHtml: `
+        <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 16px 0;">
+          <b>${_esc(clienteNombre)}</b> escribió desde su portal y todavía no tiene un asesor asignado.
+        </p>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 8px 0;">
+          <tr><td style="padding:6px 0;color:#666;font-size:13px;">Solicitó</td><td style="padding:6px 0;color:#111;font-size:14px;">${_esc(solicitanteNombre)}${solicitanteCorreo ? ` (${_esc(solicitanteCorreo)})` : ''}</td></tr>
+          ${mensaje ? `<tr><td style="padding:6px 0;color:#666;font-size:13px;vertical-align:top;">Mensaje</td><td style="padding:6px 0;color:#111;font-size:14px;">${_esc(mensaje)}</td></tr>` : ''}
+        </table>
+        <p style="color:#555;font-size:13px;margin:12px 0 0 0;">Asígnale un responsable en su ficha de Seguimiento de clientes para que pueda chatear con él.</p>
+      `,
+      ctaHtml: link ? `<p style="text-align:center;margin:24px 0;"><a href="${link}" style="background:#7C3AED;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Ver clientes</a></p>` : '',
+    });
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: solicitanteCorreo || EMAIL_FROM,
+      to: correo,
+      subject: `Cliente sin asesor: ${clienteNombre}`,
+      text: `${clienteNombre} pide un asesor desde su portal (solicitó ${solicitanteNombre}).${mensaje ? `\nMensaje: ${mensaje}` : ''}${link ? `\n\n${link}` : ''}`,
+      html,
+    });
+    return { enviado: true };
+  } catch (err) {
+    console.error('❌ [sendClienteSinAsesorEmail]', err?.message || err);
+    return { enviado: false };
+  }
+}
+
+// Devuelve { enviado, motivo } para que quien invita sepa si el acceso llegó
+// (sin correo, la contraseña generada solo la conoce quien la ve en pantalla).
 async function sendInvitacionAccesoSistemaEmail({ nombre, correo, usuario, password, link }) {
   try {
-    if (!mailer) { console.warn('⚠️ [sendInvitacionAccesoSistemaEmail] SMTP no configurado. Email simulado'); return; }
-    if (!correo) return;
+    if (!mailer) { console.warn('⚠️ [sendInvitacionAccesoSistemaEmail] SMTP no configurado. Email simulado'); return { enviado: false, motivo: 'El servidor no tiene correo configurado' }; }
+    if (!correo) return { enviado: false, motivo: 'Sin correo' };
 
     const html = _shellSeguimiento({
       titulo: '🔑 Tu acceso al sistema',
@@ -2107,8 +2145,10 @@ async function sendInvitacionAccesoSistemaEmail({ nombre, correo, usuario, passw
       text, html,
     });
     logger.debug(`✅ [sendInvitacionAccesoSistemaEmail] Enviado a ${correo}`);
+    return { enviado: true };
   } catch (err) {
     console.error('❌ [sendInvitacionAccesoSistemaEmail] Error general:', err?.message || err);
+    return { enviado: false, motivo: 'No se pudo enviar el correo' };
   }
 }
 
@@ -2305,6 +2345,7 @@ module.exports = {
   sendInvitacionPortalEmail,
   sendSolicitudDatosFiscalesEmail,
   sendInvitacionAccesoSistemaEmail,
+  sendClienteSinAsesorEmail,
   sendEncuestaSeguimientoEmail,
   sendRatRevisionPendienteEmail,
   sendCumplimientoVencimientoEmail,

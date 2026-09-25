@@ -45,6 +45,18 @@ export interface PortalDocumento {
   mimeType: string
   tamanoBytes: number
   fechaSubida: string
+  descripcion?: string | null
+  // true = lo envió alguien del portal de la empresa; false = lo publicó su asesor.
+  subidoPorCliente?: boolean
+  subidoPorNombre?: string | null
+}
+
+// Asesor asignado al cliente (responsable del contacto en el CRM).
+export interface PortalAsesor {
+  id: number
+  nombre: string
+  puesto: string | null
+  fotoUrl: string | null
 }
 
 export interface PortalCita {

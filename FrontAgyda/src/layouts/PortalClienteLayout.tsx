@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { PortalClienteSidebar } from '@/pages/portal-cliente/components/PortalClienteSidebar'
 import { PortalClienteHeader } from '@/pages/portal-cliente/components/PortalClienteHeader'
+import { PortalChatAsesor } from '@/pages/portal-cliente/components/PortalChatAsesor'
 
 /**
  * Layout del Portal de Cliente — deliberadamente independiente de AppLayout
@@ -59,6 +60,8 @@ export function PortalClienteLayout() {
           <Outlet />
         </main>
       </div>
+      {/* Chat con su asesor (o aviso de que aún no tiene uno). */}
+      <PortalChatAsesor />
     </div>
   )
 }

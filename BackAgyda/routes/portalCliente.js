@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/portalClienteController');
 const usuariosCtrl = require('../controllers/portalUsuariosController');
+const asesorCtrl = require('../controllers/portalAsesorController');
+const { uploadCrmDocumento } = require('../middleware/crmDocumentoUpload');
 const { authenticateToken } = require('../middleware/auth');
 const { requirePortalCliente, requirePortalAction } = require('../middleware/portalCliente');
 
@@ -25,6 +27,12 @@ router.get('/facturas', requirePortalAction('ver-facturas'), ctrl.getFacturas);
 router.get('/facturas/:id/documento/:formato', requirePortalAction('descargar-documentos'), ctrl.descargarFacturaDocumento);
 router.get('/documentos', requirePortalAction('descargar-documentos'), ctrl.getDocumentos);
 router.get('/documentos/:id/download', requirePortalAction('descargar-documentos'), ctrl.descargarDocumento);
+router.post('/documentos', requirePortalAction('subir-documentos'), uploadCrmDocumento.single('file'), asesorCtrl.subirDocumento);
+
+// Su asesor (responsable del contacto), chat con él y aviso si no tiene.
+router.get('/asesor', requirePortalAction('chatear-asesor'), asesorCtrl.getAsesor);
+router.post('/asesor/chat', requirePortalAction('chatear-asesor'), asesorCtrl.abrirChatAsesor);
+router.post('/asesor/notificar', requirePortalAction('chatear-asesor'), asesorCtrl.notificarSinAsesor);
 router.get('/citas', requirePortalAction('ver-citas'), ctrl.getCitas);
 router.get('/citas/historial', requirePortalAction('ver-citas'), ctrl.getCitasHistorial);
 router.post('/citas/:id/confirmar', requirePortalAction('gestionar-citas'), ctrl.confirmarCita);
@@ -37,6 +45,7 @@ router.get('/subroles-disponibles', requirePortalAction('gestionar-usuarios'), u
 router.get('/usuarios', requirePortalAction('gestionar-usuarios'), usuariosCtrl.listar);
 router.post('/usuarios', requirePortalAction('gestionar-usuarios'), usuariosCtrl.crear);
 router.put('/usuarios/:id', requirePortalAction('gestionar-usuarios'), usuariosCtrl.actualizar);
+router.post('/usuarios/:id/reenviar-acceso', requirePortalAction('gestionar-usuarios'), usuariosCtrl.reenviarAcceso);
 router.delete('/usuarios/:id', requirePortalAction('gestionar-usuarios'), usuariosCtrl.eliminar);
 
 module.exports = router;

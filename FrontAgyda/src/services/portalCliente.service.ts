@@ -1,8 +1,9 @@
 import { api } from '@/lib/axios'
 import type {
   PortalResumen, PortalProyecto, PortalCotizacion, PortalFactura, PortalDocumento, PortalCita, PortalIncidencia,
-  PortalProductoServicio, PortalCatalogoItem,
+  PortalProductoServicio, PortalCatalogoItem, PortalAsesor,
 } from '@/types/portalCliente.types'
+import { parseMensajeriaCanal, type MensajeriaCanal } from '@/types/mensajeria.types'
 
 export interface PortalUsuario {
   id: number
@@ -15,6 +16,14 @@ export interface PortalUsuario {
   loginActivo: boolean
   subrolId: number
   subrolNombre: string
+}
+
+// Resultado de mandar el acceso por correo (invitar / reenviar). Si el correo
+// no salió, `acceso` trae los datos para entregarlos a mano (única copia).
+export interface PortalResultadoAcceso {
+  correoEnviado: boolean
+  motivo?: string
+  acceso?: { usuario: string; password: string }
 }
 
 export interface PortalNotificacion {
@@ -49,8 +58,13 @@ export const portalClienteService = {
     const { data } = await api.get('/portal-cliente/usuarios')
     return (data?.data ?? []) as PortalUsuario[]
   },
-  async crearUsuario(body: { nombre: string; correo: string; password?: string; subrolId: number }): Promise<{ neusId: number }> {
+  async crearUsuario(body: { nombre: string; correo: string; password?: string; subrolId: number }): Promise<{ neusId: number } & PortalResultadoAcceso> {
     const { data } = await api.post('/portal-cliente/usuarios', body)
+    return data?.data
+  },
+  // Contraseña nueva + correo de acceso otra vez (no aplica a la cuenta principal).
+  async reenviarAcceso(id: number): Promise<PortalResultadoAcceso> {
+    const { data } = await api.post(`/portal-cliente/usuarios/${id}/reenviar-acceso`)
     return data?.data
   },
   async actualizarUsuario(id: number, body: { subrolId?: number; activo?: boolean }): Promise<void> {
@@ -120,6 +134,31 @@ export const portalClienteService = {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  },
+  // Para verlo sin descargar: el Blob del documento (quien llama crea y libera la URL).
+  async obtenerDocumentoBlob(id: number): Promise<Blob> {
+    const { data } = await api.get(`/portal-cliente/documentos/${id}/download`, { responseType: 'blob' })
+    return data as Blob
+  },
+  async subirDocumento(archivo: File, descripcion?: string): Promise<void> {
+    const fd = new FormData()
+    fd.append('file', archivo)
+    if (descripcion) fd.append('descripcion', descripcion)
+    await api.post('/portal-cliente/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  // Su asesor (responsable del contacto) — null si aún no tiene.
+  async getAsesor(): Promise<PortalAsesor | null> {
+    const { data } = await api.get('/portal-cliente/asesor')
+    return (data?.data?.asesor ?? null) as PortalAsesor | null
+  },
+  // Abre o reutiliza el chat de Mensajería con su asesor.
+  async abrirChatAsesor(): Promise<MensajeriaCanal> {
+    const { data } = await api.post('/portal-cliente/asesor/chat')
+    return parseMensajeriaCanal((data?.data ?? data) as Record<string, unknown>)
+  },
+  async notificarSinAsesor(mensaje?: string): Promise<{ avisados: number; correos: number }> {
+    const { data } = await api.post('/portal-cliente/asesor/notificar', { mensaje })
+    return data?.data
   },
   async getCitas(): Promise<PortalCita[]> {
     const { data } = await api.get('/portal-cliente/citas')
