@@ -45,6 +45,24 @@ export const DEFAULT_CONFIG: PersonalizacionConfig = {
   // Mismos defaults que personalizacionController (DEFAULT_CONFIG).
   prospeccion: { ventanaAnalisisDias: 30 },
   emailMarketing: { emailsPorHoraDefault: 200 },
+  canalesPortal: {
+    whatsappNumero: '',
+    whatsappHabilitado: false,
+    messengerUrl: '',
+    messengerHabilitado: false,
+    telefono: '',
+    telefonoHabilitado: false,
+    email: '',
+    emailHabilitado: false,
+    sitioWebUrl: '',
+    sitioWebHabilitado: false,
+    horarioInicio: '',
+    horarioFin: '',
+    diasSemana: '1,2,3,4,5',
+    sabadoHabilitado: false,
+    sabadoHorarioInicio: '',
+    sabadoHorarioFin: '',
+  },
 }
 
 // Layout por defecto del inicio — el orden/tamaño que ya tenía la portada,

@@ -87,7 +87,7 @@ function ProyectoCard() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || !proyecto ? (
         <div className="h-24 animate-pulse rounded-xl bg-white/10" />
       ) : (
         <>

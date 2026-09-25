@@ -37,7 +37,7 @@ function validarSitioWeb(v: string): string | null {
 }
 
 function CardSeccion({ icon: Icon, titulo, subtitulo, habilitado, onToggle, sinDato, error, children }: {
-  icon: React.ElementType; titulo: string; subtitulo: string
+  icon: React.ComponentType<{ className?: string }>; titulo: string; subtitulo: string
   habilitado: boolean; onToggle: (v: boolean) => void
   // true cuando el campo de este canal está vacío — bloquea encenderlo hasta
   // que se capture un dato, para no activar un canal sin nada que mostrar.
