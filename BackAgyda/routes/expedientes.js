@@ -7,11 +7,20 @@ const expedienteController = require('../controllers/expedienteController');
 const expedienteCompletoController = require('../controllers/expedienteCompletoController');
 const { authenticateToken, verificarRol } = require('../middleware/auth');
 const { uploadExpediente } = require('../middleware/expedienteUpload');
+const { requireActionAccess } = require('../middleware/moduleAccess');
+
+// Acciones de Accesos (módulo 'expedientes'): el propio → ver-propio / editar-propio;
+// el de otros → además de ser AD, ver-otros / gestionar-otros.
+const verPropio = requireActionAccess('expedientes', 'ver-propio');
+const editarPropio = requireActionAccess('expedientes', 'editar-propio');
+const verOtros = requireActionAccess('expedientes', 'ver-otros');
+const gestionarOtros = requireActionAccess('expedientes', 'gestionar-otros');
 
 // Rutas "Mi expediente" — cualquier usuario autenticado accede a su propio expediente
 router.post(
 	'/mi/documentos',
 	authenticateToken,
+	editarPropio,
 	uploadExpediente.single('file'),
 	expedienteController.uploadMiDocumento
 );
@@ -19,62 +28,66 @@ router.post(
 router.get(
 	'/mi/documentos',
 	authenticateToken,
+	verPropio,
 	expedienteController.listMisDocumentos
 );
 
 router.get(
 	'/mi/documentos/:docId/download',
 	authenticateToken,
+	verPropio,
 	expedienteController.downloadMiDocumento
 );
 
 router.delete(
 	'/mi/documentos/:docId',
 	authenticateToken,
+	editarPropio,
 	expedienteController.deleteMiDocumento
 );
 
 // ── Contacto ──
-router.get('/mi/contacto', authenticateToken, expedienteController.getMiContacto);
-router.put('/mi/contacto', authenticateToken, expedienteController.updateMiContacto);
+router.get('/mi/contacto', authenticateToken, verPropio, expedienteController.getMiContacto);
+router.put('/mi/contacto', authenticateToken, editarPropio, expedienteController.updateMiContacto);
 
 // ── Persona ──
-router.get('/mi/persona', authenticateToken, expedienteCompletoController.getPersona);
-router.put('/mi/persona', authenticateToken, expedienteCompletoController.updatePersona);
-router.get('/:usuarioId/persona', authenticateToken, verificarRol(['AD']), expedienteCompletoController.getPersona);
-router.put('/:usuarioId/persona', authenticateToken, verificarRol(['AD']), expedienteCompletoController.updatePersona);
+router.get('/mi/persona', authenticateToken, verPropio, expedienteCompletoController.getPersona);
+router.put('/mi/persona', authenticateToken, editarPropio, expedienteCompletoController.updatePersona);
+router.get('/:usuarioId/persona', authenticateToken, verificarRol(['AD']), verOtros, expedienteCompletoController.getPersona);
+router.put('/:usuarioId/persona', authenticateToken, verificarRol(['AD']), gestionarOtros, expedienteCompletoController.updatePersona);
 
 // ── Familiares ──
-router.get('/mi/familiares', authenticateToken, expedienteCompletoController.listFamiliares);
-router.put('/mi/familiares', authenticateToken, expedienteCompletoController.saveFamiliares);
-router.get('/:usuarioId/familiares', authenticateToken, verificarRol(['AD']), expedienteCompletoController.listFamiliares);
-router.put('/:usuarioId/familiares', authenticateToken, verificarRol(['AD']), expedienteCompletoController.saveFamiliares);
+router.get('/mi/familiares', authenticateToken, verPropio, expedienteCompletoController.listFamiliares);
+router.put('/mi/familiares', authenticateToken, editarPropio, expedienteCompletoController.saveFamiliares);
+router.get('/:usuarioId/familiares', authenticateToken, verificarRol(['AD']), verOtros, expedienteCompletoController.listFamiliares);
+router.put('/:usuarioId/familiares', authenticateToken, verificarRol(['AD']), gestionarOtros, expedienteCompletoController.saveFamiliares);
 
 // ── Formación: certificaciones ──
-router.get('/mi/certificaciones', authenticateToken, expedienteCompletoController.listCertificaciones);
-router.post('/mi/certificaciones', authenticateToken, expedienteCompletoController.createCertificacion);
-router.delete('/mi/certificaciones/:id', authenticateToken, expedienteCompletoController.deleteCertificacion);
+router.get('/mi/certificaciones', authenticateToken, verPropio, expedienteCompletoController.listCertificaciones);
+router.post('/mi/certificaciones', authenticateToken, editarPropio, expedienteCompletoController.createCertificacion);
+router.delete('/mi/certificaciones/:id', authenticateToken, editarPropio, expedienteCompletoController.deleteCertificacion);
 
 // ── Formación: trayectoria académica ──
-router.get('/mi/academico', authenticateToken, expedienteCompletoController.listAcademico);
-router.post('/mi/academico', authenticateToken, expedienteCompletoController.createAcademico);
-router.delete('/mi/academico/:id', authenticateToken, expedienteCompletoController.deleteAcademico);
+router.get('/mi/academico', authenticateToken, verPropio, expedienteCompletoController.listAcademico);
+router.post('/mi/academico', authenticateToken, editarPropio, expedienteCompletoController.createAcademico);
+router.delete('/mi/academico/:id', authenticateToken, editarPropio, expedienteCompletoController.deleteAcademico);
 
 // ── Formación: experiencia laboral ──
-router.get('/mi/experiencia-laboral', authenticateToken, expedienteCompletoController.listExperienciaLaboral);
-router.post('/mi/experiencia-laboral', authenticateToken, expedienteCompletoController.createExperienciaLaboral);
-router.delete('/mi/experiencia-laboral/:id', authenticateToken, expedienteCompletoController.deleteExperienciaLaboral);
+router.get('/mi/experiencia-laboral', authenticateToken, verPropio, expedienteCompletoController.listExperienciaLaboral);
+router.post('/mi/experiencia-laboral', authenticateToken, editarPropio, expedienteCompletoController.createExperienciaLaboral);
+router.delete('/mi/experiencia-laboral/:id', authenticateToken, editarPropio, expedienteCompletoController.deleteExperienciaLaboral);
 
 // ── Talento (7 categorías) ──
-router.get('/mi/talento', authenticateToken, expedienteCompletoController.listTalento);
-router.post('/mi/talento', authenticateToken, expedienteCompletoController.createTalento);
-router.delete('/mi/talento/:id', authenticateToken, expedienteCompletoController.deleteTalento);
+router.get('/mi/talento', authenticateToken, verPropio, expedienteCompletoController.listTalento);
+router.post('/mi/talento', authenticateToken, editarPropio, expedienteCompletoController.createTalento);
+router.delete('/mi/talento/:id', authenticateToken, editarPropio, expedienteCompletoController.deleteTalento);
 
 // Rutas admin — solo AD puede gestionar expedientes de otros usuarios
 router.post(
 	'/:userId/documentos',
 	authenticateToken,
 	verificarRol(['AD']),
+	gestionarOtros,
 	uploadExpediente.single('file'),
 	expedienteController.uploadDocumento
 );
@@ -83,6 +96,7 @@ router.get(
 	'/:userId/documentos',
 	authenticateToken,
 	verificarRol(['AD']),
+	verOtros,
 	expedienteController.listDocumentosByUsuario
 );
 
@@ -90,6 +104,7 @@ router.get(
 	'/documentos/:docId/download',
 	authenticateToken,
 	verificarRol(['AD']),
+	verOtros,
 	expedienteController.downloadDocumento
 );
 
@@ -97,6 +112,7 @@ router.delete(
 	'/documentos/:docId',
 	authenticateToken,
 	verificarRol(['AD']),
+	gestionarOtros,
 	expedienteController.deleteDocumento
 );
 

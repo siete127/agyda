@@ -53,11 +53,14 @@ const GESTION_MIS_URL = 'https://mis.ardabytec.vip'
 function urlConAgenteSiAplica(url: string, user: { id: number; nombres: string } | null | undefined): string {
   if (!user || !url.includes('/formulario-publico/')) return url
   try {
-    const u = new URL(url)
+    // Una ruta interna ("/formulario-publico/…") se resuelve contra el dominio actual
+    // y se devuelve como ruta, para que siga abriéndose donde esté el usuario.
+    const interna = url.startsWith('/')
+    const u = new URL(url, window.location.origin)
     if (u.searchParams.has('agente')) return url
     u.searchParams.set('agente', user.nombres)
     u.searchParams.set('agenteId', String(user.id))
-    return u.toString()
+    return interna ? `${u.pathname}${u.search}${u.hash}` : u.toString()
   } catch {
     return url
   }

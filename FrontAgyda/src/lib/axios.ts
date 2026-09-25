@@ -49,16 +49,23 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
+// ¿El backend rechazó el token? Solo eso cierra la sesión:
+//   401 siempre = sin token → login
+//   403 solo cuando el backend dice que el token expiró/es inválido (no por rol insuficiente)
+// Un error de red, un timeout o un 5xx (p. ej. el backend reiniciándose en un
+// deploy, o el proxy respondiendo 502) NO es un rechazo: la sesión sigue.
+export function esTokenRechazado(error: unknown): boolean {
+  if (!(error instanceof AxiosError) || !error.response) return false
+  const status = error.response.status
+  const msg = (error.response.data as Record<string, unknown> | undefined)?.message as string | undefined
+  return status === 401 ||
+    (status === 403 && !!(msg?.includes('expirado') || msg?.includes('inválido') || msg?.includes('invalido')))
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    const status = error.response?.status
-    const msg = (error.response?.data as Record<string, unknown>)?.message as string | undefined
-    // 401 siempre = sin token → login
-    // 403 solo cuando el backend dice que el token expiró/es inválido (no por rol insuficiente)
-    const esTokenInvalido = status === 401 ||
-      (status === 403 && (msg?.includes('expirado') || msg?.includes('inválido') || msg?.includes('invalido')))
-    if (esTokenInvalido) {
+    if (esTokenRechazado(error)) {
       // El puente de sesión (/auth-bridge) maneja su propia autenticación: valida
       // el ?token= de la URL contra /auth/me y decide a dónde ir. Si aquí
       // redirigimos a /login por un 401 de otra request en vuelo (p.ej. el

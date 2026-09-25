@@ -15,7 +15,7 @@ export type CCFormTipoCampo =
   | 'fecha_hora' | 'lista' | 'radio' | 'checkbox' | 'si_no' | 'multiseleccion'
   | 'moneda' | 'porcentaje' | 'url' | 'archivo' | 'imagen' | 'firma' | 'catalogo'
   | 'usuario_agente' | 'sucursal' | 'calculado' | 'oculto' | 'titulo' | 'separador'
-  | 'buscador'
+  | 'buscador' | 'pendientes'
 
 export interface CCFormCanalDisponible {
   id: number
@@ -65,6 +65,91 @@ export interface CCFormVersionResumen {
   fechaCreacion: string
   publicadoPorNombre: string | null
   fechaPublicacion: string | null
+}
+
+// GET /contact-center/formularios/:id/registros — lo capturado en un
+// formulario; `valores` va por código de campo, ya legible (etiqueta de la
+// opción, nombre de la tipificación, fechas 'YYYY-MM-DD').
+export interface CCFormRegistro {
+  interaccionId: number
+  fecha: string
+  estado: string
+  agenteNombre: string | null
+  clienteNombre: string | null
+  clienteTelefono: string | null
+  valores: Record<string, string | null>
+}
+export interface CCFormRegistros {
+  formulario: { id: number; nombre: string }
+  columnas: { codigo: string; etiqueta: string; tipo: string }[]
+  total: number
+  limite: number
+  registros: CCFormRegistro[]
+}
+
+// GET /contact-center/formularios-publico/:token/prellenar?telefono= —
+// registro previo de esa persona. `valores` va por id de campo de la versión
+// actual (solo datos de identidad: nombre, apellidos, teléfono, correo…).
+export interface CCFormPrellenado {
+  origen: 'interaccion' | 'postulante' | null
+  nombre: string | null
+  fecha: string | null
+  estatus: string | null
+  valores: Record<number, string>
+  // Campos con configJson.mostrarUltimo: su último valor guardado, legible,
+  // para mostrarlo como referencia arriba del campo (no se llena solo).
+  ultimos: Record<number, string>
+  postulacion: string | null // dónde fue su contacto más reciente
+  // Todos sus contactos, en cualquier postulación, del más reciente al más viejo.
+  historial: CCFormHistorialItem[]
+}
+export interface CCFormHistorialItem {
+  origen: 'interaccion' | 'web'
+  id: number
+  fecha: string
+  postulacion: string
+  campania: string | null
+  estaPostulacion: boolean // de las campañas del formulario que se está llenando
+  nombre: string | null
+  estatus: string | null
+  asistencia: string | null // 'YYYY-MM-DD'
+  horario: string | null
+  canal: string | null
+  puesto: string | null
+  asesor: string | null
+}
+
+// GET /contact-center/formularios-publico/:token/pendientes — a quién llamar
+// (último registro de cada persona): confirmar su cita, recordársela o
+// reagendar una que se venció sin confirmar.
+export type CCFormPendienteGrupo = 'confirmar' | 'recordar' | 'vencida'
+export interface CCFormPendiente {
+  interaccionId: number
+  grupo: CCFormPendienteGrupo
+  telefono: string | null
+  nombre: string | null
+  fechaAsistencia: string // 'YYYY-MM-DD'
+  horario: string | null
+  puesto: string | null
+  estatus: string | null
+  asesor: string | null
+  ultimoContacto: string
+}
+export interface CCFormPendientes {
+  disponible: boolean // false si el formulario no tiene campo 'pendientes', fecha de asistencia o estatus
+  hoy: string | null // fecha del servidor, 'YYYY-MM-DD'
+  pendientes: CCFormPendiente[]
+  // Configuración del campo 'pendientes' (configJson) — ver CCFormPendientesConfig.
+  alcance?: CCFormPendientesAlcance
+  grupos?: CCFormPendienteGrupo[]
+  agente?: string | null // con alcance 'propios': de quién son los pendientes que se ven
+  requiereAgente?: boolean // 'propios' pero la liga no trae agente
+}
+// configJson del campo tipo 'pendientes'.
+export type CCFormPendientesAlcance = 'todos' | 'propios'
+export interface CCFormPendientesConfig {
+  alcance?: CCFormPendientesAlcance
+  grupos?: CCFormPendienteGrupo[]
 }
 
 export interface CCFormularioDetalle extends CCFormulario {

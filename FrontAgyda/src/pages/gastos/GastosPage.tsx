@@ -49,6 +49,11 @@ export default function GastosPage() {
   const user = useCurrentUser()
   const isAdmin = user?.tipoUsuario?.toUpperCase() === 'AD' || user?.tipoUsuario?.toUpperCase() === 'TI'
   const [tab, setTab] = useState<'gastos' | 'reportes' | 'admin'>('gastos')
+  // Acciones de Accesos: "ver" = mis gastos y reportes; la administración, cualquiera de las de admin.
+  const { can } = useActionAccess()
+  const puedeVer = can('gastos', 'ver')
+  const puedeAdmin = isAdmin && (can('gastos', 'aprobar-reporte') || can('gastos', 'registrar-pago') || can('gastos', 'gestionar-categorias'))
+  const tabActiva = tab !== 'admin' && !puedeVer && puedeAdmin ? 'admin' : tab
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -69,16 +74,20 @@ export default function GastosPage() {
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1 w-fit">
-        <TabBtn active={tab === 'gastos'}   onClick={() => setTab('gastos')}   icon={<Receipt   className="h-3.5 w-3.5" />} label="Mis Gastos" />
-        <TabBtn active={tab === 'reportes'} onClick={() => setTab('reportes')} icon={<FileText  className="h-3.5 w-3.5" />} label="Mis Reportes" />
-        {isAdmin && (
-          <TabBtn active={tab === 'admin'}  onClick={() => setTab('admin')}    icon={<Users     className="h-3.5 w-3.5" />} label="Administración" />
+        {puedeVer && (
+          <>
+            <TabBtn active={tabActiva === 'gastos'}   onClick={() => setTab('gastos')}   icon={<Receipt   className="h-3.5 w-3.5" />} label="Mis Gastos" />
+            <TabBtn active={tabActiva === 'reportes'} onClick={() => setTab('reportes')} icon={<FileText  className="h-3.5 w-3.5" />} label="Mis Reportes" />
+          </>
+        )}
+        {puedeAdmin && (
+          <TabBtn active={tabActiva === 'admin'}  onClick={() => setTab('admin')}    icon={<Users     className="h-3.5 w-3.5" />} label="Administración" />
         )}
       </div>
 
-      {tab === 'gastos'   && <MisGastosTab />}
-      {tab === 'reportes' && <MisReportesTab />}
-      {tab === 'admin'    && isAdmin && <AdminGastosTab />}
+      {tabActiva === 'gastos'   && puedeVer && <MisGastosTab />}
+      {tabActiva === 'reportes' && puedeVer && <MisReportesTab />}
+      {tabActiva === 'admin'    && puedeAdmin && <AdminGastosTab />}
     </div>
   )
 }
@@ -102,6 +111,9 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
 ══════════════════════════════════════════════════════ */
 function MisGastosTab() {
   const qc = useQueryClient()
+  const { can } = useActionAccess()
+  const puedeCrearGasto = can('gastos', 'crear-gasto')
+  const puedeCrearReporte = can('gastos', 'crear-reporte')
   const [selected, setSelected] = useState<number[]>([])
   const [showNuevo, setShowNuevo] = useState(false)
   const [editando, setEditando] = useState<Gasto | null>(null)
@@ -157,16 +169,18 @@ function MisGastosTab() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-[0.75rem] text-gray-400">{sinReporte.length} gasto{sinReporte.length !== 1 ? 's' : ''} sin agrupar</p>
         <div className="flex gap-2">
-          {selected.length > 0 && (
+          {puedeCrearReporte && selected.length > 0 && (
             <button onClick={() => setShowReporte(true)}
               className="flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-[0.78rem] font-semibold text-white hover:bg-brand/90 transition-colors">
               <FileText className="h-3.5 w-3.5" /> Crear Reporte ({selected.length})
             </button>
           )}
-          <button onClick={() => setShowNuevo(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-            <Plus className="h-3.5 w-3.5" /> Nuevo gasto
-          </button>
+          {puedeCrearGasto && (
+            <button onClick={() => setShowNuevo(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-card px-3 py-2 text-[0.78rem] font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+              <Plus className="h-3.5 w-3.5" /> Nuevo gasto
+            </button>
+          )}
         </div>
       </div>
 
@@ -178,7 +192,9 @@ function MisGastosTab() {
           <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-300">
             <Receipt className="h-10 w-10" />
             <p className="text-[0.82rem]">Sin gastos registrados</p>
-            <button onClick={() => setShowNuevo(true)} className="mt-1 text-[0.78rem] font-semibold text-brand hover:underline">+ Agregar primer gasto</button>
+            {puedeCrearGasto && (
+              <button onClick={() => setShowNuevo(true)} className="mt-1 text-[0.78rem] font-semibold text-brand hover:underline">+ Agregar primer gasto</button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -199,7 +215,7 @@ function MisGastosTab() {
                 {sinReporte.map(g => (
                   <tr key={g.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3">
-                      {g.estatus === 'borrador' && (
+                      {puedeCrearReporte && g.estatus === 'borrador' && (
                         <input type="checkbox" className="rounded accent-brand"
                           checked={selected.includes(g.id)} onChange={() => toggle(g.id)} />
                       )}
@@ -235,7 +251,7 @@ function MisGastosTab() {
                             <Eye className="h-3.5 w-3.5" />
                           </a>
                         )}
-                        {g.estatus === 'borrador' && (
+                        {puedeCrearGasto && g.estatus === 'borrador' && (
                           <>
                             <button onClick={() => setEditando(g)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-brand transition-colors" title="Editar">
                               <Pencil className="h-3.5 w-3.5" />
@@ -700,7 +716,7 @@ function DetalleReporteModal({ reporteId, onClose, isAdmin, onRefresh }: {
           </div>
 
           {/* Acciones empleado */}
-          {!isAdmin && rep.estatus === 'borrador' && (
+          {!isAdmin && can('gastos', 'crear-reporte') && rep.estatus === 'borrador' && (
             <button onClick={() => enviar.mutate()} disabled={enviar.isPending}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-[0.82rem] font-bold text-white hover:bg-brand/90 disabled:opacity-40 transition-colors">
               {enviar.isPending ? <Spinner size="sm" /> : <Send className="h-4 w-4" />} Enviar al manager

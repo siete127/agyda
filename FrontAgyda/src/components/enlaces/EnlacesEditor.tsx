@@ -162,7 +162,7 @@ export function EnlacesEditor({ enlaces, onChange, donde, alAbrirFlotante }: {
                 {/* fila 2: URL + modo */}
                 <div className="mt-3 grid gap-4 sm:grid-cols-[1fr_auto]">
                   <div>
-                    <Etiqueta hint="Dirección completa a la que lleva el enlace. Debe empezar con http:// o https://.">URL</Etiqueta>
+                    <Etiqueta hint="Dirección externa (empieza con http:// o https://) o una ruta del propio sistema (empieza con /, p. ej. /formulario-publico/…), que se abre en el mismo dominio donde estés.">URL</Etiqueta>
                     <div className="relative">
                       <Link2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
                       <input
@@ -174,7 +174,7 @@ export function EnlacesEditor({ enlaces, onChange, donde, alAbrirFlotante }: {
                           urlMala ? 'border-red-300 focus:border-red-400' : 'border-gray-200 focus:border-violet-500')}
                       />
                     </div>
-                    {urlMala && <p className="mt-1 pl-1 text-[0.68rem] text-red-500">La URL debe empezar con http:// o https://</p>}
+                    {urlMala && <p className="mt-1 pl-1 text-[0.68rem] text-red-500">La URL debe empezar con http://, https:// o / (ruta del sistema)</p>}
                   </div>
 
                   <div>

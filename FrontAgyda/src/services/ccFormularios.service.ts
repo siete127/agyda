@@ -4,7 +4,7 @@ import type {
   CCFormCampoInput, CCFormTipoCampo, CCFormTipificacionesDelFormulario, CCFormInteraccionBuscada,
   CCFormBuscadorResultado, CCFormCanalDisponible, CCFormModo, CCFormPublicoDefinicion,
   CCFormAccionPost, CCFormAccionTipo, CCFormRespuestaInput, CCFormGuardarRespuestasResultado,
-  CCFormOpcion,
+  CCFormOpcion, CCFormRegistros, CCFormPrellenado, CCFormPendientes,
 } from '@/types/ccFormularios.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -15,6 +15,8 @@ export const ccFormulariosService = {
   listTiposCampo: () => d<CCFormTipoCampo[]>(api.get('/contact-center/formularios/tipos-campo')),
 
   listFormularios: () => d<CCFormulario[]>(api.get('/contact-center/formularios')),
+  // Lo capturado en un formulario, con cada valor ya legible (vista "Registros de formularios").
+  listRegistros: (id: number) => api.get(`/contact-center/formularios/${id}/registros`).then((r) => r.data.data as CCFormRegistros),
   getFormulario: (id: number) => d<CCFormularioDetalle>(api.get(`/contact-center/formularios/${id}`)),
   createFormulario: (body: { nombre: string; codigo?: string; descripcion?: string }) =>
     api.post('/contact-center/formularios', body).then((r) => r.data),
@@ -112,6 +114,16 @@ export const ccFormularioPublicoService = {
     d<CCFormCanalDisponible[]>(apiPublico.get(`/contact-center/formularios-publico/${token}/canales-disponibles`)),
   buscar: (token: string, texto: string) =>
     d<CCFormBuscadorResultado[]>(apiPublico.get(`/contact-center/formularios-publico/${token}/buscador`, { params: { texto } })),
+  // Datos previos de la persona por su teléfono (para llenar el formulario).
+  prellenar: (token: string, telefono: string) =>
+    apiPublico.get(`/contact-center/formularios-publico/${token}/prellenar`, { params: { telefono } })
+      .then((r) => r.data.data as CCFormPrellenado),
+  // A quién llamar para confirmar/recordar/reagendar su cita.
+  // `agente` sirve cuando el campo está configurado como "cada asesor solo los suyos".
+  pendientes: (token: string, agente?: { id: number | null; nombre: string }) =>
+    apiPublico.get(`/contact-center/formularios-publico/${token}/pendientes`, {
+      params: { agenteId: agente?.id ?? undefined, agente: agente?.nombre || undefined },
+    }).then((r) => r.data.data as CCFormPendientes),
   registrar: (token: string, body: {
     clienteNombre?: string; clienteTelefono?: string; canalId: number; agenteId?: number | null; agenteNombre?: string | null; comentario?: string
   }) => apiPublico.post(`/contact-center/formularios-publico/${token}/buscador/registrar`, body).then((r) => r.data),

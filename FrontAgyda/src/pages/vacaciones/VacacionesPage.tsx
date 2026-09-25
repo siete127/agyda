@@ -5,6 +5,7 @@ import { api } from '@/lib/axios'
 import { getSocket } from '@/lib/socket'
 import { useAuthStore } from '@/stores/auth.store'
 import { useActionAccess } from '@/hooks/useActionAccess'
+import { useVacacionesPermisos } from '@/hooks/useVacacionesPermisos'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ResumenVacacionesTab } from './ResumenVacacionesTab'
@@ -404,9 +405,9 @@ type Tab = 'vacaciones' | 'permisos' | 'resumen'
 export function VacacionesPage() {
   const [tab, setTab] = useState<Tab>('permisos')
   const [showNueva, setShowNueva] = useState(false)
-  const isAdmin = useAuthStore((s) => s.isAdmin())
   const { can } = useActionAccess()
-  const puedeAprobar = isAdmin && can('vacaciones', 'aprobar-rechazar')
+  // verTodas = el backend le manda las solicitudes de todos (columna Solicitante, pestaña Días por agente).
+  const { puedeAprobar, verTodas } = useVacacionesPermisos()
   const qc = useQueryClient()
 
   const { data: saldo, isLoading: loadSaldo } = useQuery<Saldo>({
@@ -460,7 +461,7 @@ export function VacacionesPage() {
   // Mostrar botón nueva solicitud:
   // - con pool: siempre (vacaciones y permisos)
   // - sin pool: solo en tab Permisos
-  const puedeNuevaSolicitud = !enResumen && saldo?.elegible && (tabEfectiva === 'permisos' || !sinPool)
+  const puedeNuevaSolicitud = can('vacaciones', 'crear-solicitud') && !enResumen && saldo?.elegible && (tabEfectiva === 'permisos' || !sinPool)
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -518,7 +519,7 @@ export function VacacionesPage() {
             </button>
           )
         })}
-        {isAdmin && (
+        {verTodas && (
           <button
             onClick={() => setTab('resumen')}
             className={clsx(
@@ -567,7 +568,7 @@ export function VacacionesPage() {
           <ListaSolicitudes
             solicitudes={solicitudes}
             isLoading={loadSolicitudes}
-            isAdmin={isAdmin}
+            isAdmin={verTodas}
             puedeAprobar={puedeAprobar}
             tipoFiltro={tipoFiltro}
             onResponder={responder.mutate}

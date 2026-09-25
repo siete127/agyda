@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth.store'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import {
   CONFIG_TREE, UBICACIONES_POR_PANTALLA, PENDIENTES,
   type ConfigNode, type UbicacionConfig,
@@ -188,6 +189,7 @@ export function ConfiguracionPage() {
   const { user: usuarioActual } = useAuthStore()
   const esSuperAdmin = SUPER_ADMIN_EMPRESAS_IDS.has(usuarioActual?.id ?? -1)
   const { isAllowed, isLoading: cargandoModulos } = useModuleAccess()
+  const { can, isLoading: cargandoAcciones } = useActionAccess()
 
   // Cada módulo se muestra solo si la empresa/usuario lo tiene activo; así una
   // configuración compartida aparece únicamente en los módulos que se usan.
@@ -197,6 +199,7 @@ export function ConfiguracionPage() {
     if (n.key === 'empresas' && !esSuperAdmin) return false
     if (n.moduleKey && !cargandoModulos && !isAllowed(n.moduleKey)) return false
     if (n.requiere && !cargandoModulos && n.requiere.some((m) => !isAllowed(m))) return false
+    if (n.accion && !cargandoAcciones && !can(n.accion[0], n.accion[1])) return false
     return true
   })
   // Índice solo de lo visible: una sección muestra únicamente sus módulos activos.

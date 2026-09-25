@@ -69,7 +69,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/configuracion',    label: 'Configuración',   icon: 'Settings',             moduleKey: 'configuracion',    roles: ['AD','TI'],          showInSidebar: true  },
 
   // ── Áreas de la empresa ────────────────────────────────────────────────
-  { path: '/areas',            label: 'Portal de Áreas', icon: 'Building2',            moduleKey: 'areas-portal',      roles: ['AD','TI'],         showInSidebar: true  },
+  { path: '/areas',            label: 'Portal de Áreas', icon: 'Building2',            moduleKey: 'areas-portal',      roles: ['AD','TI'],         showInSidebar: false }, // duplicaba el menú lateral
   { path: '/direccion-general', label: 'Dirección General', icon: 'LayoutDashboard',   moduleKey: 'direccion-general', roles: ['AD'],              showInSidebar: false  },
   { path: '/direccion-general/planeacion-estrategica',    label: 'Planeación Estratégica',       icon: 'Target',        moduleKey: 'direccion-general', roles: ['AD'], showInSidebar: true },
   { path: '/direccion-general/indicadores-empresariales', label: 'Indicadores Empresariales',    icon: 'Gauge',         moduleKey: 'direccion-general', roles: ['AD'], showInSidebar: true },
@@ -114,6 +114,8 @@ export const ROUTES: RouteConfig[] = [
   { path: '/operaciones/kpis', label: 'KPIs',            icon: 'Gauge',                moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Indicadores clave de operaciones' },
   { path: '/operaciones/metas', label: 'Metas',          icon: 'ListChecks',           moduleKey: 'operaciones',      roles: ['AD','TI'],          showInSidebar: true,  description: 'Metas operativas del Call Center' },
   { path: '/operaciones/suite-reportes', label: 'Suite de reportes', icon: 'FileBarChart', moduleKey: 'operaciones',  roles: ['AD','TI'],          showInSidebar: true,  description: 'Catálogo de reportes de operación y definiciones RDL' },
+  // Fuera del menú: se consulta desde la Suite de reportes (Operación → Registros de formularios).
+  { path: '/contact-center/registros', label: 'Registros de formularios', icon: 'CalendarCheck', moduleKey: 'contact-center', roles: ['AD','TI','CC'], showInSidebar: false, description: 'Lo capturado en un formulario, con las citas próximas primero' },
   { path: '/tecnologia',       label: 'Tecnología',      icon: 'Cpu',                  moduleKey: 'tecnologia',       roles: ['AD','TI'],          showInSidebar: true,  description: 'Incidentes y mantenimientos' },
   { path: '/tecnologia/internet-redes', label: 'Internet y redes', icon: 'Wifi',       moduleKey: 'tecnologia',       roles: ['AD','TI'],          showInSidebar: true,  description: 'Estado de conectividad e infraestructura de red' },
   { path: '/tecnologia/sistemas', label: 'Sistemas',     icon: 'Server',               moduleKey: 'tecnologia',       roles: ['AD','TI'],          showInSidebar: true,  description: 'Sistemas internos y su estado' },

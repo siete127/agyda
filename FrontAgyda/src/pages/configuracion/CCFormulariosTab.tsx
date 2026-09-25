@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCFormulario, CCFormVersionCompleta, CCFormSeccion, CCFormCampo, CCFormTipoCampo,
   CCFormAccionPost, CCFormAccionTipo, CCFormOpcion, CCFormBuscadorResultado,
+  CCFormPendientesAlcance, CCFormPendienteGrupo,
 } from '@/types/ccFormularios.types'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
@@ -41,6 +42,9 @@ const TIPO_CAMPO_LABEL: Record<CCFormTipoCampo, string> = {
   // contacto nuevo si no se encuentra — no es un campo de texto simple, ver
   // BuscadorCampoRuntime más abajo.
   buscador: 'Buscador de interacciones',
+  // Panel del formulario externo con a quién llamar (citas por confirmar,
+  // recordar o reagendar). No guarda valor; se configura quién ve qué.
+  pendientes: 'Pendientes por contactar (citas)',
 }
 const TIPOS_CON_OPCIONES: CCFormTipoCampo[] = ['lista', 'radio', 'checkbox', 'multiseleccion']
 
@@ -586,7 +590,7 @@ function PreviewFormularioModal({ isOpen, onClose, version, formularioId }: { is
   const setValor = (campoId: number, valor: unknown) => setValores((v) => ({ ...v, [campoId]: valor }))
 
   const todosLosCampos = version.secciones.flatMap((s) => s.campos)
-  const camposCapturables = todosLosCampos.filter((c) => !['titulo', 'separador', 'buscador'].includes(c.tipo))
+  const camposCapturables = todosLosCampos.filter((c) => !['titulo', 'separador', 'buscador', 'pendientes'].includes(c.tipo))
   const faltantes = camposCapturables.filter((c) => c.obligatorio && !valores[c.id] && valores[c.id] !== 0)
 
   // Al elegir un resultado del campo 'buscador', vuelca sus datos tanto al
@@ -658,7 +662,7 @@ function PreviewFormularioModal({ isOpen, onClose, version, formularioId }: { is
             {s.descripcion && <p className="mb-3 text-[0.78rem] text-ink-tertiary">{s.descripcion}</p>}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {s.campos.filter((c) => c.visible).map((c) => (
-                <div key={c.id} className={c.ancho === 'completo' || c.tipo === 'buscador' ? 'sm:col-span-2' : ''}>
+                <div key={c.id} className={c.ancho === 'completo' || c.tipo === 'buscador' || c.tipo === 'pendientes' ? 'sm:col-span-2' : ''}>
                   <PreviewCampo campo={c} formularioId={formularioId} valor={valores[c.id]} onChange={(v) => setValor(c.id, v)} onSeleccionarBuscador={usarResultadoBuscador} />
                 </div>
               ))}
@@ -757,6 +761,13 @@ function PreviewCampo({ campo, formularioId, valor, onChange, onSeleccionarBusca
   if (campo.tipo === 'titulo') return <p className="pt-2 text-sm font-bold text-ink">{campo.etiqueta}</p>
   if (campo.tipo === 'separador') return <hr className="my-2 border-gray-200" />
   if (campo.tipo === 'buscador') return <BuscadorCampoRuntime campo={campo} formularioId={formularioId} onSeleccionar={onSeleccionarBuscador} />
+  if (campo.tipo === 'pendientes') {
+    return (
+      <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-3 py-2.5 text-[0.75rem] text-violet-700">
+        <b>{campo.etiqueta || 'Pendientes por contactar'}</b> — panel con las citas por confirmar, recordar o reagendar. Se ve en el formulario externo.
+      </div>
+    )
+  }
 
   const etiqueta = (
     <span className={label}>
@@ -1145,6 +1156,12 @@ function CampoRow({ campo, formularioId, editable, onChanged }: { campo: CCFormC
 // calcula en el renderer (PreviewCampo/CampoPublico) al montar el campo, no
 // aquí; esto solo guarda la intención en FC_CONFIG_JSON.autocompletar.
 const TIPOS_CON_AUTOCOMPLETAR: CCFormTipoCampo[] = ['fecha', 'fecha_hora', 'texto_corto']
+// Grupos del campo tipo 'pendientes' (backend: GRUPOS_PENDIENTES).
+const GRUPOS_PENDIENTES_LABEL: { key: CCFormPendienteGrupo; label: string }[] = [
+  { key: 'confirmar', label: 'Por confirmar' },
+  { key: 'recordar', label: 'Recordar hoy / mañana' },
+  { key: 'vencida', label: 'Vencidas sin confirmar' },
+]
 type Autocompletar = '' | 'fecha_actual' | 'usuario_actual'
 const AUTOCOMPLETAR_LABEL: Record<Exclude<Autocompletar, ''>, string> = {
   fecha_actual: 'Fecha y hora actual (automático)',
@@ -1166,6 +1183,12 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
   const [opcionesTexto, setOpcionesTexto] = useState((campoExistente?.opciones ?? []).map((o) => o.etiqueta).join('\n'))
   const configExistente = (() => { try { return campoExistente?.configJson ? JSON.parse(campoExistente.configJson) : {} } catch { return {} } })()
   const [autocompletar, setAutocompletar] = useState<Autocompletar>(configExistente.autocompletar ?? '')
+  const [mostrarUltimo, setMostrarUltimo] = useState<boolean>(!!configExistente.mostrarUltimo)
+  // Campo tipo 'pendientes': quién ve qué y qué grupos se muestran.
+  const [pendAlcance, setPendAlcance] = useState<CCFormPendientesAlcance>(configExistente.alcance === 'propios' ? 'propios' : 'todos')
+  const [pendGrupos, setPendGrupos] = useState<CCFormPendienteGrupo[]>(
+    Array.isArray(configExistente.grupos) && configExistente.grupos.length ? configExistente.grupos : GRUPOS_PENDIENTES_LABEL.map((g) => g.key),
+  )
   const [catalogoFuente, setCatalogoFuente] = useState(campoExistente?.catalogoFuente || 'estatico')
 
   // Vista previa en vivo de las opciones que va a traer una fuente
@@ -1185,9 +1208,17 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
         : TIPOS_CON_OPCIONES.includes(tipo)
           ? opcionesTexto.split('\n').map((s) => s.trim()).filter(Boolean).map((v, i) => ({ valor: v, etiqueta: v, orden: i }))
           : undefined
+      // Se conservan las demás opciones que ya tuviera el campo; solo se
+      // ajustan las que se editan aquí.
+      const configJson: Record<string, unknown> = { ...configExistente }
+      if (autocompletar) configJson.autocompletar = autocompletar
+      else delete configJson.autocompletar
+      if (mostrarUltimo && tipo !== 'pendientes') configJson.mostrarUltimo = true
+      else delete configJson.mostrarUltimo
+      if (tipo === 'pendientes') { configJson.alcance = pendAlcance; configJson.grupos = pendGrupos }
+      else { delete configJson.alcance; delete configJson.grupos }
       const body: any = {
-        codigo, tipo, etiqueta, obligatorio, orden, opciones,
-        configJson: autocompletar ? { autocompletar } : {},
+        codigo, tipo, etiqueta, obligatorio, orden, opciones, configJson,
       }
       if (tipo === 'catalogo') body.catalogoFuente = catalogoFuente
       return campoExistente ? ccFormulariosService.updateCampo(campoExistente.id, body) : ccFormulariosService.createCampo(seccionId, body)
@@ -1221,6 +1252,48 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
             ))}
           </select>
           {autocompletar && <span className="mt-0.5 block text-[0.68rem] text-ink-tertiary">El agente puede corregirlo a mano si no marcas "Solo lectura".</span>}
+        </label>
+      )}
+
+      {tipo === 'pendientes' && (
+        <div className="space-y-2.5 rounded-lg border border-violet-100 bg-card p-2.5">
+          <label><span className={label}>¿Quién ve los pendientes?</span>
+            <select className={field} value={pendAlcance} onChange={(e) => setPendAlcance(e.target.value as CCFormPendientesAlcance)}>
+              <option value="todos">Todos — cualquier agente ve todos los pendientes de la campaña</option>
+              <option value="propios">Cada asesor solo los suyos</option>
+            </select>
+            {pendAlcance === 'propios' && (
+              <span className="mt-0.5 block text-[0.68rem] text-ink-tertiary">
+                Se toman los registros donde él es el asesor (su usuario en la interacción o el campo «Asesor» por nombre). La liga debe abrirse desde AGYDA para saber quién es.
+              </span>
+            )}
+          </label>
+          <div>
+            <span className={label}>Grupos que se muestran</span>
+            <div className="flex flex-wrap gap-3">
+              {GRUPOS_PENDIENTES_LABEL.map((g) => (
+                <label key={g.key} className="flex items-center gap-1.5 text-[0.78rem] text-ink-secondary">
+                  <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={pendGrupos.includes(g.key)}
+                    onChange={(e) => setPendGrupos((gs) => e.target.checked ? [...gs, g.key] : gs.filter((x) => x !== g.key))} />
+                  {g.label}
+                </label>
+              ))}
+            </div>
+            {!pendGrupos.length && <span className="mt-0.5 block text-[0.68rem] text-red-500">Elige al menos un grupo</span>}
+          </div>
+        </div>
+      )}
+
+      {!['titulo', 'separador', 'buscador', 'pendientes', 'telefono'].includes(tipo) && (
+        <label className="flex items-start gap-2 text-[0.78rem] text-ink-secondary">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-violet-600" checked={mostrarUltimo}
+            onChange={(e) => setMostrarUltimo(e.target.checked)} />
+          <span>
+            Mostrar el último valor guardado
+            <span className="block text-[0.68rem] text-ink-tertiary">
+              En el formulario externo, al escribir el teléfono de alguien ya registrado, aparece arriba de este campo lo último que se guardó (no se llena solo).
+            </span>
+          </span>
         </label>
       )}
 
@@ -1265,7 +1338,7 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
 
       <div className="flex justify-end gap-2 pt-1">
         <button onClick={onCancel} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-ink-tertiary hover:bg-gray-100"><X className="h-3.5 w-3.5" /> Cancelar</button>
-        <button onClick={() => guardar.mutate()} disabled={!codigo.trim() || !etiqueta.trim() || guardar.isPending}
+        <button onClick={() => guardar.mutate()} disabled={!codigo.trim() || !etiqueta.trim() || guardar.isPending || (tipo === 'pendientes' && !pendGrupos.length)}
           className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
           {guardar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Guardar
         </button>

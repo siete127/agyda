@@ -5,6 +5,8 @@ import { useUIStore } from '@/stores/ui.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
+import { useActionAccess } from '@/hooks/useActionAccess'
+import { puedeVerModulo } from '@/router/accionVer'
 import { useNotificationStore } from '@/stores/notification.store'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/axios'
@@ -45,6 +47,7 @@ export function Sidebar() {
   const user          = useCurrentUser()
   const userRole      = user?.tipoUsuario?.toUpperCase() ?? ''
   const { isAllowed } = useModuleAccess()
+  const { isLoading: cargandoAcciones, can } = useActionAccess()
   const unreadCount   = useNotificationStore((s) => s.unreadCount)
   const { branding }  = usePersonalizacion()
   const logoCompactoSrc = personalizacionService.assetUrl(branding.logoCompactoId)
@@ -86,6 +89,7 @@ export function Sidebar() {
     if (!r.showInSidebar) return false
     if (r.roles.length > 0 && !r.roles.includes(userRole)) return false
     if (!isAllowed(r.moduleKey)) return false
+    if (!cargandoAcciones && !puedeVerModulo(r.moduleKey, can)) return false
     return true
   })
 

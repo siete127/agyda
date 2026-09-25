@@ -68,7 +68,33 @@ const sql = require("mssql");
 const { logAudit } = require("../services/auditService");
 const jwt = require("jsonwebtoken");
 const { getIO } = require("../services/socketService");
-const { getUserAllowedActions, esSuperAdminFijo } = require("../middleware/moduleAccess");
+const { getUserAllowedActions, esSuperAdminFijo, getEmpresaModulosBloqueados } = require("../middleware/moduleAccess");
+
+// Regla única para aprobar/rechazar vacaciones (misma que usa la pantalla): ser AD
+// y tener "Aprobar / rechazar" marcado en Vacaciones o en Vacaciones (admin). Si
+// ninguno de los dos módulos está configurado se permite (compatibilidad); si
+// alguno está configurado sin esa acción, no.
+async function puedeAprobarVacaciones(req) {
+  if (esSuperAdminFijo(req)) return true;
+  if (String(req.user?.tipoUsuario || "").toUpperCase() !== "AD") return false;
+  const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+  if (bloqueados.has("vacaciones")) return false;
+  const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
+  const vac = await getUserAllowedActions(uid, "vacaciones", req.user?.empresa);
+  const adm = await getUserAllowedActions(uid, "vacaciones-admin", req.user?.empresa);
+  return vac.has("aprobar-rechazar") || adm.has("aprobar-rechazar") || (vac.has("*") && adm.has("*"));
+}
+
+// Ver las solicitudes de todos: quien puede aprobar, o quien tiene marcada
+// explícitamente "Ver todas" en Vacaciones (admin). "Sin configurar" no basta.
+async function puedeVerTodasVacaciones(req) {
+  if (await puedeAprobarVacaciones(req)) return true;
+  const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
+  const adm = await getUserAllowedActions(uid, "vacaciones-admin", req.user?.empresa);
+  return adm.has("ver-todas");
+}
+exports.puedeAprobarVacaciones = puedeAprobarVacaciones;
+exports.puedeVerTodasVacaciones = puedeVerTodasVacaciones;
 
 // Notifica a todas las sesiones conectadas que el pool de vacaciones de un usuario
 // cambió, para que "Días por agente" y "Mi saldo" se refresquen solos.
@@ -779,15 +805,11 @@ exports.getSolicitudes = async (req, res) => {
     const { estado } = req.query;
     let { numeroPersonal } = req.query;
 
-    // Solo quien tiene el permiso de aprobar/rechazar (o es super-admin) puede ver
-    // el historial de TODOS. Cualquier otro usuario solo ve sus propias solicitudes,
-    // sin importar qué numeroPersonal intente mandar en el query string.
+    // Solo quien puede aprobar/rechazar o tiene "Ver todas" ve el historial de TODOS.
+    // Cualquier otro usuario solo ve sus propias solicitudes, sin importar qué
+    // numeroPersonal intente mandar en el query string.
     const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
-    if (!esSuperAdminFijo(req)) {
-      const allowed = await getUserAllowedActions(uid, "vacaciones", req.user?.empresa);
-      const puedeVerTodas = allowed.has("*") || allowed.has("aprobar-rechazar");
-      if (!puedeVerTodas) numeroPersonal = String(uid);
-    }
+    if (!(await puedeVerTodasVacaciones(req))) numeroPersonal = String(uid);
 
     console.log(
       `📋 Obteniendo solicitudes - Estado: ${

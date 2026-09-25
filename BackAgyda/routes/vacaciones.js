@@ -3,6 +3,19 @@ const router = express.Router();
 const vacacionesController = require("../controllers/vacacionesController");
 const { authenticateToken } = require("../middleware/auth");
 const { requireActionAccess } = require("../middleware/moduleAccess");
+
+// Aprobar/rechazar y demás acciones de administración de vacaciones: AD con
+// "Aprobar / rechazar" en Vacaciones o Vacaciones (admin). Ver puedeAprobarVacaciones.
+const regla = (fn) => async (req, res, next) => {
+  try {
+    if (await fn(req)) return next();
+    return res.status(403).json({ success: false, message: "Acceso denegado a esta función" });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: "Error verificando permisos de acción" });
+  }
+};
+const aprobar = regla(vacacionesController.puedeAprobarVacaciones);
+const verTodas = regla(vacacionesController.puedeVerTodasVacaciones);
 // Obtener todos los horarios-totis
 router.get(
   "/horarios-totis",
@@ -25,6 +38,7 @@ router.get(
 router.put(
   "/solicitudes/:id/cancelar-aprobacion",
   authenticateToken,
+  aprobar,
   vacacionesController.cancelarAprobacion
 );
 
@@ -46,6 +60,7 @@ router.get(
 router.get(
   "/resumen-agentes",
   authenticateToken,
+  verTodas,
   vacacionesController.getResumenAgentes
 );
 
@@ -53,19 +68,19 @@ router.get(
 router.post(
   "/pool-override/:usuarioId",
   authenticateToken,
-  requireActionAccess("vacaciones", "aprobar-rechazar"),
+  aprobar,
   vacacionesController.asignarPoolManual
 );
 router.delete(
   "/pool-override/:usuarioId",
   authenticateToken,
-  requireActionAccess("vacaciones", "aprobar-rechazar"),
+  aprobar,
   vacacionesController.quitarPoolManual
 );
 router.delete(
   "/pool-override/:usuarioId/restaurar",
   authenticateToken,
-  requireActionAccess("vacaciones", "aprobar-rechazar"),
+  aprobar,
   vacacionesController.restaurarPoolAutomatico
 );
 
@@ -73,6 +88,7 @@ router.delete(
 router.post(
   "/solicitud",
   authenticateToken,
+  requireActionAccess("vacaciones", "crear-solicitud"),
   vacacionesController.crearSolicitud
 );
 
@@ -80,6 +96,7 @@ router.post(
 router.get(
   "/solicitudes",
   authenticateToken,
+  requireActionAccess("vacaciones", "ver"),
   vacacionesController.getSolicitudes
 );
 
@@ -94,6 +111,7 @@ router.get(
 router.put(
   "/solicitudes/:id",
   authenticateToken,
+  requireActionAccess("vacaciones", "crear-solicitud"),
   vacacionesController.editarSolicitud
 );
 
@@ -102,7 +120,7 @@ router.put(
 router.patch(
   "/solicitudes/:id/fecha",
   authenticateToken,
-  requireActionAccess("vacaciones-admin", "aprobar-rechazar"),
+  aprobar,
   vacacionesController.editarFechaSolicitud
 );
 
@@ -110,7 +128,7 @@ router.patch(
 router.put(
   "/solicitudes/:id/responder",
   authenticateToken,
-  requireActionAccess("vacaciones-admin", "aprobar-rechazar"),
+  aprobar,
   vacacionesController.responderSolicitud
 );
 

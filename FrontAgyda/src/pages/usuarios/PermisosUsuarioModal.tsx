@@ -40,6 +40,8 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
   const qc = useQueryClient()
   const { can } = useActionAccess()
   const puedeGestionar = can('accesos', 'gestionar')
+  // Encender/apagar el acceso a AGYDA o Ventas = habilitar/deshabilitar la cuenta.
+  const puedeHabilitar = puedeGestionar && can('usuarios', 'habilitar')
 
   const [activoLocal, setActivoLocal] = useState(activo)
   const [statusLocal, setStatusLocal] = useState(status)
@@ -202,7 +204,7 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
                 </div>
               </div>
               <button
-                disabled={toggleIntranet.isPending || !puedeGestionar}
+                disabled={toggleIntranet.isPending || !puedeHabilitar}
                 onClick={() => toggleIntranet.mutate(!activoLocal)}
                 className={clsx(
                   'relative inline-flex h-5.5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed',
@@ -223,7 +225,7 @@ export function PermisosUsuarioModal({ usuarioId, nombre, tipoUsuario, login, fo
                 </div>
               </div>
               <button
-                disabled={toggleVentas.isPending || !puedeGestionar}
+                disabled={toggleVentas.isPending || !puedeHabilitar}
                 onClick={() => toggleVentas.mutate(!statusLocal)}
                 className={clsx(
                   'relative inline-flex h-5.5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed',

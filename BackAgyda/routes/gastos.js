@@ -4,7 +4,7 @@ const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
 const { authenticateToken, verificarRol } = require('../middleware/auth')
-const { requireActionAccess } = require('../middleware/moduleAccess')
+const { requireActionAccess, requireAnyActionAccess } = require('../middleware/moduleAccess')
 const gastosController = require('../controllers/gastosController')
 
 const auth = authenticateToken
@@ -35,22 +35,31 @@ const reciboUpload = multer({
 // Categorías (pública — no requiere auth para que el form de creación las cargue)
 router.get('/categorias', gastosController.getCategorias)
 
+// Acciones de Accesos (módulo 'gastos') para lo del propio empleado.
+const ver = requireActionAccess('gastos', 'ver')
+const crearGasto = requireActionAccess('gastos', 'crear-gasto')
+const crearReporte = requireActionAccess('gastos', 'crear-reporte')
+// El detalle y los comentarios de un reporte los usan el empleado y quien lo aprueba.
+const verReporte = requireAnyActionAccess([['gastos', 'ver'], ['gastos', 'aprobar-reporte']])
+const comentarReporte = requireAnyActionAccess([['gastos', 'crear-reporte'], ['gastos', 'aprobar-reporte']])
+const adminReportes = requireAnyActionAccess([['gastos', 'aprobar-reporte'], ['gastos', 'registrar-pago']])
+
 // Gastos individuales
-router.get('/',           auth, gastosController.getMisGastos)
-router.post('/',          auth, gastosController.createGasto)
-router.put('/:id',        auth, gastosController.updateGasto)
-router.delete('/:id',     auth, gastosController.deleteGasto)
-router.post('/:id/recibo', auth, reciboUpload.single('recibo'), gastosController.uploadRecibo)
+router.get('/',           auth, ver, gastosController.getMisGastos)
+router.post('/',          auth, crearGasto, gastosController.createGasto)
+router.put('/:id',        auth, crearGasto, gastosController.updateGasto)
+router.delete('/:id',     auth, crearGasto, gastosController.deleteGasto)
+router.post('/:id/recibo', auth, crearGasto, reciboUpload.single('recibo'), gastosController.uploadRecibo)
 
 // Reportes (empleado)
-router.get('/reportes',              auth, gastosController.getMisReportes)
-router.post('/reportes',             auth, gastosController.createReporte)
-router.get('/reportes/:id',          auth, gastosController.getReporte)
-router.post('/reportes/:id/enviar',  auth, gastosController.enviarReporte)
-router.post('/reportes/:id/comentarios', auth, gastosController.addComentario)
+router.get('/reportes',              auth, ver, gastosController.getMisReportes)
+router.post('/reportes',             auth, crearReporte, gastosController.createReporte)
+router.get('/reportes/:id',          auth, verReporte, gastosController.getReporte)
+router.post('/reportes/:id/enviar',  auth, crearReporte, gastosController.enviarReporte)
+router.post('/reportes/:id/comentarios', auth, comentarReporte, gastosController.addComentario)
 
 // Admin
-router.get('/admin/reportes',               auth, roleAD, gastosController.getAllReportes)
+router.get('/admin/reportes',               auth, roleAD, adminReportes, gastosController.getAllReportes)
 router.post('/admin/reportes/:id/aprobar',  auth, roleAD, requireActionAccess('gastos', 'aprobar-reporte'),      gastosController.aprobarReporte)
 router.post('/admin/reportes/:id/rechazar', auth, roleAD, requireActionAccess('gastos', 'aprobar-reporte'),      gastosController.rechazarReporte)
 router.post('/admin/reportes/:id/pago',     auth, roleAD, requireActionAccess('gastos', 'registrar-pago'),       gastosController.registrarPago)

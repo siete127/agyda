@@ -5,7 +5,9 @@ import {
   SlidersHorizontal, MoreVertical, ShieldCheck, UserCog, Clock,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, X,
 } from 'lucide-react'
-import { api } from '@/lib/axios'
+import { api, getApiError } from '@/lib/axios'
+import { useAuthStore } from '@/stores/auth.store'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Avatar } from '@/components/ui/Avatar'
@@ -64,11 +66,12 @@ function StatCard({
 
 /* ── Menú de acciones (3 puntos) ── */
 function RowMenu({
-  onEdit, onDelete, onReactivate, esDesactivado,
+  onEdit, onDelete, onReactivate, onDeshabilitar, esDesactivado,
 }: {
   onEdit?: () => void
   onDelete?: () => void
   onReactivate?: () => void
+  onDeshabilitar?: () => void // ausente = no se puede (p. ej. tu propia cuenta)
   esDesactivado: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -83,6 +86,10 @@ function RowMenu({
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
 
+  // Sin ninguna acción permitida no se muestra el menú.
+  const hayAcciones = esDesactivado ? !!onReactivate : !!(onEdit || onDelete || onDeshabilitar)
+  if (!hayAcciones) return null
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -94,26 +101,40 @@ function RowMenu({
       {open && (
         <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-card py-1 shadow-lg animate-fade-in">
           {esDesactivado ? (
-            <button
-              onClick={() => { onReactivate?.(); setOpen(false) }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-[0.78rem] font-medium text-emerald-600 hover:bg-emerald-50"
-            >
-              <UserCheck className="h-3.5 w-3.5" /> Reactivar
-            </button>
+            onReactivate && (
+              <button
+                onClick={() => { onReactivate(); setOpen(false) }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-[0.78rem] font-medium text-emerald-600 hover:bg-emerald-50"
+              >
+                <UserCheck className="h-3.5 w-3.5" /> Habilitar
+              </button>
+            )
           ) : (
             <>
-              <button
-                onClick={() => { onEdit?.(); setOpen(false) }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-[0.78rem] font-medium text-gray-600 hover:bg-gray-50"
-              >
-                <Edit2 className="h-3.5 w-3.5" /> Editar
-              </button>
-              <button
-                onClick={() => { onDelete?.(); setOpen(false) }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-[0.78rem] font-medium text-red-600 hover:bg-red-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Eliminar
-              </button>
+              {onEdit && (
+                <button
+                  onClick={() => { onEdit(); setOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-[0.78rem] font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  <Edit2 className="h-3.5 w-3.5" /> Editar
+                </button>
+              )}
+              {onDeshabilitar && (
+                <button
+                  onClick={() => { onDeshabilitar(); setOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-[0.78rem] font-medium text-amber-600 hover:bg-amber-50"
+                >
+                  <UserX className="h-3.5 w-3.5" /> Deshabilitar
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={() => { onDelete(); setOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-[0.78rem] font-medium text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                </button>
+              )}
             </>
           )}
         </div>
@@ -154,23 +175,42 @@ export function UsuariosTab() {
       const list = Array.isArray(data) ? data : (data?.data ?? [])
       return (list as Record<string, unknown>[]).map(parseUsuario)
     },
-    enabled: tab === 'desactivados',
+    // Siempre: los KPIs (habilitadas/deshabilitadas) necesitan el conteo real,
+    // no solo cuando se abre la pestaña "Desactivados".
   })
+
+  const miId = useAuthStore((s) => s.user?.id)
+  // Acciones de Accesos del módulo Usuarios (el backend exige las mismas).
+  const { can } = useActionAccess()
+  const puede = {
+    crear: can('usuarios', 'crear'),
+    editar: can('usuarios', 'editar'),
+    habilitar: can('usuarios', 'habilitar'),
+    eliminar: can('usuarios', 'eliminar'),
+  }
+  // Habilitar / deshabilitar la cuenta (con confirmación). AGYDA = NEUS_ACTIVO
+  // (lo que revisa el login); Ventas = NEUS_STATUS, opcional en el mismo paso.
+  const [cambioCuenta, setCambioCuenta] = useState<{ u: Usuario; activo: boolean } | null>(null)
+  const [tambienVentas, setTambienVentas] = useState(true)
+  const cambiarCuenta = useMutation({
+    mutationFn: async ({ id, activo, ventas }: { id: number; activo: boolean; ventas: boolean }) => {
+      await api.put(`/usuarios/${id}/activo`, { activo })
+      if (ventas) await api.put(`/usuarios/${id}/status-ventas`, { status: activo })
+    },
+    onSuccess: (_, v) => {
+      qc.invalidateQueries({ queryKey: ['usuarios'] })
+      qc.invalidateQueries({ queryKey: ['usuarios-desactivados'] })
+      toast.success(v.activo ? 'Cuenta habilitada' : 'Cuenta deshabilitada')
+      setCambioCuenta(null)
+    },
+    onError: (e) => toast.error(getApiError(e) || 'No se pudo cambiar la cuenta'),
+  })
+  const pedirCambio = (u: Usuario, activo: boolean) => { setTambienVentas(true); setCambioCuenta({ u, activo }) }
 
   const eliminar = useMutation({
     mutationFn: (id: number) => api.delete(`/usuarios/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['usuarios'] }); toast.success('Usuario eliminado') },
     onError: () => toast.error('Error al eliminar'),
-  })
-
-  const reactivar = useMutation({
-    mutationFn: (id: number) => api.put(`/usuarios/${id}/activo`, { activo: true }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['usuarios'] })
-      qc.invalidateQueries({ queryKey: ['usuarios-desactivados'] })
-      toast.success('Usuario reactivado')
-    },
-    onError: () => toast.error('Error al reactivar'),
   })
 
   const lista = tab === 'activos' ? usuarios : desactivados
@@ -219,12 +259,14 @@ export function UsuariosTab() {
       {/* ── Encabezado con acción ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[0.8rem] text-gray-400">Gestiona los usuarios que tienen acceso al sistema</p>
-        <button
-          onClick={() => { setSelected(null); setShowModal(true) }}
-          className="flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-[0.78rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]"
-        >
-          <UserPlus className="h-4 w-4" /> Nuevo usuario
-        </button>
+        {puede.crear && (
+          <button
+            onClick={() => { setSelected(null); setShowModal(true) }}
+            className="flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-[0.78rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]"
+          >
+            <UserPlus className="h-4 w-4" /> Nuevo usuario
+          </button>
+        )}
       </div>
 
       {/* ── KPIs ── */}
@@ -462,9 +504,10 @@ export function UsuariosTab() {
                         <div className="flex justify-end">
                           <RowMenu
                             esDesactivado={tab === 'desactivados'}
-                            onEdit={() => { setSelected(u); setShowModal(true) }}
-                            onDelete={() => setConfirmDelete(u)}
-                            onReactivate={() => reactivar.mutate(u.id)}
+                            onEdit={puede.editar ? () => { setSelected(u); setShowModal(true) } : undefined}
+                            onDelete={puede.eliminar ? () => setConfirmDelete(u) : undefined}
+                            onReactivate={puede.habilitar ? () => pedirCambio(u, true) : undefined}
+                            onDeshabilitar={puede.habilitar && u.id !== miId ? () => pedirCambio(u, false) : undefined}
                           />
                         </div>
                       </td>
@@ -472,7 +515,7 @@ export function UsuariosTab() {
                     {abierto && (
                       <tr>
                         <td colSpan={6} className="p-0">
-                          <UsuarioFichaExpandida usuarioId={u.id} puedeEditar />
+                          <UsuarioFichaExpandida usuarioId={u.id} puedeEditar={puede.editar} />
                         </td>
                       </tr>
                     )}
@@ -550,6 +593,37 @@ export function UsuariosTab() {
       </div>
 
       {showModal && <UsuarioModal usuario={selected} onClose={() => setShowModal(false)} />}
+
+      {cambioCuenta && (
+        <Modal isOpen onClose={() => setCambioCuenta(null)} title={cambioCuenta.activo ? 'Habilitar cuenta' : 'Deshabilitar cuenta'} size="sm">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              {cambioCuenta.activo ? '¿Habilitar a ' : '¿Deshabilitar a '}
+              <span className="font-semibold text-gray-900">{cambioCuenta.u.nombres} {cambioCuenta.u.apellidos}</span>
+              {cambioCuenta.u.login && <span className="text-gray-400"> ({cambioCuenta.u.login})</span>}?
+            </p>
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-[0.75rem] text-gray-500">
+              {cambioCuenta.activo
+                ? 'Podrá volver a iniciar sesión en AGYDA con su usuario y contraseña de siempre.'
+                : 'No podrá iniciar sesión en AGYDA. No se borra nada: sus datos, historial y permisos se conservan y puedes habilitarla después.'}
+            </p>
+            <label className="flex items-center gap-2 text-[0.8rem] text-gray-700">
+              <input type="checkbox" className="h-4 w-4 accent-brand" checked={tambienVentas} onChange={(e) => setTambienVentas(e.target.checked)} />
+              {cambioCuenta.activo ? 'Habilitar también su acceso a Ventas' : 'Quitar también su acceso a Ventas'}
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setCambioCuenta(null)}>Cancelar</Button>
+              <Button
+                isLoading={cambiarCuenta.isPending}
+                onClick={() => cambiarCuenta.mutate({ id: cambioCuenta.u.id, activo: cambioCuenta.activo, ventas: tambienVentas })}
+                className={cambioCuenta.activo ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600' : 'bg-amber-600 hover:bg-amber-700 border-amber-600'}
+              >
+                {cambioCuenta.activo ? 'Habilitar' : 'Deshabilitar'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {confirmDelete && (
         <Modal isOpen onClose={() => setConfirmDelete(null)} title="Eliminar usuario" size="sm">

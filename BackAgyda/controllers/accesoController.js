@@ -134,6 +134,7 @@ const ACCIONES_POR_MODULO = {
     { key: 'gestionar-skills',    nombre: 'Gestionar skills',       descripcion: 'Crear y administrar campañas, skills (grupos), plantillas, tipificaciones y motivos de cierre' },
     { key: 'asignar-agentes',     nombre: 'Asignar agentes',        descripcion: 'Asignar campañas y skills a los agentes' },
     { key: 'supervision',         nombre: 'Supervisión',            descripcion: 'Ver interacciones de todos los agentes, métricas e historial completo' },
+    { key: 'gestionar-formularios', nombre: 'Gestionar formularios', descripcion: 'Crear, editar, versionar y publicar formularios de atención (constructor), sus asignaciones, tipificaciones y acciones sugeridas' },
     { key: 'notificar-correo',    nombre: 'Notificar por correo',   descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   postulantes: [
@@ -282,12 +283,15 @@ const ACCIONES_POR_MODULO = {
     { key: 'eliminar', nombre: 'Eliminar producto/servicio', descripcion: 'Borrar del catálogo (o desactivar si tiene clientes asignados)' },
   ],
   usuarios: [
-    { key: 'ver',                nombre: 'Ver usuarios',          descripcion: 'Consultar listado, perfil, estatus y horarios de usuarios' },
+    // Se suman al tipo de usuario (AD/TI administran usuarios). Sobre la propia
+    // cuenta (foto, contraseña, alias) no hacen falta. Ver routes/usuarios.js.
+    { key: 'ver',                nombre: 'Ver gestión de usuarios', descripcion: 'Abrir la pantalla de gestión de usuarios (Configuración → Usuarios)' },
     { key: 'crear',               nombre: 'Crear usuario',         descripcion: 'Dar de alta un nuevo usuario' },
-    { key: 'editar',               nombre: 'Editar usuario',        descripcion: 'Actualizar datos, alias, puesto o perfil de un usuario' },
-    { key: 'eliminar',             nombre: 'Eliminar / desactivar', descripcion: 'Desactivar o eliminar un usuario' },
-    { key: 'cambiar-foto',         nombre: 'Cambiar foto/portada',  descripcion: 'Actualizar foto de perfil o portada de cualquier usuario (AD)' },
-    { key: 'cambiar-password',     nombre: 'Cambiar contraseña',    descripcion: 'Restablecer la contraseña de un usuario' },
+    { key: 'editar',               nombre: 'Editar usuario',        descripcion: 'Actualizar datos, ficha, rol, alias o perfil de otro usuario' },
+    { key: 'habilitar',            nombre: 'Habilitar / deshabilitar', descripcion: 'Habilitar o deshabilitar la cuenta de un usuario (AGYDA y Ventas) sin borrarla' },
+    { key: 'eliminar',             nombre: 'Eliminar usuario',      descripcion: 'Borrar definitivamente un usuario' },
+    { key: 'cambiar-foto',         nombre: 'Cambiar foto/portada',  descripcion: 'Actualizar la foto de perfil o la portada de otro usuario' },
+    { key: 'cambiar-password',     nombre: 'Cambiar contraseña',    descripcion: 'Restablecer la contraseña de otro usuario' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   encuestas: [
@@ -396,6 +400,40 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   operaciones: [
+    { key: 'ver', nombre: 'Ver reportes de operación', descripcion: 'Consultar la Suite de reportes, incluido "Registros de formularios" (lo capturado en cada formulario)' },
+    { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+  ],
+  // Módulos cuyas rutas ya revisaban estas acciones, pero que no estaban en el
+  // catálogo: no aparecían en Accesos y, a quien tuviera el módulo configurado,
+  // no se le podían otorgar.
+  vacantes: [
+    { key: 'ver-postulantes', nombre: 'Ver y gestionar postulantes', descripcion: 'Consultar los postulantes de las vacantes, el tablero y cambiar su estado o etapa' },
+    { key: 'crear',           nombre: 'Crear vacante',     descripcion: 'Publicar una vacante nueva' },
+    { key: 'editar',          nombre: 'Editar vacante',    descripcion: 'Modificar una vacante y activarla o desactivarla' },
+    { key: 'eliminar',        nombre: 'Eliminar vacante',  descripcion: 'Borrar una vacante' },
+    { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+  ],
+  chatbot: [
+    { key: 'ver',      nombre: 'Ver chatbot',           descripcion: 'Consultar respuestas, categorías, leads, rendimiento, menú y flujo del chatbot' },
+    { key: 'crear',    nombre: 'Crear respuestas/nodos', descripcion: 'Agregar respuestas, etiquetas de menú y nodos al flujo' },
+    { key: 'editar',   nombre: 'Editar chatbot',        descripcion: 'Editar respuestas, configuración, flujo y resolver preguntas sin respuesta' },
+    { key: 'eliminar', nombre: 'Eliminar',              descripcion: 'Borrar respuestas, etiquetas de menú y nodos del flujo' },
+    { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+  ],
+  capacitacion: [
+    { key: 'crear',    nombre: 'Crear curso',     descripcion: 'Dar de alta un curso nuevo' },
+    { key: 'editar',   nombre: 'Gestionar cursos', descripcion: 'Editar cursos, materiales, exámenes, temporizador y asignar o quitar participantes' },
+    { key: 'eliminar', nombre: 'Eliminar curso',  descripcion: 'Borrar un curso' },
+    { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+  ],
+  incapacidades: [
+    { key: 'ver',     nombre: 'Ver incapacidades',     descripcion: 'Consultar las incapacidades de todo el personal' },
+    { key: 'aprobar', nombre: 'Aprobar / rechazar',    descripcion: 'Responder (aprobar o rechazar) una incapacidad' },
+    { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+  ],
+  'evaluacion-desempeno': [
+    { key: 'ver',   nombre: 'Ver evaluaciones',       descripcion: 'Consultar ciclos y evaluaciones de desempeño' },
+    { key: 'crear', nombre: 'Gestionar evaluaciones', descripcion: 'Crear y activar ciclos, crear, editar y finalizar evaluaciones' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   tecnologia: [

@@ -9,6 +9,7 @@ import {
   Layers, Upload,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -774,6 +775,9 @@ function ImportarExcelButton({ onDone }: { onDone: () => void }) {
 }
 
 function InventarioGeneralView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
+  const { can } = useActionAccess()
+  const puedeCrear = can('activos', 'crear')
+  const puedeEditar = can('activos', 'editar')
   const [search, setSearch] = useState('')
   const [filtroDpto, setFiltroDpto] = useState('')
   const [modalGeneral, setModalGeneral] = useState(false)
@@ -827,10 +831,12 @@ function InventarioGeneralView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
         </button>
         <span className="text-[0.72rem] text-gray-400">{filtrados.length} equipos</span>
         <div className="ml-auto flex items-center gap-2">
-          <ImportarExcelButton onDone={() => refetch()} />
-          <Button onClick={() => { setEditandoGeneral(null); setModalGeneral(true) }} className="text-[0.78rem] py-1.5 px-3">
-            <Plus className="h-3.5 w-3.5" /> Nuevo equipo
-          </Button>
+          {puedeCrear && <ImportarExcelButton onDone={() => refetch()} />}
+          {puedeCrear && (
+            <Button onClick={() => { setEditandoGeneral(null); setModalGeneral(true) }} className="text-[0.78rem] py-1.5 px-3">
+              <Plus className="h-3.5 w-3.5" /> Nuevo equipo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -870,7 +876,7 @@ function InventarioGeneralView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
                 const estadoCfg = ESTADO_INVENTARIO[e.estado] ?? { bg: 'bg-gray-100', text: 'text-gray-500' }
                 const deptoCfg = DEPTO_COLOR[e.departamento] ?? 'bg-gray-100 text-gray-600'
                 return (
-                  <tr key={e.id} onClick={() => { setEditandoGeneral(e); setModalGeneral(true) }} className="hover:bg-gray-50/60 transition-colors cursor-pointer">
+                  <tr key={e.id} onClick={puedeEditar ? () => { setEditandoGeneral(e); setModalGeneral(true) } : undefined} className={clsx('hover:bg-gray-50/60 transition-colors', puedeEditar && 'cursor-pointer')}>
                     <td className="px-4 py-3">
                       <p className="font-mono text-[0.78rem] font-semibold text-gray-800">{e.nombreEquipo || '—'}</p>
                     </td>
@@ -1311,6 +1317,10 @@ function MobModal({ item, usuarios, onClose }: {
 }
 
 function InventarioMobiliarioView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
+  const { can } = useActionAccess()
+  const puedeCrear = can('activos', 'crear')
+  const puedeEditar = can('activos', 'editar')
+  const puedeEliminar = can('activos', 'eliminar')
   const [search, setSearch]     = useState('')
   const [filtroCateg, setFiltroCateg] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -1430,12 +1440,14 @@ function InventarioMobiliarioView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
           <RefreshCw className="h-3.5 w-3.5" />
         </button>
         <span className="text-[0.72rem] text-gray-400">{filtrados.length} registros</span>
-        <Button
-          onClick={() => { setEditando(null); setModal(true) }}
-          className="ml-auto text-[0.78rem] py-1.5 px-3"
-        >
-          <Plus className="h-3.5 w-3.5" /> Nuevo activo
-        </Button>
+        {puedeCrear && (
+          <Button
+            onClick={() => { setEditando(null); setModal(true) }}
+            className="ml-auto text-[0.78rem] py-1.5 px-3"
+          >
+            <Plus className="h-3.5 w-3.5" /> Nuevo activo
+          </Button>
+        )}
       </div>
 
       {/* Tabla */}
@@ -1508,18 +1520,22 @@ function InventarioMobiliarioView({ usuarios }: { usuarios: UsuarioOpcion[] }) {
                     <td className="px-4 py-3 text-[0.78rem] text-gray-600">{item.asignadoNombre || <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 justify-end">
-                        <button
-                          onClick={() => { setEditando(item); setModal(true) }}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setConfirmDel(item)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {puedeEditar && (
+                          <button
+                            onClick={() => { setEditando(item); setModal(true) }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {puedeEliminar && (
+                          <button
+                            onClick={() => setConfirmDel(item)}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

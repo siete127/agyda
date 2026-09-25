@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
-const { requireActionAccess } = require('../middleware/moduleAccess');
+const { requireActionAccess, requireAnyActionAccess } = require('../middleware/moduleAccess');
 const { uploadCcMedia } = require('../middleware/ccMediaUpload');
 const { postulanteFormRateLimit } = require('../middleware/publicFormRateLimit');
 const inter = require('../controllers/ccInteraccionesController');
@@ -176,7 +176,9 @@ const forms = require('../controllers/ccFormulariosController');
 
 router.get('/formularios/tipos-campo', authenticateToken, requireActionAccess(M, 'ver'), forms.listTiposCampo);
 
-router.get('/formularios', authenticateToken, requireActionAccess(M, 'ver'), forms.listFormularios);
+// Lectura también desde la Suite de reportes (módulo operaciones).
+const verFormularios = requireAnyActionAccess([[M, 'ver'], ['operaciones', 'ver']]);
+router.get('/formularios', authenticateToken, verFormularios, forms.listFormularios);
 router.post('/formularios', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.createFormulario);
 router.get('/formularios/:id', authenticateToken, requireActionAccess(M, 'ver'), forms.getFormulario);
 router.patch('/formularios/:id', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.updateFormulario);
@@ -219,6 +221,8 @@ router.delete('/formularios-asignaciones/:id', authenticateToken, requireActionA
 router.get('/formularios/:id/tipificaciones', authenticateToken, requireActionAccess(M, 'ver'), forms.listTipificacionesDelFormulario);
 router.put('/formularios/:id/tipificaciones', authenticateToken, requireActionAccess(M, 'gestionar-formularios'), forms.setTipificacionesDelFormulario);
 router.get('/formularios/:id/interacciones', authenticateToken, requireActionAccess(M, 'ver'), forms.buscarInteraccionesDelFormulario);
+// Vista rápida de lo capturado en un formulario (página "Registros de formularios").
+router.get('/formularios/:id/registros', authenticateToken, verFormularios, forms.listRegistrosDelFormulario);
 
 // Campo tipo 'buscador' dentro del constructor — lo usa el AGENTE en vivo
 // durante una atención real, no el administrador del formulario, por eso va
@@ -239,6 +243,8 @@ router.get('/formularios-publico/:token', forms.getFormularioPublico);
 router.get('/formularios-publico/:token/canales-disponibles', forms.listCanalesDisponiblesPublico);
 router.get('/formularios-publico/:token/opciones-catalogo', forms.getOpcionesCatalogoDinamicoPublico);
 router.get('/formularios-publico/:token/buscador', forms.buscarRegistrosCampoBuscadorPublico);
+router.get('/formularios-publico/:token/prellenar', forms.prellenarPorTelefonoPublico);
+router.get('/formularios-publico/:token/pendientes', forms.pendientesPorContactarPublico);
 router.post('/formularios-publico/:token/buscador/registrar', forms.crearRegistroCampoBuscadorPublico);
 router.post('/formularios-publico/:token/versiones/:versionId/respuestas', forms.guardarRespuestasPublico);
 

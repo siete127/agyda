@@ -197,7 +197,9 @@ const ENLACE_MODOS = ['pestana', 'flotante', 'ventana'];
 function limpiarEnlace(raw, i) {
   const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
   const url = s(raw?.url, 500);
-  if (!url || !/^https?:\/\//i.test(url)) return null;
+  // Dirección externa (http/https) o ruta interna del sistema ("/formulario-publico/…"),
+  // que se abre en el mismo dominio donde esté el usuario. "//host" no es interna.
+  if (!url || !(/^https?:\/\//i.test(url) || /^\/(?![/\\])/.test(url))) return null;
   return {
     id: s(raw?.id, 40) || `enlace-${Date.now()}-${i}`,
     label: s(raw?.label, 40) || 'Enlace',
