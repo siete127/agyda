@@ -65,6 +65,7 @@ export interface CRMOportunidad {
   tags: string[]
   prioridad: 0|1|2|3
   proyectoId: number | null
+  proximaReunionFecha: string | null
 }
 
 export interface CRMActividad {
@@ -168,6 +169,7 @@ export function parseCRMOportunidad(raw: Record<string, unknown>): CRMOportunida
     tags:                 String(pick(raw,'tags','OPO_TAGS') ?? '').split(',').map((s: string) => s.trim()).filter(Boolean),
     prioridad:            (Number(pick(raw,'prioridad','OPO_PRIORIDAD')) || 0) as 0|1|2|3,
     proyectoId:           pick(raw, 'proyectoId', 'OPO_PROYECTO_ID') as number | null,
+    proximaReunionFecha:  pick(raw, 'proximaReunionFecha') as string | null,
   }
 }
 

@@ -584,6 +584,15 @@ function OportunidadCard({ opo, onClick, onDelete, onDragStart, onDragOver }: { 
         )}
       </div>
 
+      {opo.proximaReunionFecha && (
+        <div className="mt-2 flex items-center gap-1 rounded-lg bg-blue-50 px-1.5 py-1 text-[0.65rem] font-semibold text-blue-700">
+          <CalendarDays className="h-3 w-3 flex-shrink-0" />
+          {new Date(opo.proximaReunionFecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+          {' · '}
+          {new Date(opo.proximaReunionFecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      )}
+
       {opo.asignadoNombre && (
         <div className="mt-2 flex items-center gap-1 text-[0.65rem] text-gray-400">
           <User className="h-3 w-3" />{opo.asignadoNombre}

@@ -6,6 +6,8 @@ const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess')
 const notificationService = require('../services/notificationService');
 const { sanitizeFilename, decryptBuffer } = require('../utils/cryptoDocs');
 const { getPortalRolAcciones } = require('../middleware/portalCliente');
+const facturacionService = require('../services/facturacionService');
+const cotizacionesController = require('./crmCotizacionesController');
 
 // Portal del cliente (login real, NEUS_TIPOUSUARIO='CL') — mismo shape de
 // datos que crmPortalController.js (el portal por liga/token), pero
@@ -85,6 +87,186 @@ exports.getResumen = async (req, res) => {
   }
 };
 
+// GET /productos-servicios — productos y servicios contratados por la
+// empresa, para mostrarlos en el Principal del portal (mismo puente
+// CRM_CONTACTO_PRODUCTOS_SERVICIOS que ya usa el módulo interno de Clientes).
+exports.getProductosServicios = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request()
+      .input('id', sql.Int, req.contacto.id)
+      .query(`
+        SELECT
+          CCPS.CCPS_ID as id, PS.PS_ID as productoServicioId, PS.PS_TIPO as tipo,
+          PS.PS_NOMBRE as nombre, PS.PS_DESCRIPCION as descripcion,
+          PS.PS_PRECIO as precio, PS.PS_RECURRENCIA as recurrencia,
+          CCPS.CCPS_FECHA_ASIGNACION as fechaAlta
+        FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS CCPS
+        JOIN PRODUCTOS_SERVICIOS PS ON PS.PS_ID = CCPS.CCPS_PS_ID
+        WHERE CCPS.CCPS_CONT_ID = @id
+        ORDER BY PS.PS_NOMBRE ASC
+      `);
+    res.json({ success: true, data: result.recordset });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /catalogo-productos-servicios — catálogo completo disponible (no solo
+// lo ya contratado), para que el cliente elija qué cotizar.
+exports.getCatalogoProductosServicios = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request().query(`
+      SELECT PS_ID as id, PS_TIPO as tipo, PS_NOMBRE as nombre,
+             PS_DESCRIPCION as descripcion, PS_PRECIO as precio,
+             PS_RECURRENCIA as recurrencia
+      FROM PRODUCTOS_SERVICIOS
+      WHERE PS_ACTIVO = 1
+      ORDER BY PS_NOMBRE ASC
+    `);
+    res.json({ success: true, data: result.recordset });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+const _cotizacionRateMap = new Map();
+function _rateLimitCotizacion(contactoId) {
+  const ahora = Date.now();
+  const ultimo = _cotizacionRateMap.get(contactoId) ?? 0;
+  if (ahora - ultimo < 60_000) return false;
+  _cotizacionRateMap.set(contactoId, ahora);
+  return true;
+}
+
+// POST /solicitar-cotizacion — el cliente elige productos/servicios del
+// catálogo y se crea una CRM_COTIZACIONES real en borrador, igual que si la
+// hubiera armado un vendedor interno (reusa _insertItems/_cfgVentas de
+// crmCotizacionesController para no duplicar el cálculo de subtotal/IVA).
+// Se busca una oportunidad abierta del contacto o se crea una nueva.
+exports.solicitarCotizacion = async (req, res) => {
+  const pool = await databaseService.getPool(req.user?.empresa);
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ success: false, message: 'Selecciona al menos un producto o servicio' });
+    if (items.length > 30) return res.status(400).json({ success: false, message: 'Máximo 30 conceptos por solicitud' });
+
+    if (!_rateLimitCotizacion(req.contacto.id)) {
+      return res.status(429).json({ success: false, message: 'Espera un momento antes de enviar otra solicitud' });
+    }
+
+    // Valida los psId contra el catálogo real y arma los renglones — nunca se
+    // confía en el precio/descripción que mande el cliente desde el frontend.
+    const ids = [...new Set(items.map((it) => Number(it.psId)).filter((n) => Number.isInteger(n) && n > 0))];
+    if (!ids.length) return res.status(400).json({ success: false, message: 'Selección inválida' });
+    const catalogo = await pool.request().query(`
+      SELECT PS_ID as id, PS_TIPO as tipo, PS_NOMBRE as nombre, PS_PRECIO as precio,
+             PS_COSTO as costo, PS_IVA_TASA as ivaTasa, PS_CLAVE_PROD_SERV as claveProdServ, PS_CLAVE_UNIDAD as claveUnidad
+      FROM PRODUCTOS_SERVICIOS WHERE PS_ACTIVO = 1 AND PS_ID IN (${ids.join(',')})
+    `);
+    const porId = new Map(catalogo.recordset.map((p) => [p.id, p]));
+    const renglones = [];
+    for (const it of items) {
+      const ps = porId.get(Number(it.psId));
+      if (!ps) continue;
+      const cantidad = Math.max(1, Number(it.cantidad) || 1);
+      const requerimientos = it.requerimientos ? String(it.requerimientos).trim().slice(0, 4000) : null;
+      renglones.push({
+        descripcion: ps.nombre, cantidad, precioUnit: ps.precio, descuento: 0,
+        costoUnit: ps.costo, psId: ps.id, ivaTasa: ps.ivaTasa, claveProdServ: ps.claveProdServ, claveUnidad: ps.claveUnidad,
+        requerimientos,
+      });
+    }
+    if (!renglones.length) return res.status(400).json({ success: false, message: 'Selección inválida' });
+
+    // Fecha/hora opcional para agendar la contactación como una reunión real
+    // (CLI_CITAS), igual que ya hace el módulo de Seguimiento de Cliente —
+    // no un campo suelto en la oportunidad.
+    const fechaContacto = req.body?.fechaContactacion ? fechaHoraSql(req.body.fechaContactacion) : null;
+
+    let opoId = (await pool.request().input('id', sql.Int, req.contacto.id).query(`
+      SELECT TOP 1 OPO_ID as id FROM CRM_OPORTUNIDADES
+      WHERE OPO_CONTACTO_ID=@id AND OPO_ACTIVO=1 AND OPO_ETAPA NOT IN ('ganado','perdido')
+      ORDER BY OPO_FECHA_REGISTRO DESC
+    `)).recordset[0]?.id;
+
+    if (!opoId) {
+      const nombreOpo = `Solicitud de cotización — ${req.contacto.empresa || req.contacto.nombre}`.slice(0, 200);
+      opoId = (await pool.request()
+        .input('nombre', sql.NVarChar, nombreOpo)
+        .input('contactoId', sql.Int, req.contacto.id)
+        .query(`
+          INSERT INTO CRM_OPORTUNIDADES (OPO_NOMBRE,OPO_CONTACTO_ID,OPO_ETAPA,OPO_TAGS)
+          VALUES (@nombre,@contactoId,'prospecto','portal-cliente');
+          SELECT SCOPE_IDENTITY() as id;
+        `)).recordset[0].id;
+    }
+
+    const cfg = await cotizacionesController._cfgVentas(req);
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+      const titulo = `Solicitud desde Portal — ${new Date().toLocaleDateString('es-MX')}`;
+      const r = await tx.request()
+        .input('opoId', sql.Int, opoId).input('titulo', sql.NVarChar(200), titulo)
+        .query(`INSERT INTO CRM_COTIZACIONES(COT_OPO_ID,COT_FOLIO,COT_TITULO) OUTPUT INSERTED.COT_ID as id VALUES(@opoId,'',@titulo)`);
+      const cotId = r.recordset[0].id;
+      const folio = cotizacionesController._fmtFolio(cotId);
+      const t = await cotizacionesController._insertItems(tx, cotId, renglones, cfg);
+      const semaforo = cotizacionesController._calcSemaforo(t.margenPct, cfg);
+      await tx.request()
+        .input('id', sql.Int, cotId).input('folio', sql.NVarChar(20), folio)
+        .input('sub', sql.Decimal(18, 2), t.subtotal).input('iva', sql.Decimal(18, 2), t.iva)
+        .input('total', sql.Decimal(18, 2), t.total).input('ct', sql.Decimal(18, 2), t.costoTotal)
+        .input('ut', sql.Decimal(18, 2), t.utilidad).input('mp', sql.Decimal(6, 2), t.margenPct)
+        .input('sem', sql.NVarChar(12), semaforo)
+        .query(`UPDATE CRM_COTIZACIONES SET COT_FOLIO=@folio, COT_SUBTOTAL=@sub, COT_IVA=@iva, COT_TOTAL=@total,
+                  COT_COSTO_TOTAL=@ct, COT_UTILIDAD=@ut, COT_MARGEN_PCT=@mp, COT_SEMAFORO=@sem
+                WHERE COT_ID=@id`)
+      await tx.commit();
+
+      let citaId = null;
+      if (fechaContacto) {
+        try {
+          const rc = await pool.request()
+            .input('contactoId', sql.Int, req.contacto.id)
+            .input('titulo', sql.NVarChar(200), `Contactación — Solicitud ${folio}`)
+            .input('motivo', sql.NVarChar(sql.MAX), `Seguimiento a la solicitud de cotización ${folio} generada desde el Portal de Cliente.`)
+            .input('fechaHora', sql.VarChar(19), fechaContacto)
+            .query(`
+              INSERT INTO CLI_CITAS (CITA_CONTACTO_ID, CITA_MODALIDAD, CITA_TITULO, CITA_MOTIVO, CITA_FECHA_HORA, CITA_DURACION_MIN, CITA_RECORDAR_MIN_ANTES)
+              OUTPUT INSERTED.CITA_ID
+              VALUES (@contactoId, 'telefonica', @titulo, @motivo, CONVERT(DATETIME, @fechaHora, 120), 30, '1440,60')
+            `);
+          citaId = rc.recordset[0].CITA_ID;
+        } catch (e) { console.warn('solicitarCotizacion (portal-cliente) crear cita:', e.message); }
+      }
+
+      try {
+        const sup = await getUsuariosParaNotificarCorreo('crm', req.user?.empresa);
+        for (const uid of sup) {
+          await notificationService.createNotification({
+            usuarioId: uid,
+            mensaje: `Nueva solicitud de cotización desde el portal: ${folio} — ${req.contacto.empresa || req.contacto.nombre}`,
+            tipo: 'cliente-cotizacion-portal',
+            dataExtra: { cotId, folio, opoId, contactoId: req.contacto.id, citaId },
+            tenantKey: req.user?.empresa,
+          });
+        }
+      } catch (e) { console.warn('solicitarCotizacion (portal-cliente) aviso ventas:', e.message); }
+
+      res.status(201).json({ success: true, data: { id: cotId, folio, citaId } });
+    } catch (e) {
+      await tx.rollback().catch(() => {});
+      throw e;
+    }
+  } catch (e) {
+    console.error('Error solicitarCotizacion (portal-cliente):', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // GET /proyectos — oportunidades del contacto que ya generaron un proyecto real.
 exports.getProyectos = async (req, res) => {
   try {
@@ -133,7 +315,7 @@ exports.getCotizaciones = async (req, res) => {
         SELECT COT_ID as id, COT_FOLIO as folio, COT_TITULO as titulo, COT_ESTATUS as estatus, COT_TOTAL as total,
                CONVERT(NVARCHAR(10), COT_FECHA, 23) as fecha
         FROM CRM_COTIZACIONES
-        WHERE COT_OPO_ID=@opoId AND COT_ACTIVO=1 AND COT_ESTATUS IN ('enviada','aprobada','rechazada')
+        WHERE COT_OPO_ID=@opoId AND COT_ACTIVO=1 AND COT_ESTATUS IN ('borrador','enviada','aprobada','rechazada')
         ORDER BY COT_FECHA_REGISTRO DESC
       `);
       cotizaciones.push(...cots.recordset);
@@ -160,6 +342,44 @@ exports.getFacturas = async (req, res) => {
     res.json({ success: true, data: rs.recordset });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /facturas/:id/documento/:formato — PDF/XML de una factura propia.
+// Calcado de facturasController.descargar (panel interno) pero con el WHERE
+// atado a req.contacto.id: sin esto, cualquier usuario del portal podría
+// descargar la factura de otro cliente con solo cambiar el :id en la URL.
+exports.descargarFacturaDocumento = async (req, res) => {
+  try {
+    const facId = parseInt(req.params.id, 10);
+    const formato = req.params.formato === 'xml' ? 'xml' : 'pdf';
+    if (!Number.isInteger(facId) || facId <= 0) {
+      return res.status(400).json({ success: false, message: 'Factura inválida' });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request()
+      .input('id', sql.Int, facId)
+      .input('contactoId', sql.Int, req.contacto.id)
+      .query(`SELECT * FROM dbo.FACTURAS WHERE FAC_ID=@id AND FAC_CLIENTE_ID=@contactoId`);
+    const f = rs.recordset[0];
+    if (!f) return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+
+    if (formato === 'xml' && f.FAC_XML) {
+      res.setHeader('Content-Type', 'application/xml');
+      res.setHeader('Content-Disposition', `attachment; filename="${f.FAC_SERIE}${f.FAC_FOLIO}.xml"`);
+      return res.send(f.FAC_XML);
+    }
+    if (f.FAC_ESTATUS === 'pre-factura' || !f.FAC_PAC_ID) {
+      return res.status(409).json({ success: false, message: 'La factura aún no está timbrada.' });
+    }
+    const buf = await facturacionService.descargar(req.user?.empresa, f.FAC_PAC_ID, formato);
+    res.setHeader('Content-Type', formato === 'xml' ? 'application/xml' : 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${f.FAC_SERIE}${f.FAC_FOLIO}.${formato}"`);
+    res.send(buf);
+  } catch (e) {
+    console.error('portalCliente.descargarFacturaDocumento:', e.message);
+    res.status(502).json({ success: false, message: 'No se pudo descargar el documento' });
   }
 };
 

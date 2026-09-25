@@ -38,6 +38,9 @@ const PortalClienteCanalesPage = lz(() => import('@/pages/portal-cliente/PortalC
 // Facturas: diseño de la rama de Betty, reconectado al servicio real de
 // main (portalCliente.service.ts) en vez de a datos mock.
 const PortalClienteFacturasPage = lz(() => import('@/pages/portal-cliente/PortalClienteFacturasPage'), 'PortalClienteFacturasPage')
+const PortalClienteProductosPage = lz(() => import('@/pages/portal-cliente/PortalClienteProductosPage'), 'PortalClienteProductosPage')
+const PortalClienteDocumentosPage = lz(() => import('@/pages/portal-cliente/PortalClienteDocumentosPage'), 'PortalClienteDocumentosPage')
+const PortalClienteCotizacionesPage = lz(() => import('@/pages/portal-cliente/PortalClienteCotizacionesPage'), 'PortalClienteCotizacionesPage')
 const PortalClienteUsuariosPage = lz(() => import('@/pages/portal-cliente/PortalClienteUsuariosPage'), 'PortalClienteUsuariosPage')
 import { ProximamentePage } from '@/pages/portal-cliente/components/ProximamentePage'
 const DashboardPage   = lz(() => import('@/pages/dashboard/DashboardPage'),   'DashboardPage')
@@ -113,6 +116,7 @@ const ProteccionDatosPage          = lz(() => import('@/pages/legal/ProteccionDa
 const CumplimientoNormativoPage    = lz(() => import('@/pages/legal/CumplimientoNormativoPage'), 'CumplimientoNormativoPage')
 const ControlDocumentalPage        = lz(() => import('@/pages/legal/ControlDocumentalPage'), 'ControlDocumentalPage')
 const FinanzasPage                 = lz(() => import('@/pages/finanzas/FinanzasPage'),         'FinanzasPage')
+const FacturacionPage               = lz(() => import('@/pages/facturacion/FacturacionPage'), 'FacturacionPage')
 const IngresosPage                  = lz(() => import('@/pages/ingresos/IngresosPage'), 'IngresosPage')
 const BancosPage                    = lz(() => import('@/pages/bancos/BancosPage'), 'BancosPage')
 const EgresosPage                   = lz(() => import('@/pages/egresos/EgresosPage'), 'EgresosPage')
@@ -234,6 +238,9 @@ export const router = createBrowserRouter([
           // se deja activa mientras se decide si conecta a datos reales.
           { path: '/portal-cliente/canales', element: wrap(<PortalClienteCanalesPage />) },
           { path: '/portal-cliente/facturas', element: wrap(<PortalClienteFacturasPage />) },
+          { path: '/portal-cliente/productos', element: wrap(<PortalClienteProductosPage />) },
+          { path: '/portal-cliente/documentos', element: wrap(<PortalClienteDocumentosPage />) },
+          { path: '/portal-cliente/cotizaciones', element: wrap(<PortalClienteCotizacionesPage />) },
           { path: '/portal-cliente/usuarios', element: wrap(<PortalClienteUsuariosPage />) },
         ],
       },
@@ -328,6 +335,7 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="finanzas" />,        children: [{ path: '/finanzas/ingresos', element: wrap(<IngresosPage />) }] },
               { element: <ModuleRoute moduleKey="finanzas" />,        children: [{ path: '/finanzas/bancos', element: wrap(<BancosPage />) }] },
               { element: <ModuleRoute moduleKey="finanzas" />,        children: [{ path: '/finanzas/egresos', element: wrap(<EgresosPage />) }] },
+              { element: <ModuleRoute moduleKey="finanzas" />,        children: [{ path: '/finanzas/facturacion', element: wrap(<FacturacionPage />) }] },
               { element: <ModuleRoute moduleKey="finanzas" />,        children: [{ path: '/finanzas/cuentas-cobrar', element: wrap(<CuentasCobrarPage />) }] },
               { element: <ModuleRoute moduleKey="finanzas" />,        children: [{ path: '/finanzas/reportes-financieros', element: wrap(<ReportesFinancierosPage />) }] },
               { element: <ModuleRoute moduleKey="finanzas" />,        children: [{ path: '/finanzas/presupuestos', element: wrap(<PresupuestosPage />) }] },

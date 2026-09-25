@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
-  Box, Monitor, Calendar, ChevronRight, FileText, CheckCircle2,
-  Star, Mail, Phone, Globe, Headphones, Receipt,
+  Box, Monitor, Calendar, ChevronRight, FileText,
+  Star, Mail, Phone, Globe, Headphones, Receipt, Plus, MessageCircle,
+  FolderOpen, Wrench, DollarSign,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { useThemeStore, resolveTheme } from '@/stores/theme.store'
@@ -53,6 +54,30 @@ function ProyectoCard() {
   const { data: proyectos, isLoading } = useQuery({ queryKey: ['portal-proyectos'], queryFn: () => portalClienteService.getProyectos() })
   const proyecto: PortalProyecto | undefined = proyectos?.[0]
 
+  if (!isLoading && !proyecto) {
+    return (
+      <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
+        <CardHeader icon={<Box className="h-4 w-4 text-brand" />} title="Mis proyectos" cta="Ver todos" onCta={() => navigate('/portal-cliente/atencion')} />
+        <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-ink-tertiary">
+            <FolderOpen className="h-7 w-7" />
+          </span>
+          <div>
+            <p className="text-sm font-bold text-ink">Aún no tienes proyectos activos.</p>
+            <p className="mt-1 text-xs text-ink-tertiary">Cuando tengas un proyecto, podrás ver aquí su estado, progreso y detalles importantes.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/portal-cliente/canales')}
+            className="mt-1 rounded-full bg-brand px-5 py-2.5 text-xs font-bold text-white hover:bg-brand-dark"
+          >
+            Conocer nuestros servicios
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-2xl bg-[#0a2f71] p-5 shadow-card">
       <div className="mb-4 flex items-center justify-between">
@@ -64,8 +89,6 @@ function ProyectoCard() {
 
       {isLoading ? (
         <div className="h-24 animate-pulse rounded-xl bg-white/10" />
-      ) : !proyecto ? (
-        <p className="text-xs text-white/60">Aún no tienes proyectos activos.</p>
       ) : (
         <>
           <div className="flex items-center justify-between gap-3">
@@ -188,6 +211,30 @@ function FacturasSeccion() {
   const { data: facturas } = useQuery({ queryKey: ['portal-facturas'], queryFn: () => portalClienteService.getFacturas() })
   const ultimas = (facturas ?? []).slice(0, 5)
 
+  if (ultimas.length === 0) {
+    return (
+      <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
+        <CardHeader icon={<Receipt className="h-4 w-4 text-brand" />} title="Facturas" cta="Ver todas" onCta={() => navigate('/portal-cliente/facturas')} />
+        <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-ink-tertiary">
+            <Receipt className="h-7 w-7" />
+          </span>
+          <div>
+            <p className="text-sm font-bold text-ink">Sin facturas registradas.</p>
+            <p className="mt-1 text-xs text-ink-tertiary">Aquí aparecerán tus facturas emitidas.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/portal-cliente/facturas')}
+            className="mt-1 rounded-full bg-brand px-5 py-2.5 text-xs font-bold text-white hover:bg-brand-dark"
+          >
+            Ver todas las facturas
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[320px_1fr]">
       <div className="relative overflow-hidden rounded-2xl bg-[#0a2f71] p-6">
@@ -247,32 +294,60 @@ function FacturasSeccion() {
 function LoImportanteDelDia() {
   const navigate = useNavigate()
   const { data: resumen } = useQuery({ queryKey: ['portal-resumen'], queryFn: () => portalClienteService.getResumen() })
+  const { data: items } = useQuery({ queryKey: ['portal-productos-servicios'], queryFn: () => portalClienteService.getProductosServicios() })
 
-  const stats = [
-    { label: 'Solicitudes abiertas', valor: resumen?.stats.incidenciasAbiertas ?? 0, icon: FileText, ruta: '/portal-cliente/atencion' },
-    { label: 'Citas próximas', valor: resumen?.stats.citasProximas ?? 0, icon: Calendar, ruta: '/portal-cliente/reuniones' },
+  const productos = (items ?? []).filter((p) => p.tipo === 'PRODUCTO')
+  const servicios = (items ?? []).filter((p) => p.tipo === 'SERVICIO')
+  const costoMensual = (items ?? []).filter((p) => p.recurrencia === 'MENSUAL').reduce((sum, p) => sum + p.precio, 0)
+
+  const cajas = [
+    {
+      icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10',
+      valor: resumen?.stats.incidenciasAbiertas ?? 0, label: 'Solicitudes abiertas',
+      cta: 'Ver solicitudes', ruta: '/portal-cliente/atencion',
+    },
+    {
+      icon: Calendar, color: 'text-emerald-500', bg: 'bg-emerald-500/10',
+      valor: resumen?.stats.citasProximas ?? 0, label: 'Citas próximas',
+      cta: 'Ver calendario', ruta: '/portal-cliente/reuniones',
+    },
+    {
+      icon: Box, color: 'text-brand', bg: 'bg-brand/10',
+      valor: productos.length, label: 'Productos contratados',
+      cta: 'Ver detalle', ruta: '/portal-cliente/productos',
+    },
+    {
+      icon: Wrench, color: 'text-violet-500', bg: 'bg-violet-500/10',
+      valor: servicios.length, label: 'Servicios contratados',
+      cta: 'Ver detalle', ruta: '/portal-cliente/productos',
+    },
+    {
+      icon: DollarSign, color: 'text-amber-500', bg: 'bg-amber-500/10',
+      valor: costoMensual, prefix: '$', label: 'Costo mensual contratado',
+      cta: 'Ver detalle', ruta: '/portal-cliente/productos',
+    },
   ]
 
   return (
     <div>
-      <h3 className="mb-4 text-sm font-bold text-ink">Lo importante del día</h3>
-      <div className="grid grid-cols-2 gap-3">
-        {stats.map((s) => (
+      <h3 className="mb-4 text-sm font-bold text-ink">Lo importante hoy</h3>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {cajas.map((c) => (
           <button
-            key={s.label}
+            key={c.label}
             type="button"
-            onClick={() => navigate(s.ruta)}
-            className="flex aspect-square flex-col items-start justify-center gap-2 rounded-2xl border border-surface-border bg-card p-4 text-left shadow-card hover:bg-surface"
+            onClick={() => navigate(c.ruta)}
+            className="flex flex-col items-center gap-2 rounded-xl border border-surface-border bg-card p-3.5 text-center shadow-card hover:bg-surface"
           >
-            <span className="flex items-center gap-2">
-              <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-[#19b6bc] bg-[#19b6bc]/10">
-                <s.icon className="h-6 w-6" />
+            <span className="flex w-full items-center justify-center gap-2.5">
+              <span className={clsx('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full', c.bg, c.color)}>
+                <c.icon className="h-6 w-6" />
               </span>
-              <CountUp end={s.valor} className="text-3xl font-bold text-ink" />
+              <CountUp end={c.valor} prefix={c.prefix} className="text-2xl font-bold text-ink" />
             </span>
-            <span className="flex items-center gap-0.5 whitespace-nowrap text-[11px] leading-tight text-ink-tertiary">
-              {s.label}
-              <ChevronRight className="h-3 w-3" />
+            <span className="flex items-center justify-center gap-1.5 whitespace-nowrap text-[11px] leading-tight text-ink-tertiary">
+              {c.label}
+              <span className="text-base font-bold leading-none text-brand">→</span>
             </span>
           </button>
         ))}
@@ -405,28 +480,82 @@ function CanalesComunicacion() {
   )
 }
 
+function AccesosRapidos() {
+  const navigate = useNavigate()
+
+  const items = [
+    {
+      label: 'Solicitar soporte', desc: 'Crea una nueva solicitud', icon: Plus,
+      destacado: true, onClick: () => navigate('/portal-cliente/atencion'),
+    },
+    {
+      label: 'Agendar reunión', desc: 'Reúnete con tu equipo', icon: Calendar,
+      destacado: false, onClick: () => navigate('/portal-cliente/reuniones'),
+    },
+    {
+      label: 'Ver canales', desc: 'Novedades y anuncios', icon: MessageCircle,
+      destacado: false, onClick: () => navigate('/portal-cliente/canales'),
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {items.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          onClick={item.onClick}
+          className={clsx(
+            'flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors',
+            item.destacado
+              ? 'bg-[#0a2f71] text-white hover:bg-[#0a2f71]/90'
+              : 'border border-surface-border bg-card text-ink hover:bg-surface'
+          )}
+        >
+          <span className={clsx(
+            'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full',
+            item.destacado ? 'bg-white/15 text-white' : 'bg-brand/10 text-brand'
+          )}>
+            <item.icon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className={clsx('truncate text-sm font-bold', item.destacado ? 'text-white' : 'text-ink')}>{item.label}</p>
+            <p className={clsx('truncate text-xs', item.destacado ? 'text-white/70' : 'text-ink-tertiary')}>{item.desc}</p>
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function PortalClientePrincipalPage() {
   const user = useAuthStore((s) => s.user)
   const primerNombre = user?.nombres?.split(' ')[0] ?? 'Cliente'
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-ink">
-          Buenos días, {primerNombre}!
-        </h1>
-        <p className="mt-1 text-sm capitalize text-ink-tertiary">{saludoFecha()}</p>
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-ink">
+            Buenos días, {primerNombre}!
+          </h1>
+          <p className="mt-1 text-sm capitalize text-ink-tertiary">{saludoFecha()}</p>
+          <p className="mt-2 max-w-md text-sm text-ink-tertiary">
+            Aquí puedes consultar el estado de tus proyectos, reuniones, solicitudes, facturas y más.
+          </p>
+        </div>
+        <div className="w-full lg:w-auto">
+          <AccesosRapidos />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Reveal index={0}><ProyectoCard /></Reveal>
         <Reveal index={1}><ReunionCard /></Reveal>
+        <Reveal index={2}><EncuestaCard /></Reveal>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Reveal index={2}><LoImportanteDelDia /></Reveal>
-        <Reveal index={3}><EncuestaCard /></Reveal>
-      </div>
+      <Reveal index={3}><LoImportanteDelDia /></Reveal>
 
       <Reveal index={4}><FacturasSeccion /></Reveal>
 

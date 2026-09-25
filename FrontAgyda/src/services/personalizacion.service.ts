@@ -105,6 +105,27 @@ export interface EmailMarketingConfig {
   emailsPorHoraDefault: number
 }
 
+export interface CanalesPortalConfig {
+  whatsappNumero: string
+  whatsappHabilitado: boolean
+  messengerUrl: string
+  messengerHabilitado: boolean
+  telefono: string
+  telefonoHabilitado: boolean
+  email: string
+  emailHabilitado: boolean
+  sitioWebUrl: string
+  sitioWebHabilitado: boolean
+  // Horario estructurado — diasSemana es un CSV "1,2,3,4,5" (1=lunes...5=viernes;
+  // sábado y domingo tienen su propio bloque, suelen tener horario distinto).
+  horarioInicio: string
+  horarioFin: string
+  diasSemana: string
+  sabadoHabilitado: boolean
+  sabadoHorarioInicio: string
+  sabadoHorarioFin: string
+}
+
 export interface PersonalizacionConfig {
   branding: Branding
   headerButtons: HeaderButton[]
@@ -115,6 +136,7 @@ export interface PersonalizacionConfig {
   ventas: VentasConfig
   prospeccion: ProspeccionConfig
   emailMarketing: EmailMarketingConfig
+  canalesPortal: CanalesPortalConfig
 }
 
 export const personalizacionService = {
@@ -164,6 +186,11 @@ export const personalizacionService = {
   async updateEmailMarketing(e: EmailMarketingConfig): Promise<EmailMarketingConfig> {
     const { data } = await api.put('/personalizacion/email-marketing', e)
     return data.data as EmailMarketingConfig
+  },
+
+  async updateCanalesPortal(c: CanalesPortalConfig): Promise<CanalesPortalConfig> {
+    const { data } = await api.put('/personalizacion/canales-portal', c)
+    return data.data as CanalesPortalConfig
   },
 
   async updateDashboard(cards: DashboardCard[]): Promise<{ cards: DashboardCard[] }> {

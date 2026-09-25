@@ -13,7 +13,15 @@ const OPO_SELECT = `
          (SELECT COUNT(*) FROM CRM_ACTIVIDADES WHERE ACT_OPO_ID=o.OPO_ID AND ACT_COMPLETADA=0) as actividadesPendientes,
          ISNULL(o.OPO_TAGS,'') as tags,
          ISNULL(o.OPO_PRIORIDAD,0) as prioridad,
-         o.OPO_PROYECTO_ID as proyectoId
+         o.OPO_PROYECTO_ID as proyectoId,
+         (
+           SELECT TOP 1 CONVERT(NVARCHAR(19), k.CITA_FECHA_HORA, 126)
+           FROM CLI_CITAS k
+           WHERE k.CITA_CONTACTO_ID = o.OPO_CONTACTO_ID AND k.CITA_ACTIVO = 1
+             AND k.CITA_ESTATUS NOT IN ('cancelada','asistio','no_asistio')
+             AND k.CITA_FECHA_HORA >= DATEADD(HOUR, -1, GETDATE())
+           ORDER BY k.CITA_FECHA_HORA ASC
+         ) as proximaReunionFecha
   FROM CRM_OPORTUNIDADES o
   LEFT JOIN CRM_CONTACTOS c ON c.CONT_ID = o.OPO_CONTACTO_ID
   LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = o.OPO_ASIGNADO_A

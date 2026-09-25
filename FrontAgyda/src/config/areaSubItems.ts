@@ -36,7 +36,7 @@ export const AREA_SUB_ITEMS: Record<AreaKey, AreaSubItem[]> = {
     { slug: 'ingresos', label: 'Ingresos', kind: 'link', linkTo: '/finanzas/ingresos', description: 'Registro de ingresos de la empresa.' },
     { slug: 'egresos', label: 'Egresos', kind: 'link', linkTo: '/finanzas/egresos', description: 'Registro de egresos, distinto del control de gastos por empleado.' },
     { slug: 'presupuestos', label: 'Presupuestos', kind: 'link', linkTo: '/finanzas/presupuestos', description: 'Presupuesto asignado y ejercido por área y periodo.' },
-    { slug: 'facturacion', label: 'Facturación', kind: 'placeholder', description: 'Emisión y control de facturas.' },
+    { slug: 'facturacion', label: 'Facturación', kind: 'link', linkTo: '/finanzas/facturacion', description: 'Emisión y control de facturas.' },
     { slug: 'cuentas-cobrar', label: 'Cuentas por cobrar', kind: 'link', linkTo: '/finanzas/cuentas-cobrar', description: 'Saldos pendientes de clientes.' },
     { slug: 'cuentas-pagar', label: 'Cuentas por pagar', kind: 'link', linkTo: '/finanzas/cuentas-pagar', description: 'Saldos pendientes con proveedores.' },
     { slug: 'bancos', label: 'Bancos', kind: 'link', linkTo: '/finanzas/bancos', description: 'Cuentas bancarias y movimientos.' },

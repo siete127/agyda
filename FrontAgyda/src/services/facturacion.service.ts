@@ -115,6 +115,10 @@ export const facturacionService = {
     api.put('/facturacion/config', b).then((r) => r.data),
   probarConexion: () => api.post('/facturacion/config/probar').then((r) => r.data),
 
+  list: async (): Promise<Factura[]> => {
+    const { data } = await api.get('/facturas')
+    return data.data ?? []
+  },
   listByCotizacion: async (cotId: number): Promise<Factura[]> => {
     const { data } = await api.get('/facturas', { params: { cotId } })
     return data.data ?? []

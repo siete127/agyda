@@ -23,6 +23,7 @@ router.put('/ventas', ...soloAdminConfig, ctrl.updateVentas);
 router.put('/ventas/estatus-contados', ...soloAdminConfig, ctrl.updateEstatusContados);
 router.put('/prospeccion', ...soloAdminConfig, ctrl.updateProspeccion);
 router.put('/email-marketing', ...soloAdminConfig, ctrl.updateEmailMarketing);
+router.put('/canales-portal', authenticateToken, requireActionAccess('configuracion', 'canales-portal'), ctrl.updateCanalesPortal);
 router.put('/dashboard', ...soloAdminConfig, ctrl.updateDashboard);
 router.put('/mascota', ...soloAdminConfig, ctrl.updateMascota);
 router.post('/assets', ...soloAdminConfig, uploadPersonalizacion.single('archivo'), ctrl.subirAsset);

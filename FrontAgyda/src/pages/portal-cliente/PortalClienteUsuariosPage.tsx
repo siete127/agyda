@@ -6,6 +6,7 @@ import { Users, Plus, ShieldCheck, Power, ChevronRight, Mail, User as UserIcon }
 import { Modal } from '@/components/ui/Modal'
 import { portalClienteService, type PortalUsuario } from '@/services/portalCliente.service'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
+import { PortalHero } from './components/PortalHero'
 
 function Breadcrumb() {
   return (
@@ -188,19 +189,13 @@ export function PortalClienteUsuariosPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       <Breadcrumb />
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
-            <Users className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-ink">Usuarios de mi empresa</h1>
-            <p className="text-xs text-ink-tertiary">Invita a tu equipo y asígnales un sub-rol dentro del portal.</p>
-          </div>
-        </div>
+      <div className="mt-3">
+        <PortalHero icon={Users} titulo="Usuarios de mi empresa" descripcion="Invita a tu equipo y asígnales un sub-rol dentro del portal." />
+      </div>
+      <div className="mt-4 flex justify-end">
         <button
           onClick={() => setShowInvitar(true)}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+          className="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> Invitar
         </button>

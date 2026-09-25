@@ -63,6 +63,26 @@ export interface PortalCita {
   solicitudPendienteTipo: 'reprogramar' | 'cancelar' | null
 }
 
+export interface PortalProductoServicio {
+  id: number
+  productoServicioId: number
+  tipo: 'PRODUCTO' | 'SERVICIO'
+  nombre: string
+  descripcion: string | null
+  precio: number
+  recurrencia: 'MENSUAL' | 'ANUAL' | 'UNICO'
+  fechaAlta: string
+}
+
+export interface PortalCatalogoItem {
+  id: number
+  tipo: 'PRODUCTO' | 'SERVICIO'
+  nombre: string
+  descripcion: string | null
+  precio: number
+  recurrencia: 'MENSUAL' | 'ANUAL' | 'UNICO'
+}
+
 export interface PortalIncidencia {
   id: number
   folio: string

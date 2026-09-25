@@ -76,6 +76,14 @@ async function _recalcCabecera(pool, cotId, cfg) {
   return { subtotal, iva, total, costoTotal: conCosto ? costoTotal : null, utilidad, margenPct, semaforo }
 }
 
+// Reexportadas para portalClienteController.crearCotizacionPortal, que arma
+// una CRM_COTIZACIONES en borrador con el mismo cálculo de subtotal/IVA que
+// usa este controller, sin duplicar la lógica de margen/semáforo.
+exports._insertItems = _insertItems
+exports._cfgVentas = _cfgVentas
+exports._calcSemaforo = _calcSemaforo
+exports._fmtFolio = _fmtFolio
+
 exports.listByOpo = async (req, res) => {
   try {
     const pool = await _getPool(req)
@@ -108,7 +116,7 @@ exports.getById = async (req, res) => {
       .input('id', sql.Int, req.params.id)
       .query(`SELECT COTI_ID as id, COTI_ES_SECCION as esSeccion, COTI_DESCRIPCION as descripcion, COTI_CANTIDAD as cantidad, COTI_PRECIO_UNIT as precioUnit, COTI_DESCUENTO as descuento, COTI_SUBTOTAL as subtotal,
                      COTI_COSTO_UNIT as costoUnit, COTI_PS_ID as psId, COTI_IVA_TASA as ivaTasa,
-                     COTI_CLAVE_PROD_SERV as claveProdServ, COTI_CLAVE_UNIDAD as claveUnidad
+                     COTI_CLAVE_PROD_SERV as claveProdServ, COTI_CLAVE_UNIDAD as claveUnidad, COTI_REQUERIMIENTOS as requerimientos
               FROM CRM_COTIZACION_ITEMS WHERE COTI_COT_ID=@id ORDER BY COTI_ORDEN`)
     res.json({ success: true, data: { ...cot.recordset[0], items: items.recordset } })
   } catch (e) {
@@ -144,12 +152,13 @@ async function _insertItems(tx, cotId, items, cfg) {
       .input('ivaTasa', sql.Decimal(5, 4), esS ? 0 : ivaTasa)
       .input('cps', sql.NVarChar(12), (!esS && it.claveProdServ) ? String(it.claveProdServ).slice(0, 12) : null)
       .input('cu', sql.NVarChar(6), (!esS && it.claveUnidad) ? String(it.claveUnidad).slice(0, 6) : null)
+      .input('req', sql.NVarChar(sql.MAX), (!esS && it.requerimientos) ? String(it.requerimientos).slice(0, 4000) : null)
       // COTI_SUBTOTAL se omite a propósito: en algunos tenants es columna
       // calculada. Donde es columna normal queda NULL y getById lo recalcula.
       .query(`INSERT INTO CRM_COTIZACION_ITEMS
         (COTI_COT_ID,COTI_ORDEN,COTI_ES_SECCION,COTI_DESCRIPCION,COTI_CANTIDAD,COTI_PRECIO_UNIT,COTI_DESCUENTO,
-         COTI_COSTO_UNIT,COTI_PS_ID,COTI_IVA_TASA,COTI_CLAVE_PROD_SERV,COTI_CLAVE_UNIDAD)
-        VALUES (@cotId,@orden,@esS,@desc,@cant,@precio,@dto,@costo,@psId,@ivaTasa,@cps,@cu)`)
+         COTI_COSTO_UNIT,COTI_PS_ID,COTI_IVA_TASA,COTI_CLAVE_PROD_SERV,COTI_CLAVE_UNIDAD,COTI_REQUERIMIENTOS)
+        VALUES (@cotId,@orden,@esS,@desc,@cant,@precio,@dto,@costo,@psId,@ivaTasa,@cps,@cu,@req)`)
   }
   const total = subtotal + iva
   const utilidad = conCosto ? subtotal - costoTotal : null

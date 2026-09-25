@@ -96,6 +96,31 @@ const DEFAULT_CONFIG = {
   emailMarketing: {
     emailsPorHoraDefault: 200,
   },
+  // Canales de contacto que se muestran en "Canales" del Portal de Cliente
+  // (WhatsApp/Messenger/teléfono/sitio web/horario) — editables aquí en vez
+  // de hardcodeados, para no depender de una campaña real de Contact Center.
+  canalesPortal: {
+    whatsappNumero: '',
+    whatsappHabilitado: false,
+    messengerUrl: '',
+    messengerHabilitado: false,
+    telefono: '',
+    telefonoHabilitado: false,
+    email: '',
+    emailHabilitado: false,
+    sitioWebUrl: '',
+    sitioWebHabilitado: false,
+    // Horario estructurado (mismo patrón que CCO_CONFIG): diasSemana es un
+    // CSV de números 1=lunes...5=viernes (sábado y domingo tienen su propio
+    // bloque, ya que suelen tener horario distinto), horarioInicio/Fin en
+    // formato HH:mm.
+    horarioInicio: '',
+    horarioFin: '',
+    diasSemana: '1,2,3,4,5',
+    sabadoHabilitado: false,
+    sabadoHorarioInicio: '',
+    sabadoHorarioFin: '',
+  },
 };
 
 function clamp(n, min, max, fallback) {
@@ -159,6 +184,43 @@ function limpiarEmailMarketing(raw) {
   const D = DEFAULT_CONFIG.emailMarketing;
   const m = raw && typeof raw === 'object' ? raw : {};
   return { emailsPorHoraDefault: Math.round(clamp(m.emailsPorHoraDefault, 1, 10000, D.emailsPorHoraDefault)) };
+}
+
+function s(val, maxLen) {
+  return typeof val === 'string' ? val.trim().slice(0, maxLen) : '';
+}
+
+const HORA_HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+function limpiarHora(val, fallback) {
+  return typeof val === 'string' && HORA_HHMM.test(val) ? val : fallback;
+}
+function limpiarDiasSemana(val, fallback) {
+  if (typeof val !== 'string') return fallback;
+  const dias = val.split(',').map((d) => d.trim()).filter((d) => /^[1-7]$/.test(d));
+  return dias.length > 0 ? dias.join(',') : fallback;
+}
+
+function limpiarCanalesPortal(raw) {
+  const D = DEFAULT_CONFIG.canalesPortal;
+  const m = raw && typeof raw === 'object' ? raw : {};
+  return {
+    whatsappNumero: s(m.whatsappNumero, 20) || D.whatsappNumero,
+    whatsappHabilitado: !!m.whatsappHabilitado,
+    messengerUrl: s(m.messengerUrl, 300) || D.messengerUrl,
+    messengerHabilitado: !!m.messengerHabilitado,
+    telefono: s(m.telefono, 20) || D.telefono,
+    telefonoHabilitado: !!m.telefonoHabilitado,
+    email: s(m.email, 200) || D.email,
+    emailHabilitado: !!m.emailHabilitado,
+    sitioWebUrl: s(m.sitioWebUrl, 300) || D.sitioWebUrl,
+    sitioWebHabilitado: !!m.sitioWebHabilitado,
+    horarioInicio: limpiarHora(m.horarioInicio, D.horarioInicio),
+    horarioFin: limpiarHora(m.horarioFin, D.horarioFin),
+    diasSemana: limpiarDiasSemana(m.diasSemana, D.diasSemana),
+    sabadoHabilitado: !!m.sabadoHabilitado,
+    sabadoHorarioInicio: limpiarHora(m.sabadoHorarioInicio, D.sabadoHorarioInicio),
+    sabadoHorarioFin: limpiarHora(m.sabadoHorarioFin, D.sabadoHorarioFin),
+  };
 }
 
 // Config de margen que consume crmCotizacionesController (evita duplicar defaults).
@@ -235,6 +297,7 @@ function mergeConfig(stored) {
     ventas: limpiarVentas(stored.ventas),
     prospeccion: limpiarProspeccion(stored.prospeccion),
     emailMarketing: limpiarEmailMarketing(stored.emailMarketing),
+    canalesPortal: limpiarCanalesPortal(stored.canalesPortal),
     mascota: (() => {
       const m = stored.mascota && typeof stored.mascota === 'object' ? stored.mascota : {};
       // Migración desde el formato viejo (una sola mascota con `modo`).
@@ -524,6 +587,28 @@ exports.updateEmailMarketing = async (req, res) => {
   } catch (e) {
     logger.error('personalizacionController.updateEmailMarketing', e);
     return res.status(500).json({ success: false, message: 'Error al guardar la configuración de email marketing' });
+  }
+};
+
+// PUT /api/personalizacion/canales-portal
+// Body: { whatsappNumero, whatsappHabilitado, messengerUrl, messengerHabilitado,
+//         telefono, telefonoHabilitado, email, emailHabilitado, sitioWebUrl,
+//         sitioWebHabilitado, horarioTexto }
+exports.updateCanalesPortal = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const config = await readConfig(pool);
+    config.canalesPortal = limpiarCanalesPortal(req.body);
+    await writeConfig(pool, config, req.user?.id);
+    await logAudit(pool, {
+      userId: req.user?.id, userName: req.user?.usuario, modulo: 'configuracion',
+      accion: 'personalizacion-canales-portal', detalle: JSON.stringify(config.canalesPortal), ip: req.ip,
+    }).catch(() => {});
+    notify(req, 'canalesPortal');
+    return res.json({ success: true, data: config.canalesPortal });
+  } catch (e) {
+    logger.error('personalizacionController.updateCanalesPortal', e);
+    return res.status(500).json({ success: false, message: 'Error al guardar los canales del portal' });
   }
 };
 
