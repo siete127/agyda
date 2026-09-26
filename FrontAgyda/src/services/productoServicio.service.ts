@@ -16,6 +16,11 @@ export interface ProductoServicio {
   claveUnidad: string | null
   unidadNombre: string | null
   ivaTasa: number
+  // Ficha ampliada del catálogo — texto plano, un punto por línea.
+  caracteristicas: string | null
+  beneficios: string | null
+  integraciones: string | null
+  aplicaciones: string | null
   fechaRegistro: string
 }
 
@@ -31,6 +36,10 @@ export interface ProductoServicioInput {
   claveUnidad?: string | null
   unidadNombre?: string | null
   ivaTasa?: number
+  caracteristicas?: string | null
+  beneficios?: string | null
+  integraciones?: string | null
+  aplicaciones?: string | null
 }
 
 export interface ClienteProductoServicio {
@@ -63,6 +72,10 @@ function parseProductoServicio(r: Record<string, unknown>): ProductoServicio {
     claveUnidad: r.claveUnidad ? String(r.claveUnidad) : null,
     unidadNombre: r.unidadNombre ? String(r.unidadNombre) : null,
     ivaTasa: r.ivaTasa == null ? 0.16 : Number(r.ivaTasa),
+    caracteristicas: r.caracteristicas ? String(r.caracteristicas) : null,
+    beneficios: r.beneficios ? String(r.beneficios) : null,
+    integraciones: r.integraciones ? String(r.integraciones) : null,
+    aplicaciones: r.aplicaciones ? String(r.aplicaciones) : null,
     fechaRegistro: String(r.fechaRegistro ?? ''),
   }
 }

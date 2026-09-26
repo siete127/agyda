@@ -1600,6 +1600,73 @@ END
   }
 }
 
+// Horario de disponibilidad por asesor — usado para calcular slots reales al
+// agendar contactación desde el Portal de Cliente. Un renglón por día de la
+// semana en que el asesor atiende (no una fila única con CSV de días, para
+// poder tener horas distintas por día si hace falta a futuro). El bloque de
+// comida es opcional y se excluye siempre de los slots calculados. Las
+// vacaciones/permisos NO se duplican aquí: se consulta dbo.PERMISOS
+// (ESTATUS='aprobado') en tiempo real al calcular disponibilidad.
+async function ensureHorariosAsesorSchema(pool) {
+  try {
+    const batchSql = `
+IF OBJECT_ID('dbo.HORARIOS_ASESOR', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.HORARIOS_ASESOR (
+    HA_ID             INT IDENTITY(1,1) PRIMARY KEY,
+    HA_USUARIO_ID     INT NOT NULL,
+    HA_DIA_SEMANA     TINYINT NOT NULL, -- 1=Lunes ... 7=Domingo
+    HA_HORA_INICIO    CHAR(5) NOT NULL, -- 'HH:mm'
+    HA_HORA_FIN       CHAR(5) NOT NULL,
+    HA_COMIDA_INICIO  CHAR(5) NULL,
+    HA_COMIDA_FIN     CHAR(5) NULL,
+    HA_ACTIVO         BIT NOT NULL DEFAULT 1,
+    HA_ACTUALIZADO_EN DATETIME NOT NULL DEFAULT GETDATE(),
+    HA_ACTUALIZADO_POR INT NULL,
+    CONSTRAINT UQ_HORARIOS_ASESOR_USUARIO_DIA UNIQUE (HA_USUARIO_ID, HA_DIA_SEMANA)
+  );
+  CREATE INDEX IX_HORARIOS_ASESOR_USUARIO ON dbo.HORARIOS_ASESOR(HA_USUARIO_ID);
+END
+`;
+    await pool.request().batch(batchSql);
+    logger.info('✅ Esquema de horarios de asesor asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de horarios de asesor:', err.message);
+  }
+}
+
+// Propuesta de horario del asesor, pendiente de aprobación del supervisor —
+// separada de HORARIOS_ASESOR (que es el horario VIGENTE, el que ya usa el
+// cálculo de disponibilidad). El asesor guarda aquí su propuesta completa
+// (todos los días, como JSON — no una fila por día, porque una propuesta se
+// aprueba o se descarta como bloque, no día por día). Al aprobar (tal cual o
+// editada por el supervisor), el contenido final se vuelca a HORARIOS_ASESOR
+// y esta fila pasa a 'aprobada'.
+async function ensureHorariosAsesorPropuestasSchema(pool) {
+  try {
+    const batchSql = `
+IF OBJECT_ID('dbo.HORARIOS_ASESOR_PROPUESTAS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.HORARIOS_ASESOR_PROPUESTAS (
+    HAP_ID              INT IDENTITY(1,1) PRIMARY KEY,
+    HAP_USUARIO_ID      INT NOT NULL,
+    HAP_DIAS_JSON       NVARCHAR(MAX) NOT NULL,
+    HAP_ESTATUS         NVARCHAR(20) NOT NULL DEFAULT 'pendiente', -- pendiente | aprobada | rechazada
+    HAP_COMENTARIO      NVARCHAR(500) NULL, -- motivo si se rechaza
+    HAP_ENVIADA_EN      DATETIME NOT NULL DEFAULT GETDATE(),
+    HAP_RESUELTA_EN     DATETIME NULL,
+    HAP_RESUELTA_POR    INT NULL
+  );
+  CREATE INDEX IX_HORARIOS_ASESOR_PROPUESTAS_USUARIO ON dbo.HORARIOS_ASESOR_PROPUESTAS(HAP_USUARIO_ID, HAP_ESTATUS);
+END
+`;
+    await pool.request().batch(batchSql);
+    logger.info('✅ Esquema de propuestas de horario de asesor asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de propuestas de horario de asesor:', err.message);
+  }
+}
+
 // Expedientes: documentos por usuario (cifrados en BD)
 async function ensureExpedientesSchema(pool) {
   try {
@@ -5871,6 +5938,8 @@ async function ensureAllSchemas(pool) {
   await ensureKbSchema(pool);
   await ensureProfileSchema(pool);
   await ensurePermisosSchema(pool);
+  await ensureHorariosAsesorSchema(pool);
+  await ensureHorariosAsesorPropuestasSchema(pool);
   await ensureCalendarioSchema(pool);
   await ensureExpedientesSchema(pool);
   await ensureUiBackgroundSchema(pool);
@@ -8706,6 +8775,13 @@ END
     `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_CLAVE_UNIDAD') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_CLAVE_UNIDAD NVARCHAR(6) NULL;`,
     `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_UNIDAD_NOMBRE') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_UNIDAD_NOMBRE NVARCHAR(100) NULL;`,
     `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_IVA_TASA') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_IVA_TASA DECIMAL(5,4) NOT NULL CONSTRAINT DF_PS_IVA_TASA DEFAULT 0.16;`,
+    // Ficha ampliada del catálogo (tomada del material de ventas real) — cada
+    // una es una lista de puntos en texto plano, un punto por línea, para
+    // capturarse y mostrarse como bullets sin depender de un editor rico.
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_CARACTERISTICAS') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_CARACTERISTICAS NVARCHAR(MAX) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_BENEFICIOS') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_BENEFICIOS NVARCHAR(MAX) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_INTEGRACIONES') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_INTEGRACIONES NVARCHAR(MAX) NULL;`,
+    `IF COL_LENGTH('dbo.PRODUCTOS_SERVICIOS','PS_APLICACIONES') IS NULL ALTER TABLE dbo.PRODUCTOS_SERVICIOS ADD PS_APLICACIONES NVARCHAR(MAX) NULL;`,
   ];
   for (const q of psCols) {
     try { await pool.request().query(q); }

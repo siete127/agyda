@@ -88,6 +88,10 @@ export const portalClienteService = {
     const { data } = await api.post('/portal-cliente/solicitar-cotizacion', { items, fechaContactacion })
     return data?.data
   },
+  async getDisponibilidadAsesor(): Promise<{ asesorId: number | null; dias: { fecha: string; slots: string[] }[] }> {
+    const { data } = await api.get('/portal-cliente/disponibilidad-asesor')
+    return data?.data ?? { asesorId: null, dias: [] }
+  },
   async getResumen(): Promise<PortalResumen> {
     const { data } = await api.get('/portal-cliente/resumen')
     return data?.data as PortalResumen

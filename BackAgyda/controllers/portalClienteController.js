@@ -134,6 +134,8 @@ exports.getProductosServicios = async (req, res) => {
           CCPS.CCPS_ID as id, PS.PS_ID as productoServicioId, PS.PS_TIPO as tipo,
           PS.PS_NOMBRE as nombre, PS.PS_DESCRIPCION as descripcion,
           PS.PS_PRECIO as precio, PS.PS_RECURRENCIA as recurrencia,
+          PS.PS_CARACTERISTICAS as caracteristicas, PS.PS_BENEFICIOS as beneficios,
+          PS.PS_INTEGRACIONES as integraciones, PS.PS_APLICACIONES as aplicaciones,
           CCPS.CCPS_FECHA_ASIGNACION as fechaAlta
         FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS CCPS
         JOIN PRODUCTOS_SERVICIOS PS ON PS.PS_ID = CCPS.CCPS_PS_ID
@@ -154,7 +156,9 @@ exports.getCatalogoProductosServicios = async (req, res) => {
     const result = await pool.request().query(`
       SELECT PS_ID as id, PS_TIPO as tipo, PS_NOMBRE as nombre,
              PS_DESCRIPCION as descripcion, PS_PRECIO as precio,
-             PS_RECURRENCIA as recurrencia
+             PS_RECURRENCIA as recurrencia,
+             PS_CARACTERISTICAS as caracteristicas, PS_BENEFICIOS as beneficios,
+             PS_INTEGRACIONES as integraciones, PS_APLICACIONES as aplicaciones
       FROM PRODUCTOS_SERVICIOS
       WHERE PS_ACTIVO = 1
       ORDER BY PS_NOMBRE ASC
@@ -216,13 +220,17 @@ exports.solicitarCotizacion = async (req, res) => {
 
     // Fecha/hora opcional para agendar la contactación como una reunión real
     // (CLI_CITAS), igual que ya hace el módulo de Seguimiento de Cliente —
-    // no un campo suelto en la oportunidad.
+    // no un campo suelto en la oportunidad. Nunca se confía en la validación
+    // del frontend: si viene en el pasado, se rechaza aquí también.
     const fechaContacto = req.body?.fechaContactacion ? fechaHoraSql(req.body.fechaContactacion) : null;
+    if (fechaContacto && new Date(fechaContacto.replace(' ', 'T')) < new Date()) {
+      return res.status(400).json({ success: false, message: 'La fecha de contacto propuesta ya pasó' });
+    }
 
     let opoId = (await pool.request().input('id', sql.Int, req.contacto.id).query(`
       SELECT TOP 1 OPO_ID as id FROM CRM_OPORTUNIDADES
       WHERE OPO_CONTACTO_ID=@id AND OPO_ACTIVO=1 AND OPO_ETAPA NOT IN ('ganado','perdido')
-      ORDER BY OPO_FECHA_REGISTRO DESC
+      ORDER BY OPO_FECHA DESC
     `)).recordset[0]?.id;
 
     if (!opoId) {
@@ -260,26 +268,34 @@ exports.solicitarCotizacion = async (req, res) => {
                 WHERE COT_ID=@id`)
       await tx.commit();
 
+      const responsable = (await pool.request().input('id', sql.Int, req.contacto.id)
+        .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`)).recordset[0];
+      const asesorId = responsable?.responsableId || null;
+
       let citaId = null;
       if (fechaContacto) {
         try {
           const rc = await pool.request()
             .input('contactoId', sql.Int, req.contacto.id)
+            .input('asignadoA', sql.Int, asesorId)
             .input('titulo', sql.NVarChar(200), `Contactación — Solicitud ${folio}`)
             .input('motivo', sql.NVarChar(sql.MAX), `Seguimiento a la solicitud de cotización ${folio} generada desde el Portal de Cliente.`)
             .input('fechaHora', sql.VarChar(19), fechaContacto)
             .query(`
-              INSERT INTO CLI_CITAS (CITA_CONTACTO_ID, CITA_MODALIDAD, CITA_TITULO, CITA_MOTIVO, CITA_FECHA_HORA, CITA_DURACION_MIN, CITA_RECORDAR_MIN_ANTES)
+              INSERT INTO CLI_CITAS (CITA_CONTACTO_ID, CITA_ASIGNADO_A, CITA_MODALIDAD, CITA_TITULO, CITA_MOTIVO, CITA_FECHA_HORA, CITA_DURACION_MIN, CITA_RECORDAR_MIN_ANTES)
               OUTPUT INSERTED.CITA_ID
-              VALUES (@contactoId, 'telefonica', @titulo, @motivo, CONVERT(DATETIME, @fechaHora, 120), 30, '1440,60')
+              VALUES (@contactoId, @asignadoA, 'telefonica', @titulo, @motivo, CONVERT(DATETIME, @fechaHora, 120), 30, '1440,60')
             `);
           citaId = rc.recordset[0].CITA_ID;
         } catch (e) { console.warn('solicitarCotizacion (portal-cliente) crear cita:', e.message); }
       }
 
       try {
-        const sup = await getUsuariosParaNotificarCorreo('crm', req.user?.empresa);
-        for (const uid of sup) {
+        // Si hay un asesor responsable, se le notifica directo a él (además
+        // de que la cita ya le queda asignada en su agenda); si no lo hay,
+        // se avisa al módulo de ventas en general, igual que antes.
+        const destinatarios = asesorId ? [asesorId] : await getUsuariosParaNotificarCorreo('crm', req.user?.empresa);
+        for (const uid of destinatarios) {
           await notificationService.createNotification({
             usuarioId: uid,
             mensaje: `Nueva solicitud de cotización desde el portal: ${folio} — ${req.contacto.empresa || req.contacto.nombre}`,
