@@ -91,7 +91,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/marketing/imagen-corporativa',  label: 'Imagen Corporativa',  icon: 'Palette',       moduleKey: 'marketing', roles: ['AD','TI'], showInSidebar: true },
   { path: '/marketing/resultados',          label: 'Resultados',         icon: 'BarChart3',     moduleKey: 'marketing', roles: ['AD','TI'], showInSidebar: true },
   { path: '/legal',            label: 'Legal',           icon: 'Scale',                moduleKey: 'legal',            roles: ['AD','TI'],          showInSidebar: true  },
-  { path: '/finanzas',         label: 'Finanzas',        icon: 'Wallet',               moduleKey: 'finanzas',         roles: ['AD','TI'],          showInSidebar: true,  description: 'Ingresos, cuentas por cobrar y por pagar' },
+  { path: '/finanzas',         label: 'Finanzas',        icon: 'Wallet',               moduleKey: 'finanzas',         roles: ['AD','TI'],          showInSidebar: true,  description: 'Facturación, ingresos y cobranza' },
   { path: '/finanzas/ingresos', label: 'Ingresos',       icon: 'TrendingUp',           moduleKey: 'finanzas',         roles: ['AD','TI'],          showInSidebar: true,  description: 'Registro de ingresos de la empresa' },
   { path: '/finanzas/egresos', label: 'Egresos',         icon: 'TrendingDown',         moduleKey: 'finanzas',         roles: ['AD','TI'],          showInSidebar: true,  description: 'Registro de egresos de la empresa' },
   { path: '/finanzas/presupuestos', label: 'Presupuestos', icon: 'PiggyBank',          moduleKey: 'finanzas',         roles: ['AD','TI'],          showInSidebar: true,  description: 'Presupuesto asignado y ejercido por área' },

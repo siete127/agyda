@@ -62,6 +62,41 @@ export interface ReceptorFiscal {
   usoCfdi: string
 }
 
+export interface CotizacionPorFacturar {
+  id: number
+  folio: string
+  titulo: string | null
+  fecha: string
+  total: number
+  clienteId: number | null
+  cliente: string | null
+  renglones: number
+}
+
+export interface ClienteFacturable {
+  id: number
+  nombre: string
+  contacto: string | null
+  rfc: string | null
+}
+
+export interface ConceptoFacturaInput {
+  psId?: number | null
+  descripcion: string
+  cantidad: number
+  precioUnit: number
+  ivaTasa?: number
+}
+
+export interface FacturaEmitida {
+  id: number
+  estatus: Factura['estatus']
+  folio: string | number | null
+  serie?: string | null
+  modo: 'timbrada' | 'pre-factura'
+  total?: number
+}
+
 export interface FacturaPago {
   id: number
   fechaPago: string
@@ -131,6 +166,18 @@ export const facturacionService = {
   },
   facturarCotizacion: (cotId: number, body: { receptor?: ReceptorFiscal; formaPago?: string; metodoPago?: string }) =>
     api.post(`/facturas/desde-cotizacion/${cotId}`, body).then((r) => r.data),
+  /** Cotizaciones aprobadas sin factura y clientes, para facturar desde Finanzas. */
+  porFacturar: async (): Promise<{ cotizaciones: CotizacionPorFacturar[]; clientes: ClienteFacturable[] }> => {
+    const { data } = await api.get('/facturas/por-facturar')
+    return data.data ?? { cotizaciones: [], clientes: [] }
+  },
+  /** Datos fiscales guardados del cliente (para precargar el receptor). */
+  receptorDe: async (clienteId: number): Promise<Partial<ReceptorFiscal>> => {
+    const { data } = await api.get(`/facturas/receptor/${clienteId}`)
+    return data.data ?? {}
+  },
+  facturarManual: (body: { clienteId: number; conceptos: ConceptoFacturaInput[]; receptor?: ReceptorFiscal; formaPago?: string; metodoPago?: string }) =>
+    api.post('/facturas/manual', body).then((r) => r.data as { data: FacturaEmitida }),
   cancelar: (id: number, motivo = '02') =>
     api.post(`/facturas/${id}/cancelar`, { motivo }).then((r) => r.data),
   documentoUrl: (id: number, formato: 'pdf' | 'xml') => `/api/facturas/${id}/documento/${formato}`,

@@ -324,6 +324,14 @@ async function emitirNotaCredito(tenantKey, facturaId, datos) {
     items = ci.recordset;
   }
   if (!items || !items.length) {
+    // Factura de productos/servicios sueltos: sus renglones guardados.
+    const fc = await pool.request().input('f', sql.Int, facturaId)
+      .query(`SELECT FCO_DESCRIPCION descripcion, FCO_CLAVE_PROD_SERV claveProdServ, FCO_CLAVE_UNIDAD claveUnidad,
+                     FCO_CANTIDAD cantidad, FCO_PRECIO_UNIT precioUnit, FCO_IVA_TASA ivaTasa
+              FROM dbo.FACTURA_CONCEPTOS WHERE FCO_FAC_ID = @f`).catch(() => ({ recordset: [] }));
+    items = fc.recordset;
+  }
+  if (!items || !items.length) {
     // NC total sin detalle: un solo renglón por el subtotal de la factura.
     items = [{
       descripcion: `Nota de crédito de la factura ${f.FAC_SERIE || ''}${f.FAC_FOLIO || ''}`,

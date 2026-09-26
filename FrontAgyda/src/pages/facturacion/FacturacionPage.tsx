@@ -2,46 +2,24 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { ArrowLeft, Receipt, FileText, FileCode, DollarSign, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { ArrowLeft, Receipt, FileText, FileCode, DollarSign, CheckCircle2, Clock, XCircle, Plus } from 'lucide-react'
 import { facturacionService, type Factura } from '@/services/facturacion.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { Spinner } from '@/components/ui/Spinner'
-
-function formatMonto(monto: number | null, moneda: string) {
-  return (monto ?? 0).toLocaleString('es-MX', { style: 'currency', currency: moneda || 'MXN' })
-}
+import { Button } from '@/components/ui/Button'
+import { estatusVisual, ESTATUS_BADGE, formatMonto } from './estatusFactura'
+import { NuevaFacturaModal } from './NuevaFacturaModal'
 
 function formatFecha(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-// El estatus fiscal (pre-factura/timbrada/cancelada/error) y si ya se cobró
-// (pagada/saldo) son dos datos separados en BD — se combinan aquí en un solo
-// estatus visual, más fácil de leer de un vistazo (mismo criterio que ya usa
-// Cuentas por Cobrar con "Vencida" calculada aparte del estatus crudo).
-// Una pre-factura también se cobra (p. ej. la de un producto asignado a un
-// cliente): muestra Pagada/Pendiente de cobro y "Pre-factura" va aparte como
-// etiqueta y como filtro por estatus fiscal.
-type EstatusVisual = 'Pagada' | 'Pendiente de cobro' | 'Cancelada' | 'Error'
-
-function estatusVisual(f: Factura): EstatusVisual {
-  if (f.estatus === 'cancelada') return 'Cancelada'
-  if (f.estatus === 'error') return 'Error'
-  return f.pagada ? 'Pagada' : 'Pendiente de cobro'
-}
-
+// "Pre-factura" filtra por estatus fiscal; el resto por el estatus visual.
 function coincide(f: Factura, filtro: (typeof FILTROS)[number]) {
   if (filtro === 'Todas') return true
   if (filtro === 'Pre-factura') return f.estatus === 'pre-factura'
   return estatusVisual(f) === filtro
-}
-
-const ESTATUS_BADGE: Record<EstatusVisual, string> = {
-  Pagada: 'bg-emerald-100 text-emerald-700',
-  'Pendiente de cobro': 'bg-amber-100 text-amber-700',
-  Cancelada: 'bg-red-100 text-red-700',
-  Error: 'bg-red-100 text-red-700',
 }
 
 const FILTROS = ['Todas', 'Pagada', 'Pendiente de cobro', 'Pre-factura', 'Cancelada'] as const
@@ -51,13 +29,16 @@ export function FacturacionPage() {
   const puedeCancelar = can('crm', 'facturacion-cancelar')
   const [filtro, setFiltro] = useState<(typeof FILTROS)[number]>('Todas')
   const [descargando, setDescargando] = useState<string | null>(null)
+  const [nueva, setNueva] = useState(false)
+  const puedeFacturar = can('crm', 'facturar')
 
   const { data: facturas = [], isLoading } = useQuery({
     queryKey: ['facturas-todas'],
     queryFn: () => facturacionService.list(),
   })
 
-  const totalFacturado = facturas.reduce((sum, f) => sum + (f.total ?? 0), 0)
+  // Las canceladas no cuentan como facturado.
+  const totalFacturado = facturas.filter((f) => f.estatus !== 'cancelada').reduce((sum, f) => sum + (f.total ?? 0), 0)
   const totalPendiente = facturas
     .filter((f) => estatusVisual(f) === 'Pendiente de cobro')
     .reduce((sum, f) => sum + (f.saldo ?? f.total ?? 0), 0)
@@ -81,11 +62,16 @@ export function FacturacionPage() {
       <Link to="/finanzas" className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700">
         <ArrowLeft className="h-3.5 w-3.5" /> Volver a Finanzas
       </Link>
-      <div>
-        <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-          <Receipt className="h-5 w-5 text-brand" /> Facturación
-        </h1>
-        <p className="mt-0.5 text-xs text-gray-500">Historial de facturas emitidas y su estatus de cobro.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+            <Receipt className="h-5 w-5 text-brand" /> Facturación
+          </h1>
+          <p className="mt-0.5 text-xs text-gray-500">Historial de facturas emitidas y su estatus de cobro.</p>
+        </div>
+        {puedeFacturar && (
+          <Button size="sm" onClick={() => setNueva(true)}><Plus className="h-3.5 w-3.5" /> Nueva factura</Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -213,6 +199,8 @@ export function FacturacionPage() {
           </div>
         </>
       )}
+
+      {nueva && <NuevaFacturaModal onClose={() => setNueva(false)} />}
     </div>
   )
 }

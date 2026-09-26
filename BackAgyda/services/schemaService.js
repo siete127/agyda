@@ -3756,6 +3756,30 @@ async function ensureFinanzasSchema(pool) {
   } catch (err) {
     console.warn('⚠️ FinanzasCxcProductos:', err.message);
   }
+
+  // Renglones de las facturas emitidas desde Finanzas (productos/servicios
+  // sueltos) o desde una cotización: detalle para consultarla y para notas de crédito.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.FACTURA_CONCEPTOS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.FACTURA_CONCEPTOS (
+          FCO_ID              INT IDENTITY(1,1) PRIMARY KEY,
+          FCO_FAC_ID          INT            NOT NULL,
+          FCO_PS_ID           INT            NULL,
+          FCO_DESCRIPCION     NVARCHAR(400)  NOT NULL,
+          FCO_CANTIDAD        DECIMAL(10,3)  NOT NULL DEFAULT 1,
+          FCO_PRECIO_UNIT     DECIMAL(18,2)  NOT NULL DEFAULT 0,
+          FCO_IVA_TASA        DECIMAL(5,4)   NOT NULL DEFAULT 0.16,
+          FCO_CLAVE_PROD_SERV NVARCHAR(12)   NULL,
+          FCO_CLAVE_UNIDAD    NVARCHAR(6)    NULL
+        );
+        CREATE INDEX IX_FACTURA_CONCEPTOS_FAC ON dbo.FACTURA_CONCEPTOS(FCO_FAC_ID);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ FacturaConceptos:', err.message);
+  }
 }
 
 // Ventas: metas por asesor/periodo (complementa CRM/ventas existentes).
