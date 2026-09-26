@@ -126,6 +126,20 @@ async function validarCorreo(valor) {
   };
 }
 
+// Correo obligatorio (regla de negocio para clientes): devuelve el mensaje de
+// error o null si se puede guardar. Bloquea vacío, formato inválido y dominios
+// que no existen o no reciben correo. Si el DNS no responde (no se pudo
+// comprobar) NO bloquea: una caída de DNS no debe frenar la operación.
+async function errorCorreoObligatorio(valor) {
+  if (!String(valor || '').trim()) return 'El correo es obligatorio';
+  const r = await validarCorreo(valor);
+  if (!r.formato) return 'El correo no tiene un formato válido (ej. nombre@empresa.com)';
+  if (r.dominioRecibe === false) {
+    return `El dominio ${r.dominio} no existe o no recibe correo${r.sugerencia ? `. ¿Quisiste decir ${r.sugerencia}?` : ''}`;
+  }
+  return null;
+}
+
 // ── Código postal (SEPOMEX) ────────────────────────────────────────────────
 let mxCp = null;
 async function buscarCp(valor) {
@@ -141,4 +155,4 @@ async function buscarCp(valor) {
   };
 }
 
-module.exports = { validarRfc, digitoVerificador, validarCorreo, buscarCp };
+module.exports = { validarRfc, digitoVerificador, validarCorreo, errorCorreoObligatorio, buscarCp };

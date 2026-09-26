@@ -26,7 +26,11 @@ export function LoginPage() {
   const irADashboard = (tipoUsuario: string | undefined) => {
     const tipo = tipoUsuario?.toUpperCase()
     if (tipo === 'CL') {
-      navigate('/portal-cliente', { replace: true })
+      // Usuario del portal: vuelve a la página del portal a la que iba (p. ej. el
+      // enlace "Soporte técnico" del correo, /portal-cliente?soporte=1).
+      const from = (location.state as { from?: Location })?.from
+      const destino = from?.pathname?.startsWith('/portal-cliente') ? `${from.pathname}${from.search ?? ''}` : '/portal-cliente'
+      navigate(destino, { replace: true })
     } else {
       const from = (location.state as { from?: Location })?.from
       const target = from?.pathname && from.pathname !== '/login' ? `${from.pathname}${from.search ?? ''}` : '/dashboard'

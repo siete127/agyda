@@ -143,15 +143,16 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 // Alimenta el bloque "Ingresado por factura" del cliente (FINANZAS_INGRESOS se
 // cruza por texto en el concepto).
-async function registrarIngresoFinanzas(pool, { clienteNombre, folioFactura, monto, fecha }) {
+async function registrarIngresoFinanzas(pool, { clienteNombre, clienteId, folioFactura, monto, fecha }) {
   try {
     const concepto = `Pago factura ${folioFactura}${clienteNombre ? ` — ${clienteNombre}` : ''}`;
     const r = await pool.request()
       .input('c', sql.NVarChar(255), concepto.slice(0, 255))
       .input('m', sql.Decimal(18, 2), round2(monto))
       .input('f', sql.Date, fecha ? new Date(fecha) : new Date())
-      .query(`INSERT INTO dbo.FINANZAS_INGRESOS (FI_CONCEPTO, FI_MONTO, FI_FECHA, FI_CATEGORIA)
-              OUTPUT INSERTED.FI_ID id VALUES (@c, @m, @f, 'Facturación')`);
+      .input('cli', sql.Int, clienteId || null)
+      .query(`INSERT INTO dbo.FINANZAS_INGRESOS (FI_CONCEPTO, FI_MONTO, FI_FECHA, FI_CATEGORIA, FI_CONT_ID)
+              OUTPUT INSERTED.FI_ID id VALUES (@c, @m, @f, 'Facturación', @cli)`);
     return r.recordset[0]?.id || null;
   } catch (e) {
     console.warn('registrarIngresoFinanzas:', e.message);
@@ -214,8 +215,10 @@ async function registrarPago(tenantKey, facturaId, datos) {
     }
   }
 
+  const folio = `${f.FAC_SERIE || ''}${f.FAC_FOLIO || ''}` || `#${facturaId}`;
   const finanzasId = await registrarIngresoFinanzas(pool, {
-    clienteNombre: f.clienteNombre, folioFactura: `${f.FAC_SERIE || ''}${f.FAC_FOLIO || ''}`,
+    clienteNombre: f.clienteNombre, clienteId: f.FAC_CLIENTE_ID,
+    folioFactura: f.FAC_CONCEPTO ? `${folio} · ${f.FAC_CONCEPTO}` : folio,
     monto, fecha: datos.fechaPago,
   });
 
@@ -244,6 +247,19 @@ async function registrarPago(tenantKey, facturaId, datos) {
 
   await pool.request().input('id', sql.Int, facturaId).input('s', sql.Decimal(18, 2), saldoInsoluto)
     .query(`UPDATE dbo.FACTURAS SET FAC_SALDO = @s, FAC_PAGADA = CASE WHEN @s <= 0.01 THEN 1 ELSE 0 END WHERE FAC_ID = @id`);
+
+  // Si la factura acompaña a una cuenta por cobrar (producto asignado al
+  // cliente), el ingreso queda ligado a ella y, liquidada, la CxC pasa a pagada.
+  await pool.request().input('fac', sql.Int, facturaId).input('fi', sql.Int, finanzasId)
+    .input('s', sql.Decimal(18, 2), saldoInsoluto).input('f', sql.Date, new Date(datos.fechaPago))
+    .query(`
+      DECLARE @cxc INT = (SELECT TOP 1 FCC_ID FROM FINANZAS_CXC WHERE FCC_FAC_ID = @fac);
+      IF @cxc IS NOT NULL
+      BEGIN
+        IF @fi IS NOT NULL UPDATE FINANZAS_INGRESOS SET FI_CXC_ID = @cxc WHERE FI_ID = @fi;
+        IF @s <= 0.01 UPDATE FINANZAS_CXC SET FCC_ESTATUS = 'pagada', FCC_FECHA_PAGO = @f WHERE FCC_ID = @cxc;
+      END`)
+    .catch((e) => console.warn('registrarPago → CxC:', e.message));
 
   return { id: ins.recordset[0].id, parcialidad, saldoInsoluto, cfdi: cfdi.estatus, uuid: cfdi.uuid, error: cfdi.error };
 }
@@ -277,6 +293,10 @@ async function cancelarPago(tenantKey, pagoId, motivo) {
     await pool.request().input('id', sql.Int, p.PAG_FINANZAS_ID)
       .query('DELETE FROM dbo.FINANZAS_INGRESOS WHERE FI_ID = @id').catch(() => {});
   }
+  // Su cuenta por cobrar (si la tiene) vuelve a quedar pendiente.
+  await pool.request().input('fac', sql.Int, p.PAG_FACTURA_ID)
+    .query(`UPDATE FINANZAS_CXC SET FCC_ESTATUS = 'pendiente', FCC_FECHA_PAGO = NULL WHERE FCC_FAC_ID = @fac`)
+    .catch(() => {});
   return { ok: true };
 }
 

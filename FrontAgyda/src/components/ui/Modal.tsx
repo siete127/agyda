@@ -13,6 +13,8 @@ interface ModalProps {
   variant?: 'default' | 'corporate'
   /** Eleva el modal sobre otro ya abierto (diálogos anidados) */
   elevated?: boolean
+  /** Sin relleno ni scroll propio: el contenido ocupa todo el panel y maneja su scroll. */
+  bare?: boolean
 }
 
 const sizeClasses = {
@@ -35,7 +37,7 @@ function unlockBodyScroll() {
   if (openModalCount === 0) document.body.style.overflow = ''
 }
 
-export function Modal({ isOpen, onClose, title, children, size = 'md', variant = 'default', elevated = false }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, size = 'md', variant = 'default', elevated = false, bare = false }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return
 
@@ -93,7 +95,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', variant =
         </div>
 
         {/* Contenido */}
-        <div className="p-5 overflow-y-auto flex-1">{children}</div>
+        <div className={bare ? 'flex min-h-0 flex-1 flex-col' : 'p-5 overflow-y-auto flex-1'}>{children}</div>
       </div>
     </div>,
     document.body,

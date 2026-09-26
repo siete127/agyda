@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { MessageCircle, X, Loader2, BellRing, UserX } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { portalClienteService } from '@/services/portalCliente.service'
@@ -20,6 +21,11 @@ export function PortalChatAsesor() {
   const abrirChatFlotante = useMensajeriaStore((s) => s.abrirChatFlotante)
   const [panel, setPanel] = useState(false)
   const [mensaje, setMensaje] = useState('')
+  // ?soporte=1 (botón "Soporte técnico" del correo o de una notificación): abre
+  // solo el chat con su asesor, o el aviso para pedir uno si no tiene.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const pideSoporte = searchParams.get('soporte') === '1'
+  const [soporteAtendido, setSoporteAtendido] = useState(false)
 
   const { data: asesor, isLoading } = useQuery({
     queryKey: ['portal-asesor'],
@@ -56,6 +62,23 @@ export function PortalChatAsesor() {
     },
     onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message ?? 'No se pudo avisar al equipo'),
   })
+
+  // Atender ?soporte=1 una sola vez, cuando ya se sabe si tiene asesor.
+  const listoParaSoporte = pideSoporte && habilitado && !isLoading
+  if (listoParaSoporte && !soporteAtendido) {
+    setSoporteAtendido(true)
+    if (!asesor) setPanel(true)
+  }
+  useEffect(() => {
+    if (!listoParaSoporte || !soporteAtendido) return
+    if (asesor) abrirChat.mutate()
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('soporte')
+    setSearchParams(sp, { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listoParaSoporte, soporteAtendido])
+  // Un nuevo ?soporte=1 (otra notificación) vuelve a atenderse.
+  if (!pideSoporte && soporteAtendido) setSoporteAtendido(false)
 
   if (!habilitado) return null
 

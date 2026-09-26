@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { TrendingUp, Plus, Trash2 } from 'lucide-react'
+import { TrendingUp, Plus, Trash2, Receipt, ArrowUpRight } from 'lucide-react'
 import { finanzasService } from '@/services/finanzas.service'
 import { useIsADorTI } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
@@ -80,17 +81,31 @@ export function IngresosPage() {
   const qc = useQueryClient()
   const [showCrear, setShowCrear] = useState(false)
 
+  const navigate = useNavigate()
+
   const { data: ingresos = [], isLoading } = useQuery({
     queryKey: ['finanzas-ingresos'],
     queryFn: () => finanzasService.getIngresos(),
   })
 
+  // Lo que está por cobrar (p. ej. productos asignados a clientes): entra aquí
+  // en cuanto se marca como cobrado en Cuentas por cobrar.
+  const { data: cuentas = [] } = useQuery({
+    queryKey: ['finanzas-cxc'],
+    queryFn: () => finanzasService.getCxc(),
+  })
+  const porCobrar = cuentas.filter((c) => c.estatus === 'pendiente')
+  const totalPorCobrar = porCobrar.reduce((sum, c) => sum + c.monto, 0)
+
   const eliminar = useMutation({
-    mutationFn: (id: number) => finanzasService.deleteIngreso(id),
-    onSuccess: () => {
+    mutationFn: (i: { id: number; cxcId?: number | null }) => finanzasService.deleteIngreso(i.id),
+    onSuccess: (_r, i) => {
       qc.invalidateQueries({ queryKey: ['finanzas-ingresos'] })
       qc.invalidateQueries({ queryKey: ['finanzas-dashboard'] })
-      toast.success('Ingreso eliminado')
+      qc.invalidateQueries({ queryKey: ['finanzas-cxc'] })
+      qc.invalidateQueries({ queryKey: ['cliente-finanzas'] })
+      qc.invalidateQueries({ queryKey: ['facturas-todas'] })
+      toast.success(i.cxcId ? 'Ingreso eliminado · su cuenta por cobrar volvió a pendiente' : 'Ingreso eliminado')
     },
     onError: () => toast.error('Error al eliminar el ingreso'),
   })
@@ -110,6 +125,26 @@ export function IngresosPage() {
           <Button size="sm" onClick={() => setShowCrear(true)}><Plus className="h-3.5 w-3.5" /> Nuevo ingreso</Button>
         )}
       </div>
+
+      {porCobrar.length > 0 && (
+        <div className="card flex flex-wrap items-center gap-3 border-amber-100 bg-amber-50/50 p-4">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+            <Receipt className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-bold text-amber-700">{formatMonto(totalPorCobrar)} por cobrar</p>
+            <p className="text-xs text-gray-500">
+              {porCobrar.length} cuenta{porCobrar.length !== 1 ? 's' : ''} pendiente{porCobrar.length !== 1 ? 's' : ''}. Se registran aquí como ingreso al marcarlas como cobradas.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/finanzas/cuentas-cobrar')}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-amber-200 bg-card px-3 py-1.5 text-[0.72rem] font-semibold text-amber-700 transition-colors hover:bg-amber-50"
+          >
+            Ver cuentas por cobrar <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-16"><Spinner size="lg" /></div>
@@ -144,13 +179,16 @@ export function IngresosPage() {
               <tbody>
                 {ingresos.map((i) => (
                   <tr key={i.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                    <td className="px-4 py-2.5 font-medium text-gray-900">{i.concepto}</td>
+                    <td className="px-4 py-2.5 font-medium text-gray-900">
+                      {i.concepto}
+                      {i.cxcId && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[0.6rem] font-semibold text-amber-700">Cobro de CxC</span>}
+                    </td>
                     <td className="px-4 py-2.5 text-gray-600">{i.categoria ?? '—'}</td>
                     <td className="px-4 py-2.5 text-gray-600">{formatFecha(i.fecha)}</td>
                     <td className="px-4 py-2.5 font-semibold text-emerald-600">{formatMonto(i.monto)}</td>
                     {isAdmin && (
                       <td className="px-4 py-2.5 text-right">
-                        <button onClick={() => eliminar.mutate(i.id)} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 ml-auto">
+                        <button onClick={() => eliminar.mutate(i)} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 ml-auto">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </td>

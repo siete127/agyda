@@ -20,19 +20,26 @@ function formatFecha(iso: string | null) {
 // (pagada/saldo) son dos datos separados en BD — se combinan aquí en un solo
 // estatus visual, más fácil de leer de un vistazo (mismo criterio que ya usa
 // Cuentas por Cobrar con "Vencida" calculada aparte del estatus crudo).
-type EstatusVisual = 'Pagada' | 'Pendiente de cobro' | 'Pre-factura' | 'Cancelada' | 'Error'
+// Una pre-factura también se cobra (p. ej. la de un producto asignado a un
+// cliente): muestra Pagada/Pendiente de cobro y "Pre-factura" va aparte como
+// etiqueta y como filtro por estatus fiscal.
+type EstatusVisual = 'Pagada' | 'Pendiente de cobro' | 'Cancelada' | 'Error'
 
 function estatusVisual(f: Factura): EstatusVisual {
   if (f.estatus === 'cancelada') return 'Cancelada'
   if (f.estatus === 'error') return 'Error'
-  if (f.estatus === 'pre-factura') return 'Pre-factura'
   return f.pagada ? 'Pagada' : 'Pendiente de cobro'
+}
+
+function coincide(f: Factura, filtro: (typeof FILTROS)[number]) {
+  if (filtro === 'Todas') return true
+  if (filtro === 'Pre-factura') return f.estatus === 'pre-factura'
+  return estatusVisual(f) === filtro
 }
 
 const ESTATUS_BADGE: Record<EstatusVisual, string> = {
   Pagada: 'bg-emerald-100 text-emerald-700',
   'Pendiente de cobro': 'bg-amber-100 text-amber-700',
-  'Pre-factura': 'bg-gray-100 text-gray-600',
   Cancelada: 'bg-red-100 text-red-700',
   Error: 'bg-red-100 text-red-700',
 }
@@ -57,7 +64,7 @@ export function FacturacionPage() {
   const pagadas = facturas.filter((f) => estatusVisual(f) === 'Pagada').length
   const canceladas = facturas.filter((f) => estatusVisual(f) === 'Cancelada').length
 
-  const filtradas = filtro === 'Todas' ? facturas : facturas.filter((f) => estatusVisual(f) === filtro)
+  const filtradas = facturas.filter((f) => coincide(f, filtro))
 
   async function descargar(f: Factura, formato: 'pdf' | 'xml') {
     const key = `${f.id}-${formato}`
@@ -146,11 +153,20 @@ export function FacturacionPage() {
                   </tr>
                 ) : filtradas.map((f) => {
                   const ev = estatusVisual(f)
-                  const timbrada = f.estatus === 'timbrada' || f.pagada
+                  // PDF/XML solo existen timbrada (una pre-factura pagada no los tiene).
+                  const timbrada = f.estatus === 'timbrada'
                   return (
                     <tr key={f.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{f.serie ?? ''}{f.folio ?? f.id}</td>
-                      <td className="px-4 py-2.5 text-gray-700">{f.receptorNombre ?? '—'}</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">
+                        {f.serie ?? ''}{f.folio ?? f.id}
+                        {f.estatus === 'pre-factura' && (
+                          <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-[0.6rem] font-semibold text-gray-500">Pre-factura</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-700">
+                        <p>{f.receptorNombre ?? '—'}</p>
+                        {f.concepto && <p className="text-[0.68rem] text-gray-400">{f.concepto}</p>}
+                      </td>
                       <td className="px-4 py-2.5 text-gray-600">{formatFecha(f.fecha)}</td>
                       <td className="px-4 py-2.5 font-semibold text-gray-900">{formatMonto(f.total, f.moneda)}</td>
                       <td className="px-4 py-2.5">

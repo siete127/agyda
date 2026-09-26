@@ -31,6 +31,8 @@ function mapFactura(r) {
     fechaTimbrado: r.FAC_FECHA_TIMBRADO,
     fechaCancelacion: r.FAC_FECHA_CANCELACION,
     fecha: r.FAC_FECHA,
+    // Qué se factura cuando viene de un producto asignado al cliente.
+    concepto: r.FAC_CONCEPTO || null,
   };
 }
 
@@ -220,6 +222,13 @@ exports.cancelar = async (req, res) => {
     }
     await pool.request().input('id', sql.Int, req.params.id)
       .query(`UPDATE dbo.FACTURAS SET FAC_ESTATUS='cancelada', FAC_FECHA_CANCELACION=GETDATE() WHERE FAC_ID=@id`);
+    // La cuenta por cobrar que acompañaba a la factura (producto asignado al
+    // cliente) ya no se cobra, si seguía pendiente y sin abonos.
+    await pool.request().input('id', sql.Int, req.params.id)
+      .query(`DELETE c FROM FINANZAS_CXC c
+              WHERE c.FCC_FAC_ID = @id AND c.FCC_ESTATUS = 'pendiente'
+                AND NOT EXISTS (SELECT 1 FROM FINANZAS_INGRESOS i WHERE i.FI_CXC_ID = c.FCC_ID)`)
+      .catch((e) => console.warn('facturas.cancelar → CxC:', e.message));
     res.json({ success: true });
   } catch (e) {
     console.error('facturas.cancelar:', e.message);

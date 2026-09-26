@@ -50,6 +50,8 @@ export interface Factura {
   fechaTimbrado: string | null
   fechaCancelacion: string | null
   fecha: string
+  /** Qué se factura cuando viene de un producto asignado al cliente. */
+  concepto?: string | null
 }
 
 export interface ReceptorFiscal {

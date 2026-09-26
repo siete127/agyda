@@ -14,6 +14,8 @@ export interface Ingreso {
   monto: number
   fecha: string
   categoria: string | null
+  /** Cuenta por cobrar cuyo cobro generó este ingreso (si aplica). */
+  cxcId?: number | null
 }
 
 export interface CrearIngresoPayload {
@@ -46,6 +48,8 @@ export interface CuentaPorCobrar {
   monto: number
   fechaVencimiento: string | null
   estatus: EstatusCxc
+  /** Producto/servicio que la generó al asignarlo al cliente (si aplica). */
+  concepto?: string | null
 }
 
 export interface CrearCxcPayload {

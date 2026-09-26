@@ -6,7 +6,7 @@ const { invalidatePortalRolCache } = require('../middleware/portalCliente');
 const crypto = require('crypto');
 const { DEFAULT_TENANT } = require('../config/tenants');
 
-const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
 // Contraseña temporal legible (sin 0/O/1/l que se confunden al dictarla).
 function generarContrasena(largo = 10) {

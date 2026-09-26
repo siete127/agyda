@@ -3,8 +3,9 @@ const databaseService = require('../services/databaseService');
 const { logAudit } = require('../services/auditService');
 const clienteSeguimientoController = require('./clienteSeguimientoController');
 const emailService = require('../services/emailService');
+const { generarCxcPorProductos, cancelarCxcPorProductos } = require('../services/cxcProductosService');
 
-const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
 const CONTACTO_SELECT_FIELDS = `
   CONT_ID as id, CONT_NOMBRE as nombre, CONT_EMPRESA as empresa,
@@ -296,12 +297,20 @@ exports.altaCliente = async (req, res) => {
     // actualizó el acceso en esta misma llamada y se pidió explícitamente
     // (switch en el frontend), para no reenviar la contraseña sin querer.
     if (generarAccesoPortal && enviarInvitacion && neusUsuario && contactoActual.CONT_CORREO) {
+      // La invitación siempre lleva contraseña: la capturada o, si no, la actual.
+      let passwordEnviar = passwordPortal || null;
+      if (!passwordEnviar) {
+        const rs = await pool.request().input('u', sql.NVarChar, neusUsuario)
+          .query('SELECT TOP 1 NEUS_CONTRA contra FROM NEUS_USUARIOS WHERE NEUS_USUARIO = @u');
+        passwordEnviar = rs.recordset[0]?.contra || null;
+      }
+      const tenant = String(req.user?.empresa || require('../config/tenants').DEFAULT_TENANT).toLowerCase();
       emailService.sendInvitacionAccesoSistemaEmail({
         nombre: contactoActual.CONT_NOMBRE,
         correo: contactoActual.CONT_CORREO,
         usuario: neusUsuario,
-        password: passwordPortal || null,
-        link: `${BASE_URL}/login`,
+        password: passwordEnviar,
+        link: `${BASE_URL}/login?tenant=${encodeURIComponent(tenant)}`,
       }).catch(() => {});
     }
 
@@ -426,14 +435,18 @@ exports.asignarProductoServicio = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Datos inválidos' });
     }
     const pool = await databaseService.getPool(req.user?.empresa);
-    await pool.request()
+    const ins = await pool.request()
       .input('contId', sql.Int, id)
       .input('psId', sql.Int, psId)
       .query(`
         IF NOT EXISTS (SELECT 1 FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId)
           INSERT INTO CRM_CONTACTO_PRODUCTOS_SERVICIOS (CCPS_CONT_ID, CCPS_PS_ID) VALUES (@contId, @psId)
       `);
-    res.status(201).json({ success: true });
+    // Igual que en Clientes: lo recién asignado genera su cuenta por cobrar.
+    const cxc = (ins.rowsAffected || []).some((n) => n > 0)
+      ? await generarCxcPorProductos(pool, id, [psId]).catch((e) => { console.warn('crm asignarProductoServicio CxC:', e.message); return null; })
+      : null;
+    res.status(201).json({ success: true, data: { cxc } });
   } catch (e) {
     console.error('Error asignando producto/servicio a contacto CRM:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -452,7 +465,8 @@ exports.quitarProductoServicio = async (req, res) => {
       .input('contId', sql.Int, id)
       .input('psId', sql.Int, psId)
       .query(`DELETE FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId`);
-    res.json({ success: true });
+    const cxcCanceladas = await cancelarCxcPorProductos(pool, id, [psId]).catch((e) => { console.warn('crm quitarProductoServicio CxC:', e.message); return 0; });
+    res.json({ success: true, data: { cxcCanceladas } });
   } catch (e) {
     console.error('Error quitando producto/servicio de contacto CRM:', e);
     res.status(500).json({ success: false, message: e.message });

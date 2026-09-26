@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { upsertKpi } = require('./areasController');
+const facturacionService = require('../services/facturacionService');
 const logger = global.logger || require('../utils/logger');
 
 async function getDashboard(req, res) {
@@ -76,8 +77,9 @@ async function listIngresos(req, res) {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request()
       .query(`
-        SELECT FI_ID as id, FI_CONCEPTO as concepto, FI_MONTO as monto, FI_FECHA as fecha, FI_CATEGORIA as categoria
-        FROM FINANZAS_INGRESOS ORDER BY FI_FECHA DESC
+        SELECT FI_ID as id, FI_CONCEPTO as concepto, FI_MONTO as monto, FI_FECHA as fecha, FI_CATEGORIA as categoria,
+               FI_CXC_ID as cxcId
+        FROM FINANZAS_INGRESOS ORDER BY FI_FECHA DESC, FI_ID DESC
       `);
     res.json({ success: true, data: rs.recordset });
   } catch (err) {
@@ -108,7 +110,21 @@ async function eliminarIngreso(req, res) {
   try {
     const { id } = req.params;
     const pool = await databaseService.getPool(req.user?.empresa);
-    await pool.request().input('id', sql.Int, id).query('DELETE FROM FINANZAS_INGRESOS WHERE FI_ID = @id');
+    // Si es el pago de una factura, se cancela ese pago (devuelve el saldo a
+    // la factura, borra este ingreso y regresa su CxC a pendiente).
+    const pago = (await pool.request().input('id', sql.Int, id)
+      .query(`SELECT TOP 1 PAG_ID id FROM FACTURA_PAGOS WHERE PAG_FINANZAS_ID = @id AND PAG_ESTATUS <> 'cancelado'`)
+      .catch(() => ({ recordset: [] }))).recordset[0];
+    if (pago) {
+      await facturacionService.cancelarPago(req.user?.empresa, pago.id);
+      return res.json({ success: true });
+    }
+    // Si venía de cobrar una cuenta por cobrar, esa cuenta vuelve a pendiente.
+    await pool.request().input('id', sql.Int, id).query(`
+      UPDATE c SET FCC_ESTATUS = 'pendiente', FCC_FECHA_PAGO = NULL
+      FROM FINANZAS_CXC c JOIN FINANZAS_INGRESOS i ON i.FI_CXC_ID = c.FCC_ID
+      WHERE i.FI_ID = @id;
+      DELETE FROM FINANZAS_INGRESOS WHERE FI_ID = @id;`);
     res.json({ success: true });
   } catch (err) {
     logger.error('finanzasController.eliminarIngreso', err);
@@ -166,7 +182,8 @@ async function listCxc(req, res) {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request()
       .query(`
-        SELECT FCC_ID as id, FCC_CLIENTE as cliente, FCC_MONTO as monto, FCC_FECHA_VENCIMIENTO as fechaVencimiento, FCC_ESTATUS as estatus
+        SELECT FCC_ID as id, FCC_CLIENTE as cliente, FCC_MONTO as monto, FCC_FECHA_VENCIMIENTO as fechaVencimiento, FCC_ESTATUS as estatus,
+               FCC_CONCEPTO as concepto
         FROM FINANZAS_CXC ORDER BY FCC_FECHA_VENCIMIENTO ASC
       `);
     res.json({ success: true, data: rs.recordset });
@@ -200,9 +217,55 @@ async function actualizarEstatusCxc(req, res) {
     const { estatus } = req.body;
     if (!['pendiente', 'pagada'].includes(estatus)) return res.status(400).json({ success: false, message: 'Estatus inválido' });
     const pool = await databaseService.getPool(req.user?.empresa);
-    await pool.request().input('id', sql.Int, id).input('estatus', sql.NVarChar, estatus)
-      .query('UPDATE FINANZAS_CXC SET FCC_ESTATUS = @estatus WHERE FCC_ID = @id');
-    res.json({ success: true });
+
+    // Con pre-factura (producto asignado al cliente): cobrarla es registrar el
+    // pago de la factura por su saldo — eso crea el ingreso, deja la factura
+    // "Pagada" y la CxC pagada (facturacionService.registrarPago). Regresarla
+    // a pendiente cancela esos pagos.
+    const fac = (await pool.request().input('id', sql.Int, id).query(`
+      SELECT f.FAC_ID id, ISNULL(f.FAC_SALDO, f.FAC_TOTAL) saldo
+      FROM FINANZAS_CXC c JOIN FACTURAS f ON f.FAC_ID = c.FCC_FAC_ID AND f.FAC_ESTATUS <> 'cancelada'
+      WHERE c.FCC_ID = @id`).catch(() => ({ recordset: [] }))).recordset[0];
+    if (fac) {
+      if (estatus === 'pagada' && Number(fac.saldo) > 0.01) {
+        await facturacionService.registrarPago(req.user?.empresa, fac.id, {
+          fechaPago: new Date().toISOString().slice(0, 10), formaPago: '99', monto: Number(fac.saldo),
+          usuarioId: req.user?.id || null,
+        });
+      } else if (estatus === 'pendiente') {
+        const pagos = (await pool.request().input('f', sql.Int, fac.id)
+          .query(`SELECT PAG_ID id FROM FACTURA_PAGOS WHERE PAG_FACTURA_ID = @f AND PAG_ESTATUS <> 'cancelado'`)).recordset;
+        for (const p of pagos) await facturacionService.cancelarPago(req.user?.empresa, p.id);
+      }
+      await pool.request().input('id', sql.Int, id).input('estatus', sql.NVarChar, estatus)
+        .query(`UPDATE FINANZAS_CXC SET FCC_ESTATUS = @estatus,
+                  FCC_FECHA_PAGO = CASE WHEN @estatus = 'pagada' THEN ISNULL(FCC_FECHA_PAGO, CAST(GETDATE() AS date)) ELSE NULL END
+                WHERE FCC_ID = @id`);
+      const ing = (await pool.request().input('id', sql.Int, id)
+        .query('SELECT TOP 1 FI_ID id FROM FINANZAS_INGRESOS WHERE FI_CXC_ID = @id ORDER BY FI_ID DESC')).recordset[0];
+      return res.json({ success: true, data: { ingresoId: ing?.id || null, facturaId: fac.id } });
+    }
+
+    // Sin factura: cobrarla la registra en Ingresos (ligada por FI_CXC_ID, una
+    // sola vez); regresarla a pendiente quita ese ingreso. La fecha de pago
+    // ubica lo cobrado en el histórico del cliente.
+    const r = await pool.request().input('id', sql.Int, id).input('estatus', sql.NVarChar, estatus)
+      .query(`
+        SET XACT_ABORT ON;
+        BEGIN TRAN;
+        UPDATE FINANZAS_CXC SET FCC_ESTATUS = @estatus,
+          FCC_FECHA_PAGO = CASE WHEN @estatus = 'pagada' THEN CAST(GETDATE() AS date) ELSE NULL END
+        WHERE FCC_ID = @id;
+        IF @estatus = 'pagada' AND NOT EXISTS (SELECT 1 FROM FINANZAS_INGRESOS WHERE FI_CXC_ID = @id)
+          INSERT INTO FINANZAS_INGRESOS (FI_CONCEPTO, FI_MONTO, FI_FECHA, FI_CATEGORIA, FI_CXC_ID, FI_CONT_ID)
+          SELECT LEFT(CONCAT('Cobro: ', COALESCE(FCC_CONCEPTO + N' — ', ''), FCC_CLIENTE), 255),
+                 FCC_MONTO, CAST(GETDATE() AS date), 'Cuentas por cobrar', FCC_ID, FCC_CONT_ID
+          FROM FINANZAS_CXC WHERE FCC_ID = @id;
+        IF @estatus = 'pendiente'
+          DELETE FROM FINANZAS_INGRESOS WHERE FI_CXC_ID = @id;
+        COMMIT;
+        SELECT (SELECT TOP 1 FI_ID FROM FINANZAS_INGRESOS WHERE FI_CXC_ID = @id) ingresoId;`);
+    res.json({ success: true, data: { ingresoId: r.recordset?.[0]?.ingresoId || null } });
   } catch (err) {
     logger.error('finanzasController.actualizarEstatusCxc', err);
     res.status(500).json({ success: false, message: 'Error al actualizar el estatus' });

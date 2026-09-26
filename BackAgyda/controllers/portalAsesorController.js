@@ -13,7 +13,7 @@ const crmDocumentosCliente = require('./crmDocumentosClienteController');
 // cuando todavía no tiene uno. También la subida de documentos del cliente.
 // req.contacto lo resuelve requirePortalCliente (la empresa cliente).
 
-const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
 // Asesor = responsable del contacto, si sigue activo.
 async function asesorDe(pool, contactoId) {

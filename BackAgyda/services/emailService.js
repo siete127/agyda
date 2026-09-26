@@ -2117,6 +2117,86 @@ async function sendClienteSinAsesorEmail({ nombre, correo, clienteNombre, solici
   }
 }
 
+// Al cliente: se le asignó un producto o servicio. Con acceso al portal lleva
+// el botón "Soporte técnico", que abre el portal directo en el chat con su
+// asesor (o el aviso para pedir uno); sin acceso, solo el aviso.
+// retirado=true: mismo aviso pero de que se le QUITÓ el producto/servicio.
+async function sendProductoAsignadoEmail({ nombre, correo, productoNombre, productos = [], linkSoporte, linkPortal, retirado = false }) {
+  try {
+    const varios = productos.length > 1;
+    if (retirado) return await _enviarProductoRetirado({ nombre, correo, productoNombre, linkSoporte, linkPortal });
+    if (!mailer) { console.warn('⚠️ [sendProductoAsignadoEmail] SMTP no configurado. Email simulado'); return { enviado: false }; }
+    if (!correo) return { enviado: false };
+    const botones = linkSoporte ? `
+      <p style="text-align:center;margin:24px 0 10px 0;">
+        <a href="${linkSoporte}" style="background:#1B4FD8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">🎧 Soporte técnico</a>
+      </p>
+      ${linkPortal ? `<p style="text-align:center;margin:0 0 20px 0;"><a href="${linkPortal}" style="color:#1B4FD8;font-size:13px;text-decoration:underline;">Ir a mi portal</a></p>` : ''}` : '';
+    const html = _shellSeguimiento({
+      titulo: varios ? '📦 Tus productos ya están asignados' : '📦 Tu producto ya está asignado',
+      saludo: `Hola ${_esc(nombre || '')},`,
+      cuerpoHtml: `
+        ${varios ? `
+        <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 8px 0;">Te asignamos lo siguiente; ya puedes verlo en tu portal de cliente:</p>
+        <ul style="margin:0 0 14px 0;padding-left:20px;color:#111;font-size:14px;line-height:1.7;">
+          ${productos.map((p) => `<li><b>${_esc(p)}</b></li>`).join('')}
+        </ul>` : `
+        <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 12px 0;">
+          Te asignamos <b>${_esc(productoNombre)}</b>. Ya puedes verlo en tu portal de cliente.
+        </p>`}
+        <p style="color:#555;font-size:14px;line-height:1.6;margin:0;">
+          ${linkSoporte
+            ? '¿Necesitas ayuda para empezar? Da clic en <b>Soporte técnico</b> y chatea directo con tu asesor.'
+            : 'Tu asesor se pondrá en contacto contigo para cualquier duda.'}
+        </p>`,
+      ctaHtml: botones,
+    });
+    await mailer.sendMail({
+      from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+      to: correo,
+      subject: varios ? `Tus productos ya están asignados (${productos.length})` : `Tu producto ya está asignado: ${productoNombre}`,
+      text: `Te asignamos ${varios ? productos.join(', ') : productoNombre}.${linkSoporte ? `\nSoporte técnico (chat con tu asesor): ${linkSoporte}` : '\nTu asesor se pondrá en contacto contigo.'}`,
+      html,
+    });
+    return { enviado: true };
+  } catch (err) {
+    console.error('❌ [sendProductoAsignadoEmail]', err?.message || err);
+    return { enviado: false };
+  }
+}
+
+async function _enviarProductoRetirado({ nombre, correo, productoNombre, linkSoporte, linkPortal }) {
+  if (!mailer) { console.warn('⚠️ [sendProductoAsignadoEmail/retirado] SMTP no configurado. Email simulado'); return { enviado: false }; }
+  if (!correo) return { enviado: false };
+  const botones = linkSoporte ? `
+    <p style="text-align:center;margin:24px 0 10px 0;">
+      <a href="${linkSoporte}" style="background:#1B4FD8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">🎧 Soporte técnico</a>
+    </p>
+    ${linkPortal ? `<p style="text-align:center;margin:0 0 20px 0;"><a href="${linkPortal}" style="color:#1B4FD8;font-size:13px;text-decoration:underline;">Ir a mi portal</a></p>` : ''}` : '';
+  const html = _shellSeguimiento({
+    titulo: '📦 Actualizamos tus productos',
+    saludo: `Hola ${_esc(nombre || '')},`,
+    cuerpoHtml: `
+      <p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 12px 0;">
+        Retiramos de tu cuenta <b>${_esc(productoNombre)}</b>. Ya no aparecerá en tu portal de cliente.
+      </p>
+      <p style="color:#555;font-size:14px;line-height:1.6;margin:0;">
+        ${linkSoporte
+          ? '¿Tienes dudas sobre este cambio? Da clic en <b>Soporte técnico</b> y chatea directo con tu asesor.'
+          : 'Si tienes dudas sobre este cambio, tu asesor se pondrá en contacto contigo.'}
+      </p>`,
+    ctaHtml: botones,
+  });
+  await mailer.sendMail({
+    from: `${EMAIL_FROM_NOMBRE} <${EMAIL_FROM}>`, sender: EMAIL_FROM, replyTo: EMAIL_FROM,
+    to: correo,
+    subject: `Se retiró de tu cuenta: ${productoNombre}`,
+    text: `Retiramos de tu cuenta ${productoNombre}.${linkSoporte ? `\n¿Dudas? Soporte técnico (chat con tu asesor): ${linkSoporte}` : '\nSi tienes dudas, tu asesor se pondrá en contacto contigo.'}`,
+    html,
+  });
+  return { enviado: true };
+}
+
 // Devuelve { enviado, motivo } para que quien invita sepa si el acceso llegó
 // (sin correo, la contraseña generada solo la conoce quien la ve en pantalla).
 async function sendInvitacionAccesoSistemaEmail({ nombre, correo, usuario, password, link }) {
@@ -2346,6 +2426,7 @@ module.exports = {
   sendSolicitudDatosFiscalesEmail,
   sendInvitacionAccesoSistemaEmail,
   sendClienteSinAsesorEmail,
+  sendProductoAsignadoEmail,
   sendEncuestaSeguimientoEmail,
   sendRatRevisionPendienteEmail,
   sendCumplimientoVencimientoEmail,

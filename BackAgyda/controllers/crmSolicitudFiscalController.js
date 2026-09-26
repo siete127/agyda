@@ -4,7 +4,7 @@ const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const { REGIMENES_FISCALES, USOS_CFDI } = require('../constants/catalogosSat');
 
-const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
 // Valida un token de solicitud fiscal y devuelve la fila o null (mismo
 // patrón que resolverToken en crmPortalController).

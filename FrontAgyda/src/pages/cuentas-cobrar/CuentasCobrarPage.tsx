@@ -85,10 +85,14 @@ export function CuentasCobrarPage() {
 
   const cambiarEstatus = useMutation({
     mutationFn: ({ id, estatus }: { id: number; estatus: 'pendiente' | 'pagada' }) => finanzasService.actualizarEstatusCxc(id, estatus),
-    onSuccess: () => {
+    onSuccess: (_r, { estatus }) => {
       qc.invalidateQueries({ queryKey: ['finanzas-cxc'] })
       qc.invalidateQueries({ queryKey: ['finanzas-dashboard'] })
-      toast.success('Estatus actualizado')
+      // Cobrarla la registra en Ingresos (y en la ficha del cliente).
+      qc.invalidateQueries({ queryKey: ['finanzas-ingresos'] })
+      qc.invalidateQueries({ queryKey: ['cliente-finanzas'] })
+      qc.invalidateQueries({ queryKey: ['facturas-todas'] })
+      toast.success(estatus === 'pagada' ? 'Cobrada · se registró en Ingresos y su factura quedó pagada' : 'Estatus actualizado')
     },
     onError: () => toast.error('Error al actualizar el estatus'),
   })
@@ -161,7 +165,10 @@ export function CuentasCobrarPage() {
                   const vencida = estaVencida(c)
                   return (
                     <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{c.cliente}</td>
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-gray-900">{c.cliente}</p>
+                        {c.concepto && <p className="text-[0.68rem] text-gray-400">{c.concepto}</p>}
+                      </td>
                       <td className="px-4 py-2.5 font-semibold text-gray-900">{formatMonto(c.monto)}</td>
                       <td className={clsx('px-4 py-2.5', vencida ? 'text-red-600 font-semibold' : 'text-gray-600')}>{formatFecha(c.fechaVencimiento)}</td>
                       <td className="px-4 py-2.5">

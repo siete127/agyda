@@ -293,6 +293,22 @@ const emailService = require('./services/emailService');
 socketService.initialize(server);
 
 (async () => {
+  // Correo lo antes posible: el servidor ya atiende peticiones mientras
+  // databaseService.initialize revisa el esquema de todas las empresas
+  // (minutos), y sin transporte todo correo de ese lapso se "simulaba" y se
+  // perdía. Se lee su config con una conexión corta propia; si falla, se
+  // intenta de nuevo al final con el camino de siempre.
+  let correoInicializado = false;
+  if (process.env.SKIP_DB !== 'true') {
+    try {
+      const dbConfigRow = await require('./controllers/notificacionesCorreoController').leerConfigServidorCorreoRapido();
+      emailService.initialize(dbConfigRow);
+      correoInicializado = true;
+    } catch (err) {
+      logger.warn('⚠️ Lectura rápida de config de correo falló, se reintenta tras inicializar la BD:', err.message);
+    }
+  }
+
   if (process.env.SKIP_DB !== 'true') {
     try {
       await databaseService.initialize();
@@ -328,13 +344,15 @@ socketService.initialize(server);
   // la config guardada desde Configuración > Notificaciones > Correo (si
   // existe y está habilitada); si falla o no hay nada guardado, cae de
   // vuelta a las variables de entorno de siempre (ver config/email.js).
-  try {
-    const notificacionesCorreoController = require('./controllers/notificacionesCorreoController');
-    const dbConfigRow = await notificacionesCorreoController.getConfigServidorCorreo();
-    emailService.initialize(dbConfigRow);
-  } catch (err) {
-    logger.warn('⚠️ No se pudo leer config de servidor de correo desde BD, usando .env:', err.message);
-    emailService.initialize();
+  if (!correoInicializado) {
+    try {
+      const notificacionesCorreoController = require('./controllers/notificacionesCorreoController');
+      const dbConfigRow = await notificacionesCorreoController.getConfigServidorCorreo();
+      emailService.initialize(dbConfigRow);
+    } catch (err) {
+      logger.warn('⚠️ No se pudo leer config de servidor de correo desde BD, usando .env:', err.message);
+      emailService.initialize();
+    }
   }
 
   // Notificaciones por Telegram — long-polling contra la Bot API para

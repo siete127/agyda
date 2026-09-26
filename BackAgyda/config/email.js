@@ -49,7 +49,7 @@ const USE_RESEND = Boolean(RESEND_API_KEY);
 const EMAIL_FROM = USE_RESEND
   ? RESEND_SENDER_EMAIL
   : (USE_OAUTH2 ? AZURE_SENDER_EMAIL : (process.env.SMTP_FROM || 'tecardaby@gmail.com'));
-const EMAIL_BASE_URL = process.env.EMAIL_BASE_URL || 'https://intranet.ardabytec.vip:8444';
+const EMAIL_BASE_URL = process.env.EMAIL_BASE_URL || 'https://agyda.ardabytec.vip';
 const PERMISOS_MAIL_TO = (process.env.PERMISOS_MAIL_TO || 'edgar.montoya@ardabytec.com,jmiranda@ardabytec.com,RRHH@ardabytec.com,chetooortizz@gmail.com')
   .split(',')
   .map(s => s.trim())

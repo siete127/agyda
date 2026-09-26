@@ -98,6 +98,9 @@ export const productoServicioService = {
   },
   asignarACliente: (clienteId: number, productoServicioId: number) =>
     api.post(`/clientes/${clienteId}/productos-servicios`, { productoServicioId }).then((r) => r.data),
+  // Varios a la vez: el cliente recibe un solo aviso con todos.
+  asignarVariosACliente: (clienteId: number, productoServicioIds: number[]) =>
+    api.post(`/clientes/${clienteId}/productos-servicios`, { productoServicioIds }).then((r) => r.data),
   quitarDeCliente: (clienteId: number, productoServicioId: number) =>
     api.delete(`/clientes/${clienteId}/productos-servicios/${productoServicioId}`).then((r) => r.data),
 }

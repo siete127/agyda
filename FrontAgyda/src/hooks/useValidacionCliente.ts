@@ -61,15 +61,22 @@ export function useValidacionCliente({ rfc, correo, cp, colonia }: { rfc: string
     }
   }
 
+  // El correo del cliente es obligatorio (mismo criterio que el backend,
+  // errorCorreoObligatorio): vacío, mal formado o dominio que no recibe = error.
   let avisoCorreo: Aviso | null = null
   const sugerenciaCorreo = qCorreo.data?.sugerencia ?? null
-  if (correo.trim() && qCorreo.data) {
+  const correoActual = correo.trim().toLowerCase()
+  const correoComprobado = !!qCorreo.data && qCorreo.data.correo === correoActual && !qCorreo.isFetching
+  if (!correoActual) avisoCorreo = { nivel: 'error', texto: 'El correo es obligatorio' }
+  else if (qCorreo.data) {
     const d = qCorreo.data
     if (!d.formato) avisoCorreo = { nivel: 'error', texto: 'No parece un correo (ej. nombre@empresa.com)' }
-    else if (d.dominioRecibe === false) avisoCorreo = { nivel: 'aviso', texto: `El dominio ${d.dominio} no existe o no recibe correo` }
-    else if (d.dominioRecibe === null) avisoCorreo = { nivel: 'info', texto: `No se pudo comprobar el dominio ${d.dominio}` }
+    else if (d.dominioRecibe === false) avisoCorreo = { nivel: 'error', texto: `El dominio ${d.dominio} no existe o no recibe correo` }
+    else if (d.dominioRecibe === null) avisoCorreo = { nivel: 'info', texto: `No se pudo comprobar el dominio ${d.dominio}; se permite guardar` }
     else avisoCorreo = { nivel: 'ok', texto: `El dominio ${d.dominio} recibe correo` }
   }
+  // Se puede guardar solo cuando lo escrito ya se comprobó y no es error.
+  const correoValido = correoComprobado && avisoCorreo?.nivel !== 'error'
 
   let avisoCp: Aviso | null = null
   const datosCp = qCp.data && qCp.data.cp === cpD && qCp.data.existe ? qCp.data : null
@@ -91,7 +98,8 @@ export function useValidacionCliente({ rfc, correo, cp, colonia }: { rfc: string
   }
 
   return {
-    avisoRfc, avisoCorreo, avisoCp, avisoColonia, sugerenciaCorreo, datosCp,
+    avisoRfc, avisoCorreo, avisoCp, avisoColonia, sugerenciaCorreo, datosCp, correoValido,
+    comprobandoCorreo: !!correoActual && !correoComprobado,
     validando: qRfc.isFetching || qCorreo.isFetching || qCp.isFetching,
   }
 }

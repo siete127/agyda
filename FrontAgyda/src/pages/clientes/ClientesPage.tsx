@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText,
   Package, LayoutGrid, List, Eye, EyeOff, MoreVertical, Power, X, User, Route, MapPinned, Hash,
-  ShoppingBag, PackagePlus, Save, ChevronDown, Wallet, ArrowUpRight, KeyRound, CheckCircle2, AlertTriangle,
+  ShoppingBag, PackagePlus, Save, Wallet, ArrowUpRight, KeyRound, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
 import { useValidacionCliente, type Aviso } from '@/hooks/useValidacionCliente'
 import { api } from '@/lib/axios'
@@ -13,19 +13,11 @@ import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { productoServicioService, type ProductoServicioRecurrencia } from '@/services/productoServicio.service'
+import { productoServicioService } from '@/services/productoServicio.service'
 
-const RECURRENCIA_LABEL: Record<ProductoServicioRecurrencia, string> = {
-  SEMANAL: 'Semanal', QUINCENAL: 'Quincenal', MENSUAL: 'Mensual', ANUAL: 'Anual', UNICO: 'Pago único',
-}
-const RECURRENCIA_CHIP: Record<ProductoServicioRecurrencia, string> = {
-  SEMANAL: 'bg-amber-100 text-amber-700',
-  QUINCENAL: 'bg-teal-100 text-teal-700',
-  MENSUAL: 'bg-blue-100 text-blue-700',
-  ANUAL: 'bg-violet-100 text-violet-700',
-  UNICO: 'bg-gray-100 text-gray-600',
-}
-const money = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 })
+// Etiquetas de recurrencia y formato de dinero compartidos con el catálogo para asignar.
+import { RECURRENCIA_LABEL, RECURRENCIA_CHIP, money } from './productoServicioUi'
+import { CatalogoProductosModal } from './CatalogoProductosModal'
 
 interface FinanzasCliente {
   totalIngresado: number
@@ -101,7 +93,7 @@ function FinanzasClienteBloque({ clienteId }: { clienteId: number }) {
           </div>
         </div>
         <button
-          onClick={() => navigate('/finanzas/ingresos')}
+          onClick={() => navigate((data?.pendienteCobro ?? 0) > 0 ? '/finanzas/cuentas-cobrar' : '/finanzas/ingresos')}
           className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-card px-3 py-1.5 text-[0.72rem] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
         >
           Gestión de finanzas <ArrowUpRight className="h-3.5 w-3.5" />
@@ -120,7 +112,7 @@ function FinanzasClienteBloque({ clienteId }: { clienteId: number }) {
       {!isLoading && data && <HistoricoMensual datos={data.historico} />}
 
       <p className="mt-2 text-[0.66rem] text-gray-400">
-        Solo informativo. El registro y la gestión de ingresos se hace en el módulo de Finanzas.
+        Al agregar un producto o servicio con precio se genera su cuenta por cobrar; suma aquí al marcarla como pagada en Finanzas.
       </p>
     </div>
   )
@@ -173,9 +165,9 @@ const EMPTY_FORM = {
 }
 
 /* ── Productos/servicios contratados (solo al editar un cliente existente) ── */
-function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
+function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: number; clienteNombre: string }) {
   const qc = useQueryClient()
-  const [seleccion, setSeleccion] = useState('')
+  const [catalogoAbierto, setCatalogoAbierto] = useState(false)
 
   const { data: catalogo = [] } = useQuery({
     queryKey: ['productos-servicios', 'activos'],
@@ -188,17 +180,38 @@ function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
   })
 
   const asignar = useMutation({
-    mutationFn: (psId: number) => productoServicioService.asignarACliente(clienteId, psId),
-    onSuccess: () => {
+    mutationFn: (psIds: number[]) => productoServicioService.asignarVariosACliente(clienteId, psIds),
+    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; usuarios: number; correos: number; productos?: number } | null; cxc?: { creadas: number; monto: number; facturas?: number } | null } }) => {
       qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] })
-      setSeleccion('')
+      // Lo asignado con precio genera su cuenta por cobrar ("Pendiente de cobro") y su pre-factura.
+      qc.invalidateQueries({ queryKey: ['cliente-finanzas', clienteId] })
+      qc.invalidateQueries({ queryKey: ['facturas-todas'] })
+      setCatalogoAbierto(false)
+      // El backend avisa al cliente (portal + correo con "Soporte técnico").
+      const a = r?.data?.aviso
+      const que = (a?.productos ?? 1) > 1 ? `${a?.productos} productos asignados` : 'Producto asignado'
+      if (!a) toast.success(que)
+      else if (a.conPortal) toast.success(`${que} · se avisó al cliente en su portal${a.correos ? ` y por correo (${a.correos})` : ''}`)
+      else toast.success(a.correos ? `${que} · el cliente no tiene portal: se le avisó por correo` : `${que} · el cliente no tiene portal ni correo para avisarle`)
+      const cxc = r?.data?.cxc
+      if (cxc?.creadas) toast.success(`${cxc.facturas ? 'Pre-factura y cuenta por cobrar generadas' : 'Cuenta por cobrar generada'} en Finanzas: ${money(cxc.monto)} (IVA incluido)`)
     },
     onError: () => toast.error('No se pudo asignar'),
   })
 
   const quitar = useMutation({
     mutationFn: (psId: number) => productoServicioService.quitarDeCliente(clienteId, psId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] }),
+    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; correos: number } | null; cxcCanceladas?: number } }) => {
+      qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] })
+      qc.invalidateQueries({ queryKey: ['cliente-finanzas', clienteId] })
+      qc.invalidateQueries({ queryKey: ['facturas-todas'] })
+      if (r?.data?.cxcCanceladas) toast('Se eliminó su cuenta por cobrar pendiente y se canceló su pre-factura')
+      // El backend también avisa al cliente cuando se le retira.
+      const a = r?.data?.aviso
+      if (!a) toast.success('Producto retirado')
+      else if (a.conPortal) toast.success(`Producto retirado · se avisó al cliente en su portal${a.correos ? ` y por correo (${a.correos})` : ''}`)
+      else toast.success(a.correos ? 'Producto retirado · se avisó al cliente por correo' : 'Producto retirado · el cliente no tiene portal ni correo para avisarle')
+    },
     onError: () => toast.error('No se pudo quitar'),
   })
 
@@ -253,7 +266,11 @@ function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
                     </p>
                   )}
                 </div>
-                <button onClick={() => quitar.mutate(a.productoServicioId)} className="flex-shrink-0 rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500">
+                <button
+                  title="Retirar (se le avisará al cliente)"
+                  disabled={quitar.isPending}
+                  onClick={() => { if (window.confirm(`¿Retirar "${a.nombre}" de este cliente? Se le avisará por correo y en su portal.`)) quitar.mutate(a.productoServicioId) }}
+                  className="flex-shrink-0 rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -263,33 +280,36 @@ function ProductosServiciosCliente({ clienteId }: { clienteId: number }) {
       )}
 
       <div className="border-t border-gray-100 pt-4">
-        <label className="mb-1.5 block text-[0.78rem] font-semibold text-gray-600">Agregar producto/servicio</label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <ShoppingBag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
-            <select
-              value={seleccion}
-              onChange={(e) => setSeleccion(e.target.value)}
-              className="w-full appearance-none rounded-xl border border-gray-200 bg-card py-2.5 pl-10 pr-9 text-[0.82rem] text-gray-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15"
-            >
-              <option value="">Selecciona un producto o servicio…</option>
-              {disponibles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre} — {RECURRENCIA_LABEL[c.recurrencia]}{c.precio > 0 ? ` (${money(c.precio)})` : ''}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          </div>
-          <button
-            disabled={!seleccion || asignar.isPending}
-            onClick={() => seleccion && asignar.mutate(Number(seleccion))}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white transition-all hover:bg-violet-700 disabled:opacity-40"
-          >
-            <PackagePlus className="h-4 w-4" /> Agregar
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setCatalogoAbierto(true)}
+          disabled={disponibles.length === 0}
+          className="group flex w-full items-center gap-3.5 rounded-2xl border border-dashed border-violet-200 bg-gradient-to-r from-violet-50/70 to-indigo-50/50 px-4 py-3.5 text-left transition hover:border-violet-400 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm shadow-violet-600/30 transition group-hover:scale-105">
+            <PackagePlus className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[0.85rem] font-bold text-violet-700">Agregar producto o servicio</span>
+            <span className="block text-[0.72rem] text-gray-500">
+              {disponibles.length
+                ? `Explora el catálogo (${disponibles.length} disponibles) · el cliente recibe aviso con Soporte técnico`
+                : 'El cliente ya tiene todo el catálogo asignado'}
+            </span>
+          </span>
+          <ShoppingBag className="h-4 w-4 flex-shrink-0 text-violet-300 transition group-hover:text-violet-500" />
+        </button>
       </div>
+
+      {catalogoAbierto && (
+        <CatalogoProductosModal
+          disponibles={disponibles}
+          clienteNombre={clienteNombre}
+          asignando={asignar.isPending}
+          onAsignar={(psIds) => asignar.mutate(psIds)}
+          onClose={() => setCatalogoAbierto(false)}
+        />
+      )}
     </div>
   )
 }
@@ -310,7 +330,16 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
 
   // Validación de RFC, correo, CP y colonia: solo avisa, nunca bloquea el guardado.
   const val = useValidacionCliente({ rfc: form.rfc, correo: form.correo, cp: form.cp, colonia: form.colonia })
-  const AVISOS: Record<string, Aviso | null> = { rfc: val.avisoRfc, correo: val.avisoCorreo, cp: val.avisoCp, colonia: val.avisoColonia }
+  // El correo es obligatorio: el aviso de 'vacío' aparece al intentar guardar, no al abrir el formulario.
+  const [intentoGuardar, setIntentoGuardar] = useState(false)
+  const avisoCorreo = !form.correo.trim() && !intentoGuardar ? null : val.avisoCorreo
+  const AVISOS: Record<string, Aviso | null> = { rfc: val.avisoRfc, correo: avisoCorreo, cp: val.avisoCp, colonia: val.avisoColonia }
+  const intentarGuardar = () => {
+    setIntentoGuardar(true)
+    if (val.comprobandoCorreo) { toast('Comprobando el correo… vuelve a intentar en un momento', { icon: '⏳' }); return }
+    if (!val.correoValido) { toast.error(val.avisoCorreo?.texto ?? 'Revisa el correo'); return }
+    guardar.mutate()
+  }
   // Al reconocer un CP nuevo: llena la ciudad (si está vacía) y la colonia si el CP solo tiene una.
   const [cpAplicado, setCpAplicado] = useState<string | null>(cliente?.cp ?? null)
   if (val.datosCp && val.datosCp.cp !== cpAplicado) {
@@ -347,7 +376,7 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
     { key: 'nombre',   label: 'Contacto',      span: 1, icon: User,       ph: 'Persona de contacto' },
     { key: 'rfc',      label: 'RFC',           span: 1, icon: FileText,   ph: 'RFC' },
     { key: 'telefono', label: 'Teléfono',      span: 1, icon: Phone,      ph: 'Teléfono' },
-    { key: 'correo',   label: 'Correo',        span: 1, icon: Mail,       ph: 'Ingresa el correo' },
+    { key: 'correo',   label: 'Correo *',      span: 1, icon: Mail,       ph: 'Ingresa el correo' },
     { key: 'ciudad',   label: 'Ciudad',        span: 1, icon: MapPin,     ph: 'Ciudad' },
     { key: 'calle',    label: 'Calle',         span: 1, icon: Route,      ph: 'Calle y número' },
     { key: 'colonia',  label: 'Colonia',       span: 1, icon: MapPinned,  ph: 'Colonia' },
@@ -518,7 +547,7 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
                   </div>
                   <p className="text-[0.9rem] font-bold text-gray-800">Productos y servicios contratados</p>
                 </div>
-                <ProductosServiciosCliente clienteId={cliente.id} />
+                <ProductosServiciosCliente clienteId={cliente.id} clienteNombre={cliente.empresa || cliente.nombre} />
               </div>
             </div>
           )}
@@ -530,7 +559,7 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
             Cancelar
           </button>
           <button
-            onClick={() => guardar.mutate()}
+            onClick={intentarGuardar}
             disabled={guardar.isPending || !form.empresa.trim()}
             className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-[0.85rem] font-semibold text-white shadow-sm shadow-violet-600/20 transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-50"
           >

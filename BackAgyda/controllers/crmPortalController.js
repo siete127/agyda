@@ -7,7 +7,7 @@ const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess')
 const notificationService = require('../services/notificationService');
 const { sanitizeFilename, decryptBuffer } = require('../utils/cryptoDocs');
 
-const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
 // Rate-limit en memoria para la creación de incidencias desde el portal: un
 // intento por contacto cada 60 s (patrón de asistenciaController._checkRateLimit).

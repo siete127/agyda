@@ -1,5 +1,6 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
+const { asegurarAncla } = require('../services/portalAnclaService');
 
 // Resuelve el usuario del Portal de Cliente logueado (req.user.id = NEUS_ID,
 // puesto por authenticateToken) vía la tabla puente PORTAL_USUARIOS —
@@ -13,7 +14,7 @@ async function requirePortalCliente(req, res, next) {
       return res.status(403).json({ success: false, message: 'Acceso exclusivo del portal de cliente' });
     }
     const pool = await databaseService.getPool(req.user.empresa);
-    const rs = await pool.request()
+    const buscar = () => pool.request()
       .input('neusId', sql.Int, req.user.id)
       .query(`
         SELECT c.CONT_ID as id, c.CONT_NOMBRE as nombre, c.CONT_EMPRESA as empresa,
@@ -23,6 +24,12 @@ async function requirePortalCliente(req, res, next) {
         JOIN dbo.CRM_CONTACTOS c ON c.CONT_ID = pu.PU_CONT_ID
         WHERE pu.PU_NEUS_ID=@neusId AND pu.PU_ACTIVO=1 AND c.CONT_ACTIVO=1
       `);
+    let rs = await buscar();
+    // Acceso dado desde Clientes/CRM que aún no está en el portal: se registra
+    // como su cuenta principal y se vuelve a buscar (ver portalAnclaService).
+    if (!rs.recordset[0] && await asegurarAncla(pool, { neusId: req.user.id }).catch(() => 0)) {
+      rs = await buscar();
+    }
     if (!rs.recordset[0]) {
       return res.status(404).json({ success: false, message: 'No hay un contacto vinculado a este usuario' });
     }

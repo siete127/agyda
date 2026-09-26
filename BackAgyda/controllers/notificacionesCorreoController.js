@@ -144,6 +144,24 @@ function mapFilaServidor(r) {
 
 // Usada por server.js al arrancar (antes de que exista req) — por eso acepta
 // tenantKey directo en vez de leerlo de req.user.
+// Lectura rápida para el arranque: una conexión corta propia a la BD maestra,
+// sin esperar a databaseService.initialize (que antes revisa el esquema de
+// todas las empresas y tarda minutos). Así el correo queda listo en segundos y
+// no se "simulan" los envíos de los primeros minutos tras un reinicio/deploy.
+// Si la tabla aún no existe (BD nueva) lanza error y el arranque usa el camino normal.
+async function leerConfigServidorCorreoRapido() {
+  const dbConfig = require('../config/database');
+  const { getTenantConfig, DEFAULT_TENANT } = require('../config/tenants');
+  const { database } = getTenantConfig(DEFAULT_TENANT);
+  const pool = await new sql.ConnectionPool({ ...dbConfig, database }).connect();
+  try {
+    const r = await pool.request().query('SELECT TOP 1 * FROM EMAIL_SERVIDOR_CONFIG ORDER BY ESC_ID DESC');
+    return mapFilaServidor(r.recordset[0]);
+  } finally {
+    await pool.close().catch(() => {});
+  }
+}
+
 async function getConfigServidorCorreo(tenantKey) {
   const pool = await databaseService.getPool(tenantKey);
   await ensureTablaServidor(pool);
@@ -513,3 +531,4 @@ module.exports.getDestinatariosUsuarios = getDestinatariosUsuarios;
 module.exports.getDestinatariosTelegram = getDestinatariosTelegram;
 module.exports.getDestinatariosTelegramConNombre = getDestinatariosTelegramConNombre;
 module.exports.getConfigServidorCorreo = getConfigServidorCorreo;
+module.exports.leerConfigServidorCorreoRapido = leerConfigServidorCorreoRapido;

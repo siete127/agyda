@@ -187,7 +187,7 @@ function htmlResponse(title, message, ok) {
       <div class="icon-circle">${icon}</div>
       <h1>${title}</h1>
       <p>${message}</p>
-      <a href="${process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444'}" class="button">🏠 Volver a AGYDA</a>
+      <a href="${process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip'}" class="button">🏠 Volver a AGYDA</a>
       <div class="footer">
         Sistema de Gestión de Permisos<br>
         AGYDA ArdaBytec · Copyright (c) 2026 ArdaBytec · v20.11.0

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Bell, ChevronDown, LogOut, User as UserIcon,
-  Sun, Moon, MonitorSmartphone, Loader2, CheckCheck,
+  Sun, Moon, MonitorSmartphone, Loader2, CheckCheck, Headphones,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/stores/auth.store'
@@ -176,6 +176,18 @@ export function PortalClienteHeader() {
                       >
                         <p className={clsx('text-sm', n.leida ? 'text-ink-secondary' : 'font-semibold text-ink')}>{n.mensaje}</p>
                         <p className="text-[11px] text-ink-tertiary">{new Date(n.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                        {n.dataExtra?.soporte === true && (
+                          // Abre el chat con su asesor (o el aviso para pedir uno) — ver PortalChatAsesor.
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); marcarLeida(n.id); setNotifOpen(false); navigate('/portal-cliente?soporte=1') }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); marcarLeida(n.id); setNotifOpen(false); navigate('/portal-cliente?soporte=1') } }}
+                            className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                          >
+                            <Headphones className="h-3.5 w-3.5" /> Soporte técnico
+                          </span>
+                        )}
                       </button>
                     ))
                   )}

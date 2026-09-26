@@ -2447,6 +2447,15 @@ async function ensurePortalRolesSchema(pool) {
     console.warn('⚠️ PortalAccionesNuevas:', err.message);
   }
 
+  // Clientes con acceso (CONT_NEUS_ID) que aún no están en el portal: se
+  // registran como su cuenta principal (ver services/portalAnclaService.js).
+  try {
+    const n = await require('./portalAnclaService').asegurarTodasLasAnclas(pool);
+    if (n) logger.info(`✅ Portal de Cliente: ${n} cuenta(s) principal(es) registradas`);
+  } catch (err) {
+    console.warn('⚠️ PortalAnclas:', err.message);
+  }
+
   logger.info('✅ Esquema de roles del Portal de Cliente asegurado');
 }
 
@@ -3721,6 +3730,31 @@ async function ensureFinanzasSchema(pool) {
     `);
   } catch (err) {
     console.warn('⚠️ FinanzasSchema:', err.message);
+  }
+
+  // CxC generadas al asignar productos/servicios a un cliente (cxcProductosService):
+  // concepto y vínculo al cliente/producto para mostrarlas en su ficha y
+  // eliminarlas si se le quita el producto antes de cobrar.
+  try {
+    await pool.request().batch(`
+      IF COL_LENGTH('dbo.FINANZAS_CXC','FCC_CONCEPTO') IS NULL ALTER TABLE dbo.FINANZAS_CXC ADD FCC_CONCEPTO NVARCHAR(255) NULL;
+      IF COL_LENGTH('dbo.FINANZAS_CXC','FCC_CONT_ID') IS NULL ALTER TABLE dbo.FINANZAS_CXC ADD FCC_CONT_ID INT NULL;
+      IF COL_LENGTH('dbo.FINANZAS_CXC','FCC_PS_ID') IS NULL ALTER TABLE dbo.FINANZAS_CXC ADD FCC_PS_ID INT NULL;
+      IF COL_LENGTH('dbo.FINANZAS_CXC','FCC_FECHA_PAGO') IS NULL ALTER TABLE dbo.FINANZAS_CXC ADD FCC_FECHA_PAGO DATE NULL;
+      -- Ingreso que se registra al cobrar una CxC (FI_CXC_ID) y cliente al que pertenece (FI_CONT_ID).
+      IF COL_LENGTH('dbo.FINANZAS_INGRESOS','FI_CXC_ID') IS NULL ALTER TABLE dbo.FINANZAS_INGRESOS ADD FI_CXC_ID INT NULL;
+      IF COL_LENGTH('dbo.FINANZAS_INGRESOS','FI_CONT_ID') IS NULL ALTER TABLE dbo.FINANZAS_INGRESOS ADD FI_CONT_ID INT NULL;
+      -- Pre-factura que acompaña a la CxC (FCC_FAC_ID) y qué se factura (FAC_CONCEPTO).
+      IF COL_LENGTH('dbo.FINANZAS_CXC','FCC_FAC_ID') IS NULL ALTER TABLE dbo.FINANZAS_CXC ADD FCC_FAC_ID INT NULL;
+      IF OBJECT_ID('dbo.FACTURAS','U') IS NOT NULL AND COL_LENGTH('dbo.FACTURAS','FAC_CONCEPTO') IS NULL
+        ALTER TABLE dbo.FACTURAS ADD FAC_CONCEPTO NVARCHAR(255) NULL;
+    `);
+    await pool.request().batch(`
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FINANZAS_CXC_CONT' AND object_id = OBJECT_ID('dbo.FINANZAS_CXC'))
+        CREATE INDEX IX_FINANZAS_CXC_CONT ON dbo.FINANZAS_CXC(FCC_CONT_ID, FCC_PS_ID);
+    `);
+  } catch (err) {
+    console.warn('⚠️ FinanzasCxcProductos:', err.message);
   }
 }
 

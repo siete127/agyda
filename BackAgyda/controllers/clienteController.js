@@ -1,8 +1,12 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
+const { errorCorreoObligatorio } = require('../utils/validacionesMx');
+const notificationService = require('../services/notificationService');
+const { asegurarAncla } = require('../services/portalAnclaService');
+const { generarCxcPorProductos, cancelarCxcPorProductos } = require('../services/cxcProductosService');
 
-const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://intranet.ardabytec.vip:8444';
+const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
 exports.getProductos = async (req, res) => {
   try {
@@ -82,41 +86,55 @@ exports.getFinanzasCliente = async (req, res) => {
     const { empresa, nombre } = cli.recordset[0];
     const patron = `%${(empresa || nombre || '').trim()}%`;
 
+    // Ingresos del cliente: los de cobros de CxC y pagos de factura van ligados
+    // por FI_CONT_ID; los capturados a mano, solo por el nombre en el concepto.
+    const ingresosDelCliente = `((FI_CONT_ID = @id) OR (FI_CONT_ID IS NULL AND @p <> '%%' AND FI_CONCEPTO LIKE @p))`;
     const ingresos = await pool.request()
       .input('p', sql.NVarChar, patron)
+      .input('id', sql.Int, id)
       .query(`
         SELECT ISNULL(SUM(FI_MONTO), 0) as total, COUNT(*) as n,
                MAX(FI_FECHA) as ultima
         FROM FINANZAS_INGRESOS
-        WHERE @p <> '%%' AND FI_CONCEPTO LIKE @p
+        WHERE ${ingresosDelCliente}
       `).catch(() => ({ recordset: [{ total: 0, n: 0, ultima: null }] }));
 
+    // CxC del cliente: las generadas al asignarle productos van ligadas por
+    // FCC_CONT_ID; las capturadas a mano en Finanzas, solo por el nombre. Lo
+    // ya cobrado con ingreso ligado (FI_CXC_ID) ya está en los ingresos: aquí
+    // solo cuenta lo que falta por cobrar (monto − abonos).
+    const cxcDelCliente = `((FCC_CONT_ID = @id) OR (FCC_CONT_ID IS NULL AND @p <> '%%' AND FCC_CLIENTE LIKE @p))`;
+    const sinIngreso = `NOT EXISTS (SELECT 1 FROM FINANZAS_INGRESOS fi WHERE fi.FI_CXC_ID = FCC_ID)`;
     const cxc = await pool.request()
       .input('p', sql.NVarChar, patron)
+      .input('id', sql.Int, id)
       .query(`
         SELECT
-          ISNULL(SUM(CASE WHEN FCC_ESTATUS IN ('pagada','pagado','cobrada','cobrado') THEN FCC_MONTO ELSE 0 END), 0) as cobrado,
-          ISNULL(SUM(CASE WHEN FCC_ESTATUS NOT IN ('pagada','pagado','cobrada','cobrado','cancelada','cancelado') THEN FCC_MONTO ELSE 0 END), 0) as pendiente,
-          COUNT(*) as n
+          ISNULL(SUM(CASE WHEN FCC_ESTATUS IN ('pagada','pagado','cobrada','cobrado') AND ab.monto IS NULL THEN FCC_MONTO ELSE 0 END), 0) as cobrado,
+          ISNULL(SUM(CASE WHEN FCC_ESTATUS NOT IN ('pagada','pagado','cobrada','cobrado','cancelada','cancelado')
+                          AND FCC_MONTO > ISNULL(ab.monto, 0) THEN FCC_MONTO - ISNULL(ab.monto, 0) ELSE 0 END), 0) as pendiente,
+          SUM(CASE WHEN ab.monto IS NULL THEN 1 ELSE 0 END) as n
         FROM FINANZAS_CXC
-        WHERE @p <> '%%' AND FCC_CLIENTE LIKE @p
+        OUTER APPLY (SELECT SUM(fi.FI_MONTO) monto FROM FINANZAS_INGRESOS fi WHERE fi.FI_CXC_ID = FCC_ID) ab
+        WHERE ${cxcDelCliente}
       `).catch(() => ({ recordset: [{ cobrado: 0, pendiente: 0, n: 0 }] }));
 
     // Histórico por mes de los últimos 12 meses (ingresos + CxC cobradas).
     const historicoRs = await pool.request()
       .input('p', sql.NVarChar, patron)
+      .input('id', sql.Int, id)
       .query(`
         SELECT FORMAT(fecha, 'yyyy-MM') as mes, SUM(monto) as total
         FROM (
           SELECT FI_FECHA as fecha, FI_MONTO as monto
           FROM FINANZAS_INGRESOS
-          WHERE @p <> '%%' AND FI_CONCEPTO LIKE @p AND FI_FECHA >= DATEADD(month, -12, CAST(GETDATE() AS date))
+          WHERE ${ingresosDelCliente} AND FI_FECHA >= DATEADD(month, -12, CAST(GETDATE() AS date))
           UNION ALL
-          SELECT FCC_FECHA_VENCIMIENTO as fecha, FCC_MONTO as monto
+          SELECT COALESCE(FCC_FECHA_PAGO, FCC_FECHA_VENCIMIENTO) as fecha, FCC_MONTO as monto
           FROM FINANZAS_CXC
-          WHERE @p <> '%%' AND FCC_CLIENTE LIKE @p
+          WHERE ${cxcDelCliente} AND ${sinIngreso}
             AND FCC_ESTATUS IN ('pagada','pagado','cobrada','cobrado')
-            AND FCC_FECHA_VENCIMIENTO >= DATEADD(month, -12, CAST(GETDATE() AS date))
+            AND COALESCE(FCC_FECHA_PAGO, FCC_FECHA_VENCIMIENTO) >= DATEADD(month, -12, CAST(GETDATE() AS date))
         ) x
         GROUP BY FORMAT(fecha, 'yyyy-MM')
         ORDER BY mes
@@ -141,22 +159,93 @@ exports.getFinanzasCliente = async (req, res) => {
   }
 };
 
+// Aviso al cliente de que se le asignó un producto/servicio: notificación en su
+// portal y correo con el botón "Soporte técnico" (abre /portal-cliente con el
+// chat de su asesor, o el aviso para pedir uno). Sin usuarios del portal, un
+// correo a su contacto sin enlace. Devuelve el resumen para la pantalla.
+// retirado=true: el mismo aviso, pero de que se le QUITÓ (con Soporte técnico por dudas).
+async function avisarProductoAsignado(pool, req, contId, psIds, { retirado = false } = {}) {
+  const ids = psIds.map(Number).filter(Boolean);
+  const productos = ids.length ? (await pool.request()
+    .query(`SELECT PS_NOMBRE nombre FROM PRODUCTOS_SERVICIOS WHERE PS_ID IN (${ids.join(',')}) ORDER BY PS_NOMBRE`)).recordset.map((r) => r.nombre) : [];
+  // "A", "A y B", "A, B y C"
+  const productoNombre = productos.length <= 1 ? (productos[0] || 'tu producto')
+    : `${productos.slice(0, -1).join(', ')} y ${productos[productos.length - 1]}`;
+  const psId = ids[0];
+  // Si su acceso (Clientes → Acceso al sistema) aún no está en el portal, se
+  // registra como su cuenta principal para que reciba el botón de soporte.
+  await asegurarAncla(pool, { contId }).catch(() => 0);
+  const usuarios = (await pool.request().input('c', sql.Int, contId).query(`
+    SELECT u.NEUS_ID id, u.NEUS_NOMBRES nombre,
+           COALESCE(NULLIF(u.NEUS_CORREO, ''), CASE WHEN u.NEUS_USUARIO LIKE '%_@_%._%' THEN u.NEUS_USUARIO END) correo
+    FROM PORTAL_USUARIOS pu JOIN NEUS_USUARIOS u ON u.NEUS_ID = pu.PU_NEUS_ID AND u.NEUS_ACTIVO = 1
+    WHERE pu.PU_CONT_ID = @c AND pu.PU_ACTIVO = 1`)).recordset;
+  const linkPortal = `${BASE_URL}/portal-cliente`;
+  const linkSoporte = `${linkPortal}?soporte=1`;
+  let correos = 0;
+
+  if (usuarios.length) {
+    for (const u of usuarios) {
+      await notificationService.createNotification({
+        usuarioId: u.id,
+        mensaje: (retirado
+          ? `Se retiró de tu cuenta: ${productoNombre}. ¿Dudas? Abre Soporte técnico.`
+          : `Ya tienes asignado: ${productoNombre}. ¿Necesitas ayuda? Abre Soporte técnico.`).slice(0, 480),
+        tipo: retirado ? 'cliente-producto-retirado' : 'cliente-producto-asignado',
+        dataExtra: { productoServicioId: psId, productoServicioIds: ids, soporte: true },
+        tenantKey: req.user?.empresa,
+      }).catch(() => {});
+      if (u.correo) {
+        const r = await emailService.sendProductoAsignadoEmail({ nombre: u.nombre, correo: u.correo, productoNombre, productos, linkSoporte, linkPortal, retirado });
+        if (r?.enviado) correos++;
+      }
+    }
+    return { conPortal: true, usuarios: usuarios.length, correos, productoNombre, productos: productos.length };
+  }
+
+  const cont = (await pool.request().input('c', sql.Int, contId)
+    .query('SELECT CONT_NOMBRE nombre, CONT_CORREO correo FROM CRM_CONTACTOS WHERE CONT_ID = @c')).recordset[0];
+  if (cont?.correo) {
+    const r = await emailService.sendProductoAsignadoEmail({ nombre: cont.nombre, correo: cont.correo, productoNombre, productos, retirado });
+    if (r?.enviado) correos++;
+  }
+  return { conPortal: false, usuarios: 0, correos, productoNombre, productos: productos.length };
+}
+
 exports.asignarProductoServicio = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const psId = parseInt(req.body.productoServicioId, 10);
-    if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(psId) || psId <= 0) {
+    // Uno (productoServicioId) o varios (productoServicioIds) a la vez.
+    const psIds = [...new Set((Array.isArray(req.body.productoServicioIds) ? req.body.productoServicioIds : [req.body.productoServicioId])
+      .map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0))];
+    if (!Number.isInteger(id) || id <= 0 || !psIds.length) {
       return res.status(400).json({ success: false, message: 'Datos inválidos' });
     }
     const pool = await databaseService.getPool(req.user?.empresa);
-    await pool.request()
-      .input('contId', sql.Int, id)
-      .input('psId', sql.Int, psId)
-      .query(`
-        IF NOT EXISTS (SELECT 1 FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId)
-          INSERT INTO CRM_CONTACTO_PRODUCTOS_SERVICIOS (CCPS_CONT_ID, CCPS_PS_ID) VALUES (@contId, @psId)
-      `);
-    return res.status(201).json({ success: true });
+    const nuevosIds = [];
+    for (const psId of psIds) {
+      const ins = await pool.request()
+        .input('contId', sql.Int, id)
+        .input('psId', sql.Int, psId)
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId)
+            INSERT INTO CRM_CONTACTO_PRODUCTOS_SERVICIOS (CCPS_CONT_ID, CCPS_PS_ID) VALUES (@contId, @psId)
+        `);
+      if ((ins.rowsAffected || []).some((n) => n > 0)) nuevosIds.push(psId);
+    }
+    const nuevos = nuevosIds.length;
+    // Lo recién asignado genera su cuenta por cobrar en Finanzas.
+    const cxc = await generarCxcPorProductos(pool, id, nuevosIds).catch((e) => {
+      console.warn('asignarProductoServicio CxC:', e.message);
+      return null;
+    });
+    // Cada vez que se da "Agregar" se avisa al cliente (aunque ya lo tuviera),
+    // con UN solo aviso para todo lo asignado en esta vez.
+    const aviso = await avisarProductoAsignado(pool, req, id, psIds).catch((e) => {
+      console.warn('asignarProductoServicio aviso al cliente:', e.message);
+      return null;
+    });
+    return res.status(201).json({ success: true, data: { nuevo: nuevos > 0, nuevos, aviso, cxc } });
   } catch (e) {
     console.error('Error asignando producto/servicio a cliente:', e);
     return res.status(500).json({ success: false, message: e.message });
@@ -171,11 +260,22 @@ exports.quitarProductoServicio = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Datos inválidos' });
     }
     const pool = await databaseService.getPool(req.user?.empresa);
-    await pool.request()
+    const del = await pool.request()
       .input('contId', sql.Int, id)
       .input('psId', sql.Int, psId)
       .query(`DELETE FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId`);
-    return res.json({ success: true });
+    const quitado = (del.rowsAffected || []).some((n) => n > 0);
+    // Su cuenta por cobrar, si aún no se cobraba, deja de existir.
+    const cxcCanceladas = await cancelarCxcPorProductos(pool, id, [psId]).catch((e) => {
+      console.warn('quitarProductoServicio CxC:', e.message);
+      return 0;
+    });
+    // Avisar al cliente solo si de verdad lo tenía (correo + su portal).
+    const aviso = quitado ? await avisarProductoAsignado(pool, req, id, [psId], { retirado: true }).catch((e) => {
+      console.warn('quitarProductoServicio aviso al cliente:', e.message);
+      return null;
+    }) : null;
+    return res.json({ success: true, data: { quitado, aviso, cxcCanceladas } });
   } catch (e) {
     console.error('Error quitando producto/servicio de cliente:', e);
     return res.status(500).json({ success: false, message: e.message });
@@ -243,6 +343,10 @@ exports.createCliente = async (req, res) => {
       pais,
       observaciones
     } = req.body;
+
+    // El correo del cliente es obligatorio y debe poder recibir correo.
+    const errorCorreo = await errorCorreoObligatorio(correo);
+    if (errorCorreo) return res.status(400).json({ success: false, message: errorCorreo, campo: 'correo' });
 
     if ((!empresa || empresa.toString().trim() === '') && (!nombre || nombre.toString().trim() === '')) {
       return res.status(400).json({ success: false, message: 'Falta empresa o nombre del cliente' });
@@ -409,6 +513,13 @@ exports.updateCliente = async (req, res) => {
       observaciones,
     } = req.body;
 
+    // Si se manda el correo (edición del formulario), debe ser válido; los
+    // cambios parciales (p. ej. solo { activo }) no lo traen y no se validan.
+    if (correo !== undefined) {
+      const errorCorreo = await errorCorreoObligatorio(correo);
+      if (errorCorreo) return res.status(400).json({ success: false, message: errorCorreo, campo: 'correo' });
+    }
+
     const pool = await databaseService.getPool(req.user?.empresa);
     const transaction = new sql.Transaction(pool);
     try {
@@ -504,15 +615,25 @@ exports.updateCliente = async (req, res) => {
       // Invitación por correo con credenciales — solo si se pidió explícitamente
       // (switch en el frontend) y hay a quién mandarla.
       if (enviarInvitacion && neusId && correo) {
-        const usuarioRs = await pool.request().input('id', sql.Int, neusId).query(`SELECT NEUS_USUARIO as usuario FROM NEUS_USUARIOS WHERE NEUS_ID=@id`);
+        const usuarioRs = await pool.request().input('id', sql.Int, neusId)
+          .query(`SELECT NEUS_USUARIO as usuario, NEUS_CONTRA as contra FROM NEUS_USUARIOS WHERE NEUS_ID=@id`);
         const usuarioLogin = usuarioRs.recordset[0]?.usuario;
         if (usuarioLogin) {
+          // La invitación siempre lleva contraseña: la nueva si se capturó; si no,
+          // la actual; y si no tiene ninguna, una temporal que se guarda aquí.
+          let passwordEnviar = password || usuarioRs.recordset[0]?.contra || null;
+          if (!passwordEnviar) {
+            passwordEnviar = require('crypto').randomBytes(8).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 10) || 'Temp' + Date.now().toString().slice(-6);
+            await pool.request().input('id', sql.Int, neusId).input('p', sql.NVarChar, passwordEnviar)
+              .query(`UPDATE NEUS_USUARIOS SET NEUS_CONTRA = @p, [password] = @p WHERE NEUS_ID = @id`);
+          }
+          const tenant = String(req.user?.empresa || require('../config/tenants').DEFAULT_TENANT).toLowerCase();
           emailService.sendInvitacionAccesoSistemaEmail({
             nombre: nombre || empresa,
             correo,
             usuario: usuarioLogin,
-            password: password || null,
-            link: `${BASE_URL}/login`,
+            password: passwordEnviar,
+            link: `${BASE_URL}/login?tenant=${encodeURIComponent(tenant)}`,
           }).catch(() => {});
         }
       }
