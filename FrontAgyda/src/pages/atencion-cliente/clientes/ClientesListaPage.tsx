@@ -2,14 +2,18 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-  Users, Search, Plus, ChevronLeft, Building2, SlidersHorizontal,
-  Sparkles, Loader2, Eye, CheckCircle2, Flame, ClipboardList, KeyRound,
+  Users, Search, Plus, ChevronLeft, SlidersHorizontal,
+  Sparkles, Loader2, Eye, CheckCircle2, Flame, ClipboardList,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { crmService } from '@/services/crm.service'
-import { CLIENTE_ESTATUS_COLORES, type CRMContacto } from '@/types/crm.types'
+import { crmService, type ClientesFiltros } from '@/services/crm.service'
+import { type CRMContacto } from '@/types/crm.types'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { NuevoClienteModal } from './NuevoClienteModal'
+import { ClientesTablaLista } from './ClientesTablaLista'
+import { ClientesFiltrosPanel, contarFiltrosActivos } from './ClientesFiltrosPanel'
+import { ClienteDetallePanel } from './ClienteDetallePanel'
+import type { ExpedienteTab } from './ClienteExpediente'
 
 // Segmentos de la cartera. Se derivan del estatus de color + alta formal:
 //   nuevos       → aún sin alta formal como cliente
@@ -71,13 +75,25 @@ export function ClientesListaPage({ embedded = false, onAbrirCliente }: {
   const [busqueda, setBusqueda] = useState('')
   const [segmento, setSegmento] = useState<Segmento>('todos')
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
+  const [filtros, setFiltros] = useState<ClientesFiltros>({})
   const [showNuevo, setShowNuevo] = useState(false)
 
-  const abrir = (id: number) => (onAbrirCliente ? onAbrirCliente(id) : navigate(`/atencion-cliente/clientes/${id}`))
+  // Solo la vista de 2 columnas embebida (dentro de "Seguimiento de
+  // clientes") mantiene la selección aquí — la ruta standalone sigue
+  // navegando a /atencion-cliente/clientes/:id como antes.
+  const [seleccionadoId, setSeleccionadoId] = useState<number | null>(null)
+  const [expTab, setExpTab] = useState<string | null>(null)
+  const [expSub, setExpSub] = useState<string | null>(null)
+
+  const abrir = (id: number) => {
+    if (onAbrirCliente) { onAbrirCliente(id); return }
+    if (embedded) { setSeleccionadoId(id); setExpTab(null); setExpSub(null); return }
+    navigate(`/atencion-cliente/clientes/${id}`)
+  }
 
   const { data: clientes = [], isLoading } = useQuery({
-    queryKey: ['clientes-lista'],
-    queryFn: () => crmService.getClientes(),
+    queryKey: ['clientes-lista', filtros],
+    queryFn: () => crmService.getClientes(filtros),
     staleTime: 30_000,
   })
 
@@ -107,6 +123,107 @@ export function ClientesListaPage({ embedded = false, onAbrirCliente }: {
         <Plus className={size === 'lg' ? 'h-4 w-4' : 'h-3.5 w-3.5'} /> Nuevo cliente
       </button>
     ) : null
+
+  const usaLayoutDosColumnas = embedded && !onAbrirCliente
+  const filtrosActivos = contarFiltrosActivos(filtros)
+
+  const columnaLista = (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar cliente por nombre, empresa o correo..."
+            className="w-full rounded-xl border border-gray-200 bg-card pl-10 pr-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
+          />
+        </div>
+        <button
+          onClick={() => setFiltrosAbiertos((v) => !v)}
+          className={clsx(
+            'relative flex h-[42px] flex-shrink-0 items-center gap-1.5 rounded-xl border px-3 text-[0.78rem] font-semibold transition-colors',
+            filtrosAbiertos || filtrosActivos > 0
+              ? 'border-brand bg-brand/10 text-brand'
+              : 'border-gray-200 bg-card text-gray-500 hover:bg-gray-50',
+          )}
+        >
+          <SlidersHorizontal className="h-4 w-4" /> Filtros
+          {filtrosActivos > 0 && (
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-brand text-[0.62rem] font-bold text-white">
+              {filtrosActivos}
+            </span>
+          )}
+        </button>
+        {!usaLayoutDosColumnas && <NuevoClienteBtn />}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {SEGMENTOS.map((s) => {
+          const activo = segmento === s.key
+          const Icon = s.icon
+          return (
+            <button
+              key={s.key}
+              onClick={() => setSegmento(s.key)}
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[0.8rem] font-semibold transition-all',
+                activo
+                  ? clsx(s.activeBg, s.activeText, 'border-transparent shadow-sm')
+                  : 'border-gray-200 bg-card text-gray-600 hover:border-gray-300 hover:bg-gray-50',
+              )}
+            >
+              {activo
+                ? <Icon className={clsx('h-3.5 w-3.5', s.key === 'proceso' && 'animate-spin')} />
+                : <span className={clsx('h-1.5 w-1.5 rounded-full', s.dot)} />}
+              {s.label}
+              <span
+                className={clsx(
+                  'inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[0.7rem] font-bold tabular-nums',
+                  activo ? s.countActive : 'bg-gray-100 text-gray-500',
+                )}
+              >
+                {conteos[s.key]}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {filtrosAbiertos && <ClientesFiltrosPanel filtros={filtros} onChange={setFiltros} />}
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => <div key={i} className="card p-3 animate-pulse h-12" />)}
+        </div>
+      ) : filtrados.length === 0 ? (
+        <div className="card relative flex flex-col items-center justify-center gap-4 overflow-hidden py-16 px-6">
+          <div className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full bg-brand/5" />
+          <div className="pointer-events-none absolute -bottom-16 -right-16 h-48 w-48 rounded-full bg-purple-500/5" />
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/15 to-purple-500/15">
+            <ClipboardList className="h-8 w-8 text-brand" />
+          </div>
+          <div className="relative text-center">
+            <p className="text-base font-bold text-gray-800">
+              {busqueda || segmento !== 'todos' || filtrosActivos > 0 ? 'Sin resultados' : 'Sin clientes registrados'}
+            </p>
+            <p className="mt-1 text-sm text-gray-400">
+              {busqueda || segmento !== 'todos' || filtrosActivos > 0
+                ? 'Prueba con otro segmento, filtro o término de búsqueda.'
+                : puedeGestionar
+                  ? 'Usa el botón para dar de alta el primer cliente.'
+                  : 'No hay clientes registrados todavía.'}
+            </p>
+          </div>
+          {!busqueda && segmento === 'todos' && filtrosActivos === 0 && (
+            <div className="relative"><NuevoClienteBtn size="lg" /></div>
+          )}
+        </div>
+      ) : (
+        <ClientesTablaLista clientes={filtrados} seleccionadoId={seleccionadoId} onSeleccionar={abrir} />
+      )}
+    </div>
+  )
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -141,162 +258,22 @@ export function ClientesListaPage({ embedded = false, onAbrirCliente }: {
         </>
       )}
 
-      {/* Segmentos + acción */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          {SEGMENTOS.map((s) => {
-            const activo = segmento === s.key
-            const Icon = s.icon
-            return (
-              <button
-                key={s.key}
-                onClick={() => setSegmento(s.key)}
-                className={clsx(
-                  'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[0.8rem] font-semibold transition-all',
-                  activo
-                    ? clsx(s.activeBg, s.activeText, 'border-transparent shadow-sm')
-                    : 'border-gray-200 bg-card text-gray-600 hover:border-gray-300 hover:bg-gray-50',
-                )}
-              >
-                {activo
-                  ? <Icon className={clsx('h-3.5 w-3.5', s.key === 'proceso' && 'animate-spin')} />
-                  : <span className={clsx('h-1.5 w-1.5 rounded-full', s.dot)} />}
-                {s.label}
-                <span
-                  className={clsx(
-                    'inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[0.7rem] font-bold tabular-nums',
-                    activo ? s.countActive : 'bg-gray-100 text-gray-500',
-                  )}
-                >
-                  {conteos[s.key]}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-        <div className="ml-auto">
-          <NuevoClienteBtn />
-        </div>
-      </div>
+      {usaLayoutDosColumnas ? (
+        <div className="flex items-center justify-end"><NuevoClienteBtn /></div>
+      ) : null}
 
-      {/* Buscador + filtro */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar cliente por nombre, empresa o correo..."
-            className="w-full rounded-xl border border-gray-200 bg-card pl-10 pr-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
+      {usaLayoutDosColumnas ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          {columnaLista}
+          <ClienteDetallePanel
+            contactoId={seleccionadoId}
+            expParam={expTab}
+            subParam={expSub}
+            onExp={(t: ExpedienteTab) => { setExpTab(t); setExpSub(null) }}
+            onSub={setExpSub}
           />
         </div>
-        <button
-          onClick={() => setFiltrosAbiertos((v) => !v)}
-          className={clsx(
-            'flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-xl border transition-colors',
-            filtrosAbiertos
-              ? 'border-brand bg-brand/10 text-brand'
-              : 'border-gray-200 bg-card text-gray-500 hover:bg-gray-50',
-          )}
-          title="Filtros avanzados"
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-        </button>
-      </div>
-
-      {filtrosAbiertos && (
-        <div className="card flex flex-wrap items-center gap-2 p-3 text-xs text-gray-500">
-          <span className="font-semibold text-gray-600">Ordenar por:</span>
-          {['Nombre', 'Más recientes', 'Estatus'].map((o) => (
-            <button key={o} className="rounded-full border border-gray-200 px-2.5 py-1 hover:bg-gray-50">{o}</button>
-          ))}
-        </div>
-      )}
-
-      {/* Lista */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="card p-4 animate-pulse h-24" />)}
-        </div>
-      ) : filtrados.length === 0 ? (
-        <div className="card relative flex flex-col items-center justify-center gap-4 overflow-hidden py-16 px-6">
-          <div className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full bg-brand/5" />
-          <div className="pointer-events-none absolute -bottom-16 -right-16 h-48 w-48 rounded-full bg-purple-500/5" />
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/15 to-purple-500/15">
-            <ClipboardList className="h-8 w-8 text-brand" />
-          </div>
-          <div className="relative text-center">
-            <p className="text-base font-bold text-gray-800">
-              {busqueda || segmento !== 'todos' ? 'Sin resultados' : 'Sin clientes registrados'}
-            </p>
-            <p className="mt-1 text-sm text-gray-400">
-              {busqueda || segmento !== 'todos'
-                ? 'Prueba con otro segmento o término de búsqueda.'
-                : puedeGestionar
-                  ? 'Usa el botón para dar de alta el primer cliente.'
-                  : 'No hay clientes registrados todavía.'}
-            </p>
-          </div>
-          {!busqueda && segmento === 'todos' && (
-            <div className="relative">
-              <NuevoClienteBtn size="lg" />
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtrados.map((c) => {
-            const cfg = CLIENTE_ESTATUS_COLORES.find((e) => e.key === c.estatusCliente) ?? CLIENTE_ESTATUS_COLORES[0]
-            return (
-              <button
-                key={c.id}
-                onClick={() => abrir(c.id)}
-                className="flex flex-col gap-2 rounded-2xl border border-gray-200/60 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{c.nombre}</p>
-                  {c.esCliente ? (
-                    <span className={clsx('inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold', cfg.bg, cfg.text)}>
-                      <span className={clsx('h-1.5 w-1.5 rounded-full', cfg.dot)} />
-                      {cfg.label}
-                    </span>
-                  ) : (
-                    <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-[0.65rem] font-semibold text-amber-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                      Sin alta formal
-                    </span>
-                  )}
-                </div>
-                {c.empresa && (
-                  <p className="flex items-center gap-1 text-xs text-gray-400 truncate">
-                    <Building2 className="h-3 w-3" /> {c.empresa}
-                  </p>
-                )}
-                {c.productoServicio && <p className="text-xs text-gray-500 truncate">{c.productoServicio}</p>}
-                {(c.tipoClienteNombre || c.segmentoNombre) && (
-                  <div className="flex flex-wrap gap-1">
-                    {c.tipoClienteNombre && (
-                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[0.62rem] font-semibold text-gray-600">
-                        {c.tipoClienteNombre}
-                      </span>
-                    )}
-                    {c.segmentoNombre && (
-                      <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[0.62rem] font-semibold text-indigo-700">
-                        {c.segmentoNombre}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {c.neusId && (
-                  <span className="inline-flex w-fit items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[0.62rem] font-semibold text-blue-700">
-                    <KeyRound className="h-2.5 w-2.5" /> Acceso al sistema{c.tipoAccesoNombre ? `: ${c.tipoAccesoNombre}` : ''}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      ) : columnaLista}
 
       {showNuevo && <NuevoClienteModal onClose={() => setShowNuevo(false)} onCreated={(id) => { setShowNuevo(false); abrir(id) }} />}
     </div>

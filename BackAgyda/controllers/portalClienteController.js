@@ -684,9 +684,27 @@ function _rateLimitIncidencia(contactoId) {
 
 // POST /incidencias — el cliente abre una incidencia/solicitud. Prioridad
 // forzada a 'media' (el cliente no elige), asignada al responsable del contacto.
+exports.getCategoriasCaso = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const cats = await pool.request().query(`
+      SELECT CAT_ID as id, CAT_NOMBRE as nombre FROM CASOS_CATEGORIAS WHERE CAT_ACTIVO=1 ORDER BY CAT_ORDEN ASC, CAT_NOMBRE ASC
+    `);
+    const subs = await pool.request().query(`
+      SELECT SUB_CAT_ID as categoriaId, SUB_NOMBRE as nombre FROM CASOS_SUBCATEGORIAS WHERE SUB_ACTIVO=1 ORDER BY SUB_ORDEN ASC, SUB_NOMBRE ASC
+    `);
+    const data = cats.recordset
+      .map((c) => ({ id: c.id, nombre: c.nombre, subcategorias: subs.recordset.filter((s) => s.categoriaId === c.id).map((s) => s.nombre) }))
+      .filter((c) => c.subcategorias.length > 0);
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.crearIncidencia = async (req, res) => {
   try {
-    const { titulo, descripcion, categoria } = req.body || {};
+    const { titulo, descripcion, categoria, subcategoria } = req.body || {};
 
     const tit = String(titulo || '').trim();
     const desc = String(descripcion || '').trim();
@@ -697,7 +715,25 @@ exports.crearIncidencia = async (req, res) => {
       return res.status(429).json({ success: false, message: 'Espera un momento antes de enviar otra solicitud' });
     }
 
-    const cat = categoria ? String(categoria).trim().slice(0, 50) : null;
+    const catNombre = categoria ? String(categoria).trim().slice(0, 80) : null;
+    const subNombre = subcategoria ? String(subcategoria).trim().slice(0, 80) : null;
+    const cat = catNombre && subNombre ? `${catNombre} > ${subNombre}` : catNombre;
+
+    // Prioridad automática según la subcategoría elegida (catálogo
+    // configurable en AGYDA) — si no coincide con ninguna activa, 'media'.
+    let prioridadCategoria = 'media';
+    if (catNombre && subNombre) {
+      const pool0 = await databaseService.getPool(req.user?.empresa);
+      const rsCat = await pool0.request()
+        .input('catNombre', sql.NVarChar(80), catNombre)
+        .input('subNombre', sql.NVarChar(80), subNombre)
+        .query(`
+          SELECT s.SUB_PRIORIDAD as prioridad
+          FROM CASOS_SUBCATEGORIAS s JOIN CASOS_CATEGORIAS c ON c.CAT_ID = s.SUB_CAT_ID
+          WHERE c.CAT_NOMBRE=@catNombre AND s.SUB_NOMBRE=@subNombre AND c.CAT_ACTIVO=1 AND s.SUB_ACTIVO=1
+        `);
+      if (rsCat.recordset[0]?.prioridad) prioridadCategoria = rsCat.recordset[0].prioridad;
+    }
 
     const resultado = await casoController.crearCasoAutomatico(
       {
@@ -706,7 +742,7 @@ exports.crearIncidencia = async (req, res) => {
         titulo: tit,
         descripcion: desc,
         categoria: cat,
-        prioridad: 'media',
+        prioridad: prioridadCategoria,
         origen: 'portal',
         tenantKey: req.user?.empresa,
       },
@@ -716,7 +752,7 @@ exports.crearIncidencia = async (req, res) => {
         notifTipo: 'cliente-incidencia-portal',
         notifEmailFn: (u, ctx) => emailService.sendIncidenciaSlaEmail({
           nombre: u.nombre, correo: u.correo, folio: ctx.folio, titulo: ctx.titulo,
-          contactoNombre: null, prioridad: 'media', fechaLimiteSla: null, nivel: 'riesgo',
+          contactoNombre: null, prioridad: prioridadCategoria, fechaLimiteSla: null, nivel: 'riesgo',
         }),
       },
     );
@@ -745,6 +781,81 @@ exports.crearIncidencia = async (req, res) => {
     res.status(201).json({ success: true, folio: resultado.folio });
   } catch (e) {
     console.error('Error crearIncidencia (portal-cliente):', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /incidencias/:id/comentarios — hilo de conversación de una solicitud
+// propia. Valida dueño (WHERE CASO_CONTACTO_ID=@contactoId) antes de mostrar
+// nada, igual que ya hace descargarFacturaDocumento con IDOR.
+exports.getComentariosIncidencia = async (req, res) => {
+  try {
+    const casoId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(casoId) || casoId <= 0) return res.status(400).json({ success: false, message: 'id inválido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const caso = await pool.request().input('id', sql.Int, casoId).input('contactoId', sql.Int, req.contacto.id)
+      .query(`SELECT CASO_ID FROM CASOS WHERE CASO_ID=@id AND CASO_CONTACTO_ID=@contactoId`);
+    if (!caso.recordset.length) return res.status(404).json({ success: false, message: 'Solicitud no encontrada' });
+
+    const rs = await pool.request().input('id', sql.Int, casoId).query(`
+      SELECT CCO_ID as id, CCO_COMENTARIO as comentario, CCO_ORIGEN as origen,
+             CCO_USUARIO_ID as usuarioId, U.NEUS_NOMBRES as usuarioNombre, CCO_FECHA as fecha
+      FROM CASOS_COMENTARIOS CCO
+      LEFT JOIN NEUS_USUARIOS U ON U.NEUS_ID = CCO.CCO_USUARIO_ID
+      WHERE CCO_CASO_ID=@id
+      ORDER BY CCO_FECHA ASC
+    `);
+    // El cliente marca como leídos los mensajes del agente al abrir el hilo.
+    await pool.request().input('id', sql.Int, casoId)
+      .query(`UPDATE CASOS_COMENTARIOS SET CCO_LEIDO_CLIENTE=1 WHERE CCO_CASO_ID=@id AND CCO_ORIGEN='interno'`);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /incidencias/:id/comentarios — el cliente responde en el hilo de su
+// propia solicitud.
+exports.addComentarioIncidencia = async (req, res) => {
+  try {
+    const casoId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(casoId) || casoId <= 0) return res.status(400).json({ success: false, message: 'id inválido' });
+    const comentario = String(req.body?.comentario || '').trim();
+    if (!comentario) return res.status(400).json({ success: false, message: 'Escribe un mensaje' });
+    if (comentario.length > 4000) return res.status(400).json({ success: false, message: 'Mensaje demasiado largo' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const caso = await pool.request().input('id', sql.Int, casoId).input('contactoId', sql.Int, req.contacto.id)
+      .query(`SELECT CASO_ID as id, CASO_FOLIO as folio, CASO_ASIGNADO_A as asignadoA FROM CASOS WHERE CASO_ID=@id AND CASO_CONTACTO_ID=@contactoId`);
+    const c = caso.recordset[0];
+    if (!c) return res.status(404).json({ success: false, message: 'Solicitud no encontrada' });
+
+    const ins = await pool.request()
+      .input('casoId', sql.Int, casoId)
+      .input('comentario', sql.NVarChar(sql.MAX), comentario)
+      .input('contactoId', sql.Int, req.contacto.id)
+      .query(`
+        INSERT INTO CASOS_COMENTARIOS (CCO_CASO_ID, CCO_COMENTARIO, CCO_CONTACTO_ID, CCO_ORIGEN)
+        OUTPUT INSERTED.CCO_ID, INSERTED.CCO_FECHA
+        VALUES (@casoId, @comentario, @contactoId, 'portal')
+      `);
+
+    if (c.asignadoA) {
+      try {
+        await notificationService.createNotification({
+          usuarioId: c.asignadoA,
+          mensaje: `Nuevo mensaje del cliente en la solicitud ${c.folio}`,
+          tipo: 'cliente-caso-mensaje',
+          dataExtra: { casoId, folio: c.folio },
+          tenantKey: req.user?.empresa,
+        });
+      } catch (e) { console.warn('addComentarioIncidencia: aviso asesor:', e.message); }
+    }
+
+    res.status(201).json({ success: true, data: { id: ins.recordset[0].CCO_ID, fecha: ins.recordset[0].CCO_FECHA } });
+  } catch (e) {
+    console.error('Error addComentarioIncidencia:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

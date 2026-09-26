@@ -39,8 +39,11 @@ router.get('/citas', requirePortalAction('ver-citas'), ctrl.getCitas);
 router.get('/citas/historial', requirePortalAction('ver-citas'), ctrl.getCitasHistorial);
 router.post('/citas/:id/confirmar', requirePortalAction('gestionar-citas'), ctrl.confirmarCita);
 router.post('/citas/:id/solicitar-cambio', requirePortalAction('gestionar-citas'), ctrl.solicitarCambioCita);
+router.get('/categorias-caso', requirePortalAction('ver-incidencias'), ctrl.getCategoriasCaso);
 router.get('/incidencias', requirePortalAction('ver-incidencias'), ctrl.getIncidencias);
 router.post('/incidencias', requirePortalAction('crear-incidencias'), ctrl.crearIncidencia);
+router.get('/incidencias/:id/comentarios', requirePortalAction('ver-incidencias'), ctrl.getComentariosIncidencia);
+router.post('/incidencias/:id/comentarios', requirePortalAction('crear-incidencias'), ctrl.addComentarioIncidencia);
 
 // Gestión de usuarios de la propia empresa (solo sub-roles con gestionar-usuarios).
 router.get('/subroles-disponibles', requirePortalAction('gestionar-usuarios'), usuariosCtrl.listarSubrolesDisponibles);

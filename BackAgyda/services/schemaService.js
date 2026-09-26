@@ -1667,6 +1667,108 @@ END
   }
 }
 
+// Catálogo configurable de categorías/subcategorías de casos/incidencias
+// (AGYDA → Configuración → Portal de Cliente). La categoría (CASOS_CATEGORIAS)
+// solo agrupa, sin prioridad propia; la prioridad vive en la subcategoría
+// (CASOS_SUBCATEGORIAS), usada para asignar automáticamente CASO_PRIORIDAD al
+// crear un caso desde el Portal de Cliente. CASO_CATEGORIA sigue siendo texto
+// libre en CASOS (no FK) para no invalidar casos históricos si una
+// subcategoría se renombra o desactiva — se guarda como "Categoría > Sub".
+async function ensureCasosCategoriasSchema(pool) {
+  try {
+    const batchSql = `
+IF OBJECT_ID('dbo.CASOS_CATEGORIAS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CASOS_CATEGORIAS (
+    CAT_ID        INT IDENTITY(1,1) PRIMARY KEY,
+    CAT_NOMBRE    NVARCHAR(80) NOT NULL,
+    CAT_ORDEN     INT NOT NULL DEFAULT 0,
+    CAT_ACTIVO    BIT NOT NULL DEFAULT 1,
+    CAT_CREADO_EN DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_CASOS_CATEGORIAS_NOMBRE UNIQUE (CAT_NOMBRE)
+  );
+END
+
+IF OBJECT_ID('dbo.CASOS_SUBCATEGORIAS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.CASOS_SUBCATEGORIAS (
+    SUB_ID        INT IDENTITY(1,1) PRIMARY KEY,
+    SUB_CAT_ID    INT NOT NULL,
+    SUB_NOMBRE    NVARCHAR(80) NOT NULL,
+    SUB_PRIORIDAD NVARCHAR(20) NOT NULL DEFAULT 'media', -- baja | media | alta | critica
+    SUB_ORDEN     INT NOT NULL DEFAULT 0,
+    SUB_ACTIVO    BIT NOT NULL DEFAULT 1,
+    SUB_CREADO_EN DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_CASOS_SUBCATEGORIAS UNIQUE (SUB_CAT_ID, SUB_NOMBRE),
+    CONSTRAINT FK_CASOS_SUBCATEGORIAS_CAT FOREIGN KEY (SUB_CAT_ID) REFERENCES dbo.CASOS_CATEGORIAS(CAT_ID)
+  );
+  CREATE INDEX IX_CASOS_SUBCATEGORIAS_CAT ON dbo.CASOS_SUBCATEGORIAS(SUB_CAT_ID);
+END
+
+-- Quita el campo CAT_PRIORIDAD viejo (catálogo de un solo nivel, ya no vigente).
+IF COL_LENGTH('dbo.CASOS_CATEGORIAS', 'CAT_PRIORIDAD') IS NOT NULL
+BEGIN
+  DECLARE @dfName NVARCHAR(200);
+  SELECT @dfName = dc.name FROM sys.default_constraints dc
+    JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID('dbo.CASOS_CATEGORIAS') AND c.name = 'CAT_PRIORIDAD';
+  IF @dfName IS NOT NULL EXEC('ALTER TABLE dbo.CASOS_CATEGORIAS DROP CONSTRAINT ' + @dfName);
+  ALTER TABLE dbo.CASOS_CATEGORIAS DROP COLUMN CAT_PRIORIDAD;
+END
+`;
+    // CASO_CATEGORIA nació como NVARCHAR(50) para un nombre plano; ahora
+    // guarda "Categoría > Subcategoría" (hasta 80+80+3 caracteres), así que
+    // se amplía si sigue en su tamaño original.
+    await pool.request().batch(`
+IF EXISTS (
+  SELECT 1 FROM sys.columns
+  WHERE object_id = OBJECT_ID('dbo.CASOS') AND name = 'CASO_CATEGORIA' AND max_length < 300
+)
+  ALTER TABLE dbo.CASOS ALTER COLUMN CASO_CATEGORIA NVARCHAR(200) NULL;
+`);
+
+    await pool.request().batch(batchSql);
+
+    // Semilla/migración idempotente: si el catálogo nuevo (Soporte técnico /
+    // Cobros o facturación) no existe todavía, se crea; y las categorías
+    // viejas de un solo nivel (Servicio, Facturación, Producto, Atención,
+    // Otro) se eliminan del catálogo (no de los casos ya creados).
+    const req = pool.request();
+    const catSoporte = await req.query(`
+      IF NOT EXISTS (SELECT 1 FROM CASOS_CATEGORIAS WHERE CAT_NOMBRE = N'Soporte técnico')
+        INSERT INTO CASOS_CATEGORIAS (CAT_NOMBRE, CAT_ORDEN) VALUES (N'Soporte técnico', 1);
+      IF NOT EXISTS (SELECT 1 FROM CASOS_CATEGORIAS WHERE CAT_NOMBRE = N'Cobros o facturación')
+        INSERT INTO CASOS_CATEGORIAS (CAT_NOMBRE, CAT_ORDEN) VALUES (N'Cobros o facturación', 2);
+
+      DECLARE @soporteId INT = (SELECT CAT_ID FROM CASOS_CATEGORIAS WHERE CAT_NOMBRE = N'Soporte técnico');
+      DECLARE @facturacionId INT = (SELECT CAT_ID FROM CASOS_CATEGORIAS WHERE CAT_NOMBRE = N'Cobros o facturación');
+
+      IF NOT EXISTS (SELECT 1 FROM CASOS_SUBCATEGORIAS WHERE SUB_CAT_ID = @soporteId AND SUB_NOMBRE = N'Dudas del sistema')
+        INSERT INTO CASOS_SUBCATEGORIAS (SUB_CAT_ID, SUB_NOMBRE, SUB_PRIORIDAD, SUB_ORDEN) VALUES (@soporteId, N'Dudas del sistema', 'baja', 1);
+      IF NOT EXISTS (SELECT 1 FROM CASOS_SUBCATEGORIAS WHERE SUB_CAT_ID = @soporteId AND SUB_NOMBRE = N'Fallas del sistema')
+        INSERT INTO CASOS_SUBCATEGORIAS (SUB_CAT_ID, SUB_NOMBRE, SUB_PRIORIDAD, SUB_ORDEN) VALUES (@soporteId, N'Fallas del sistema', 'alta', 2);
+      IF NOT EXISTS (SELECT 1 FROM CASOS_SUBCATEGORIAS WHERE SUB_CAT_ID = @facturacionId AND SUB_NOMBRE = N'Aclaración')
+        INSERT INTO CASOS_SUBCATEGORIAS (SUB_CAT_ID, SUB_NOMBRE, SUB_PRIORIDAD, SUB_ORDEN) VALUES (@facturacionId, N'Aclaración', 'media', 1);
+      IF NOT EXISTS (SELECT 1 FROM CASOS_SUBCATEGORIAS WHERE SUB_CAT_ID = @facturacionId AND SUB_NOMBRE = N'Cancelación de productos o servicios')
+        INSERT INTO CASOS_SUBCATEGORIAS (SUB_CAT_ID, SUB_NOMBRE, SUB_PRIORIDAD, SUB_ORDEN) VALUES (@facturacionId, N'Cancelación de productos o servicios', 'alta', 2);
+
+      -- Reclasifica casos históricos que usaban el catálogo viejo de un solo nivel.
+      UPDATE CASOS SET CASO_CATEGORIA = N'Soporte técnico > Dudas del sistema'
+        WHERE CASO_CATEGORIA IN (N'Servicio', N'Producto', N'Atención', N'Otro');
+      UPDATE CASOS SET CASO_CATEGORIA = N'Cobros o facturación > Aclaración'
+        WHERE CASO_CATEGORIA = N'Facturación';
+
+      -- Elimina las categorías viejas de un solo nivel del catálogo (ya reclasificados los casos).
+      DELETE FROM CASOS_CATEGORIAS WHERE CAT_NOMBRE IN (N'Servicio', N'Facturación', N'Producto', N'Atención', N'Otro');
+    `);
+    void catSoporte;
+
+    logger.info('✅ Esquema de categorías/subcategorías de casos asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de categorías de casos:', err.message);
+  }
+}
+
 // Expedientes: documentos por usuario (cifrados en BD)
 async function ensureExpedientesSchema(pool) {
   try {
@@ -4649,6 +4751,21 @@ async function ensureCasosSchema(pool) {
     console.warn('⚠️ CasosComentariosSchema:', err.message);
   }
 
+  // Extiende CASOS_COMENTARIOS para que el mismo hilo sirva de conversación
+  // asíncrona cliente↔asesor desde el Portal, no solo bitácora interna entre
+  // agentes: CCO_ORIGEN distingue quién escribió, CCO_CONTACTO_ID es el autor
+  // cuando es el cliente (CCO_USUARIO_ID sigue usándose para agentes).
+  const casosComentariosCols = [
+    `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_ORIGEN') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_ORIGEN NVARCHAR(10) NOT NULL CONSTRAINT DF_CCO_ORIGEN DEFAULT 'interno';`,
+    `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_CONTACTO_ID') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_CONTACTO_ID INT NULL;`,
+    `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_LEIDO_CLIENTE') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_LEIDO_CLIENTE BIT NOT NULL CONSTRAINT DF_CCO_LEIDO_CLIENTE DEFAULT 0;`,
+    `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_LEIDO_INTERNO') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_LEIDO_INTERNO BIT NOT NULL CONSTRAINT DF_CCO_LEIDO_INTERNO DEFAULT 0;`,
+  ];
+  for (const q of casosComentariosCols) {
+    try { await pool.request().query(q); }
+    catch (err) { console.warn('⚠️ CASOS_COMENTARIOS cols:', err.message); }
+  }
+
   // Evidencias — misma estructura cifrada AES-256-GCM que CLI_INCIDENCIAS_EVIDENCIAS
   // (utils/cryptoDocs.js, misma EXPEDIENTE_ENCRYPTION_KEY), abierta a nivel de
   // esquema a cualquier CASO_TIPO aunque hoy la UI solo la use para 'incidencia'.
@@ -5940,6 +6057,7 @@ async function ensureAllSchemas(pool) {
   await ensurePermisosSchema(pool);
   await ensureHorariosAsesorSchema(pool);
   await ensureHorariosAsesorPropuestasSchema(pool);
+  await ensureCasosCategoriasSchema(pool);
   await ensureCalendarioSchema(pool);
   await ensureExpedientesSchema(pool);
   await ensureUiBackgroundSchema(pool);

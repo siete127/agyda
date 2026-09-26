@@ -103,6 +103,12 @@ export interface PortalCatalogoItem {
   aplicaciones: string | null
 }
 
+export interface PortalCategoriaCaso {
+  id: number
+  nombre: string
+  subcategorias: string[]
+}
+
 export interface PortalIncidencia {
   id: number
   folio: string

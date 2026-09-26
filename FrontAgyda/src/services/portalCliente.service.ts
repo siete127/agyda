@@ -1,7 +1,7 @@
 import { api } from '@/lib/axios'
 import type {
   PortalResumen, PortalProyecto, PortalCotizacion, PortalFactura, PortalDocumento, PortalCita, PortalIncidencia,
-  PortalProductoServicio, PortalCatalogoItem, PortalAsesor,
+  PortalProductoServicio, PortalCatalogoItem, PortalAsesor, PortalCategoriaCaso,
 } from '@/types/portalCliente.types'
 import { parseMensajeriaCanal, type MensajeriaCanal } from '@/types/mensajeria.types'
 
@@ -178,12 +178,32 @@ export const portalClienteService = {
   async solicitarCambioCita(id: number, body: { tipo: 'reprogramar' | 'cancelar'; fechaPropuesta?: string; motivo?: string }): Promise<void> {
     await api.post(`/portal-cliente/citas/${id}/solicitar-cambio`, body)
   },
+  async getCategoriasCaso(): Promise<PortalCategoriaCaso[]> {
+    const { data } = await api.get('/portal-cliente/categorias-caso')
+    return (data?.data ?? []) as PortalCategoriaCaso[]
+  },
   async getIncidencias(): Promise<PortalIncidencia[]> {
     const { data } = await api.get('/portal-cliente/incidencias')
     return (data?.data ?? []) as PortalIncidencia[]
   },
-  async crearIncidencia(body: { titulo: string; descripcion: string; categoria?: string }): Promise<{ folio: string }> {
+  async crearIncidencia(body: { titulo: string; descripcion: string; categoria?: string; subcategoria?: string }): Promise<{ folio: string }> {
     const { data } = await api.post('/portal-cliente/incidencias', body)
     return { folio: data?.folio }
   },
+  async getComentariosIncidencia(id: number): Promise<PortalComentarioIncidencia[]> {
+    const { data } = await api.get(`/portal-cliente/incidencias/${id}/comentarios`)
+    return (data?.data ?? []) as PortalComentarioIncidencia[]
+  },
+  async addComentarioIncidencia(id: number, comentario: string): Promise<void> {
+    await api.post(`/portal-cliente/incidencias/${id}/comentarios`, { comentario })
+  },
+}
+
+export interface PortalComentarioIncidencia {
+  id: number
+  comentario: string
+  origen: 'interno' | 'portal'
+  usuarioId: number | null
+  usuarioNombre: string | null
+  fecha: string
 }

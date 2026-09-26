@@ -74,6 +74,16 @@ exports.getAll = async (req, res) => {
     // no tiene por qué aparecer en el módulo de Seguimiento de clientes —
     // solo en el Pipeline de Ventas hasta que alguien lo convierta.
     const conSeguimiento = req.query.conSeguimiento === '1' || req.query.conSeguimiento === 'true';
+    // Filtros reales de la columna "Filtros" en Seguimiento de clientes —
+    // estatusCliente es CSV (?estatusCliente=verde,rojo); enRiesgo mira la
+    // ÚLTIMA evaluación de AC_RETENCION por cliente (mismo criterio que
+    // getUltimaRetencion, sin duplicar helper porque aquí es EXISTS, no fetch).
+    const estatusCliente = req.query.estatusCliente
+      ? String(req.query.estatusCliente).split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+    const segmentoId = req.query.segmentoId ? parseInt(req.query.segmentoId, 10) : null;
+    const enRiesgo = req.query.enRiesgo === '1' || req.query.enRiesgo === 'true';
+
     let query = `
       SELECT ${CONTACTO_SELECT_FIELDS}
       FROM CRM_CONTACTOS
@@ -87,10 +97,26 @@ exports.getAll = async (req, res) => {
         WHERE o.OPO_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND o.OPO_PROYECTO_ID IS NOT NULL
       ))`;
     }
+    if (estatusCliente.length) {
+      const keys = estatusCliente.map((_, i) => `@estCliente${i}`);
+      query += ` AND CONT_ESTATUS_CLIENTE IN (${keys.join(',')})`;
+    }
+    if (Number.isFinite(segmentoId)) query += ` AND CONT_SEGMENTO_ID = @segmentoId`;
+    if (enRiesgo) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM AC_RETENCION r
+        WHERE r.AR_CLIENTE_ID = CRM_CONTACTOS.CONT_ID AND r.AR_ESTATUS = 'riesgo'
+          AND r.AR_FECHA_EVALUACION = (
+            SELECT MAX(r2.AR_FECHA_EVALUACION) FROM AC_RETENCION r2 WHERE r2.AR_CLIENTE_ID = r.AR_CLIENTE_ID
+          )
+      )`;
+    }
     query += ` ORDER BY CONT_NOMBRE`;
     const req2 = pool.request();
     if (q) req2.input('q', sql.NVarChar, q);
     if (esCliente !== undefined) req2.input('esCliente', sql.Bit, esCliente === '1' || esCliente === 'true' ? 1 : 0);
+    estatusCliente.forEach((v, i) => req2.input(`estCliente${i}`, sql.NVarChar, v));
+    if (Number.isFinite(segmentoId)) req2.input('segmentoId', sql.Int, segmentoId);
     const result = await req2.query(query);
     res.json({ success: true, data: result.recordset });
   } catch (e) {
@@ -314,6 +340,21 @@ exports.altaCliente = async (req, res) => {
 
 // Header del Perfil de Cliente: datos generales + conteos de cada sección del
 // expediente, para no tener que disparar 8 queries separadas al abrir la página.
+// Última evaluación de retención de un cliente — "en riesgo" se define como
+// que la evaluación MÁS RECIENTE (no un estado con vigencia explícita, la
+// tabla no la tiene) tenga estatus 'riesgo'. Reusado por getExpediente (para
+// el botón "Generar oportunidad" del header) y por getResumen (para la
+// tarjeta de Retención), sin duplicar el SQL.
+async function getUltimaRetencion(pool, contactoId) {
+  const rs = await pool.request().input('id', sql.Int, contactoId).query(`
+    SELECT TOP 1 AR_ESTATUS as estatus, AR_FECHA_EVALUACION as fecha, AR_MOTIVO_RIESGO as motivo
+    FROM AC_RETENCION WHERE AR_CLIENTE_ID=@id ORDER BY AR_FECHA_EVALUACION DESC, AR_ID DESC
+  `);
+  const row = rs.recordset[0];
+  if (!row) return null;
+  return { estatus: row.estatus, fecha: row.fecha, motivo: row.motivo, enRiesgo: row.estatus === 'riesgo' };
+}
+
 exports.getExpediente = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -324,6 +365,8 @@ exports.getExpediente = async (req, res) => {
       .input('id', sql.Int, id)
       .query(`SELECT ${CONTACTO_SELECT_FIELDS} FROM CRM_CONTACTOS ${CONTACTO_CATALOGOS_JOIN} WHERE CONT_ID=@id AND CONT_ACTIVO=1`);
     if (!contacto.recordset.length) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+
+    const retencion = await getUltimaRetencion(pool, id);
 
     const conteos = await pool.request()
       .input('id', sql.Int, id)
@@ -383,9 +426,83 @@ exports.getExpediente = async (req, res) => {
     }));
 
     const etiquetas = await getEtiquetasContacto(pool, id);
-    res.json({ success: true, data: { ...contacto.recordset[0], etiquetas, conteos: conteos.recordset[0], oportunidades } });
+    res.json({ success: true, data: { ...contacto.recordset[0], etiquetas, conteos: conteos.recordset[0], oportunidades, retencion } });
   } catch (e) {
     console.error('Error getExpediente CRM:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Métricas agregadas de un cliente individual (tab "Resumen" del expediente
+// rediseñado) — Casos/Citas/Ofertas/Satisfacción/Retención/Valor comercial.
+// Separado de getExpediente porque es agregación pesada de 5 tablas más que
+// solo hace falta cuando el usuario está viendo esa tab (frontend la pide
+// con `enabled: tab === 'resumen'`), no en cada apertura del cliente.
+//
+// ?meses=N filtra por fecha del EVENTO (creación/envío/cierre) en cada
+// tabla — casos abiertos y citas próximas son estado actual, no historial,
+// así que esos dos conteos nunca se filtran por periodo (siempre reflejan
+// "ahora mismo"), sea cual sea el rango elegido.
+exports.getResumen = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'id inválido' });
+    const meses = parseInt(req.query.meses, 10);
+    const filtrarPorPeriodo = Number.isFinite(meses) && meses > 0;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    const casos = await pool.request().input('id', sql.Int, id).query(`
+      SELECT
+        SUM(CASE WHEN ${filtrarPorPeriodo ? `CASO_FECHA_CREACION >= DATEADD(MONTH, -${meses}, GETDATE())` : '1=1'} THEN 1 ELSE 0 END) as total,
+        SUM(CASE WHEN CASO_ESTATUS NOT IN ('resuelto','cerrado') THEN 1 ELSE 0 END) as abiertos
+      FROM CASOS WHERE CASO_CONTACTO_ID=@id AND CASO_ACTIVO=1
+    `);
+
+    const citas = await pool.request().input('id', sql.Int, id).query(`
+      SELECT
+        SUM(CASE WHEN ${filtrarPorPeriodo ? `CITA_FECHA_HORA >= DATEADD(MONTH, -${meses}, GETDATE())` : '1=1'} THEN 1 ELSE 0 END) as total,
+        SUM(CASE WHEN CITA_FECHA_HORA > GETDATE() AND CITA_ESTATUS NOT IN ('cancelada') THEN 1 ELSE 0 END) as proximas,
+        MAX(CITA_FECHA_HORA) as ultimaFecha
+      FROM CLI_CITAS WHERE CITA_CONTACTO_ID=@id AND CITA_ACTIVO=1
+    `);
+
+    const ofertas = await pool.request().input('id', sql.Int, id).query(`
+      SELECT COUNT(*) as enviosTotal FROM CRM_OFERTAS_ENVIOS
+      WHERE OE_CONTACTO_ID=@id ${filtrarPorPeriodo ? `AND OE_FECHA >= DATEADD(MONTH, -${meses}, GETDATE())` : ''}
+    `);
+
+    const satisfaccion = await pool.request().input('id', sql.Int, id).query(`
+      SELECT COUNT(*) as encuestasEnviadas,
+             SUM(CASE WHEN CES_CLASIFICACION IS NOT NULL THEN 1 ELSE 0 END) as respondidas,
+             SUM(CASE WHEN CES_CLASIFICACION='satisfecho' THEN 1 ELSE 0 END) as satisfechos
+      FROM CRM_ENCUESTAS_ENVIADAS
+      WHERE CES_CONTACTO_ID=@id ${filtrarPorPeriodo ? `AND CES_FECHA_ENVIO >= DATEADD(MONTH, -${meses}, GETDATE())` : ''}
+    `);
+
+    const retencion = await getUltimaRetencion(pool, id);
+
+    const valorComercial = await pool.request().input('id', sql.Int, id).query(`
+      SELECT
+        SUM(CASE WHEN OPO_ETAPA NOT IN ('ganado','perdido') THEN OPO_VALOR ELSE 0 END) as pipelineAbierto,
+        SUM(CASE WHEN OPO_ETAPA='ganado' ${filtrarPorPeriodo ? `AND OPO_FECHA_CIERRE >= DATEADD(MONTH, -${meses}, GETDATE())` : ''} THEN OPO_VALOR ELSE 0 END) as totalGanado,
+        SUM(CASE WHEN OPO_ETAPA NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) as oportunidadesAbiertas
+      FROM CRM_OPORTUNIDADES WHERE OPO_CONTACTO_ID=@id AND OPO_ACTIVO=1
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        casos: casos.recordset[0],
+        citas: citas.recordset[0],
+        ofertas: ofertas.recordset[0],
+        satisfaccion: satisfaccion.recordset[0],
+        retencion,
+        valorComercial: valorComercial.recordset[0],
+      },
+    });
+  } catch (e) {
+    console.error('Error getResumen CRM:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

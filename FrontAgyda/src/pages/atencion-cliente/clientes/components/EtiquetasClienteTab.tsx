@@ -8,7 +8,7 @@ import { crmCatalogosClienteService } from '@/services/crmCatalogosCliente.servi
 import { CatalogoListaGestion } from '@/components/crm/CatalogoListaGestion'
 import type { CRMContacto } from '@/types/crm.types'
 
-export function EtiquetasClienteTab({ cliente }: { cliente: CRMContacto }) {
+export function EtiquetasClienteTab({ cliente, compact }: { cliente: CRMContacto; compact?: boolean }) {
   const qc = useQueryClient()
   const [etiquetaIds, setEtiquetaIds] = useState<number[]>(cliente.etiquetas.map((e) => e.id))
 
@@ -33,6 +33,42 @@ export function EtiquetasClienteTab({ cliente }: { cliente: CRMContacto }) {
   const idsSeleccionados = [...etiquetaIds].sort().join(',')
   const cambio = idsActuales !== idsSeleccionados
 
+  const bloqueSeleccion = (
+    <div className={compact ? 'space-y-3' : 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card space-y-3'}>
+      {!compact && <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Etiquetas</p>}
+      {items.length === 0 ? (
+        <p className="text-xs text-ink-tertiary py-2">Sin etiquetas definidas — agrega la primera desde Configuración.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              onClick={() => toggleEtiqueta(e.id)}
+              className={clsx(
+                'rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors',
+                etiquetaIds.includes(e.id) ? 'border-violet-500 bg-violet-100 text-violet-700' : 'border-gray-200 text-gray-500 hover:border-gray-300',
+              )}
+            >
+              {e.nombre}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex justify-end pt-1">
+        <button
+          onClick={() => guardar.mutate()}
+          disabled={!cambio || guardar.isPending}
+          className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-violet-600/20 transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-60"
+        >
+          <Check className="h-3.5 w-3.5" /> Guardar
+        </button>
+      </div>
+    </div>
+  )
+
+  if (compact) return bloqueSeleccion
+
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
@@ -47,36 +83,7 @@ export function EtiquetasClienteTab({ cliente }: { cliente: CRMContacto }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card space-y-3">
-        {items.length === 0 ? (
-          <p className="text-xs text-ink-tertiary py-2">Sin etiquetas definidas — agrega la primera abajo.</p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {items.map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => toggleEtiqueta(e.id)}
-                className={clsx(
-                  'rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors',
-                  etiquetaIds.includes(e.id) ? 'border-violet-500 bg-violet-100 text-violet-700' : 'border-gray-200 text-gray-500 hover:border-gray-300',
-                )}
-              >
-                {e.nombre}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="flex justify-end pt-1">
-          <button
-            onClick={() => guardar.mutate()}
-            disabled={!cambio || guardar.isPending}
-            className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-violet-600/20 transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-60"
-          >
-            <Check className="h-3.5 w-3.5" /> Guardar
-          </button>
-        </div>
-      </div>
+      {bloqueSeleccion}
 
       <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <p className="mb-3 text-[0.8rem] font-bold text-ink">Opciones del catálogo</p>

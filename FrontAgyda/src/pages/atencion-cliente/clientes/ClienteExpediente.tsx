@@ -1,47 +1,47 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { User, FileText, Building2, History, Inbox, Tag, Layers, FolderTree, Factory, ListTree, Tags, KeyRound } from 'lucide-react'
+import {
+  User, FileText, Building2, History, Inbox, Briefcase, Mail, Phone, MapPin,
+  Pencil, MoreHorizontal, CalendarCheck, UserCircle, Download,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import { Spinner } from '@/components/ui/Spinner'
 import { Tabs, type TabItem } from '@/components/ui/Tabs'
 import { crmService } from '@/services/crm.service'
-import { crmCatalogosClienteService } from '@/services/crmCatalogosCliente.service'
 import { CLIENTE_ESTATUS_COLORES } from '@/types/crm.types'
-import { DatosGeneralesTab } from './components/DatosGeneralesTab'
+import { useModuleAccess } from '@/hooks/useModuleAccess'
+import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
+import { GenerarOportunidadModal } from '../components/GenerarOportunidadModal'
+import { ResumenTab } from './components/ResumenTab'
+import { AtencionTab, type SubAtencion } from './components/AtencionTab'
+import { ComercialConsolidadoTab, type SubComercial } from './components/ComercialConsolidadoTab'
 import { DocumentosTab } from './components/DocumentosTab'
-import { SeguimientoConsolidadoTab, type SubSeguimiento } from './components/SeguimientoConsolidadoTab'
-import { CasosPagosTab, type SubCasosPagos } from './components/CasosPagosTab'
-import { CatalogoSeleccionTab } from './components/CatalogoSeleccionTab'
-import { EtiquetasClienteTab } from './components/EtiquetasClienteTab'
-import { AccesoPortalTab } from './components/AccesoPortalTab'
+import { HistorialTab } from './components/HistorialTab'
+import { EtiquetasHeaderChips } from './components/EtiquetasHeaderChips'
 
 // Cuerpo del expediente del cliente — extraído de ClientePerfilPage para que lo
-// compartan la ruta /clientes/:id (wrapper que lee la URL) y el ClienteDrawer
-// del módulo "Seguimiento de clientes" (le pasa tab/sub por props).
+// compartan la ruta /clientes/:id (wrapper que lee la URL) y el panel de
+// detalle del módulo "Seguimiento de clientes" (le pasa tab/sub por props).
 //
-// Expediente de 11 pestañas:
-//   datos          → DatosGeneralesTab
-//   tipo/segmento/categoria/industria/clasificacion → CatalogoSeleccionTab (×5)
-//   etiquetas      → EtiquetasClienteTab
-//   acceso-portal  → AccesoPortalTab
-//   seguimiento    → bitácora + tareas + citas + renovaciones + historial (sub-tabs)
-//   casos-pagos    → casos + control de pagos + satisfacción + comercial (sub-tabs)
-//   documentos     → DocumentosTab
+// Expediente de 5 pestañas (rediseño UX — antes eran 11):
+//   resumen    → Información general (datos + catálogos + etiquetas + acceso
+//                portal, antes 8 pestañas separadas) + Métricas rápidas +
+//                Actividad reciente
+//   atencion   → bitácora + tareas + citas + renovaciones + casos (sub-tabs)
+//   comercial  → control de pagos + satisfacción + comercial (sub-tabs)
+//   documentos → DocumentosTab
+//   actividad  → historial completo (antes una sub-tab de "seguimiento")
 
-export type ExpedienteTab =
-  | 'datos' | 'tipo' | 'segmento' | 'categoria' | 'industria' | 'clasificacion' | 'etiquetas' | 'acceso-portal'
-  | 'seguimiento' | 'casos-pagos' | 'documentos'
-export const EXPEDIENTE_TAB_KEYS: ExpedienteTab[] = [
-  'datos', 'tipo', 'segmento', 'categoria', 'industria', 'clasificacion', 'etiquetas', 'acceso-portal',
-  'seguimiento', 'casos-pagos', 'documentos',
-]
+export type ExpedienteTab = 'resumen' | 'atencion' | 'comercial' | 'documentos' | 'actividad'
+export const EXPEDIENTE_TAB_KEYS: ExpedienteTab[] = ['resumen', 'atencion', 'comercial', 'documentos', 'actividad']
 
-export const EXPEDIENTE_SUB_DEFAULT: Record<'seguimiento' | 'casos-pagos', string> = {
-  seguimiento: 'bitacora',
-  'casos-pagos': 'casos',
+export const EXPEDIENTE_SUB_DEFAULT: Record<'atencion' | 'comercial', string> = {
+  atencion: 'bitacora',
+  comercial: 'pagos',
 }
-export const EXPEDIENTE_SUB_VALIDAS: Record<'seguimiento' | 'casos-pagos', string[]> = {
-  seguimiento: ['bitacora', 'tareas', 'citas', 'renovaciones', 'historial'],
-  'casos-pagos': ['casos', 'pagos', 'satisfaccion', 'comercial'],
+export const EXPEDIENTE_SUB_VALIDAS: Record<'atencion' | 'comercial', string[]> = {
+  atencion: ['bitacora', 'tareas', 'citas', 'renovaciones', 'casos'],
+  comercial: ['pagos', 'satisfaccion', 'comercial'],
 }
 
 export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact }: {
@@ -52,6 +52,11 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
   onSub: (s: string) => void
   compact?: boolean
 }) {
+  const { isAllowed } = useModuleAccess()
+  const { data: usuarios } = useUsuariosSimple()
+  const [generarOportunidad, setGenerarOportunidad] = useState(false)
+  const [menuAbierto, setMenuAbierto] = useState(false)
+
   const { data: cliente, isLoading, error } = useQuery({
     queryKey: ['cliente-expediente', contactoId],
     queryFn: () => crmService.getExpediente(contactoId),
@@ -70,34 +75,49 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
   }
 
   const cfg = CLIENTE_ESTATUS_COLORES.find((e) => e.key === cliente.estatusCliente) ?? CLIENTE_ESTATUS_COLORES[0]
+  const puedeGenerarOportunidad = isAllowed('crm') && !!cliente.retencion?.enRiesgo
   const TABS: TabItem<ExpedienteTab>[] = [
-    { key: 'datos', label: 'Datos', icon: User },
-    { key: 'tipo', label: 'Tipo', icon: Tag },
-    { key: 'segmento', label: 'Segmento', icon: Layers },
-    { key: 'categoria', label: 'Categoría', icon: FolderTree },
-    { key: 'industria', label: 'Industria', icon: Factory },
-    { key: 'clasificacion', label: 'Clasificación', icon: ListTree },
-    { key: 'etiquetas', label: 'Etiquetas', icon: Tags },
-    { key: 'acceso-portal', label: 'Acceso al portal', icon: KeyRound },
-    { key: 'seguimiento', label: 'Seguimiento', icon: History },
-    { key: 'casos-pagos', label: 'Casos, pagos y ventas', icon: Inbox },
+    { key: 'resumen', label: 'Resumen', icon: User },
+    { key: 'atencion', label: 'Atención', icon: Inbox },
+    { key: 'comercial', label: 'Comercial', icon: Briefcase },
     { key: 'documentos', label: 'Documentos', icon: FileText, badge: cliente.conteos?.documentos },
+    { key: 'actividad', label: 'Actividad', icon: History },
   ]
 
+  const responsableNombre = usuarios?.find((u) => u.id === cliente.responsableId)?.nombre
+  const fechaAlta = cliente.fecha ? new Date(cliente.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : null
+
+  const exportarExpediente = () => {
+    const resumen = [
+      `Expediente de cliente — ${cliente.nombre}`,
+      cliente.empresa ? `Empresa: ${cliente.empresa}` : null,
+      `Estatus: ${cfg.label}`,
+      cliente.correo ? `Correo: ${cliente.correo}` : null,
+      cliente.telefono ? `Teléfono: ${cliente.telefono}` : null,
+      cliente.direccion ? `Dirección: ${cliente.direccion}` : null,
+      fechaAlta ? `Cliente desde: ${fechaAlta}` : null,
+      responsableNombre ? `Ejecutivo asignado: ${responsableNombre}` : null,
+      cliente.etiquetas.length ? `Etiquetas: ${cliente.etiquetas.map((e) => e.nombre).join(', ')}` : null,
+    ].filter(Boolean).join('\n')
+    const blob = new Blob([resumen], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `expediente-${cliente.nombre.replace(/\s+/g, '-').toLowerCase()}.txt`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    setMenuAbierto(false)
+  }
+
   return (
-    <div className="space-y-5 animate-fade-in">
-      <div className={clsx('card overflow-hidden', compact && 'rounded-xl')}>
-        <div
-          className={clsx('animate-gradient-x relative overflow-hidden', compact ? 'px-5 py-4' : 'px-6 py-5')}
-          style={{
-            backgroundImage: 'linear-gradient(90deg, #0D1B3E 0%, #1B4FD8 25%, #5FA8FF 50%, #1B4FD8 75%, #0D1B3E 100%)',
-            backgroundSize: '200% 100%',
-          }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex items-center gap-3">
-            <div className={clsx('flex items-center justify-center rounded-xl bg-white/10', compact ? 'h-10 w-10' : 'h-12 w-12')}>
-              <User className={compact ? 'h-5 w-5 text-white' : 'h-6 w-6 text-white'} />
+    <div className="space-y-5 animate-fade-in" onClick={() => menuAbierto && setMenuAbierto(false)}>
+      <div className={clsx('overflow-hidden rounded-2xl bg-[#0B1220]', compact ? 'p-4' : 'p-5')}>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-start gap-3">
+            <div className={clsx('flex flex-shrink-0 items-center justify-center rounded-full bg-brand text-sm font-bold text-white', compact ? 'h-11 w-11' : 'h-12 w-12')}>
+              {cliente.nombre?.slice(0, 2).toUpperCase() || <User className="h-5 w-5" />}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -107,74 +127,92 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
                 </span>
               </div>
               {cliente.empresa && (
-                <p className="mt-0.5 flex items-center gap-1 text-xs text-blue-100/80">
+                <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
                   <Building2 className="h-3 w-3" /> {cliente.empresa}
                 </p>
               )}
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-300">
+                {cliente.correo && <span className="flex items-center gap-1.5"><Mail className="h-3 w-3 text-gray-500" /> {cliente.correo}</span>}
+                {cliente.telefono && <span className="flex items-center gap-1.5"><Phone className="h-3 w-3 text-gray-500" /> {cliente.telefono}</span>}
+                {cliente.direccion && <span className="flex items-center gap-1.5"><MapPin className="h-3 w-3 text-gray-500" /> {cliente.direccion}</span>}
+              </div>
+              <div className="mt-2">
+                <EtiquetasHeaderChips cliente={cliente} />
+              </div>
             </div>
           </div>
+
+          <div className="flex items-start gap-2">
+            {puedeGenerarOportunidad && (
+              <button
+                onClick={() => setGenerarOportunidad(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-brand-dark transition-colors"
+              >
+                <Briefcase className="h-4 w-4" /> Generar oportunidad
+              </button>
+            )}
+            <button className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-[0.78rem] font-semibold text-gray-200 hover:bg-white/5 transition-colors">
+              <Pencil className="h-3.5 w-3.5" /> Editar
+            </button>
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => setMenuAbierto((v) => !v)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {menuAbierto && (
+                <div className="absolute right-0 top-9 z-10 w-52 rounded-xl border border-gray-100 bg-card py-1.5 shadow-lg">
+                  <button
+                    onClick={exportarExpediente}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[0.8rem] font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Exportar expediente
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-4 border-t border-white/10 pt-3 text-xs text-gray-400">
+          {fechaAlta && <span className="flex items-center gap-1.5"><CalendarCheck className="h-3.5 w-3.5" /> Cliente desde {fechaAlta}</span>}
+          {responsableNombre && <span className="flex items-center gap-1.5"><UserCircle className="h-3.5 w-3.5" /> Ejecutivo asignado: {responsableNombre}</span>}
         </div>
       </div>
 
       <Tabs tabs={TABS} value={tab} onChange={onTab} />
 
-      {tab === 'datos' && <DatosGeneralesTab cliente={cliente} />}
-      {tab === 'tipo' && (
-        <CatalogoSeleccionTab
-          cliente={cliente} titulo="Tipo de cliente" subtitulo="Ej. Persona física, Persona moral, Gobierno."
-          icon={Tag} service={crmCatalogosClienteService.tipos} queryKey="crm-catalogo-tipos-cliente"
-          campo="tipoClienteId" valorActualId={cliente.tipoClienteId} valorActualNombre={cliente.tipoClienteNombre}
-        />
-      )}
-      {tab === 'segmento' && (
-        <CatalogoSeleccionTab
-          cliente={cliente} titulo="Segmento" subtitulo="Segmentación comercial del cliente."
-          icon={Layers} service={crmCatalogosClienteService.segmentos} queryKey="crm-catalogo-segmentos"
-          campo="segmentoId" valorActualId={cliente.segmentoId} valorActualNombre={cliente.segmentoNombre}
-        />
-      )}
-      {tab === 'categoria' && (
-        <CatalogoSeleccionTab
-          cliente={cliente} titulo="Categoría" subtitulo="Categoría comercial del cliente."
-          icon={FolderTree} service={crmCatalogosClienteService.categorias} queryKey="crm-catalogo-categorias-cliente"
-          campo="categoriaId" valorActualId={cliente.categoriaId} valorActualNombre={cliente.categoriaNombre}
-        />
-      )}
-      {tab === 'industria' && (
-        <CatalogoSeleccionTab
-          cliente={cliente} titulo="Industria" subtitulo="Giro o industria del cliente."
-          icon={Factory} service={crmCatalogosClienteService.industrias} queryKey="crm-catalogo-industrias"
-          campo="industriaId" valorActualId={cliente.industriaId} valorActualNombre={cliente.industriaNombre}
-        />
-      )}
-      {tab === 'clasificacion' && (
-        <CatalogoSeleccionTab
-          cliente={cliente} titulo="Clasificación" subtitulo="Clasificación interna del cliente."
-          icon={ListTree} service={crmCatalogosClienteService.clasificaciones} queryKey="crm-catalogo-clasificaciones-cliente"
-          campo="clasificacionId" valorActualId={cliente.clasificacionId} valorActualNombre={cliente.clasificacionNombre}
-        />
-      )}
-      {tab === 'etiquetas' && <EtiquetasClienteTab cliente={cliente} />}
-      {tab === 'acceso-portal' && <AccesoPortalTab cliente={cliente} />}
-      {tab === 'seguimiento' && (
-        <SeguimientoConsolidadoTab
+      {tab === 'resumen' && <ResumenTab cliente={cliente} />}
+      {tab === 'atencion' && (
+        <AtencionTab
           contactoId={cliente.id}
           clienteNombre={cliente.nombre}
-          sub={sub as SubSeguimiento}
+          sub={sub as SubAtencion}
           onSubChange={onSub}
         />
       )}
-      {tab === 'casos-pagos' && (
-        <CasosPagosTab
+      {tab === 'comercial' && (
+        <ComercialConsolidadoTab
           contactoId={cliente.id}
-          clienteNombre={cliente.nombre}
-          sub={sub as SubCasosPagos}
+          sub={sub as SubComercial}
           onSubChange={onSub}
           conteos={cliente.conteos}
           oportunidades={cliente.oportunidades}
         />
       )}
       {tab === 'documentos' && <DocumentosTab contactoId={cliente.id} />}
+      {tab === 'actividad' && <HistorialTab contactoId={cliente.id} />}
+
+      {generarOportunidad && cliente.retencion && (
+        <GenerarOportunidadModal
+          contactoId={cliente.id}
+          contactoNombre={cliente.nombre}
+          tituloSugerido={`Retención — ${cliente.nombre}`}
+          contextoNota={`Generada desde el expediente del cliente (evaluación de retención: ${cliente.retencion.estatus}).${cliente.retencion.motivo ? `\n\nMotivo: ${cliente.retencion.motivo}` : ''}`}
+          onClose={() => setGenerarOportunidad(false)}
+        />
+      )}
     </div>
   )
 }

@@ -449,6 +449,7 @@ const ACCIONES_POR_MODULO = {
     // que las tenían recibieron casos-ver / casos-gestionar por backfill.
     { key: 'casos-ver',              nombre: 'Ver casos',               descripcion: 'Consultar el listado y detalle de casos de clientes (consultas, aclaraciones, quejas, incidencias)' },
     { key: 'casos-gestionar',        nombre: 'Gestionar casos',         descripcion: 'Crear, asignar, comentar y cambiar el estatus de casos' },
+    { key: 'categorias-gestionar',   nombre: 'Gestionar categorías de casos', descripcion: 'Agregar, editar, desactivar y asignar la prioridad automática de las categorías de casos/incidencias' },
     { key: 'citas-ver',              nombre: 'Ver agenda de citas',     descripcion: 'Consultar la agenda de citas y las sesiones de tratamiento de clientes' },
     { key: 'citas-gestionar',        nombre: 'Gestionar citas',         descripcion: 'Agendar, reprogramar, cancelar citas y sesiones de tratamiento; resolver solicitudes del portal' },
     { key: 'ofertas-gestionar',      nombre: 'Gestionar ofertas',       descripcion: 'Crear y enviar campañas de oferta a segmentos de clientes por correo y WhatsApp' },

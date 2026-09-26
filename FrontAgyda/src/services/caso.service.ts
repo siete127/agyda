@@ -1,8 +1,8 @@
 import { api } from '@/lib/axios'
 import {
-  type Caso, type CasoComentario, type CasoEvidencia, type CasoAccionCorrectiva,
+  type Caso, type CasoComentario, type CasoEvidencia, type CasoAccionCorrectiva, type CasoCategoria,
   type CasoTipo, type CasoPrioridad, type CasoEstatus,
-  parseCaso, parseCasoComentario, parseCasoEvidencia, parseCasoAccionCorrectiva,
+  parseCaso, parseCasoComentario, parseCasoEvidencia, parseCasoAccionCorrectiva, parseCasoCategoria,
 } from '@/types/caso.types'
 
 const norm = <T>(data: unknown, parse: (r: Record<string, unknown>) => T): T[] => {
@@ -83,4 +83,25 @@ export const casoService = {
   },
   createAccionCorrectiva: (casoId: number, body: { descripcion: string; responsable: string; fechaCompromiso: string; estado?: string }) =>
     api.post(`/atencion-cliente/casos/${casoId}/accion-correctiva`, body).then((r) => r.data),
+
+  getCategoriasActivas: async (): Promise<CasoCategoria[]> => {
+    const { data } = await api.get('/atencion-cliente/categorias-casos/activas')
+    return norm(data?.data ?? data, parseCasoCategoria)
+  },
+  getCategorias: async (): Promise<CasoCategoria[]> => {
+    const { data } = await api.get('/atencion-cliente/categorias-casos')
+    return norm(data?.data ?? data, parseCasoCategoria)
+  },
+  createCategoria: (body: { nombre: string; orden?: number }) =>
+    api.post('/atencion-cliente/categorias-casos', body).then((r) => r.data),
+  updateCategoria: (id: number, body: { nombre?: string; orden?: number; activo?: boolean }) =>
+    api.put(`/atencion-cliente/categorias-casos/${id}`, body).then((r) => r.data),
+  deleteCategoria: (id: number) =>
+    api.delete(`/atencion-cliente/categorias-casos/${id}`).then((r) => r.data),
+  createSubcategoria: (categoriaId: number, body: { nombre: string; prioridad: CasoPrioridad; orden?: number }) =>
+    api.post(`/atencion-cliente/categorias-casos/${categoriaId}/subcategorias`, body).then((r) => r.data),
+  updateSubcategoria: (id: number, body: { nombre?: string; prioridad?: CasoPrioridad; orden?: number; activo?: boolean }) =>
+    api.put(`/atencion-cliente/subcategorias-casos/${id}`, body).then((r) => r.data),
+  deleteSubcategoria: (id: number) =>
+    api.delete(`/atencion-cliente/subcategorias-casos/${id}`).then((r) => r.data),
 }

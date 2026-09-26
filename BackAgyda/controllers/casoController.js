@@ -209,7 +209,7 @@ exports.create = async (req, res) => {
       .input('clienteNombreLibre', sql.NVarChar(200), nombreLibre)
       .input('titulo', sql.NVarChar(200), String(titulo).trim())
       .input('descripcion', sql.NVarChar(sql.MAX), descripcion || null)
-      .input('categoria', sql.NVarChar(50), categoria || null)
+      .input('categoria', sql.NVarChar(200), categoria || null)
       .input('referencia', sql.NVarChar(100), referencia || null)
       .input('prioridad', sql.NVarChar(20), prio)
       .input('slaHoras', sql.Int, slaHoras)
@@ -387,12 +387,18 @@ exports.listComentarios = async (req, res) => {
       .input('id', sql.Int, casoId)
       .query(`
         SELECT CCO_ID as id, CCO_CASO_ID as casoId, CCO_COMENTARIO as comentario,
-               CCO_USUARIO_ID as usuarioId, U.NEUS_NOMBRES as usuarioNombre, CCO_FECHA as fecha
+               CCO_USUARIO_ID as usuarioId, U.NEUS_NOMBRES as usuarioNombre,
+               CCO_CONTACTO_ID as contactoId, C.CONT_NOMBRE as contactoNombre,
+               CCO_ORIGEN as origen, CCO_FECHA as fecha
         FROM CASOS_COMENTARIOS CCO
         LEFT JOIN NEUS_USUARIOS U ON U.NEUS_ID = CCO.CCO_USUARIO_ID
+        LEFT JOIN CRM_CONTACTOS C ON C.CONT_ID = CCO.CCO_CONTACTO_ID
         WHERE CCO_CASO_ID = @id
         ORDER BY CCO_FECHA ASC
       `);
+    // El agente que consulta el hilo marca como leídos los mensajes del cliente.
+    await pool.request().input('id', sql.Int, casoId)
+      .query(`UPDATE CASOS_COMENTARIOS SET CCO_LEIDO_INTERNO=1 WHERE CCO_CASO_ID=@id AND CCO_ORIGEN='portal'`);
     res.json({ success: true, data: rs.recordset });
   } catch (e) {
     console.error('Error listComentarios caso:', e);
@@ -413,10 +419,32 @@ exports.addComentario = async (req, res) => {
       .input('comentario', sql.NVarChar(sql.MAX), String(comentario).trim())
       .input('usuarioId', sql.Int, getUserId(req))
       .query(`
-        INSERT INTO CASOS_COMENTARIOS (CCO_CASO_ID, CCO_COMENTARIO, CCO_USUARIO_ID)
+        INSERT INTO CASOS_COMENTARIOS (CCO_CASO_ID, CCO_COMENTARIO, CCO_USUARIO_ID, CCO_ORIGEN)
         OUTPUT INSERTED.CCO_ID
-        VALUES (@casoId, @comentario, @usuarioId)
+        VALUES (@casoId, @comentario, @usuarioId, 'interno')
       `);
+
+    // Avisa a los usuarios del Portal de Cliente ligados al contacto del caso
+    // (si lo tiene) de que su asesor respondió — mismo patrón ya usado para
+    // avisar de cotizaciones/cierres de caso.
+    try {
+      const caso = (await pool.request().input('id', sql.Int, casoId)
+        .query(`SELECT CASO_CONTACTO_ID as contactoId, CASO_FOLIO as folio, CASO_ORIGEN as origen FROM CASOS WHERE CASO_ID=@id`)).recordset[0];
+      if (caso?.origen === 'portal' && caso.contactoId) {
+        const portalUsers = await pool.request().input('contId', sql.Int, caso.contactoId)
+          .query(`SELECT PU_NEUS_ID as neusId FROM PORTAL_USUARIOS WHERE PU_CONT_ID=@contId AND PU_ACTIVO=1`);
+        for (const pu of portalUsers.recordset) {
+          await notificationService.createNotification({
+            usuarioId: pu.neusId,
+            mensaje: `Tu asesor respondió tu solicitud ${caso.folio}`,
+            tipo: 'cliente-caso-mensaje',
+            dataExtra: { casoId, folio: caso.folio },
+            tenantKey: req.user?.empresa,
+          });
+        }
+      }
+    } catch (e) { console.warn('addComentario caso: aviso a portal:', e.message); }
+
     res.status(201).json({ success: true, data: { id: ins.recordset[0].CCO_ID } });
   } catch (e) {
     console.error('Error addComentario caso:', e);
@@ -714,7 +742,7 @@ exports.crearCasoAutomatico = async ({ tipo, contactoId, titulo, descripcion, ca
       .input('contactoId', sql.Int, contactoId)
       .input('titulo', sql.NVarChar(200), titulo)
       .input('descripcion', sql.NVarChar(sql.MAX), descripcion || null)
-      .input('categoria', sql.NVarChar(50), categoria || null)
+      .input('categoria', sql.NVarChar(200), categoria || null)
       .input('prioridad', sql.NVarChar(20), prio)
       .input('slaHoras', sql.Int, slaHoras)
       .input('origen', sql.NVarChar(20), origen || 'manual')
