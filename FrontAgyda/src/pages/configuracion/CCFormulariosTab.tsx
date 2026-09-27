@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { ccFormulariosService } from '@/services/ccFormularios.service'
 import { ccService } from '@/services/cc.service'
 import { Modal } from '@/components/ui/Modal'
+import { TipoCampoPicker } from './TipoCampoPicker'
 import { useAuthStore } from '@/stores/auth.store'
 import type {
   CCFormulario, CCFormVersionCompleta, CCFormSeccion, CCFormCampo, CCFormTipoCampo,
@@ -1232,13 +1233,9 @@ function CampoForm({ seccionId, formularioId, orden, campoExistente, onDone, onC
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <label><span className={label}>Código interno</span>
           <input className={field} value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="ej. nombre_cliente" /></label>
-        <label><span className={label}>Tipo de campo</span>
-          <select className={field} value={tipo} onChange={(e) => setTipo(e.target.value as CCFormTipoCampo)}>
-            {(tipos.length ? tipos : Object.keys(TIPO_CAMPO_LABEL) as CCFormTipoCampo[]).map((t) => (
-              <option key={t} value={t}>{TIPO_CAMPO_LABEL[t] ?? t}</option>
-            ))}
-          </select>
-        </label>
+        <div><span className={label}>Tipo de campo</span>
+          <TipoCampoPicker value={tipo} onChange={setTipo} tipos={tipos} />
+        </div>
       </div>
       <label><span className={label}>Etiqueta (lo que ve el agente)</span>
         <input className={field} value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} placeholder="ej. Nombre del cliente" /></label>

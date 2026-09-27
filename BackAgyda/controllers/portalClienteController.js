@@ -3,6 +3,7 @@ const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const casoController = require('./casoController');
 const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
+const { usuariosAtencionDeCliente } = require('../services/atencionGruposService');
 const notificationService = require('../services/notificationService');
 const { sanitizeFilename, decryptBuffer } = require('../utils/cryptoDocs');
 const { getPortalRolAcciones } = require('../middleware/portalCliente');
@@ -137,7 +138,8 @@ exports.getProductosServicios = async (req, res) => {
           CCPS.CCPS_FECHA_ASIGNACION as fechaAlta
         FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS CCPS
         JOIN PRODUCTOS_SERVICIOS PS ON PS.PS_ID = CCPS.CCPS_PS_ID
-        WHERE CCPS.CCPS_CONT_ID = @id
+        -- Los pendientes de pago aún no son del cliente (se le avisa al pagarse).
+        WHERE CCPS.CCPS_CONT_ID = @id AND ISNULL(CCPS.CCPS_ESTATUS, 'activo') = 'activo'
         ORDER BY PS.PS_NOMBRE ASC
       `);
     res.json({ success: true, data: result.recordset });
@@ -533,10 +535,11 @@ function _rateLimitCita(contactoId) {
 async function _notificarAsesorCita(pool, tenantKey, citaId, tipo, contactoNombre) {
   try {
     const cita = (await pool.request().input('id', sql.Int, citaId)
-      .query(`SELECT CITA_ASIGNADO_A as asignadoA FROM CLI_CITAS WHERE CITA_ID=@id`)).recordset[0];
+      .query(`SELECT CITA_ASIGNADO_A as asignadoA, CITA_CONTACTO_ID as contactoId FROM CLI_CITAS WHERE CITA_ID=@id`)).recordset[0];
     const destinatarios = new Set();
     if (cita?.asignadoA) destinatarios.add(cita.asignadoA);
-    for (const s of await getUsuariosParaNotificarCorreo('atencion-cliente', tenantKey)) destinatarios.add(s);
+    // Grupo de atención del cliente (o quienes tienen el aviso del módulo).
+    for (const s of await usuariosAtencionDeCliente(pool, tenantKey, cita?.contactoId)) destinatarios.add(s);
     for (const uid of destinatarios) {
       await notificationService.createNotification({
         usuarioId: uid,
@@ -713,7 +716,7 @@ exports.crearIncidencia = async (req, res) => {
       const resp = await pool.request().input('id', sql.Int, req.contacto.id)
         .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
       if (!resp.recordset[0]?.responsableId) {
-        const sup = await getUsuariosParaNotificarCorreo('atencion-cliente', req.user?.empresa);
+        const sup = await usuariosAtencionDeCliente(pool, req.user?.empresa, req.contacto.id);
         for (const uid of sup) {
           await notificationService.createNotification({
             usuarioId: uid,

@@ -18,6 +18,7 @@ import { productoServicioService } from '@/services/productoServicio.service'
 // Etiquetas de recurrencia y formato de dinero compartidos con el catálogo para asignar.
 import { RECURRENCIA_LABEL, RECURRENCIA_CHIP, money } from './productoServicioUi'
 import { CatalogoProductosModal } from './CatalogoProductosModal'
+import { NuevaFacturaModal, type PresetFacturaCliente } from '@/pages/facturacion/NuevaFacturaModal'
 
 interface FinanzasCliente {
   totalIngresado: number
@@ -179,13 +180,15 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
     queryFn: () => productoServicioService.getByCliente(clienteId),
   })
 
+  // Lo que se cobra se factura primero (con los datos ya cargados); el
+  // cliente lo recibe —y se le avisa— hasta que se valida el pago.
+  const [facturarPreset, setFacturarPreset] = useState<PresetFacturaCliente | null>(null)
+
+  // Asignación directa: solo para lo que no tiene precio (no hay nada que cobrar).
   const asignar = useMutation({
     mutationFn: (psIds: number[]) => productoServicioService.asignarVariosACliente(clienteId, psIds),
-    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; usuarios: number; correos: number; productos?: number } | null; cxc?: { creadas: number; monto: number; facturas?: number } | null } }) => {
+    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; usuarios: number; correos: number; productos?: number } | null } }) => {
       qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] })
-      // Lo asignado con precio genera su cuenta por cobrar ("Pendiente de cobro") y su pre-factura.
-      qc.invalidateQueries({ queryKey: ['cliente-finanzas', clienteId] })
-      qc.invalidateQueries({ queryKey: ['facturas-todas'] })
       setCatalogoAbierto(false)
       // El backend avisa al cliente (portal + correo con "Soporte técnico").
       const a = r?.data?.aviso
@@ -193,18 +196,29 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
       if (!a) toast.success(que)
       else if (a.conPortal) toast.success(`${que} · se avisó al cliente en su portal${a.correos ? ` y por correo (${a.correos})` : ''}`)
       else toast.success(a.correos ? `${que} · el cliente no tiene portal: se le avisó por correo` : `${que} · el cliente no tiene portal ni correo para avisarle`)
-      const cxc = r?.data?.cxc
-      if (cxc?.creadas) toast.success(`${cxc.facturas ? 'Pre-factura y cuenta por cobrar generadas' : 'Cuenta por cobrar generada'} en Finanzas: ${money(cxc.monto)} (IVA incluido)`)
     },
     onError: () => toast.error('No se pudo asignar'),
   })
 
+  const agregar = (psIds: number[]) => {
+    const elegidos = catalogo.filter((p) => psIds.includes(p.id))
+    if (elegidos.every((p) => !(Number(p.precio) > 0))) return asignar.mutate(psIds)
+    setCatalogoAbierto(false)
+    setFacturarPreset({ clienteId, clienteNombre, productos: elegidos })
+  }
+
   const quitar = useMutation({
     mutationFn: (psId: number) => productoServicioService.quitarDeCliente(clienteId, psId),
-    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; correos: number } | null; cxcCanceladas?: number } }) => {
+    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; correos: number } | null; cxcCanceladas?: number; pendiente?: boolean; facturaCancelada?: boolean } }) => {
       qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] })
       qc.invalidateQueries({ queryKey: ['cliente-finanzas', clienteId] })
       qc.invalidateQueries({ queryKey: ['facturas-todas'] })
+      if (r?.data?.pendiente) {
+        toast.success(r.data.facturaCancelada
+          ? 'Producto retirado · se canceló su pre-factura (no se había avisado al cliente)'
+          : 'Producto retirado · estaba pendiente de pago, no se había avisado al cliente')
+        return
+      }
       if (r?.data?.cxcCanceladas) toast('Se eliminó su cuenta por cobrar pendiente y se canceló su pre-factura')
       // El backend también avisa al cliente cuando se le retira.
       const a = r?.data?.aviso
@@ -217,8 +231,10 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
 
   const disponibles = catalogo.filter((c) => c.activo && !asignados.some((a) => a.productoServicioId === c.id))
 
-  const totalMensual = asignados.filter((a) => a.recurrencia === 'MENSUAL').reduce((s, a) => s + a.precio, 0)
-  const totalAnual = asignados.filter((a) => a.recurrencia === 'ANUAL').reduce((s, a) => s + a.precio, 0)
+  // Lo contratado cuenta hasta que se pagó.
+  const activos = asignados.filter((a) => a.estatus === 'activo')
+  const totalMensual = activos.filter((a) => a.recurrencia === 'MENSUAL').reduce((s, a) => s + a.precio, 0)
+  const totalAnual = activos.filter((a) => a.recurrencia === 'ANUAL').reduce((s, a) => s + a.precio, 0)
 
   return (
     <div className="space-y-4">
@@ -255,6 +271,11 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
                   <div className="mt-0.5 flex items-center gap-1.5">
                     <span className="text-[0.62rem] uppercase tracking-wide text-gray-400">{a.tipo === 'SERVICIO' ? 'Servicio' : 'Producto'}</span>
                     <span className={clsx('chip text-[0.6rem]', RECURRENCIA_CHIP[a.recurrencia])}>{RECURRENCIA_LABEL[a.recurrencia]}</span>
+                    {a.estatus === 'pendiente-pago' && (
+                      <span className="chip bg-amber-100 text-[0.6rem] text-amber-700" title="Se activa y se avisa al cliente cuando se valide el pago">
+                        Pendiente de pago{a.facturaFolio ? ` · ${a.facturaFolio}` : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex-shrink-0 text-right">
@@ -267,9 +288,14 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
                   )}
                 </div>
                 <button
-                  title="Retirar (se le avisará al cliente)"
+                  title={a.estatus === 'pendiente-pago' ? 'Retirar (aún no se le avisa al cliente)' : 'Retirar (se le avisará al cliente)'}
                   disabled={quitar.isPending}
-                  onClick={() => { if (window.confirm(`¿Retirar "${a.nombre}" de este cliente? Se le avisará por correo y en su portal.`)) quitar.mutate(a.productoServicioId) }}
+                  onClick={() => {
+                    const msg = a.estatus === 'pendiente-pago'
+                      ? `¿Retirar "${a.nombre}"? Está pendiente de pago: no se le avisa al cliente y, si es lo único de su pre-factura, esta se cancela.`
+                      : `¿Retirar "${a.nombre}" de este cliente? Se le avisará por correo y en su portal.`
+                    if (window.confirm(msg)) quitar.mutate(a.productoServicioId)
+                  }}
                   className="flex-shrink-0 rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -293,7 +319,7 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
             <span className="block text-[0.85rem] font-bold text-violet-700">Agregar producto o servicio</span>
             <span className="block text-[0.72rem] text-gray-500">
               {disponibles.length
-                ? `Explora el catálogo (${disponibles.length} disponibles) · el cliente recibe aviso con Soporte técnico`
+                ? `Explora el catálogo (${disponibles.length} disponibles) · se factura y el cliente recibe aviso al validarse el pago`
                 : 'El cliente ya tiene todo el catálogo asignado'}
             </span>
           </span>
@@ -306,9 +332,13 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
           disponibles={disponibles}
           clienteNombre={clienteNombre}
           asignando={asignar.isPending}
-          onAsignar={(psIds) => asignar.mutate(psIds)}
+          onAsignar={agregar}
           onClose={() => setCatalogoAbierto(false)}
         />
+      )}
+
+      {facturarPreset && (
+        <NuevaFacturaModal preset={facturarPreset} onClose={() => setFacturarPreset(null)} />
       )}
     </div>
   )

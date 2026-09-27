@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { clsx } from 'clsx'
-import { Search, X, Package, Sparkles, Check, Mail, Headphones, Send, Loader2, PackageSearch, CheckSquare, Square } from 'lucide-react'
+import { Search, X, Package, Sparkles, Check, Mail, Headphones, Receipt, Loader2, PackageSearch, CheckSquare, Square } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import type { ProductoServicio, ProductoServicioRecurrencia, ProductoServicioTipo } from '@/services/productoServicio.service'
 import { RECURRENCIA_CHIP, RECURRENCIA_LABEL, RECURRENCIA_SUFIJO, money } from './productoServicioUi'
@@ -31,8 +31,8 @@ function resumenPrecios(items: ProductoServicio[]): string {
 
 // Catálogo para asignar productos/servicios a un cliente: buscador, filtros por
 // tipo y forma de cobro, tarjetas con descripción y precio, selección múltiple
-// y un resumen de lo que recibirá el cliente (un solo aviso por correo y en su
-// portal con el botón "Soporte técnico", con todo lo asignado).
+// y un resumen. Lo elegido pasa a facturarse; al validarse el pago el cliente
+// recibe un solo aviso (correo y portal, con el botón "Soporte técnico").
 export function CatalogoProductosModal({ disponibles, clienteNombre, asignando, onAsignar, onClose }: {
   disponibles: ProductoServicio[]
   clienteNombre: string
@@ -161,7 +161,8 @@ export function CatalogoProductosModal({ disponibles, clienteNombre, asignando, 
               </p>
               <p className="mt-0.5 truncate text-[0.7rem] text-gray-500">{seleccionados.map((p) => p.nombre).join(', ')}</p>
               <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.7rem] text-gray-500">
-                <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-violet-500" /> Un solo aviso por correo y en su portal</span>
+                <span className="flex items-center gap-1"><Receipt className="h-3 w-3 text-violet-500" /> Primero se factura</span>
+                <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-violet-500" /> al validar el pago se avisa al cliente</span>
                 <span className="flex items-center gap-1"><Headphones className="h-3 w-3 text-violet-500" /> con el botón Soporte técnico</span>
               </p>
             </>
@@ -173,8 +174,8 @@ export function CatalogoProductosModal({ disponibles, clienteNombre, asignando, 
           <button onClick={onClose} className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[0.82rem] font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
           <button disabled={!sel.length || asignando} onClick={() => onAsignar(sel)}
             className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-[0.82rem] font-semibold text-white shadow-sm shadow-violet-600/25 transition hover:bg-violet-700 disabled:opacity-40">
-            {asignando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Asignar y avisar{sel.length > 1 ? ` (${sel.length})` : ''}
+            {asignando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+            Continuar a facturar{sel.length > 1 ? ` (${sel.length})` : ''}
           </button>
         </div>
       </div>

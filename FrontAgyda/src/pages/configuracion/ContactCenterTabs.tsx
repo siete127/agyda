@@ -19,6 +19,7 @@ import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
 import { TIPIFICACIONES_LLAMADA } from '@/constants/tipificacionesLlamada'
 import { NotasPostulanteModal } from './NotasPostulanteModal'
+import { CCFormulariosTab } from './CCFormulariosTab'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 
@@ -889,6 +890,8 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
    marcador con la URL fija de la campaña (/formulario-publico/c/<slug>). */
 export function FormularioYMarcadorPanel({ campania, onIrAContacto }: { campania: { id: number }; onIrAContacto: () => void }) {
   const qc = useQueryClient()
+  // "Nuevo +": el diseñador de formularios encima; al cerrarlo se recargan para asignarlos aquí.
+  const [disenador, setDisenador] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ['cc-campania-formularios', campania.id],
     queryFn: () => ccService.getFormulariosDeCampania(campania.id),
@@ -935,11 +938,26 @@ export function FormularioYMarcadorPanel({ campania, onIrAContacto }: { campania
   return (
     <div className="space-y-4">
       <div className={card}>
-        <p className="mb-1 text-sm font-bold text-ink">Formularios de la campaña</p>
+        <div className="mb-1 flex items-center gap-2">
+          <p className="flex-1 text-sm font-bold text-ink">Formularios de la campaña</p>
+          <button type="button" onClick={() => setDisenador(true)} title="Crear un formulario nuevo"
+            className="flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1 text-[0.7rem] font-semibold text-white hover:bg-violet-700">
+            <Plus className="h-3.5 w-3.5" /> Nuevo
+          </button>
+        </div>
         <p className="mb-3 text-[0.72rem] text-ink-tertiary">
-          Un formulario puede servir para toda la campaña o solo para un canal (si un canal tiene el suyo, ese manda). Se diseñan en
-          Configuración → Contact Center → Formularios; aquí solo se asignan.
+          Un formulario puede servir para toda la campaña o solo para un canal (si un canal tiene el suyo, ese manda). Con Nuevo creas y
+          diseñas uno; para asignarlo aquí debe estar publicado (y en modo Externo si lo abrirá el marcador).
         </p>
+        {disenador && (
+          <Modal isOpen onClose={() => {
+            setDisenador(false)
+            qc.invalidateQueries({ queryKey: ['ccf-formularios'] })
+            qc.invalidateQueries({ queryKey: ['cc-campania-formularios', campania.id] })
+          }} title="Formularios" size="full" elevated>
+            <CCFormulariosTab />
+          </Modal>
+        )}
         <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl bg-gray-50 p-3 sm:grid-cols-[2fr_1.5fr_auto] sm:items-end">
           <label className="block">
             <span className={label}>Formulario (publicado)</span>

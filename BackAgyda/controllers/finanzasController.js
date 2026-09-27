@@ -227,11 +227,13 @@ async function actualizarEstatusCxc(req, res) {
       FROM FINANZAS_CXC c JOIN FACTURAS f ON f.FAC_ID = c.FCC_FAC_ID AND f.FAC_ESTATUS <> 'cancelada'
       WHERE c.FCC_ID = @id`).catch(() => ({ recordset: [] }))).recordset[0];
     if (fac) {
+      let aviso = null;
       if (estatus === 'pagada' && Number(fac.saldo) > 0.01) {
-        await facturacionService.registrarPago(req.user?.empresa, fac.id, {
+        // Al liquidarla se activan los productos que esperaban el pago y se avisa al cliente.
+        ({ aviso } = await facturacionService.registrarPago(req.user?.empresa, fac.id, {
           fechaPago: new Date().toISOString().slice(0, 10), formaPago: '99', monto: Number(fac.saldo),
           usuarioId: req.user?.id || null,
-        });
+        }));
       } else if (estatus === 'pendiente') {
         const pagos = (await pool.request().input('f', sql.Int, fac.id)
           .query(`SELECT PAG_ID id FROM FACTURA_PAGOS WHERE PAG_FACTURA_ID = @f AND PAG_ESTATUS <> 'cancelado'`)).recordset;
@@ -243,7 +245,7 @@ async function actualizarEstatusCxc(req, res) {
                 WHERE FCC_ID = @id`);
       const ing = (await pool.request().input('id', sql.Int, id)
         .query('SELECT TOP 1 FI_ID id FROM FINANZAS_INGRESOS WHERE FI_CXC_ID = @id ORDER BY FI_ID DESC')).recordset[0];
-      return res.json({ success: true, data: { ingresoId: ing?.id || null, facturaId: fac.id } });
+      return res.json({ success: true, data: { ingresoId: ing?.id || null, facturaId: fac.id, aviso } });
     }
 
     // Sin factura: cobrarla la registra en Ingresos (ligada por FI_CXC_ID, una

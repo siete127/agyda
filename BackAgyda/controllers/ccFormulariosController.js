@@ -1524,7 +1524,19 @@ exports.resolverMarcadorPublico = async (req, res) => {
           .query('SELECT CM2_ID id, CM2_NOMBRE nombre, CM2_MARCADOR_FORM_ID elegido FROM dbo.CCO_CAMPANIAS WHERE LOWER(CM2_SLUG) = @s AND CM2_ACTIVO = 1');
         if (!c.recordset.length) continue;
         const camp = c.recordset[0];
-        const form = await _formularioDelMarcador(p, camp.id, camp.elegido);
+        // ?equipo=<slug>: link del marcador de un grupo de Contact Center → el
+        // formulario que el grupo eligió para esta campaña; si no, el de la campaña.
+        const equipoSlug = String(req.query.equipo || '').trim().toLowerCase();
+        let elegido = camp.elegido;
+        if (equipoSlug) {
+          const eq = (await p.request().input('c', sql.Int, camp.id).input('s', sql.NVarChar(60), equipoSlug)
+            .query(`SELECT ec.EQC_FORM_ID f FROM dbo.CC_EQUIPOS e
+                    JOIN dbo.CC_EQUIPO_CAMPANIAS ec ON ec.EQC_EQUIPO_ID = e.EQ_ID AND ec.EQC_CAMPANIA_ID = @c
+                    WHERE e.EQ_SLUG = @s AND e.EQ_ACTIVO = 1`)
+            .catch(() => ({ recordset: [] }))).recordset[0];
+          if (eq?.f) elegido = eq.f;
+        }
+        const form = await _formularioDelMarcador(p, camp.id, elegido);
         if (!form) {
           const message = camp.elegido
             ? `El formulario elegido para el marcador de "${camp.nombre}" ya no está disponible (debe estar publicado y en modo externo)`
@@ -2469,3 +2481,6 @@ exports.guardarRespuestasPublico = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error al guardar el registro' });
   }
 };
+
+// Formularios de una campaña (los usa también Configuración → Grupos → Equipos).
+exports._formulariosDeCampania = _formulariosDeCampania;

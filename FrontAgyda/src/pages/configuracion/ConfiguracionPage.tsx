@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from 'react'
-import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus, Share2, ListTodo, Megaphone, Sparkles } from 'lucide-react'
+import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus, Share2, ListTodo, UsersRound, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth.store'
@@ -13,7 +13,7 @@ import { IMPACTO_POR_PANTALLA } from './configCompartidas'
 import { NuevoClienteModal } from '@/pages/atencion-cliente/clientes/NuevoClienteModal'
 import { CATEGORY_STYLES, DEFAULT_CATEGORY_STYLE, countLeaves } from './categoryStyles'
 import { EmpresasTab } from './EmpresasTab'
-import { AsistenteCampania } from './AsistenteCampania'
+import { AsistenteGrupo } from './AsistenteGrupo'
 import { ModulosEmpresaTab } from './ModulosEmpresaTab'
 import { PermisosTab } from './PermisosTab'
 import { WebphoneVistasTab } from './WebphoneVistasTab'
@@ -23,6 +23,7 @@ import { NotificacionesCorreoTab } from './NotificacionesCorreoTab'
 import { MensajeriaConfigTab } from './MensajeriaConfigTab'
 import { UsuariosTab } from './UsuariosTab'
 import { FuncionesUsuarioTab } from './FuncionesUsuarioTab'
+import { GruposTab } from './GruposTab'
 import { RolesTab } from './RolesTab'
 import { PerfilesTab } from './PerfilesTab'
 import { BrandingTab } from './BrandingTab'
@@ -84,6 +85,7 @@ const SCREENS: Record<string, ComponentType> = {
   permisos: PermisosTab,
   usuarios: UsuariosTab,
   'funciones-usuario': FuncionesUsuarioTab,
+  grupos: GruposTab,
   roles: RolesTab,
   perfiles: PerfilesTab,
   'pers-branding': BrandingTab,
@@ -215,11 +217,12 @@ export function ConfiguracionPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [verPendientes, setVerPendientes] = useState(false)
-  const [asistenteCampania, setAsistenteCampania] = useState(false)
-  // Alta de campañas: AD/TI (el backend lo exige) con acceso al Contact Center.
+  // Tarjeta "Crear grupo" de la portada: el grupo se crea y se le asignan
+  // campañas (o una nueva, con su propio asistente), skills, marcador,
+  // supervisores y su gente. Mismo permiso que editar grupos: AD/TI con "editar" usuarios.
+  const [asistenteGrupo, setAsistenteGrupo] = useState(false)
   const rolActual = (usuarioActual?.tipoUsuario ?? '').toUpperCase()
-  const puedeCrearCampania = ['AD', 'TI'].includes(rolActual) && !cargandoModulos && !cargandoAcciones
-    && isAllowed('contact-center') && can('contact-center', 'gestionar-skills')
+  const puedeCrearGrupo = ['AD', 'TI'].includes(rolActual) && !cargandoAcciones && can('usuarios', 'editar')
 
   const q = search.trim().toLowerCase()
   const results = q ? searchResults(tree, q) : []
@@ -320,8 +323,8 @@ export function ConfiguracionPage() {
         />
       </div>
 
-      {asistenteCampania ? (
-        <AsistenteCampania onSalir={() => setAsistenteCampania(false)} />
+      {asistenteGrupo ? (
+        <AsistenteGrupo onSalir={() => setAsistenteGrupo(false)} />
       ) : q ? (
         <SearchResultsView results={results} onSelect={(n) => navigateToKey(n.key)} />
       ) : verPendientes ? (
@@ -339,7 +342,7 @@ export function ConfiguracionPage() {
         />
       ) : (
         <HomeView tree={tree} onOpen={openCategory} pendientes={pendientes.length} onVerPendientes={() => setVerPendientes(true)}
-          onNuevaCampania={puedeCrearCampania ? () => setAsistenteCampania(true) : undefined} />
+          onNuevoGrupo={puedeCrearGrupo ? () => setAsistenteGrupo(true) : undefined} />
       )}
     </div>
   )
@@ -347,28 +350,28 @@ export function ConfiguracionPage() {
 
 /* ─────────────────────────── Home: grid de categorías ─────────────────────────── */
 
-function HomeView({ tree, onOpen, pendientes, onVerPendientes, onNuevaCampania }: {
+function HomeView({ tree, onOpen, pendientes, onVerPendientes, onNuevoGrupo }: {
   tree: ConfigNode[]
   onOpen: (key: string) => void
   pendientes: number
   onVerPendientes: () => void
-  onNuevaCampania?: () => void
+  onNuevoGrupo?: () => void
 }) {
   return (
     <div className="space-y-4">
-      {onNuevaCampania && (
+      {onNuevoGrupo && (
         <button
-          onClick={onNuevaCampania}
+          onClick={onNuevoGrupo}
           className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 text-left text-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
         >
           <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
           <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/15">
-            <Megaphone className="h-6 w-6" />
+            <UsersRound className="h-6 w-6" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1.5 text-[0.95rem] font-bold">Configurar nueva campaña <Sparkles className="h-4 w-4 text-amber-200" /></p>
+            <p className="flex items-center gap-1.5 text-[0.95rem] font-bold">Crear grupo <Sparkles className="h-4 w-4 text-amber-200" /></p>
             <p className="mt-0.5 text-[0.75rem] text-white/80">
-              Paso a paso: crea la campaña, sus skills y agentes, canales, formulario, URL del marcador, tipificaciones y supervisores. Los reportes se crean solos.
+              Paso a paso: crea el grupo y asígnale campañas (o crea una nueva), skills, forma de comunicación, marcador y su link, supervisores, agentes y, si atiende clientes, sus clientes. Todo se les aplica solo.
             </p>
           </div>
           <ChevronRight className="h-5 w-5 flex-shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />

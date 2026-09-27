@@ -42,6 +42,10 @@ export interface ClienteProductoServicio {
   precio: number
   recurrencia: ProductoServicioRecurrencia
   fechaAlta: string
+  /** 'pendiente-pago' hasta que se valida el pago de su factura. */
+  estatus: 'activo' | 'pendiente-pago'
+  facturaId: number | null
+  facturaFolio: string | null
 }
 
 const norm = <T>(data: unknown, parse: (r: Record<string, unknown>) => T): T[] => {
@@ -77,6 +81,9 @@ function parseClienteProductoServicio(r: Record<string, unknown>): ClienteProduc
     precio: Number(r.precio ?? 0),
     recurrencia: (r.recurrencia as ProductoServicioRecurrencia) ?? 'UNICO',
     fechaAlta: String(r.fechaAlta ?? ''),
+    estatus: r.estatus === 'pendiente-pago' ? 'pendiente-pago' : 'activo',
+    facturaId: r.facturaId != null ? Number(r.facturaId) : null,
+    facturaFolio: r.facturaFolio ? String(r.facturaFolio) : null,
   }
 }
 

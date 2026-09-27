@@ -95,6 +95,8 @@ export interface FacturaEmitida {
   serie?: string | null
   modo: 'timbrada' | 'pre-factura'
   total?: number
+  /** Productos del catálogo que quedaron en el cliente pendientes de pago. */
+  asignados?: number
 }
 
 export interface FacturaPago {
@@ -176,6 +178,7 @@ export const facturacionService = {
     const { data } = await api.get(`/facturas/receptor/${clienteId}`)
     return data.data ?? {}
   },
+  /** Los productos del catálogo quedan en el cliente pendientes de pago (se avisa al pagarse). */
   facturarManual: (body: { clienteId: number; conceptos: ConceptoFacturaInput[]; receptor?: ReceptorFiscal; formaPago?: string; metodoPago?: string }) =>
     api.post('/facturas/manual', body).then((r) => r.data as { data: FacturaEmitida }),
   cancelar: (id: number, motivo = '02') =>

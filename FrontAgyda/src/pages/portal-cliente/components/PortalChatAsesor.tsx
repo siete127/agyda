@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { MessageCircle, X, Loader2, BellRing, UserX } from 'lucide-react'
+import { MessageCircle, X, Loader2, BellRing, UserX, UsersRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { portalClienteService } from '@/services/portalCliente.service'
 import { mensajeriaService } from '@/services/mensajeria.service'
@@ -13,7 +13,8 @@ import { MensajeriaFloatingBubble } from '@/components/ui/MensajeriaFloatingBubb
 // Botón flotante del portal para hablar con su asesor (responsable del
 // contacto en el CRM). El chat es un DM de Mensajería: se abre con la misma
 // ventana flotante del panel interno y el asesor contesta desde su Mensajería.
-// Sin asesor: leyenda + "Notificar" (avisa al grupo "Asesor de clientes").
+// Sin asesor individual pero con grupo de atención: chat con todo el equipo.
+// Sin ninguno: leyenda + "Notificar" (avisa al grupo "Asesor de clientes").
 export function PortalChatAsesor() {
   const { puede, isLoading: cargandoAcciones } = usePortalAcciones()
   const habilitado = !cargandoAcciones && puede('chatear-asesor')
@@ -122,7 +123,11 @@ export function PortalChatAsesor() {
         title={asesor ? `Chatear con ${asesor.nombre}` : 'Chatear con tu asesor'}
         className="group fixed bottom-6 right-6 z-[150] flex items-center gap-2.5 rounded-full bg-brand py-2.5 pl-2.5 pr-4 text-white shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl disabled:opacity-70"
       >
-        {asesor ? (
+        {asesor?.esEquipo ? (
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 ring-2 ring-white/70">
+            {abrirChat.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UsersRound className="h-4 w-4" />}
+          </span>
+        ) : asesor ? (
           <span className="rounded-full ring-2 ring-white/70"><Avatar src={asesor.fotoUrl} name={asesor.nombre} size="sm" /></span>
         ) : (
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15">
@@ -130,7 +135,7 @@ export function PortalChatAsesor() {
           </span>
         )}
         <span className="text-left leading-tight">
-          <span className="block text-[0.8rem] font-semibold">{asesor ? 'Chatear con mi asesor' : 'Mi asesor'}</span>
+          <span className="block text-[0.8rem] font-semibold">{asesor?.esEquipo ? 'Chatear con mi equipo' : asesor ? 'Chatear con mi asesor' : 'Mi asesor'}</span>
           {asesor && <span className="block max-w-[10rem] truncate text-[0.66rem] text-white/80">{asesor.nombre}</span>}
         </span>
       </button>

@@ -53,10 +53,13 @@ export interface PortalDocumento {
 
 // Asesor asignado al cliente (responsable del contacto en el CRM).
 export interface PortalAsesor {
-  id: number
+  /** null cuando lo atiende un grupo de atención (no una persona). */
+  id: number | null
   nombre: string
   puesto: string | null
   fotoUrl: string | null
+  /** Lo atiende su grupo de atención: el chat es con todo el equipo. */
+  esEquipo?: boolean
 }
 
 export interface PortalCita {

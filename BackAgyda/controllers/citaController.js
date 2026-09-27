@@ -690,7 +690,11 @@ exports.notificarSolicitudPortal = async (pool, tenantKey, { citaId, asignadoA, 
   const destinatarios = new Set();
   if (asignadoA) destinatarios.add(asignadoA);
   try {
-    for (const s of await getUsuariosParaNotificarCorreo('atencion-cliente', tenantKey)) destinatarios.add(s);
+    // Grupo de atención del cliente de la cita (o quienes tienen el aviso del módulo).
+    const cont = (await pool.request().input('id', require('mssql').Int, citaId)
+      .query('SELECT CITA_CONTACTO_ID c FROM CLI_CITAS WHERE CITA_ID = @id')).recordset[0]?.c;
+    const { usuariosAtencionDeCliente } = require('../services/atencionGruposService');
+    for (const s of await usuariosAtencionDeCliente(pool, tenantKey, cont)) destinatarios.add(s);
   } catch { /* best-effort */ }
   for (const uid of destinatarios) {
     try {

@@ -532,3 +532,5 @@ module.exports.getDestinatariosTelegram = getDestinatariosTelegram;
 module.exports.getDestinatariosTelegramConNombre = getDestinatariosTelegramConNombre;
 module.exports.getConfigServidorCorreo = getConfigServidorCorreo;
 module.exports.leerConfigServidorCorreoRapido = leerConfigServidorCorreoRapido;
+// Eventos con destinatarios configurables (los usa también Configuración → Grupos).
+module.exports.MODULOS = MODULOS;

@@ -2,9 +2,8 @@ const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const { errorCorreoObligatorio } = require('../utils/validacionesMx');
-const notificationService = require('../services/notificationService');
-const { asegurarAncla } = require('../services/portalAnclaService');
-const { generarCxcPorProductos, cancelarCxcPorProductos } = require('../services/cxcProductosService');
+const { generarCxcPorProductos, cancelarCxcPorProductos, cancelarFacturaPendiente } = require('../services/cxcProductosService');
+const { avisarProductoAsignado } = require('../services/productoAvisoService');
 
 const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
@@ -54,9 +53,13 @@ exports.getProductosServiciosCliente = async (req, res) => {
           CCPS.CCPS_ID as id, PS.PS_ID as productoServicioId, PS.PS_TIPO as tipo,
           PS.PS_NOMBRE as nombre, PS.PS_DESCRIPCION as descripcion,
           PS.PS_PRECIO as precio, PS.PS_RECURRENCIA as recurrencia,
-          CCPS.CCPS_FECHA_ASIGNACION as fechaAlta
+          CCPS.CCPS_FECHA_ASIGNACION as fechaAlta,
+          -- 'pendiente-pago' hasta que se valida el pago de su factura.
+          CCPS.CCPS_ESTATUS as estatus, CCPS.CCPS_FAC_ID as facturaId,
+          CONCAT(F.FAC_SERIE, F.FAC_FOLIO) as facturaFolio
         FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS CCPS
         JOIN PRODUCTOS_SERVICIOS PS ON PS.PS_ID = CCPS.CCPS_PS_ID
+        LEFT JOIN FACTURAS F ON F.FAC_ID = CCPS.CCPS_FAC_ID
         WHERE CCPS.CCPS_CONT_ID = @id
         ORDER BY PS.PS_NOMBRE ASC
       `);
@@ -159,59 +162,6 @@ exports.getFinanzasCliente = async (req, res) => {
   }
 };
 
-// Aviso al cliente de que se le asignó un producto/servicio: notificación en su
-// portal y correo con el botón "Soporte técnico" (abre /portal-cliente con el
-// chat de su asesor, o el aviso para pedir uno). Sin usuarios del portal, un
-// correo a su contacto sin enlace. Devuelve el resumen para la pantalla.
-// retirado=true: el mismo aviso, pero de que se le QUITÓ (con Soporte técnico por dudas).
-async function avisarProductoAsignado(pool, req, contId, psIds, { retirado = false } = {}) {
-  const ids = psIds.map(Number).filter(Boolean);
-  const productos = ids.length ? (await pool.request()
-    .query(`SELECT PS_NOMBRE nombre FROM PRODUCTOS_SERVICIOS WHERE PS_ID IN (${ids.join(',')}) ORDER BY PS_NOMBRE`)).recordset.map((r) => r.nombre) : [];
-  // "A", "A y B", "A, B y C"
-  const productoNombre = productos.length <= 1 ? (productos[0] || 'tu producto')
-    : `${productos.slice(0, -1).join(', ')} y ${productos[productos.length - 1]}`;
-  const psId = ids[0];
-  // Si su acceso (Clientes → Acceso al sistema) aún no está en el portal, se
-  // registra como su cuenta principal para que reciba el botón de soporte.
-  await asegurarAncla(pool, { contId }).catch(() => 0);
-  const usuarios = (await pool.request().input('c', sql.Int, contId).query(`
-    SELECT u.NEUS_ID id, u.NEUS_NOMBRES nombre,
-           COALESCE(NULLIF(u.NEUS_CORREO, ''), CASE WHEN u.NEUS_USUARIO LIKE '%_@_%._%' THEN u.NEUS_USUARIO END) correo
-    FROM PORTAL_USUARIOS pu JOIN NEUS_USUARIOS u ON u.NEUS_ID = pu.PU_NEUS_ID AND u.NEUS_ACTIVO = 1
-    WHERE pu.PU_CONT_ID = @c AND pu.PU_ACTIVO = 1`)).recordset;
-  const linkPortal = `${BASE_URL}/portal-cliente`;
-  const linkSoporte = `${linkPortal}?soporte=1`;
-  let correos = 0;
-
-  if (usuarios.length) {
-    for (const u of usuarios) {
-      await notificationService.createNotification({
-        usuarioId: u.id,
-        mensaje: (retirado
-          ? `Se retiró de tu cuenta: ${productoNombre}. ¿Dudas? Abre Soporte técnico.`
-          : `Ya tienes asignado: ${productoNombre}. ¿Necesitas ayuda? Abre Soporte técnico.`).slice(0, 480),
-        tipo: retirado ? 'cliente-producto-retirado' : 'cliente-producto-asignado',
-        dataExtra: { productoServicioId: psId, productoServicioIds: ids, soporte: true },
-        tenantKey: req.user?.empresa,
-      }).catch(() => {});
-      if (u.correo) {
-        const r = await emailService.sendProductoAsignadoEmail({ nombre: u.nombre, correo: u.correo, productoNombre, productos, linkSoporte, linkPortal, retirado });
-        if (r?.enviado) correos++;
-      }
-    }
-    return { conPortal: true, usuarios: usuarios.length, correos, productoNombre, productos: productos.length };
-  }
-
-  const cont = (await pool.request().input('c', sql.Int, contId)
-    .query('SELECT CONT_NOMBRE nombre, CONT_CORREO correo FROM CRM_CONTACTOS WHERE CONT_ID = @c')).recordset[0];
-  if (cont?.correo) {
-    const r = await emailService.sendProductoAsignadoEmail({ nombre: cont.nombre, correo: cont.correo, productoNombre, productos, retirado });
-    if (r?.enviado) correos++;
-  }
-  return { conPortal: false, usuarios: 0, correos, productoNombre, productos: productos.length };
-}
-
 exports.asignarProductoServicio = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -239,9 +189,10 @@ exports.asignarProductoServicio = async (req, res) => {
       console.warn('asignarProductoServicio CxC:', e.message);
       return null;
     });
-    // Cada vez que se da "Agregar" se avisa al cliente (aunque ya lo tuviera),
-    // con UN solo aviso para todo lo asignado en esta vez.
-    const aviso = await avisarProductoAsignado(pool, req, id, psIds).catch((e) => {
+    // Asignación directa (sin factura: desde Clientes solo lo que no tiene
+    // precio; lo que se cobra pasa por /facturas/manual y avisa al pagarse).
+    // Se avisa al cliente con UN solo aviso para todo lo asignado esta vez.
+    const aviso = await avisarProductoAsignado(pool, req.user?.empresa, id, psIds).catch((e) => {
       console.warn('asignarProductoServicio aviso al cliente:', e.message);
       return null;
     });
@@ -263,19 +214,29 @@ exports.quitarProductoServicio = async (req, res) => {
     const del = await pool.request()
       .input('contId', sql.Int, id)
       .input('psId', sql.Int, psId)
-      .query(`DELETE FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId`);
-    const quitado = (del.rowsAffected || []).some((n) => n > 0);
+      .query(`DELETE FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS
+              OUTPUT DELETED.CCPS_ESTATUS estatus, DELETED.CCPS_FAC_ID fac
+              WHERE CCPS_CONT_ID = @contId AND CCPS_PS_ID = @psId`);
+    const fila = del.recordset?.[0] || null;
+    const quitado = !!fila;
+    const pendiente = fila?.estatus === 'pendiente-pago';
     // Su cuenta por cobrar, si aún no se cobraba, deja de existir.
     const cxcCanceladas = await cancelarCxcPorProductos(pool, id, [psId]).catch((e) => {
       console.warn('quitarProductoServicio CxC:', e.message);
       return 0;
     });
-    // Avisar al cliente solo si de verdad lo tenía (correo + su portal).
-    const aviso = quitado ? await avisarProductoAsignado(pool, req, id, [psId], { retirado: true }).catch((e) => {
+    // Si esperaba el pago de su factura y ya no queda nada más en ella, la
+    // pre-factura se cancela (con su cuenta por cobrar).
+    const facturaCancelada = pendiente && fila.fac
+      ? await cancelarFacturaPendiente(pool, fila.fac).catch((e) => { console.warn('quitarProductoServicio factura:', e.message); return false; })
+      : false;
+    // Avisar al cliente solo si de verdad lo tenía activo (correo + su portal);
+    // uno pendiente de pago nunca se le anunció.
+    const aviso = quitado && !pendiente ? await avisarProductoAsignado(pool, req.user?.empresa, id, [psId], { retirado: true }).catch((e) => {
       console.warn('quitarProductoServicio aviso al cliente:', e.message);
       return null;
     }) : null;
-    return res.json({ success: true, data: { quitado, aviso, cxcCanceladas } });
+    return res.json({ success: true, data: { quitado, aviso, cxcCanceladas, pendiente, facturaCancelada } });
   } catch (e) {
     console.error('Error quitando producto/servicio de cliente:', e);
     return res.status(500).json({ success: false, message: e.message });

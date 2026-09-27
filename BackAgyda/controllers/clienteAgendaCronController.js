@@ -4,6 +4,7 @@ const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const notificationService = require('../services/notificationService');
 const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
+const { grupoDeCliente } = require('../services/atencionGruposService');
 const { listTenants } = require('../config/tenants');
 
 // Agenda de seguimiento a clientes — una corrida diaria (08:00 America/Mexico_City,
@@ -184,7 +185,10 @@ async function runInactividadClientes(pool, tenantKey) {
       const dias = c.ultimoSeguimiento
         ? Math.floor((Date.now() - new Date(c.ultimoSeguimiento).getTime()) / 86400000)
         : DIAS_INACTIVIDAD;
-      const destinatarios = c.responsableId ? [c.responsableId] : await getSupervisores();
+      // Sin responsable: su grupo de atención; si no tiene, los del aviso del módulo.
+      const grupo = c.responsableId ? null : await grupoDeCliente(pool, c.contactoId).catch(() => null);
+      const destinatarios = c.responsableId ? [c.responsableId]
+        : grupo?.miembros.length ? grupo.miembros.map((m) => m.id) : await getSupervisores();
 
       for (const uid of destinatarios) {
         await notificarCanales(pool, tenantKey, {

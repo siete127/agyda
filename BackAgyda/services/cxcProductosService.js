@@ -104,4 +104,25 @@ async function cancelarCxcPorProductos(pool, contId, psIds) {
   return r.recordset[0]?.n || 0;
 }
 
-module.exports = { generarCxcPorProductos, cancelarCxcPorProductos };
+// Se quitó al cliente un producto que esperaba el pago de su factura: si ya
+// no queda nada más ligado a esa factura y es una pre-factura sin pagos, se
+// cancela junto con su cuenta por cobrar. Una timbrada se deja (cancelarla
+// ante el SAT se hace en Facturación). Devuelve true si la canceló.
+async function cancelarFacturaPendiente(pool, facId) {
+  const r = await pool.request().input('fac', sql.Int, facId).query(`
+    DECLARE @ok BIT = 0;
+    IF NOT EXISTS (SELECT 1 FROM CRM_CONTACTO_PRODUCTOS_SERVICIOS WHERE CCPS_FAC_ID = @fac)
+       AND EXISTS (SELECT 1 FROM dbo.FACTURAS WHERE FAC_ID = @fac AND FAC_ESTATUS = 'pre-factura')
+       AND NOT EXISTS (SELECT 1 FROM dbo.FACTURA_PAGOS WHERE PAG_FACTURA_ID = @fac AND PAG_ESTATUS <> 'cancelado')
+    BEGIN
+      UPDATE dbo.FACTURAS SET FAC_ESTATUS = 'cancelada', FAC_FECHA_CANCELACION = GETDATE() WHERE FAC_ID = @fac;
+      DELETE c FROM FINANZAS_CXC c
+      WHERE c.FCC_FAC_ID = @fac AND c.FCC_ESTATUS = 'pendiente'
+        AND NOT EXISTS (SELECT 1 FROM FINANZAS_INGRESOS i WHERE i.FI_CXC_ID = c.FCC_ID);
+      SET @ok = 1;
+    END
+    SELECT @ok ok;`);
+  return !!r.recordset[0]?.ok;
+}
+
+module.exports = { generarCxcPorProductos, cancelarCxcPorProductos, cancelarFacturaPendiente };

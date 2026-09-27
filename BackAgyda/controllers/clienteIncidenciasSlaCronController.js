@@ -4,6 +4,7 @@ const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 const notificationService = require('../services/notificationService');
 const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess');
+const { grupoDeCliente } = require('../services/atencionGruposService');
 const { listTenants } = require('../config/tenants');
 
 // Motor de SLA de las incidencias de cliente (CASOS tipo 'incidencia') —
@@ -56,7 +57,7 @@ async function runSlaCheckCasosTenant(tenantKey) {
              k.CASO_FECHA_LIMITE_SLA AS fechaLimiteSla,
              k.CASO_SLA_RIESGO_NOTIF AS riesgoNotif, k.CASO_SLA_VENCIDO_NOTIF AS vencidoNotif,
              DATEDIFF(MINUTE, k.CASO_FECHA_CREACION, GETDATE()) AS minutosTranscurridos,
-             c.CONT_NOMBRE AS contactoNombre
+             c.CONT_NOMBRE AS contactoNombre, k.CASO_CONTACTO_ID AS contactoId
       FROM CASOS k
       INNER JOIN CRM_CONTACTOS c ON c.CONT_ID = k.CASO_CONTACTO_ID
       WHERE k.CASO_ACTIVO = 1
@@ -89,7 +90,9 @@ async function runSlaCheckCasosTenant(tenantKey) {
 
         const destinatarios = new Set();
         if (c.asignadoA) destinatarios.add(c.asignadoA);
-        for (const s of await getSupervisores()) destinatarios.add(s);
+        // Grupo de atención del cliente; si no tiene, los del aviso del módulo.
+        const grupo = await grupoDeCliente(pool, c.contactoId).catch(() => null);
+        for (const s of grupo?.miembros.length ? grupo.miembros.map((m) => m.id) : await getSupervisores()) destinatarios.add(s);
 
         for (const uid of destinatarios) {
           await notificarCanales(pool, tenantKey, {

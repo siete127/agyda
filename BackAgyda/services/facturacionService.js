@@ -1,5 +1,6 @@
 const sql = require('mssql');
 const databaseService = require('./databaseService');
+const { activarProductosDeFactura, revertirProductosDeFactura } = require('./productoAvisoService');
 
 const ADAPTERS = {
   facturama: require('./pac/facturamaAdapter'),
@@ -261,7 +262,14 @@ async function registrarPago(tenantKey, facturaId, datos) {
       END`)
     .catch((e) => console.warn('registrarPago → CxC:', e.message));
 
-  return { id: ins.recordset[0].id, parcialidad, saldoInsoluto, cfdi: cfdi.estatus, uuid: cfdi.uuid, error: cfdi.error };
+  // Pago validado por completo: los productos que esperaban esta factura se
+  // activan en el cliente y hasta ahora se le avisa (portal + correo).
+  const aviso = saldoInsoluto <= 0.01
+    ? await activarProductosDeFactura(pool, tenantKey, facturaId).catch((e) => { console.warn('registrarPago → productos:', e.message); return null; })
+    : null;
+
+  return {
+    aviso, id: ins.recordset[0].id, parcialidad, saldoInsoluto, cfdi: cfdi.estatus, uuid: cfdi.uuid, error: cfdi.error };
 }
 
 async function listPagos(tenantKey, facturaId) {
@@ -297,6 +305,8 @@ async function cancelarPago(tenantKey, pagoId, motivo) {
   await pool.request().input('fac', sql.Int, p.PAG_FACTURA_ID)
     .query(`UPDATE FINANZAS_CXC SET FCC_ESTATUS = 'pendiente', FCC_FECHA_PAGO = NULL WHERE FCC_FAC_ID = @fac`)
     .catch(() => {});
+  // Y sus productos vuelven a quedar pendientes de pago.
+  await revertirProductosDeFactura(pool, p.PAG_FACTURA_ID).catch(() => {});
   return { ok: true };
 }
 

@@ -7,6 +7,7 @@ const { getUsuariosParaNotificarCorreo } = require('../middleware/moduleAccess')
 const { FUNCIONES, usuariosConFuncion } = require('../services/funcionesUsuarioService');
 const mensajeriaController = require('./mensajeriaController');
 const crmDocumentosCliente = require('./crmDocumentosClienteController');
+const { grupoDeCliente, abrirChatGrupo } = require('../services/atencionGruposService');
 
 // Portal de Cliente: su asesor (el responsable del contacto en el CRM), el
 // chat con él (un DM de Mensajería) y el aviso al grupo "Asesor de clientes"
@@ -25,11 +26,29 @@ async function asesorDe(pool, contactoId) {
   return r.recordset[0] || null;
 }
 
+// Quién atiende al cliente: su asesor individual o, si no tiene, su grupo de
+// atención (con al menos un asesor activo). Para el portal el grupo se
+// presenta como un "asesor" más: nombre del equipo y cuántos lo forman.
+async function atencionDe(pool, contactoId) {
+  const asesor = await asesorDe(pool, contactoId);
+  if (asesor) return { asesor, grupo: null };
+  const grupo = await grupoDeCliente(pool, contactoId);
+  if (!grupo || !grupo.miembros.length) return { asesor: null, grupo: null };
+  const n = grupo.asesores.length || grupo.miembros.length;
+  return {
+    asesor: {
+      id: null, nombre: grupo.nombre, fotoUrl: null, esEquipo: true,
+      puesto: `Equipo de atención · ${n} asesor${n === 1 ? '' : 'es'}`,
+    },
+    grupo,
+  };
+}
+
 // GET /portal-cliente/asesor
 exports.getAsesor = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
-    const asesor = await asesorDe(pool, req.contacto.id);
+    const { asesor } = await atencionDe(pool, req.contacto.id);
     res.json({ success: true, data: { asesor } });
   } catch (e) {
     console.error('portalAsesor.getAsesor:', e.message);
@@ -43,9 +62,15 @@ exports.getAsesor = async (req, res) => {
 exports.abrirChatAsesor = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
-    const asesor = await asesorDe(pool, req.contacto.id);
+    const { asesor, grupo } = await atencionDe(pool, req.contacto.id);
     if (!asesor) return res.status(409).json({ success: false, message: 'Aún no tienes un asesor asignado', sinAsesor: true });
-    return mensajeriaController.crearOReusarDM({ ...req, body: { usuarioId: asesor.id } }, res);
+    if (!grupo) return mensajeriaController.crearOReusarDM({ ...req, body: { usuarioId: asesor.id } }, res);
+    // Sin asesor individual: chat del cliente con todo su grupo de atención.
+    const { canal, creado } = await abrirChatGrupo(pool, {
+      tenantKey: req.user?.empresa, grupo, contId: req.contacto.id,
+      clienteNombre: req.contacto.empresa || req.contacto.nombre, usuarioId: req.user.id,
+    });
+    return res.status(creado ? 201 : 200).json({ success: true, data: canal });
   } catch (e) {
     console.error('portalAsesor.abrirChatAsesor:', e.message);
     res.status(500).json({ success: false, message: 'No se pudo abrir el chat' });
@@ -63,7 +88,7 @@ const NOTIFICAR_CADA_MS = 30 * 60 * 1000;
 exports.notificarSinAsesor = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
-    if (await asesorDe(pool, req.contacto.id)) {
+    if ((await atencionDe(pool, req.contacto.id)).asesor) {
       return res.status(409).json({ success: false, message: 'Ya tienes un asesor asignado' });
     }
     const ultimo = _notificarRate.get(req.contacto.id);
@@ -139,10 +164,12 @@ exports.subirDocumento = async (req, res) => {
     if (body?.success) {
       (async () => {
         const pool = await databaseService.getPool(req.user?.empresa);
-        const asesor = await asesorDe(pool, req.contacto.id);
-        if (asesor) {
+        // A su asesor o, si no tiene, a todo su grupo de atención.
+        const { asesor, grupo } = await atencionDe(pool, req.contacto.id);
+        const destinos = grupo ? grupo.miembros.map((m) => m.id) : (asesor ? [asesor.id] : []);
+        for (const usuarioId of destinos) {
           await notificationService.createNotification({
-            usuarioId: asesor.id,
+            usuarioId,
             mensaje: `${req.contacto.empresa || req.contacto.nombre} subió un documento: ${body.data?.nombreOriginal ?? ''}`,
             tipo: 'cliente-documento-portal',
             // docClienteId (no documentoId): ese nombre lo enruta notificationTarget a Legal.

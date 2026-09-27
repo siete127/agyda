@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const facturacionService = require('../services/facturacionService');
+const { asignarPendientesDeFactura, quitarPendientesDeFactura } = require('../services/productoAvisoService');
 
 async function _pool(req) { return databaseService.getPool(req?.user?.empresa); }
 
@@ -192,6 +193,11 @@ exports.manual = async (req, res) => {
 
     await guardarConceptos(pool, facId, conceptos);
     await crearCxcDeFactura(pool, { facId, contId: cont.id, cliente: cont.empresa || cont.nombre, total, concepto });
+    // Los productos del catálogo que se facturan quedan en el cliente pendientes
+    // de pago (se facture desde Clientes o desde Finanzas); se activan y se le
+    // avisa cuando se valide el pago. Los conceptos libres solo se facturan.
+    const asignados = await asignarPendientesDeFactura(pool, cont.id, conceptos.map((k) => k.psId), facId)
+      .catch((e) => { console.warn('facturas.manual → productos:', e.message); return 0; });
 
     // Guardar los datos fiscales en el cliente para la próxima vez.
     if (b.receptor?.rfc) {
@@ -204,7 +210,7 @@ exports.manual = async (req, res) => {
         .catch(() => {});
     }
 
-    res.json({ success: true, data: { id: facId, estatus, uuid: resultado.uuid, folio: resultado.folio, serie: resultado.serie, modo: resultado.modo, total } });
+    res.json({ success: true, data: { id: facId, estatus, uuid: resultado.uuid, folio: resultado.folio, serie: resultado.serie, modo: resultado.modo, total, asignados } });
   } catch (e) {
     console.error('facturas.manual:', e.message);
     res.status(500).json({ success: false, message: 'Error al generar la factura' });
@@ -386,8 +392,14 @@ exports.desdeCotizacion = async (req, res) => {
       ivaTasa: it.COTI_IVA_TASA, claveProdServ: it.COTI_CLAVE_PROD_SERV, claveUnidad: it.COTI_CLAVE_UNIDAD,
     })));
     await crearCxcDeFactura(pool, { facId, contId: c.contactoId, cliente: receptor.nombre, total: c.COT_TOTAL, concepto });
+    // Igual que al facturar productos sueltos: los renglones del catálogo quedan
+    // en el cliente pendientes de pago y se le avisa al validarse el pago.
+    const asignados = c.contactoId
+      ? await asignarPendientesDeFactura(pool, c.contactoId, items.recordset.map((it) => it.COTI_PS_ID), facId)
+        .catch((e) => { console.warn('facturas.desdeCotizacion → productos:', e.message); return 0; })
+      : 0;
 
-    res.json({ success: true, data: { id: facId, estatus, uuid: resultado.uuid, folio: resultado.folio, modo: resultado.modo } });
+    res.json({ success: true, data: { id: facId, estatus, uuid: resultado.uuid, folio: resultado.folio, modo: resultado.modo, asignados } });
   } catch (e) {
     console.error('facturas.desdeCotizacion:', e.message);
     res.status(500).json({ success: false, message: 'Error al generar la factura' });
@@ -416,6 +428,9 @@ exports.cancelar = async (req, res) => {
               WHERE c.FCC_FAC_ID = @id AND c.FCC_ESTATUS = 'pendiente'
                 AND NOT EXISTS (SELECT 1 FROM FINANZAS_INGRESOS i WHERE i.FI_CXC_ID = c.FCC_ID)`)
       .catch((e) => console.warn('facturas.cancelar → CxC:', e.message));
+    // Los productos que esperaban el pago de esta factura se retiran del cliente.
+    await quitarPendientesDeFactura(pool, Number(req.params.id))
+      .catch((e) => console.warn('facturas.cancelar → productos:', e.message));
     res.json({ success: true });
   } catch (e) {
     console.error('facturas.cancelar:', e.message);

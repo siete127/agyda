@@ -6,7 +6,7 @@ import { Package, FileSignature, Search, Plus, Trash2, ArrowLeft, Receipt, Check
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { facturacionService, type CotizacionPorFacturar, type ReceptorFiscal } from '@/services/facturacion.service'
-import { productoServicioService } from '@/services/productoServicio.service'
+import { productoServicioService, type ProductoServicio } from '@/services/productoServicio.service'
 import { satService } from '@/services/sat.service'
 import { formatMonto } from './estatusFactura'
 
@@ -24,21 +24,36 @@ interface Linea {
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 const RECEPTOR_VACIO: ReceptorFiscal = { rfc: '', nombre: '', regimenFiscal: '', cp: '', usoCfdi: 'G03' }
 
+/** Desde Clientes → "Agregar producto": factura directa, con cliente y productos ya cargados. */
+export interface PresetFacturaCliente {
+  clienteId: number
+  clienteNombre: string
+  productos: ProductoServicio[]
+}
+
 /* Facturar desde Finanzas: productos/servicios sueltos del catálogo o una
-   cotización aprobada del CRM. Paso 1 qué se factura, paso 2 datos fiscales. */
-export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
+   cotización aprobada del CRM. Paso 1 qué se factura, paso 2 datos fiscales.
+   Con `preset` (desde Clientes) abre directo en los datos fiscales. En todos
+   los casos los productos del catálogo quedan en el cliente pendientes de
+   pago: al validarse el pago se activan y se le avisa. */
+export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = null, onDone }: {
   onClose: () => void
   cotizacionInicial?: CotizacionPorFacturar | null
+  preset?: PresetFacturaCliente | null
+  onDone?: () => void
 }) {
   const qc = useQueryClient()
   const [modo, setModo] = useState<Modo>(cotizacionInicial ? 'cotizacion' : 'productos')
-  const [paso, setPaso] = useState<1 | 2>(1)
-  const [clienteId, setClienteId] = useState<number | null>(null)
+  const [paso, setPaso] = useState<1 | 2>(preset ? 2 : 1)
+  const [clienteId, setClienteId] = useState<number | null>(preset?.clienteId ?? null)
   const [buscarCliente, setBuscarCliente] = useState('')
   const [buscarProd, setBuscarProd] = useState('')
-  const [lineas, setLineas] = useState<Linea[]>([])
+  const [lineas, setLineas] = useState<Linea[]>(() => (preset?.productos ?? []).map((p, i) => ({
+    key: i + 1, psId: p.id, descripcion: p.nombre, cantidad: 1, precioUnit: Number(p.precio) || 0, ivaTasa: p.ivaTasa ?? 0.16,
+  })))
   const [cot, setCot] = useState<CotizacionPorFacturar | null>(cotizacionInicial)
-  const [rec, setRec] = useState<ReceptorFiscal>(RECEPTOR_VACIO)
+  // Datos fiscales: los guardados del cliente hasta que se editen aquí.
+  const [recEditado, setRec] = useState<ReceptorFiscal | null>(null)
   const [formaPago, setFormaPago] = useState('99')
   const [metodoPago, setMetodoPago] = useState('PUE')
 
@@ -56,7 +71,8 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
 
   const clientes = useMemo(() => pendientes?.clientes ?? [], [pendientes])
   const cotizaciones = pendientes?.cotizaciones ?? []
-  const cliente = clientes.find((c) => c.id === clienteId) ?? null
+  const cliente = clientes.find((c) => c.id === clienteId)
+    ?? (preset ? { id: preset.clienteId, nombre: preset.clienteNombre, contacto: null, rfc: null } : null)
 
   const clientesFiltrados = useMemo(() => {
     const t = buscarCliente.trim().toLowerCase()
@@ -90,20 +106,20 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
     ? !!clienteId && lineas.length > 0 && lineas.every((l) => l.descripcion.trim() && l.cantidad > 0) && total > 0
     : !!cot
 
-  // Al pasar a datos fiscales se precargan los guardados del cliente.
-  const continuar = async () => {
-    const base = { ...RECEPTOR_VACIO, nombre: modo === 'cotizacion' ? cot?.cliente ?? '' : cliente?.nombre ?? '' }
-    if (clienteFactura) {
-      try {
-        const r = await facturacionService.receptorDe(clienteFactura)
-        setRec({
-          rfc: r.rfc ?? '', nombre: r.nombre ?? base.nombre, regimenFiscal: r.regimenFiscal ?? '',
-          cp: r.cp ?? '', usoCfdi: r.usoCfdi || 'G03',
-        })
-      } catch { setRec(base) }
-    } else setRec(base)
-    setPaso(2)
+  // En datos fiscales se precargan los guardados del cliente.
+  const { data: recGuardado } = useQuery({
+    queryKey: ['factura-receptor', clienteFactura],
+    queryFn: () => facturacionService.receptorDe(clienteFactura!),
+    enabled: paso === 2 && !!clienteFactura,
+  })
+  const rec: ReceptorFiscal = recEditado ?? {
+    rfc: recGuardado?.rfc ?? '',
+    nombre: recGuardado?.nombre ?? (modo === 'cotizacion' ? cot?.cliente ?? '' : cliente?.nombre ?? ''),
+    regimenFiscal: recGuardado?.regimenFiscal ?? '',
+    cp: recGuardado?.cp ?? '',
+    usoCfdi: recGuardado?.usoCfdi || RECEPTOR_VACIO.usoCfdi,
   }
+  const continuar = () => { setRec(null); setPaso(2) }
 
   const receptorValido = rec.rfc.length >= 12 && rec.nombre.trim() && rec.regimenFiscal && rec.cp.length === 5
 
@@ -111,7 +127,7 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
     mutationFn: async () => {
       if (modo === 'cotizacion' && cot) {
         const r = await facturacionService.facturarCotizacion(cot.id, { receptor: rec, formaPago, metodoPago })
-        return r?.data as { modo?: string; folio?: string | number; serie?: string } | undefined
+        return r?.data as { modo?: string; folio?: string | number; serie?: string; asignados?: number } | undefined
       }
       const r = await facturacionService.facturarManual({
         clienteId: clienteId!, receptor: rec, formaPago, metodoPago,
@@ -120,11 +136,13 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
       return r?.data
     },
     onSuccess: (d) => {
-      ;['facturas-todas', 'facturas-por-facturar', 'finanzas-dashboard', 'finanzas-cxc', 'cliente-finanzas', 'crm-facturas']
+      ;['facturas-todas', 'facturas-por-facturar', 'finanzas-dashboard', 'finanzas-cxc', 'cliente-finanzas', 'crm-facturas', 'cliente-productos-servicios']
         .forEach((k) => qc.invalidateQueries({ queryKey: [k] }))
-      toast.success(d?.modo === 'timbrada'
-        ? `Factura ${d?.serie ?? ''}${d?.folio ?? ''} timbrada`
-        : `Pre-factura ${d?.serie ?? 'PRE'}${d?.folio ?? ''} generada · quedó en Cuentas por cobrar`)
+      const que = d?.modo === 'timbrada' ? `Factura ${d?.serie ?? ''}${d?.folio ?? ''} timbrada` : `Pre-factura ${d?.serie ?? 'PRE'}${d?.folio ?? ''} generada`
+      toast.success(d?.asignados
+        ? `${que} · ${d.asignados} producto${d.asignados > 1 ? 's' : ''} pendiente${d.asignados > 1 ? 's' : ''} de pago en el cliente; al validar el pago se activan y se le avisa`
+        : `${que} · quedó en Cuentas por cobrar`, { duration: 6000 })
+      onDone?.()
       onClose()
     },
     onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message ?? 'No se pudo facturar'),
@@ -134,7 +152,7 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
   const label = 'mb-1 block text-[0.7rem] font-semibold text-gray-500'
 
   return (
-    <Modal isOpen onClose={onClose} title="Nueva factura" size="xl">
+    <Modal isOpen onClose={onClose} title={preset ? `Facturar a ${preset.clienteNombre}` : 'Nueva factura'} size="xl" elevated={!!preset}>
       <div className="space-y-4">
         {/* Pasos */}
         <div className="flex items-center gap-2 text-[0.72rem] font-semibold">
@@ -152,7 +170,7 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
 
         {paso === 1 && (
           <>
-            <div className="grid grid-cols-2 gap-2">
+            {!preset && <div className="grid grid-cols-2 gap-2">
               {([
                 { m: 'productos', icon: Package, t: 'Productos y servicios', d: 'Del catálogo o conceptos libres' },
                 { m: 'cotizacion', icon: FileSignature, t: 'Cotización aprobada', d: `${cotizaciones.length} por facturar` },
@@ -169,7 +187,7 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
                   </div>
                 </button>
               ))}
-            </div>
+            </div>}
 
             {modo === 'productos' ? (
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
@@ -183,7 +201,7 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
                           <p className="truncate text-sm font-semibold text-gray-900">{cliente.nombre}</p>
                           <p className="text-[0.68rem] text-gray-400">{cliente.rfc || 'Sin RFC registrado'}</p>
                         </div>
-                        <button type="button" onClick={() => setClienteId(null)} className="text-[0.7rem] font-semibold text-brand hover:underline">Cambiar</button>
+                        {!preset && <button type="button" onClick={() => setClienteId(null)} className="text-[0.7rem] font-semibold text-brand hover:underline">Cambiar</button>}
                       </div>
                     ) : (
                       <div className="rounded-xl border border-gray-200">
@@ -315,6 +333,16 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null }: {
               </div>
               <span className="text-lg font-black tabular-nums text-gray-900">{formatMonto(modo === 'cotizacion' ? cot?.total : total)}</span>
             </div>
+            {(modo === 'cotizacion' || lineas.some((l) => l.psId)) && (
+              <div className="rounded-xl border border-violet-100 bg-violet-50/60 px-3 py-2 text-[0.72rem] text-violet-700">
+                {modo === 'cotizacion'
+                  ? 'Los productos del catálogo de la cotización'
+                  : lineas.filter((l) => l.psId).map((l) => l.descripcion).join(', ')}{' '}
+                quedarán en el cliente <b>pendientes de pago</b>. Al validarse el pago se activan y se le avisa por correo
+                y en su portal (con Soporte técnico).{' '}
+                {modo === 'productos' && <button type="button" onClick={() => setPaso(1)} className="font-semibold underline">Editar conceptos</button>}
+              </div>
+            )}
 
             <p className="text-xs text-gray-500">Datos fiscales del receptor. Se guardan en la ficha del cliente para la próxima factura.</p>
             <div className="grid grid-cols-2 gap-3">

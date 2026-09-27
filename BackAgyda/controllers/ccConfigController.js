@@ -8,6 +8,22 @@ const baileysManager = require('../services/canalesBaileys/baileysManager');
 const fcaManager = require('../services/canalesFca/fcaManager');
 const igPrivateManager = require('../services/canalesIgPrivate/igPrivateManager');
 const { logAudit } = require('../services/auditService');
+const { equiposDeSkill, equiposDeCampania } = require('../services/ccEquiposService');
+
+// Un skill o una campaña ligados a un grupo de Contact Center los controla el
+// grupo: sus agentes/supervisores se cambian desde el grupo (Configuración → Grupos).
+async function bloqueoPorEquipo(p, grupoId, res) {
+  const eqs = await equiposDeSkill(p, grupoId);
+  if (!eqs.length) return false;
+  res.status(409).json({ success: false, message: `Este skill lo controla el grupo "${eqs.map((e) => e.nombre).join('", "')}": cambia a su gente desde el grupo (Configuración → Grupos)` });
+  return true;
+}
+async function bloqueoPorGrupoDeCampania(p, campaniaId, res) {
+  const eqs = await equiposDeCampania(p, campaniaId);
+  if (!eqs.length) return false;
+  res.status(409).json({ success: false, message: `Esta campaña la controla el grupo "${eqs.map((e) => e.nombre).join('", "')}": cambia sus supervisores desde el grupo (Configuración → Grupos)` });
+  return true;
+}
 
 function esAdmin(req) {
   return ['AD', 'TI'].includes(String(req.user?.tipoUsuario || '').toUpperCase());
@@ -541,10 +557,13 @@ exports.updateCampania = async (req, res) => {
       const slugNorm = String(b.slug || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
       if (!slugNorm) return res.status(400).json({ success: false, message: 'El slug no puede quedar vacío' });
       const dup = await p.request().input('slug', sql.NVarChar(80), slugNorm).input('id', sql.Int, req.params.id)
-        .query(`SELECT 1 FROM dbo.CCO_CAMPANIAS WHERE CM2_SLUG = @slug AND CM2_ID <> @id`);
-      if (dup.recordset.length) return res.status(409).json({ success: false, message: 'Ese slug ya lo usa otra campaña' });
+        .query(`SELECT 1 FROM dbo.CCO_CAMPANIAS WHERE CM2_SLUG = @slug AND CM2_ID <> @id AND CM2_ACTIVO = 1`);
+      if (dup.recordset.length) return res.status(409).json({ success: false, message: 'Ese identificador ya lo usa otra campaña activa' });
+      // Una campaña eliminada ya no usa su URL (el marcador solo abre activas):
+      // se la quita para que la tome esta (el índice único no permite repetirla).
       await p.request().input('id', sql.Int, req.params.id).input('slug', sql.NVarChar(80), slugNorm)
-        .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_SLUG = @slug WHERE CM2_ID = @id`);
+        .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_SLUG = NULL WHERE CM2_SLUG = @slug AND CM2_ID <> @id AND CM2_ACTIVO = 0;
+                UPDATE dbo.CCO_CAMPANIAS SET CM2_SLUG = @slug WHERE CM2_ID = @id`);
     }
     await p.request().input('id', sql.Int, req.params.id)
       .input('n', sql.NVarChar(200), b.nombre || null).input('d', sql.NVarChar(sql.MAX), b.descripcion ?? null)
@@ -584,6 +603,7 @@ exports.asignarSupervisorACampania = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    if (await bloqueoPorGrupoDeCampania(p, req.params.id, res)) return;
     await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.body?.usuarioId)
       .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u)
               INSERT INTO dbo.CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@c, @u);`);
@@ -603,6 +623,7 @@ exports.quitarSupervisorDeCampania = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    if (await bloqueoPorGrupoDeCampania(p, req.params.id, res)) return;
     const info = await p.request().input('c', sql.Int, req.params.id).input('u', sql.Int, req.params.usuarioId).query(`
       SELECT (SELECT CM2_NOMBRE FROM dbo.CCO_CAMPANIAS WHERE CM2_ID = @c) campaniaNombre,
              (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
@@ -688,6 +709,7 @@ exports.asignarAgenteAGrupo = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    if (await bloqueoPorEquipo(p, req.params.grupoId, res)) return;
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId)
       .query(`MERGE dbo.CCO_GRUPO_AGENTES AS t USING (SELECT @g g, @u u) s ON t.CGA_GRUPO_ID = s.g AND t.CGA_USUARIO_ID = s.u
               WHEN MATCHED THEN UPDATE SET CGA_ACTIVO = 1 WHEN NOT MATCHED THEN INSERT (CGA_GRUPO_ID, CGA_USUARIO_ID) VALUES (@g, @u);`);
@@ -698,6 +720,7 @@ exports.quitarAgenteDeGrupo = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    if (await bloqueoPorEquipo(p, req.params.grupoId, res)) return;
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId)
       .query(`UPDATE dbo.CCO_GRUPO_AGENTES SET CGA_ACTIVO = 0 WHERE CGA_GRUPO_ID = @g AND CGA_USUARIO_ID = @u`);
     res.json({ success: true });
@@ -720,6 +743,7 @@ exports.asignarSupervisorAGrupo = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    if (await bloqueoPorEquipo(p, req.params.grupoId, res)) return;
     await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.body?.usuarioId)
       .query(`IF NOT EXISTS (SELECT 1 FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u)
               INSERT INTO dbo.CCO_GRUPO_SUPERVISORES (GS_GRUPO_ID, GS_SUPERVISOR_ID) VALUES (@g, @u);`);
@@ -739,6 +763,7 @@ exports.quitarSupervisorDeGrupo = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
+    if (await bloqueoPorEquipo(p, req.params.grupoId, res)) return;
     const info = await p.request().input('g', sql.Int, req.params.grupoId).input('u', sql.Int, req.params.usuarioId).query(`
       SELECT (SELECT CG_NOMBRE FROM dbo.CCO_GRUPOS WHERE CG_ID = @g) grupoNombre,
              (SELECT NEUS_NOMBRES FROM dbo.NEUS_USUARIOS WHERE NEUS_ID = @u) supervisorNombre`);
