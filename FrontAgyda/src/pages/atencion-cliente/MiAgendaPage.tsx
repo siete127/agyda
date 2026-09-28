@@ -52,7 +52,7 @@ export function MiAgendaPage({ embedded = false }: { embedded?: boolean }) {
                   <CalendarClock className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white tracking-tight">Mi agenda</h1>
+                  <h1 className="text-lg font-bold text-white tracking-tight">Mis pendientes</h1>
                   <p className="mt-0.5 text-xs text-blue-100/80">{totalHoy} pendiente{totalHoy !== 1 ? 's' : ''} para hoy</p>
                 </div>
               </div>

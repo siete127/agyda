@@ -33,7 +33,7 @@ const QUEJA_CODIGOS_LECTORES_AC = ['ADM_0001', 'ADM_0002'];
 
 const CASO_SELECT_FIELDS = `
   K.CASO_ID as id, K.CASO_FOLIO as folio, K.CASO_TIPO as tipo,
-  K.CASO_CONTACTO_ID as contactoId, C.CONT_NOMBRE as contactoNombre,
+  K.CASO_CONTACTO_ID as contactoId, C.CONT_NOMBRE as contactoNombre, C.CONT_EMPRESA as contactoEmpresa,
   K.CASO_CLIENTE_NOMBRE_LIBRE as clienteNombreLibre,
   K.CASO_TITULO as titulo, K.CASO_DESCRIPCION as descripcion, K.CASO_CATEGORIA as categoria,
   K.CASO_REFERENCIA as referencia, K.CASO_PRIORIDAD as prioridad,
@@ -97,7 +97,7 @@ function generarFolioEnTransaccion(transaction) {
 
 exports.list = async (req, res) => {
   try {
-    const { tipo, estatus, prioridad, contactoId } = req.query;
+    const { tipo, estatus, prioridad, contactoId, asignadoA } = req.query;
     const pool = await databaseService.getPool(req.user?.empresa);
 
     const cond = ['K.CASO_ACTIVO = 1'];
@@ -106,6 +106,7 @@ exports.list = async (req, res) => {
     if (estatus) { cond.push('K.CASO_ESTATUS = @estatus'); request.input('estatus', sql.NVarChar, estatus); }
     if (prioridad) { cond.push('K.CASO_PRIORIDAD = @prioridad'); request.input('prioridad', sql.NVarChar, prioridad); }
     if (contactoId) { cond.push('K.CASO_CONTACTO_ID = @contactoId'); request.input('contactoId', sql.Int, contactoId); }
+    if (asignadoA) { cond.push('K.CASO_ASIGNADO_A = @asignadoA'); request.input('asignadoA', sql.Int, asignadoA); }
 
     const rs = await request.query(`
       SELECT ${CASO_SELECT_FIELDS}
@@ -197,7 +198,15 @@ exports.create = async (req, res) => {
     const org = ORIGENES_VALIDOS.includes(origen) ? origen : 'manual';
     // SLA solo para incidencia (las 3 entidades ligeras no tenían SLA).
     const slaHoras = tipo === 'incidencia' ? SLA_HORAS_POR_PRIORIDAD[prio] : null;
-    const asignado = asignadoA ? parseInt(asignadoA, 10) : null;
+    // Sin asignadoA explícito (el modal de "Nuevo caso" ya no lo pide — se
+    // asigna solo, igual que las incidencias creadas desde el Portal de
+    // Cliente): hereda el responsable del contacto, si tiene uno.
+    let asignado = asignadoA ? parseInt(asignadoA, 10) : null;
+    if (!asignado && contId) {
+      const resp = await pool.request().input('id', sql.Int, contId)
+        .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
+      asignado = resp.recordset[0]?.responsableId || null;
+    }
 
     await transaction.begin();
     const folio = await generarFolioEnTransaccion(transaction);
@@ -377,28 +386,35 @@ exports.deleteCaso = async (req, res) => {
 
 // ── Comentarios ─────────────────────────────────────────────────────────────
 
+// ?visible=1 → tab "Conversación" (lo que ve el cliente); ?visible=0 → tab
+// "Notas internas" (nunca llega al portal); sin el param → todos (compat).
 exports.listComentarios = async (req, res) => {
   try {
     const casoId = parseInt(req.params.id, 10);
     if (!Number.isFinite(casoId)) return res.status(400).json({ success: false, message: 'id inválido' });
+    const { visible } = req.query;
+    const filtroVisible = (visible === '1' || visible === '0') ? 'AND CCO_VISIBLE_CLIENTE = @visible' : '';
 
     const pool = await databaseService.getPool(req.user?.empresa);
-    const rs = await pool.request()
-      .input('id', sql.Int, casoId)
-      .query(`
+    const request = pool.request().input('id', sql.Int, casoId);
+    if (filtroVisible) request.input('visible', sql.Bit, visible === '1' ? 1 : 0);
+    const rs = await request.query(`
         SELECT CCO_ID as id, CCO_CASO_ID as casoId, CCO_COMENTARIO as comentario,
                CCO_USUARIO_ID as usuarioId, U.NEUS_NOMBRES as usuarioNombre,
                CCO_CONTACTO_ID as contactoId, C.CONT_NOMBRE as contactoNombre,
-               CCO_ORIGEN as origen, CCO_FECHA as fecha
+               CCO_ORIGEN as origen, CCO_VISIBLE_CLIENTE as visibleCliente, CCO_FECHA as fecha
         FROM CASOS_COMENTARIOS CCO
         LEFT JOIN NEUS_USUARIOS U ON U.NEUS_ID = CCO.CCO_USUARIO_ID
         LEFT JOIN CRM_CONTACTOS C ON C.CONT_ID = CCO.CCO_CONTACTO_ID
-        WHERE CCO_CASO_ID = @id
+        WHERE CCO_CASO_ID = @id ${filtroVisible}
         ORDER BY CCO_FECHA ASC
       `);
-    // El agente que consulta el hilo marca como leídos los mensajes del cliente.
-    await pool.request().input('id', sql.Int, casoId)
-      .query(`UPDATE CASOS_COMENTARIOS SET CCO_LEIDO_INTERNO=1 WHERE CCO_CASO_ID=@id AND CCO_ORIGEN='portal'`);
+    // El agente que consulta la conversación (no notas internas) marca como
+    // leídos los mensajes del cliente.
+    if (visible !== '0') {
+      await pool.request().input('id', sql.Int, casoId)
+        .query(`UPDATE CASOS_COMENTARIOS SET CCO_LEIDO_INTERNO=1 WHERE CCO_CASO_ID=@id AND CCO_ORIGEN='portal'`);
+    }
     res.json({ success: true, data: rs.recordset });
   } catch (e) {
     console.error('Error listComentarios caso:', e);
@@ -406,44 +422,51 @@ exports.listComentarios = async (req, res) => {
   }
 };
 
+// visibleCliente=false → nota interna: no notifica al portal y no aparece
+// en el chat que ve el cliente (CCO_VISIBLE_CLIENTE=0). Default true para no
+// alterar el comportamiento actual de "Conversación".
 exports.addComentario = async (req, res) => {
   try {
     const casoId = parseInt(req.params.id, 10);
     if (!Number.isFinite(casoId)) return res.status(400).json({ success: false, message: 'id inválido' });
-    const { comentario } = req.body || {};
+    const { comentario, visibleCliente } = req.body || {};
     if (!comentario || !String(comentario).trim()) return res.status(400).json({ success: false, message: 'Comentario requerido' });
+    const esVisible = visibleCliente === false ? 0 : 1;
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const ins = await pool.request()
       .input('casoId', sql.Int, casoId)
       .input('comentario', sql.NVarChar(sql.MAX), String(comentario).trim())
       .input('usuarioId', sql.Int, getUserId(req))
+      .input('visible', sql.Bit, esVisible)
       .query(`
-        INSERT INTO CASOS_COMENTARIOS (CCO_CASO_ID, CCO_COMENTARIO, CCO_USUARIO_ID, CCO_ORIGEN)
+        INSERT INTO CASOS_COMENTARIOS (CCO_CASO_ID, CCO_COMENTARIO, CCO_USUARIO_ID, CCO_ORIGEN, CCO_VISIBLE_CLIENTE)
         OUTPUT INSERTED.CCO_ID
-        VALUES (@casoId, @comentario, @usuarioId, 'interno')
+        VALUES (@casoId, @comentario, @usuarioId, 'interno', @visible)
       `);
 
     // Avisa a los usuarios del Portal de Cliente ligados al contacto del caso
-    // (si lo tiene) de que su asesor respondió — mismo patrón ya usado para
-    // avisar de cotizaciones/cierres de caso.
-    try {
-      const caso = (await pool.request().input('id', sql.Int, casoId)
-        .query(`SELECT CASO_CONTACTO_ID as contactoId, CASO_FOLIO as folio, CASO_ORIGEN as origen FROM CASOS WHERE CASO_ID=@id`)).recordset[0];
-      if (caso?.origen === 'portal' && caso.contactoId) {
-        const portalUsers = await pool.request().input('contId', sql.Int, caso.contactoId)
-          .query(`SELECT PU_NEUS_ID as neusId FROM PORTAL_USUARIOS WHERE PU_CONT_ID=@contId AND PU_ACTIVO=1`);
-        for (const pu of portalUsers.recordset) {
-          await notificationService.createNotification({
-            usuarioId: pu.neusId,
-            mensaje: `Tu asesor respondió tu solicitud ${caso.folio}`,
-            tipo: 'cliente-caso-mensaje',
-            dataExtra: { casoId, folio: caso.folio },
-            tenantKey: req.user?.empresa,
-          });
+    // (si lo tiene) de que su asesor respondió — solo si el comentario es
+    // visible para el cliente (las notas internas nunca se notifican).
+    if (esVisible === 1) {
+      try {
+        const caso = (await pool.request().input('id', sql.Int, casoId)
+          .query(`SELECT CASO_CONTACTO_ID as contactoId, CASO_FOLIO as folio, CASO_ORIGEN as origen FROM CASOS WHERE CASO_ID=@id`)).recordset[0];
+        if (caso?.origen === 'portal' && caso.contactoId) {
+          const portalUsers = await pool.request().input('contId', sql.Int, caso.contactoId)
+            .query(`SELECT PU_NEUS_ID as neusId FROM PORTAL_USUARIOS WHERE PU_CONT_ID=@contId AND PU_ACTIVO=1`);
+          for (const pu of portalUsers.recordset) {
+            await notificationService.createNotification({
+              usuarioId: pu.neusId,
+              mensaje: `Tu asesor respondió tu solicitud ${caso.folio}`,
+              tipo: 'cliente-caso-mensaje',
+              dataExtra: { casoId, folio: caso.folio },
+              tenantKey: req.user?.empresa,
+            });
+          }
         }
-      }
-    } catch (e) { console.warn('addComentario caso: aviso a portal:', e.message); }
+      } catch (e) { console.warn('addComentario caso: aviso a portal:', e.message); }
+    }
 
     res.status(201).json({ success: true, data: { id: ins.recordset[0].CCO_ID } });
   } catch (e) {
@@ -599,14 +622,17 @@ exports.deleteEvidencia = async (req, res) => {
       .input('evidenciaId', sql.Int, evidenciaId)
       .query(`
         UPDATE CASOS_EVIDENCIAS SET EVI_ACTIVO = 0
+        OUTPUT DELETED.EVI_CASO_ID as casoId
         WHERE EVI_ID = @evidenciaId AND EVI_ACTIVO = 1;
-        SELECT @@ROWCOUNT as affected;
       `);
-    if (!(result.recordset?.[0]?.affected || 0)) return res.status(404).json({ success: false, message: 'Evidencia no encontrada' });
+    const casoId = result.recordset?.[0]?.casoId;
+    if (!casoId) return res.status(404).json({ success: false, message: 'Evidencia no encontrada' });
 
+    // entidadId=casoId (no evidenciaId) para que este evento aparezca en el
+    // tab "Actividades" del caso correcto.
     await logAudit(pool, {
       userId: getUserId(req), userName: req.user?.nombre || null,
-      modulo: 'atencion-cliente', accion: 'eliminar-evidencia-caso', entidadId: evidenciaId, detalle: null, ip: req.ip,
+      modulo: 'atencion-cliente', accion: 'eliminar-evidencia-caso', entidadId: casoId, detalle: { evidenciaId }, ip: req.ip,
     });
 
     res.json({ success: true });
@@ -705,6 +731,34 @@ exports.createAccionCorrectiva = async (req, res) => {
     res.status(201).json({ success: true, data: rs.recordset[0] });
   } catch (e) {
     console.error('Error createAccionCorrectiva caso:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ── Actividad (timeline de auditoría de este caso) ───────────────────────────
+// Reusa INTRANET_AUDITORIA, ya poblada por logAudit() en crear-caso,
+// actualizar-estatus-caso, eliminar-caso, subir/eliminar-evidencia-caso y
+// crear-accion-correctiva-caso — no es una tabla nueva, solo lectura filtrada.
+exports.listActividad = async (req, res) => {
+  try {
+    const casoId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(casoId)) return res.status(400).json({ success: false, message: 'id inválido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const caso = await pool.request().input('id', sql.Int, casoId)
+      .query(`SELECT TOP 1 CASO_ID FROM CASOS WHERE CASO_ID=@id AND CASO_ACTIVO=1`);
+    if (!caso.recordset.length) return res.status(404).json({ success: false, message: 'Caso no encontrado' });
+
+    const rs = await pool.request().input('casoId', sql.NVarChar(100), String(casoId)).query(`
+      SELECT AUDIT_ID as id, USUARIO_ID as usuarioId, USUARIO_NOMBRE as usuarioNombre,
+             ACCION as accion, DETALLE as detalle, FECHA as fecha
+      FROM INTRANET_AUDITORIA
+      WHERE MODULO = 'atencion-cliente' AND ENTIDAD_ID = @casoId
+      ORDER BY FECHA DESC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listActividad caso:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

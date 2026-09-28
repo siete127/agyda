@@ -146,7 +146,7 @@ const RespaldosPage                 = lz(() => import('@/pages/respaldos/Respald
 const SistemasPage                  = lz(() => import('@/pages/sistemas/SistemasPage'),         'SistemasPage')
 const AtencionClientePage           = lz(() => import('@/pages/atencion-cliente/AtencionClientePage'), 'AtencionClientePage')
 // Módulo "Seguimiento de clientes": una sola pantalla con pestañas que colapsa
-// Casos / Agenda / Ofertas / Satisfacción / Retención / Mi agenda + la lista de
+// Casos / Agenda / Ofertas / Satisfacción / Retención / Mis pendientes + la lista de
 // clientes. Las rutas viejas redirigen (RedirectTab preserva el query).
 const SeguimientoClientesPage        = lz(() => import('@/pages/atencion-cliente/SeguimientoClientesPage'), 'SeguimientoClientesPage')
 const ClientePerfilPage              = lz(() => import('@/pages/atencion-cliente/clientes/ClientePerfilPage'), 'ClientePerfilPage')

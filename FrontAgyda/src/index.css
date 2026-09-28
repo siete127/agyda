@@ -378,6 +378,88 @@
   :root:not([data-theme="light"]) .recharts-cartesian-axis-tick-line { stroke: rgb(var(--surface-border)) !important; }
 }
 
+/* ── Badges de color fijo (bg-X-50/100 + text-X-500/600/700) en modo oscuro ──
+   Docenas de badges de estatus/tipo en toda la app (Casos, Clientes, Agenda,
+   Ventas, CRM, etc.) usan la paleta con nombre de Tailwind directamente
+   (bg-amber-100, text-emerald-700...) en vez de las CSS vars de tema, porque
+   cada color representa un significado semántico distinto y no un tono de
+   superficie. Sin esto, en oscuro el fondo pálido casi no contrasta con el
+   texto oscuro. color-mix() atenúa cada color contra la tarjeta/blanco
+   manteniendo su identidad, sin tocar cada uno de los usos. */
+:root[data-theme="dark"] .bg-red-50, :root[data-theme="dark"] .bg-red-100 { background-color: color-mix(in srgb, #ef4444 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-amber-50, :root[data-theme="dark"] .bg-amber-100 { background-color: color-mix(in srgb, #f59e0b 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-emerald-50, :root[data-theme="dark"] .bg-emerald-100 { background-color: color-mix(in srgb, #10b981 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-teal-50, :root[data-theme="dark"] .bg-teal-100 { background-color: color-mix(in srgb, #14b8a6 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-violet-50, :root[data-theme="dark"] .bg-violet-100 { background-color: color-mix(in srgb, #8b5cf6 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-blue-50, :root[data-theme="dark"] .bg-blue-100 { background-color: color-mix(in srgb, #3b82f6 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-green-50, :root[data-theme="dark"] .bg-green-100 { background-color: color-mix(in srgb, #22c55e 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-yellow-50, :root[data-theme="dark"] .bg-yellow-100 { background-color: color-mix(in srgb, #eab308 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-orange-50, :root[data-theme="dark"] .bg-orange-100 { background-color: color-mix(in srgb, #f97316 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-purple-50, :root[data-theme="dark"] .bg-purple-100 { background-color: color-mix(in srgb, #a855f7 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-pink-50, :root[data-theme="dark"] .bg-pink-100 { background-color: color-mix(in srgb, #ec4899 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-indigo-50, :root[data-theme="dark"] .bg-indigo-100 { background-color: color-mix(in srgb, #6366f1 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-cyan-50, :root[data-theme="dark"] .bg-cyan-100 { background-color: color-mix(in srgb, #06b6d4 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-rose-50, :root[data-theme="dark"] .bg-rose-100 { background-color: color-mix(in srgb, #f43f5e 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-lime-50, :root[data-theme="dark"] .bg-lime-100 { background-color: color-mix(in srgb, #84cc16 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-sky-50, :root[data-theme="dark"] .bg-sky-100 { background-color: color-mix(in srgb, #0ea5e9 22%, rgb(var(--card))) !important; }
+:root[data-theme="dark"] .bg-fuchsia-50, :root[data-theme="dark"] .bg-fuchsia-100 { background-color: color-mix(in srgb, #d946ef 22%, rgb(var(--card))) !important; }
+
+:root[data-theme="dark"] .text-red-500, :root[data-theme="dark"] .text-red-600, :root[data-theme="dark"] .text-red-700 { color: color-mix(in srgb, #ef4444 75%, white) !important; }
+:root[data-theme="dark"] .text-amber-500, :root[data-theme="dark"] .text-amber-600, :root[data-theme="dark"] .text-amber-700 { color: color-mix(in srgb, #f59e0b 75%, white) !important; }
+:root[data-theme="dark"] .text-emerald-500, :root[data-theme="dark"] .text-emerald-600, :root[data-theme="dark"] .text-emerald-700 { color: color-mix(in srgb, #10b981 75%, white) !important; }
+:root[data-theme="dark"] .text-teal-500, :root[data-theme="dark"] .text-teal-600, :root[data-theme="dark"] .text-teal-700 { color: color-mix(in srgb, #14b8a6 75%, white) !important; }
+:root[data-theme="dark"] .text-violet-500, :root[data-theme="dark"] .text-violet-600, :root[data-theme="dark"] .text-violet-700 { color: color-mix(in srgb, #8b5cf6 75%, white) !important; }
+:root[data-theme="dark"] .text-blue-500, :root[data-theme="dark"] .text-blue-600, :root[data-theme="dark"] .text-blue-700 { color: color-mix(in srgb, #3b82f6 75%, white) !important; }
+:root[data-theme="dark"] .text-green-500, :root[data-theme="dark"] .text-green-600, :root[data-theme="dark"] .text-green-700 { color: color-mix(in srgb, #22c55e 75%, white) !important; }
+:root[data-theme="dark"] .text-yellow-500, :root[data-theme="dark"] .text-yellow-600, :root[data-theme="dark"] .text-yellow-700 { color: color-mix(in srgb, #eab308 75%, white) !important; }
+:root[data-theme="dark"] .text-orange-500, :root[data-theme="dark"] .text-orange-600, :root[data-theme="dark"] .text-orange-700 { color: color-mix(in srgb, #f97316 75%, white) !important; }
+:root[data-theme="dark"] .text-purple-500, :root[data-theme="dark"] .text-purple-600, :root[data-theme="dark"] .text-purple-700 { color: color-mix(in srgb, #a855f7 75%, white) !important; }
+:root[data-theme="dark"] .text-pink-500, :root[data-theme="dark"] .text-pink-600, :root[data-theme="dark"] .text-pink-700 { color: color-mix(in srgb, #ec4899 75%, white) !important; }
+:root[data-theme="dark"] .text-indigo-500, :root[data-theme="dark"] .text-indigo-600, :root[data-theme="dark"] .text-indigo-700 { color: color-mix(in srgb, #6366f1 75%, white) !important; }
+:root[data-theme="dark"] .text-cyan-500, :root[data-theme="dark"] .text-cyan-600, :root[data-theme="dark"] .text-cyan-700 { color: color-mix(in srgb, #06b6d4 75%, white) !important; }
+:root[data-theme="dark"] .text-rose-500, :root[data-theme="dark"] .text-rose-600, :root[data-theme="dark"] .text-rose-700 { color: color-mix(in srgb, #f43f5e 75%, white) !important; }
+:root[data-theme="dark"] .text-lime-500, :root[data-theme="dark"] .text-lime-600, :root[data-theme="dark"] .text-lime-700 { color: color-mix(in srgb, #84cc16 75%, white) !important; }
+:root[data-theme="dark"] .text-sky-500, :root[data-theme="dark"] .text-sky-600, :root[data-theme="dark"] .text-sky-700 { color: color-mix(in srgb, #0ea5e9 75%, white) !important; }
+:root[data-theme="dark"] .text-fuchsia-500, :root[data-theme="dark"] .text-fuchsia-600, :root[data-theme="dark"] .text-fuchsia-700 { color: color-mix(in srgb, #d946ef 75%, white) !important; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .bg-red-50, :root:not([data-theme="light"]) .bg-red-100 { background-color: color-mix(in srgb, #ef4444 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-amber-50, :root:not([data-theme="light"]) .bg-amber-100 { background-color: color-mix(in srgb, #f59e0b 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-emerald-50, :root:not([data-theme="light"]) .bg-emerald-100 { background-color: color-mix(in srgb, #10b981 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-teal-50, :root:not([data-theme="light"]) .bg-teal-100 { background-color: color-mix(in srgb, #14b8a6 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-violet-50, :root:not([data-theme="light"]) .bg-violet-100 { background-color: color-mix(in srgb, #8b5cf6 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-blue-50, :root:not([data-theme="light"]) .bg-blue-100 { background-color: color-mix(in srgb, #3b82f6 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-green-50, :root:not([data-theme="light"]) .bg-green-100 { background-color: color-mix(in srgb, #22c55e 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-yellow-50, :root:not([data-theme="light"]) .bg-yellow-100 { background-color: color-mix(in srgb, #eab308 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-orange-50, :root:not([data-theme="light"]) .bg-orange-100 { background-color: color-mix(in srgb, #f97316 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-purple-50, :root:not([data-theme="light"]) .bg-purple-100 { background-color: color-mix(in srgb, #a855f7 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-pink-50, :root:not([data-theme="light"]) .bg-pink-100 { background-color: color-mix(in srgb, #ec4899 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-indigo-50, :root:not([data-theme="light"]) .bg-indigo-100 { background-color: color-mix(in srgb, #6366f1 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-cyan-50, :root:not([data-theme="light"]) .bg-cyan-100 { background-color: color-mix(in srgb, #06b6d4 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-rose-50, :root:not([data-theme="light"]) .bg-rose-100 { background-color: color-mix(in srgb, #f43f5e 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-lime-50, :root:not([data-theme="light"]) .bg-lime-100 { background-color: color-mix(in srgb, #84cc16 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-sky-50, :root:not([data-theme="light"]) .bg-sky-100 { background-color: color-mix(in srgb, #0ea5e9 22%, rgb(var(--card))) !important; }
+  :root:not([data-theme="light"]) .bg-fuchsia-50, :root:not([data-theme="light"]) .bg-fuchsia-100 { background-color: color-mix(in srgb, #d946ef 22%, rgb(var(--card))) !important; }
+
+  :root:not([data-theme="light"]) .text-red-500, :root:not([data-theme="light"]) .text-red-600, :root:not([data-theme="light"]) .text-red-700 { color: color-mix(in srgb, #ef4444 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-amber-500, :root:not([data-theme="light"]) .text-amber-600, :root:not([data-theme="light"]) .text-amber-700 { color: color-mix(in srgb, #f59e0b 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-emerald-500, :root:not([data-theme="light"]) .text-emerald-600, :root:not([data-theme="light"]) .text-emerald-700 { color: color-mix(in srgb, #10b981 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-teal-500, :root:not([data-theme="light"]) .text-teal-600, :root:not([data-theme="light"]) .text-teal-700 { color: color-mix(in srgb, #14b8a6 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-violet-500, :root:not([data-theme="light"]) .text-violet-600, :root:not([data-theme="light"]) .text-violet-700 { color: color-mix(in srgb, #8b5cf6 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-blue-500, :root:not([data-theme="light"]) .text-blue-600, :root:not([data-theme="light"]) .text-blue-700 { color: color-mix(in srgb, #3b82f6 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-green-500, :root:not([data-theme="light"]) .text-green-600, :root:not([data-theme="light"]) .text-green-700 { color: color-mix(in srgb, #22c55e 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-yellow-500, :root:not([data-theme="light"]) .text-yellow-600, :root:not([data-theme="light"]) .text-yellow-700 { color: color-mix(in srgb, #eab308 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-orange-500, :root:not([data-theme="light"]) .text-orange-600, :root:not([data-theme="light"]) .text-orange-700 { color: color-mix(in srgb, #f97316 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-purple-500, :root:not([data-theme="light"]) .text-purple-600, :root:not([data-theme="light"]) .text-purple-700 { color: color-mix(in srgb, #a855f7 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-pink-500, :root:not([data-theme="light"]) .text-pink-600, :root:not([data-theme="light"]) .text-pink-700 { color: color-mix(in srgb, #ec4899 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-indigo-500, :root:not([data-theme="light"]) .text-indigo-600, :root:not([data-theme="light"]) .text-indigo-700 { color: color-mix(in srgb, #6366f1 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-cyan-500, :root:not([data-theme="light"]) .text-cyan-600, :root:not([data-theme="light"]) .text-cyan-700 { color: color-mix(in srgb, #06b6d4 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-rose-500, :root:not([data-theme="light"]) .text-rose-600, :root:not([data-theme="light"]) .text-rose-700 { color: color-mix(in srgb, #f43f5e 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-lime-500, :root:not([data-theme="light"]) .text-lime-600, :root:not([data-theme="light"]) .text-lime-700 { color: color-mix(in srgb, #84cc16 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-sky-500, :root:not([data-theme="light"]) .text-sky-600, :root:not([data-theme="light"]) .text-sky-700 { color: color-mix(in srgb, #0ea5e9 75%, white) !important; }
+  :root:not([data-theme="light"]) .text-fuchsia-500, :root:not([data-theme="light"]) .text-fuchsia-600, :root:not([data-theme="light"]) .text-fuchsia-700 { color: color-mix(in srgb, #d946ef 75%, white) !important; }
+}
+
 /* ── Controls/MiniMap de @xyflow/react (Constructor de flujo del chatbot) ──
    La librería expone variables --xy-* pensadas justo para esto — no hace
    falta !important ni pelear con sus clases, solo redefinir sus tokens con

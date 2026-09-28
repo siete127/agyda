@@ -17,6 +17,7 @@ const siEsDeOtro = (accion) => (req, res, next) => {
 };
 
 router.get('/propuestas/pendientes', authenticateToken, requireActionAccess('horario-asesores', 'gestionar'), ctrl.listarPropuestasPendientes);
+router.get('/propuestas/historial', authenticateToken, requireActionAccess('horario-asesores', 'gestionar'), ctrl.listarHistorial);
 router.post('/propuestas/:propuestaId/resolver', authenticateToken, requireActionAccess('horario-asesores', 'gestionar'), ctrl.resolverPropuesta);
 
 router.get('/:usuarioId', authenticateToken, siEsDeOtro('ver-todos'), ctrl.getHorario);

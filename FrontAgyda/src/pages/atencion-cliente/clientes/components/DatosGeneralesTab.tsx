@@ -135,19 +135,18 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Estatus</label>
-          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
+          <div className="flex flex-col gap-1.5">
             {CLIENTE_ESTATUS_COLORES.map((cfg) => (
               <button
                 key={cfg.key}
                 type="button"
                 onClick={() => setEstatusCliente(cfg.key)}
-                title={cfg.label}
                 className={clsx(
-                  'flex flex-col items-center gap-1 rounded-xl border-2 py-2 text-[0.65rem] font-semibold transition-all',
-                  estatusCliente === cfg.key ? `${cfg.bg} ${cfg.text} border-current` : 'border-gray-200 bg-card text-gray-400 hover:border-gray-300',
+                  'flex items-center gap-2 rounded-xl border-2 px-3 py-2 text-left text-[0.75rem] font-semibold transition-all',
+                  estatusCliente === cfg.key ? `${cfg.bg} ${cfg.text} border-current` : 'border-gray-200 bg-card text-gray-500 hover:border-gray-300',
                 )}
               >
-                <span className={clsx('h-2 w-2 rounded-full', cfg.dot)} />
+                <span className={clsx('h-2 w-2 flex-shrink-0 rounded-full', cfg.dot)} />
                 {cfg.label}
               </button>
             ))}

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Video, Phone, Calendar, Link as LinkIcon, CheckCircle2, XCircle } from 'lucide-react'
+import { Video, Phone, Calendar, Link as LinkIcon, CheckCircle2, XCircle, CalendarClock } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { citaService } from '@/services/cita.service'
@@ -17,8 +17,11 @@ function fmtFecha(f: string) {
 }
 
 const MODALIDAD_ICON = { videollamada: Video, telefonica: Phone, generica: Calendar }
-// Transiciones que ofrece el detalle (agendada/confirmada/reprogramada son estados "abiertos").
-const TRANSICIONES: CitaEstatus[] = ['confirmada', 'reprogramada', 'asistio', 'no_asistio', 'cancelada']
+// Transiciones que ofrece el detalle. "reprogramada" se quitó de aquí porque
+// solo cambiaba el estatus sin mover la fecha/hora real — ahora existe el
+// control "Reprogramar" (abajo) que sí actualiza CITA_FECHA_HORA y deja el
+// estatus como 'reprogramada' al guardar.
+const TRANSICIONES: CitaEstatus[] = ['confirmada', 'asistio', 'no_asistio', 'cancelada']
 
 export function CitaDetalleModal({ cita, onClose, queryKeysToInvalidate }: {
   cita: Cita
@@ -30,6 +33,9 @@ export function CitaDetalleModal({ cita, onClose, queryKeysToInvalidate }: {
   const qc = useQueryClient()
   const [nota, setNota] = useState(cita.notaResultado ?? '')
   const [marcando, setMarcando] = useState<'asistio' | 'no_asistio' | null>(null)
+  const [reprogramando, setReprogramando] = useState(false)
+  const [nuevaFecha, setNuevaFecha] = useState(cita.fechaHora.slice(0, 10))
+  const [nuevaHora, setNuevaHora] = useState(cita.fechaHora.slice(11, 16))
 
   const modalCfg = CITA_MODALIDAD_CONFIG[cita.modalidad]
   const estCfg = ESTATUS_CITA_CONFIG[cita.estatus]
@@ -48,6 +54,15 @@ export function CitaDetalleModal({ cita, onClose, queryKeysToInvalidate }: {
     mutationFn: (accion: 'aprobar' | 'rechazar') => citaService.resolverSolicitud(cita.solicitudPendiente!.id, accion),
     onSuccess: () => { toast.success('Solicitud resuelta'); invalidar() },
     onError: () => toast.error('No se pudo resolver'),
+  })
+
+  const reprogramar = useMutation({
+    mutationFn: async () => {
+      await citaService.update(cita.id, { fechaHora: `${nuevaFecha}T${nuevaHora}:00` })
+      if (!cerrada) await citaService.updateEstatus(cita.id, 'reprogramada')
+    },
+    onSuccess: () => { toast.success('Cita reprogramada'); setReprogramando(false); invalidar() },
+    onError: (err: unknown) => toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudo reprogramar'),
   })
 
   return (
@@ -102,9 +117,13 @@ export function CitaDetalleModal({ cita, onClose, queryKeysToInvalidate }: {
           </div>
         )}
 
-        {/* Transiciones de estatus */}
+        {/* Transiciones de estatus + reprogramar */}
         {puedeGestionar && !cerrada && (
           <div className="flex flex-wrap gap-1.5">
+            <button onClick={() => setReprogramando((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg border border-transparent bg-blue-50 px-3 py-1.5 text-[0.72rem] font-semibold text-blue-700 transition-colors hover:opacity-80">
+              <CalendarClock className="h-3.5 w-3.5" /> Reprogramar
+            </button>
             {TRANSICIONES.filter((e) => e !== cita.estatus).map((e) => {
               const cfg = ESTATUS_CITA_CONFIG[e]
               if (e === 'asistio' || e === 'no_asistio') {
@@ -122,6 +141,21 @@ export function CitaDetalleModal({ cita, onClose, queryKeysToInvalidate }: {
                 </button>
               )
             })}
+          </div>
+        )}
+
+        {/* Mini-formulario de reprogramación */}
+        {reprogramando && (
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-3 space-y-2">
+            <p className="text-[0.75rem] font-bold text-blue-800">Nueva fecha y hora</p>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)} className="field text-sm" />
+              <input type="time" value={nuevaHora} onChange={(e) => setNuevaHora(e.target.value)} className="field text-sm" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setReprogramando(false)}>Cancelar</Button>
+              <Button isLoading={reprogramar.isPending} disabled={!nuevaFecha || !nuevaHora} onClick={() => reprogramar.mutate()}>Guardar</Button>
+            </div>
           </div>
         )}
 

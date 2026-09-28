@@ -208,6 +208,29 @@ exports.resolverPropuesta = async (req, res) => {
   }
 };
 
+// GET /horario-asesor/propuestas/historial — bandeja del supervisor: últimas
+// propuestas ya resueltas (aprobadas/rechazadas), con quién las resolvió.
+exports.listarHistorial = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT TOP 100 p.HAP_ID as id, p.HAP_USUARIO_ID as usuarioId, u.NEUS_NOMBRES as usuarioNombre,
+             p.HAP_DIAS_JSON as diasJson, p.HAP_ESTATUS as estatus, p.HAP_COMENTARIO as comentario,
+             p.HAP_ENVIADA_EN as enviadaEn, p.HAP_RESUELTA_EN as resueltaEn,
+             p.HAP_RESUELTA_POR as resueltaPor, r.NEUS_NOMBRES as resueltaPorNombre
+      FROM HORARIOS_ASESOR_PROPUESTAS p
+      JOIN NEUS_USUARIOS u ON u.NEUS_ID = p.HAP_USUARIO_ID
+      LEFT JOIN NEUS_USUARIOS r ON r.NEUS_ID = p.HAP_RESUELTA_POR
+      WHERE p.HAP_ESTATUS IN ('aprobada', 'rechazada')
+      ORDER BY p.HAP_RESUELTA_EN DESC
+    `);
+    const data = rs.recordset.map((r) => ({ ...r, dias: JSON.parse(r.diasJson) }));
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // Arma las franjas de DURACION_SLOT_MIN minutos entre inicio y fin (strings
 // 'HH:mm'), excluyendo el bloque de comida si cae dentro del rango.
 function _slotsDelDia(horaInicio, horaFin, comidaInicio, comidaFin) {

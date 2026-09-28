@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { horarioAsesorService, type DiaHorarioAsesor } from '@/services/horarioAsesor.service'
 import { useCurrentUser } from '@/hooks/useAuth'
 
-const DIAS = [
+export const DIAS = [
   { valor: 1, label: 'Lunes' },
   { valor: 2, label: 'Martes' },
   { valor: 3, label: 'Miércoles' },
@@ -20,16 +20,16 @@ const field =
   'w-full rounded-lg border border-gray-200 bg-card px-2.5 py-1.5 text-[0.8rem] text-gray-900 ' +
   'outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15 disabled:bg-gray-50 disabled:text-gray-500'
 
-type FormDia = { horaInicio: string; horaFin: string; comidaInicio: string; comidaFin: string; activo: boolean }
-type Form = Record<number, FormDia>
+export type FormDia = { horaInicio: string; horaFin: string; comidaInicio: string; comidaFin: string; activo: boolean }
+export type Form = Record<number, FormDia>
 
-function formVacio(): Form {
+export function formVacio(): Form {
   const f: Form = {}
   for (const d of DIAS) f[d.valor] = { horaInicio: '09:00', horaFin: '18:00', comidaInicio: '', comidaFin: '', activo: false }
   return f
 }
 
-function aForm(dias: DiaHorarioAsesor[]): Form {
+export function aForm(dias: DiaHorarioAsesor[]): Form {
   const f = formVacio()
   for (const d of dias) {
     f[d.diaSemana] = {
@@ -41,7 +41,7 @@ function aForm(dias: DiaHorarioAsesor[]): Form {
   return f
 }
 
-function formADias(form: Form): DiaHorarioAsesor[] {
+export function formADias(form: Form): DiaHorarioAsesor[] {
   return DIAS
     .filter((d) => form[d.valor].activo)
     .map((d) => ({
@@ -54,7 +54,7 @@ function formADias(form: Form): DiaHorarioAsesor[] {
 }
 
 /* ── Editor de días — reusado por el asesor (propuesta) y el supervisor (aprobar/editar) ── */
-function EditorDias({ form, onChange, disabled }: { form: Form; onChange: (form: Form) => void; disabled: boolean }) {
+export function EditorDias({ form, onChange, disabled }: { form: Form; onChange: (form: Form) => void; disabled: boolean }) {
   function set(dia: number, patch: Partial<FormDia>) {
     onChange({ ...form, [dia]: { ...form[dia], ...patch } })
   }
@@ -79,28 +79,66 @@ function EditorDias({ form, onChange, disabled }: { form: Form; onChange: (form:
     )
   }
 
+  // Días que ya tienen horario capturado, en el orden en que se activaron —
+  // el primero sirve como "plantilla" para copiar a los demás.
+  const activos = DIAS.filter((d) => form[d.valor].activo)
+  const copiarATodos = () => {
+    if (activos.length === 0) return
+    const base = form[activos[0].valor]
+    const next = { ...form }
+    for (const d of activos) next[d.valor] = { ...next[d.valor], horaInicio: base.horaInicio, horaFin: base.horaFin, comidaInicio: base.comidaInicio, comidaFin: base.comidaFin }
+    onChange(next)
+  }
+  const aplicarPreset = (dias: number[]) => {
+    const next = { ...form }
+    for (const d of DIAS) next[d.valor] = { ...next[d.valor], activo: dias.includes(d.valor) }
+    onChange(next)
+  }
+
   return (
     <div className="flex flex-col gap-2.5">
-      {DIAS.map((d) => (
-        <div key={d.valor} className={clsx('flex flex-wrap items-center gap-2.5 rounded-lg border px-3 py-2', form[d.valor].activo ? 'border-brand/20 bg-brand/5' : 'border-gray-100')}>
-          <button
-            type="button"
-            onClick={() => set(d.valor, { activo: !form[d.valor].activo })}
-            className={clsx('relative h-5 w-9 flex-shrink-0 rounded-full border-0 p-0 transition-colors', form[d.valor].activo ? 'bg-brand' : 'bg-gray-200')}
-          >
-            <span className={clsx('absolute left-[3px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-white shadow transition-transform', form[d.valor].activo && 'translate-x-4')} />
+      <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
+        <button type="button" onClick={() => aplicarPreset([1, 2, 3, 4, 5])} className="rounded-lg border border-gray-200 px-2.5 py-1 text-[0.68rem] font-semibold text-gray-500 hover:bg-gray-50">
+          Lunes a Viernes
+        </button>
+        <button type="button" onClick={() => aplicarPreset([1, 2, 3, 4, 5, 6])} className="rounded-lg border border-gray-200 px-2.5 py-1 text-[0.68rem] font-semibold text-gray-500 hover:bg-gray-50">
+          Lunes a Sábado
+        </button>
+        {activos.length > 1 && (
+          <button type="button" onClick={copiarATodos} className="ml-auto rounded-lg border border-brand/30 bg-brand/5 px-2.5 py-1 text-[0.68rem] font-semibold text-brand hover:bg-brand/10">
+            Copiar horario a todos los días activos
           </button>
-          <span className="w-16 flex-shrink-0 text-[0.78rem] font-semibold text-gray-700">{d.label}</span>
+        )}
+      </div>
+      {DIAS.map((d) => (
+        <div key={d.valor} className={clsx('rounded-xl border px-4 py-3', form[d.valor].activo ? 'border-brand/20 bg-brand/5' : 'border-gray-100')}>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => set(d.valor, { activo: !form[d.valor].activo })}
+              className={clsx('relative h-6 w-11 flex-shrink-0 rounded-full border-0 p-0 transition-colors', form[d.valor].activo ? 'bg-brand' : 'bg-gray-200')}
+            >
+              <span className={clsx('absolute left-[4px] top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow transition-transform', form[d.valor].activo && 'translate-x-5')} />
+            </button>
+            <span className="text-[0.85rem] font-semibold text-gray-700">{d.label}</span>
+            {!form[d.valor].activo && <span className="ml-auto text-[0.78rem] text-gray-300">No disponible</span>}
+          </div>
           {form[d.valor].activo && (
-            <>
-              <input type="time" className={clsx(field, 'w-28')} value={form[d.valor].horaInicio} onChange={(e) => set(d.valor, { horaInicio: e.target.value })} />
-              <span className="text-[0.72rem] text-gray-400">a</span>
-              <input type="time" className={clsx(field, 'w-28')} value={form[d.valor].horaFin} onChange={(e) => set(d.valor, { horaFin: e.target.value })} />
-              <span className="ml-2 flex items-center gap-1 text-[0.68rem] text-gray-400"><UtensilsCrossed className="h-3 w-3" /> Comida</span>
-              <input type="time" className={clsx(field, 'w-24')} value={form[d.valor].comidaInicio} onChange={(e) => set(d.valor, { comidaInicio: e.target.value })} />
-              <span className="text-[0.72rem] text-gray-400">a</span>
-              <input type="time" className={clsx(field, 'w-24')} value={form[d.valor].comidaFin} onChange={(e) => set(d.valor, { comidaFin: e.target.value })} />
-            </>
+            <div className="mt-2.5 grid grid-cols-1 gap-x-4 gap-y-2 pl-14 sm:grid-cols-2">
+              <div className="flex items-center gap-2">
+                <input type="time" className={clsx(field, 'min-w-0 flex-1')} value={form[d.valor].horaInicio} onChange={(e) => set(d.valor, { horaInicio: e.target.value })} />
+                <span className="flex-shrink-0 text-[0.75rem] text-gray-400">a</span>
+                <input type="time" className={clsx(field, 'min-w-0 flex-1')} value={form[d.valor].horaFin} onChange={(e) => set(d.valor, { horaFin: e.target.value })} />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="flex flex-shrink-0 items-center gap-1 text-[0.72rem] font-medium text-gray-400">
+                  <UtensilsCrossed className="h-3.5 w-3.5" /> Comida
+                </span>
+                <input type="time" className={clsx(field, 'min-w-0 flex-1')} value={form[d.valor].comidaInicio} onChange={(e) => set(d.valor, { comidaInicio: e.target.value })} />
+                <span className="flex-shrink-0 text-[0.75rem] text-gray-400">a</span>
+                <input type="time" className={clsx(field, 'min-w-0 flex-1')} value={form[d.valor].comidaFin} onChange={(e) => set(d.valor, { comidaFin: e.target.value })} />
+              </div>
+            </div>
           )}
         </div>
       ))}

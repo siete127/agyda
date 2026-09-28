@@ -85,10 +85,35 @@ exports.getAll = async (req, res) => {
     const segmentoId = req.query.segmentoId ? parseInt(req.query.segmentoId, 10) : null;
     const enRiesgo = req.query.enRiesgo === '1' || req.query.enRiesgo === 'true';
 
+    // Última actividad: fecha + título del evento MÁS RECIENTE entre las
+    // fuentes más comunes de interacción (mismas tablas que getHistorial,
+    // sin el UNION completo de esa vista — aquí solo hace falta el TOP 1).
+    const ULTIMA_ACTIVIDAD_JOIN = `
+      OUTER APPLY (
+        SELECT TOP 1 f as ultimaActividad, titulo as ultimaActividadTitulo FROM (
+          SELECT SEG_FECHA as f, CONCAT('Contacto (', SEG_TIPO_CONTACTO, ')') as titulo
+            FROM CLI_SEGUIMIENTOS WHERE SEG_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND SEG_ACTIVO = 1
+          UNION ALL
+          SELECT TAR_FECHA_CREACION, CONCAT('Tarea: ', TAR_TITULO)
+            FROM CLI_TAREAS WHERE TAR_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND TAR_ACTIVO = 1
+          UNION ALL
+          SELECT CASO_FECHA_CREACION, CONCAT('Caso ', CASO_FOLIO, ': ', CASO_TITULO)
+            FROM CASOS WHERE CASO_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND CASO_ACTIVO = 1
+          UNION ALL
+          SELECT CITA_FECHA_HORA, CONCAT('Cita: ', ISNULL(CITA_MOTIVO, 'Sin motivo'))
+            FROM CLI_CITAS WHERE CITA_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND CITA_ACTIVO = 1
+          UNION ALL
+          SELECT DOC_FECHA_SUBIDA, CONCAT('Documento: ', DOC_NOMBRE_ORIGINAL)
+            FROM CRM_DOCUMENTOS_CLIENTE WHERE DOC_CONTACTO_ID = CRM_CONTACTOS.CONT_ID AND DOC_ACTIVO = 1
+        ) eventos
+        ORDER BY f DESC
+      ) ua`;
+
     let query = `
-      SELECT ${CONTACTO_SELECT_FIELDS}
+      SELECT ${CONTACTO_SELECT_FIELDS}, ua.ultimaActividad, ua.ultimaActividadTitulo
       FROM CRM_CONTACTOS
       ${CONTACTO_CATALOGOS_JOIN}
+      ${ULTIMA_ACTIVIDAD_JOIN}
       WHERE CONT_ACTIVO = 1`;
     if (q) query += ` AND (CONT_NOMBRE LIKE @q OR CONT_EMPRESA LIKE @q OR CONT_CORREO LIKE @q)`;
     if (esCliente !== undefined) query += ` AND CONT_ES_CLIENTE = @esCliente`;

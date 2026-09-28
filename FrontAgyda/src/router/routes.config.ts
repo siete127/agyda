@@ -130,7 +130,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/atencion-cliente/satisfaccion', label: 'Satisfacción', icon: 'Smile',        moduleKey: 'atencion-cliente', roles: INT, showInSidebar: false },
   { path: '/atencion-cliente/retencion',    label: 'Retención',    icon: 'ShieldAlert',  moduleKey: 'atencion-cliente', roles: INT, showInSidebar: false },
   { path: '/atencion-cliente/clientes',     label: 'Seguimiento de clientes', icon: 'Users', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Clientes, casos, agenda, ofertas, satisfacción y retención' },
-  { path: '/atencion-cliente/mis-tareas',   label: 'Mi agenda',    icon: 'CalendarClock', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: false },
+  { path: '/atencion-cliente/mis-tareas',   label: 'Mis pendientes',    icon: 'CalendarClock', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: false },
   { path: '/atencion-cliente/clientes/dashboard', label: 'Dashboard de Clientes', icon: 'BarChart3', moduleKey: 'atencion-cliente', roles: INT, showInSidebar: true, description: 'Métricas y reportes de clientes' },
   { path: '/rh',               label: 'Recursos Humanos', icon: 'UserPlus',            moduleKey: 'rh-area',          roles: ['AD','TI'],          showInSidebar: true,  description: 'Vacantes abiertas y candidatos en proceso' },
   { path: '/rh/reclutamiento', label: 'Reclutamiento',   icon: 'UserSearch',           moduleKey: 'rh-area',          roles: ['AD','TI'],          showInSidebar: true,  description: 'Vacantes, candidatos, entrevistas y contratación' },

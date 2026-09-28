@@ -44,6 +44,8 @@ export interface CRMContacto {
   neusId: number | null
   tipoAccesoId: number | null
   tipoAccesoNombre: string | null
+  ultimaActividad: string | null
+  ultimaActividadTitulo: string | null
 }
 
 export interface CRMOportunidad {
@@ -146,6 +148,8 @@ export function parseCRMContacto(raw: Record<string, unknown>): CRMContacto {
     neusId:                  pick(raw, 'neusId', 'CONT_NEUS_ID') as number | null,
     tipoAccesoId:            pick(raw, 'tipoAccesoId', 'CONT_TIPO_ACCESO_ID') as number | null,
     tipoAccesoNombre:        pick(raw, 'tipoAccesoNombre') as string | null,
+    ultimaActividad:         pick(raw, 'ultimaActividad') as string | null,
+    ultimaActividadTitulo:   pick(raw, 'ultimaActividadTitulo') as string | null,
   }
 }
 

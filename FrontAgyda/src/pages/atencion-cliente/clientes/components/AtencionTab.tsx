@@ -33,7 +33,7 @@ export function AtencionTab({ contactoId, clienteNombre, sub, onSubChange }: {
       {sub === 'tareas' && <TareasTab contactoId={contactoId} />}
       {sub === 'citas' && <ClienteCitasTab contactoId={contactoId} clienteNombre={clienteNombre} />}
       {sub === 'renovaciones' && <RenovacionesTab contactoId={contactoId} />}
-      {sub === 'casos' && <ClienteCasosTab contactoId={contactoId} clienteNombre={clienteNombre} />}
+      {sub === 'casos' && <ClienteCasosTab contactoId={contactoId} />}
     </div>
   )
 }

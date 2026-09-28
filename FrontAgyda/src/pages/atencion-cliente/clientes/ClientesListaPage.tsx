@@ -158,7 +158,7 @@ export function ClientesListaPage({ embedded = false, onAbrirCliente }: {
         {!usaLayoutDosColumnas && <NuevoClienteBtn />}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {SEGMENTOS.map((s) => {
           const activo = segmento === s.key
           const Icon = s.icon
@@ -167,19 +167,19 @@ export function ClientesListaPage({ embedded = false, onAbrirCliente }: {
               key={s.key}
               onClick={() => setSegmento(s.key)}
               className={clsx(
-                'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[0.8rem] font-semibold transition-all',
+                'inline-flex items-center justify-center gap-1.5 rounded-full border px-2 py-1.5 text-[0.75rem] font-semibold transition-all',
                 activo
                   ? clsx(s.activeBg, s.activeText, 'border-transparent shadow-sm')
                   : 'border-gray-200 bg-card text-gray-600 hover:border-gray-300 hover:bg-gray-50',
               )}
             >
               {activo
-                ? <Icon className={clsx('h-3.5 w-3.5', s.key === 'proceso' && 'animate-spin')} />
-                : <span className={clsx('h-1.5 w-1.5 rounded-full', s.dot)} />}
-              {s.label}
+                ? <Icon className={clsx('h-3.5 w-3.5 flex-shrink-0', s.key === 'proceso' && 'animate-spin')} />
+                : <span className={clsx('h-1.5 w-1.5 flex-shrink-0 rounded-full', s.dot)} />}
+              <span className="truncate">{s.label}</span>
               <span
                 className={clsx(
-                  'inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[0.7rem] font-bold tabular-nums',
+                  'inline-flex min-w-[1.25rem] flex-shrink-0 items-center justify-center rounded-full px-1 text-[0.7rem] font-bold tabular-nums',
                   activo ? s.countActive : 'bg-gray-100 text-gray-500',
                 )}
               >
