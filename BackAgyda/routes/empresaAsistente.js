@@ -12,22 +12,15 @@ router.get('/puedo', c.puedo);
 
 router.use(requireGestionEmpresas);
 router.get('/catalogo', c.catalogo);
-router.get('/codigo', c.sugerirCodigo);
-router.post('/', c.crear);
+router.get('/codigo', c.codigo);
 
-router.get('/:empKey', c.estado);
-router.put('/:empKey/asistente', c.guardarAvance);
-router.put('/:empKey/modulos', c.guardarModulos);
-
-router.post('/:empKey/roles', c.crearRol);
-router.put('/:empKey/roles/:rolId', c.actualizarRol);
-router.delete('/:empKey/roles/:rolId', c.eliminarRol);
-
-router.post('/:empKey/perfiles', c.guardarPerfil);
-router.put('/:empKey/perfiles/:perfilId', c.guardarPerfil);
-router.delete('/:empKey/perfiles/:perfilId', c.eliminarPerfil);
-
-router.post('/:empKey/usuarios', c.crearUsuario);
-router.post('/:empKey/usuarios/importar', c.importarUsuarios);
+// Borradores: se capturan y guardan; la empresa se crea al final (POST /:id/crear).
+router.get('/borradores', c.listarBorradores);
+router.post('/borradores', c.crearBorrador);
+router.get('/borradores/:id', c.leer);
+router.put('/borradores/:id', c.guardarBorrador);
+router.delete('/borradores/:id', c.descartar);
+router.post('/borradores/:id/crear', c.crearEmpresa);
+router.post('/borradores/:id/terminar', c.terminar);
 
 module.exports = router;

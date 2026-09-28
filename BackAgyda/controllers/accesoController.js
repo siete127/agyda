@@ -100,6 +100,23 @@ exports.MODULOS_DISPONIBLES = MODULOS_DISPONIBLES;
 // Reusados por rolController (validar acciones) y schemaService (seed de roles).
 exports.DEFAULT_MODULES_BY_ROLE = DEFAULT_MODULES_BY_ROLE;
 
+// Los 6 roles de sistema que se crean en cada empresa nueva (schemaService los
+// siembra; el asistente "Crear empresa" los muestra antes de que exista la BD).
+const ROLES_SISTEMA = [
+  { base: 'AD', nombre: 'Administrador',  desc: 'Acceso completo de administracion' },
+  { base: 'TI', nombre: 'Tecnologia',     desc: 'Acceso completo del equipo de TI' },
+  { base: 'CC', nombre: 'Call Center',    desc: 'Agente de Call Center' },
+  { base: 'ST', nombre: 'Staff',          desc: 'Personal interno' },
+  { base: 'VE', nombre: 'Ventas',         desc: 'Equipo de ventas' },
+  { base: 'CL', nombre: 'Cliente',        desc: 'Cliente externo - acceso minimo' },
+];
+exports.ROLES_SISTEMA = ROLES_SISTEMA;
+// Módulos con los que nace cada rol de sistema (acceso completo al módulo).
+exports.modulosDefaultDeRol = (base) => {
+  const defaults = DEFAULT_MODULES_BY_ROLE[String(base).toLowerCase()] ?? [];
+  return defaults[0] === '*' ? MODULOS_DISPONIBLES.map((m) => m.key) : defaults;
+};
+
 /* ══════════════════════════════════════════════════════
    PERMISOS GRANULARES POR ACCIÓN
 ══════════════════════════════════════════════════════ */

@@ -252,6 +252,39 @@ function grupoCC(o) {
   };
 }
 
+// Lo mismo que config.leer ofrece para elegir, pero para un grupo que todavía
+// no existe (asistente "Crear grupo", que captura todo antes de crearlo):
+// campañas activas con sus skills y los formularios que abre el marcador,
+// marcadores (Webphone) y campañas de ventas.
+async function catalogoNuevoGrupo(pool) {
+  const campaniasRs = await q(pool, `
+    SELECT c.CM2_ID id, c.CM2_NOMBRE nombre, c.CM2_SLUG slug,
+           (SELECT STRING_AGG(oe.EQ_NOMBRE, ', ') FROM CC_EQUIPO_CAMPANIAS oc JOIN CC_EQUIPOS oe ON oe.EQ_ID = oc.EQC_EQUIPO_ID AND oe.EQ_ACTIVO = 1
+             WHERE oc.EQC_CAMPANIA_ID = c.CM2_ID) otrosGrupos
+    FROM CCO_CAMPANIAS c WHERE c.CM2_ACTIVO = 1 ORDER BY c.CM2_NOMBRE`);
+  const skillsRs = await q(pool, `
+    SELECT g.CG_ID id, g.CG_NOMBRE nombre, g.CG_CAMPANIA_ID campaniaId,
+           (SELECT COUNT(*) FROM CCO_CANALES cn WHERE cn.CN_GRUPO_ID = g.CG_ID) canales,
+           (SELECT STRING_AGG(oe.EQ_NOMBRE, ', ') FROM CC_EQUIPO_SKILLS os JOIN CC_EQUIPOS oe ON oe.EQ_ID = os.EQS_EQUIPO_ID AND oe.EQ_ACTIVO = 1
+             WHERE os.EQS_GRUPO_ID = g.CG_ID) otrosGrupos
+    FROM CCO_GRUPOS g WHERE g.CG_ACTIVO = 1 ORDER BY g.CG_NOMBRE`);
+  const formsCtrl = require('../controllers/ccFormulariosController');
+  const campanias = [];
+  for (const c of campaniasRs) {
+    let formularios = [];
+    try { formularios = (await formsCtrl._formulariosDeCampania(pool, c.id)).filter((f) => f.abrePorUrl).map((f) => ({ id: f.id, nombre: f.nombre })); } catch (_) { /* sin formularios */ }
+    campanias.push({
+      id: c.id, nombre: c.nombre, otrosGrupos: c.otrosGrupos, formularios,
+      // El link del marcador lleva el identificador del grupo, que se genera al crearlo.
+      tieneLinkMarcador: !!c.slug,
+      skills: skillsRs.filter((s) => s.campaniaId === c.id).map((s) => ({ id: s.id, nombre: s.nombre, canales: s.canales, otrosGrupos: s.otrosGrupos })),
+    });
+  }
+  const vistas = await q(pool, 'SELECT WVIS_ID id, WVIS_LABEL nombre FROM WEBPHONE_VISTAS ORDER BY WVIS_ORDEN, WVIS_LABEL').catch(() => []);
+  const ventas = await campanasVentas();
+  return { campanias, vistas, campanasVentas: (ventas || []).map((v) => ({ id: v.id, nombre: v.nombre })) };
+}
+
 // Clientes que atiende un grupo de atención (cada cliente en un solo grupo:
 // asignarlo aquí lo mueve). Si el cliente no tiene asesor individual, su
 // portal chatea con el grupo y los avisos de "Atención a clientes" de ese
@@ -680,4 +713,4 @@ function descriptor(t) {
   };
 }
 
-module.exports = { SEGMENTOS, TIPOS, porKey, descriptor, ids };
+module.exports = { SEGMENTOS, TIPOS, porKey, descriptor, ids, catalogoNuevoGrupo };

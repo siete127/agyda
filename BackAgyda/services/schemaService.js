@@ -3039,6 +3039,33 @@ END
   ALTER TABLE dbo.INTRANET_EMPRESAS ADD EMP_ASISTENTE NVARCHAR(MAX) NULL;`);
     await pool.request().query(`IF OBJECT_ID('dbo.INTRANET_EMPRESAS', 'U') IS NOT NULL AND COL_LENGTH('dbo.INTRANET_EMPRESAS', 'EMP_MODULOS_ESTRICTO') IS NULL
   ALTER TABLE dbo.INTRANET_EMPRESAS ADD EMP_MODULOS_ESTRICTO BIT NOT NULL CONSTRAINT DF_EMPRESAS_MODULOS_ESTRICTO DEFAULT 0;`);
+    // Borradores del asistente "Crear empresa": todo lo capturado (empresa,
+    // módulos, roles, perfiles, usuarios) vive aquí hasta que se pulsa "Crear
+    // empresa"; entonces se crea todo de una vez y se registra el avance para
+    // poder continuar si se interrumpe. BOR_RESULTADO guarda las contraseñas
+    // temporales solo hasta que el usuario termina el asistente.
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.INTRANET_EMPRESAS_BORRADORES', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INTRANET_EMPRESAS_BORRADORES (
+    BOR_ID             INT IDENTITY(1,1) PRIMARY KEY,
+    BOR_USUARIO_ID     INT NULL,
+    BOR_USUARIO_NOMBRE NVARCHAR(200) NULL,
+    BOR_NOMBRE         NVARCHAR(200) NULL,
+    BOR_CODIGO         NVARCHAR(50)  NULL,
+    BOR_DATOS          NVARCHAR(MAX) NULL,
+    BOR_PASO           INT NOT NULL DEFAULT 0,
+    BOR_ESTADO         NVARCHAR(20) NOT NULL DEFAULT 'borrador',
+    BOR_EMP_KEY        NVARCHAR(50)  NULL,
+    BOR_AVANCE         NVARCHAR(MAX) NULL,
+    BOR_ERROR          NVARCHAR(MAX) NULL,
+    BOR_RESULTADO      NVARCHAR(MAX) NULL,
+    BOR_CREADO         DATETIME NOT NULL DEFAULT GETDATE(),
+    BOR_ACTUALIZADO    DATETIME NOT NULL DEFAULT GETDATE()
+  );
+  CREATE INDEX IX_EMPRESAS_BORRADORES_ESTADO ON dbo.INTRANET_EMPRESAS_BORRADORES(BOR_ESTADO);
+END
+    `);
     logger.info('✅ Esquema de empresas (tenants) asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de empresas:', err.message);
@@ -3137,15 +3164,7 @@ async function ensureRolesSchema(pool) {
     }
 
     // Permisos = los módulos por defecto de ese rol, con ACCION_KEY='*' (acceso al módulo).
-    const { DEFAULT_MODULES_BY_ROLE, MODULOS_DISPONIBLES } = require('../controllers/accesoController');
-    const SISTEMA = [
-      { base: 'AD', nombre: 'Administrador',  desc: 'Acceso completo de administracion' },
-      { base: 'TI', nombre: 'Tecnologia',     desc: 'Acceso completo del equipo de TI' },
-      { base: 'CC', nombre: 'Call Center',    desc: 'Agente de Call Center' },
-      { base: 'ST', nombre: 'Staff',          desc: 'Personal interno' },
-      { base: 'VE', nombre: 'Ventas',         desc: 'Equipo de ventas' },
-      { base: 'CL', nombre: 'Cliente',        desc: 'Cliente externo - acceso minimo' },
-    ];
+    const { DEFAULT_MODULES_BY_ROLE, MODULOS_DISPONIBLES, ROLES_SISTEMA: SISTEMA } = require('../controllers/accesoController');
     const todosLosModulos = MODULOS_DISPONIBLES.map((m) => m.key);
     for (const r of SISTEMA) {
       const ins = await pool.request()
@@ -3178,6 +3197,38 @@ async function ensureRolesSchema(pool) {
     logger.info('✅ Esquema de roles asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de roles:', err.message);
+  }
+}
+
+// Borradores del asistente "Crear grupo" (en la BD de CADA empresa: el
+// asistente funciona en cualquier empresa que tenga sus módulos). Lo capturado
+// vive aquí hasta "Crear grupo"; BOR_GRUPO_ID guarda el grupo en cuanto se
+// crea para que continuar una creación interrumpida no lo duplique.
+async function ensureGruposBorradoresSchema(pool) {
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.INTRANET_GRUPOS_BORRADORES', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.INTRANET_GRUPOS_BORRADORES (
+          BOR_ID             INT IDENTITY(1,1) PRIMARY KEY,
+          BOR_USUARIO_ID     INT NULL,
+          BOR_USUARIO_NOMBRE NVARCHAR(200) NULL,
+          BOR_TIPO           NVARCHAR(40)  NOT NULL DEFAULT 'cc-equipos',
+          BOR_NOMBRE         NVARCHAR(200) NULL,
+          BOR_DATOS          NVARCHAR(MAX) NULL,
+          BOR_PASO           INT NOT NULL DEFAULT 0,
+          BOR_ESTADO         NVARCHAR(20)  NOT NULL DEFAULT 'borrador',
+          BOR_GRUPO_ID       INT NULL,
+          BOR_AVANCE         NVARCHAR(MAX) NULL,
+          BOR_ERROR          NVARCHAR(MAX) NULL,
+          BOR_CREADO         DATETIME NOT NULL DEFAULT GETDATE(),
+          BOR_ACTUALIZADO    DATETIME NOT NULL DEFAULT GETDATE()
+        );
+        CREATE INDEX IX_GRUPOS_BORRADORES_ESTADO ON dbo.INTRANET_GRUPOS_BORRADORES(BOR_ESTADO);
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar esquema de borradores de grupos:', err.message);
   }
 }
 
@@ -6170,6 +6221,7 @@ async function ensureAllSchemas(pool) {
   await ensureEmailMarketingSchema(pool);
   await ensureRolesSchema(pool);
   await ensurePerfilesSchema(pool);
+  await ensureGruposBorradoresSchema(pool);
   await ensureAccesosSchema(pool);
   await ensureAreasSchema(pool);
   await ensureCalidadSchema(pool);

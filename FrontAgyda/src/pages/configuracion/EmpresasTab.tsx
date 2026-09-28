@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Building2, Plus, ShieldAlert, Home, ChevronRight, SlidersHorizontal, Users, LayoutGrid, ShieldCheck, Hash, User, AtSign, Lock, Eye, EyeOff, X } from 'lucide-react'
+import { Building2, Plus, ShieldAlert, Home, ChevronRight, SlidersHorizontal, Users, LayoutGrid, ShieldCheck, Hash, User, AtSign, Lock, Eye, EyeOff, X, FileClock, Trash2 } from 'lucide-react'
 import { api, getApiError } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/auth.store'
 import { EmpresaModulosPanel } from './EmpresaModulosPanel'
-import { usePuedeGestionarEmpresas, abrirAsistenteEmpresa } from '@/services/empresasAsistente.service'
+import { usePuedeGestionarEmpresas, abrirAsistenteEmpresa, empresasAsistenteService, type BorradorResumen } from '@/services/empresasAsistente.service'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 const empInputCls =
   'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
@@ -54,8 +55,56 @@ function SeccionNum({ n, titulo, subtitulo }: { n: number; titulo: string; subti
 
 interface Empresa {
   key: string; nombre: string; usuarios: number | null; modulosActivos: number; modulosTotal: number
-  // Avance del asistente "Crear empresa" (null = empresa previa al asistente).
-  asistente: { paso?: number; completos?: string[]; terminado?: boolean } | null
+  // Creación con el asistente (null = empresa previa al asistente).
+  asistente: { terminado?: boolean; borradorId?: number } | null
+}
+
+// Empresas capturadas con el asistente que aún no se crean (borradores), o
+// cuya creación quedó a medias. De cualquier usuario con el permiso.
+function EmpresasPendientes() {
+  const qc = useQueryClient()
+  const [descartar, setDescartar] = useState<BorradorResumen | null>(null)
+  const { data: borradores = [] } = useQuery({ queryKey: ['empresa-asistente-borradores'], queryFn: empresasAsistenteService.borradores })
+  const quitar = useMutation({
+    mutationFn: (id: number) => empresasAsistenteService.descartar(id),
+    onSuccess: () => { toast.success('Borrador descartado'); setDescartar(null); qc.invalidateQueries({ queryKey: ['empresa-asistente-borradores'] }) },
+    onError: (e) => toast.error(getApiError(e) || 'No se pudo descartar'),
+  })
+  if (!borradores.length) return null
+  const estadoTexto = (b: BorradorResumen) =>
+    b.estado === 'creada' ? 'Creada · falta terminar el asistente'
+      : b.estado === 'error' ? 'No se terminó de crear'
+        : b.estado === 'creando' ? (b.interrumpido ? 'Creación interrumpida' : 'Creándose…')
+          : `Borrador · paso ${Math.min(b.paso + 1, 6)} de 6`
+  return (
+    <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-card shadow-card">
+      <div className="flex items-center gap-2 border-b border-amber-100 bg-amber-50/50 px-5 py-3">
+        <FileClock className="h-4 w-4 text-amber-600" />
+        <h3 className="text-[0.9rem] font-bold text-gray-900">Empresas pendientes</h3>
+        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[0.65rem] font-bold text-amber-700">{borradores.length}</span>
+        <span className="text-[0.72rem] text-gray-400">Capturadas con el asistente, todavía sin terminar</span>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {borradores.map((b) => (
+          <div key={b.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[0.88rem] font-semibold text-gray-900">{b.nombre || 'Empresa sin nombre'} {b.codigo && <span className="font-mono text-[0.72rem] text-gray-400">· {b.codigo}</span>}</p>
+              <p className="truncate text-[0.72rem] text-gray-400">
+                {estadoTexto(b)} · {b.resumen.usuarios} usuarios · {b.esMio ? 'tuyo' : `de ${b.usuarioNombre ?? 'otro usuario'}`}
+              </p>
+            </div>
+            {!b.empKey && b.estado !== 'creando' && (
+              <button onClick={() => setDescartar(b)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500" title="Descartar borrador"><Trash2 className="h-4 w-4" /></button>
+            )}
+            <button onClick={() => abrirAsistenteEmpresa(b.id)} className="rounded-lg bg-violet-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-violet-700">Continuar</button>
+          </div>
+        ))}
+      </div>
+      <ConfirmDialog isOpen={!!descartar} onClose={() => setDescartar(null)} onConfirm={() => descartar && quitar.mutate(descartar.id)}
+        title="Descartar borrador" message={`Se borrará todo lo capturado de "${descartar?.nombre || 'Empresa sin nombre'}". No se puede deshacer.`}
+        confirmLabel="Descartar" isPending={quitar.isPending} />
+    </div>
+  )
 }
 
 // Meta-fila del card "Tu Hogar" (usuarios · módulos · estado).
@@ -312,6 +361,8 @@ export function EmpresasTab() {
             </div>
           )}
 
+          <EmpresasPendientes />
+
           {/* ── Otras empresas ── */}
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-card">
             <div className="flex items-center gap-2 border-b border-gray-50 px-5 py-4">
@@ -337,7 +388,7 @@ export function EmpresasTab() {
                           {e.nombre}
                           {e.asistente && !e.asistente.terminado && (
                             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.62rem] font-semibold text-amber-700">
-                              En configuración · paso {Math.min((e.asistente.paso ?? 0) + 1, 6)} de 6
+                              Creación incompleta
                             </span>
                           )}
                         </p>
@@ -347,12 +398,12 @@ export function EmpresasTab() {
                           {' · '}{e.modulosActivos} módulos
                         </p>
                       </div>
-                      {e.asistente && !e.asistente.terminado && (
+                      {e.asistente && !e.asistente.terminado && e.asistente.borradorId && (
                         <span role="button" tabIndex={0}
-                          onClick={(ev) => { ev.stopPropagation(); abrirAsistenteEmpresa(e.key) }}
-                          onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); abrirAsistenteEmpresa(e.key) } }}
+                          onClick={(ev) => { ev.stopPropagation(); abrirAsistenteEmpresa(e.asistente!.borradorId!) }}
+                          onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); abrirAsistenteEmpresa(e.asistente!.borradorId!) } }}
                           className="flex-shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-[0.72rem] font-semibold text-white hover:bg-violet-700">
-                          Continuar asistente
+                          Continuar creación
                         </span>
                       )}
                       <SlidersHorizontal className="h-4 w-4 flex-shrink-0 text-gray-300" />

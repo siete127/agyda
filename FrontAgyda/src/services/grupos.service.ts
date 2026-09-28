@@ -133,6 +133,63 @@ export interface OpcionesGrupos {
   clientes: { id: number; nombre: string; grupo: string | null }[]
 }
 
+// ── Asistente "Crear grupo" (borrador: el grupo se crea al final) ──
+export type TipoGrupoAsistente = 'cc-equipos' | 'atencion-clientes'
+export interface DisponibilidadAsistenteGrupo {
+  permiso: boolean
+  disponible: boolean
+  /** Módulos que la empresa necesita activar para usar el asistente. */
+  faltan: { key: string; nombre: string }[]
+  atencion: boolean   // Atención al Cliente activo → tipo "Atención a clientes"
+  marcador: boolean   // Webphone activo → modalidades con marcador
+}
+export interface CatalogoAsistenteGrupo {
+  campanias: { id: number; nombre: string; otrosGrupos: string | null; formularios: { id: number; nombre: string }[]; tieneLinkMarcador: boolean
+    skills: { id: number; nombre: string; canales: number; otrosGrupos: string | null }[] }[]
+  vistas: { id: number; nombre: string }[]
+  campanasVentas: { id: number; nombre: string }[]
+  usuarios: { id: number; nombre: string; tipo: string; puesto: string | null }[]
+  clientes: { id: number; nombre: string; grupo: string | null }[]
+  atencion: boolean
+  marcador: boolean
+}
+export interface DatosGrupoBorrador {
+  tipo: TipoGrupoAsistente
+  nombre: string
+  descripcion: string
+  campanias: { id: number; formularioId: number | null }[]
+  modalidad: ModalidadGrupo
+  skillIds: number[]
+  webphoneVistaId: number | null
+  ventasCampanaId: number | null
+  supervisores: { usuarioId: number; nombre: string }[]
+  agentes: { usuarioId: number; nombre: string }[]
+  clientes: { clienteId: number; nombre: string }[]
+}
+export interface PendienteGrupo { paso: string; texto: string }
+export interface BorradorGrupoResumen {
+  id: number; tipo: TipoGrupoAsistente; nombre: string | null; paso: number
+  estado: 'borrador' | 'creando' | 'error' | 'creado' | 'terminado'; grupoId: number | null
+  usuarioNombre: string | null; esMio: boolean; actualizado: string; interrumpido: boolean
+  avance: { etapa?: string; completadas: string[]; resultado?: ResultadoSyncEquipo | null; agentesOmitidos?: number } | null
+  error: string | null
+  resumen: { campanias: number; supervisores: number; agentes: number; clientes: number }
+}
+export interface BorradorGrupo extends BorradorGrupoResumen { datos: DatosGrupoBorrador; pendientes: PendienteGrupo[] }
+
+const ga = '/grupos-asistente'
+export const grupoAsistenteService = {
+  disponible: () => api.get(`${ga}/disponible`).then((r) => r.data.data as DisponibilidadAsistenteGrupo),
+  catalogo: () => api.get(`${ga}/catalogo`).then((r) => r.data.data as CatalogoAsistenteGrupo),
+  borradores: () => api.get(`${ga}/borradores`).then((r) => r.data.data as BorradorGrupoResumen[]),
+  borrador: (id: number) => api.get(`${ga}/borradores/${id}`).then((r) => r.data.data as BorradorGrupo),
+  crearBorrador: (datos: DatosGrupoBorrador, paso: number) => api.post(`${ga}/borradores`, { datos, paso }).then((r) => r.data.data as { id: number }),
+  guardarBorrador: (id: number, datos: DatosGrupoBorrador, paso: number) => api.put(`${ga}/borradores/${id}`, { datos, paso }).then((r) => r.data.data as { pendientes: PendienteGrupo[] }),
+  descartar: (id: number) => api.delete(`${ga}/borradores/${id}`),
+  crearGrupo: (id: number) => api.post(`${ga}/borradores/${id}/crear`, undefined, { timeout: 120_000 }).then((r) => r.data.data as { grupoId: number; resultado: ResultadoSyncEquipo | null }),
+  terminar: (id: number) => api.post(`${ga}/borradores/${id}/terminar`),
+}
+
 export const gruposService = {
   resumen: async (): Promise<{ segmentos: SegmentoGrupos[]; tipos: TipoGrupo[] }> => {
     const { data } = await api.get('/grupos')

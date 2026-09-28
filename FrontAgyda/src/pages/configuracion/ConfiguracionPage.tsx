@@ -1,7 +1,8 @@
 import { useEffect, useState, type ComponentType } from 'react'
 import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus, Share2, ListTodo, UsersRound, Sparkles, Building2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { grupoAsistenteService } from '@/services/grupos.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -225,12 +226,16 @@ export function ConfiguracionPage() {
   // campañas (o una nueva, con su propio asistente), skills, marcador,
   // supervisores y su gente. Mismo permiso que editar grupos: AD/TI con "editar" usuarios.
   const [asistenteGrupo, setAsistenteGrupo] = useState(false)
-  const rolActual = (usuarioActual?.tipoUsuario ?? '').toUpperCase()
-  const puedeCrearGrupo = ['AD', 'TI'].includes(rolActual) && !cargandoAcciones && can('usuarios', 'editar')
-  // Asistente "Crear empresa": null = cerrado; { empKey: null } = empresa nueva.
-  const [asistenteEmpresa, setAsistenteEmpresa] = useState<{ empKey: string | null } | null>(null)
+  // En cualquier empresa (también las futuras) siempre que tenga activos los
+  // módulos que usa el asistente (Contact Center y Usuarios) y el usuario sea
+  // AD/TI con "editar" usuarios. Lo decide el backend con los módulos de la empresa.
+  const { data: dispGrupos } = useQuery({ queryKey: ['grupo-asistente-disponible'], queryFn: grupoAsistenteService.disponible, staleTime: 60_000, retry: false })
+  const puedeCrearGrupo = !!dispGrupos?.disponible
+  // Asistente "Crear empresa": null = cerrado; { borradorId: null } = abrir y
+  // preguntar por borradores pendientes; con id = continuar ese borrador.
+  const [asistenteEmpresa, setAsistenteEmpresa] = useState<{ borradorId: number | null } | null>(null)
   useEffect(() => {
-    const abrir = (e: Event) => setAsistenteEmpresa({ empKey: (e as CustomEvent<{ empKey?: string }>).detail?.empKey ?? null })
+    const abrir = (e: Event) => setAsistenteEmpresa({ borradorId: (e as CustomEvent<{ borradorId?: number | null }>).detail?.borradorId ?? null })
     window.addEventListener(EVENTO_ASISTENTE_EMPRESA, abrir)
     return () => window.removeEventListener(EVENTO_ASISTENTE_EMPRESA, abrir)
   }, [])
@@ -335,7 +340,7 @@ export function ConfiguracionPage() {
       </div>
 
       {asistenteEmpresa ? (
-        <AsistenteEmpresa empKeyInicial={asistenteEmpresa.empKey} onSalir={() => setAsistenteEmpresa(null)} />
+        <AsistenteEmpresa borradorIdInicial={asistenteEmpresa.borradorId} onSalir={() => setAsistenteEmpresa(null)} />
       ) : asistenteGrupo ? (
         <AsistenteGrupo onSalir={() => setAsistenteGrupo(false)} />
       ) : q ? (
@@ -356,7 +361,7 @@ export function ConfiguracionPage() {
       ) : (
         <HomeView tree={tree} onOpen={openCategory} pendientes={pendientes.length} onVerPendientes={() => setVerPendientes(true)}
           onNuevoGrupo={puedeCrearGrupo ? () => setAsistenteGrupo(true) : undefined}
-          onNuevaEmpresa={puedeGestionarEmpresas ? () => setAsistenteEmpresa({ empKey: null }) : undefined} />
+          onNuevaEmpresa={puedeGestionarEmpresas ? () => setAsistenteEmpresa({ borradorId: null }) : undefined} />
       )}
     </div>
   )
@@ -386,7 +391,7 @@ function HomeView({ tree, onOpen, pendientes, onVerPendientes, onNuevoGrupo, onN
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-[0.95rem] font-bold">Crear empresa <Sparkles className="h-4 w-4 text-amber-200" /></p>
             <p className="mt-0.5 text-[0.75rem] text-white/80">
-              Paso a paso: crea la empresa, elige sus módulos, ajusta sus roles y perfiles, y da de alta a su administrador y a su equipo (uno por uno o desde Excel). Todo se aplica solo.
+              Paso a paso: captura la empresa, sus módulos, roles, perfiles, su administrador y su equipo (uno por uno o desde Excel). Se guarda como borrador y al final se crea con todo configurado.
             </p>
           </div>
           <ChevronRight className="h-5 w-5 flex-shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />
@@ -404,7 +409,7 @@ function HomeView({ tree, onOpen, pendientes, onVerPendientes, onNuevoGrupo, onN
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-[0.95rem] font-bold">Crear grupo <Sparkles className="h-4 w-4 text-amber-200" /></p>
             <p className="mt-0.5 text-[0.75rem] text-white/80">
-              Paso a paso: crea el grupo y asígnale campañas (o crea una nueva), skills, forma de comunicación, marcador y su link, supervisores, agentes y, si atiende clientes, sus clientes. Todo se les aplica solo.
+              Paso a paso: captura el grupo con sus campañas (o crea una nueva), skills, forma de comunicación, marcador, supervisores, agentes y, si atiende clientes, sus clientes. Se guarda como borrador y al final se crea con todo aplicado.
             </p>
           </div>
           <ChevronRight className="h-5 w-5 flex-shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />
