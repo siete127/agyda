@@ -8,7 +8,7 @@ import { crmService } from '@/services/crm.service'
 import { casoService } from '@/services/caso.service'
 import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import {
-  CASO_TIPO_CONFIG, PRIORIDAD_CASO_CONFIG, CATEGORIAS_CASO,
+  CASO_TIPO_CONFIG, PRIORIDAD_CASO_CONFIG,
   type CasoTipo, type CasoPrioridad,
 } from '@/types/caso.types'
 
@@ -29,7 +29,8 @@ export function NuevoCasoModal({ onClose, onCreated, contactoPreset }: {
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [referencia, setReferencia] = useState('')
-  const [categoria, setCategoria] = useState('')
+  const [categoriaId, setCategoriaId] = useState('')
+  const [subcategoriaId, setSubcategoriaId] = useState('')
   const [prioridad, setPrioridad] = useState<CasoPrioridad>('media')
   const [asignadoA, setAsignadoA] = useState('')
 
@@ -39,10 +40,35 @@ export function NuevoCasoModal({ onClose, onCreated, contactoPreset }: {
     staleTime: 60_000,
   })
 
+  const { data: categorias } = useQuery({
+    queryKey: ['categorias-caso-activas'],
+    queryFn: () => casoService.getCategoriasActivas(),
+    staleTime: 60_000,
+  })
+
   const seleccionarCliente = (id: string) => {
     setContactoId(id)
     const c = clientes?.find((x) => String(x.id) === id)
     if (c) setClienteNombreLibre(c.nombre)
+  }
+
+  const categoriaSeleccionada = categorias?.find((c) => String(c.id) === categoriaId)
+  const subcategoriaSeleccionada = categoriaSeleccionada?.subcategorias.find((s) => String(s.id) === subcategoriaId)
+  const categoriaTexto = categoriaSeleccionada && subcategoriaSeleccionada
+    ? `${categoriaSeleccionada.nombre} > ${subcategoriaSeleccionada.nombre}`
+    : ''
+
+  const seleccionarCategoria = (id: string) => {
+    setCategoriaId(id)
+    setSubcategoriaId('')
+  }
+
+  // Prioridad automática según la subcategoría elegida — el admin puede
+  // seguir cambiándola a mano después (no se vuelve a pisar en cada render).
+  const seleccionarSubcategoria = (id: string) => {
+    setSubcategoriaId(id)
+    const sub = categoriaSeleccionada?.subcategorias.find((s) => String(s.id) === id)
+    if (sub) setPrioridad(sub.prioridad)
   }
 
   // Etiquetas y reglas por tipo (equivalentes a los modales viejos).
@@ -60,7 +86,7 @@ export function NuevoCasoModal({ onClose, onCreated, contactoPreset }: {
       contactoId: contactoId ? Number(contactoId) : undefined,
       clienteNombreLibre: muestraCliente && !contactoId && clienteNombreLibre.trim() ? clienteNombreLibre.trim() : undefined,
       referencia: tipo === 'aclaracion' && referencia.trim() ? referencia.trim() : undefined,
-      categoria: esIncidencia && categoria ? categoria : undefined,
+      categoria: esIncidencia && categoriaTexto ? categoriaTexto : undefined,
       prioridad: esIncidencia ? prioridad : undefined,
       asignadoA: esIncidencia && asignadoA ? Number(asignadoA) : undefined,
     }),
@@ -150,18 +176,25 @@ export function NuevoCasoModal({ onClose, onCreated, contactoPreset }: {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Categoría</label>
-                <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="field">
+                <select value={categoriaId} onChange={(e) => seleccionarCategoria(e.target.value)} className="field">
                   <option value="">Sin especificar</option>
-                  {CATEGORIAS_CASO.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {categorias?.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Asignar a</label>
-                <select value={asignadoA} onChange={(e) => setAsignadoA(e.target.value)} className="field">
-                  <option value="">Sin asignar</option>
-                  {usuarios?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Subcategoría</label>
+                <select value={subcategoriaId} onChange={(e) => seleccionarSubcategoria(e.target.value)} className="field" disabled={!categoriaSeleccionada}>
+                  <option value="">Sin especificar</option>
+                  {categoriaSeleccionada?.subcategorias.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Asignar a</label>
+              <select value={asignadoA} onChange={(e) => setAsignadoA(e.target.value)} className="field">
+                <option value="">Sin asignar</option>
+                {usuarios?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Prioridad</label>

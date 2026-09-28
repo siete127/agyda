@@ -36,6 +36,7 @@ import { IncentivosConfigTab } from './IncentivosConfigTab'
 import { ProspeccionConfigTab } from './ProspeccionConfigTab'
 import { EmailMarketingConfigTab } from './EmailMarketingConfigTab'
 import { CanalesPortalConfigTab } from './CanalesPortalConfigTab'
+import { CategoriasCasoConfigTab } from './CategoriasCasoConfigTab'
 import { TiposClienteConfigTab } from './TiposClienteConfigTab'
 import { SegmentosClienteConfigTab } from './SegmentosClienteConfigTab'
 import { CategoriasClienteConfigTab } from './CategoriasClienteConfigTab'
@@ -98,6 +99,7 @@ const SCREENS: Record<string, ComponentType> = {
   'prospeccion-config': ProspeccionConfigTab,
   'email-marketing-config': EmailMarketingConfigTab,
   'canales-portal-config': CanalesPortalConfigTab,
+  'categorias-caso-config': CategoriasCasoConfigTab,
   'tipos-cliente-crm': TiposClienteConfigTab,
   'segmentos-crm': SegmentosClienteConfigTab,
   'categorias-cliente-crm': CategoriasClienteConfigTab,

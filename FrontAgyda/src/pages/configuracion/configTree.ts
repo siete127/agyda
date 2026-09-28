@@ -48,9 +48,10 @@ const CATALOGO: ConfigNode[] = [
   },
   {
     key: 'portal-cliente-config', label: 'Portal de Cliente',
-    description: 'Canales de contacto que ven las empresas cliente en su portal',
+    description: 'Canales de contacto y categorías de casos que ven las empresas cliente en su portal',
     children: [
       { key: 'canales-portal-config', label: 'Canales de contacto', screen: 'canales-portal-config' },
+      { key: 'categorias-caso-config', label: 'Categorías de casos', screen: 'categorias-caso-config', accion: ['atencion-cliente', 'categorias-gestionar'] },
     ],
   },
   {

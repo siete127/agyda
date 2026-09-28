@@ -25,6 +25,8 @@ exports.getAll = async (req, res) => {
         PS_COSTO as costo, PS_CLAVE_PROD_SERV as claveProdServ,
         PS_CLAVE_UNIDAD as claveUnidad, PS_UNIDAD_NOMBRE as unidadNombre,
         PS_IVA_TASA as ivaTasa,
+        PS_CARACTERISTICAS as caracteristicas, PS_BENEFICIOS as beneficios,
+        PS_INTEGRACIONES as integraciones, PS_APLICACIONES as aplicaciones,
         PS_FECHA_REGISTRO as fechaRegistro
       FROM PRODUCTOS_SERVICIOS
       ORDER BY PS_NOMBRE ASC
@@ -39,7 +41,8 @@ exports.getAll = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const { tipo, nombre, descripcion, precio, recurrencia, activo,
-            costo, claveProdServ, claveUnidad, unidadNombre, ivaTasa } = req.body;
+            costo, claveProdServ, claveUnidad, unidadNombre, ivaTasa,
+            caracteristicas, beneficios, integraciones, aplicaciones } = req.body;
     if (!nombre || String(nombre).trim() === '') {
       return res.status(400).json({ success: false, message: 'Falta el nombre' });
     }
@@ -57,12 +60,18 @@ exports.create = async (req, res) => {
       .input('cu', sql.NVarChar(6), claveUnidad ? String(claveUnidad).slice(0, 6) : null)
       .input('un', sql.NVarChar(100), unidadNombre ? String(unidadNombre).slice(0, 100) : null)
       .input('iva', sql.Decimal(5, 4), (ivaTasa === undefined || ivaTasa === null || ivaTasa === '') ? 0.16 : Number(ivaTasa))
+      .input('caracteristicas', sql.NVarChar(sql.MAX), caracteristicas || null)
+      .input('beneficios', sql.NVarChar(sql.MAX), beneficios || null)
+      .input('integraciones', sql.NVarChar(sql.MAX), integraciones || null)
+      .input('aplicaciones', sql.NVarChar(sql.MAX), aplicaciones || null)
       .query(`
         INSERT INTO PRODUCTOS_SERVICIOS (PS_TIPO, PS_NOMBRE, PS_DESCRIPCION, PS_PRECIO, PS_RECURRENCIA, PS_ACTIVO,
-          PS_COSTO, PS_CLAVE_PROD_SERV, PS_CLAVE_UNIDAD, PS_UNIDAD_NOMBRE, PS_IVA_TASA)
+          PS_COSTO, PS_CLAVE_PROD_SERV, PS_CLAVE_UNIDAD, PS_UNIDAD_NOMBRE, PS_IVA_TASA,
+          PS_CARACTERISTICAS, PS_BENEFICIOS, PS_INTEGRACIONES, PS_APLICACIONES)
         OUTPUT INSERTED.PS_ID as id
         VALUES (@tipo, @nombre, @descripcion, @precio, @recurrencia, @activo,
-          @costo, @cps, @cu, @un, @iva)
+          @costo, @cps, @cu, @un, @iva,
+          @caracteristicas, @beneficios, @integraciones, @aplicaciones)
       `);
 
     return res.status(201).json({ success: true, data: { id: result.recordset[0].id } });
@@ -80,7 +89,8 @@ exports.update = async (req, res) => {
     }
 
     const { tipo, nombre, descripcion, precio, recurrencia, activo,
-            costo, claveProdServ, claveUnidad, unidadNombre, ivaTasa } = req.body;
+            costo, claveProdServ, claveUnidad, unidadNombre, ivaTasa,
+            caracteristicas, beneficios, integraciones, aplicaciones } = req.body;
     const pool = await databaseService.getPool(req.user?.empresa);
 
     await pool.request()
@@ -100,6 +110,14 @@ exports.update = async (req, res) => {
       .input('un', sql.NVarChar(100), unidadNombre !== undefined ? (unidadNombre ? String(unidadNombre).slice(0, 100) : null) : null)
       .input('unSet', sql.Bit, unidadNombre === undefined ? 0 : 1)
       .input('iva', sql.Decimal(5, 4), (ivaTasa === undefined || ivaTasa === null || ivaTasa === '') ? null : Number(ivaTasa))
+      .input('caracteristicas', sql.NVarChar(sql.MAX), caracteristicas !== undefined ? (caracteristicas || null) : null)
+      .input('caracteristicasSet', sql.Bit, caracteristicas === undefined ? 0 : 1)
+      .input('beneficios', sql.NVarChar(sql.MAX), beneficios !== undefined ? (beneficios || null) : null)
+      .input('beneficiosSet', sql.Bit, beneficios === undefined ? 0 : 1)
+      .input('integraciones', sql.NVarChar(sql.MAX), integraciones !== undefined ? (integraciones || null) : null)
+      .input('integracionesSet', sql.Bit, integraciones === undefined ? 0 : 1)
+      .input('aplicaciones', sql.NVarChar(sql.MAX), aplicaciones !== undefined ? (aplicaciones || null) : null)
+      .input('aplicacionesSet', sql.Bit, aplicaciones === undefined ? 0 : 1)
       .query(`
         UPDATE PRODUCTOS_SERVICIOS SET
           PS_TIPO = COALESCE(@tipo, PS_TIPO),
@@ -112,7 +130,11 @@ exports.update = async (req, res) => {
           PS_CLAVE_PROD_SERV = CASE WHEN @cpsSet = 1 THEN @cps ELSE PS_CLAVE_PROD_SERV END,
           PS_CLAVE_UNIDAD = CASE WHEN @cuSet = 1 THEN @cu ELSE PS_CLAVE_UNIDAD END,
           PS_UNIDAD_NOMBRE = CASE WHEN @unSet = 1 THEN @un ELSE PS_UNIDAD_NOMBRE END,
-          PS_IVA_TASA = COALESCE(@iva, PS_IVA_TASA)
+          PS_IVA_TASA = COALESCE(@iva, PS_IVA_TASA),
+          PS_CARACTERISTICAS = CASE WHEN @caracteristicasSet = 1 THEN @caracteristicas ELSE PS_CARACTERISTICAS END,
+          PS_BENEFICIOS = CASE WHEN @beneficiosSet = 1 THEN @beneficios ELSE PS_BENEFICIOS END,
+          PS_INTEGRACIONES = CASE WHEN @integracionesSet = 1 THEN @integraciones ELSE PS_INTEGRACIONES END,
+          PS_APLICACIONES = CASE WHEN @aplicacionesSet = 1 THEN @aplicaciones ELSE PS_APLICACIONES END
         WHERE PS_ID = @id
       `);
 

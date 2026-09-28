@@ -12,8 +12,8 @@ const norm = <T>(data: unknown, parse: (r: Record<string, unknown>) => T): T[] =
 
 export const clienteSeguimientoService = {
   // ── Historial de comunicaciones ──
-  getHistorial: async (contactoId: number): Promise<HistorialEvento[]> => {
-    const { data } = await api.get(`/atencion-cliente/clientes/${contactoId}/historial`)
+  getHistorial: async (contactoId: number, limit?: number): Promise<HistorialEvento[]> => {
+    const { data } = await api.get(`/atencion-cliente/clientes/${contactoId}/historial`, { params: limit ? { limit } : undefined })
     return norm(data?.data ?? data, parseHistorialEvento)
   },
 

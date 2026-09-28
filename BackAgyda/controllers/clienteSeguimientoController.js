@@ -336,11 +336,14 @@ exports.getHistorial = async (req, res) => {
   try {
     const contactoId = parseInt(req.params.id, 10);
     if (!Number.isFinite(contactoId)) return res.status(400).json({ success: false, message: 'id inválido' });
+    const limit = parseInt(req.query.limit, 10);
+    const topClause = Number.isFinite(limit) && limit > 0 ? `TOP (${limit})` : '';
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const request = pool.request().input('id', sql.Int, contactoId);
 
     const rs = await request.query(`
+      SELECT ${topClause} * FROM (
       SELECT 'seguimiento' as tipo, SEG_ID as id, SEG_FECHA as fecha,
              CONCAT('Contacto (', SEG_TIPO_CONTACTO, ')') as titulo, SEG_NOTA as detalle,
              SEG_ESTATUS_COLOR as color, SEG_USUARIO_ID as usuarioId
@@ -384,7 +387,17 @@ exports.getHistorial = async (req, res) => {
              ISNULL(DOC_CATEGORIA, 'sin categoría'), NULL, DOC_SUBIDO_POR
       FROM CRM_DOCUMENTOS_CLIENTE WHERE DOC_CONTACTO_ID=@id AND DOC_ACTIVO=1
 
-      ORDER BY fecha DESC
+      UNION ALL
+      SELECT 'cita', CITA_ID, CITA_FECHA_HORA, CONCAT('Cita: ', ISNULL(CITA_MOTIVO, 'Sin motivo')),
+             CONCAT(CITA_MODALIDAD, ' — ', CITA_ESTATUS), NULL, CITA_CREADO_POR
+      FROM CLI_CITAS WHERE CITA_CONTACTO_ID=@id AND CITA_ACTIVO=1
+
+      UNION ALL
+      SELECT 'retencion', AR_ID, AR_FECHA_EVALUACION, CONCAT('Evaluación de retención: ', AR_ESTATUS),
+             ISNULL(AR_MOTIVO_RIESGO, ''), NULL, NULL
+      FROM AC_RETENCION WHERE AR_CLIENTE_ID=@id
+
+      ) t ORDER BY fecha DESC
     `);
 
     const usuarioIds = [...new Set(rs.recordset.map((r) => r.usuarioId).filter(Boolean))];

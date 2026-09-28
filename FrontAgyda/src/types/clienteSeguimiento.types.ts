@@ -97,11 +97,12 @@ export interface MiAgenda {
   seguimientos: AgendaSeguimiento[]
 }
 
-export type HistorialTipo = 'seguimiento' | 'tarea' | 'pago' | 'encuesta' | 'incidencia' | 'renovacion' | 'documento'
+export type HistorialTipo = 'seguimiento' | 'tarea' | 'pago' | 'encuesta' | 'incidencia' | 'renovacion' | 'documento' | 'cita' | 'retencion'
 
 export const HISTORIAL_TIPO_LABEL: Record<HistorialTipo, string> = {
   seguimiento: 'Seguimiento', tarea: 'Tarea', pago: 'Pago', encuesta: 'Encuesta',
   incidencia: 'Incidencia', renovacion: 'Renovación', documento: 'Documento',
+  cita: 'Cita', retencion: 'Retención',
 }
 
 export interface HistorialEvento {

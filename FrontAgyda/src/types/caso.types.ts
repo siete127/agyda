@@ -34,7 +34,49 @@ export const ORIGEN_CASO_LABEL: Record<CasoOrigen, string> = {
   manual: 'Manual', encuesta: 'Encuesta', pago_vencido: 'Pago vencido', portal: 'Portal del cliente',
 }
 
+// Fallback usado solo si el catálogo configurable (CASOS_CATEGORIAS, ver
+// useCategoriasCaso) aún no cargó — nunca se debe asumir que esta es la
+// lista real, que ahora vive en AGYDA → Atención al cliente → Categorías.
 export const CATEGORIAS_CASO = ['Servicio', 'Facturación', 'Producto', 'Atención', 'Otro'] as const
+
+export interface CasoSubcategoria {
+  id: number
+  categoriaId: number
+  nombre: string
+  prioridad: CasoPrioridad
+  orden: number
+  activo: boolean
+}
+
+export interface CasoCategoria {
+  id: number
+  nombre: string
+  orden: number
+  activo: boolean
+  subcategorias: CasoSubcategoria[]
+}
+
+export function parseCasoSubcategoria(raw: Record<string, unknown>): CasoSubcategoria {
+  return {
+    id:          Number(pick(raw, 'id')),
+    categoriaId: Number(pick(raw, 'categoriaId')),
+    nombre:      String(pick(raw, 'nombre') ?? ''),
+    prioridad:   (pick(raw, 'prioridad') as CasoPrioridad) ?? 'media',
+    orden:       Number(pick(raw, 'orden') ?? 0),
+    activo:      Boolean(pick(raw, 'activo') ?? true),
+  }
+}
+
+export function parseCasoCategoria(raw: Record<string, unknown>): CasoCategoria {
+  const subsRaw = pick(raw, 'subcategorias')
+  return {
+    id:            Number(pick(raw, 'id')),
+    nombre:        String(pick(raw, 'nombre') ?? ''),
+    orden:         Number(pick(raw, 'orden') ?? 0),
+    activo:        Boolean(pick(raw, 'activo') ?? true),
+    subcategorias: Array.isArray(subsRaw) ? (subsRaw as Record<string, unknown>[]).map(parseCasoSubcategoria) : [],
+  }
+}
 
 export interface Caso {
   id: number
@@ -67,6 +109,9 @@ export interface CasoComentario {
   comentario: string
   usuarioId: number | null
   usuarioNombre: string | null
+  contactoId: number | null
+  contactoNombre: string | null
+  origen: 'interno' | 'portal'
   fecha: string
 }
 
@@ -132,6 +177,9 @@ export function parseCasoComentario(raw: Record<string, unknown>): CasoComentari
     comentario:    String(pick(raw, 'comentario') ?? ''),
     usuarioId:     pick(raw, 'usuarioId') as number | null,
     usuarioNombre: pick(raw, 'usuarioNombre') as string | null,
+    contactoId:    pick(raw, 'contactoId') as number | null,
+    contactoNombre: pick(raw, 'contactoNombre') as string | null,
+    origen:        (pick(raw, 'origen') as 'interno' | 'portal') ?? 'interno',
     fecha:         String(pick(raw, 'fecha') ?? ''),
   }
 }

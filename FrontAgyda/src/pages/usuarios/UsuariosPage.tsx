@@ -12,6 +12,7 @@ import { useActionAccess } from '@/hooks/useActionAccess'
 import { type Usuario, parseUsuario, ROL_COLORS } from './usuario.model'
 import { UsuarioModal } from './UsuarioModal'
 import { UsuarioFichaExpandida } from './UsuarioFichaExpandida'
+import { HorarioAsesorSeccion } from './HorarioAsesorSeccion'
 
 /* ── Skeleton ── */
 function SkeletonRow() {
@@ -53,6 +54,7 @@ export function UsuariosPage() {
     eliminar: can('usuarios', 'eliminar'),
   }
   const puedeEditarFicha = puede.editar
+  const puedeGestionarHorario = can('horario-asesores', 'gestionar')
   const qc = useQueryClient()
 
   const { data: usuarios = [], isLoading, refetch, isRefetching } = useQuery({
@@ -348,6 +350,7 @@ export function UsuariosPage() {
                   <tr>
                     <td colSpan={5} className="p-0">
                       <UsuarioFichaExpandida usuarioId={u.id} puedeEditar={puedeEditarFicha} />
+                      <HorarioAsesorSeccion usuarioId={u.id} puedeGestionar={puedeGestionarHorario} />
                     </td>
                   </tr>
                 )}

@@ -3,6 +3,7 @@ const router = express.Router();
 const ctrl = require('../controllers/portalClienteController');
 const usuariosCtrl = require('../controllers/portalUsuariosController');
 const asesorCtrl = require('../controllers/portalAsesorController');
+const horarioAsesorCtrl = require('../controllers/horarioAsesorController');
 const { uploadCrmDocumento } = require('../middleware/crmDocumentoUpload');
 const { authenticateToken } = require('../middleware/auth');
 const { requirePortalCliente, requirePortalAction } = require('../middleware/portalCliente');
@@ -21,6 +22,7 @@ router.get('/resumen', requirePortalAction('ver-resumen'), ctrl.getResumen);
 router.get('/productos-servicios', requirePortalAction('ver-resumen'), ctrl.getProductosServicios);
 router.get('/catalogo-productos-servicios', requirePortalAction('ver-cotizaciones'), ctrl.getCatalogoProductosServicios);
 router.post('/solicitar-cotizacion', requirePortalAction('ver-cotizaciones'), ctrl.solicitarCotizacion);
+router.get('/disponibilidad-asesor', requirePortalAction('ver-cotizaciones'), horarioAsesorCtrl.getDisponibilidadAsesor);
 router.get('/proyectos', requirePortalAction('ver-proyectos'), ctrl.getProyectos);
 router.get('/cotizaciones', requirePortalAction('ver-cotizaciones'), ctrl.getCotizaciones);
 router.get('/facturas', requirePortalAction('ver-facturas'), ctrl.getFacturas);
@@ -37,8 +39,11 @@ router.get('/citas', requirePortalAction('ver-citas'), ctrl.getCitas);
 router.get('/citas/historial', requirePortalAction('ver-citas'), ctrl.getCitasHistorial);
 router.post('/citas/:id/confirmar', requirePortalAction('gestionar-citas'), ctrl.confirmarCita);
 router.post('/citas/:id/solicitar-cambio', requirePortalAction('gestionar-citas'), ctrl.solicitarCambioCita);
+router.get('/categorias-caso', requirePortalAction('ver-incidencias'), ctrl.getCategoriasCaso);
 router.get('/incidencias', requirePortalAction('ver-incidencias'), ctrl.getIncidencias);
 router.post('/incidencias', requirePortalAction('crear-incidencias'), ctrl.crearIncidencia);
+router.get('/incidencias/:id/comentarios', requirePortalAction('ver-incidencias'), ctrl.getComentariosIncidencia);
+router.post('/incidencias/:id/comentarios', requirePortalAction('crear-incidencias'), ctrl.addComentarioIncidencia);
 
 // Gestión de usuarios de la propia empresa (solo sub-roles con gestionar-usuarios).
 router.get('/subroles-disponibles', requirePortalAction('gestionar-usuarios'), usuariosCtrl.listarSubrolesDisponibles);

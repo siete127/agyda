@@ -302,8 +302,15 @@ export function CasoDetalleModal({ caso, onClose, queryKeysToInvalidate }: {
           ) : (
             <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
               {comentarios.map((c) => (
-                <div key={c.id} className="px-3 py-2">
-                  <p className="text-[0.72rem] font-semibold text-gray-600">{c.usuarioNombre ?? 'Usuario'} · {fmtFecha(c.fecha)}</p>
+                <div key={c.id} className={clsx('px-3 py-2', c.origen === 'portal' && 'bg-emerald-50/60')}>
+                  <p className="flex items-center gap-1.5 text-[0.72rem] font-semibold text-gray-600">
+                    {c.origen === 'portal' ? (
+                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[0.6rem] font-bold text-emerald-700">Cliente</span>
+                    ) : (
+                      <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[0.6rem] font-bold text-brand">Agente</span>
+                    )}
+                    {c.origen === 'portal' ? (c.contactoNombre ?? 'Cliente') : (c.usuarioNombre ?? 'Usuario')} · {fmtFecha(c.fecha)}
+                  </p>
                   <p className="text-sm text-gray-700">{c.comentario}</p>
                 </div>
               ))}

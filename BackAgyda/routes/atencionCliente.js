@@ -8,6 +8,7 @@ const clienteAgendaCron = require('../controllers/clienteAgendaCronController');
 const clienteIncSlaCron = require('../controllers/clienteIncidenciasSlaCronController');
 const citaRecordatorioCron = require('../controllers/citaRecordatorioCronController');
 const caso = require('../controllers/casoController');
+const casoCategoria = require('../controllers/casoCategoriaController');
 const cita = require('../controllers/citaController');
 const oferta = require('../controllers/ofertaController');
 const clienteDashboard = require('../controllers/clienteDashboardController');
@@ -59,6 +60,17 @@ router.post('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess
 router.get('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.getAccionCorrectiva);
 router.post('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.createAccionCorrectiva);
 router.get('/clientes/:id/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), caso.listByContacto);
+
+// ── Categorías/subcategorías de casos (catálogo configurable de 2 niveles,
+//    prioridad asociada a la subcategoría) ──────────────────────────────────
+router.get('/categorias-casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'categorias-gestionar'), casoCategoria.listCategorias);
+router.get('/categorias-casos/activas', auth.authenticateToken, casoCategoria.listCategoriasActivas);
+router.post('/categorias-casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'categorias-gestionar'), casoCategoria.createCategoria);
+router.put('/categorias-casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'categorias-gestionar'), casoCategoria.updateCategoria);
+router.delete('/categorias-casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'categorias-gestionar'), casoCategoria.deleteCategoria);
+router.post('/categorias-casos/:categoriaId/subcategorias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'categorias-gestionar'), casoCategoria.createSubcategoria);
+router.put('/subcategorias-casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'categorias-gestionar'), casoCategoria.updateSubcategoria);
+router.delete('/subcategorias-casos/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'categorias-gestionar'), casoCategoria.deleteSubcategoria);
 
 // ── Citas y tratamientos (CRM Cliente) ───────────────────────────────────────
 // Rutas específicas ANTES de /citas/:id para que no colisionen.

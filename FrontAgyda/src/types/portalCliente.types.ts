@@ -86,6 +86,10 @@ export interface PortalProductoServicio {
   descripcion: string | null
   precio: number
   recurrencia: 'MENSUAL' | 'ANUAL' | 'UNICO'
+  caracteristicas: string | null
+  beneficios: string | null
+  integraciones: string | null
+  aplicaciones: string | null
   fechaAlta: string
 }
 
@@ -96,6 +100,16 @@ export interface PortalCatalogoItem {
   descripcion: string | null
   precio: number
   recurrencia: 'MENSUAL' | 'ANUAL' | 'UNICO'
+  caracteristicas: string | null
+  beneficios: string | null
+  integraciones: string | null
+  aplicaciones: string | null
+}
+
+export interface PortalCategoriaCaso {
+  id: number
+  nombre: string
+  subcategorias: string[]
 }
 
 export interface PortalIncidencia {

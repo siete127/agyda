@@ -7,7 +7,7 @@ import {
 
 // Ruta /atencion-cliente/clientes/:id — wrapper delgado que lee tab/sub de la
 // URL y monta el expediente. Se mantiene para deep-links y compatibilidad; el
-// módulo "Seguimiento de clientes" usa el mismo cuerpo dentro del ClienteDrawer.
+// módulo "Seguimiento de clientes" usa el mismo cuerpo dentro de ClienteDetallePanel.
 export function ClientePerfilPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -15,10 +15,10 @@ export function ClientePerfilPage() {
   const [params, setParams] = useSearchParams()
 
   const tab: ExpedienteTab = EXPEDIENTE_TAB_KEYS.includes(params.get('tab') as ExpedienteTab)
-    ? (params.get('tab') as ExpedienteTab) : 'datos'
+    ? (params.get('tab') as ExpedienteTab) : 'resumen'
   const setTab = (t: ExpedienteTab) => setParams((p) => { p.set('tab', t); p.delete('sub'); return p }, { replace: true })
 
-  const subGrupo = (tab === 'seguimiento' || tab === 'casos-pagos') ? tab : null
+  const subGrupo = (tab === 'atencion' || tab === 'comercial') ? tab : null
   const subRaw = params.get('sub')
   const sub = subGrupo && subRaw && EXPEDIENTE_SUB_VALIDAS[subGrupo].includes(subRaw)
     ? subRaw

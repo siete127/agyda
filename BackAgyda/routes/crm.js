@@ -67,6 +67,7 @@ router.delete('/contactos/:id', authenticateToken, verificarRol(['AD']), crmCont
 // ── Expediente de cliente (módulo Atención al Cliente, sobre CRM_CONTACTOS) ──
 router.put('/contactos/:id/alta-cliente', authenticateToken, requireActionAccess('atencion-cliente', 'clientes-gestionar'), crmContactos.altaCliente);
 router.get('/contactos/:id/expediente',   authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), crmContactos.getExpediente);
+router.get('/contactos/:id/resumen',      authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), crmContactos.getResumen);
 
 // ── Productos/servicios contratados por un contacto (alta desde CRM u Oportunidades) ──
 router.get('/contactos/:id/productos-servicios',              authenticateToken, crmContactos.getProductosServicios);

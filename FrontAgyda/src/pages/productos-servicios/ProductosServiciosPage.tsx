@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, RefreshCw, Plus, Edit2, Trash2, Package, Wrench, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Search, RefreshCw, Plus, Edit2, Trash2, Package, Wrench, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -36,6 +36,60 @@ const EMPTY_FORM = {
   claveProdServLabel: null as string | null,
   claveUnidad: null as string | null,
   claveUnidadLabel: null as string | null,
+  caracteristicas: [] as string[],
+  beneficios: [] as string[],
+  integraciones: [] as string[],
+  aplicaciones: [] as string[],
+}
+
+// Convierte el texto plano guardado en BD (un punto por línea) en lista, y
+// viceversa al guardar — el backend sigue almacenando un solo NVARCHAR(MAX).
+function textoALista(texto: string | null): string[] {
+  if (!texto) return []
+  return texto.split('\n').map((l) => l.trim()).filter(Boolean)
+}
+function listaATexto(lista: string[]): string | null {
+  const limpio = lista.map((l) => l.trim()).filter(Boolean)
+  return limpio.length ? limpio.join('\n') : null
+}
+
+/* ── Lista editable: un input por punto, con agregar/quitar fila ── */
+function ListaEditable({ label, placeholder, items, onChange }: { label: string; placeholder: string; items: string[]; onChange: (items: string[]) => void }) {
+  function actualizar(i: number, valor: string) {
+    const next = [...items]
+    next[i] = valor
+    onChange(next)
+  }
+  function quitar(i: number) {
+    onChange(items.filter((_, idx) => idx !== i))
+  }
+  function agregar() {
+    onChange([...items, ''])
+  }
+
+  return (
+    <div>
+      <label className="mb-1 block text-[0.7rem] font-medium text-gray-500">{label}</label>
+      <div className="space-y-1.5">
+        {items.map((val, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <input
+              value={val}
+              onChange={(e) => actualizar(i, e.target.value)}
+              placeholder={placeholder}
+              className="field flex-1 py-1.5 text-xs"
+            />
+            <button type="button" onClick={() => quitar(i)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+        <button type="button" onClick={agregar} className="flex items-center gap-1 text-[0.72rem] font-semibold text-brand hover:underline">
+          <Plus className="h-3 w-3" /> Agregar
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /* ── Modal ── */
@@ -48,6 +102,8 @@ function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | nul
     ivaPct: String(Math.round((item.ivaTasa ?? 0.16) * 10000) / 100),
     claveProdServ: item.claveProdServ, claveProdServLabel: null,
     claveUnidad: item.claveUnidad, claveUnidadLabel: item.unidadNombre,
+    caracteristicas: textoALista(item.caracteristicas), beneficios: textoALista(item.beneficios),
+    integraciones: textoALista(item.integraciones), aplicaciones: textoALista(item.aplicaciones),
   } : { ...EMPTY_FORM })
 
   const guardar = useMutation({
@@ -63,6 +119,10 @@ function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | nul
         claveProdServ: form.claveProdServ,
         claveUnidad: form.claveUnidad,
         unidadNombre: form.claveUnidadLabel,
+        caracteristicas: listaATexto(form.caracteristicas),
+        beneficios: listaATexto(form.beneficios),
+        integraciones: listaATexto(form.integraciones),
+        aplicaciones: listaATexto(form.aplicaciones),
       }
       return item ? productoServicioService.update(item.id, body) : productoServicioService.create(body)
     },
@@ -75,7 +135,7 @@ function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | nul
   })
 
   return (
-    <Modal isOpen onClose={onClose} title={item ? 'Editar producto/servicio' : 'Nuevo producto/servicio'} size="md">
+    <Modal isOpen onClose={onClose} title={item ? 'Editar producto/servicio' : 'Nuevo producto/servicio'} size="lg">
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Tipo</label>
@@ -141,6 +201,30 @@ function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | nul
               value={form.claveUnidad}
               label={form.claveUnidadLabel}
               onChange={(clave, desc) => setForm({ ...form, claveUnidad: clave, claveUnidadLabel: desc })}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500">
+            Ficha para el Portal de Cliente <span className="font-normal normal-case text-gray-400">— opcional</span>
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <ListaEditable
+              label="Características" placeholder="Ej. Marcación predictiva"
+              items={form.caracteristicas} onChange={(items) => setForm({ ...form, caracteristicas: items })}
+            />
+            <ListaEditable
+              label="Beneficios" placeholder="Ej. Reducción de costos"
+              items={form.beneficios} onChange={(items) => setForm({ ...form, beneficios: items })}
+            />
+            <ListaEditable
+              label="Integraciones" placeholder="Ej. CRM"
+              items={form.integraciones} onChange={(items) => setForm({ ...form, integraciones: items })}
+            />
+            <ListaEditable
+              label="Se usa para" placeholder="Ej. Centros de atención al cliente"
+              items={form.aplicaciones} onChange={(items) => setForm({ ...form, aplicaciones: items })}
             />
           </div>
         </div>

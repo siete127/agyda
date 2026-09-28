@@ -200,49 +200,6 @@ export function LoginPage() {
         Si tienes problemas para ingresar, contacta a soporte técnico
       </p>
 
-      {import.meta.env.DEV && <PortalClienteDevShortcut />}
     </div>
-  )
-}
-
-// Acceso directo SOLO en desarrollo (import.meta.env.DEV, no se incluye en el
-// build de producción) para revisar el Portal de Cliente sin depender del
-// backend real: mientras ese backend no tenga acceso a la BD desde este
-// entorno, cualquier login real devuelve 502. Simula una sesión CL válida
-// directamente en el store, sin tocar /auth/login.
-function PortalClienteDevShortcut() {
-  const setUser = useAuthStore((s) => s.setUser)
-  const navigate = useNavigate()
-
-  const entrar = () => {
-    setUser(
-      {
-        id: 0,
-        nombres: 'Nombre Cliente',
-        usuario: 'demo-cliente',
-        tipoUsuario: 'CL',
-        activo: true,
-        status: true,
-        base: 'demo',
-        fechaRegistro: null,
-        fechaIngreso: null,
-        ventasUsuario: '',
-        ventasPassword: '',
-        ventasRol: '',
-        accessToken: 'dev-shortcut',
-      },
-      'dev-shortcut-token'
-    )
-    navigate('/portal-cliente', { replace: true })
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={entrar}
-      className="mx-auto flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-dashed border-amber-400/40 bg-amber-400/10 py-2.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20"
-    >
-      🚧 Ver demo: Portal de Cliente (solo dev)
-    </button>
   )
 }

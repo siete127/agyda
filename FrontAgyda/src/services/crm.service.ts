@@ -38,6 +38,31 @@ export interface ExpedienteOportunidad {
   cotizaciones: ExpedienteCotizacion[]
 }
 
+// Última evaluación de retención de un cliente — "en riesgo" = esa evaluación
+// (la más reciente, no hay concepto de vigencia) tiene estatus 'riesgo'.
+export interface ClienteRetencion {
+  estatus: 'riesgo' | 'estable' | 'recuperado'
+  fecha: string
+  motivo: string | null
+  enRiesgo: boolean
+}
+
+export interface ClienteResumen {
+  casos: { total: number; abiertos: number }
+  citas: { total: number; proximas: number; ultimaFecha: string | null }
+  ofertas: { enviosTotal: number }
+  satisfaccion: { encuestasEnviadas: number; respondidas: number; satisfechos: number }
+  retencion: ClienteRetencion | null
+  valorComercial: { pipelineAbierto: number; totalGanado: number; oportunidadesAbiertas: number }
+}
+
+export interface ClientesFiltros {
+  q?: string
+  estatusCliente?: string[]
+  segmentoId?: number
+  enRiesgo?: boolean
+}
+
 export const crmService = {
   // ── Contactos ──
   getContactos: async (q?: string): Promise<CRMContacto[]> => {
@@ -63,8 +88,16 @@ export const crmService = {
   // proyecto (ver crmContactosController.getAll). Antes traía TODO el CRM
   // sin filtrar, incluidos contactos sueltos del formulario web que nunca
   // pasaron por el flujo de alta/generar-proyecto.
-  getClientes: async (q?: string): Promise<CRMContacto[]> => {
-    const { data } = await api.get('/crm/contactos', { params: { conSeguimiento: '1', ...(q ? { q } : {}) } })
+  getClientes: async (filtros?: ClientesFiltros): Promise<CRMContacto[]> => {
+    const { data } = await api.get('/crm/contactos', {
+      params: {
+        conSeguimiento: '1',
+        ...(filtros?.q ? { q: filtros.q } : {}),
+        ...(filtros?.estatusCliente?.length ? { estatusCliente: filtros.estatusCliente.join(',') } : {}),
+        ...(filtros?.segmentoId ? { segmentoId: filtros.segmentoId } : {}),
+        ...(filtros?.enRiesgo ? { enRiesgo: '1' } : {}),
+      },
+    })
     return norm(data?.data ?? data, parseCRMContacto)
   },
   altaCliente: async (id: number, body: {
@@ -80,6 +113,7 @@ export const crmService = {
   getExpediente: async (id: number): Promise<CRMContacto & {
     conteos: { documentos: number; pagos: number; encuestas: number; oportunidades: number }
     oportunidades: ExpedienteOportunidad[]
+    retencion: ClienteRetencion | null
   }> => {
     const { data } = await api.get(`/crm/contactos/${id}/expediente`)
     const raw = data?.data ?? data
@@ -87,6 +121,31 @@ export const crmService = {
       ...parseCRMContacto(raw),
       conteos: raw.conteos,
       oportunidades: Array.isArray(raw.oportunidades) ? raw.oportunidades : [],
+      retencion: raw.retencion ?? null,
+    }
+  },
+  // Métricas agregadas de un cliente (tab "Resumen"). Los SUM sobre 0 filas
+  // llegan como null desde SQL — se normalizan aquí a 0 para no propagar ese
+  // detalle de implementación al frontend.
+  getResumen: async (id: number, meses?: number): Promise<ClienteResumen> => {
+    const { data } = await api.get(`/crm/contactos/${id}/resumen`, { params: meses ? { meses } : undefined })
+    const raw = data?.data ?? data
+    const n = (v: unknown): number => (typeof v === 'number' ? v : 0)
+    return {
+      casos: { total: n(raw.casos?.total), abiertos: n(raw.casos?.abiertos) },
+      citas: { total: n(raw.citas?.total), proximas: n(raw.citas?.proximas), ultimaFecha: raw.citas?.ultimaFecha ?? null },
+      ofertas: { enviosTotal: n(raw.ofertas?.enviosTotal) },
+      satisfaccion: {
+        encuestasEnviadas: n(raw.satisfaccion?.encuestasEnviadas),
+        respondidas: n(raw.satisfaccion?.respondidas),
+        satisfechos: n(raw.satisfaccion?.satisfechos),
+      },
+      retencion: raw.retencion ?? null,
+      valorComercial: {
+        pipelineAbierto: n(raw.valorComercial?.pipelineAbierto),
+        totalGanado: n(raw.valorComercial?.totalGanado),
+        oportunidadesAbiertas: n(raw.valorComercial?.oportunidadesAbiertas),
+      },
     }
   },
 

@@ -4,7 +4,6 @@ import {
 } from 'lucide-react'
 import { Tabs, type TabItem } from '@/components/ui/Tabs'
 import { ClientesListaPage } from './clientes/ClientesListaPage'
-import { ClienteDrawer } from './clientes/ClienteDrawer'
 import { CasosPage } from './CasosPage'
 import { AgendaCitasPage } from './AgendaCitasPage'
 import { OfertasPage } from './OfertasPage'
@@ -13,14 +12,12 @@ import { RetencionPage } from './RetencionPage'
 import { MiAgendaPage } from './MiAgendaPage'
 
 // Módulo "Seguimiento de clientes" — única entrada del sidebar. Colapsa las 7
-// pantallas del área en pestañas. La lista de clientes es la pestaña "Clientes";
-// al abrir un cliente, su expediente aparece en un panel lateral (ClienteDrawer)
-// sin perder la lista detrás.
+// pantallas del área en pestañas. La pestaña "Clientes" (ClientesListaPage,
+// embedded) resuelve su propio layout de 2 columnas y la selección del
+// cliente en estado local, no en la URL de este shell.
 //
 // Estado en la URL:
 //   ?tab=<clientes|casos|agenda|ofertas|satisfaccion|retencion|mi-agenda>
-//   ?id=<contactoId>   → abre el drawer del expediente
-//   ?exp=<datos|seguimiento|casos-pagos|documentos> & ?sub=<...>  → pestaña del expediente
 // Los query params de deep-link de cada sub-página (casoId, citaId, tipo,
 // estatus) conviven en el mismo useSearchParams — usan nombres distintos.
 
@@ -48,12 +45,6 @@ export function SeguimientoClientesPage() {
     for (const k of ['casoId', 'citaId', 'estatus', 'id', 'exp']) p.delete(k)
     return p
   }, { replace: true })
-
-  const clienteId = params.get('id') ? Number(params.get('id')) : null
-  const abrirCliente = (id: number) => setParams((p) => { p.set('id', String(id)); return p }, { replace: true })
-  const cerrarCliente = () => setParams((p) => { p.delete('id'); p.delete('exp'); p.delete('sub'); return p }, { replace: true })
-  const setExp = (t: string) => setParams((p) => { p.set('exp', t); p.delete('sub'); return p }, { replace: true })
-  const setExpSub = (s: string) => setParams((p) => { p.set('sub', s); return p }, { replace: true })
 
   const TABS: TabItem<Tab>[] = [
     { key: 'clientes', label: 'Clientes', icon: Users },
@@ -100,24 +91,13 @@ export function SeguimientoClientesPage() {
         <Tabs tabs={TABS} value={tab} onChange={setTab} />
       </div>
 
-      {tab === 'clientes' && <ClientesListaPage embedded onAbrirCliente={abrirCliente} />}
+      {tab === 'clientes' && <ClientesListaPage embedded />}
       {tab === 'casos' && <CasosPage embedded />}
       {tab === 'agenda' && <AgendaCitasPage embedded />}
       {tab === 'ofertas' && <OfertasPage embedded />}
       {tab === 'satisfaccion' && <SatisfaccionPage embedded />}
       {tab === 'retencion' && <RetencionPage embedded />}
       {tab === 'mi-agenda' && <MiAgendaPage embedded />}
-
-      {clienteId != null && Number.isFinite(clienteId) && (
-        <ClienteDrawer
-          contactoId={clienteId}
-          expParam={params.get('exp')}
-          subParam={params.get('sub')}
-          onExp={setExp}
-          onSub={setExpSub}
-          onClose={cerrarCliente}
-        />
-      )}
     </div>
   )
 }

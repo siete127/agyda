@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -6,7 +6,7 @@ import {
   Headphones, ChevronDown, Search, Calendar,
   Plus, HelpCircle, MessageCircle,
   FileText, CheckCircle2, XCircle,
-  Clock, Tag, AlertTriangle, Send,
+  Clock, Tag, AlertTriangle, Send, Loader2,
 } from 'lucide-react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 import { PortalBreadcrumb } from '@/pages/portal-cliente/components/PortalBreadcrumb'
@@ -109,55 +109,58 @@ interface Filtros {
   estado: string
 }
 
-const ESTADOS = ['abierto', 'en_proceso', 'resuelto', 'cerrado']
+const ESTADOS = ['abierto', 'en_proceso', 'resuelto', 'cerrado'] as const
+const ESTADO_LABEL: Record<string, string> = { abierto: 'Abiertas', en_proceso: 'En proceso', resuelto: 'Resueltas', cerrado: 'Cerradas' }
+// Color propio por estatus, mismo patrón que los tabs de Cotizaciones.
+const ESTADO_COLOR: Record<string, { texto: string; linea: string }> = {
+  todos: { texto: 'text-ink', linea: 'bg-ink' },
+  abierto: { texto: 'text-amber-600', linea: 'bg-amber-600' },
+  en_proceso: { texto: 'text-blue-600', linea: 'bg-blue-600' },
+  resuelto: { texto: 'text-emerald-600', linea: 'bg-emerald-600' },
+  cerrado: { texto: 'text-slate-500', linea: 'bg-slate-500' },
+}
 
-function FiltroDropdown({
-  valor, opciones, etiquetaTodos, onCambiar,
-}: { valor: string; opciones: string[]; etiquetaTodos: string; onCambiar: (v: string) => void }) {
-  const { abierto, setAbierto } = usePopover()
+function TabsEstatus({ incidencias, estado, onCambiar }: { incidencias: PortalIncidencia[]; estado: string; onCambiar: (v: string) => void }) {
+  // Solo se muestran los tabs de estatus que realmente tienen alguna solicitud.
+  const visibles = ESTADOS.filter((e) => incidencias.some((i) => i.estatus.toLowerCase() === e))
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setAbierto((v) => !v)}
-        className="flex items-center gap-2 whitespace-nowrap rounded-full border border-surface-border bg-card px-3.5 py-2 text-xs font-semibold text-ink-secondary hover:bg-surface"
-      >
-        {valor === 'Todos los estados' ? valor : <span className="capitalize">{valor.replace('_', ' ')}</span>}
-        <ChevronDown className="h-3.5 w-3.5 text-ink-tertiary" />
-      </button>
-      {abierto && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setAbierto(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-xl border border-surface-border bg-card p-1.5 shadow-card-lg">
-            <button type="button" onClick={() => { onCambiar(etiquetaTodos); setAbierto(false) }} className={clsx('block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-surface', valor === etiquetaTodos ? 'text-brand' : 'text-ink-secondary')}>
-              {etiquetaTodos}
-            </button>
-            {opciones.map((op) => (
-              <button key={op} type="button" onClick={() => { onCambiar(op); setAbierto(false) }} className={clsx('block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold capitalize hover:bg-surface', valor === op ? 'text-brand' : 'text-ink-secondary')}>
-                {op.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+    <div className="flex gap-6 overflow-x-auto border-b border-surface-border">
+      {['todos', ...visibles].map((e) => {
+        const count = e === 'todos' ? incidencias.length : incidencias.filter((i) => i.estatus.toLowerCase() === e).length
+        const activo = estado === e
+        const color = ESTADO_COLOR[e]
+        return (
+          <button
+            key={e}
+            type="button"
+            onClick={() => onCambiar(e)}
+            className="group relative flex flex-shrink-0 items-center gap-1.5 pb-3 pt-1 text-sm font-semibold transition-colors"
+          >
+            <span className={clsx(activo ? color.texto : 'text-ink-tertiary group-hover:text-ink')}>
+              {e === 'todos' ? 'Todas' : ESTADO_LABEL[e]}
+            </span>
+            <span className={clsx('rounded-full px-1.5 py-0.5 text-[10px] font-bold', activo ? clsx(color.texto, 'bg-current/10') : 'bg-surface text-ink-tertiary')}>
+              {count}
+            </span>
+            <span className={clsx('absolute inset-x-0 -bottom-px h-0.5 rounded-full transition-colors', activo ? color.linea : 'bg-transparent')} />
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-function BarraFiltros({ filtros, onCambiar }: { filtros: Filtros; onCambiar: (f: Partial<Filtros>) => void }) {
+function BarraBusqueda({ filtros, onCambiar }: { filtros: Filtros; onCambiar: (f: Partial<Filtros>) => void }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="relative min-w-[200px] flex-1">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
-        <input
-          type="text"
-          value={filtros.busqueda}
-          onChange={(e) => onCambiar({ busqueda: e.target.value })}
-          placeholder="Buscar solicitudes..."
-          className="w-full rounded-full border border-surface-border bg-card py-2 pl-10 pr-4 text-xs text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
-        />
-      </div>
-      <FiltroDropdown valor={filtros.estado} opciones={ESTADOS} etiquetaTodos="Todos los estados" onCambiar={(v) => onCambiar({ estado: v })} />
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
+      <input
+        type="text"
+        value={filtros.busqueda}
+        onChange={(e) => onCambiar({ busqueda: e.target.value })}
+        placeholder="Buscar solicitudes..."
+        className="w-full rounded-full border border-surface-border bg-card py-2 pl-10 pr-4 text-xs text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
+      />
     </div>
   )
 }
@@ -220,6 +223,32 @@ function inicialesDe(nombre: string) {
 
 function DetalleSolicitud({ inc }: { inc: PortalIncidencia }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const qc = useQueryClient()
+  const [mensaje, setMensaje] = useState('')
+  const cerrada = ['resuelto', 'cerrado'].includes(inc.estatus.toLowerCase())
+
+  const { data: comentarios = [], isLoading: cargandoComentarios } = useQuery({
+    queryKey: ['portal-incidencia-comentarios', inc.id],
+    queryFn: () => portalClienteService.getComentariosIncidencia(inc.id),
+    refetchInterval: 20_000,
+  })
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+  }, [comentarios.length])
+
+  const enviar = useMutation({
+    mutationFn: () => portalClienteService.addComentarioIncidencia(inc.id, mensaje.trim()),
+    onSuccess: () => {
+      setMensaje('')
+      qc.invalidateQueries({ queryKey: ['portal-incidencia-comentarios', inc.id] })
+    },
+    onError: () => toast.error('No se pudo enviar tu mensaje'),
+  })
+
+  function enviarSiHayTexto() {
+    if (mensaje.trim() && !enviar.isPending) enviar.mutate()
+  }
 
   return (
     <div className="flex h-[600px] flex-col overflow-hidden bg-card">
@@ -278,7 +307,7 @@ function DetalleSolicitud({ inc }: { inc: PortalIncidencia }) {
           </div>
         </div>
 
-        {inc.solucionPropuesta ? (
+        {inc.solucionPropuesta && (
           <div className="flex justify-start">
             <div className="max-w-[75%] rounded-lg rounded-tl-none bg-card px-3 py-2 text-ink shadow-sm">
               <p className="mb-0.5 text-xs font-bold text-[#19b6bc]">Soporte AGYDA</p>
@@ -290,12 +319,61 @@ function DetalleSolicitud({ inc }: { inc: PortalIncidencia }) {
               )}
             </div>
           </div>
-        ) : (
+        )}
+
+        {cargandoComentarios ? (
+          <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-ink-tertiary" /></div>
+        ) : comentarios.length === 0 && !inc.solucionPropuesta ? (
           <div className="flex justify-start">
             <div className="max-w-[75%] rounded-lg rounded-tl-none bg-card px-3 py-2 text-ink-tertiary shadow-sm">
               <p className="text-xs">Un agente de soporte revisará tu solicitud y te responderá aquí.</p>
             </div>
           </div>
+        ) : (
+          comentarios.map((c) => (
+            <div key={c.id} className={clsx('flex', c.origen === 'portal' ? 'justify-end' : 'justify-start')}>
+              <div className={clsx(
+                'max-w-[75%] rounded-lg px-3 py-2 shadow-sm',
+                c.origen === 'portal'
+                  ? 'rounded-tr-none bg-emerald-100 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-50'
+                  : 'rounded-tl-none bg-card text-ink'
+              )}>
+                {c.origen === 'interno' && (
+                  <p className="mb-0.5 text-xs font-bold text-[#19b6bc]">{c.usuarioNombre ?? 'Soporte AGYDA'}</p>
+                )}
+                <p className="whitespace-pre-line text-sm">{c.comentario}</p>
+                <p className={clsx('mt-1 text-[10px]', c.origen === 'portal' ? 'text-right text-emerald-800/70 dark:text-emerald-100/60' : 'text-right text-ink-tertiary')}>
+                  {new Date(c.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="flex flex-shrink-0 items-center gap-2 border-t border-surface-border p-3">
+        {cerrada ? (
+          <p className="w-full text-center text-xs text-ink-tertiary">Esta solicitud ya fue {inc.estatus.toLowerCase()} — no se pueden enviar más mensajes.</p>
+        ) : (
+          <>
+            <input
+              type="text"
+              value={mensaje}
+              onChange={(e) => setMensaje(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') enviarSiHayTexto() }}
+              placeholder="Escribe un mensaje..."
+              maxLength={4000}
+              className="flex-1 rounded-full border border-surface-border bg-surface px-4 py-2 text-sm text-ink placeholder:text-ink-tertiary focus:border-brand focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={enviarSiHayTexto}
+              disabled={!mensaje.trim() || enviar.isPending}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {enviar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -358,15 +436,30 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 function ModalNuevaSolicitud({ abierto, onCerrar, onCreada }: { abierto: boolean; onCerrar: () => void; onCreada: (folio: string) => void }) {
   const qc = useQueryClient()
   const [titulo, setTitulo] = useState('')
-  const [categoria, setCategoria] = useState('')
+  const [categoriaId, setCategoriaId] = useState('')
+  const [subcategoria, setSubcategoria] = useState('')
   const [descripcion, setDescripcion] = useState('')
 
+  const { data: categorias } = useQuery({
+    queryKey: ['portal-categorias-caso'],
+    queryFn: () => portalClienteService.getCategoriasCaso(),
+    staleTime: 60_000,
+  })
+
+  const categoriaSeleccionada = categorias?.find((c) => String(c.id) === categoriaId)
+
   const enviar = useMutation({
-    mutationFn: () => portalClienteService.crearIncidencia({ titulo: titulo.trim(), descripcion: descripcion.trim(), categoria: categoria || undefined }),
+    mutationFn: () => portalClienteService.crearIncidencia({
+      titulo: titulo.trim(),
+      descripcion: descripcion.trim(),
+      categoria: categoriaSeleccionada?.nombre,
+      subcategoria: subcategoria || undefined,
+    }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['portal-incidencias'] })
       setTitulo('')
-      setCategoria('')
+      setCategoriaId('')
+      setSubcategoria('')
       setDescripcion('')
       onCreada(res.folio)
     },
@@ -382,8 +475,19 @@ function ModalNuevaSolicitud({ abierto, onCerrar, onCreada }: { abierto: boolean
           <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={200} placeholder="Resumen breve de tu solicitud" className={inputClase} />
         </Campo>
         <Campo label="Categoría (opcional)">
-          <input type="text" value={categoria} onChange={(e) => setCategoria(e.target.value)} maxLength={50} placeholder="Ej. Facturación, Soporte técnico..." className={inputClase} />
+          <select value={categoriaId} onChange={(e) => { setCategoriaId(e.target.value); setSubcategoria('') }} className={inputClase}>
+            <option value="">Sin especificar</option>
+            {categorias?.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
         </Campo>
+        {categoriaSeleccionada && (
+          <Campo label="Subcategoría">
+            <select value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} className={inputClase}>
+              <option value="">Sin especificar</option>
+              {categoriaSeleccionada.subcategorias.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </Campo>
+        )}
         <Campo label="Describe tu solicitud">
           <textarea rows={4} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} maxLength={4000} className={clsx(inputClase, 'resize-none')} />
         </Campo>
@@ -412,7 +516,7 @@ export function PortalClienteAtencionPage() {
   const [tab, setTab] = useState<(typeof TABS_PRINCIPALES)[number]>('Mis solicitudes')
   const [seleccionadaId, setSeleccionadaId] = useState<number | null>(null)
   const [modalNueva, setModalNueva] = useState(false)
-  const [filtros, setFiltros] = useState<Filtros>({ busqueda: '', estado: 'Todos los estados' })
+  const [filtros, setFiltros] = useState<Filtros>({ busqueda: '', estado: 'todos' })
   const { puede } = usePortalAcciones()
 
   const { data: incidencias = [], isLoading } = useQuery({ queryKey: ['portal-incidencias'], queryFn: () => portalClienteService.getIncidencias() })
@@ -423,7 +527,7 @@ export function PortalClienteAtencionPage() {
 
   const filtradas = incidencias
     .filter((i) => i.titulo.toLowerCase().includes(filtros.busqueda.toLowerCase()) || i.folio.toLowerCase().includes(filtros.busqueda.toLowerCase()))
-    .filter((i) => filtros.estado === 'Todos los estados' || i.estatus.toLowerCase() === filtros.estado)
+    .filter((i) => filtros.estado === 'todos' || i.estatus.toLowerCase() === filtros.estado)
     .sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime())
 
   const seleccionada = filtradas.find((i) => i.id === seleccionadaId) ?? filtradas[0] ?? null
@@ -471,7 +575,8 @@ export function PortalClienteAtencionPage() {
         ) : (
           <Reveal index={0} className="flex flex-col gap-5">
             <ResumenSolicitudes incidencias={incidencias} />
-            <BarraFiltros filtros={filtros} onCambiar={actualizarFiltros} />
+            <TabsEstatus incidencias={incidencias} estado={filtros.estado} onCambiar={(v) => actualizarFiltros({ estado: v })} />
+            <BarraBusqueda filtros={filtros} onCambiar={actualizarFiltros} />
             {incidencias.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-2xl border border-surface-border bg-card p-10 text-center shadow-card">
                 <Headphones className="h-8 w-8 text-ink-tertiary/50" />

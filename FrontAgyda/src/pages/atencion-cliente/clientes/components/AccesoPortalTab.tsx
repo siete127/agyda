@@ -7,7 +7,7 @@ import { crmCatalogosClienteService } from '@/services/crmCatalogosCliente.servi
 import { CatalogoListaGestion } from '@/components/crm/CatalogoListaGestion'
 import type { CRMContacto } from '@/types/crm.types'
 
-export function AccesoPortalTab({ cliente }: { cliente: CRMContacto }) {
+export function AccesoPortalTab({ cliente, compact }: { cliente: CRMContacto; compact?: boolean }) {
   const qc = useQueryClient()
   const [generarAccesoPortal, setGenerarAccesoPortal] = useState(false)
   const [passwordPortal, setPasswordPortal] = useState('')
@@ -34,21 +34,9 @@ export function AccesoPortalTab({ cliente }: { cliente: CRMContacto }) {
     onError: () => toast.error('No se pudo actualizar'),
   })
 
-  return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
-            <KeyRound className="h-6 w-6" />
-          </div>
-          <div>
-            <h2 className="text-[1.35rem] font-bold text-gray-900">Acceso al portal</h2>
-            <p className="text-[0.82rem] text-gray-400">Login del cliente a su propio portal (portal-cliente) y a qué tiene acceso.</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card space-y-3">
+  const bloqueAcceso = (
+    <div className={compact ? 'space-y-3' : 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card space-y-3'}>
+      {!compact && <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Acceso al portal</p>}
         {cliente.neusId ? (
           <>
             <p className="text-xs font-semibold text-gray-700">Acceso al portal de cliente: <span className="text-emerald-600">activo</span></p>
@@ -114,7 +102,26 @@ export function AccesoPortalTab({ cliente }: { cliente: CRMContacto }) {
             <Check className="h-3.5 w-3.5" /> Guardar
           </button>
         </div>
+    </div>
+  )
+
+  if (compact) return bloqueAcceso
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
+            <KeyRound className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-[1.35rem] font-bold text-gray-900">Acceso al portal</h2>
+            <p className="text-[0.82rem] text-gray-400">Login del cliente a su propio portal (portal-cliente) y a qué tiene acceso.</p>
+          </div>
+        </div>
       </div>
+
+      {bloqueAcceso}
 
       <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
         <p className="mb-3 text-[0.8rem] font-bold text-ink">Tipos de acceso al portal</p>

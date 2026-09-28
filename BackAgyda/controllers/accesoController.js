@@ -82,6 +82,7 @@ const MODULOS_DISPONIBLES = [
   { key: 'capacitacion',        nombre: 'Capacitación',        descripcion: 'Catálogo de cursos, materiales y constancias' },
   { key: 'incapacidades',       nombre: 'Incapacidades',       descripcion: 'Solicitud, comprobante, seguimiento y aprobación de incapacidades médicas' },
   { key: 'evaluacion-desempeno', nombre: 'Evaluación de desempeño', descripcion: 'Ciclos de evaluación, KPIs, metas y planes de mejora por empleado' },
+  { key: 'horario-asesores',    nombre: 'Horario de Asesores', descripcion: 'Horario de disponibilidad de cada asesor para agendar contactación desde el Portal de Cliente' },
 ];
 
 function listAvailableModules() {
@@ -448,6 +449,7 @@ const ACCIONES_POR_MODULO = {
     // que las tenían recibieron casos-ver / casos-gestionar por backfill.
     { key: 'casos-ver',              nombre: 'Ver casos',               descripcion: 'Consultar el listado y detalle de casos de clientes (consultas, aclaraciones, quejas, incidencias)' },
     { key: 'casos-gestionar',        nombre: 'Gestionar casos',         descripcion: 'Crear, asignar, comentar y cambiar el estatus de casos' },
+    { key: 'categorias-gestionar',   nombre: 'Gestionar categorías de casos', descripcion: 'Agregar, editar, desactivar y asignar la prioridad automática de las categorías de casos/incidencias' },
     { key: 'citas-ver',              nombre: 'Ver agenda de citas',     descripcion: 'Consultar la agenda de citas y las sesiones de tratamiento de clientes' },
     { key: 'citas-gestionar',        nombre: 'Gestionar citas',         descripcion: 'Agendar, reprogramar, cancelar citas y sesiones de tratamiento; resolver solicitudes del portal' },
     { key: 'ofertas-gestionar',      nombre: 'Gestionar ofertas',       descripcion: 'Crear y enviar campañas de oferta a segmentos de clientes por correo y WhatsApp' },
@@ -465,6 +467,11 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   'rh-area': [
+    { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
+  ],
+  'horario-asesores': [
+    { key: 'ver-todos',  nombre: 'Ver horarios de todos', descripcion: 'Consultar el horario de disponibilidad de cualquier asesor' },
+    { key: 'gestionar',  nombre: 'Gestionar horarios',    descripcion: 'Crear y editar el horario de disponibilidad de los asesores' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
 };
