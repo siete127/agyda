@@ -75,6 +75,66 @@ async function contarSesionesCompletadas(pool, tratamientoId) {
   return rs.recordset[0].n;
 }
 
+// Valida fechaHora contra el horario vigente del asesor (HORARIOS_ASESOR).
+// Devuelve un mensaje de error si está fuera de horario/comida/día sin
+// horario, o null si es válido. Duplica la validación de NuevaCitaModal.tsx
+// (defensa en profundidad: no confiar solo en la UI).
+async function validarHorarioAsesor(pool, asesorId, fechaHora) {
+  const sqlFecha = fechaHoraSql(fechaHora);
+  if (!sqlFecha) return null;
+  const [fechaParte, horaParte] = sqlFecha.split(' ');
+  const diaSemana = ((new Date(`${fechaParte}T00:00:00`).getDay() + 6) % 7) + 1; // 1=Lunes...7=Domingo
+  const hora = horaParte.slice(0, 5); // 'HH:mm'
+
+  const rs = await pool.request()
+    .input('uid', sql.Int, asesorId)
+    .input('dia', sql.Int, diaSemana)
+    .query(`
+      SELECT HA_HORA_INICIO as horaInicio, HA_HORA_FIN as horaFin,
+             HA_COMIDA_INICIO as comidaInicio, HA_COMIDA_FIN as comidaFin
+      FROM HORARIOS_ASESOR WHERE HA_USUARIO_ID=@uid AND HA_DIA_SEMANA=@dia AND HA_ACTIVO=1
+    `);
+  const cfg = rs.recordset[0];
+  if (!cfg) return 'El asesor seleccionado no tiene horario configurado ese día.';
+  if (hora < cfg.horaInicio || hora > cfg.horaFin) {
+    return `Fuera de horario: el asesor atiende de ${cfg.horaInicio} a ${cfg.horaFin} ese día.`;
+  }
+  if (cfg.comidaInicio && cfg.comidaFin && hora >= cfg.comidaInicio && hora < cfg.comidaFin) {
+    return `Ese horario cae en la comida del asesor (${cfg.comidaInicio}-${cfg.comidaFin}).`;
+  }
+  return null;
+}
+
+// Evita doble-agenda: el asesor no puede tener dos citas activas (no
+// canceladas) que se solapen en el tiempo. excluirCitaId se usa al
+// reprogramar, para no comparar la cita contra sí misma.
+async function validarSolapamiento(pool, asesorId, fechaHora, duracionMin, excluirCitaId) {
+  const sqlFecha = fechaHoraSql(fechaHora);
+  if (!sqlFecha) return null;
+  const dur = parseInt(duracionMin, 10) || 30;
+
+  const rq = pool.request()
+    .input('uid', sql.Int, asesorId)
+    .input('inicio', sql.VarChar(19), sqlFecha)
+    .input('duracion', sql.Int, dur);
+  if (excluirCitaId) rq.input('excluirId', sql.Int, excluirCitaId);
+
+  const rs = await rq.query(`
+    SELECT TOP 1 CITA_ID as id, CITA_TITULO as titulo,
+      CONVERT(NVARCHAR(19), CITA_FECHA_HORA, 126) as fechaHora
+    FROM CLI_CITAS
+    WHERE CITA_ASIGNADO_A = @uid
+      AND CITA_ACTIVO = 1
+      AND CITA_ESTATUS <> 'cancelada'
+      ${excluirCitaId ? 'AND CITA_ID <> @excluirId' : ''}
+      AND CITA_FECHA_HORA < DATEADD(MINUTE, @duracion, CONVERT(DATETIME, @inicio, 120))
+      AND DATEADD(MINUTE, CITA_DURACION_MIN, CITA_FECHA_HORA) > CONVERT(DATETIME, @inicio, 120)
+  `);
+  const choque = rs.recordset[0];
+  if (!choque) return null;
+  return `El asesor ya tiene otra cita en ese horario: "${choque.titulo}".`;
+}
+
 // ── Lecturas ────────────────────────────────────────────────────────────────
 
 exports.list = async (req, res) => {
@@ -84,8 +144,12 @@ exports.list = async (req, res) => {
 
     const cond = ['K.CITA_ACTIVO = 1'];
     const request = pool.request();
-    if (desde) { cond.push('K.CITA_FECHA_HORA >= @desde'); request.input('desde', sql.DateTime, desde); }
-    if (hasta) { cond.push('K.CITA_FECHA_HORA <= @hasta'); request.input('hasta', sql.DateTime, hasta); }
+    // VarChar + CONVERT literal (no sql.DateTime): bindear un string como
+    // DateTime hace que el driver lo reinterprete con new Date(), que aplica
+    // zona horaria y desfasa el filtro — mismo motivo que fechaHoraSql() más
+    // arriba para las escrituras.
+    if (desde) { cond.push("K.CITA_FECHA_HORA >= CONVERT(DATETIME, @desde, 120)"); request.input('desde', sql.VarChar(19), fechaHoraSql(desde)); }
+    if (hasta) { cond.push("K.CITA_FECHA_HORA <= CONVERT(DATETIME, @hasta, 120)"); request.input('hasta', sql.VarChar(19), fechaHoraSql(hasta)); }
     if (estatus) { cond.push('K.CITA_ESTATUS = @estatus'); request.input('estatus', sql.NVarChar, estatus); }
     if (asignadoA) { cond.push('K.CITA_ASIGNADO_A = @asignadoA'); request.input('asignadoA', sql.Int, asignadoA); }
     if (contactoId) { cond.push('K.CITA_CONTACTO_ID = @contactoId'); request.input('contactoId', sql.Int, contactoId); }
@@ -188,6 +252,13 @@ exports.create = async (req, res) => {
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
+    if (asignado) {
+      const errorHorario = await validarHorarioAsesor(pool, asignado, fechaHora);
+      if (errorHorario) return res.status(400).json({ success: false, message: errorHorario });
+      const errorSolapa = await validarSolapamiento(pool, asignado, fechaHora, duracionMin, null);
+      if (errorSolapa) return res.status(400).json({ success: false, message: errorSolapa });
+    }
+
     const rs = await pool.request()
       .input('contactoId', sql.Int, contId)
       .input('tratamientoId', sql.Int, tratId)
@@ -243,6 +314,24 @@ exports.update = async (req, res) => {
     if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'id inválido' });
     const b = req.body || {};
     const pool = await databaseService.getPool(req.user?.empresa);
+
+    // Si se mueve la fecha/hora (reprogramar), se reasigna, o cambia la
+    // duración, revalida contra el horario del asesor y contra sus otras
+    // citas (nuevo valor si viene en el body, o el que ya tenía la cita).
+    if (b.fechaHora != null || b.asignadoA != null || b.duracionMin != null) {
+      const actual = (await pool.request().input('id', sql.Int, id)
+        .query(`SELECT CITA_ASIGNADO_A as asignadoA, CITA_DURACION_MIN as duracionMin, CONVERT(NVARCHAR(19), CITA_FECHA_HORA, 126) as fechaHora FROM CLI_CITAS WHERE CITA_ID=@id AND CITA_ACTIVO=1`)).recordset[0];
+      if (!actual) return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+      const asesorAValidar = b.asignadoA != null ? (b.asignadoA ? parseInt(b.asignadoA, 10) : null) : actual.asignadoA;
+      const fechaAValidar = b.fechaHora != null ? b.fechaHora : actual.fechaHora;
+      const duracionAValidar = b.duracionMin != null ? b.duracionMin : actual.duracionMin;
+      if (asesorAValidar) {
+        const errorHorario = await validarHorarioAsesor(pool, asesorAValidar, fechaAValidar);
+        if (errorHorario) return res.status(400).json({ success: false, message: errorHorario });
+        const errorSolapa = await validarSolapamiento(pool, asesorAValidar, fechaAValidar, duracionAValidar, id);
+        if (errorSolapa) return res.status(400).json({ success: false, message: errorSolapa });
+      }
+    }
 
     const sets = [];
     const r = pool.request().input('id', sql.Int, id);

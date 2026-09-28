@@ -4760,6 +4760,11 @@ async function ensureCasosSchema(pool) {
     `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_CONTACTO_ID') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_CONTACTO_ID INT NULL;`,
     `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_LEIDO_CLIENTE') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_LEIDO_CLIENTE BIT NOT NULL CONSTRAINT DF_CCO_LEIDO_CLIENTE DEFAULT 0;`,
     `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_LEIDO_INTERNO') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_LEIDO_INTERNO BIT NOT NULL CONSTRAINT DF_CCO_LEIDO_INTERNO DEFAULT 0;`,
+    // Distingue chat visible al cliente ("Conversación", =1, comportamiento
+    // histórico) de notas internas ("Notas internas", =0, nunca se notifican
+    // ni se muestran en el Portal de Cliente). DEFAULT 1 preserva el historial
+    // de chats ya guardados como visible, sin necesitar migración de datos.
+    `IF COL_LENGTH('dbo.CASOS_COMENTARIOS','CCO_VISIBLE_CLIENTE') IS NULL ALTER TABLE dbo.CASOS_COMENTARIOS ADD CCO_VISIBLE_CLIENTE BIT NOT NULL CONSTRAINT DF_CCO_VISIBLE_CLIENTE DEFAULT 1;`,
   ];
   for (const q of casosComentariosCols) {
     try { await pool.request().query(q); }

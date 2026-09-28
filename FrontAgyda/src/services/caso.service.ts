@@ -1,8 +1,8 @@
 import { api } from '@/lib/axios'
 import {
-  type Caso, type CasoComentario, type CasoEvidencia, type CasoAccionCorrectiva, type CasoCategoria,
+  type Caso, type CasoComentario, type CasoEvidencia, type CasoAccionCorrectiva, type CasoCategoria, type CasoActividad,
   type CasoTipo, type CasoPrioridad, type CasoEstatus,
-  parseCaso, parseCasoComentario, parseCasoEvidencia, parseCasoAccionCorrectiva, parseCasoCategoria,
+  parseCaso, parseCasoComentario, parseCasoEvidencia, parseCasoAccionCorrectiva, parseCasoCategoria, parseCasoActividad,
 } from '@/types/caso.types'
 
 const norm = <T>(data: unknown, parse: (r: Record<string, unknown>) => T): T[] => {
@@ -43,12 +43,19 @@ export const casoService = {
     api.patch(`/atencion-cliente/casos/${id}/solucion`, body).then((r) => r.data),
   remove: (id: number) => api.delete(`/atencion-cliente/casos/${id}`).then((r) => r.data),
 
-  getComentarios: async (casoId: number): Promise<CasoComentario[]> => {
-    const { data } = await api.get(`/atencion-cliente/casos/${casoId}/comentarios`)
+  // visible: '1' → Conversación (lo que ve el cliente); '0' → Notas internas;
+  // sin el param, trae todo (uso interno, no recomendado para las tabs nuevas).
+  getComentarios: async (casoId: number, visible?: '0' | '1'): Promise<CasoComentario[]> => {
+    const { data } = await api.get(`/atencion-cliente/casos/${casoId}/comentarios`, { params: visible ? { visible } : undefined })
     return norm(data?.data ?? data, parseCasoComentario)
   },
-  addComentario: (casoId: number, comentario: string) =>
-    api.post(`/atencion-cliente/casos/${casoId}/comentarios`, { comentario }).then((r) => r.data),
+  addComentario: (casoId: number, comentario: string, visibleCliente = true) =>
+    api.post(`/atencion-cliente/casos/${casoId}/comentarios`, { comentario, visibleCliente }).then((r) => r.data),
+
+  getActividad: async (casoId: number): Promise<CasoActividad[]> => {
+    const { data } = await api.get(`/atencion-cliente/casos/${casoId}/actividad`)
+    return norm(data?.data ?? data, parseCasoActividad)
+  },
 
   getEvidencias: async (casoId: number): Promise<CasoEvidencia[]> => {
     const { data } = await api.get(`/atencion-cliente/casos/${casoId}/evidencias`)

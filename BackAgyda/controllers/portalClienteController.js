@@ -798,12 +798,14 @@ exports.getComentariosIncidencia = async (req, res) => {
       .query(`SELECT CASO_ID FROM CASOS WHERE CASO_ID=@id AND CASO_CONTACTO_ID=@contactoId`);
     if (!caso.recordset.length) return res.status(404).json({ success: false, message: 'Solicitud no encontrada' });
 
+    // CCO_VISIBLE_CLIENTE=1 excluye las notas internas del agente — el
+    // cliente nunca debe ver comentarios marcados como no visibles para él.
     const rs = await pool.request().input('id', sql.Int, casoId).query(`
       SELECT CCO_ID as id, CCO_COMENTARIO as comentario, CCO_ORIGEN as origen,
              CCO_USUARIO_ID as usuarioId, U.NEUS_NOMBRES as usuarioNombre, CCO_FECHA as fecha
       FROM CASOS_COMENTARIOS CCO
       LEFT JOIN NEUS_USUARIOS U ON U.NEUS_ID = CCO.CCO_USUARIO_ID
-      WHERE CCO_CASO_ID=@id
+      WHERE CCO_CASO_ID=@id AND CCO_VISIBLE_CLIENTE=1
       ORDER BY CCO_FECHA ASC
     `);
     // El cliente marca como leídos los mensajes del agente al abrir el hilo.

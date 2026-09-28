@@ -84,6 +84,7 @@ export interface Caso {
   tipo: CasoTipo
   contactoId: number | null
   contactoNombre: string | null
+  contactoEmpresa: string | null
   clienteNombreLibre: string | null
   titulo: string
   descripcion: string | null
@@ -112,6 +113,16 @@ export interface CasoComentario {
   contactoId: number | null
   contactoNombre: string | null
   origen: 'interno' | 'portal'
+  visibleCliente: boolean
+  fecha: string
+}
+
+export interface CasoActividad {
+  id: number
+  usuarioId: number | null
+  usuarioNombre: string | null
+  accion: string
+  detalle: string | null
   fecha: string
 }
 
@@ -150,6 +161,7 @@ export function parseCaso(raw: Record<string, unknown>): Caso {
     tipo:              (pick(raw, 'tipo') as CasoTipo) ?? 'consulta',
     contactoId:        pick(raw, 'contactoId') as number | null,
     contactoNombre:    pick(raw, 'contactoNombre') as string | null,
+    contactoEmpresa:   pick(raw, 'contactoEmpresa') as string | null,
     clienteNombreLibre: pick(raw, 'clienteNombreLibre') as string | null,
     titulo:            String(pick(raw, 'titulo') ?? ''),
     descripcion:       pick(raw, 'descripcion') as string | null,
@@ -180,6 +192,18 @@ export function parseCasoComentario(raw: Record<string, unknown>): CasoComentari
     contactoId:    pick(raw, 'contactoId') as number | null,
     contactoNombre: pick(raw, 'contactoNombre') as string | null,
     origen:        (pick(raw, 'origen') as 'interno' | 'portal') ?? 'interno',
+    visibleCliente: Boolean(pick(raw, 'visibleCliente') ?? true),
+    fecha:         String(pick(raw, 'fecha') ?? ''),
+  }
+}
+
+export function parseCasoActividad(raw: Record<string, unknown>): CasoActividad {
+  return {
+    id:            Number(pick(raw, 'id')),
+    usuarioId:     pick(raw, 'usuarioId') as number | null,
+    usuarioNombre: pick(raw, 'usuarioNombre') as string | null,
+    accion:        String(pick(raw, 'accion') ?? ''),
+    detalle:       pick(raw, 'detalle') as string | null,
     fecha:         String(pick(raw, 'fecha') ?? ''),
   }
 }

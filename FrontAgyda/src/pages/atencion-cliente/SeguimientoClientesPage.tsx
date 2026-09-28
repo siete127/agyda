@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  Headphones, Users, Inbox, CalendarClock, Gift, Smile, ShieldAlert, CalendarDays, BarChart3,
+  Headphones, Users, Inbox, CalendarClock, Gift, Smile, ShieldAlert, CalendarDays, BarChart3, Clock,
 } from 'lucide-react'
 import { Tabs, type TabItem } from '@/components/ui/Tabs'
 import { ClientesListaPage } from './clientes/ClientesListaPage'
@@ -10,6 +10,7 @@ import { OfertasPage } from './OfertasPage'
 import { SatisfaccionPage } from './SatisfaccionPage'
 import { RetencionPage } from './RetencionPage'
 import { MiAgendaPage } from './MiAgendaPage'
+import { HorarioAsesoresPage } from './HorarioAsesoresPage'
 
 // Módulo "Seguimiento de clientes" — única entrada del sidebar. Colapsa las 7
 // pantallas del área en pestañas. La pestaña "Clientes" (ClientesListaPage,
@@ -21,17 +22,18 @@ import { MiAgendaPage } from './MiAgendaPage'
 // Los query params de deep-link de cada sub-página (casoId, citaId, tipo,
 // estatus) conviven en el mismo useSearchParams — usan nombres distintos.
 
-type Tab = 'clientes' | 'casos' | 'agenda' | 'ofertas' | 'satisfaccion' | 'retencion' | 'mi-agenda'
-const TAB_KEYS: Tab[] = ['clientes', 'casos', 'agenda', 'ofertas', 'satisfaccion', 'retencion', 'mi-agenda']
+type Tab = 'clientes' | 'casos' | 'agenda' | 'horario' | 'ofertas' | 'satisfaccion' | 'retencion' | 'mi-agenda'
+const TAB_KEYS: Tab[] = ['clientes', 'casos', 'agenda', 'horario', 'ofertas', 'satisfaccion', 'retencion', 'mi-agenda']
 
 const SUBTITULO: Record<Tab, string> = {
   clientes: 'Cartera de clientes y sus expedientes',
   casos: 'Consultas, aclaraciones, quejas e incidencias',
   agenda: 'Citas y sesiones de tratamiento',
+  horario: 'Horario de disponibilidad de cada asesor',
   ofertas: 'Campañas a segmentos por correo y WhatsApp',
   satisfaccion: 'Encuestas y medición de satisfacción',
   retencion: 'Clientes en riesgo y acciones de retención',
-  'mi-agenda': 'Tu agenda del día: tareas y seguimientos',
+  'mi-agenda': 'Tus tareas y seguimientos pendientes de hoy',
 }
 
 export function SeguimientoClientesPage() {
@@ -50,10 +52,11 @@ export function SeguimientoClientesPage() {
     { key: 'clientes', label: 'Clientes', icon: Users },
     { key: 'casos', label: 'Casos', icon: Inbox },
     { key: 'agenda', label: 'Agenda', icon: CalendarClock },
+    { key: 'horario', label: 'Horario', icon: Clock },
     { key: 'ofertas', label: 'Ofertas', icon: Gift },
     { key: 'satisfaccion', label: 'Satisfacción', icon: Smile },
     { key: 'retencion', label: 'Retención', icon: ShieldAlert },
-    { key: 'mi-agenda', label: 'Mi agenda', icon: CalendarDays },
+    { key: 'mi-agenda', label: 'Mis pendientes', icon: CalendarDays },
   ]
 
   return (
@@ -94,6 +97,7 @@ export function SeguimientoClientesPage() {
       {tab === 'clientes' && <ClientesListaPage embedded />}
       {tab === 'casos' && <CasosPage embedded />}
       {tab === 'agenda' && <AgendaCitasPage embedded />}
+      {tab === 'horario' && <HorarioAsesoresPage embedded />}
       {tab === 'ofertas' && <OfertasPage embedded />}
       {tab === 'satisfaccion' && <SatisfaccionPage embedded />}
       {tab === 'retencion' && <RetencionPage embedded />}

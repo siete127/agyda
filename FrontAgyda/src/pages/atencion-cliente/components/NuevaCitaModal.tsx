@@ -6,32 +6,40 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { crmService } from '@/services/crm.service'
 import { citaService } from '@/services/cita.service'
-import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
+import { horarioAsesorService } from '@/services/horarioAsesor.service'
+import { useCurrentUser } from '@/hooks/useAuth'
 import {
   CITA_MODALIDAD_CONFIG, RECORDAR_OPCIONES, type CitaModalidad,
 } from '@/types/cita.types'
 
+// 1=Lunes...7=Domingo, igual que HA_DIA_SEMANA en el backend.
+function diaSemanaISO(fecha: string): number {
+  const d = new Date(`${fecha}T00:00:00`)
+  return ((d.getDay() + 6) % 7) + 1
+}
+
 // Modal único de creación de citas. Puede abrirse suelto (agenda global),
 // con un contacto ya fijo (desde el expediente), o como sesión de un
 // tratamiento existente.
-export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamientoPreset }: {
+export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamientoPreset, fechaHoraPreset }: {
   onClose: () => void
   onCreated?: (id: number) => void
   contactoPreset?: { id: number; nombre: string }
   tratamientoPreset?: { id: number; nombre: string }
+  // 'YYYY-MM-DDTHH:mm' — prellenado al crear desde un slot vacío del timeline de Agenda.
+  fechaHoraPreset?: string
 }) {
   const qc = useQueryClient()
-  const { data: usuarios } = useUsuariosSimple()
+  const usuarioActual = useCurrentUser()
   const [contactoId, setContactoId] = useState(contactoPreset ? String(contactoPreset.id) : '')
   const [modalidad, setModalidad] = useState<CitaModalidad>('videollamada')
   const [titulo, setTitulo] = useState('')
   const [motivo, setMotivo] = useState('')
-  const [fecha, setFecha] = useState('')
-  const [hora, setHora] = useState('')
+  const [fecha, setFecha] = useState(fechaHoraPreset ? fechaHoraPreset.slice(0, 10) : '')
+  const [hora, setHora] = useState(fechaHoraPreset ? fechaHoraPreset.slice(11, 16) : '')
   const [duracionMin, setDuracionMin] = useState('30')
   const [enlace, setEnlace] = useState('')
   const [telefono, setTelefono] = useState('')
-  const [asignadoA, setAsignadoA] = useState('')
   const [recordar, setRecordar] = useState<number[]>([1440, 60])
   const [tratamientoId, setTratamientoId] = useState(tratamientoPreset ? String(tratamientoPreset.id) : '')
 
@@ -54,8 +62,52 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
   const toggleRecordar = (min: number) =>
     setRecordar((prev) => prev.includes(min) ? prev.filter((m) => m !== min) : [...prev, min].sort((a, b) => b - a))
 
+  // Toda cita se asigna al usuario que la crea — no se puede agendar a
+  // nombre de otro asesor desde aquí.
+  const asignadoAIdNum = usuarioActual?.id ?? 0
+  const { data: horarioAsesor } = useQuery({
+    queryKey: ['horario-asesor', asignadoAIdNum],
+    queryFn: () => horarioAsesorService.getHorario(asignadoAIdNum),
+    staleTime: 60_000,
+    enabled: asignadoAIdNum > 0,
+  })
+
+  // Citas del asesor ese día, para detectar solapamiento antes de guardar
+  // (el backend repite esta validación como defensa en profundidad).
+  const { data: citasDelDia } = useQuery({
+    queryKey: ['citas', 'dia', asignadoAIdNum, fecha],
+    queryFn: () => citaService.getAll({ desde: `${fecha} 00:00:00`, hasta: `${fecha} 23:59:59`, asignadoA: asignadoAIdNum }),
+    staleTime: 15_000,
+    enabled: asignadoAIdNum > 0 && !!fecha,
+  })
+
+  let errorHorario: string | null = null
+  if (asignadoAIdNum > 0 && fecha && hora && horarioAsesor) {
+    const dia = diaSemanaISO(fecha)
+    const cfgDia = horarioAsesor.find((h) => h.diaSemana === dia && h.activo !== false)
+    if (!cfgDia) {
+      errorHorario = 'El asesor seleccionado no tiene horario configurado ese día.'
+    } else if (hora < cfgDia.horaInicio || hora > cfgDia.horaFin) {
+      errorHorario = `Fuera de horario: el asesor atiende de ${cfgDia.horaInicio} a ${cfgDia.horaFin} ese día.`
+    } else if (cfgDia.comidaInicio && cfgDia.comidaFin && hora >= cfgDia.comidaInicio && hora < cfgDia.comidaFin) {
+      errorHorario = `Ese horario cae en la comida del asesor (${cfgDia.comidaInicio}-${cfgDia.comidaFin}).`
+    }
+  }
+
+  if (!errorHorario && fecha && hora && citasDelDia) {
+    const inicio = new Date(`${fecha}T${hora}:00`).getTime()
+    const fin = inicio + (Number(duracionMin) || 30) * 60_000
+    const choque = citasDelDia.find((c) => {
+      if (c.estatus === 'cancelada') return false
+      const cIni = new Date(c.fechaHora).getTime()
+      const cFin = cIni + c.duracionMin * 60_000
+      return cIni < fin && cFin > inicio
+    })
+    if (choque) errorHorario = `Ya tienes otra cita en ese horario: "${choque.titulo}".`
+  }
+
   const fechaHora = fecha && hora ? `${fecha}T${hora}:00` : ''
-  const puedeGuardar = (contactoId || contactoPreset) && titulo.trim() && fechaHora
+  const puedeGuardar = (contactoId || contactoPreset) && titulo.trim() && fechaHora && !errorHorario
 
   const crear = useMutation({
     mutationFn: async () => {
@@ -67,7 +119,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
         motivo: motivo.trim() || undefined,
         enlace: modalidad === 'videollamada' && enlace.trim() ? enlace.trim() : undefined,
         telefono: modalidad === 'telefonica' && telefono.trim() ? telefono.trim() : undefined,
-        asignadoA: asignadoA ? Number(asignadoA) : undefined,
+        asignadoA: usuarioActual?.id,
         recordarMinAntes: recordar,
       }
       if (tratamientoId) {
@@ -149,7 +201,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Hora</label>
-            <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="field" />
+            <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className={errorHorario ? 'field border-red-300 focus:border-red-400 focus:ring-red-400/15' : 'field'} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Duración</label>
@@ -158,6 +210,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
             </select>
           </div>
         </div>
+        {errorHorario && <p className="-mt-2 text-[0.72rem] font-semibold text-red-500">{errorHorario}</p>}
 
         {modalidad === 'videollamada' && (
           <div>
@@ -171,14 +224,6 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
             <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className="field" placeholder="55 1234 5678" maxLength={30} />
           </div>
         )}
-
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Asignar a</label>
-          <select value={asignadoA} onChange={(e) => setAsignadoA(e.target.value)} className="field">
-            <option value="">Sin asignar</option>
-            {usuarios?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </div>
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Recordar al cliente</label>

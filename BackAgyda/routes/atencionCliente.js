@@ -59,6 +59,7 @@ router.get('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess(
 router.post('/casos/:id/evidencias', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), uploadCrmDocumento.single('file'), caso.subirEvidencia);
 router.get('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.getAccionCorrectiva);
 router.post('/casos/:id/accion-correctiva', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-gestionar'), caso.createAccionCorrectiva);
+router.get('/casos/:id/actividad', auth.authenticateToken, requireActionAccess('atencion-cliente', 'casos-ver'), caso.listActividad);
 router.get('/clientes/:id/casos', auth.authenticateToken, requireActionAccess('atencion-cliente', 'clientes-ver'), caso.listByContacto);
 
 // ── Categorías/subcategorías de casos (catálogo configurable de 2 niveles,

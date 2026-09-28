@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   User, FileText, Building2, History, Inbox, Briefcase, Mail, Phone, MapPin,
-  Pencil, MoreHorizontal, CalendarCheck, UserCircle, Download,
+  CalendarCheck, UserCircle, Download,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Spinner } from '@/components/ui/Spinner'
@@ -55,7 +55,6 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
   const { isAllowed } = useModuleAccess()
   const { data: usuarios } = useUsuariosSimple()
   const [generarOportunidad, setGenerarOportunidad] = useState(false)
-  const [menuAbierto, setMenuAbierto] = useState(false)
 
   const { data: cliente, isLoading, error } = useQuery({
     queryKey: ['cliente-expediente', contactoId],
@@ -108,11 +107,10 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
-    setMenuAbierto(false)
   }
 
   return (
-    <div className="space-y-5 animate-fade-in" onClick={() => menuAbierto && setMenuAbierto(false)}>
+    <div className="space-y-5 animate-fade-in">
       <div className={clsx('overflow-hidden rounded-2xl bg-[#0B1220]', compact ? 'p-4' : 'p-5')}>
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-start gap-3">
@@ -151,27 +149,12 @@ export function ClienteExpediente({ contactoId, tab, sub, onTab, onSub, compact 
                 <Briefcase className="h-4 w-4" /> Generar oportunidad
               </button>
             )}
-            <button className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-[0.78rem] font-semibold text-gray-200 hover:bg-white/5 transition-colors">
-              <Pencil className="h-3.5 w-3.5" /> Editar
+            <button
+              onClick={exportarExpediente}
+              className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-[0.78rem] font-semibold text-gray-200 hover:bg-white/5 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" /> Exportar expediente
             </button>
-            <div className="relative" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => setMenuAbierto((v) => !v)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-              {menuAbierto && (
-                <div className="absolute right-0 top-9 z-10 w-52 rounded-xl border border-gray-100 bg-card py-1.5 shadow-lg">
-                  <button
-                    onClick={exportarExpediente}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[0.8rem] font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    <Download className="h-3.5 w-3.5" /> Exportar expediente
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
