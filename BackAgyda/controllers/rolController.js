@@ -50,6 +50,10 @@ function buildPermisoRows(modulos, acciones) {
   return rows;
 }
 
+// Reusados por el asistente "Crear empresa" (empresaAsistenteController).
+exports.buildPermisoRows = buildPermisoRows;
+exports.derivarRolBase = derivarRolBase;
+
 exports.listRoles = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);

@@ -1,5 +1,5 @@
-import { useState, type ComponentType } from 'react'
-import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus, Share2, ListTodo, UsersRound, Sparkles } from 'lucide-react'
+import { useEffect, useState, type ComponentType } from 'react'
+import { Settings, Search, HardHat, ChevronRight, ArrowLeft, LayoutGrid, CheckCircle2, UserPlus, Share2, ListTodo, UsersRound, Sparkles, Building2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth.store'
@@ -14,6 +14,8 @@ import { NuevoClienteModal } from '@/pages/atencion-cliente/clientes/NuevoClient
 import { CATEGORY_STYLES, DEFAULT_CATEGORY_STYLE, countLeaves } from './categoryStyles'
 import { EmpresasTab } from './EmpresasTab'
 import { AsistenteGrupo } from './AsistenteGrupo'
+import { AsistenteEmpresa } from './AsistenteEmpresa'
+import { usePuedeGestionarEmpresas, EVENTO_ASISTENTE_EMPRESA } from '@/services/empresasAsistente.service'
 import { ModulosEmpresaTab } from './ModulosEmpresaTab'
 import { PermisosTab } from './PermisosTab'
 import { WebphoneVistasTab } from './WebphoneVistasTab'
@@ -77,8 +79,6 @@ import { PlantillasTab } from './tecnologia/PlantillasTab'
 import { CamposPersonalizadosTab } from './tecnologia/CamposPersonalizadosTab'
 import { SeguridadTab } from './tecnologia/SeguridadTab'
 import { IntegracionesTab } from './tecnologia/IntegracionesTab'
-
-const SUPER_ADMIN_EMPRESAS_IDS = new Set([1, 96, 64])
 
 const SCREENS: Record<string, ComponentType> = {
   empresas: EmpresasTab,
@@ -196,7 +196,9 @@ function indiceDe(nodes: ConfigNode[], out: Record<string, ConfigNode> = {}): Re
 
 export function ConfiguracionPage() {
   const { user: usuarioActual } = useAuthStore()
-  const esSuperAdmin = SUPER_ADMIN_EMPRESAS_IDS.has(usuarioActual?.id ?? -1)
+  // Empresas y el asistente "Crear empresa": acción accesos/crear-empresas
+  // marcada explícitamente, solo en Ardaby Tec (lo resuelve el backend).
+  const { puede: puedeGestionarEmpresas } = usePuedeGestionarEmpresas()
   const { isAllowed, isLoading: cargandoModulos } = useModuleAccess()
   const { can, isLoading: cargandoAcciones } = useActionAccess()
 
@@ -205,7 +207,7 @@ export function ConfiguracionPage() {
   // (Recorrido barato — ~800 nodos — así que se recalcula en cada render y
   // siempre refleja los módulos vigentes.)
   const tree = filtrarArbol(CONFIG_TREE, (n) => {
-    if (n.key === 'empresas' && !esSuperAdmin) return false
+    if (n.key === 'empresas' && !puedeGestionarEmpresas) return false
     if (n.moduleKey && !cargandoModulos && !isAllowed(n.moduleKey)) return false
     if (n.requiere && !cargandoModulos && n.requiere.some((m) => !isAllowed(m))) return false
     if (n.accion && !cargandoAcciones && !can(n.accion[0], n.accion[1])) return false
@@ -225,6 +227,13 @@ export function ConfiguracionPage() {
   const [asistenteGrupo, setAsistenteGrupo] = useState(false)
   const rolActual = (usuarioActual?.tipoUsuario ?? '').toUpperCase()
   const puedeCrearGrupo = ['AD', 'TI'].includes(rolActual) && !cargandoAcciones && can('usuarios', 'editar')
+  // Asistente "Crear empresa": null = cerrado; { empKey: null } = empresa nueva.
+  const [asistenteEmpresa, setAsistenteEmpresa] = useState<{ empKey: string | null } | null>(null)
+  useEffect(() => {
+    const abrir = (e: Event) => setAsistenteEmpresa({ empKey: (e as CustomEvent<{ empKey?: string }>).detail?.empKey ?? null })
+    window.addEventListener(EVENTO_ASISTENTE_EMPRESA, abrir)
+    return () => window.removeEventListener(EVENTO_ASISTENTE_EMPRESA, abrir)
+  }, [])
 
   const q = search.trim().toLowerCase()
   const results = q ? searchResults(tree, q) : []
@@ -325,7 +334,9 @@ export function ConfiguracionPage() {
         />
       </div>
 
-      {asistenteGrupo ? (
+      {asistenteEmpresa ? (
+        <AsistenteEmpresa empKeyInicial={asistenteEmpresa.empKey} onSalir={() => setAsistenteEmpresa(null)} />
+      ) : asistenteGrupo ? (
         <AsistenteGrupo onSalir={() => setAsistenteGrupo(false)} />
       ) : q ? (
         <SearchResultsView results={results} onSelect={(n) => navigateToKey(n.key)} />
@@ -344,7 +355,8 @@ export function ConfiguracionPage() {
         />
       ) : (
         <HomeView tree={tree} onOpen={openCategory} pendientes={pendientes.length} onVerPendientes={() => setVerPendientes(true)}
-          onNuevoGrupo={puedeCrearGrupo ? () => setAsistenteGrupo(true) : undefined} />
+          onNuevoGrupo={puedeCrearGrupo ? () => setAsistenteGrupo(true) : undefined}
+          onNuevaEmpresa={puedeGestionarEmpresas ? () => setAsistenteEmpresa({ empKey: null }) : undefined} />
       )}
     </div>
   )
@@ -352,15 +364,34 @@ export function ConfiguracionPage() {
 
 /* ─────────────────────────── Home: grid de categorías ─────────────────────────── */
 
-function HomeView({ tree, onOpen, pendientes, onVerPendientes, onNuevoGrupo }: {
+function HomeView({ tree, onOpen, pendientes, onVerPendientes, onNuevoGrupo, onNuevaEmpresa }: {
   tree: ConfigNode[]
   onOpen: (key: string) => void
   pendientes: number
   onVerPendientes: () => void
   onNuevoGrupo?: () => void
+  onNuevaEmpresa?: () => void
 }) {
   return (
     <div className="space-y-4">
+      {onNuevaEmpresa && (
+        <button
+          onClick={onNuevaEmpresa}
+          className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-r from-sky-600 to-blue-700 px-5 py-4 text-left text-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
+        >
+          <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/15">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1.5 text-[0.95rem] font-bold">Crear empresa <Sparkles className="h-4 w-4 text-amber-200" /></p>
+            <p className="mt-0.5 text-[0.75rem] text-white/80">
+              Paso a paso: crea la empresa, elige sus módulos, ajusta sus roles y perfiles, y da de alta a su administrador y a su equipo (uno por uno o desde Excel). Todo se aplica solo.
+            </p>
+          </div>
+          <ChevronRight className="h-5 w-5 flex-shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      )}
       {onNuevoGrupo && (
         <button
           onClick={onNuevoGrupo}

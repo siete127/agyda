@@ -1,9 +1,10 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const { getIO } = require('../services/socketService');
+const { puedeGestionarEmpresas } = require('../utils/gestionEmpresas');
 const { esSuperAdminFijo } = require('../utils/superAdmin');
 const { DEFAULT_TENANT } = require('../config/tenants');
-const { invalidateEmpresaModulosCache } = require('../middleware/moduleAccess');
+const { invalidateEmpresaModulosCache, esEmpresaModulosEstricto } = require('../middleware/moduleAccess');
 
 function notifyEmpresaModulosUpdated(empKey) {
   try { getIO(empKey).emit('empresa-modulos-updated'); } catch (_) { /* sin sockets activos, no bloquea */ }
@@ -13,7 +14,7 @@ function notifyEmpresaModulosUpdated(empKey) {
 // su estado ALLOW resuelto (true si no hay fila = activo por default).
 exports.getEmpresaModulos = async (req, res) => {
   try {
-    if (!esSuperAdminFijo(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    if (!(await puedeGestionarEmpresas(req))) return res.status(403).json({ success: false, message: 'No autorizado' });
     const { empKey } = req.params;
     const empKeyNorm = String(empKey || '').toLowerCase();
     if (!empKeyNorm) return res.status(400).json({ success: false, message: 'empKey requerido' });
@@ -26,12 +27,14 @@ exports.getEmpresaModulos = async (req, res) => {
       .input('empKey', sql.NVarChar, empKeyNorm)
       .query(`SELECT MODULO_KEY, ALLOW FROM INTRANET_EMPRESAS_MODULOS WHERE EMP_KEY=@empKey`);
 
+    // Sin fila: activo en empresas normales, bloqueado en las de modo estricto (asistente).
+    const porDefecto = !(await esEmpresaModulosEstricto(pool, empKeyNorm));
     const overrides = new Map(rs.recordset.map((r) => [String(r.MODULO_KEY), r.ALLOW === true || r.ALLOW === 1]));
     const data = MODULOS_DISPONIBLES.map((m) => ({
       key: m.key,
       nombre: m.nombre,
       descripcion: m.descripcion,
-      allow: overrides.has(m.key) ? overrides.get(m.key) : true,
+      allow: overrides.has(m.key) ? overrides.get(m.key) : porDefecto,
     }));
 
     return res.json({ success: true, data: { empKey: empKeyNorm, modulos: data } });
@@ -44,12 +47,16 @@ exports.getEmpresaModulos = async (req, res) => {
 // PUT /accesos/empresas/:empKey/modulos/:moduloKey  { allow: boolean }
 exports.setEmpresaModulo = async (req, res) => {
   try {
-    if (!esSuperAdminFijo(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    if (!(await puedeGestionarEmpresas(req))) return res.status(403).json({ success: false, message: 'No autorizado' });
     const { empKey, moduloKey } = req.params;
     const { allow } = req.body || {};
     const empKeyNorm = String(empKey || '').toLowerCase();
     const key = String(moduloKey || '').toLowerCase();
     if (!empKeyNorm || !key) return res.status(400).json({ success: false, message: 'empKey y moduloKey requeridos' });
+    // Los módulos de la propia empresa maestra solo los cambian los super-admins fijos.
+    if (empKeyNorm === DEFAULT_TENANT && !esSuperAdminFijo(req)) {
+      return res.status(403).json({ success: false, message: 'Solo los super administradores pueden cambiar los módulos de Ardaby Tec' });
+    }
     if (typeof allow !== 'boolean') return res.status(400).json({ success: false, message: 'allow (boolean) requerido' });
     if (key === '*' || key === 'areas-portal') {
       return res.status(400).json({ success: false, message: 'Este valor no es un módulo asignable' });

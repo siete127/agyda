@@ -205,6 +205,10 @@ const ACCIONES_POR_MODULO = {
   ],
   accesos: [
     { key: 'gestionar', nombre: 'Gestionar accesos', descripcion: 'Otorgar o revocar módulos y acciones a otros usuarios' },
+    // Solo existe en Ardaby Tec (ver utils/gestionEmpresas.js): en las demás
+    // empresas se oculta del catálogo y el backend la rechaza aunque esté marcada.
+    // Además es opt-in explícito: NO la concede la compatibilidad de "módulo sin configurar".
+    { key: 'crear-empresas', nombre: 'Crear y configurar empresas', descripcion: 'Usar el asistente "Crear empresa": crear empresas nuevas, elegir sus módulos, roles, perfiles y usuarios. Solo Ardaby Tec; hay que marcarla explícitamente' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   noticias: [
@@ -479,14 +483,27 @@ const ACCIONES_POR_MODULO = {
 // Reusado por rolController para validar que cada acción de un rol exista.
 exports.ACCIONES_POR_MODULO = ACCIONES_POR_MODULO;
 
+// Acciones que solo existen en la empresa maestra (Ardaby Tec).
+const ACCIONES_SOLO_MAESTRA = { accesos: ['crear-empresas'] };
+function accionesDeEmpresa(tenantKey) {
+  if (String(tenantKey || DEFAULT_TENANT).toLowerCase() === DEFAULT_TENANT) return ACCIONES_POR_MODULO;
+  const filtrado = {};
+  for (const [mod, lista] of Object.entries(ACCIONES_POR_MODULO)) {
+    const quitar = ACCIONES_SOLO_MAESTRA[mod] ?? [];
+    filtrado[mod] = quitar.length ? lista.filter((a) => !quitar.includes(a.key)) : lista;
+  }
+  return filtrado;
+}
+exports.accionesDeEmpresa = accionesDeEmpresa;
+
 exports.getModuleActions = async (req, res) => {
   const { moduloKey } = req.params;
-  const acciones = ACCIONES_POR_MODULO[String(moduloKey || '').toLowerCase()] ?? [];
+  const acciones = accionesDeEmpresa(req.user?.empresa)[String(moduloKey || '').toLowerCase()] ?? [];
   res.json({ success: true, data: acciones });
 };
 
 exports.getAllModuleActions = async (req, res) => {
-  res.json({ success: true, data: ACCIONES_POR_MODULO });
+  res.json({ success: true, data: accionesDeEmpresa(req.user?.empresa) });
 };
 
 // Acciones granulares del usuario autenticado (para filtrar botones en la UI)
@@ -565,7 +582,7 @@ exports.setModuleActions = async (req, res) => {
     if (!Array.isArray(acciones)) acciones = [];
 
     const adminId = req.user && (req.user.id || req.user.sub || req.user.userId) ? parseInt(req.user.id || req.user.sub || req.user.userId) : null;
-    const disponibles = (ACCIONES_POR_MODULO[String(moduloKey).toLowerCase()] ?? []).map(a => a.key);
+    const disponibles = (accionesDeEmpresa(req.user?.empresa)[String(moduloKey).toLowerCase()] ?? []).map(a => a.key);
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const t = new sql.Transaction(pool);
@@ -854,22 +871,22 @@ exports.revokeModule = async (req, res) => {
 
 exports.listEmpresas = async (req, res) => {
   try {
-    if (!esSuperAdminFijo(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const { puedeGestionarEmpresas } = require('../utils/gestionEmpresas');
+    if (!(await puedeGestionarEmpresas(req))) return res.status(403).json({ success: false, message: 'No autorizado' });
     const { listTenants } = require('../config/tenants');
+    const { getEmpresaModulosBloqueados } = require('../middleware/moduleAccess');
     const tenants = listTenants();
-
-    // Overrides ALLOW=0 por empresa (todas viven en el tenant maestro) para
-    // resolver "N módulos activos" sin una query por empresa.
     const modulosTotal = MODULOS_DISPONIBLES.length;
-    let bloqueadosPorEmpresa = new Map();
+
+    // Avance del asistente "Crear empresa" (NULL = empresa previa al asistente).
+    let asistentePorEmpresa = new Map();
     try {
       const master = await databaseService.getPool(DEFAULT_TENANT);
-      const rs = await master.request().query(
-        `SELECT EMP_KEY, COUNT(*) AS n FROM INTRANET_EMPRESAS_MODULOS
-         WHERE ALLOW = 0 GROUP BY EMP_KEY`,
-      );
-      bloqueadosPorEmpresa = new Map(rs.recordset.map((r) => [String(r.EMP_KEY).toLowerCase(), r.n]));
-    } catch (_) { /* si falla, todos cuentan como activos */ }
+      const rs = await master.request().query(`SELECT EMP_KEY, EMP_ASISTENTE FROM dbo.INTRANET_EMPRESAS WHERE EMP_ASISTENTE IS NOT NULL`);
+      asistentePorEmpresa = new Map(rs.recordset.map((r) => {
+        try { return [String(r.EMP_KEY).toLowerCase(), JSON.parse(r.EMP_ASISTENTE)]; } catch (_) { return [String(r.EMP_KEY).toLowerCase(), null]; }
+      }));
+    } catch (_) { /* columna aún no creada */ }
 
     const data = await Promise.all(tenants.map(async (t) => {
       let usuarios = null;
@@ -878,13 +895,15 @@ exports.listEmpresas = async (req, res) => {
         const r = await pool.request().query('SELECT COUNT(*) AS n FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1');
         usuarios = r.recordset[0]?.n ?? null;
       } catch (_) { /* empresa sin BD accesible: usuarios = null */ }
-      const bloqueados = bloqueadosPorEmpresa.get(t.key.toLowerCase()) ?? 0;
+      let bloqueados = 0;
+      try { bloqueados = (await getEmpresaModulosBloqueados(t.key)).size; } catch (_) { /* todos activos */ }
       return {
         key: t.key,
         nombre: t.nombre,
         usuarios,
         modulosActivos: Math.max(0, modulosTotal - bloqueados),
         modulosTotal,
+        asistente: asistentePorEmpresa.get(t.key.toLowerCase()) ?? null,
       };
     }));
 
@@ -897,94 +916,38 @@ exports.listEmpresas = async (req, res) => {
 
 exports.createEmpresa = async (req, res) => {
   try {
-    if (!esSuperAdminFijo(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const { puedeGestionarEmpresas } = require('../utils/gestionEmpresas');
+    if (!(await puedeGestionarEmpresas(req))) return res.status(403).json({ success: false, message: 'No autorizado' });
 
     const { codigo, nombre, adminUsuario, adminPassword, adminNombre } = req.body || {};
     if (!codigo || !nombre || !adminUsuario || !adminPassword || !adminNombre) {
       return res.status(400).json({ success: false, message: 'Faltan campos obligatorios' });
     }
-    const key = String(codigo).trim().toLowerCase();
-    if (!/^[a-z][a-z0-9_]{1,29}$/.test(key)) {
-      return res.status(400).json({ success: false, message: 'Código inválido: solo minúsculas, números y guion bajo, debe empezar con letra (2-30 caracteres)' });
-    }
 
-    const { getTenantConfig, registerTenant } = require('../config/tenants');
+    // 1-3. BD + catálogo + esquema (ver empresaCreacionService: el catálogo se
+    //      registra antes del esquema para no dejar la empresa huérfana).
+    const { crearEmpresaBase, crearUsuarioEnEmpresa } = require('../services/empresaCreacionService');
+    let empresa;
     try {
-      getTenantConfig(key);
-      return res.status(400).json({ success: false, message: 'Ya existe una empresa con ese código' });
-    } catch (_) {
-      // getTenantConfig lanza si no existe — es el caso esperado, seguir.
+      empresa = await crearEmpresaBase({ codigo, nombre, creadoPor: req.user?.id || null });
+    } catch (e) {
+      console.error('Error creando empresa:', e);
+      return res.status(e.status || 500).json({ success: false, message: e.message });
     }
+    const { key, database: databaseName } = empresa;
+    const poolMaestro = await databaseService.getPool(DEFAULT_TENANT);
 
-    const databaseName = `intranet_${key}`;
-
-    // 1. Crear la base de datos (contra el pool de la empresa maestra, pero
-    //    en el contexto de master — CREATE DATABASE no puede ir en batch con
-    //    USE de otra BD ni dentro de una transacción explícita).
-    const poolMaestro = await databaseService.getPool(req.user?.empresa);
-    try {
-      await poolMaestro.request().batch(`
-        IF DB_ID('${databaseName}') IS NOT NULL
-          THROW 50001, 'La base de datos ya existe', 1;
-        CREATE DATABASE [${databaseName}];
-      `);
-    } catch (dbErr) {
-      console.error('Error creando base de datos de empresa:', dbErr);
-      return res.status(500).json({ success: false, message: `No se pudo crear la base de datos: ${dbErr.message}` });
-    }
-
-    // 2. Registrar el tenant en el caché en memoria ANTES de inicializar el
-    //    pool — getTenantConfig (usado por initialize/getPool) necesita
-    //    resolver la BD del tenant nuevo, y solo la conoce tras este registro.
-    registerTenant(key, nombre.trim(), databaseName);
-
-    // 3. Abrir pool sobre la BD recién creada — initialize() aplica
-    //    ensureAllSchemas automáticamente (incluye NEUS_USUARIOS desde cero).
-    let poolNuevo;
-    try {
-      await databaseService.initialize(key);
-      poolNuevo = await databaseService.getPool(key);
-    } catch (schemaErr) {
-      console.error('Error inicializando esquema de empresa nueva:', schemaErr);
-      return res.status(500).json({ success: false, message: `Base de datos creada, pero falló el esquema: ${schemaErr.message}` });
-    }
-
-    // 4. Crear el primer usuario administrador en la BD nueva.
+    // 4. Primer usuario administrador (AD, sin rol: acceso completo por compatibilidad).
     let nuevoAdminId = null;
     try {
-      const insert = await poolNuevo.request()
-        .input('nombres', sql.NVarChar, adminNombre.trim())
-        .input('usuario', sql.NVarChar, String(adminUsuario).trim())
-        .input('contra', sql.NVarChar, adminPassword)
-        .query(`
-          INSERT INTO NEUS_USUARIOS
-          (NEUS_NOMBRES, NEUS_USUARIO, NEUS_CONTRA, NEUS_TIPOUSUARIO, NEUS_ACTIVO, NEUS_STATUS, NEUS_BASE, NEUS_FECHA_REGISTRO, username, [password], NEUS_DEBE_CAMBIAR_PASSWORD)
-          VALUES (@nombres, @usuario, @contra, 'AD', 1, 1, 1, GETDATE(), @usuario, @contra, 1);
-          SELECT SCOPE_IDENTITY() AS NEUS_ID;
-        `);
-      nuevoAdminId = insert.recordset[0]?.NEUS_ID || null;
+      const poolNuevo = await databaseService.getPool(key);
+      const admin = await crearUsuarioEnEmpresa(poolNuevo, key, {
+        nombres: adminNombre, usuario: adminUsuario, contra: adminPassword, tipoUsuario: 'AD',
+      }, req.user?.id || null);
+      nuevoAdminId = admin.id;
     } catch (userErr) {
       console.error('Error creando admin inicial de empresa nueva:', userErr);
       return res.status(500).json({ success: false, message: `Empresa creada, pero falló el usuario administrador: ${userErr.message}` });
-    }
-
-    // 5. Registrar la empresa en el catálogo persistente (BD maestra), para
-    //    que sobreviva a un restart del proceso.
-    try {
-      await poolMaestro.request()
-        .input('key', sql.NVarChar, key)
-        .input('nombre', sql.NVarChar, nombre.trim())
-        .input('database', sql.NVarChar, databaseName)
-        .input('creadoPor', sql.Int, req.user?.id || null)
-        .query(`
-          INSERT INTO dbo.INTRANET_EMPRESAS (EMP_KEY, EMP_NOMBRE, EMP_DATABASE, EMP_CREADO_POR)
-          VALUES (@key, @nombre, @database, @creadoPor)
-        `);
-    } catch (catalogErr) {
-      console.error('Error registrando empresa en catálogo:', catalogErr);
-      // No revertir lo ya creado — la empresa funciona igual (quedó en el
-      // caché en memoria vía registerTenant); solo no sobrevivirá un restart
-      // sin que alguien vuelva a ejecutar esto o inserte la fila a mano.
     }
 
     await logAudit(poolMaestro, {

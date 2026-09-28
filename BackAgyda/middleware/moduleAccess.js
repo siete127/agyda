@@ -36,11 +36,33 @@ async function getEmpresaModulosBloqueados(empKey) {
   const pool = await databaseService.getPool(DEFAULT_TENANT); // siempre la BD maestra
   const rs = await pool.request()
     .input('empKey', require('mssql').NVarChar, key)
-    .query(`SELECT MODULO_KEY FROM INTRANET_EMPRESAS_MODULOS WHERE EMP_KEY=@empKey AND ALLOW=0`);
+    .query(`SELECT MODULO_KEY, ALLOW FROM INTRANET_EMPRESAS_MODULOS WHERE EMP_KEY=@empKey`);
 
-  const blocked = new Set(rs.recordset.map((r) => String(r.MODULO_KEY).toLowerCase()));
+  let blocked;
+  if (await esEmpresaModulosEstricto(pool, key)) {
+    // Empresa en modo estricto (creada con el asistente): solo lo marcado con
+    // ALLOW=1 está activo; cualquier otro módulo del catálogo — incluidos los
+    // que se agreguen al sistema después — cuenta como bloqueado.
+    const { MODULOS_DISPONIBLES } = require('../controllers/accesoController');
+    const activos = new Set(rs.recordset.filter((r) => r.ALLOW === true || r.ALLOW === 1).map((r) => String(r.MODULO_KEY).toLowerCase()));
+    blocked = new Set(MODULOS_DISPONIBLES.map((m) => m.key.toLowerCase()).filter((k) => !activos.has(k)));
+  } else {
+    blocked = new Set(rs.recordset.filter((r) => !(r.ALLOW === true || r.ALLOW === 1)).map((r) => String(r.MODULO_KEY).toLowerCase()));
+  }
   empresaModulosCache.set(key, { ts: _now(), blocked });
   return blocked;
+}
+
+async function esEmpresaModulosEstricto(pool, empKey) {
+  try {
+    const rs = await pool.request()
+      .input('empKey', require('mssql').NVarChar, String(empKey).toLowerCase())
+      .query(`SELECT EMP_MODULOS_ESTRICTO FROM dbo.INTRANET_EMPRESAS WHERE EMP_KEY=@empKey`);
+    const v = rs.recordset[0]?.EMP_MODULOS_ESTRICTO;
+    return v === true || v === 1;
+  } catch (_) {
+    return false; // columna aún no creada (o empresa estática): comportamiento original
+  }
 }
 
 function invalidateEmpresaModulosCache(empKey) {
@@ -230,6 +252,7 @@ module.exports = {
   getUsuariosParaNotificarCorreo,
   getEmpresaModulosBloqueados,
   invalidateEmpresaModulosCache,
+  esEmpresaModulosEstricto,
   SUPER_ADMIN_IDS,
   esSuperAdminFijo,
   esSuperAdminInmuneEmpresa,

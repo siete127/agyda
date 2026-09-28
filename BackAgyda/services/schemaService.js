@@ -3030,6 +3030,15 @@ BEGIN
   );
 END
     `);
+    // EMP_ASISTENTE: avance del asistente "Crear empresa" (JSON { paso, completos,
+    // terminado }); NULL = empresa creada antes del asistente (se da por terminada).
+    // EMP_MODULOS_ESTRICTO: 1 = un módulo sin fila en INTRANET_EMPRESAS_MODULOS
+    // cuenta como BLOQUEADO (las empresas del asistente: un módulo nuevo del
+    // sistema llega apagado); 0 = comportamiento original (sin fila = activo).
+    await pool.request().query(`IF OBJECT_ID('dbo.INTRANET_EMPRESAS', 'U') IS NOT NULL AND COL_LENGTH('dbo.INTRANET_EMPRESAS', 'EMP_ASISTENTE') IS NULL
+  ALTER TABLE dbo.INTRANET_EMPRESAS ADD EMP_ASISTENTE NVARCHAR(MAX) NULL;`);
+    await pool.request().query(`IF OBJECT_ID('dbo.INTRANET_EMPRESAS', 'U') IS NOT NULL AND COL_LENGTH('dbo.INTRANET_EMPRESAS', 'EMP_MODULOS_ESTRICTO') IS NULL
+  ALTER TABLE dbo.INTRANET_EMPRESAS ADD EMP_MODULOS_ESTRICTO BIT NOT NULL CONSTRAINT DF_EMPRESAS_MODULOS_ESTRICTO DEFAULT 0;`);
     logger.info('✅ Esquema de empresas (tenants) asegurado');
   } catch (err) {
     console.warn('⚠️ No se pudo asegurar esquema de empresas:', err.message);

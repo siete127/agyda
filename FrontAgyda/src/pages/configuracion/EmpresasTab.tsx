@@ -7,6 +7,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/auth.store'
 import { EmpresaModulosPanel } from './EmpresaModulosPanel'
+import { usePuedeGestionarEmpresas, abrirAsistenteEmpresa } from '@/services/empresasAsistente.service'
 
 const empInputCls =
   'w-full rounded-xl border border-gray-200 bg-card py-2.5 pl-11 pr-3 text-[0.85rem] text-gray-900 ' +
@@ -51,12 +52,11 @@ function SeccionNum({ n, titulo, subtitulo }: { n: number; titulo: string; subti
   )
 }
 
-// Mismos IDs que el backend restringe en utils/superAdmin.esSuperAdminFijo
-// — aquí solo controla si se MUESTRA la sección; la autorización real vive en
-// el servidor (403 si alguien fuerza la UI).
-const SUPER_ADMIN_EMPRESAS_IDS = new Set([1, 96, 64])
-
-interface Empresa { key: string; nombre: string; usuarios: number | null; modulosActivos: number; modulosTotal: number }
+interface Empresa {
+  key: string; nombre: string; usuarios: number | null; modulosActivos: number; modulosTotal: number
+  // Avance del asistente "Crear empresa" (null = empresa previa al asistente).
+  asistente: { paso?: number; completos?: string[]; terminado?: boolean } | null
+}
 
 // Meta-fila del card "Tu Hogar" (usuarios · módulos · estado).
 function MetaItem({ icon: Icon, children }: { icon: typeof Users; children: React.ReactNode }) {
@@ -74,7 +74,8 @@ function MetaItem({ icon: Icon, children }: { icon: typeof Users; children: Reac
 export function EmpresasTab() {
   const qc = useQueryClient()
   const { user: usuarioActual } = useAuthStore()
-  const esSuperAdmin = SUPER_ADMIN_EMPRESAS_IDS.has(usuarioActual?.id ?? -1)
+  // Solo controla si se MUESTRA la sección; la autorización real vive en el servidor.
+  const { puede: esSuperAdmin } = usePuedeGestionarEmpresas()
 
   const [mostrarFormEmpresa, setMostrarFormEmpresa] = useState(false)
   const [formEmpresa, setFormEmpresa] = useState({ codigo: '', nombre: '', adminUsuario: '', adminPassword: '', adminNombre: '' })
@@ -143,12 +144,21 @@ export function EmpresasTab() {
             <p className="text-[0.82rem] text-gray-400">Empresas (tenants) del sistema. Toca una para gestionar sus módulos.</p>
           </div>
         </div>
-        <button
-          onClick={() => setMostrarFormEmpresa((v) => !v)}
-          className="flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]"
-        >
-          <BuildingPlus className="h-4 w-4" /> Nueva empresa
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setMostrarFormEmpresa((v) => !v)}
+            title="Alta rápida: solo la empresa y su administrador"
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-card px-4 py-2.5 text-[0.8rem] font-semibold text-gray-600 transition-all hover:bg-gray-50"
+          >
+            <BuildingPlus className="h-4 w-4" /> Alta rápida
+          </button>
+          <button
+            onClick={() => abrirAsistenteEmpresa(null)}
+            className="flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand-dark active:scale-[0.98]"
+          >
+            <BuildingPlus className="h-4 w-4" /> Nueva empresa (asistente)
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -323,13 +333,28 @@ export function EmpresasTab() {
                         <Building2 className="h-4.5 w-4.5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[0.9rem] font-semibold text-gray-900">{e.nombre}</p>
+                        <p className="flex items-center gap-2 truncate text-[0.9rem] font-semibold text-gray-900">
+                          {e.nombre}
+                          {e.asistente && !e.asistente.terminado && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.62rem] font-semibold text-amber-700">
+                              En configuración · paso {Math.min((e.asistente.paso ?? 0) + 1, 6)} de 6
+                            </span>
+                          )}
+                        </p>
                         <p className="truncate text-[0.72rem] text-gray-400">
                           {e.key}
                           {e.usuarios != null && <> · {e.usuarios} usuarios</>}
                           {' · '}{e.modulosActivos} módulos
                         </p>
                       </div>
+                      {e.asistente && !e.asistente.terminado && (
+                        <span role="button" tabIndex={0}
+                          onClick={(ev) => { ev.stopPropagation(); abrirAsistenteEmpresa(e.key) }}
+                          onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); abrirAsistenteEmpresa(e.key) } }}
+                          className="flex-shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-[0.72rem] font-semibold text-white hover:bg-violet-700">
+                          Continuar asistente
+                        </span>
+                      )}
                       <SlidersHorizontal className="h-4 w-4 flex-shrink-0 text-gray-300" />
                       <ChevronRight className={clsx('h-5 w-5 flex-shrink-0 text-gray-300 transition-transform', expandida === e.key && 'rotate-90')} />
                     </button>
