@@ -8,6 +8,8 @@ import { crmService } from '@/services/crm.service'
 import { citaService } from '@/services/cita.service'
 import { horarioAsesorService } from '@/services/horarioAsesor.service'
 import { useCurrentUser } from '@/hooks/useAuth'
+import { useActionAccess } from '@/hooks/useActionAccess'
+import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import {
   CITA_MODALIDAD_CONFIG, RECORDAR_OPCIONES, type CitaModalidad,
 } from '@/types/cita.types'
@@ -31,6 +33,9 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
 }) {
   const qc = useQueryClient()
   const usuarioActual = useCurrentUser()
+  const { can } = useActionAccess()
+  const puedeGestionar = can('atencion-cliente', 'citas-gestionar')
+  const { data: usuarios } = useUsuariosSimple()
   const [contactoId, setContactoId] = useState(contactoPreset ? String(contactoPreset.id) : '')
   const [modalidad, setModalidad] = useState<CitaModalidad>('videollamada')
   const [titulo, setTitulo] = useState('')
@@ -42,6 +47,9 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
   const [telefono, setTelefono] = useState('')
   const [recordar, setRecordar] = useState<number[]>([1440, 60])
   const [tratamientoId, setTratamientoId] = useState(tratamientoPreset ? String(tratamientoPreset.id) : '')
+  // Solo el supervisor puede elegir otro asesor; para cualquier otro usuario
+  // la cita siempre se asigna a sí mismo, sin selector visible.
+  const [asignadoA, setAsignadoA] = useState('')
 
   const { data: clientes } = useQuery({
     queryKey: ['clientes-lista'],
@@ -62,9 +70,9 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
   const toggleRecordar = (min: number) =>
     setRecordar((prev) => prev.includes(min) ? prev.filter((m) => m !== min) : [...prev, min].sort((a, b) => b - a))
 
-  // Toda cita se asigna al usuario que la crea — no se puede agendar a
-  // nombre de otro asesor desde aquí.
-  const asignadoAIdNum = usuarioActual?.id ?? 0
+  // Sin permiso de gestionar, siempre se asigna al usuario actual. Con
+  // permiso, por default también es el usuario actual, pero puede cambiarse.
+  const asignadoAIdNum = puedeGestionar && asignadoA ? Number(asignadoA) : (usuarioActual?.id ?? 0)
   const { data: horarioAsesor } = useQuery({
     queryKey: ['horario-asesor', asignadoAIdNum],
     queryFn: () => horarioAsesorService.getHorario(asignadoAIdNum),
@@ -119,7 +127,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
         motivo: motivo.trim() || undefined,
         enlace: modalidad === 'videollamada' && enlace.trim() ? enlace.trim() : undefined,
         telefono: modalidad === 'telefonica' && telefono.trim() ? telefono.trim() : undefined,
-        asignadoA: usuarioActual?.id,
+        asignadoA: asignadoAIdNum || undefined,
         recordarMinAntes: recordar,
       }
       if (tratamientoId) {
@@ -193,6 +201,16 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
           <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Título</label>
           <input value={titulo} onChange={(e) => setTitulo(e.target.value)} className="field" placeholder="Motivo de la cita" maxLength={200} autoFocus />
         </div>
+
+        {puedeGestionar && (
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Asignar a</label>
+            <select value={asignadoA} onChange={(e) => setAsignadoA(e.target.value)} className="field">
+              <option value="">Yo ({usuarioActual?.nombres || 'sin asignar'})</option>
+              {usuarios?.filter((u) => u.id !== usuarioActual?.id).map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-3">
           <div>

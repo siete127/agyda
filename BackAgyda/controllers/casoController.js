@@ -97,7 +97,7 @@ function generarFolioEnTransaccion(transaction) {
 
 exports.list = async (req, res) => {
   try {
-    const { tipo, estatus, prioridad, contactoId } = req.query;
+    const { tipo, estatus, prioridad, contactoId, asignadoA } = req.query;
     const pool = await databaseService.getPool(req.user?.empresa);
 
     const cond = ['K.CASO_ACTIVO = 1'];
@@ -106,6 +106,7 @@ exports.list = async (req, res) => {
     if (estatus) { cond.push('K.CASO_ESTATUS = @estatus'); request.input('estatus', sql.NVarChar, estatus); }
     if (prioridad) { cond.push('K.CASO_PRIORIDAD = @prioridad'); request.input('prioridad', sql.NVarChar, prioridad); }
     if (contactoId) { cond.push('K.CASO_CONTACTO_ID = @contactoId'); request.input('contactoId', sql.Int, contactoId); }
+    if (asignadoA) { cond.push('K.CASO_ASIGNADO_A = @asignadoA'); request.input('asignadoA', sql.Int, asignadoA); }
 
     const rs = await request.query(`
       SELECT ${CASO_SELECT_FIELDS}
@@ -197,7 +198,15 @@ exports.create = async (req, res) => {
     const org = ORIGENES_VALIDOS.includes(origen) ? origen : 'manual';
     // SLA solo para incidencia (las 3 entidades ligeras no tenían SLA).
     const slaHoras = tipo === 'incidencia' ? SLA_HORAS_POR_PRIORIDAD[prio] : null;
-    const asignado = asignadoA ? parseInt(asignadoA, 10) : null;
+    // Sin asignadoA explícito (el modal de "Nuevo caso" ya no lo pide — se
+    // asigna solo, igual que las incidencias creadas desde el Portal de
+    // Cliente): hereda el responsable del contacto, si tiene uno.
+    let asignado = asignadoA ? parseInt(asignadoA, 10) : null;
+    if (!asignado && contId) {
+      const resp = await pool.request().input('id', sql.Int, contId)
+        .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`);
+      asignado = resp.recordset[0]?.responsableId || null;
+    }
 
     await transaction.begin();
     const folio = await generarFolioEnTransaccion(transaction);

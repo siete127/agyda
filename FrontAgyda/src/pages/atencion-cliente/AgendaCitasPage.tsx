@@ -10,6 +10,7 @@ import {
 } from '@/types/cita.types'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { useCurrentUser } from '@/hooks/useAuth'
+import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { NuevaCitaModal } from './components/NuevaCitaModal'
 import { CitaDetalleModal } from './components/CitaDetalleModal'
 import { SolicitudesCitaPanel } from './components/SolicitudesCitaPanel'
@@ -28,9 +29,14 @@ export function AgendaCitasPage({ embedded = false }: { embedded?: boolean }) {
   const { can } = useActionAccess()
   const puedeGestionar = can('atencion-cliente', 'citas-gestionar')
   const usuarioActual = useCurrentUser()
+  const { data: usuarios } = useUsuariosSimple()
   const [params, setParams] = useSearchParams()
 
   const [filtroEstatus, setFiltroEstatus] = useState<CitaEstatus | ''>('')
+  // Solo el admin/supervisor puede elegir "Todos los asesores" o uno en
+  // particular — un asesor normal siempre ve únicamente su propia agenda,
+  // sin selector visible.
+  const [filtroAsesor, setFiltroAsesor] = useState('')
   const [filtroModalidad, setFiltroModalidad] = useState<CitaModalidad | ''>('')
   const [vista, setVista] = useState<AgendaVista>('dia')
   const [fechaAncla, setFechaAncla] = useState(new Date())
@@ -40,16 +46,17 @@ export function AgendaCitasPage({ embedded = false }: { embedded?: boolean }) {
 
   const { desde, hasta } = useAgendaRango(vista, fechaAncla)
 
-  // Cada asesor solo ve su propia agenda — nunca la de otros compañeros.
+  const asignadoAFiltro = puedeGestionar ? (filtroAsesor ? Number(filtroAsesor) : undefined) : usuarioActual?.id
+
   const { data: citas = [], isLoading } = useQuery({
-    queryKey: ['citas', vista, desde, hasta, filtroEstatus, usuarioActual?.id],
+    queryKey: ['citas', vista, desde, hasta, filtroEstatus, asignadoAFiltro],
     queryFn: () => citaService.getAll({
       desde, hasta,
       estatus: filtroEstatus || undefined,
-      asignadoA: usuarioActual?.id,
+      asignadoA: asignadoAFiltro,
     }),
     staleTime: 15_000,
-    enabled: !!usuarioActual?.id,
+    enabled: puedeGestionar || !!usuarioActual?.id,
   })
 
   // Deep-link ?citaId=
@@ -147,6 +154,12 @@ export function AgendaCitasPage({ embedded = false }: { embedded?: boolean }) {
               <option value="">Todos los estatus</option>
               {(Object.keys(ESTATUS_CITA_CONFIG) as CitaEstatus[]).map((e) => <option key={e} value={e}>{ESTATUS_CITA_CONFIG[e].label}</option>)}
             </select>
+            {puedeGestionar && (
+              <select value={filtroAsesor} onChange={(e) => setFiltroAsesor(e.target.value)} className="field w-auto">
+                <option value="">Todos los asesores</option>
+                {usuarios?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            )}
             <select value={filtroModalidad} onChange={(e) => setFiltroModalidad(e.target.value as CitaModalidad | '')} className="field w-auto">
               <option value="">Todas las modalidades</option>
               {(Object.keys(CITA_MODALIDAD_CONFIG) as CitaModalidad[]).map((m) => <option key={m} value={m}>{CITA_MODALIDAD_CONFIG[m].label}</option>)}

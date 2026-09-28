@@ -30,15 +30,20 @@ const TABS_ESTATUS: { key: TabEstatus; label: string }[] = [
 export interface CasoFiltros {
   tipo: CasoTipo | ''
   prioridad: CasoPrioridad | ''
+  // Server-side (ver CasosPage.tsx) — solo tiene efecto/es visible para quien
+  // tiene permiso de gestionar; un asesor normal siempre ve solo lo suyo.
+  asignadoA: string
 }
 
-export function CasoListaColumna({ casos, isLoading, seleccionadoId, onSeleccionar, filtros, onFiltrosChange }: {
+export function CasoListaColumna({ casos, isLoading, seleccionadoId, onSeleccionar, filtros, onFiltrosChange, puedeGestionar, usuarios }: {
   casos: Caso[]
   isLoading: boolean
   seleccionadoId: number | null
   onSeleccionar: (c: Caso) => void
   filtros: CasoFiltros
   onFiltrosChange: (f: CasoFiltros) => void
+  puedeGestionar: boolean
+  usuarios?: { id: number; nombre: string }[]
 }) {
   const [tabEstatus, setTabEstatus] = useState<TabEstatus>('todos')
   const [busqueda, setBusqueda] = useState('')
@@ -54,7 +59,7 @@ export function CasoListaColumna({ casos, isLoading, seleccionadoId, onSeleccion
     return m
   }, [casos])
 
-  const filtrosActivos = (filtros.tipo ? 1 : 0) + (filtros.prioridad ? 1 : 0)
+  const filtrosActivos = (filtros.tipo ? 1 : 0) + (filtros.prioridad ? 1 : 0) + (puedeGestionar && filtros.asignadoA ? 1 : 0)
 
   const visibles = useMemo(() => {
     let arr = casos
@@ -110,6 +115,12 @@ export function CasoListaColumna({ casos, isLoading, seleccionadoId, onSeleccion
             <option value="">Todas las prioridades</option>
             {(Object.keys(PRIORIDAD_CASO_CONFIG) as CasoPrioridad[]).map((p) => <option key={p} value={p}>{PRIORIDAD_CASO_CONFIG[p].label}</option>)}
           </select>
+          {puedeGestionar && (
+            <select value={filtros.asignadoA} onChange={(e) => onFiltrosChange({ ...filtros, asignadoA: e.target.value })} className="field text-[0.8rem]">
+              <option value="">Todos los asesores</option>
+              {usuarios?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            </select>
+          )}
         </div>
       )}
 

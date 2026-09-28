@@ -18,6 +18,8 @@ export interface PropuestaHorario {
   comentario: string | null
   enviadaEn: string
   resueltaEn: string | null
+  resueltaPor?: number | null
+  resueltaPorNombre?: string | null
 }
 
 export interface DisponibilidadDia {
@@ -39,6 +41,10 @@ export const horarioAsesorService = {
   },
   async listarPropuestasPendientes(): Promise<PropuestaHorario[]> {
     const { data } = await api.get('/horario-asesor/propuestas/pendientes')
+    return (data?.data ?? []) as PropuestaHorario[]
+  },
+  async listarHistorial(): Promise<PropuestaHorario[]> {
+    const { data } = await api.get('/horario-asesor/propuestas/historial')
     return (data?.data ?? []) as PropuestaHorario[]
   },
   async resolverPropuesta(propuestaId: number, accion: 'aprobar' | 'rechazar', dias?: DiaHorarioAsesor[], comentario?: string): Promise<void> {

@@ -1,23 +1,17 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { Plus } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { casoService } from '@/services/caso.service'
 import {
   CASO_TIPO_CONFIG, PRIORIDAD_CASO_CONFIG, ESTATUS_CASO_CONFIG, type Caso,
 } from '@/types/caso.types'
-import { useActionAccess } from '@/hooks/useActionAccess'
-import { NuevoCasoModal } from '../../components/NuevoCasoModal'
 import { CasoDetalleModal } from '../../components/CasoDetalleModal'
 
 // Reemplaza a IncidenciasTab: los 4 tipos de caso (consulta, aclaración, queja,
-// incidencia) de este cliente en una sola lista. Reusa el modal único y el
-// detalle unificado de la Fase 4.
-export function ClienteCasosTab({ contactoId, clienteNombre }: { contactoId: number; clienteNombre: string }) {
-  const { can } = useActionAccess()
-  const puedeGestionar = can('atencion-cliente', 'casos-gestionar')
-  const [nuevo, setNuevo] = useState(false)
+// incidencia) de este cliente en una sola lista. La creación de casos vive
+// únicamente en el Portal de Cliente — este tab solo consulta.
+export function ClienteCasosTab({ contactoId }: { contactoId: number }) {
   const [detalle, setDetalle] = useState<Caso | null>(null)
 
   const { data: casos = [], isLoading } = useQuery({
@@ -30,11 +24,6 @@ export function ClienteCasosTab({ contactoId, clienteNombre }: { contactoId: num
     <div className="rounded-2xl border border-gray-200/60 bg-card shadow-sm overflow-hidden">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <p className="text-[0.8rem] font-bold text-gray-700">Casos del cliente</p>
-        {puedeGestionar && (
-          <button onClick={() => setNuevo(true)} className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.72rem] font-bold text-white hover:bg-brand-dark transition-colors">
-            <Plus className="h-3.5 w-3.5" /> Nuevo caso
-          </button>
-        )}
       </div>
       {isLoading ? (
         <div className="flex justify-center py-10"><Spinner size="sm" /></div>
@@ -65,12 +54,6 @@ export function ClienteCasosTab({ contactoId, clienteNombre }: { contactoId: num
             )
           })}
         </div>
-      )}
-      {nuevo && (
-        <NuevoCasoModal
-          contactoPreset={{ id: contactoId, nombre: clienteNombre }}
-          onClose={() => setNuevo(false)}
-        />
       )}
       {detalle && (
         <CasoDetalleModal

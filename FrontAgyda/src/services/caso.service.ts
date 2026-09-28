@@ -24,7 +24,7 @@ export interface NuevoCasoBody {
 }
 
 export const casoService = {
-  getAll: async (filtros?: { tipo?: CasoTipo; estatus?: CasoEstatus; prioridad?: CasoPrioridad; contactoId?: number }): Promise<Caso[]> => {
+  getAll: async (filtros?: { tipo?: CasoTipo; estatus?: CasoEstatus; prioridad?: CasoPrioridad; contactoId?: number; asignadoA?: number }): Promise<Caso[]> => {
     const { data } = await api.get('/atencion-cliente/casos', { params: filtros })
     return norm(data?.data ?? data, parseCaso)
   },

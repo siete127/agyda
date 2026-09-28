@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Inbox, Plus, ChevronLeft } from 'lucide-react'
+import { Inbox, ChevronLeft } from 'lucide-react'
 import { casoService } from '@/services/caso.service'
 import type { Caso, CasoEstatus } from '@/types/caso.types'
 import { useActionAccess } from '@/hooks/useActionAccess'
-import { NuevoCasoModal } from './components/NuevoCasoModal'
+import { useCurrentUser } from '@/hooks/useAuth'
+import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { CasoListaColumna, type CasoFiltros } from './components/caso/CasoListaColumna'
 import { CasoDetalleColumnas } from './components/caso/CasoDetalleColumnas'
 
@@ -15,16 +16,22 @@ export function CasosPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const { can } = useActionAccess()
   const puedeGestionar = can('atencion-cliente', 'casos-gestionar')
+  const usuarioActual = useCurrentUser()
+  const { data: usuarios } = useUsuariosSimple()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const [filtros, setFiltros] = useState<CasoFiltros>({ tipo: '', prioridad: '' })
+  const [filtros, setFiltros] = useState<CasoFiltros>({ tipo: '', prioridad: '', asignadoA: '' })
   const [detalle, setDetalle] = useState<Caso | null>(null)
-  const [nuevo, setNuevo] = useState(false)
+
+  // Sin permiso de gestionar, siempre ve solo sus propios casos asignados —
+  // con permiso, puede ver todos o filtrar por un asesor en particular.
+  const asignadoAFiltro = puedeGestionar ? (filtros.asignadoA ? Number(filtros.asignadoA) : undefined) : usuarioActual?.id
 
   const { data: casos = [], isLoading } = useQuery({
-    queryKey: ['casos'],
-    queryFn: () => casoService.getAll(),
+    queryKey: ['casos', asignadoAFiltro],
+    queryFn: () => casoService.getAll({ asignadoA: asignadoAFiltro }),
     staleTime: 15_000,
+    enabled: puedeGestionar || !!usuarioActual?.id,
   })
 
   // Deep-link: /atencion-cliente/casos?casoId=123 abre el detalle directo.
@@ -78,23 +85,10 @@ export function CasosPage({ embedded = false }: { embedded?: boolean }) {
                     <p className="mt-0.5 text-xs text-blue-100/80">{abiertos.length} abierto{abiertos.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
-                {puedeGestionar && (
-                  <button onClick={() => setNuevo(true)} className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-white/25 transition-colors">
-                    <Plus className="h-4 w-4" /> Nuevo caso
-                  </button>
-                )}
               </div>
             </div>
           </div>
         </>
-      )}
-
-      {embedded && puedeGestionar && (
-        <div className="flex justify-end">
-          <button onClick={() => setNuevo(true)} className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[0.78rem] font-bold text-white hover:bg-brand-dark transition-colors">
-            <Plus className="h-4 w-4" /> Nuevo caso
-          </button>
-        </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
@@ -105,6 +99,8 @@ export function CasosPage({ embedded = false }: { embedded?: boolean }) {
           onSeleccionar={abrirCaso}
           filtros={filtros}
           onFiltrosChange={setFiltros}
+          puedeGestionar={puedeGestionar}
+          usuarios={usuarios}
         />
         {detalle ? (
           <CasoDetalleColumnas
@@ -120,8 +116,6 @@ export function CasosPage({ embedded = false }: { embedded?: boolean }) {
           </div>
         )}
       </div>
-
-      {nuevo && <NuevoCasoModal onClose={() => setNuevo(false)} />}
     </div>
   )
 }
