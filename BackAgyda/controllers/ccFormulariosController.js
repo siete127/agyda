@@ -154,16 +154,28 @@ exports.createFormulario = async (req, res) => {
     if (!String(b.nombre || '').trim()) {
       return res.status(400).json({ success: false, message: 'Falta el nombre del formulario' });
     }
-    const codigo = String(b.codigo || '').trim() ? slugCodigo(b.codigo) : slugCodigo(b.nombre);
+    const explicito = !!String(b.codigo || '').trim();
+    const base = explicito ? slugCodigo(b.codigo) : slugCodigo(b.nombre);
+    let codigo = base;
     const p = await pool(req);
     const tx = new sql.Transaction(p);
     await tx.begin();
     try {
-      const dup = await new sql.Request(tx).input('c', sql.NVarChar(60), codigo)
-        .query('SELECT FR_ID id FROM dbo.CCF_FORMULARIOS WHERE FR_CODIGO = @c');
-      if (dup.recordset.length) {
-        await tx.rollback();
-        return res.status(409).json({ success: false, message: `Ya existe un formulario con el código "${codigo}"` });
+      // Un formulario archivado no aparta su código: se le renombra para liberarlo.
+      await new sql.Request(tx).input('c', sql.NVarChar(60), base).query(`
+        UPDATE dbo.CCF_FORMULARIOS SET FR_CODIGO = LEFT(CONCAT(FR_CODIGO, '-arch-', FR_ID), 60)
+        WHERE FR_CODIGO = @c AND (FR_ACTIVO = 0 OR FR_ESTADO = 'archivado')`);
+      const usado = async (c) => (await new sql.Request(tx).input('c', sql.NVarChar(60), c)
+        .query('SELECT 1 x FROM dbo.CCF_FORMULARIOS WHERE FR_CODIGO = @c')).recordset.length > 0;
+      if (await usado(codigo)) {
+        // Código sacado del nombre: se busca el siguiente libre (prueba_2, prueba_3…).
+        if (!explicito) {
+          for (let i = 2; i < 100 && await usado(codigo); i++) codigo = `${base.slice(0, 55)}_${i}`;
+        }
+        if (explicito || await usado(codigo)) {
+          await tx.rollback();
+          return res.status(409).json({ success: false, message: `Ya existe un formulario con el código "${base}"` });
+        }
       }
       const uid = usuarioIdDe(req);
       const uname = usuarioNombreDe(req);

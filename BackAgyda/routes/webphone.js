@@ -17,6 +17,9 @@ router.get('/pantalla-llamada', webphoneController.pantallaLlamada);
 router.post('/pantalla-llamada', webphoneController.pantallaLlamada);
 router.post('/pantalla-llamada/tipificar', webphoneController.guardarTipificacion);
 
+// Config del PBX de una vista 'PBX' para el softphone SIP (sip.js) — proxy con caché.
+router.get('/pbx/config', authenticateToken, webphoneController.getPbxConfig);
+
 // Vistas embebidas del Webphone (URLs configurables) — lectura para cualquier
 // usuario autenticado, administración solo AD/TI.
 router.get('/vistas', authenticateToken, webphoneVistasController.getVistas);
@@ -36,6 +39,7 @@ router.put('/vistas/asignaciones/:neusId', authenticateToken, verificarRol(['AD'
 // plano por API. Declarada antes de las rutas /credenciales/:neusId para que
 // Express no confunda "auto-login-url" con un :neusId.
 router.get('/credenciales/auto-login-url', authenticateToken, webphoneCredencialesController.getAutoLoginUrl);
+router.get('/credenciales/mi-sip', authenticateToken, webphoneCredencialesController.getMiCredencialSip);
 router.get('/credenciales', authenticateToken, verificarRol(['AD', 'TI']), webphoneCredencialesController.getCredenciales);
 router.put('/credenciales/:neusId/:vistaId', authenticateToken, verificarRol(['AD', 'TI']), webphoneCredencialesController.upsertCredencial);
 router.delete('/credenciales/:neusId/:vistaId', authenticateToken, verificarRol(['AD', 'TI']), webphoneCredencialesController.deleteCredencial);

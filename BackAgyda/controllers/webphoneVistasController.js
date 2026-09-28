@@ -31,7 +31,10 @@ async function ensureWebphoneVistasSchema(pool) {
   }
 }
 
-const PROVIDERS = ['Azul1', 'Vici', 'Integra'];
+// 'PBX' = softphone SIP propio (sip.js contra nuestro Asterisk): no se embebe
+// en iframe, WVIS_URL es la base de la API del PBX (de ahí sale la config WSS)
+// y las credenciales por agente son extensión + contraseña SIP.
+const PROVIDERS = ['Azul1', 'Vici', 'Integra', 'PBX'];
 
 const DEFAULTS = [
   { label: 'Azul 1',   url: 'https://azul1.ardabytec.vip/', vpn: false, provider: 'Azul1' },

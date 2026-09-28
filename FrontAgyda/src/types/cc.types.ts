@@ -115,6 +115,8 @@ export interface CCCampania {
   canalesCount: number
   skillsCount: number
   agentesCount: number
+  /** Grupos de Contact Center que tienen la campaña (ponen a sus supervisores). */
+  gruposCC?: string | null
   // Identificador público de la campaña para páginas externas (ej.
   // contacto.html de Totis) — GET /api/contact-center/publico/campanias/:slug/contacto.
   slug: string | null
@@ -205,6 +207,9 @@ export interface CCGrupo {
   agentesCount: number
   // El skill con menor CG_ID entre los activos de su campaña (el primero creado).
   esPrincipal: boolean
+  supervisoresCount?: number
+  /** Grupos de Contact Center que tienen el skill (ponen a sus agentes y supervisores). */
+  gruposCC?: string | null
 }
 
 // Un skill al que está asignado el agente actual, con el nombre de su

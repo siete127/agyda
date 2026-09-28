@@ -1334,6 +1334,417 @@ exports.getDashboardResumen = async (req, res) => {
   }
 };
 
+// ── Pre nómina ────────────────────────────────────────────────────────────────
+// Proyección de la siguiente quincena a partir de una quincena YA calculada
+// (por defecto la más reciente con cálculo): toma sus agentes y sus ventas
+// aprobadas por campaña, y les aplica la configuración ACTUAL (sueldo base o
+// sueldo individual manual, tarifas de comisión, ganancia neta y bonos de
+// ranking) con las mismas reglas que calcularNomina. Asume quincena completa
+// sin faltas — las faltas aún no ocurren, así que el costo proyectado es el
+// máximo. No escribe nada.
+//
+// Punto de equilibrio: cada venta deja ganancia_neta pero cuesta su comisión,
+// así que su aporte real es (ganancia_neta − comisión por venta). Lo que hay
+// que cubrir con esos aportes es el costo que no depende de cada venta
+// (sueldos + bonos de ranking): ventas necesarias = costo fijo ÷ aporte
+// promedio, ponderado con la mezcla de campañas de la quincena base.
+exports.getPreNomina = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    res.json({ success: true, data: await calcularPreNomina(pool, Number(req.query.basePeriodoId) || null) });
+  } catch (e) {
+    console.error('[nomina] getPreNomina error:', e.message);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+async function calcularPreNomina(pool, basePeriodoId) {
+    const prReq = pool.request();
+    if (basePeriodoId) prReq.input('id', sql.Int, basePeriodoId);
+    const pr = await prReq.query(`
+      SELECT TOP 1 ID as id,
+        CONVERT(VARCHAR(10), FECHA_INICIO, 23) as fechaInicio,
+        CONVERT(VARCHAR(10), FECHA_FIN, 23)    as fechaFin,
+        RTRIM(LTRIM(ESTADO)) as estado
+      FROM NOMINA_PERIODOS
+      WHERE FECHA_CALCULO IS NOT NULL ${basePeriodoId ? 'AND ID=@id' : ''}
+      ORDER BY FECHA_INICIO DESC
+    `);
+    const periodo = pr.recordset[0];
+    if (!periodo) return { periodo: null };
+
+    // Configuración actual
+    const cfgR = await pool.request().query('SELECT TOP 1 * FROM nomina_config_global ORDER BY id DESC');
+    const cfg = cfgR.recordset[0] ?? {};
+    const SUELDO_BASE   = Number(cfg.sueldo_base   ?? 6000);
+    const DIAS_QUINCENA = Number(cfg.dias_quincena ?? 15);
+
+    const campCfgR = await pool.request().query('SELECT * FROM nomina_campana_config WHERE activo=1 ORDER BY campana_id');
+    const campanas = campCfgR.recordset.map((c) => ({
+      campanaId:    Number(c.campana_id),
+      campana:      c.campana_nombre,
+      tipoTarifa:   c.tipo_tarifa,
+      tarifa:       Number(c.tarifa ?? 0),
+      gananciaNeta: Number(c.ganancia_neta ?? 0),
+    }));
+    const bonosCfgR = await pool.request().query('SELECT * FROM nomina_bonos_config WHERE activo=1 ORDER BY lugar, campana_id');
+    const bonosCfg = bonosCfgR.recordset;
+
+    const percR = await pool.request().query('SELECT NEUS_ID as neus_id, SUELDO_QUINCENAL as sq FROM NOMINA_PERCEPCIONES WHERE ACTIVO=1 AND ES_MANUAL=1');
+    const percMap = {};
+    for (const p of percR.recordset) percMap[p.neus_id] = Number(p.sq);
+
+    await ensureExcluidosTabla(pool);
+    const exclR = await pool.request().query('SELECT NEUS_ID as id FROM NOMINA_AGENTES_EXCLUIDOS');
+    const excluidos = new Set(exclR.recordset.map((r) => r.id));
+
+    // Quincena base: lo que se pagó y lo que se vendió
+    const detR = await pool.request()
+      .input('pid', sql.Int, periodo.id)
+      .query(`SELECT NEUS_ID as neusId, ISNULL(NOMBRE,'') as nombre, SUELDO_QUINCENAL as sueldo,
+                     MONTO_DESCUENTO as descuento, TOTAL_COMISIONES as comisiones,
+                     ISNULL(BONO_RANKING,0) as bono, TOTAL_A_PAGAR as totalAPagar,
+                     ISNULL(TOTAL_VENTAS,0) as ventas
+              FROM NOMINA_DETALLE WHERE PERIODO_ID=@pid`);
+    const comR = await pool.request()
+      .input('pid', sql.Int, periodo.id)
+      .query('SELECT NEUS_ID as neusId, CAMPANA_ID as campanaId, NUM_COMISIONES as num FROM NOMINA_COMISIONES WHERE PERIODO_ID=@pid AND CAMPANA_ID IS NOT NULL');
+    const ventasMap = {}; // neusId -> { campanaId: num }
+    for (const c of comR.recordset) {
+      if (!ventasMap[c.neusId]) ventasMap[c.neusId] = {};
+      ventasMap[c.neusId][c.campanaId] = (ventasMap[c.neusId][c.campanaId] || 0) + Number(c.num);
+    }
+
+    const pasado = {
+      nomina:     detR.recordset.reduce((s, d) => s + Number(d.totalAPagar), 0),
+      sueldos:    detR.recordset.reduce((s, d) => s + Number(d.sueldo), 0),
+      descuentos: detR.recordset.reduce((s, d) => s + Number(d.descuento), 0),
+      comisiones: detR.recordset.reduce((s, d) => s + Number(d.comisiones), 0),
+      bonos:      detR.recordset.reduce((s, d) => s + Number(d.bono), 0),
+      ventas:     detR.recordset.reduce((s, d) => s + Number(d.ventas), 0),
+      empleados:  detR.recordset.length,
+    };
+
+    const comisionPorVenta = (c, sueldo) => c.tipoTarifa === 'porcentaje' ? sueldo * (c.tarifa / 100) : c.tarifa;
+
+    // Proyección por agente con la config actual (sin faltas)
+    const agentes = detR.recordset.filter((d) => !excluidos.has(d.neusId)).map((d) => {
+      const sueldo = percMap[d.neusId] ?? SUELDO_BASE;
+      const vc = ventasMap[d.neusId] ?? {};
+      let ventas = 0, comisiones = 0, ganancia = 0, campPrincipalId = null, campPrincipalMax = 0;
+      for (const c of campanas) {
+        const num = vc[c.campanaId] ?? 0;
+        ventas     += num;
+        comisiones += num * comisionPorVenta(c, sueldo);
+        ganancia   += num * c.gananciaNeta;
+        if (num > campPrincipalMax) { campPrincipalMax = num; campPrincipalId = c.campanaId; }
+      }
+      return {
+        neusId: d.neusId, nombre: d.nombre, sueldo, ventas, comisiones, ganancia, campPrincipalId,
+        pagadoPasado: Number(d.totalAPagar), bono: 0, lugar: null,
+      };
+    });
+
+    // Ranking y bono con las mismas reglas de calcularNomina
+    const ranking = agentes.filter((a) => a.ventas > 0).sort((a, b) => b.ventas - a.ventas);
+    ranking.forEach((a, i) => {
+      a.lugar = i + 1;
+      const b = bonosCfg.find((x) => x.lugar === a.lugar && x.campana_id === a.campPrincipalId)
+        ?? bonosCfg.find((x) => x.lugar === a.lugar && x.campana_id === null);
+      a.bono = b ? Number(b.monto) : 0;
+    });
+
+    const numAgentes     = agentes.length;
+    const sueldoPromedio = numAgentes > 0 ? agentes.reduce((s, a) => s + a.sueldo, 0) / numAgentes : SUELDO_BASE;
+
+    // Mezcla de campañas de la quincena base (solo agentes proyectados)
+    const ventasCamp = {};
+    for (const a of agentes) {
+      const vc = ventasMap[a.neusId] ?? {};
+      for (const c of campanas) ventasCamp[c.campanaId] = (ventasCamp[c.campanaId] ?? 0) + (vc[c.campanaId] ?? 0);
+    }
+    const ventasTotales = Object.values(ventasCamp).reduce((s, n) => s + n, 0);
+    const porCampana = campanas.map((c) => {
+      const ventas   = ventasCamp[c.campanaId] ?? 0;
+      const comision = comisionPorVenta(c, sueldoPromedio);
+      return {
+        ...c,
+        ventas,
+        mezcla: ventasTotales > 0 ? ventas / ventasTotales : (campanas.length ? 1 / campanas.length : 0),
+        comisionPorVenta: comision,
+        aportePorVenta:   c.gananciaNeta - comision,
+      };
+    });
+    const aportePromedio   = porCampana.reduce((s, c) => s + c.mezcla * c.aportePorVenta, 0);
+    const gananciaPromedio = porCampana.reduce((s, c) => s + c.mezcla * c.gananciaNeta, 0);
+    const comisionPromedio = porCampana.reduce((s, c) => s + c.mezcla * c.comisionPorVenta, 0);
+
+    const proyectado = {
+      sueldos:    agentes.reduce((s, a) => s + a.sueldo, 0),
+      comisiones: agentes.reduce((s, a) => s + a.comisiones, 0),
+      bonos:      agentes.reduce((s, a) => s + a.bono, 0),
+      ganancia:   agentes.reduce((s, a) => s + a.ganancia, 0),
+      ventas:     ventasTotales,
+      empleados:  numAgentes,
+    };
+    proyectado.nomina    = proyectado.sueldos + proyectado.comisiones + proyectado.bonos;
+    proyectado.resultado = proyectado.ganancia - proyectado.nomina;
+
+    const costoFijo = proyectado.sueldos + proyectado.bonos;
+    const ventasNecesarias = aportePromedio > 0 ? Math.ceil(costoFijo / aportePromedio) : null;
+
+    // Campaña con más ventas en la quincena base: se usa para las metas de un
+    // agente que no vendió (una meta por asesor necesita campaña para medir avance).
+    const campMayorMezcla = [...porCampana].sort((a, b) => b.ventas - a.ventas)[0]?.campanaId ?? null;
+
+    return {
+      periodo,
+      config: { sueldoBase: SUELDO_BASE, diasQuincena: DIAS_QUINCENA },
+      pasado,
+      proyectado,
+      equilibrio: {
+        costoFijo,
+        aportePromedio,
+        gananciaPromedio,
+        comisionPromedio,
+        ventasNecesarias,
+        ventasNecesariasPorAgente: ventasNecesarias !== null && numAgentes > 0 ? Math.ceil(ventasNecesarias / numAgentes) : null,
+      },
+      campanas: porCampana.map((c) => ({
+        ...c,
+        ventasNecesarias:      ventasNecesarias !== null ? Math.ceil(ventasNecesarias * c.mezcla) : null,
+        ventasSoloEstaCampana: c.aportePorVenta > 0 ? Math.ceil(costoFijo / c.aportePorVenta) : null,
+      })),
+      agentes: agentes
+        .map((a) => ({
+          neusId: a.neusId, nombre: a.nombre, sueldo: a.sueldo, ventas: a.ventas,
+          comisiones: a.comisiones, bono: a.bono, lugar: a.lugar,
+          total: a.sueldo + a.comisiones + a.bono, ganancia: a.ganancia, pagadoPasado: a.pagadoPasado,
+          campanaId: a.campPrincipalId ?? campMayorMezcla,
+          // Ventas mínimas para que su propio aporte cubra su sueldo (mezcla de campañas de la quincena base)
+          ventasMinimas: aportePromedio > 0 ? Math.ceil(a.sueldo / aportePromedio) : null,
+        }))
+        .sort((x, y) => (x.lugar ?? 999) - (y.lugar ?? 999) || x.nombre.localeCompare(y.nombre)),
+    };
+}
+
+// ── Pre nómina → Metas ────────────────────────────────────────────────────────
+// Convierte las ventas necesarias de la pre nómina en metas DIARIAS de Ventas
+// (VENTAS_METAS, las mismas que se capturan en Metas) para la siguiente
+// quincena, repartidas entre sus días hábiles (lunes a sábado, igual que el
+// cálculo de faltas). También revisa si las metas que ya existen en ese rango
+// alcanzan para cubrir la nómina.
+//
+// Las campañas de nomina_campana_config usan el mismo id que Ventas.campaignId
+// (calcularNomina ya los cruza así), por eso la meta de campaña se guarda con
+// ese id. Los asesores de una meta son Users.idUser de la BD de Ventas: se
+// ligan a los agentes de la intranet por nombre, igual que en Metas.
+
+// Estatus de venta que Nómina paga (mismos que calcularNomina / getVentasEmpleado).
+// Solo 'Aprobada' y 'Formalizado' existen en la lista configurable de Metas;
+// los demás son variantes en inglés/Banamex que esa lista no ofrece.
+const ESTATUS_NOMINA_COMPARABLES = ['Aprobada', 'Formalizado'];
+
+function diasHabilesEntre(inicio, fin) {
+  const dias = [];
+  const d = new Date(inicio + 'T12:00:00');
+  const end = new Date(fin + 'T12:00:00');
+  for (let guard = 0; d <= end && guard < 62; guard++) {
+    if (d.getDay() !== 0) dias.push(d.toISOString().slice(0, 10));
+    d.setDate(d.getDate() + 1);
+  }
+  return dias;
+}
+
+function sumarDias(fecha, n) {
+  const d = new Date(fecha + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const esFecha = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+
+// GET /nomina/pre-nomina/metas?basePeriodoId=&inicio=&fin=
+exports.getPreNominaMetas = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const pre = await calcularPreNomina(pool, Number(req.query.basePeriodoId) || null);
+    if (!pre.periodo) return res.json({ success: true, data: null });
+
+    // Quincena objetivo: la elegida, o el periodo que sigue a la base, o (si
+    // aún no se crea) la misma sugerencia que "Nueva quincena": fin + 1 a +14.
+    let inicio = esFecha(req.query.inicio) ? req.query.inicio : null;
+    let fin    = esFecha(req.query.fin) ? req.query.fin : null;
+    if (!inicio || !fin) {
+      const sig = await pool.request()
+        .input('ff', sql.NVarChar, pre.periodo.fechaFin)
+        .query(`SELECT TOP 1 CONVERT(VARCHAR(10), FECHA_INICIO, 23) as fi, CONVERT(VARCHAR(10), FECHA_FIN, 23) as ff
+                FROM NOMINA_PERIODOS WHERE FECHA_INICIO > @ff ORDER BY FECHA_INICIO`);
+      inicio = sig.recordset[0]?.fi ?? sumarDias(pre.periodo.fechaFin, 1);
+      fin    = sig.recordset[0]?.ff ?? sumarDias(inicio, 14);
+    }
+    if (fin < inicio) return res.status(400).json({ success: false, message: 'La fecha final es anterior a la inicial' });
+    const dias = diasHabilesEntre(inicio, fin);
+    const numDias = dias.length;
+
+    // Metas diarias ya capturadas en el rango
+    const metasR = await pool.request()
+      .input('inicio', sql.NVarChar, inicio).input('fin', sql.NVarChar, fin)
+      .query(`SELECT VM_ALCANCE as alcance, VM_ASESOR_ID as asesorId, VM_CAMPANA_ID as campanaId,
+                     SUM(ISNULL(VM_META_UNIDADES,0)) as total, COUNT(*) as dias
+              FROM VENTAS_METAS
+              WHERE VM_TIPO = 'diaria' AND VM_PERIODO BETWEEN @inicio AND @fin
+              GROUP BY VM_ALCANCE, VM_ASESOR_ID, VM_CAMPANA_ID`);
+    const existCampana = {}; const existAsesor = {};
+    for (const m of metasR.recordset) {
+      if (m.alcance === 'campana') existCampana[m.campanaId] = (existCampana[m.campanaId] ?? 0) + Number(m.total);
+      else existAsesor[m.asesorId] = (existAsesor[m.asesorId] ?? 0) + Number(m.total);
+    }
+    const sumaMetasCampana = Object.values(existCampana).reduce((s, n) => s + n, 0);
+    const sumaMetasAsesor  = Object.values(existAsesor).reduce((s, n) => s + n, 0);
+
+    // Asesores del sistema de Ventas, ligados por nombre a los agentes de la pre nómina
+    let asesoresVentas = [];
+    let errorVentas = null;
+    try {
+      const vPool = await getVentasPool();
+      asesoresVentas = (await vPool.request().query(`SELECT idUser as id, nombreAgente as nombre FROM Users WHERE role='agente' AND Activo=1`)).recordset;
+    } catch (e) {
+      errorVentas = e.message;
+    }
+    const normName = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const mismo = (a, b) => {
+      if (a === b) return true;
+      if (a.length >= 8 && b.startsWith(a)) return true;
+      if (b.length >= 8 && a.startsWith(b)) return true;
+      const len = Math.min(a.length, b.length, 20);
+      return len >= 20 && a.slice(0, len) === b.slice(0, len);
+    };
+    const asesoresNorm = asesoresVentas.map((u) => ({ ...u, norm: normName(u.nombre) }));
+
+    // Definición de "venta contada" de Metas vs la de Nómina
+    const persR = await pool.request().query('SELECT TOP 1 CONFIG_DATA FROM dbo.INTRANET_PERSONALIZACION ORDER BY ID DESC')
+      .catch(() => ({ recordset: [] }));
+    const stored = persR.recordset.length ? JSON.parse(persR.recordset[0].CONFIG_DATA) : null;
+    const estatusMetas = require('./personalizacionController').getEstatusContados(stored, 'metas');
+    const mismosEstatus = estatusMetas.length === ESTATUS_NOMINA_COMPARABLES.length
+      && ESTATUS_NOMINA_COMPARABLES.every((e) => estatusMetas.includes(e));
+
+    const necesarias = pre.equilibrio.ventasNecesarias;
+    const sumaCubre = sumaMetasCampana > 0 ? sumaMetasCampana : sumaMetasAsesor;
+
+    res.json({
+      success: true,
+      data: {
+        base: pre.periodo,
+        quincena: { inicio, fin, diasHabiles: numDias },
+        ventasNecesarias: necesarias,
+        cobertura: {
+          sumaMetasCampana,
+          sumaMetasAsesor,
+          // Se compara contra las metas de campaña (la meta del equipo); si no hay, contra la suma de las individuales
+          comparadaCon: sumaMetasCampana > 0 ? 'campana' : sumaMetasAsesor > 0 ? 'asesor' : null,
+          faltan: necesarias !== null ? Math.max(0, necesarias - sumaCubre) : null,
+          cubre: necesarias !== null && sumaCubre >= necesarias,
+        },
+        estatus: { nomina: ESTATUS_NOMINA_COMPARABLES, metas: estatusMetas, iguales: mismosEstatus },
+        errorVentas,
+        propuesta: {
+          campanas: pre.campanas
+            .filter((c) => (c.ventasNecesarias ?? 0) > 0)
+            .map((c) => ({
+              campanaId: c.campanaId, campana: c.campana, ventasNecesarias: c.ventasNecesarias,
+              metaDiaria: numDias > 0 ? Math.ceil(c.ventasNecesarias / numDias) : 0,
+              metaActual: existCampana[c.campanaId] ?? 0,
+            })),
+          asesores: pre.agentes.map((a) => {
+            const norm = normName(a.nombre);
+            const asesor = asesoresNorm.find((u) => mismo(u.norm, norm)) ?? null;
+            const campana = pre.campanas.find((c) => c.campanaId === a.campanaId);
+            return {
+              neusId: a.neusId, nombre: a.nombre,
+              asesorId: asesor?.id ?? null,
+              campanaId: a.campanaId, campana: campana?.campana ?? null,
+              ventasBase: a.ventas, ventasMinimas: a.ventasMinimas,
+              metaDiaria: numDias > 0 && a.ventasMinimas ? Math.ceil(a.ventasMinimas / numDias) : 0,
+              metaActual: asesor ? (existAsesor[asesor.id] ?? 0) : 0,
+            };
+          }),
+        },
+      },
+    });
+  } catch (e) {
+    console.error('[nomina] getPreNominaMetas error:', e.message);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /nomina/pre-nomina/metas
+// body: { inicio, fin, campanas: [{ campanaId, metaDiaria }], asesores: [{ asesorId, campanaId, metaDiaria }] }
+// Crea (o actualiza, mismo MERGE que Metas) una meta diaria por cada día hábil del rango.
+exports.crearMetasDesdePreNomina = async (req, res) => {
+  try {
+    const { inicio, fin } = req.body || {};
+    if (!esFecha(inicio) || !esFecha(fin) || fin < inicio) {
+      return res.status(400).json({ success: false, message: 'Rango de fechas inválido' });
+    }
+    const dias = diasHabilesEntre(inicio, fin);
+    if (dias.length === 0 || dias.length > 31) {
+      return res.status(400).json({ success: false, message: 'El rango debe tener entre 1 y 31 días hábiles' });
+    }
+    const entero = (n) => Math.max(0, Math.floor(Number(n) || 0));
+    const campanas = (Array.isArray(req.body.campanas) ? req.body.campanas : [])
+      .map((c) => ({ campanaId: Number(c.campanaId), meta: entero(c.metaDiaria) }))
+      .filter((c) => c.campanaId && c.meta > 0);
+    const asesores = (Array.isArray(req.body.asesores) ? req.body.asesores : [])
+      .map((a) => ({ asesorId: Number(a.asesorId), campanaId: Number(a.campanaId) || null, meta: entero(a.metaDiaria) }))
+      .filter((a) => a.asesorId && a.meta > 0);
+    if (!campanas.length && !asesores.length) {
+      return res.status(400).json({ success: false, message: 'No hay metas mayores a 0 para crear' });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const filas = [
+      ...campanas.map((c) => ({ asesorId: 0, campanaId: c.campanaId, alcance: 'campana', meta: c.meta })),
+      ...asesores.map((a) => ({ asesorId: a.asesorId, campanaId: a.campanaId, alcance: 'asesor', meta: a.meta })),
+    ];
+    let guardadas = 0;
+    for (const f of filas) {
+      for (const dia of dias) {
+        await pool.request()
+          .input('asesorId', sql.Int, f.asesorId)
+          .input('periodo', sql.NVarChar, dia)
+          .input('campanaId', sql.Int, f.campanaId)
+          .input('alcance', sql.NVarChar, f.alcance)
+          .input('metaUnidades', sql.Int, f.meta)
+          .query(`
+            MERGE VENTAS_METAS AS t
+            USING (SELECT @asesorId AS a, @periodo AS p, @campanaId AS c) AS s
+              ON t.VM_ASESOR_ID = s.a AND t.VM_PERIODO = s.p AND (t.VM_CAMPANA_ID = s.c OR (t.VM_CAMPANA_ID IS NULL AND s.c IS NULL))
+            WHEN MATCHED THEN UPDATE SET VM_META_UNIDADES = @metaUnidades, VM_TIPO = 'diaria', VM_ALCANCE = @alcance
+            WHEN NOT MATCHED THEN INSERT (VM_ASESOR_ID, VM_PERIODO, VM_CAMPANA_ID, VM_TIPO, VM_ALCANCE, VM_META_MONTO, VM_META_UNIDADES)
+              VALUES (@asesorId, @periodo, @campanaId, 'diaria', @alcance, 0, @metaUnidades);
+          `);
+        guardadas++;
+      }
+    }
+
+    await logAudit(pool, {
+      userId:    req.user?.id || null,
+      userName:  req.user?.nombre || null,
+      modulo:    'nomina',
+      accion:    'crear-metas-pre-nomina',
+      entidadId: null,
+      detalle:   { inicio, fin, diasHabiles: dias.length, campanas: campanas.length, asesores: asesores.length, metasGuardadas: guardadas },
+      ip:        req.ip,
+    });
+    res.json({ success: true, data: { guardadas, diasHabiles: dias.length, campanas: campanas.length, asesores: asesores.length } });
+  } catch (e) {
+    console.error('[nomina] crearMetasDesdePreNomina error:', e.message);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // ── Ventas individuales de un empleado en un periodo ─────────────────────────
 exports.getVentasEmpleado = async (req, res) => {
   try {

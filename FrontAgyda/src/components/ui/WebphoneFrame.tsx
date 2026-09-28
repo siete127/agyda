@@ -19,6 +19,8 @@ interface VistaWebphone {
   label: string
   url: string
   requiereVpn: boolean
+  // 'PBX' = softphone SIP propio: no hay iframe, WebphonePage pinta SoftphonePanel.
+  esPbx: boolean
 }
 
 function parseVista(r: Record<string, unknown>): VistaWebphone {
@@ -27,6 +29,7 @@ function parseVista(r: Record<string, unknown>): VistaWebphone {
     label: String(r['label'] ?? ''),
     url: String(r['url'] ?? ''),
     requiereVpn: Boolean(r['requiereVpn']),
+    esPbx: r['provider'] === 'PBX',
   }
 }
 
@@ -277,9 +280,12 @@ export function WebphoneFrame() {
     staleTime: 30_000,
   })
 
-  const vista = vistaAsignadaId != null
+  const vistaElegida = vistaAsignadaId != null
     ? (vistas.find((v) => v.id === vistaAsignadaId) ?? vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null)
     : (vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null)
+  // Una vista PBX no usa iframe (el softphone vive en services/softphone.service):
+  // aquí se trata como "sin vista" para no montar iframe, timeout ni flotante.
+  const vista = vistaElegida?.esPbx ? null : vistaElegida
 
   const iframeSrc = vista?.url || ''
 
@@ -292,7 +298,7 @@ export function WebphoneFrame() {
   }, [vistas, vistaId, setVistaId, vistaAsignadaId])
 
   useEffect(() => {
-    if (!vista) return
+    if (!vista) { setLoading(false); setLoadError(false); return }
     setLoading(true)
     setLoadError(false)
     if (timeoutRef.current) clearTimeout(timeoutRef.current)

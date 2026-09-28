@@ -50,6 +50,12 @@ router.put('/percepciones/:empleadoId', requireActionAccess('nomina', 'editar-pe
 // Dashboard
 router.get('/dashboard/resumen', requireActionAccess('nomina', 'ver'), c.getDashboardResumen);
 
+// Pre nómina: proyección de la siguiente quincena con la config actual (solo lectura)
+router.get('/pre-nomina', requireActionAccess('nomina', 'ver'), c.getPreNomina);
+// Pre nómina → Metas: revisar si las metas de la próxima quincena alcanzan y crearlas desde la pre nómina
+router.get('/pre-nomina/metas', requireActionAccess('nomina', 'ver'), c.getPreNominaMetas);
+router.post('/pre-nomina/metas', requireActionAccess('nomina', 'ver'), requireActionAccess('ventas-area', 'gestionar-metas'), c.crearMetasDesdePreNomina);
+
 // Lista negra de agentes — excluidos de todo cálculo futuro hasta que se quiten
 router.get('/agentes-excluidos',              requireActionAccess('nomina', 'ver'), c.getAgentesExcluidos);
 router.post('/agentes-excluidos',             requireActionAccess('nomina', 'calcular-periodo'), c.addAgenteExcluido);

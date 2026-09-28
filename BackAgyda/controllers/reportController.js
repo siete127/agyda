@@ -321,6 +321,7 @@ exports.getResumenGeneral = async (req, res) => {
     }
 
     const { from, to, rol } = req.query;
+    const usuarioId = Number(req.query.usuarioId) || null;
     const extractDate = (s) => {
       if (!s) return null;
       const match = String(s).match(/^(\d{4}-\d{2}-\d{2})/);
@@ -331,20 +332,15 @@ exports.getResumenGeneral = async (req, res) => {
 
     const pool = await databaseService.getPool(req.user?.empresa);
 
-    const rolFilter = rol ? `AND nu.NEUS_TIPOUSUARIO = @rol` : '';
-    const reqBase = pool.request()
-      .input('fromDate', sql.NVarChar, fromDate)
-      .input('toDate', sql.NVarChar, toDate);
-    if (rol) reqBase.input('rol', sql.NVarChar, rol.toUpperCase());
-
-    // 1. Usuarios AD/TI/CC activos
+    // 1. Usuarios AD/TI/CC activos (o solo el colaborador pedido, aunque ya esté inactivo)
     const usuariosResult = await pool.request()
       .input('rolFilter', sql.NVarChar, rol || '')
+      .input('usuarioId', sql.Int, usuarioId)
       .query(`
         SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_TIPOUSUARIO as rol
         FROM NEUS_USUARIOS
-        WHERE NEUS_ACTIVO = 1
-          AND NEUS_TIPOUSUARIO IN ('AD','TI','CC')
+        WHERE NEUS_TIPOUSUARIO IN ('AD','TI','CC')
+          ${usuarioId ? 'AND NEUS_ID = @usuarioId' : 'AND NEUS_ACTIVO = 1'}
           ${rol ? `AND NEUS_TIPOUSUARIO = @rolFilter` : ''}
         ORDER BY NEUS_NOMBRES
       `);
@@ -388,15 +384,16 @@ exports.getResumenGeneral = async (req, res) => {
       pausasMap[p.usuarioId][p.statusId] = p.totalMinutos;
     }
 
-    // 4. Checklist completados
+    // 4. Checklist completados — la tabla es TI_CHECKLIST_ITEMS (antes apuntaba a
+    //    CHECKLIST_ITEMS, que no existe, y el .catch dejaba la columna siempre en 0).
     const checklistResult = await pool.request()
       .input('fromDate', sql.NVarChar, fromDate)
       .input('toDate', sql.NVarChar, toDate)
       .query(`
         SELECT ci.COMPLETADO_POR as usuarioId, COUNT(*) as total
-        FROM CHECKLIST_ITEMS ci
+        FROM TI_CHECKLIST_ITEMS ci
         WHERE ci.COMPLETADO = 1
-          AND CAST(ci.UPDATED_AT AS date) >= @fromDate AND CAST(ci.UPDATED_AT AS date) <= @toDate
+          AND CAST(ci.COMPLETADO_AT AS date) >= @fromDate AND CAST(ci.COMPLETADO_AT AS date) <= @toDate
           AND ci.COMPLETADO_POR IN (${ids})
         GROUP BY ci.COMPLETADO_POR
       `).catch(() => ({ recordset: [] }));
@@ -517,5 +514,166 @@ exports.getBanioReport = async (req, res) => {
   } catch (e) {
     console.error('Error getBanioReport:', e && e.message);
     return res.status(500).json({ success: false, message: 'Error generando reporte de pausas' });
+  }
+};
+
+// ── Reporte detallado ─────────────────────────────────────────────────────────
+// Catálogo en services/reportesDetalleService.js. Filtros: tipo de reporte,
+// colaborador, rol y rango de fechas. tipo='todos' corre todos los reportes
+// para un colaborador (su "expediente" del periodo).
+
+const { getEmpresaModulosBloqueados, getUserAllowedActions, esSuperAdminFijo } = require('../middleware/moduleAccess');
+const reportesDetalle = require('../services/reportesDetalleService');
+const dbVentas = require('../config/database_ventas');
+
+const ROLES_LABEL = { AD: 'Administración', TI: 'Tecnología', CC: 'Call Center' };
+
+// Mismo criterio que requireActionAccess, para reportes que muestran datos de
+// otro módulo sensible (nómina, auditoría).
+async function puedeVerReporte(req, reporte) {
+  if (!reporte.permiso) return true;
+  const [modulo, accion] = reporte.permiso;
+  if (esSuperAdminFijo(req)) return true;
+  const bloqueados = await getEmpresaModulosBloqueados(req.user?.empresa);
+  if (bloqueados.has(modulo)) return false;
+  const uid = req.user && (req.user.id || req.user.sub || req.user.userId);
+  const permitidas = await getUserAllowedActions(uid, modulo, req.user?.empresa);
+  return permitidas.has('*') || permitidas.has(accion);
+}
+
+async function reportesPermitidos(req) {
+  const lista = [];
+  for (const r of reportesDetalle.REPORTES) if (await puedeVerReporte(req, r)) lista.push(r);
+  return lista;
+}
+
+let _ventasPool = null;
+async function getVentasPool() {
+  if (_ventasPool && _ventasPool.connected) return _ventasPool;
+  _ventasPool = await new sql.ConnectionPool(dbVentas).connect();
+  return _ventasPool;
+}
+
+// Las ventas viven en otra BD y solo traen el nombre del agente: se ligan al
+// colaborador con la misma heurística de nombre que usa Nómina (exacto,
+// prefijo en cualquier dirección, o 20 caracteres iguales al inicio).
+function normNombre(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+function mismoAgente(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 8 && b.startsWith(a)) return true;
+  if (b.length >= 8 && a.startsWith(b)) return true;
+  const len = Math.min(a.length, b.length, 20);
+  return len >= 20 && a.slice(0, len) === b.slice(0, len);
+}
+
+async function reporteVentas(pool, f) {
+  const usuarios = (await pool.request()
+    .input('usuarioId', sql.Int, f.usuarioId).input('rol', sql.NVarChar, f.rol)
+    .query(`SELECT NEUS_ID id, NEUS_NOMBRES nombre, NEUS_TIPOUSUARIO rol FROM NEUS_USUARIOS u
+            WHERE 1=1 AND (@usuarioId IS NULL OR u.NEUS_ID = @usuarioId) AND (@rol IS NULL OR u.NEUS_TIPOUSUARIO = @rol)`))
+    .recordset.map((u) => ({ ...u, norm: normNombre(u.nombre) }));
+  const filtrado = f.usuarioId !== null || f.rol !== null;
+
+  const campR = await pool.request().query('SELECT campana_id, campana_nombre FROM nomina_campana_config')
+    .catch(() => ({ recordset: [] }));
+  const campanas = Object.fromEntries(campR.recordset.map((c) => [Number(c.campana_id), c.campana_nombre]));
+
+  const vPool = await getVentasPool();
+  const vR = await vPool.request()
+    .input('desde', sql.NVarChar, f.desde).input('hasta', sql.NVarChar, f.hasta)
+    .query(`SELECT idVenta, nombreAgente, campaignId, nombreCliente, telefonoCliente, estatus, fecha
+            FROM Ventas WHERE CAST(fecha AS date) BETWEEN @desde AND @hasta ORDER BY fecha DESC`);
+
+  const cache = new Map();
+  const filas = [];
+  for (const v of vR.recordset) {
+    const norm = normNombre(v.nombreAgente);
+    if (!cache.has(norm)) cache.set(norm, usuarios.find((u) => mismoAgente(u.norm, norm)) ?? null);
+    const u = cache.get(norm);
+    if (filtrado && !u) continue;
+    filas.push({
+      Agente: u ? u.nombre : v.nombreAgente,
+      Rol: u ? (ROLES_LABEL[u.rol] ?? u.rol) : null,
+      Venta: v.idVenta,
+      'Campaña': campanas[Number(v.campaignId)] ?? v.campaignId,
+      Cliente: v.nombreCliente,
+      'Teléfono': v.telefonoCliente,
+      Estatus: v.estatus,
+      Fecha: v.fecha ? new Date(v.fecha).toISOString().slice(0, 16).replace('T', ' ') : null,
+    });
+    if (filas.length >= f.limite) break;
+  }
+  return filas;
+}
+
+async function correrReporte(pool, reporte, f) {
+  const filas = reporte.externo === 'ventas'
+    ? await reporteVentas(pool, f)
+    : (await pool.request()
+        .input('desde', sql.NVarChar, f.desde).input('hasta', sql.NVarChar, f.hasta)
+        .input('usuarioId', sql.Int, f.usuarioId).input('rol', sql.NVarChar, f.rol)
+        .input('limite', sql.Int, f.limite)
+        .query(reporte.sql)).recordset;
+  return { key: reporte.key, grupo: reporte.grupo, label: reporte.label, filas, truncado: filas.length >= f.limite };
+}
+
+// GET /api/reports/detalle/catalogo — tipos de reporte que el usuario puede ver + colaboradores para el filtro
+exports.getCatalogoReportes = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const reportes = (await reportesPermitidos(req))
+      .map(({ key, grupo, label, descripcion }) => ({ key, grupo, label, descripcion }));
+    const usuarios = await pool.request().query(`
+      SELECT NEUS_ID as id, NEUS_NOMBRES as nombre, NEUS_TIPOUSUARIO as rol, CAST(NEUS_ACTIVO AS bit) as activo
+      FROM NEUS_USUARIOS
+      WHERE NEUS_TIPOUSUARIO IN ('AD','TI','CC')
+      ORDER BY NEUS_ACTIVO DESC, NEUS_NOMBRES
+    `);
+    return res.json({ success: true, data: { reportes, usuarios: usuarios.recordset } });
+  } catch (e) {
+    console.error('Error getCatalogoReportes:', e?.message);
+    return res.status(500).json({ success: false, message: 'Error cargando el catálogo de reportes' });
+  }
+};
+
+// GET /api/reports/detalle?tipo=&usuarioId=&rol=&from=&to=
+exports.getReporteDetalle = async (req, res) => {
+  try {
+    const tipo = String(req.query.tipo || '');
+    const fechaOk = (s) => (String(s || '').match(/^(\d{4}-\d{2}-\d{2})/) || [])[1] || null;
+    const desde = fechaOk(req.query.from);
+    const hasta = fechaOk(req.query.to) || desde;
+    if (!desde) return res.status(400).json({ success: false, message: 'El rango de fechas es obligatorio' });
+    const rol = req.query.rol ? String(req.query.rol).toUpperCase() : null;
+    const f = { desde, hasta, usuarioId: Number(req.query.usuarioId) || null, rol, limite: reportesDetalle.LIMITE_FILAS };
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (tipo === 'todos') {
+      if (!f.usuarioId) return res.status(400).json({ success: false, message: 'Para ver todos los reportes elige un colaborador' });
+      const secciones = [];
+      for (const r of await reportesPermitidos(req)) {
+        try {
+          secciones.push(await correrReporte(pool, r, f));
+        } catch (e) {
+          // Un reporte que falla (p. ej. la BD de Ventas no responde) no tumba los demás
+          secciones.push({ key: r.key, grupo: r.grupo, label: r.label, filas: [], truncado: false, error: e.message });
+        }
+      }
+      return res.json({ success: true, data: { secciones } });
+    }
+
+    const reporte = reportesDetalle.porKey[tipo];
+    if (!reporte) return res.status(400).json({ success: false, message: 'Tipo de reporte no válido' });
+    if (!(await puedeVerReporte(req, reporte))) {
+      return res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte' });
+    }
+    return res.json({ success: true, data: await correrReporte(pool, reporte, f) });
+  } catch (e) {
+    console.error('Error getReporteDetalle:', e?.message);
+    return res.status(500).json({ success: false, message: `Error generando el reporte: ${e.message}` });
   }
 };

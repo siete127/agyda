@@ -179,8 +179,7 @@ exports.getById = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const rol = (req.user?.tipoUsuario || '').toUpperCase();
-    console.log('[update] rol:', rol, 'params:', req.params, 'detalle.length:', req.body?.detalle?.length);
-    if (rol !== 'AD') return res.status(403).json({ success: false, message: 'No autorizado' });
+    if (rol !== 'AD') return res.status(403).json({ success: false, message: 'Solo supervisores AD pueden guardar evaluaciones' });
 
     const evalId = Number(req.params.id);
     const { detalle, fortalezas, areasOportunidad, planAccion } = req.body;
@@ -194,39 +193,60 @@ exports.update = async (req, res) => {
     if (!evalR.recordset[0]) return res.status(404).json({ success: false, message: 'Evaluación no encontrada' });
     if (evalR.recordset[0].ESTADO === 'finalizado') return res.status(400).json({ success: false, message: 'La evaluación ya está finalizada' });
 
-    // Bulk replace: delete all for this eval then insert all at once
-    if (Array.isArray(detalle) && detalle.length > 0) {
-      await pool.request()
-        .input('eid', sql.Int, evalId)
-        .query('DELETE FROM EVAL_CAPACITACION_DETALLE WHERE EVAL_ID=@eid');
-
-      // Build a single INSERT with multiple VALUES rows
-      const rows = detalle
-        .filter(d => d.valor !== null && d.valor !== undefined)
-        .map(d => `(${evalId}, N'${String(d.criterioKey ?? d.key).replace(/'/g, "''")}', ${Number(d.subitem)}, ${Number(d.dia)}, ${Number(d.valor)})`)
-        .join(',\n');
-
-      if (rows) {
-        await pool.request().query(
-          `INSERT INTO EVAL_CAPACITACION_DETALLE (EVAL_ID, CRITERIO_KEY, SUBITEM, DIA, VALOR) VALUES ${rows}`
-        );
+    // Validar cada marca antes de tocar nada: criterio conocido, día 1-6,
+    // subitem dentro del criterio y valor 0/1/2 (null = sin marcar, se omite).
+    const criterioPorKey = Object.fromEntries(CRITERIOS.map((c) => [c.key, c]));
+    const filas = [];
+    for (const d of Array.isArray(detalle) ? detalle : []) {
+      if (d.valor === null || d.valor === undefined) continue;
+      const key = String(d.criterioKey ?? d.key ?? '');
+      const crit = criterioPorKey[key];
+      const subitem = Number(d.subitem), dia = Number(d.dia), valor = Number(d.valor);
+      if (!crit || !Number.isInteger(subitem) || subitem < 1 || subitem > crit.subitems
+          || !Number.isInteger(dia) || dia < 1 || dia > 6 || ![0, 1, 2].includes(valor)) {
+        return res.status(400).json({ success: false, message: `Marca inválida en "${crit?.label ?? key}" (día ${d.dia}). Recarga la evaluación e intenta de nuevo.` });
       }
+      filas.push({ key, subitem, dia, valor });
     }
 
-    await pool.request()
-      .input('id', sql.Int,      evalId)
-      .input('f',  sql.NVarChar, fortalezas ?? '')
-      .input('ao', sql.NVarChar, areasOportunidad ?? '')
-      .input('pa', sql.NVarChar, planAccion ?? '')
-      .query(`
-        UPDATE EVAL_CAPACITACION SET FORTALEZAS=@f, AREAS_OPORTUNIDAD=@ao, PLAN_ACCION=@pa, FECHA_ACTUALIZACION=GETDATE()
-        WHERE ID=@id
-      `);
+    // Reemplazo completo en una transacción: si algo falla no se pierden las
+    // marcas que ya estaban guardadas (antes se borraban aunque el INSERT fallara).
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+      if (Array.isArray(detalle)) {
+        await new sql.Request(tx)
+          .input('eid', sql.Int, evalId)
+          .query('DELETE FROM EVAL_CAPACITACION_DETALLE WHERE EVAL_ID=@eid');
 
-    return res.json({ success: true });
+        // Todo ya validado arriba (criterio de la lista fija, enteros en rango)
+        if (filas.length) {
+          const values = filas.map((f) => `(${evalId}, N'${f.key}', ${f.subitem}, ${f.dia}, ${f.valor})`).join(',\n');
+          await new sql.Request(tx).query(
+            `INSERT INTO EVAL_CAPACITACION_DETALLE (EVAL_ID, CRITERIO_KEY, SUBITEM, DIA, VALOR) VALUES ${values}`
+          );
+        }
+      }
+
+      await new sql.Request(tx)
+        .input('id', sql.Int,      evalId)
+        .input('f',  sql.NVarChar, fortalezas ?? '')
+        .input('ao', sql.NVarChar, areasOportunidad ?? '')
+        .input('pa', sql.NVarChar, planAccion ?? '')
+        .query(`
+          UPDATE EVAL_CAPACITACION SET FORTALEZAS=@f, AREAS_OPORTUNIDAD=@ao, PLAN_ACCION=@pa, FECHA_ACTUALIZACION=GETDATE()
+          WHERE ID=@id
+        `);
+      await tx.commit();
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      throw err;
+    }
+
+    return res.json({ success: true, guardadas: filas.length });
   } catch (e) {
     console.error('[eval-cap] update error:', e.message);
-    return res.status(500).json({ success: false, message: e.message });
+    return res.status(500).json({ success: false, message: `No se pudo guardar la evaluación: ${e.message}` });
   }
 };
 

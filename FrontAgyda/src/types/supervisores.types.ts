@@ -4,6 +4,8 @@ export interface SupervisorAsignacion {
   campaniaNombre: string
   supervisorId: number
   supervisorNombre: string
+  /** Grupos de Contact Center que tienen la campaña (ponen a sus supervisores). */
+  gruposCC?: string | null
 }
 
 export type HistorialAsignacionAccion =

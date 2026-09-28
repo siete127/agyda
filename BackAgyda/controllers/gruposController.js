@@ -76,7 +76,7 @@ exports.miembros = async (req, res) => {
 // POST /api/grupos/:tipo/:id/miembros { usuarioIds }
 exports.agregarMiembros = async (req, res) => {
   const t = tipoDe(req, res); if (!t) return;
-  if (t.soloLectura || !t.agregar) return res.status(400).json({ success: false, message: 'Este grupo se administra desde su propio módulo' });
+  if (t.soloLectura || !t.agregar) return res.status(400).json({ success: false, message: t.notaSoloLectura || 'Este grupo se administra desde su propio módulo' });
   const usuarioIds = ids(req.body?.usuarioIds);
   if (!usuarioIds.length) return res.status(400).json({ success: false, message: 'Elige al menos un usuario' });
   try {
@@ -97,7 +97,7 @@ exports.agregarMiembros = async (req, res) => {
 // DELETE /api/grupos/:tipo/:id/miembros/:usuarioId
 exports.quitarMiembro = async (req, res) => {
   const t = tipoDe(req, res); if (!t) return;
-  if (t.soloLectura || !t.quitar) return res.status(400).json({ success: false, message: 'Este grupo se administra desde su propio módulo' });
+  if (t.soloLectura || !t.quitar) return res.status(400).json({ success: false, message: t.notaSoloLectura || 'Este grupo se administra desde su propio módulo' });
   const uid = Number(req.params.usuarioId);
   if (!Number.isInteger(uid) || uid <= 0) return res.status(400).json({ success: false, message: 'Usuario inválido' });
   try {

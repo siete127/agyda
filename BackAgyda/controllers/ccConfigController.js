@@ -529,7 +529,10 @@ exports.listCampanias = async (req, res) => {
         (SELECT COUNT(*) FROM dbo.CCO_GRUPOS g WHERE g.CG_CAMPANIA_ID = c.CM2_ID AND g.CG_ACTIVO = 1) skillsCount,
         (SELECT COUNT(DISTINCT ga.CGA_USUARIO_ID) FROM dbo.CCO_GRUPO_AGENTES ga
           JOIN dbo.CCO_GRUPOS g2 ON g2.CG_ID = ga.CGA_GRUPO_ID
-          WHERE g2.CG_CAMPANIA_ID = c.CM2_ID AND g2.CG_ACTIVO = 1 AND ga.CGA_ACTIVO = 1) agentesCount
+          WHERE g2.CG_CAMPANIA_ID = c.CM2_ID AND g2.CG_ACTIVO = 1 AND ga.CGA_ACTIVO = 1) agentesCount,
+        -- Grupos de Contact Center que la tienen (ponen a sus supervisores).
+        (SELECT STRING_AGG(e.EQ_NOMBRE, ', ') FROM dbo.CC_EQUIPO_CAMPANIAS ec
+          JOIN dbo.CC_EQUIPOS e ON e.EQ_ID = ec.EQC_EQUIPO_ID AND e.EQ_ACTIVO = 1 WHERE ec.EQC_CAMPANIA_ID = c.CM2_ID) gruposCC
       FROM dbo.CCO_CAMPANIAS c
       WHERE c.CM2_ACTIVO = 1
       ORDER BY c.CM2_NOMBRE`);
@@ -654,7 +657,11 @@ exports.listGrupos = async (req, res) => {
         (SELECT COUNT(*) FROM dbo.CCO_GRUPO_AGENTES ga WHERE ga.CGA_GRUPO_ID = g.CG_ID AND ga.CGA_ACTIVO = 1) agentesCount,
         CASE WHEN g.CG_ID = (
           SELECT MIN(g2.CG_ID) FROM dbo.CCO_GRUPOS g2 WHERE g2.CG_CAMPANIA_ID = g.CG_CAMPANIA_ID AND g2.CG_ACTIVO = 1
-        ) THEN 1 ELSE 0 END esPrincipal
+        ) THEN 1 ELSE 0 END esPrincipal,
+        (SELECT COUNT(*) FROM dbo.CCO_GRUPO_SUPERVISORES gs WHERE gs.GS_GRUPO_ID = g.CG_ID) supervisoresCount,
+        -- Grupos de Contact Center que lo tienen (ponen a sus agentes y supervisores).
+        (SELECT STRING_AGG(e.EQ_NOMBRE, ', ') FROM dbo.CC_EQUIPO_SKILLS es
+          JOIN dbo.CC_EQUIPOS e ON e.EQ_ID = es.EQS_EQUIPO_ID AND e.EQ_ACTIVO = 1 WHERE es.EQS_GRUPO_ID = g.CG_ID) gruposCC
       FROM dbo.CCO_GRUPOS g
       WHERE ${where}
       ORDER BY g.CG_NOMBRE`);
@@ -688,9 +695,13 @@ exports.deleteGrupo = async (req, res) => {
   try {
     if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
     const p = await pool(req);
-    const uso = await p.request().input('id', sql.Int, req.params.id).query(`SELECT COUNT(*) n FROM dbo.CCO_GRUPO_AGENTES WHERE CGA_GRUPO_ID = @id AND CGA_ACTIVO = 1`);
-    if (uso.recordset[0].n > 0) return res.status(400).json({ success: false, message: 'El skill tiene agentes asignados' });
-    await p.request().input('id', sql.Int, req.params.id).query(`UPDATE dbo.CCO_GRUPOS SET CG_ACTIVO = 0 WHERE CG_ID = @id`);
+    const eqs = await equiposDeSkill(p, req.params.id);
+    if (eqs.length) return res.status(409).json({ success: false, message: `El skill está en el grupo "${eqs.map((e) => e.nombre).join('", "')}": quítalo del grupo primero (Configuración → Grupos)` });
+    // Su gente sale del skill: agentes y supervisores solo se asignan desde los grupos.
+    await p.request().input('id', sql.Int, req.params.id).query(`
+      UPDATE dbo.CCO_GRUPO_AGENTES SET CGA_ACTIVO = 0 WHERE CGA_GRUPO_ID = @id;
+      DELETE FROM dbo.CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @id;
+      UPDATE dbo.CCO_GRUPOS SET CG_ACTIVO = 0 WHERE CG_ID = @id`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };

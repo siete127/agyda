@@ -132,6 +132,20 @@ export interface RdlCarpeta {
   reportes: number
 }
 
+/** Opción de un parámetro del RDL (lista fija o salida de un dataset). */
+export interface RdlOpcion { value: string; label: string }
+
+/** Resultado de ejecutar un RDL en AGYDA. */
+export interface RdlResultado {
+  columnas: string[]
+  filas: Record<string, unknown>[]
+  total: number
+  truncado: boolean
+  avisos: string[]
+  dataSet: string
+  ms: number
+}
+
 export interface RdlReporte {
   id: number
   nombre: string

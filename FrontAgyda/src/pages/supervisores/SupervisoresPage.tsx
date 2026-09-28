@@ -9,7 +9,6 @@ import {
   AlertTriangle, CheckCircle2, Megaphone, RefreshCw, LogOut, TrendingUp, Settings2,
 } from 'lucide-react'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { api } from '@/lib/axios'
 import { supervisoresService } from '@/services/supervisores.service'
 import { ccService } from '@/services/cc.service'
 import { useIsADorTI } from '@/hooks/useAuth'
@@ -24,7 +23,7 @@ import {
 } from '@/types/supervisores.types'
 import type { CCInteraccion } from '@/types/cc.types'
 import { HistorialConversacionesPanel } from '@/pages/livechat/HistorialConversacionesPanel'
-import { AsignacionSupervisores } from '@/pages/configuracion/ContactCenterTabs'
+import { PersonasAsignadas } from '@/pages/configuracion/ContactCenterTabs'
 import { Eye, Radio, LogIn } from 'lucide-react'
 import type { CCMensaje } from '@/types/cc.types'
 import { getSocket } from '@/lib/socket'
@@ -32,8 +31,6 @@ import { useColumnasVisibles } from '@/hooks/useColumnasVisibles'
 import { usePausaTipos } from '@/hooks/usePausaTipos'
 import { limitePausa, llaveLegacy, type PausaTipo } from '@/types/pausaTipos.types'
 import { SelectorColumnas } from '@/components/ui/SelectorColumnas'
-
-interface Usuario { id: number; nombre: string; tipoUsuario: string }
 
 // Minutos transcurridos desde `iso` (0 si no hay fecha) — mismo criterio que formatDuracion.
 function minutosDesde(iso: string | null) {
@@ -1066,64 +1063,6 @@ function ProductividadTab() {
   )
 }
 
-/* ── Modal: asignar supervisor a campaña ── */
-function AsignarSupervisorModal({ onClose }: { onClose: () => void }) {
-  const qc = useQueryClient()
-  const [campaniaId, setCampaniaId] = useState<number | ''>('')
-  const [supervisorId, setSupervisorId] = useState<number | ''>('')
-
-  // Catálogo real de campañas (el mismo que usa Configuración > Contact Center
-  // > Campañas y skills / Asignación de agentes) — antes leía de
-  // /operaciones/campanias, una tabla vieja sin datos, desconectada de donde
-  // realmente se cargan campañas y agentes.
-  const { data: campanias = [] } = useQuery({
-    queryKey: ['cc-campanias-supervisor'],
-    queryFn: () => ccService.getCampanias(),
-  })
-  const { data: usuarios = [] } = useQuery({
-    queryKey: ['usuarios-todas-areas'],
-    queryFn: async () => {
-      const { data } = await api.get('/usuarios/todas-areas')
-      return ((data?.data ?? []) as Usuario[]).filter((u) => ['AD', 'TI'].includes(u.tipoUsuario))
-    },
-  })
-
-  const asignar = useMutation({
-    mutationFn: () => supervisoresService.asignar(Number(campaniaId), Number(supervisorId)),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['supervisores-asignaciones'] })
-      toast.success('Supervisor asignado')
-      onClose()
-    },
-    onError: (e) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al asignar'),
-  })
-
-  return (
-    <Modal isOpen onClose={onClose} title="Asignar supervisor a campaña" size="md">
-      <div className="space-y-4">
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaña</label>
-          <select value={campaniaId} onChange={(e) => setCampaniaId(e.target.value ? Number(e.target.value) : '')} className="field">
-            <option value="">Selecciona una campaña</option>
-            {campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Supervisor</label>
-          <select value={supervisorId} onChange={(e) => setSupervisorId(e.target.value ? Number(e.target.value) : '')} className="field">
-            <option value="">Selecciona un usuario</option>
-            {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </div>
-        <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button isLoading={asignar.isPending} disabled={!campaniaId || !supervisorId} onClick={() => asignar.mutate()}>Asignar</Button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
 /* ── Tab: Estatus — todos los agentes de todas las campañas, filtrables por estado ── */
 function EstatusTab() {
   const [filtroEstado, setFiltroEstado] = useState<'todos' | EstadoAgente>('todos')
@@ -1269,9 +1208,8 @@ function EstatusTab() {
   )
 }
 
-/* ── Asignar supervisor por skill, sin salir del módulo Supervisor ── */
-function AsignarPorSkillPanel() {
-  const qc = useQueryClient()
+/* ── Supervisores por skill (consulta; los pone el grupo que tiene el skill) ── */
+function SupervisoresPorSkillPanel() {
   const [campaniaId, setCampaniaId] = useState<number | ''>('')
   const [skillId, setSkillId] = useState<number | ''>('')
 
@@ -1293,7 +1231,7 @@ function AsignarPorSkillPanel() {
           <Layers className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-900">Asignar supervisor por skill</p>
+          <p className="text-sm font-semibold text-gray-900">Supervisores por skill</p>
           <p className="text-xs text-gray-500">Alcance acotado a un solo skill dentro de una campaña</p>
         </div>
       </div>
@@ -1333,11 +1271,7 @@ function AsignarPorSkillPanel() {
               <Layers className="h-3.5 w-3.5 text-violet-500" />
               Supervisores de {skillActivo?.nombre ?? 'este skill'}
             </p>
-            <AsignacionSupervisores
-              nivel="skill"
-              id={Number(skillId)}
-              onChanged={() => qc.invalidateQueries({ queryKey: ['supervisores-historial-asignaciones'] })}
-            />
+            <PersonasAsignadas nivel="skill" id={Number(skillId)} rol="supervisores" grupos={skillActivo?.gruposCC} />
           </div>
         )}
       </div>
@@ -2122,23 +2056,12 @@ function HistorialAsignacionesPanel() {
 }
 
 /* ── Tab: Administrar (admin) ── */
+// Solo consulta: los supervisores se asignan en los grupos de Contact Center
+// (Configuración → Usuarios y Seguridad → Grupos), que los ponen en sus campañas y skills.
 function AdministrarTab() {
-  const qc = useQueryClient()
-  const [showAsignar, setShowAsignar] = useState(false)
-
   const { data: asignaciones = [], isLoading } = useQuery({
     queryKey: ['supervisores-asignaciones'],
     queryFn: () => supervisoresService.getAsignaciones(),
-  })
-
-  const quitar = useMutation({
-    mutationFn: (id: number) => supervisoresService.quitar(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['supervisores-asignaciones'] })
-      qc.invalidateQueries({ queryKey: ['supervisores-historial-asignaciones'] })
-      toast.success('Supervisor quitado de la campaña')
-    },
-    onError: () => toast.error('Error al quitar el supervisor'),
   })
 
   return (
@@ -2154,8 +2077,10 @@ function AdministrarTab() {
               <p className="text-xs text-gray-500">Ven todos los skills de la campaña asignada</p>
             </div>
           </div>
-          <Button size="sm" onClick={() => setShowAsignar(true)}><Plus className="h-3.5 w-3.5" /> Asignar supervisor</Button>
         </div>
+        <p className="mb-3 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-gray-600">
+          Los supervisores se asignan solo desde <b>Configuración → Usuarios y Seguridad → Grupos</b>: el grupo los pone en sus campañas y skills.
+        </p>
 
         {isLoading ? (
           <div className="flex justify-center py-16"><Spinner size="lg" /></div>
@@ -2179,13 +2104,10 @@ function AdministrarTab() {
                       {a.campaniaNombre}
                     </p>
                   </div>
-                  <button
-                    onClick={() => quitar.mutate(a.id)}
-                    title="Quitar supervisor de esta campaña"
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <span className={clsx('flex-shrink-0 rounded-full px-2 py-0.5 text-[0.62rem] font-semibold',
+                    a.gruposCC ? 'bg-violet-50 text-violet-700' : 'bg-amber-50 text-amber-700')}>
+                    {a.gruposCC ? `Grupo: ${a.gruposCC}` : 'Sin grupo'}
+                  </span>
                 </div>
               ))}
             </div>
@@ -2193,14 +2115,13 @@ function AdministrarTab() {
         )}
       </div>
 
-      <AsignarPorSkillPanel />
+      <SupervisoresPorSkillPanel />
 
       <div>
         <p className="mb-3 text-sm font-semibold text-gray-900">Historial de cambios</p>
         <HistorialAsignacionesPanel />
       </div>
 
-      {showAsignar && <AsignarSupervisorModal onClose={() => setShowAsignar(false)} />}
     </div>
   )
 }

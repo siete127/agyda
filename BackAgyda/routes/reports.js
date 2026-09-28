@@ -10,6 +10,10 @@ router.get('/usuarios/times', authenticateToken, verificarRol(['AD', 'admin', 'A
 // GET /api/reports/resumen-general?from=&to=&rol= — solo AD
 router.get('/resumen-general', authenticateToken, verificarRol(['AD', 'admin', 'Administrador']), requireActionAccess('reports', 'ver-reportes'), reportController.getResumenGeneral);
 
+// Reporte detallado: catálogo de tipos (asistencia, pausas, tickets, CC, ventas, nómina…) filtrable por colaborador
+router.get('/detalle/catalogo', authenticateToken, verificarRol(['AD', 'admin', 'Administrador']), requireActionAccess('reports', 'ver-reportes'), reportController.getCatalogoReportes);
+router.get('/detalle', authenticateToken, verificarRol(['AD', 'admin', 'Administrador']), requireActionAccess('reports', 'ver-reportes'), reportController.getReporteDetalle);
+
 // GET /api/reports/banio?from=YYYY-MM-DDTHH:mm&to=YYYY-MM-DDTHH:mm&statusId=N
 router.get('/banio', authenticateToken, verificarRol(['AD', 'TI', 'admin', 'Administrador']), requireActionAccess('reports', 'ver-reportes'), reportController.getBanioReport);
 

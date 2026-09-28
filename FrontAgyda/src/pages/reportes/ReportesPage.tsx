@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart2, Download, RefreshCw, Users, Clock, TrendingUp, LayoutGrid, Table2, Ticket } from 'lucide-react'
+import { BarChart2, Download, RefreshCw, Users, Clock, TrendingUp, LayoutGrid, Table2, Ticket, FileSpreadsheet, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 import * as XLSX from 'xlsx'
 import { usePausaTipos } from '@/hooks/usePausaTipos'
 import { llaveLegacy } from '@/types/pausaTipos.types'
+import { ReportePicker, type ReporteOpcion as ReporteCatalogo } from './ReportePicker'
 
 interface UserTime {
   usuarioId: number
@@ -41,15 +42,86 @@ const ROLES_FILTRO = [
   { value: 'CC', label: 'Call Center' },
 ]
 
-function parseUserTime(r: Record<string, unknown>): UserTime {
-  const s = (keys: string[]) => keys.reduce((v, k) => v ?? r[k], undefined as unknown)
-  return {
-    usuarioId: Number(s(['usuarioId', 'usuario_id', 'ID', 'id']) ?? 0),
-    nombre: String(s(['nombre', 'NOMBRE', 'nombres', 'name']) ?? ''),
-    totalHoras: Number(s(['totalHoras', 'total_horas', 'horas', 'hours']) ?? 0),
-    totalMinutos: Number(s(['totalMinutos', 'total_minutos', 'minutos', 'minutes']) ?? 0),
-    diasTrabajados: Number(s(['diasTrabajados', 'dias_trabajados', 'dias', 'days']) ?? 0),
+// /reports/usuarios/times devuelve una fila por usuario, estado y día
+// (usuarioId, usuarioNombre, status_key, dia, total_minutos): se agrupa por
+// usuario para sacar su tiempo total registrado y los días con actividad.
+function agruparTiempos(rows: Record<string, unknown>[]): UserTime[] {
+  const porUsuario = new Map<number, { nombre: string; minutos: number; dias: Set<string> }>()
+  for (const r of rows) {
+    const id = Number(r['usuarioId'] ?? 0)
+    if (!id) continue
+    const acc = porUsuario.get(id) ?? { nombre: String(r['usuarioNombre'] ?? ''), minutos: 0, dias: new Set<string>() }
+    acc.minutos += Number(r['total_minutos'] ?? 0)
+    if (r['dia']) acc.dias.add(String(r['dia']).slice(0, 10))
+    porUsuario.set(id, acc)
   }
+  return [...porUsuario.entries()].map(([usuarioId, a]) => ({
+    usuarioId,
+    nombre: a.nombre,
+    totalHoras: Math.floor(a.minutos / 60),
+    totalMinutos: a.minutos,
+    diasTrabajados: a.dias.size,
+  }))
+}
+
+// ── Reporte detallado ──
+interface UsuarioFiltro { id: number; nombre: string; rol: string; activo: boolean }
+type FilaReporte = Record<string, string | number | null>
+interface SeccionReporte { key: string; grupo: string; label: string; filas: FilaReporte[]; truncado: boolean; error?: string }
+
+const TODOS_LOS_REPORTES = 'todos'
+
+function nombreHoja(label: string, usados: Set<string>) {
+  const base = label.replace(/[\\/?*[\]:]/g, '').slice(0, 28) || 'Reporte'
+  let nombre = base
+  for (let i = 2; usados.has(nombre); i++) nombre = `${base.slice(0, 26)} ${i}`
+  usados.add(nombre)
+  return nombre
+}
+
+function exportDetalleExcel(secciones: SeccionReporte[], archivo: string) {
+  const wb = XLSX.utils.book_new()
+  const usados = new Set<string>()
+  for (const s of secciones.filter((x) => x.filas.length > 0)) {
+    const ws = XLSX.utils.json_to_sheet(s.filas)
+    const headers = Object.keys(s.filas[0] ?? {})
+    ws['!cols'] = headers.map((h) => ({
+      wch: Math.min(50, Math.max(h.length, ...s.filas.slice(0, 200).map((f) => String(f[h] ?? '').length)) + 2),
+    }))
+    XLSX.utils.book_append_sheet(wb, ws, nombreHoja(s.label, usados))
+  }
+  XLSX.writeFile(wb, archivo)
+}
+
+function TablaReporte({ filas }: { filas: FilaReporte[] }) {
+  const columnas = Object.keys(filas[0] ?? {})
+  return (
+    <div className="max-h-[65vh] overflow-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 z-10">
+          <tr className="border-b border-gray-100 bg-gray-50 text-left">
+            {columnas.map((c) => (
+              <th key={c} className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {filas.map((f, i) => (
+            <tr key={i} className="hover:bg-gray-50 transition-colors">
+              {columnas.map((c) => {
+                const v = f[c]
+                return (
+                  <td key={c} className={clsx('px-4 py-2 text-[0.78rem] align-top', typeof v === 'number' ? 'text-right tabular-nums text-gray-700' : 'text-gray-700', c === columnas[0] && 'font-semibold text-gray-800 whitespace-nowrap')}>
+                    {v === null || v === '' ? <span className="text-gray-300">—</span> : <span className="line-clamp-3">{String(v)}</span>}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function fmtMin(min: number) {
@@ -250,8 +322,10 @@ export function ReportesPage() {
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
   const [from, setFrom] = useState(firstOfMonth)
   const [to, setTo] = useState(today.toISOString().slice(0, 10))
-  const [tab, setTab] = useState<'tiempos' | 'resumen'>('resumen')
+  const [tab, setTab] = useState<'tiempos' | 'resumen' | 'detalle'>('resumen')
   const [rolFiltro, setRolFiltro] = useState('')
+  const [usuarioFiltro, setUsuarioFiltro] = useState('')
+  const [tipoReporte, setTipoReporte] = useState('asistencia')
   const [enabled, setEnabled] = useState(false)
   const [vistaResumen, setVistaResumen] = useState<'tabla' | 'barras'>('tabla')
 
@@ -260,20 +334,50 @@ export function ReportesPage() {
     queryFn: async () => {
       const { data } = await api.get('/reports/usuarios/times', { params: { from, to } })
       const list = Array.isArray(data) ? data : (data?.data ?? data?.reporte ?? [])
-      return (list as Record<string, unknown>[]).map(parseUserTime)
+      return agruparTiempos(list as Record<string, unknown>[])
     },
     enabled: enabled && tab === 'tiempos',
   })
 
+  // Tipos de reporte que el usuario puede ver + colaboradores para el filtro
+  const { data: catalogo } = useQuery<{ reportes: ReporteCatalogo[]; usuarios: UsuarioFiltro[] }>({
+    queryKey: ['reportes-detalle-catalogo'],
+    queryFn: async () => (await api.get('/reports/detalle/catalogo')).data?.data,
+    enabled: tab !== 'tiempos',
+    staleTime: 5 * 60_000,
+  })
+  const usuariosFiltro = (catalogo?.usuarios ?? []).filter((u) => !rolFiltro || u.rol === rolFiltro)
+  const reporteSel = catalogo?.reportes.find((r) => r.key === tipoReporte)
+  const faltaColaborador = tab === 'detalle' && tipoReporte === TODOS_LOS_REPORTES && !usuarioFiltro
+  const nombreColaborador = catalogo?.usuarios.find((u) => String(u.id) === usuarioFiltro)?.nombre
+
   const { data: resumen = [], isLoading: isLoadingResumen, error: errorResumen, refetch: refetchResumen } = useQuery<ResumenUsuario[]>({
-    queryKey: ['reportes-resumen-general', from, to, rolFiltro],
+    queryKey: ['reportes-resumen-general', from, to, rolFiltro, usuarioFiltro],
     queryFn: async () => {
-      const { data } = await api.get('/reports/resumen-general', { params: { from, to, rol: rolFiltro || undefined } })
+      const { data } = await api.get('/reports/resumen-general', { params: { from, to, rol: rolFiltro || undefined, usuarioId: usuarioFiltro || undefined } })
       return Array.isArray(data) ? data : (data?.data ?? [])
     },
     enabled: enabled && tab === 'resumen',
     retry: false,
   })
+
+  const { data: detalle, isFetching: isLoadingDetalle, error: errorDetalle, refetch: refetchDetalle } = useQuery<SeccionReporte[]>({
+    queryKey: ['reportes-detalle', tipoReporte, from, to, rolFiltro, usuarioFiltro],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/detalle', {
+        params: { tipo: tipoReporte, from, to, rol: rolFiltro || undefined, usuarioId: usuarioFiltro || undefined },
+      })
+      return tipoReporte === TODOS_LOS_REPORTES ? (data?.data?.secciones ?? []) : [data?.data]
+    },
+    enabled: enabled && tab === 'detalle' && !faltaColaborador,
+    retry: false,
+  })
+  const errorDetalleMsg = errorDetalle
+    ? ((errorDetalle as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al generar el reporte')
+    : null
+  const seccionesConDatos = (detalle ?? []).filter((s) => s.filas.length > 0)
+  const seccionesVacias = (detalle ?? []).filter((s) => s.filas.length === 0)
+  const totalFilasDetalle = seccionesConDatos.reduce((s, x) => s + x.filas.length, 0)
   // Tipos de pausa agregados por la empresa: los activos y los que tengan minutos en el periodo.
   const { tipos: tiposPausa } = usePausaTipos()
   const pausasExtra: PausaExtra[] = tiposPausa.filter((t) =>
@@ -314,8 +418,9 @@ export function ReportesPage() {
   const totalChecklist = resumen.reduce((s, r) => s + r.checklistCompletados, 0)
 
   function generar() {
+    if (faltaColaborador) return
     setEnabled(true)
-    setTimeout(() => (tab === 'tiempos' ? refetch() : refetchResumen()), 50)
+    setTimeout(() => (tab === 'tiempos' ? refetch() : tab === 'detalle' ? refetchDetalle() : refetchResumen()), 50)
   }
 
   return (
@@ -339,7 +444,7 @@ export function ReportesPage() {
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight">Reportes</h1>
                 <p className="mt-0.5 text-xs text-blue-200/80">
-                  {tab === 'tiempos' ? 'Reporte de tiempos por usuario' : 'Resumen general por colaborador'}
+                  {tab === 'tiempos' ? 'Reporte de tiempos por usuario' : tab === 'detalle' ? 'Reporte detallado por colaborador' : 'Resumen general por colaborador'}
                 </p>
               </div>
             </div>
@@ -366,6 +471,14 @@ export function ReportesPage() {
                 </button>
               </div>
             )}
+            {tab === 'detalle' && seccionesConDatos.length > 0 && (
+              <Button
+                onClick={() => exportDetalleExcel(seccionesConDatos,
+                  `reporte_${tipoReporte === TODOS_LOS_REPORTES ? 'completo' : tipoReporte}${nombreColaborador ? '_' + nombreColaborador.replace(/\s+/g, '_') : ''}_${from}_${to}.xlsx`)}
+                className="bg-card !text-brand hover:bg-blue-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
+                <Download className="h-3.5 w-3.5" /> Exportar Excel
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -391,11 +504,26 @@ export function ReportesPage() {
           >
             <Clock className="h-3.5 w-3.5" /> Tiempos por usuario
           </button>
+          <button
+            onClick={() => setTab('detalle')}
+            className={clsx(
+              'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[0.8rem] font-semibold border transition-all',
+              tab === 'detalle' ? 'bg-brand text-white border-brand shadow-sm' : 'bg-card text-gray-600 border-gray-200 hover:border-brand/40 hover:text-brand',
+            )}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Reporte detallado
+          </button>
         </div>
 
         <div className="border-t border-gray-100 pt-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">Rango de fechas</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">{tab === 'detalle' ? 'Filtros' : 'Rango de fechas'}</p>
           <div className="flex flex-wrap gap-3 items-end">
+            {tab === 'detalle' && (
+              <div className="w-full sm:w-[320px]">
+                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Reporte de</label>
+                <ReportePicker value={tipoReporte} onChange={setTipoReporte} reportes={catalogo?.reportes ?? []} valorTodos={TODOS_LOS_REPORTES} />
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Desde</label>
               <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="field w-auto" />
@@ -404,20 +532,122 @@ export function ReportesPage() {
               <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Hasta</label>
               <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="field w-auto" />
             </div>
-            {tab === 'resumen' && (
+            {tab !== 'tiempos' && (
               <div>
                 <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Rol</label>
-                <select value={rolFiltro} onChange={(e) => setRolFiltro(e.target.value)} className="field w-auto">
+                <select value={rolFiltro} onChange={(e) => { setRolFiltro(e.target.value); setUsuarioFiltro('') }} className="field w-auto">
                   {ROLES_FILTRO.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </div>
             )}
-            <Button onClick={generar}>
+            {tab !== 'tiempos' && (
+              <div className="min-w-[220px]">
+                <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Colaborador</label>
+                <select value={usuarioFiltro} onChange={(e) => setUsuarioFiltro(e.target.value)} className={clsx('field', faltaColaborador && 'border-amber-400')}>
+                  <option value="">Todos los colaboradores</option>
+                  {usuariosFiltro.map((u) => (
+                    <option key={u.id} value={u.id}>{u.nombre}{u.activo ? '' : ' (inactivo)'}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <Button onClick={generar} disabled={faltaColaborador}>
               <RefreshCw className="h-3.5 w-3.5" /> Generar reporte
             </Button>
           </div>
+          {tab === 'detalle' && (
+            <p className={clsx('mt-3 text-[0.72rem]', faltaColaborador ? 'text-amber-600 font-semibold' : 'text-gray-400')}>
+              {faltaColaborador
+                ? 'Para ver todos los reportes juntos elige un colaborador.'
+                : tipoReporte === TODOS_LOS_REPORTES
+                  ? 'Corre todos los reportes para el colaborador en el rango: asistencia, pausas, tickets, Contact Center, ventas, evaluaciones y más.'
+                  : reporteSel?.descripcion}
+            </p>
+          )}
         </div>
       </div>
+
+      {/* ── Reporte detallado ── */}
+      {tab === 'detalle' && (
+        errorDetalleMsg ? (
+          <div className="card flex flex-col items-center justify-center gap-3 py-20">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
+              <FileSpreadsheet className="h-7 w-7 text-red-300" />
+            </div>
+            <div className="text-center max-w-sm">
+              <p className="text-sm font-semibold text-gray-700">No se pudo generar el reporte</p>
+              <p className="text-xs text-gray-400 mt-0.5">{errorDetalleMsg}</p>
+            </div>
+          </div>
+        ) : isLoadingDetalle ? (
+          <div className="card overflow-hidden">
+            <table className="w-full">
+              <tbody className="divide-y divide-gray-50">
+                {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} cols={6} />)}
+              </tbody>
+            </table>
+          </div>
+        ) : !enabled || !detalle ? (
+          <div className="card flex flex-col items-center justify-center gap-4 py-20">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
+              <FileSpreadsheet className="h-7 w-7 text-blue-300" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-gray-700">Listo para generar</p>
+              <p className="text-xs text-gray-400 mt-0.5">Elige qué reporte quieres, el colaborador y el rango, y pulsa "Generar reporte"</p>
+            </div>
+          </div>
+        ) : seccionesConDatos.length === 0 ? (
+          <div className="card flex flex-col items-center justify-center gap-4 py-20">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
+              <FileSpreadsheet className="h-7 w-7 text-gray-300" />
+            </div>
+            <p className="text-sm text-gray-500">Sin registros para esos filtros</p>
+            {seccionesVacias.some((s) => s.error) && (
+              <p className="text-xs text-red-500">Algunos reportes no se pudieron consultar: {seccionesVacias.filter((s) => s.error).map((s) => s.label).join(', ')}</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {tipoReporte === TODOS_LOS_REPORTES && (
+              <div className="card p-4">
+                <p className="text-[0.8rem] font-bold text-gray-700">
+                  {nombreColaborador} · {totalFilasDetalle.toLocaleString('es-MX')} registros en {seccionesConDatos.length} reportes
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {seccionesConDatos.map((s) => (
+                    <a key={s.key} href={`#rep-${s.key}`} className="rounded-full bg-brand/10 px-2.5 py-1 text-[0.7rem] font-semibold text-brand hover:bg-brand/20 transition-colors">
+                      {s.label} · {s.filas.length}{s.truncado ? '+' : ''}
+                    </a>
+                  ))}
+                  {seccionesVacias.map((s) => (
+                    <span key={s.key} title={s.error ? `No se pudo consultar: ${s.error}` : 'Sin registros en el rango'}
+                      className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-semibold', s.error ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-400')}>
+                      {s.label} · {s.error ? 'error' : 0}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {seccionesConDatos.map((s) => (
+              <div key={s.key} id={`rep-${s.key}`} className="card overflow-hidden scroll-mt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3">
+                  <div>
+                    <p className="text-[0.82rem] font-bold text-gray-800">{s.label}</p>
+                    <p className="text-[0.68rem] text-gray-400">{s.grupo} · {s.filas.length.toLocaleString('es-MX')} registros</p>
+                  </div>
+                  {s.truncado && (
+                    <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[0.68rem] font-semibold text-amber-700">
+                      <AlertTriangle className="h-3 w-3" /> Se muestran los primeros {s.filas.length.toLocaleString('es-MX')}; acota el rango o elige un colaborador
+                    </span>
+                  )}
+                </div>
+                <TablaReporte filas={s.filas} />
+              </div>
+            ))}
+          </div>
+        )
+      )}
 
       {/* ── Resumen general ── */}
       {tab === 'resumen' && (

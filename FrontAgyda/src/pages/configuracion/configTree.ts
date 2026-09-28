@@ -740,7 +740,7 @@ const CATALOGO: ConfigNode[] = [
           { key: 'webrtc', label: 'WebRTC' },
           { key: 'buzones', label: 'Buzones' },
           { key: 'vistas-webphone', label: 'Vistas Webphone', screen: 'webphone-vistas' },
-          { key: 'credenciales-vicidial', label: 'Credenciales VICIdial', screen: 'webphone-credenciales' },
+          { key: 'credenciales-vicidial', label: 'Credenciales VICIdial y PBX', screen: 'webphone-credenciales' },
           { key: 'asignacion-vistas-webphone', label: 'Asignación de Vistas', screen: 'webphone-asignaciones' },
         ],
       },

@@ -10,6 +10,8 @@ const { RDL_DIR } = require('../middleware/rdlUpload');
 const reportBuilderCatalog = require('../services/reportBuilderCatalog');
 const reportBuilderRunner = require('../services/reportBuilderRunner');
 const pausaTiposService = require('../services/pausaTiposService');
+const { equiposDeCampania } = require('../services/ccEquiposService');
+const rdlEjecutor = require('../services/rdlEjecutorService');
 const logger = global.logger || require('../utils/logger');
 
 async function listCampanias(req, res) {
@@ -127,7 +129,9 @@ async function listSupervisores(req, res) {
     const pool = await databaseService.getPool(req.user?.empresa);
     const rs = await pool.request().query(`
       SELECT cs.CS_ID as id, cs.CS_CAMPANIA_ID as campaniaId, c.CM2_NOMBRE as campaniaNombre,
-             cs.CS_SUPERVISOR_ID as supervisorId, u.NEUS_NOMBRES as supervisorNombre
+             cs.CS_SUPERVISOR_ID as supervisorId, u.NEUS_NOMBRES as supervisorNombre,
+             (SELECT STRING_AGG(e.EQ_NOMBRE, ', ') FROM CC_EQUIPO_CAMPANIAS ec
+               JOIN CC_EQUIPOS e ON e.EQ_ID = ec.EQC_EQUIPO_ID AND e.EQ_ACTIVO = 1 WHERE ec.EQC_CAMPANIA_ID = cs.CS_CAMPANIA_ID) as gruposCC
       FROM CC_CAMPANIAS_SUPERVISORES cs
       INNER JOIN CCO_CAMPANIAS c ON c.CM2_ID = cs.CS_CAMPANIA_ID
       INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
@@ -140,11 +144,19 @@ async function listSupervisores(req, res) {
   }
 }
 
+// Una campaña que tiene un grupo de Contact Center: sus supervisores los pone el grupo.
+async function bloqueoPorGrupo(pool, campaniaId) {
+  const eqs = await equiposDeCampania(pool, campaniaId);
+  return eqs.length ? `Esta campaña la controla el grupo "${eqs.map((e) => e.nombre).join('", "')}": cambia sus supervisores desde el grupo (Configuración → Grupos)` : null;
+}
+
 async function asignarSupervisor(req, res) {
   try {
     const { campaniaId, supervisorId } = req.body;
     if (!campaniaId || !supervisorId) return res.status(400).json({ success: false, message: 'Campaña y supervisor requeridos' });
     const pool = await databaseService.getPool(req.user?.empresa);
+    const bloqueo = await bloqueoPorGrupo(pool, campaniaId);
+    if (bloqueo) return res.status(409).json({ success: false, message: bloqueo });
     const existing = await pool.request()
       .input('campaniaId', sql.Int, campaniaId)
       .input('supervisorId', sql.Int, supervisorId)
@@ -182,6 +194,8 @@ async function quitarSupervisor(req, res) {
       LEFT JOIN CCO_CAMPANIAS c ON c.CM2_ID = cs.CS_CAMPANIA_ID
       LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = cs.CS_SUPERVISOR_ID
       WHERE cs.CS_ID = @id`);
+    const bloqueo = info.recordset[0] && await bloqueoPorGrupo(pool, info.recordset[0].campaniaId);
+    if (bloqueo) return res.status(409).json({ success: false, message: bloqueo });
     await pool.request().input('id', sql.Int, id).query('DELETE FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_ID = @id');
     await logAudit(pool, {
       userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'supervisores', accion: 'quitar-supervisor-campania',
@@ -1786,6 +1800,63 @@ async function descargarRdl(req, res) {
   }
 }
 
+/* ── Ejecutar un RDL dentro de AGYDA (services/rdlEjecutorService.js) ──
+   Candados: acceso al reporte, que lo haya subido un administrador (AD/TI:
+   su consulta se considera confiable) y todo dentro de una transacción que
+   se revierte. */
+async function _rdlEjecutable(req, res) {
+  const pool = await databaseService.getPool(req.user?.empresa);
+  await ensureRdlSchema(pool);
+  const rs = await pool.request().input('id', sql.Int, req.params.id).query(`
+    SELECT r.*, u.NEUS_TIPOUSUARIO SUBIO_TIPO FROM CC_RDL_REPORTES r
+    LEFT JOIN NEUS_USUARIOS u ON u.NEUS_ID = r.RDL_SUBIDO_POR WHERE r.RDL_ID = @id`);
+  const row = rs.recordset[0];
+  if (!row) { res.status(404).json({ success: false, message: 'Reporte no encontrado' }); return null; }
+  if (!_puedeVerRdl(req.user, row)) { res.status(403).json({ success: false, message: 'No tienes acceso a este reporte' }); return null; }
+  if (!['AD', 'TI'].includes(String(row.SUBIO_TIPO || '').toUpperCase())) {
+    res.status(403).json({ success: false, message: 'Este RDL no lo subió un administrador: pide a TI que lo suba para poder ejecutarlo' });
+    return null;
+  }
+  let metadata = null;
+  try { metadata = row.RDL_METADATA ? JSON.parse(row.RDL_METADATA) : null; } catch (_) { metadata = null; }
+  if (!metadata?.dataSets?.length) { res.status(400).json({ success: false, message: 'El reporte no tiene datasets para ejecutar' }); return null; }
+  const extras = rdlEjecutor.extrasDeReporte(metadata, rdlEjecutor.rutaDe(RDL_DIR, row.RDL_ARCHIVO));
+  // Dataset de la tabla principal (el primero que alimenta una región).
+  const principal = (metadata.dataRegions || []).find((r) => r.dataSetName)?.dataSetName || metadata.dataSets[0].name;
+  return { pool, row, metadata, extras, principal };
+}
+
+// GET /api/operaciones/suite-reportes/rdl/:id/opciones — opciones de cada parámetro.
+async function opcionesRdl(req, res) {
+  try {
+    const r = await _rdlEjecutable(req, res); if (!r) return;
+    const opciones = await rdlEjecutor.opcionesDeParametros(r.pool, r.metadata, r.extras);
+    res.json({ success: true, data: { opciones, dataSet: r.principal, conArchivo: !!r.extras } });
+  } catch (err) {
+    logger.error('operacionesController.opcionesRdl', err);
+    res.status(err.status || 500).json({ success: false, message: err.message || 'Error al leer las opciones del reporte' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/rdl/:id/ejecutar { parametros, dataSet? }
+async function ejecutarRdl(req, res) {
+  try {
+    const r = await _rdlEjecutable(req, res); if (!r) return;
+    const dataSet = req.body?.dataSet || r.principal;
+    const parametros = req.body?.parametros && typeof req.body.parametros === 'object' ? req.body.parametros : {};
+    const inicio = Date.now();
+    const out = await rdlEjecutor.ejecutarDataSet(r.pool, r.metadata, r.extras, dataSet, parametros);
+    await logAudit(r.pool, {
+      userId: req.user?.id, userName: req.user?.nombre || null, modulo: 'suite-reportes', accion: 'ejecutar-rdl',
+      entidadId: r.row.RDL_ID, detalle: { reporte: r.row.RDL_NOMBRE, dataSet, parametros, filas: out.total }, ip: req.ip,
+    }).catch(() => {});
+    res.json({ success: true, data: { ...out, dataSet, ms: Date.now() - inicio } });
+  } catch (err) {
+    logger.error('operacionesController.ejecutarRdl', err);
+    res.status(err.status || 500).json({ success: false, message: err.message || 'Error al ejecutar el reporte' });
+  }
+}
+
 // PATCH /api/operaciones/suite-reportes/rdl/:id — nombre/descripcion/carpeta + seguridad.
 async function actualizarRdl(req, res) {
   try {
@@ -2085,6 +2156,8 @@ module.exports = {
   getMiResumenAsesor,
   getHistorialAsignaciones,
   listRdl,
+  opcionesRdl,
+  ejecutarRdl,
   subirRdl,
   descargarRdl,
   actualizarRdl,

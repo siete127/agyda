@@ -1,7 +1,7 @@
 const sql = require('mssql');
 const socketService = require('./socketService');
 const { invalidateActionsCache } = require('../middleware/moduleAccess');
-const { equiposDeSkill, equiposDeCampania, sincronizarEquipo, slugLibre, enlacesDeEquipo, borrarEnlazados } = require('./ccEquiposService');
+const { equiposDeSkill, sincronizarEquipo, slugLibre, enlacesDeEquipo, borrarEnlazados } = require('./ccEquiposService');
 
 // Configuración → Usuarios y Seguridad → Grupos.
 //
@@ -23,9 +23,9 @@ const SEGMENTOS = [
   { key: 'soporte', nombre: 'Soporte TI', descripcion: 'Niveles de atención y especialidades de los técnicos' },
   { key: 'comunicacion', nombre: 'Clientes y comunicación', descripcion: 'Grupos de atención a clientes, grupos de Mensajería y usuarios del Portal de Cliente' },
   { key: 'acceso', nombre: 'Acceso', descripcion: 'Roles de permisos (se administran en Roles y Usuarios)' },
-  // Lo que los grupos de Contact Center aplican, pieza por pieza: para
-  // consultar (y editar lo que no controle un grupo).
-  { key: 'cc-detalle', nombre: 'Contact Center: detalle', descripcion: 'Cada asignación del Contact Center por separado (skills, supervisores, marcador…). Lo normal es manejarlo desde los Grupos de Contact Center; aquí se consulta.' },
+  // Lo que los grupos de Contact Center aplican, pieza por pieza: solo para
+  // consultar. Agentes y supervisores se eligen únicamente en los grupos.
+  { key: 'cc-detalle', nombre: 'Contact Center: detalle', descripcion: 'Qué aplicó cada grupo, pieza por pieza (skills, supervisores, marcador…). Solo consulta: la gente se asigna en los Grupos de Contact Center.' },
 ];
 
 const claveDe = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
@@ -71,21 +71,6 @@ async function syncLivechatSoporteTI(pool, userId, activo) {
   }
 }
 
-// Un skill ligado a un equipo de Contact Center lo controla el equipo: sus
-// agentes y supervisores no se cambian a mano (se sobrescribirían).
-async function noSiLoControlaUnEquipo(pool, grupoId) {
-  const equipos = await equiposDeSkill(pool, grupoId);
-  if (equipos.length) {
-    throw new Error(`Este skill lo controla el grupo "${equipos.map((e) => e.nombre).join('", "')}": cambia a su gente desde el grupo`);
-  }
-}
-async function noSiLaControlaUnGrupo(pool, campaniaId) {
-  const equipos = await equiposDeCampania(pool, campaniaId);
-  if (equipos.length) {
-    throw new Error(`Esta campaña la controla el grupo "${equipos.map((e) => e.nombre).join('", "')}": cambia sus supervisores desde el grupo`);
-  }
-}
-
 const emitirMensajeria = (ctx, uids, canalId, evento, payload) => {
   try {
     const io = socketService.getIO(ctx.tenantKey);
@@ -122,9 +107,13 @@ function grupoCC(o) {
       LEFT JOIN WEBPHONE_VISTAS v ON v.WVIS_ID = wa.WASG_VISTA_ID
       WHERE m.EQM_EQUIPO_ID = @id AND m.EQM_ROL = 'agente' ORDER BY u.NEUS_NOMBRES`, id),
     agregar: async (pool, id, uids) => {
+      // Cada persona tiene un solo papel en el grupo: un supervisor no se vuelve agente sin querer.
+      const sup = await q(pool, `SELECT u.NEUS_NOMBRES n FROM CC_EQUIPO_MIEMBROS m JOIN NEUS_USUARIOS u ON u.NEUS_ID = m.EQM_USUARIO_ID
+        WHERE m.EQM_EQUIPO_ID = @e AND m.EQM_ROL = 'supervisor' AND m.EQM_USUARIO_ID IN (${ids(uids).concat(0).join(',')})`, { e: [sql.Int, id] });
+      if (sup.length) throw new Error(`${sup.map((x) => x.n).join(', ')} ya es supervisor del grupo: quítalo de supervisores para agregarlo como ${o.atencion ? 'asesor' : 'agente'}`);
       for (const u of uids) {
-        await q(pool, `MERGE CC_EQUIPO_MIEMBROS AS t USING (SELECT @e e, @u u) s ON t.EQM_EQUIPO_ID = s.e AND t.EQM_USUARIO_ID = s.u
-          WHEN MATCHED THEN UPDATE SET EQM_ROL = 'agente' WHEN NOT MATCHED THEN INSERT (EQM_EQUIPO_ID, EQM_USUARIO_ID, EQM_ROL) VALUES (@e, @u, 'agente');`,
+        await q(pool, `INSERT INTO CC_EQUIPO_MIEMBROS (EQM_EQUIPO_ID, EQM_USUARIO_ID, EQM_ROL)
+          SELECT @e, @u, 'agente' WHERE NOT EXISTS (SELECT 1 FROM CC_EQUIPO_MIEMBROS WHERE EQM_EQUIPO_ID = @e AND EQM_USUARIO_ID = @u);`,
         { e: [sql.Int, id], u: [sql.Int, u] });
       }
       return sincronizarEquipo(pool, Number(id));
@@ -401,8 +390,8 @@ const TIPOS = [
   }),
   {
     key: 'cc-skills', segmento: 'cc-detalle', nombre: 'Skills (canales)',
-    descripcion: 'Grupos de conversaciones de cada campaña: qué canales entran a cada skill. Si un skill está en un grupo de Contact Center, sus agentes y supervisores los pone el grupo.',
-    miembroLabel: 'Agentes', puedeCrear: true, puedeEliminar: true,
+    descripcion: 'Grupos de conversaciones de cada campaña: qué canales entran a cada skill. Sus agentes y supervisores los pone el grupo de Contact Center que lo tenga.',
+    miembroLabel: 'Agentes', puedeCrear: true, puedeEliminar: true, soloLectura: true, notaSoloLectura: 'Se asignan desde los Grupos de Contact Center (Configuración → Grupos)',
     crearCampos: ['nombre', 'descripcion', 'campaniaId'],
     listar: (pool) => q(pool, `
       SELECT g.CG_ID id, g.CG_NOMBRE nombre, g.CG_DESCRIPCION descripcion,
@@ -415,18 +404,6 @@ const TIPOS = [
     miembros: (pool, id) => miembrosSql(pool, `
       SELECT u.NEUS_ID usuarioId, u.NEUS_NOMBRES nombre FROM CCO_GRUPO_AGENTES a JOIN NEUS_USUARIOS u ON u.NEUS_ID = a.CGA_USUARIO_ID
       WHERE a.CGA_GRUPO_ID = @id AND a.CGA_ACTIVO = 1 ORDER BY u.NEUS_NOMBRES`, id),
-    agregar: async (pool, id, uids) => {
-      await noSiLoControlaUnEquipo(pool, id);
-      for (const u of uids) {
-        await q(pool, `MERGE CCO_GRUPO_AGENTES AS t USING (SELECT @g g, @u u) s ON t.CGA_GRUPO_ID = s.g AND t.CGA_USUARIO_ID = s.u
-          WHEN MATCHED THEN UPDATE SET CGA_ACTIVO = 1 WHEN NOT MATCHED THEN INSERT (CGA_GRUPO_ID, CGA_USUARIO_ID) VALUES (@g, @u);`,
-        { g: [sql.Int, id], u: [sql.Int, u] });
-      }
-    },
-    quitar: async (pool, id, u) => {
-      await noSiLoControlaUnEquipo(pool, id);
-      await q(pool, 'UPDATE CCO_GRUPO_AGENTES SET CGA_ACTIVO = 0 WHERE CGA_GRUPO_ID = @g AND CGA_USUARIO_ID = @u', { g: [sql.Int, id], u: [sql.Int, u] });
-    },
     // Canales del skill.
     config: {
       leer: async (pool, id) => {
@@ -463,16 +440,18 @@ const TIPOS = [
       return r[0].id;
     },
     eliminar: async (pool, id) => {
-      const n = (await q(pool, 'SELECT COUNT(*) n FROM CCO_GRUPO_AGENTES WHERE CGA_GRUPO_ID = @id AND CGA_ACTIVO = 1', { id: [sql.Int, id] }))[0].n;
-      if (n > 0) throw new Error('El skill tiene agentes asignados: quítalos primero');
-      await q(pool, 'DELETE FROM CC_EQUIPO_SKILLS WHERE EQS_GRUPO_ID = @id', { id: [sql.Int, id] }).catch(() => {});
-      await q(pool, 'UPDATE CCO_GRUPOS SET CG_ACTIVO = 0 WHERE CG_ID = @id', { id: [sql.Int, id] });
+      const equipos = await equiposDeSkill(pool, id);
+      if (equipos.length) throw new Error(`El skill está en el grupo "${equipos.map((e) => e.nombre).join('", "')}": quítalo del grupo primero`);
+      // Su gente sale del skill (solo se asigna desde los grupos).
+      await q(pool, `UPDATE CCO_GRUPO_AGENTES SET CGA_ACTIVO = 0 WHERE CGA_GRUPO_ID = @id;
+        DELETE FROM CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @id;
+        UPDATE CCO_GRUPOS SET CG_ACTIVO = 0 WHERE CG_ID = @id`, { id: [sql.Int, id] });
     },
   },
   {
     key: 'cc-skill-supervisores', segmento: 'cc-detalle', nombre: 'Supervisores por skill',
-    descripcion: 'Supervisores acotados a un solo skill de la campaña (ven y supervisan solo esas conversaciones). Si el skill está en un grupo de Contact Center, son los supervisores del grupo.',
-    miembroLabel: 'Supervisores', puedeCrear: false, puedeEliminar: false,
+    descripcion: 'Supervisores acotados a un solo skill de la campaña (ven y supervisan solo esas conversaciones): son los supervisores de los grupos que tienen el skill.',
+    miembroLabel: 'Supervisores', puedeCrear: false, puedeEliminar: false, soloLectura: true, notaSoloLectura: 'Se asignan desde los Grupos de Contact Center (Configuración → Grupos)',
     listar: (pool) => q(pool, `
       SELECT g.CG_ID id, g.CG_NOMBRE nombre, NULL descripcion, c.CM2_NOMBRE contexto,
              (SELECT COUNT(*) FROM CCO_GRUPO_SUPERVISORES s WHERE s.GS_GRUPO_ID = g.CG_ID) miembros
@@ -481,22 +460,11 @@ const TIPOS = [
     miembros: (pool, id) => miembrosSql(pool, `
       SELECT u.NEUS_ID usuarioId, u.NEUS_NOMBRES nombre FROM CCO_GRUPO_SUPERVISORES s JOIN NEUS_USUARIOS u ON u.NEUS_ID = s.GS_SUPERVISOR_ID
       WHERE s.GS_GRUPO_ID = @id ORDER BY u.NEUS_NOMBRES`, id),
-    agregar: async (pool, id, uids) => {
-      await noSiLoControlaUnEquipo(pool, id);
-      for (const u of uids) {
-        await q(pool, `IF NOT EXISTS (SELECT 1 FROM CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u)
-          INSERT INTO CCO_GRUPO_SUPERVISORES (GS_GRUPO_ID, GS_SUPERVISOR_ID) VALUES (@g, @u)`, { g: [sql.Int, id], u: [sql.Int, u] });
-      }
-    },
-    quitar: async (pool, id, u) => {
-      await noSiLoControlaUnEquipo(pool, id);
-      await q(pool, 'DELETE FROM CCO_GRUPO_SUPERVISORES WHERE GS_GRUPO_ID = @g AND GS_SUPERVISOR_ID = @u', { g: [sql.Int, id], u: [sql.Int, u] });
-    },
   },
   {
     key: 'cc-campania-supervisores', segmento: 'cc-detalle', nombre: 'Supervisores por campaña',
-    descripcion: 'Supervisores de toda la campaña: supervisan todos sus skills y reciben sus alertas. Si la campaña está en un grupo, son los supervisores del grupo.',
-    miembroLabel: 'Supervisores', puedeCrear: false, puedeEliminar: false,
+    descripcion: 'Supervisores de toda la campaña: supervisan todos sus skills y reciben sus alertas. Son los supervisores de los grupos que tienen la campaña.',
+    miembroLabel: 'Supervisores', puedeCrear: false, puedeEliminar: false, soloLectura: true, notaSoloLectura: 'Se asignan desde los Grupos de Contact Center (Configuración → Grupos)',
     listar: (pool) => q(pool, `
       SELECT c.CM2_ID id, c.CM2_NOMBRE nombre, NULL descripcion,
              (SELECT COUNT(*) FROM CC_CAMPANIAS_SUPERVISORES s WHERE s.CS_CAMPANIA_ID = c.CM2_ID) miembros
@@ -504,22 +472,11 @@ const TIPOS = [
     miembros: (pool, id) => miembrosSql(pool, `
       SELECT u.NEUS_ID usuarioId, u.NEUS_NOMBRES nombre FROM CC_CAMPANIAS_SUPERVISORES s JOIN NEUS_USUARIOS u ON u.NEUS_ID = s.CS_SUPERVISOR_ID
       WHERE s.CS_CAMPANIA_ID = @id ORDER BY u.NEUS_NOMBRES`, id),
-    agregar: async (pool, id, uids) => {
-      await noSiLaControlaUnGrupo(pool, id);
-      for (const u of uids) {
-        await q(pool, `IF NOT EXISTS (SELECT 1 FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u)
-          INSERT INTO CC_CAMPANIAS_SUPERVISORES (CS_CAMPANIA_ID, CS_SUPERVISOR_ID) VALUES (@c, @u)`, { c: [sql.Int, id], u: [sql.Int, u] });
-      }
-    },
-    quitar: async (pool, id, u) => {
-      await noSiLaControlaUnGrupo(pool, id);
-      await q(pool, 'DELETE FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID = @c AND CS_SUPERVISOR_ID = @u', { c: [sql.Int, id], u: [sql.Int, u] });
-    },
   },
   {
     key: 'ventas-campanias', segmento: 'cc-detalle', nombre: 'Agentes por campaña de ventas',
-    descripcion: 'Campaña de la plataforma de Ventas en la que trabaja cada agente. Un agente está en una sola campaña: agregarlo a otra lo cambia.',
-    miembroLabel: 'Agentes', puedeCrear: false, puedeEliminar: false, unico: true,
+    descripcion: 'Campaña de la plataforma de Ventas en la que trabaja cada agente (una sola por agente). La pone el grupo de Contact Center del agente.',
+    miembroLabel: 'Agentes', puedeCrear: false, puedeEliminar: false, unico: true, soloLectura: true, notaSoloLectura: 'Se asignan desde los Grupos de Contact Center (Configuración → Grupos)',
     listar: async (pool) => {
       const asignados = await q(pool, `SELECT ACA_VENTAS_CAMPANA_ID id, MAX(ACA_VENTAS_CAMPANA_NOMBRE) nombre, COUNT(*) miembros
         FROM AC_CAMPANIAS_AGENTES GROUP BY ACA_VENTAS_CAMPANA_ID`);
@@ -532,25 +489,11 @@ const TIPOS = [
     miembros: (pool, id) => miembrosSql(pool, `
       SELECT u.NEUS_ID usuarioId, u.NEUS_NOMBRES nombre FROM AC_CAMPANIAS_AGENTES a JOIN NEUS_USUARIOS u ON u.NEUS_ID = a.ACA_NEUS_ID
       WHERE a.ACA_VENTAS_CAMPANA_ID = @id ORDER BY u.NEUS_NOMBRES`, id),
-    agregar: async (pool, id, uids, ctx) => {
-      const externas = await campanasVentas();
-      const nombre = externas?.find((c) => c.id === Number(id))?.nombre
-        || (await q(pool, 'SELECT TOP 1 ACA_VENTAS_CAMPANA_NOMBRE n FROM AC_CAMPANIAS_AGENTES WHERE ACA_VENTAS_CAMPANA_ID = @id', { id: [sql.Int, id] }))[0]?.n;
-      if (!nombre) throw new Error('Campaña de ventas no encontrada');
-      for (const u of uids) {
-        await q(pool, `MERGE AC_CAMPANIAS_AGENTES AS t USING (SELECT @u u) s ON t.ACA_NEUS_ID = s.u
-          WHEN MATCHED THEN UPDATE SET ACA_VENTAS_CAMPANA_ID = @c, ACA_VENTAS_CAMPANA_NOMBRE = @n, ACA_ASIGNADO_POR = @por, ACA_FECHA_ASIGNACION = GETDATE()
-          WHEN NOT MATCHED THEN INSERT (ACA_NEUS_ID, ACA_VENTAS_CAMPANA_ID, ACA_VENTAS_CAMPANA_NOMBRE, ACA_ASIGNADO_POR) VALUES (@u, @c, @n, @por);`,
-        { u: [sql.Int, u], c: [sql.Int, Number(id)], n: [sql.NVarChar(200), nombre], por: [sql.Int, ctx.userId || null] });
-      }
-    },
-    quitar: (pool, id, u) => q(pool, 'DELETE FROM AC_CAMPANIAS_AGENTES WHERE ACA_NEUS_ID = @u AND ACA_VENTAS_CAMPANA_ID = @c',
-      { u: [sql.Int, u], c: [sql.Int, id] }),
   },
   {
     key: 'webphone-vistas', segmento: 'cc-detalle', nombre: 'Vistas de Webphone',
-    descripcion: 'Qué marcador (vista) usa cada usuario en el Webphone. Un usuario tiene una sola vista: agregarlo a otra lo cambia.',
-    miembroLabel: 'Usuarios', puedeCrear: false, puedeEliminar: false, unico: true,
+    descripcion: 'Qué marcador (vista) usa cada usuario en el Webphone (una sola por usuario). La pone el grupo de Contact Center del usuario.',
+    miembroLabel: 'Usuarios', puedeCrear: false, puedeEliminar: false, unico: true, soloLectura: true, notaSoloLectura: 'Se asignan desde los Grupos de Contact Center (Configuración → Grupos)',
     listar: (pool) => q(pool, `
       SELECT v.WVIS_ID id, v.WVIS_LABEL nombre, v.WVIS_PROVIDER contexto, NULL descripcion,
              (SELECT COUNT(*) FROM WEBPHONE_ASIGNACIONES a WHERE a.WASG_VISTA_ID = v.WVIS_ID) miembros
@@ -558,15 +501,6 @@ const TIPOS = [
     miembros: (pool, id) => miembrosSql(pool, `
       SELECT u.NEUS_ID usuarioId, u.NEUS_NOMBRES nombre FROM WEBPHONE_ASIGNACIONES a JOIN NEUS_USUARIOS u ON u.NEUS_ID = a.WASG_NEUS_ID
       WHERE a.WASG_VISTA_ID = @id ORDER BY u.NEUS_NOMBRES`, id),
-    agregar: async (pool, id, uids) => {
-      for (const u of uids) {
-        await q(pool, `MERGE WEBPHONE_ASIGNACIONES AS t USING (SELECT @u u) s ON t.WASG_NEUS_ID = s.u
-          WHEN MATCHED THEN UPDATE SET WASG_VISTA_ID = @v WHEN NOT MATCHED THEN INSERT (WASG_NEUS_ID, WASG_VISTA_ID) VALUES (@u, @v);`,
-        { u: [sql.Int, u], v: [sql.Int, id] });
-      }
-    },
-    quitar: (pool, id, u) => q(pool, 'DELETE FROM WEBPHONE_ASIGNACIONES WHERE WASG_NEUS_ID = @u AND WASG_VISTA_ID = @v',
-      { u: [sql.Int, u], v: [sql.Int, id] }),
   },
   {
     key: 'livechat-grupos', segmento: 'cc-detalle', nombre: 'Grupos de LiveChat',
@@ -741,7 +675,7 @@ const porKey = Object.fromEntries(TIPOS.map((t) => [t.key, t]));
 function descriptor(t) {
   return {
     key: t.key, segmento: t.segmento, nombre: t.nombre, descripcion: t.descripcion, miembroLabel: t.miembroLabel,
-    puedeCrear: !!t.crear, puedeEliminar: !!t.eliminar, puedeEditarMiembros: !t.soloLectura && !!t.agregar,
+    puedeCrear: !!t.crear, puedeEliminar: !!t.eliminar, puedeEditarMiembros: !t.soloLectura && !!t.agregar, notaSoloLectura: t.notaSoloLectura || null,
     unico: !!t.unico, crearCampos: t.crearCampos || [], conClientes: !!t.clientes, conConfig: !!t.config, conEnlaces: !!t.enlaces,
   };
 }

@@ -1,6 +1,7 @@
 import { api } from '@/lib/axios'
 
-export type WebphoneProvider = 'Azul1' | 'Vici' | 'Integra'
+// 'PBX' = softphone SIP propio (sip.js), no iframe — ver services/softphone.service.ts
+export type WebphoneProvider = 'Azul1' | 'Vici' | 'Integra' | 'PBX'
 
 export interface WebphoneVista {
   id: number
@@ -75,6 +76,7 @@ export interface GuardarServidorCorreoPayload {
 export interface WebphoneCredencialVista {
   vistaId: number
   vistaLabel: string
+  provider: WebphoneProvider
   vdLogin: string | null
   campana: string | null
   tieneCredenciales: boolean

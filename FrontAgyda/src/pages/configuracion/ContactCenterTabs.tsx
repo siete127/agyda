@@ -10,11 +10,9 @@ import { useNavigate } from 'react-router-dom'
 import { REPORTES_CAMPANIA } from '@/pages/suite-reportes/reportesCampania'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { api } from '@/lib/axios'
 import { ccService } from '@/services/cc.service'
 import { ccFormulariosService } from '@/services/ccFormularios.service'
 import { CANAL_LABEL, type CCCanalTipo, type CCBaileysEstado, type CCFcaEstado, type CCIgpEstado, type CCPostulanteGestion } from '@/types/cc.types'
-import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { getSocket } from '@/lib/socket'
 import { useSocketEvent } from '@/hooks/useSocket'
 import { TIPIFICACIONES_LLAMADA } from '@/constants/tipificacionesLlamada'
@@ -871,10 +869,9 @@ function CampaniaDetalle({ campania, onVolver, onChanged }: { campania: any; onV
       {seccion === 'supervisores' && (
         <div className={card}>
           <p className="mb-3 text-xs text-ink-tertiary">
-            Supervisores de toda la campaña "{campania.nombre}" — ven todos sus skills. Para un supervisor acotado a un solo
-            skill, asignalo desde "Skills y agentes" en vez de acá.
+            Supervisores de toda la campaña "{campania.nombre}": ven todos sus skills.
           </p>
-          <AsignacionSupervisores nivel="campania" id={campania.id} onChanged={onChanged} />
+          <PersonasAsignadas nivel="campania" id={campania.id} rol="supervisores" grupos={campania.gruposCC} />
         </div>
       )}
       {seccion === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
@@ -1874,9 +1871,8 @@ export function CanalesDeCampaniaPanel({ campania, canales, onChanged }: any) {
   )
 }
 
-// Skills de la campaña + asignación de agentes integrada en el flujo (antes
-// "Asignación de agentes" era una pantalla hermana suelta, sin ligar
-// visualmente con la campaña ni el skill al que pertenece cada asignación).
+// Skills de la campaña. Sus agentes y supervisores se ven aquí, pero los pone
+// el grupo de Contact Center que tenga el skill (Configuración → Grupos).
 export function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
   const qc = useQueryClient()
   const { data: grupos = [] } = useQuery({ queryKey: ['cc-grupos', campania.id], queryFn: () => ccService.getGrupos(campania.id) })
@@ -1908,6 +1904,9 @@ export function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
               <span className="flex items-center gap-1.5 text-[0.72rem] text-ink-tertiary">
                 <Users className="h-3.5 w-3.5" /> {g.agentesCount} Agentes asignados
               </span>
+              {g.gruposCC
+                ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[0.62rem] font-semibold text-violet-700">Grupo: {g.gruposCC}</span>
+                : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[0.62rem] font-semibold text-amber-700">Sin grupo</span>}
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[0.62rem] font-semibold text-emerald-700">Activo</span>
               <div className="ml-auto flex items-center gap-1">
                 <button onClick={() => delG.mutate(g.id)} title="Eliminar skill" className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-tertiary transition hover:bg-red-50 hover:text-red-500">
@@ -1927,9 +1926,7 @@ export function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
                     Supervisores
                   </button>
                 </div>
-                {subTab === 'agentes'
-                  ? <AsignacionAgentesSkill grupoId={g.id} onChanged={inval} />
-                  : <AsignacionSupervisores nivel="skill" id={g.id} onChanged={inval} />}
+                <PersonasAsignadas nivel="skill" id={g.id} rol={subTab} grupos={g.gruposCC} />
               </div>
             )}
           </div>
@@ -1950,149 +1947,46 @@ export function SkillsDeCampaniaPanel({ campania, onChanged }: any) {
   )
 }
 
-// Lista de agentes con checkbox de asignación a ESTE skill — mismo par de
-// endpoints que ya usaba la pantalla "Asignación de agentes" general
-// (asignarAgente/quitarAgente), solo que aquí acotado a un solo grupoId en
-// vez de la matriz completa de todos los skills a la vez.
-function AsignacionAgentesSkill({ grupoId, onChanged }: { grupoId: number; onChanged: () => void }) {
-  const qc = useQueryClient()
-  const { data: asignados = [] } = useQuery({ queryKey: ['cc-agentes-grupo', grupoId], queryFn: () => ccService.getAgentesDeGrupo(grupoId) })
-  const { data: usuarios = [] } = useUsuariosSimple()
-  const [busqueda, setBusqueda] = useState('')
-  const toggle = useMutation({
-    mutationFn: ({ usuarioId, on }: { usuarioId: number; on: boolean }) =>
-      on ? ccService.asignarAgente(grupoId, usuarioId) : ccService.quitarAgente(grupoId, usuarioId),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-agentes-grupo', grupoId] }); onChanged() },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
+// Agentes y supervisores solo se eligen en los grupos de Contact Center
+// (Configuración → Usuarios y Seguridad → Grupos): cada grupo pone a su gente
+// en sus skills y campañas. Aquí solo se ve quién está y qué grupo lo pone.
+export function PersonasAsignadas({ nivel, id, rol, grupos }: {
+  nivel: 'campania' | 'skill'; id: number; rol: 'agentes' | 'supervisores'; grupos?: string | null
+}) {
+  const { data: personas = [], isLoading } = useQuery({
+    queryKey: [rol === 'agentes' ? 'cc-agentes-grupo' : nivel === 'campania' ? 'cc-supervisores-campania' : 'cc-supervisores-grupo', id],
+    queryFn: () => (rol === 'agentes' ? ccService.getAgentesDeGrupo(id)
+      : nivel === 'campania' ? ccService.getSupervisoresDeCampania(id) : ccService.getSupervisoresDeGrupo(id)),
   })
-  const idsAsignados = new Set(asignados.map((a) => a.usuarioId))
-  // Separados en dos listas: los ya asignados quedan siempre visibles arriba
-  // (antes se perdían mezclados con el resto de usuarios del sistema, sin
-  // forma de verlos sin buscarlos uno por uno) y abajo solo los candidatos
-  // a agregar, filtrados por la búsqueda.
-  const disponibles = (usuarios as any[]).filter((u) => !idsAsignados.has(u.id) && u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+  const titulo = rol === 'agentes' ? 'Agentes' : 'Supervisores'
+  const cosa = nivel === 'skill' ? 'este skill' : 'esta campaña'
 
   return (
     <div className="space-y-3">
+      <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-[0.72rem] text-ink-secondary">
+        <Users className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500" />
+        <span>
+          {grupos ? <>Los pone el grupo <b>{grupos}</b>. </> : <>Ningún grupo tiene {cosa} todavía. </>}
+          {titulo} se asignan solo desde <b>Configuración → Usuarios y Seguridad → Grupos</b>
+          {grupos ? '.' : `: crea o abre un grupo y agrégale ${cosa}.`}
+        </span>
+      </div>
       <div>
-        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
-          Agentes asignados ({asignados.length})
-        </p>
-        {asignados.length === 0 ? (
-          <p className="rounded-lg bg-black/5 px-2.5 py-2 text-xs text-ink-tertiary">Todavía no hay agentes asignados a este skill.</p>
+        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">{titulo} ({personas.length})</p>
+        {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-violet-500" /> : personas.length === 0 ? (
+          <p className="rounded-lg bg-black/5 px-2.5 py-2 text-xs text-ink-tertiary">Sin {titulo.toLowerCase()} en {cosa}.</p>
         ) : (
-          <div className="max-h-40 space-y-1 overflow-y-auto">
-            {asignados.map((a) => (
-              <div key={a.usuarioId} className="flex items-center justify-between rounded-lg bg-violet-100/60 px-2.5 py-1.5 text-sm text-ink">
-                <span className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.6rem] font-bold text-white">
-                    {a.nombre.charAt(0).toUpperCase()}
-                  </span>
-                  {a.nombre}
+          <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+            {personas.map((a) => (
+              <span key={a.usuarioId} className="flex items-center gap-1.5 rounded-full bg-violet-100/60 py-1 pl-1 pr-2.5 text-[0.78rem] text-ink">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.6rem] font-bold text-white">
+                  {(a.nombre || '?').charAt(0).toUpperCase()}
                 </span>
-                <button onClick={() => toggle.mutate({ usuarioId: a.usuarioId, on: false })} title="Quitar del skill"
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-ink-tertiary transition hover:bg-red-50 hover:text-red-500">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
+                {a.nombre}
+              </span>
             ))}
           </div>
         )}
-      </div>
-
-      <div>
-        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Agregar más agentes</p>
-        <input className={clsx(field, 'mb-2')} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar agente..." />
-        <div className="max-h-40 space-y-1 overflow-y-auto">
-          {disponibles.map((u) => (
-            <label key={u.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-black/5">
-              <input type="checkbox" className="h-3.5 w-3.5 accent-violet-600"
-                checked={false}
-                onChange={(e) => toggle.mutate({ usuarioId: u.id, on: e.target.checked })} />
-              {u.nombre}
-            </label>
-          ))}
-          {disponibles.length === 0 && <p className="px-2 py-2 text-xs text-ink-tertiary">{busqueda ? 'Sin resultados' : 'Todos los usuarios ya están asignados'}</p>}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Asignación de supervisores — mismo patrón visual que AsignacionAgentesSkill,
-// pero acotado a usuarios AD/TI (mismo filtro que ya usaba el módulo
-// Supervisor > Administrar) y parametrizado por nivel: "campania" (toda la
-// campaña, CC_CAMPANIAS_SUPERVISORES) o "skill" (un solo grupo, más granular,
-// CCO_GRUPO_SUPERVISORES) — ambas tablas comparten la misma forma de fila
-// { usuarioId, nombre }, así que la UI y el hook de mutación son idénticos.
-export function AsignacionSupervisores({ nivel, id, onChanged }: { nivel: 'campania' | 'skill'; id: number; onChanged?: () => void }) {
-  const qc = useQueryClient()
-  const queryKey = [nivel === 'campania' ? 'cc-supervisores-campania' : 'cc-supervisores-grupo', id]
-  const { data: asignados = [] } = useQuery({
-    queryKey,
-    queryFn: () => (nivel === 'campania' ? ccService.getSupervisoresDeCampania(id) : ccService.getSupervisoresDeGrupo(id)),
-  })
-  const { data: usuarios = [] } = useQuery({
-    queryKey: ['usuarios-todas-areas'],
-    queryFn: async () => {
-      const { data } = await api.get('/usuarios/todas-areas')
-      return ((data?.data ?? []) as { id: number; nombre: string; tipoUsuario: string }[]).filter((u) => ['AD', 'TI'].includes(u.tipoUsuario))
-    },
-  })
-  const [busqueda, setBusqueda] = useState('')
-  const toggle = useMutation({
-    mutationFn: ({ usuarioId, on }: { usuarioId: number; on: boolean }) => {
-      if (nivel === 'campania') return on ? ccService.asignarSupervisorACampania(id, usuarioId) : ccService.quitarSupervisorDeCampania(id, usuarioId)
-      return on ? ccService.asignarSupervisorAGrupo(id, usuarioId) : ccService.quitarSupervisorDeGrupo(id, usuarioId)
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey }); onChanged?.() },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error'),
-  })
-  const idsAsignados = new Set(asignados.map((a) => a.usuarioId))
-  const disponibles = (usuarios as { id: number; nombre: string }[]).filter((u) => !idsAsignados.has(u.id) && u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
-
-  return (
-    <div className="space-y-3">
-      <div>
-        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
-          Supervisores asignados ({asignados.length})
-        </p>
-        {asignados.length === 0 ? (
-          <p className="rounded-lg bg-black/5 px-2.5 py-2 text-xs text-ink-tertiary">Todavía no hay supervisores asignados.</p>
-        ) : (
-          <div className="max-h-40 space-y-1 overflow-y-auto">
-            {asignados.map((a) => (
-              <div key={a.usuarioId} className="flex items-center justify-between rounded-lg bg-violet-100/60 px-2.5 py-1.5 text-sm text-ink">
-                <span className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.6rem] font-bold text-white">
-                    {a.nombre.charAt(0).toUpperCase()}
-                  </span>
-                  {a.nombre}
-                </span>
-                <button onClick={() => toggle.mutate({ usuarioId: a.usuarioId, on: false })} title="Quitar supervisor"
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-ink-tertiary transition hover:bg-red-50 hover:text-red-500">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div>
-        <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Agregar supervisor (AD/TI)</p>
-        <input className={clsx(field, 'mb-2')} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar usuario..." />
-        <div className="max-h-40 space-y-1 overflow-y-auto">
-          {disponibles.map((u) => (
-            <label key={u.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-black/5">
-              <input type="checkbox" className="h-3.5 w-3.5 accent-violet-600"
-                checked={false}
-                onChange={(e) => toggle.mutate({ usuarioId: u.id, on: e.target.checked })} />
-              {u.nombre}
-            </label>
-          ))}
-          {disponibles.length === 0 && <p className="px-2 py-2 text-xs text-ink-tertiary">{busqueda ? 'Sin resultados' : 'Todos los usuarios AD/TI ya están asignados'}</p>}
-        </div>
       </div>
     </div>
   )
@@ -2150,48 +2044,6 @@ export function TipificacionesDeCampaniaPanel({ campania }: any) {
             <span className="text-ink-secondary">{t.nombre} {t.requiereComentario && <span className="text-[0.68rem] text-amber-600">· requiere comentario</span>}</span>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-/* ═══ Asignación de agentes ═══ */
-export function CCAgentesTab() {
-  const qc = useQueryClient()
-  const { data: matriz } = useQuery({ queryKey: ['cc-matriz'], queryFn: () => ccService.getMatrizAgentes() })
-  const { data: usuarios = [] } = useUsuariosSimple()
-  const toggle = useMutation({
-    mutationFn: ({ grupoId, usuarioId, on }: { grupoId: number; usuarioId: number; on: boolean }) =>
-      on ? ccService.asignarAgente(grupoId, usuarioId) : ccService.quitarAgente(grupoId, usuarioId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cc-matriz'] }),
-  })
-  const grupos = matriz?.grupos ?? []
-  const asignado = (u: number, g: number) => (matriz?.asignaciones ?? []).some((a) => a.usuarioId === u && a.grupoId === g)
-
-  return (
-    <div className="space-y-4">
-      <Header icon={Users} titulo="Asignación de agentes" subtitulo="Marca qué skills atiende cada agente. El enrutador solo asigna interacciones de sus skills." />
-      <div className={clsx(card, 'overflow-x-auto')}>
-        <table className="w-full text-sm">
-          <thead><tr className="border-b text-[0.7rem] text-gray-500">
-            <th className="py-2 text-left">Agente</th>
-            {grupos.map((g) => <th key={g.id} className="px-2 py-2 text-center">{g.icono} {g.nombre}</th>)}
-          </tr></thead>
-          <tbody>
-            {usuarios.map((u: any) => (
-              <tr key={u.id} className="border-b border-gray-100">
-                <td className="py-2">{u.nombre}</td>
-                {grupos.map((g) => (
-                  <td key={g.id} className="px-2 py-2 text-center">
-                    <input type="checkbox" className="h-4 w-4 accent-violet-600"
-                      checked={asignado(u.id, g.id)}
-                      onChange={(e) => toggle.mutate({ grupoId: g.id, usuarioId: u.id, on: e.target.checked })} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   )

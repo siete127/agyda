@@ -70,7 +70,7 @@ exports.getCredenciales = async (req, res) => {
       SELECT NEUS_ID as neusId, NEUS_NOMBRES as nombre, NEUS_USUARIO as usuarioAgyda, NEUS_TIPOUSUARIO as tipoUsuario
       FROM NEUS_USUARIOS WHERE NEUS_ACTIVO = 1 ORDER BY NEUS_NOMBRES
     `);
-    const vistas = await pool.request().query(`SELECT WVIS_ID as id, WVIS_LABEL as label FROM WEBPHONE_VISTAS ORDER BY WVIS_ORDEN`);
+    const vistas = await pool.request().query(`SELECT WVIS_ID as id, WVIS_LABEL as label, WVIS_PROVIDER as provider FROM WEBPHONE_VISTAS ORDER BY WVIS_ORDEN`);
     const creds = await pool.request().query(`
       SELECT WCRE_NEUS_ID as neusId, WCRE_VISTA_ID as vistaId, WCRE_VD_LOGIN as vdLogin, WCRE_CAMPANA as campana
       FROM WEBPHONE_CREDENCIALES
@@ -89,6 +89,7 @@ exports.getCredenciales = async (req, res) => {
         return {
           vistaId: v.id,
           vistaLabel: v.label,
+          provider: v.provider,
           vdLogin: c?.vdLogin ?? null,
           campana: c?.campana ?? null,
           tieneCredenciales: !!c,
@@ -195,6 +196,37 @@ exports.deleteCredencial = async (req, res) => {
       .input('vid', sql.Int, vistaId)
       .query('DELETE FROM WEBPHONE_CREDENCIALES WHERE WCRE_NEUS_ID=@nid AND WCRE_VISTA_ID=@vid');
     return res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Extensión + contraseña SIP del usuario autenticado para una vista 'PBX'
+// (softphone propio). Mismo criterio que getAutoLoginUrl: cada quien solo
+// obtiene las suyas, y solo de vistas PBX — nunca las de un VICIdial.
+exports.getMiCredencialSip = async (req, res) => {
+  try {
+    const neusId = Number(req.user?.id);
+    const vistaId = Number(req.query.vistaId);
+    if (!Number.isFinite(neusId) || neusId <= 0 || !Number.isFinite(vistaId) || vistaId <= 0) {
+      return res.status(400).json({ success: false, message: 'vistaId inválido' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureWebphoneVistasSchema(pool);
+    await ensureSchema(pool);
+    const r = await pool.request()
+      .input('nid', sql.Int, neusId)
+      .input('vid', sql.Int, vistaId)
+      .query(`
+        SELECT c.WCRE_VD_LOGIN as extension, c.WCRE_VD_PASS as pass
+        FROM WEBPHONE_CREDENCIALES c
+        JOIN WEBPHONE_VISTAS v ON v.WVIS_ID = c.WCRE_VISTA_ID AND v.WVIS_PROVIDER = 'PBX'
+        WHERE c.WCRE_NEUS_ID=@nid AND c.WCRE_VISTA_ID=@vid
+      `);
+    const cred = r.recordset[0];
+    if (!cred) return res.json({ success: true, data: null });
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, data: { extension: cred.extension, password: decryptText(cred.pass) } });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }

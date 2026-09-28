@@ -22,6 +22,7 @@ import { ProgressBarList } from '@/components/ui/ProgressBarList'
 import { TIPIFICACIONES_LLAMADA_LABEL } from '@/constants/tipificacionesLlamada'
 import { parseRdl, type RdlDefinition } from '@/lib/rdl'
 import { ReportBuilder } from './ReportBuilder'
+import { EjecutarRdl } from './EjecutarRdl'
 import { useSearchParams } from 'react-router-dom'
 import { CarpetaCampanias, EncabezadoCampania, RegistrosDeCampania, ProductividadCampaniaView } from './CampaniasSuite'
 import { REPORTES_CAMPANIA, type ReporteCampaniaId } from './reportesCampania'
@@ -1410,6 +1411,9 @@ function RdlView({
             </div>
           )}
 
+          {def.dataSets.length > 0 && <EjecutarRdl reporte={reporte} def={def} />}
+
+          <p className="pt-1 text-[0.72rem] font-semibold uppercase tracking-wide text-ink-tertiary">Definición del reporte</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MiniStat label="Datasets" value={def.dataSets.length} icon={Database} />
             <MiniStat label="Parámetros" value={def.parameters.length} icon={SlidersHorizontal} />
@@ -1531,7 +1535,7 @@ function RdlView({
 
           <p className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2 text-[0.72rem] text-ink-tertiary">
             <BarChart2 className="h-3.5 w-3.5" />
-            Vista previa de la definición. Para ejecutar la consulta y renderizar los datos hace falta publicar el RDL en un servidor SQL Server Reporting Services.
+            Definición leída del .rdl. Arriba, en “Ejecutar reporte”, se corre con los datos actuales de AGYDA (tablas y parámetros; gráficas y formato de página no se dibujan).
           </p>
         </>
       )}

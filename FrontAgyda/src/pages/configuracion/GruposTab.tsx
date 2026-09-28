@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   UsersRound, BellRing, Headset, Wrench, MessagesSquare, ShieldCheck, Plus, Trash2, Search, X, Loader2,
-  UserPlus, Lock, ArrowRightLeft, Eye, ChevronRight, Building2, Phone, Link2, Copy,
+  UserPlus, Lock, ArrowRightLeft, Eye, ChevronRight, Building2, Phone, Link2, Copy, Plug,
 } from 'lucide-react'
 import { gruposService, type TipoGrupo, type GrupoUsuarios, type ModalidadGrupo, type ConfigSkill, type ConfigEquipo, type SeleccionBorrar } from '@/services/grupos.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
+import { ccService } from '@/services/cc.service'
+import { CANAL_LABEL, type CCCanalTipo } from '@/types/cc.types'
 import { useAuthStore } from '@/stores/auth.store'
 import { Avatar } from '@/components/ui/Avatar'
 import { Modal } from '@/components/ui/Modal'
@@ -212,7 +214,7 @@ function DetalleGrupo({ tipo, grupo, puedeEditar, onCambio, onEliminado }: {
           )}
         </div>
         {grupo.descripcion && <p className="mt-2 text-[0.8rem] text-ink-secondary">{grupo.descripcion}</p>}
-        {!tipo.puedeEditarMiembros && <p className="mt-2 text-[0.72rem] text-ink-tertiary">Se administra desde su propio módulo; aquí solo se consulta.</p>}
+        {!tipo.puedeEditarMiembros && <p className="mt-2 text-[0.72rem] text-ink-tertiary">{tipo.notaSoloLectura ? `${tipo.notaSoloLectura}; aquí solo se consulta.` : 'Se administra desde su propio módulo; aquí solo se consulta.'}</p>}
         {tipo.unico && editable && <p className="mt-2 text-[0.72rem] text-amber-600">Cada usuario está en un solo grupo de este tipo: si agregas a alguien que ya está en otro, se mueve aquí.</p>}
       </div>
 
@@ -339,22 +341,29 @@ function EliminarGrupoModal({ tipo, grupo, onClose, onEliminado }: {
 
 // Agentes / asesores / miembros del grupo: buscar y agregar, quitar. Lo usan
 // el detalle del grupo y el asistente "Crear grupo".
-export function MiembrosGrupo({ tipo, grupo, puedeEditar, onCambio }: {
-  tipo: TipoGrupo; grupo: GrupoUsuarios; puedeEditar: boolean; onCambio: () => void
+export function MiembrosGrupo({ tipo, grupo, puedeEditar, onCambio, titulo, sub }: {
+  tipo: TipoGrupo; grupo: GrupoUsuarios; puedeEditar: boolean; onCambio: () => void; titulo?: string; sub?: string
 }) {
   const qc = useQueryClient()
   const editable = puedeEditar && tipo.puedeEditarMiembros
   const qk = ['grupos-miembros', tipo.key, String(grupo.id)]
   const { data: miembros = [], isLoading } = useQuery({ queryKey: qk, queryFn: () => gruposService.miembros(tipo.key, grupo.id) })
   const { data: opciones } = useQuery({ queryKey: ['grupos-opciones'], queryFn: () => gruposService.opciones(), enabled: editable })
+  // Grupos de Contact Center: cada persona tiene un solo papel; sus supervisores no se ofrecen como agentes.
+  const conSupervisores = tipo.conConfig && (tipo.key === 'cc-equipos' || tipo.key === 'atencion-clientes')
+  const { data: config } = useQuery({
+    queryKey: ['grupos-config', tipo.key, String(grupo.id)],
+    queryFn: () => gruposService.leerConfig<ConfigEquipo>(tipo.key, grupo.id),
+    enabled: editable && conSupervisores,
+  })
   const [busca, setBusca] = useState('')
   const recargar = () => { qc.invalidateQueries({ queryKey: qk }); onCambio() }
 
   const candidatos = useMemo(() => {
-    const ya = new Set(miembros.map((m) => m.usuarioId))
+    const ya = new Set([...miembros.map((m) => m.usuarioId), ...(config?.supervisorIds ?? [])])
     const t = busca.trim().toLowerCase()
     return (opciones?.usuarios ?? []).filter((u) => !ya.has(u.id) && (!t || `${u.nombre} ${u.puesto ?? ''}`.toLowerCase().includes(t))).slice(0, 8)
-  }, [opciones, miembros, busca])
+  }, [opciones, miembros, config, busca])
 
   const agregar = useMutation({
     mutationFn: (usuarioId: number) => gruposService.agregarMiembros(tipo.key, grupo.id, [usuarioId]),
@@ -369,7 +378,8 @@ export function MiembrosGrupo({ tipo, grupo, puedeEditar, onCambio }: {
 
   return (
     <div className={card}>
-      <p className="mb-3 text-sm font-bold text-ink">{tipo.key === 'cc-equipos' || tipo.key === 'atencion-clientes' ? '4. ' : ''}{tipo.miembroLabel} ({miembros.length})</p>
+      <p className="text-sm font-bold text-ink">{titulo ?? `${conSupervisores ? '4. ' : ''}${tipo.miembroLabel}`} ({miembros.length})</p>
+      <p className="mb-3 text-[0.72rem] text-ink-tertiary">{sub ?? (conSupervisores ? 'Al entrar reciben las campañas, skills y marcador del grupo. Los supervisores del grupo no se agregan aquí.' : '')}</p>
       {editable && (
         <div className="relative mb-3">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
@@ -421,17 +431,24 @@ const iguales = (a: number[], b: number[]) => [...a].sort().join() === [...b].so
 
 // Configuración propia del grupo: equipos de Contact Center (todas sus
 // asignaciones) o skills (sus canales).
-export function ConfigGrupo({ tipo, grupo, editable, onCambio }: {
-  tipo: TipoGrupo; grupo: GrupoUsuarios; editable: boolean; onCambio: () => void
+// seccion: 'todo' (detalle del grupo), 'asignaciones' (campañas y skills) o
+// 'personas' (supervisores, que se aplican al momento). guardarRef: el
+// asistente guarda lo pendiente al pasar de paso.
+export type SeccionConfig = 'todo' | 'asignaciones' | 'personas'
+export type GuardarPendiente = { current: (() => Promise<boolean>) | null }
+export function ConfigGrupo({ tipo, grupo, editable, onCambio, seccion = 'todo', guardarRef }: {
+  tipo: TipoGrupo; grupo: GrupoUsuarios; editable: boolean; onCambio: () => void; seccion?: SeccionConfig; guardarRef?: GuardarPendiente
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ['grupos-config', tipo.key, String(grupo.id)],
     queryFn: () => gruposService.leerConfig(tipo.key, grupo.id),
   })
+  // Campaña recién creada con "Nuevo": se marca en el grupo (falta guardar).
+  const [campaniaNueva, setCampaniaNueva] = useState<number | null>(null)
   if (isLoading || !data) return <div className={clsx(card, 'flex justify-center py-6')}><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
-  const clave = JSON.stringify(data)
+  const clave = JSON.stringify(data) + (campaniaNueva ?? '')
   return 'campanias' in data
-    ? <FormEquipo key={clave} tipo={tipo} grupo={grupo} config={data as ConfigEquipo} editable={editable} onCambio={onCambio} />
+    ? <FormEquipo key={clave} tipo={tipo} grupo={grupo} config={data as ConfigEquipo} editable={editable} onCambio={onCambio} seccion={seccion} guardarRef={guardarRef} campaniaNueva={campaniaNueva} onCampaniaNueva={setCampaniaNueva} />
     : <FormSkill key={clave} tipo={tipo} grupo={grupo} config={data as ConfigSkill} editable={editable} onCambio={onCambio} />
 }
 
@@ -439,30 +456,37 @@ export function ConfigGrupo({ tipo, grupo, editable, onCambio }: {
 // marcador), 2) skills y forma de comunicación (marcador, campaña de ventas),
 // 3) supervisores; los agentes van abajo (miembros). Al guardar se aplica a
 // todos sus integrantes.
-function Paso({ n, titulo, children, sub, accion }: { n: number; titulo: string; sub?: string; children: React.ReactNode; accion?: React.ReactNode }) {
+function Paso({ n, titulo, children, sub, accion }: { n?: number; titulo: string; sub?: string; children: React.ReactNode; accion?: React.ReactNode }) {
   return (
     <div className="border-t border-gray-100 pt-4 first:border-t-0 first:pt-0">
       <div className="flex items-center gap-2">
         <p className="flex flex-1 items-center gap-2 text-[0.85rem] font-bold text-ink">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.65rem] font-bold text-white">{n}</span> {titulo}
+          {n != null && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.65rem] font-bold text-white">{n}</span>} {titulo}
         </p>
         {accion}
       </div>
-      {sub && <p className="mb-2 ml-7 mt-0.5 text-[0.7rem] text-ink-tertiary">{sub}</p>}
-      <div className="ml-7 mt-2">{children}</div>
+      {sub && <p className={clsx('mb-2 mt-0.5 text-[0.7rem] text-ink-tertiary', n != null && 'ml-7')}>{sub}</p>}
+      <div className={clsx('mt-2', n != null && 'ml-7')}>{children}</div>
     </div>
   )
 }
 
-function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
-  tipo: TipoGrupo; grupo: GrupoUsuarios; config: ConfigEquipo; editable: boolean; onCambio: () => void
+function FormEquipo({ tipo, grupo, config, editable, onCambio, seccion, guardarRef, campaniaNueva, onCampaniaNueva }: {
+  tipo: TipoGrupo; grupo: GrupoUsuarios; config: ConfigEquipo; editable: boolean; onCambio: () => void; seccion: SeccionConfig; guardarRef?: GuardarPendiente
+  campaniaNueva: number | null; onCampaniaNueva: (id: number | null) => void
 }) {
+  const verAsignaciones = seccion !== 'personas'
+  const verSupervisores = seccion !== 'asignaciones'
+  // En "personas" cada supervisor que se agrega o quita se aplica al momento.
+  const alMomento = seccion === 'personas'
   // Grupo de atención a clientes: el mismo grupo, con asesores y clientes.
   const atencion = tipo.conClientes
   const gente = atencion ? 'asesores' : 'agentes'
   const qc = useQueryClient()
-  const [campanias, setCampanias] = useState<{ id: number; formularioId: number | null }[]>(
-    config.campanias.filter((c) => c.asignada).map((c) => ({ id: c.id, formularioId: c.formularioId })))
+  const [campanias, setCampanias] = useState<{ id: number; formularioId: number | null }[]>(() => [
+    ...config.campanias.filter((c) => c.asignada).map((c) => ({ id: c.id, formularioId: c.formularioId })),
+    ...config.campanias.filter((c) => c.id === campaniaNueva && !c.asignada).map((c) => ({ id: c.id, formularioId: null })),
+  ])
   const [modalidad, setModalidad] = useState<ModalidadGrupo>(config.modalidad)
   const [skillIds, setSkillIds] = useState<number[]>(config.skillIds)
   const [supervisores, setSupervisores] = useState(config.supervisores)
@@ -470,6 +494,8 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
   const [ventas, setVentas] = useState<number | ''>(config.ventasCampanaId ?? '')
   const [busca, setBusca] = useState('')
   const [nuevoSkill, setNuevoSkill] = useState<{ campaniaId: number; nombre: string } | null>(null)
+  // Skill con su panel de canales abierto.
+  const [canalesDe, setCanalesDe] = useState<number | null>(null)
   // "Nuevo +" de campañas: el asistente de nueva campaña encima del grupo.
   const [asistente, setAsistente] = useState(false)
   // "Nuevo +" de skills: formulario rápido (campaña del grupo + nombre).
@@ -477,6 +503,12 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
   const { can } = useActionAccess()
   const puedeCrearCampania = editable && can('contact-center', 'gestionar-skills')
   const { data: opciones } = useQuery({ queryKey: ['grupos-opciones'], queryFn: () => gruposService.opciones(), enabled: editable })
+  // Sus agentes/asesores: no se ofrecen como supervisores (una persona, un papel).
+  const { data: miembros = [] } = useQuery({
+    queryKey: ['grupos-miembros', tipo.key, String(grupo.id)],
+    queryFn: () => gruposService.miembros(tipo.key, grupo.id),
+    enabled: editable && verSupervisores,
+  })
 
   const campIds = campanias.map((c) => c.id)
   const usaSkills = modalidad !== 'marcador'
@@ -493,15 +525,16 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
 
   const textoBusca = busca.trim().toLowerCase()
   const candidatos = (opciones?.usuarios ?? [])
-    .filter((u) => !supIds.includes(u.id) && (!textoBusca || u.nombre.toLowerCase().includes(textoBusca))).slice(0, 6)
+    .filter((u) => !supIds.includes(u.id) && !miembros.some((m) => m.usuarioId === u.id) && (!textoBusca || u.nombre.toLowerCase().includes(textoBusca))).slice(0, 6)
 
   const recargar = () => { qc.invalidateQueries({ queryKey: ['grupos-config', tipo.key, String(grupo.id)] }); onCambio() }
   const guardar = useMutation({
-    mutationFn: () => gruposService.guardarConfig(tipo.key, grupo.id, {
-      campanias, modalidad, skillIds: usaSkills ? skillsValidos : [], supervisorIds: supIds,
+    mutationFn: (sup?: { usuarioId: number; nombre: string }[]) => gruposService.guardarConfig(tipo.key, grupo.id, {
+      campanias, modalidad, skillIds: usaSkills ? skillsValidos : [], supervisorIds: (sup ?? supervisores).map((x) => x.usuarioId),
       webphoneVistaId: usaMarcador ? Number(vista) || null : null, ventasCampanaId: Number(ventas) || null,
     }),
     onSuccess: (r) => {
+      onCampaniaNueva(null)
       recargar()
       const d = r.data
       toast.success(`Aplicado: ${d.campanias ?? 0} campaña(s), ${d.skills ?? 0} skill(s), ${d.agentes ?? 0} agente(s), ${d.supervisores ?? 0} supervisor(es)${d.conMarcador ? ` · marcador a ${d.conMarcador}` : ''}`)
@@ -513,6 +546,20 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
     onSuccess: (r) => { setSkillIds((xs) => [...xs, r.data.id]); setNuevoSkill(null); setSkillRapido(null); qc.invalidateQueries({ queryKey: ['grupos-config', tipo.key, String(grupo.id)] }); toast.success('Skill creado (queda marcado)') },
     onError: (e: ErrApi) => toast.error(msg(e, 'No se pudo crear el skill')),
   })
+  // El asistente guarda lo pendiente al cambiar de paso.
+  useEffect(() => {
+    if (!guardarRef) return
+    guardarRef.current = async () => {
+      if (!cambio) return true
+      if (falta) { toast.error(falta); return false }
+      try { await guardar.mutateAsync(undefined); return true } catch { return false }
+    }
+    return () => { guardarRef.current = null }
+  })
+  const cambiarSupervisores = (nuevos: { usuarioId: number; nombre: string }[]) => {
+    setSupervisores(nuevos)
+    if (alMomento) guardar.mutate(nuevos)
+  }
   const toggleCampania = (id: number) => setCampanias((xs) => (xs.some((x) => x.id === id) ? xs.filter((x) => x.id !== id) : [...xs, { id, formularioId: null }]))
   const copiar = (ruta: string) => {
     const link = `${window.location.origin}${ruta}`
@@ -528,6 +575,7 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
         <p className="mt-0.5 text-[0.72rem] text-ink-tertiary">Todo lo de aquí lo reciben automáticamente sus supervisores y {gente}; quien sale del grupo lo pierde.</p>
       </div>
 
+      {verAsignaciones && <>
       <Paso n={1} titulo={`Campañas (${campanias.length})`} sub="Sus supervisores supervisan estas campañas. Cada una da su link del marcador para este grupo."
         accion={puedeCrearCampania ? <button type="button" onClick={() => setAsistente(true)} title="Crear una campaña nueva"
           className="flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1 text-[0.7rem] font-semibold text-white hover:bg-violet-700">
@@ -594,14 +642,25 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
                       <div className="space-y-1">
                         {c.skills.map((s) => {
                           const marcado = skillIds.includes(s.id)
+                          const abierto = canalesDe === s.id
                           return (
-                            <label key={s.id} className={chk(marcado)}>
-                              <input type="checkbox" disabled={!editable} checked={marcado} className="accent-violet-600"
-                                onChange={() => setSkillIds((xs) => (marcado ? xs.filter((x) => x !== s.id) : [...xs, s.id]))} />
-                              <span className="min-w-0 flex-1 truncate">{s.nombre}</span>
-                              <span className="text-[0.62rem] text-ink-tertiary">{s.canales} canal(es)</span>
-                              {s.otrosGrupos && <span className="text-[0.62rem] text-amber-600">también {s.otrosGrupos}</span>}
-                            </label>
+                            <div key={s.id}>
+                              <div className="flex items-center gap-1.5">
+                                <label className={clsx(chk(marcado), 'min-w-0 flex-1')}>
+                                  <input type="checkbox" disabled={!editable} checked={marcado} className="accent-violet-600"
+                                    onChange={() => setSkillIds((xs) => (marcado ? xs.filter((x) => x !== s.id) : [...xs, s.id]))} />
+                                  <span className="min-w-0 flex-1 truncate">{s.nombre}</span>
+                                  {s.otrosGrupos && <span className="text-[0.62rem] text-amber-600">también {s.otrosGrupos}</span>}
+                                </label>
+                                <button type="button" onClick={() => setCanalesDe(abierto ? null : s.id)} title="Canales de este skill"
+                                  className={clsx('flex flex-shrink-0 items-center gap-1 rounded-lg border px-2 py-1.5 text-[0.68rem] font-semibold transition',
+                                    abierto ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-gray-100 text-ink-tertiary hover:border-violet-200 hover:text-violet-600')}>
+                                  <Plug className="h-3.5 w-3.5" /> <ContadorCanales skillId={s.id} inicial={s.canales} />
+                                  <ChevronRight className={clsx('h-3 w-3 transition-transform', abierto && 'rotate-90')} />
+                                </button>
+                              </div>
+                              {abierto && <CanalesDelSkill skillId={s.id} campaniaId={c.id} editable={editable} />}
+                            </div>
                           )
                         })}
                       </div>
@@ -672,31 +731,39 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
           </div>
         )}
       </Paso>
+      </>}
 
       {asistente && (
-        <Modal isOpen onClose={() => setAsistente(false)} title="Nueva campaña" size="full" elevated>
-          <AsistenteCampania onSalir={() => { setAsistente(false); qc.invalidateQueries({ queryKey: ['grupos-config', tipo.key, String(grupo.id)] }); toast('Si creaste la campaña, ya puedes marcarla en el paso 1') }} />
+        <Modal isOpen onClose={() => { setAsistente(false); toast('La campaña quedó a medias: con "Nuevo" sigues donde te quedaste') }} title="Nueva campaña" size="full" elevated>
+          <AsistenteCampania onSalir={(creada) => {
+            setAsistente(false)
+            if (creada) { onCampaniaNueva(creada); toast.success('Campaña lista y marcada en el grupo') }
+            else toast('Con "Nuevo" sigues donde te quedaste')
+            qc.invalidateQueries({ queryKey: ['grupos-config', tipo.key, String(grupo.id)] })
+          }} />
         </Modal>
       )}
 
-      <Paso n={3} titulo={`Supervisores (${supervisores.length})`} sub={atencion ? 'Supervisan sus campañas y skills, reciben los avisos de sus clientes y ven sus chats.' : 'Supervisan las campañas y los skills del grupo.'}>
+      {verSupervisores && (
+      <Paso n={seccion === 'todo' ? 3 : undefined} titulo={`Supervisores (${supervisores.length})`} sub={atencion ? 'Supervisan sus campañas y skills, reciben los avisos de sus clientes y ven sus chats.' : 'Supervisan las campañas y los skills del grupo.'}>
+        {alMomento && falta && <p className="mb-2 text-[0.72rem] text-amber-600">Primero completa el paso anterior (campañas y skills): {falta.toLowerCase()}.</p>}
         <div className="mb-2 flex flex-wrap gap-1.5">
           {supervisores.length === 0 && <span className="text-[0.72rem] text-ink-tertiary">Sin supervisor.</span>}
           {supervisores.map((s) => (
             <span key={s.usuarioId} className="flex items-center gap-1 rounded-full bg-violet-50 py-0.5 pl-2.5 pr-1 text-[0.72rem] font-semibold text-violet-700">
               {s.nombre}
-              {editable && <button onClick={() => setSupervisores((xs) => xs.filter((x) => x.usuarioId !== s.usuarioId))} className="rounded-full p-0.5 hover:bg-violet-100"><X className="h-3 w-3" /></button>}
+              {editable && <button onClick={() => cambiarSupervisores(supervisores.filter((x) => x.usuarioId !== s.usuarioId))} disabled={guardar.isPending} className="rounded-full p-0.5 hover:bg-violet-100"><X className="h-3 w-3" /></button>}
             </span>
           ))}
         </div>
-        {editable && (
+        {editable && !(alMomento && falta) && (
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
-            <input className={clsx(field, 'pl-9')} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Agregar supervisor…" />
+            <input className={clsx(field, 'pl-9')} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar un usuario para hacerlo supervisor…" />
             {busca.trim() && (
               <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-gray-100 bg-card shadow-lg">
                 {candidatos.length === 0 ? <p className="px-3 py-2.5 text-xs text-ink-tertiary">Sin resultados</p> : candidatos.map((u) => (
-                  <button key={u.id} onClick={() => { setSupervisores((xs) => [...xs, { usuarioId: u.id, nombre: u.nombre }]); setBusca('') }}
+                  <button key={u.id} disabled={guardar.isPending} onClick={() => { cambiarSupervisores([...supervisores, { usuarioId: u.id, nombre: u.nombre }]); setBusca('') }}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-violet-50">
                     <UserPlus className="h-4 w-4 flex-shrink-0 text-violet-500" /> <span className="truncate">{u.nombre}</span>
                   </button>
@@ -706,20 +773,111 @@ function FormEquipo({ tipo, grupo, config, editable, onCambio }: {
           </div>
         )}
       </Paso>
+      )}
 
-      <p className="flex items-center gap-2 border-t border-gray-100 pt-4 text-[0.85rem] font-bold text-ink">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.65rem] font-bold text-white">4</span> {atencion ? 'Asesores' : 'Agentes'}
-        <span className="text-[0.7rem] font-normal text-ink-tertiary">— se agregan abajo y reciben todo lo anterior al entrar.{atencion ? ' Después, en el paso 5, asigna sus clientes.' : ''}</span>
-      </p>
+      {seccion === 'todo' && (
+        <p className="flex items-center gap-2 border-t border-gray-100 pt-4 text-[0.85rem] font-bold text-ink">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[0.65rem] font-bold text-white">4</span> {atencion ? 'Asesores' : 'Agentes'}
+          <span className="text-[0.7rem] font-normal text-ink-tertiary">— se agregan abajo y reciben todo lo anterior al entrar.{atencion ? ' Después, en el paso 5, asigna sus clientes.' : ''}</span>
+        </p>
+      )}
+      {seccion === 'asignaciones' && (
+        <p className="border-t border-gray-100 pt-3 text-[0.72rem] text-ink-tertiary">Supervisores y {gente} se agregan en el siguiente paso. Al darle Siguiente se guarda lo de aquí.</p>
+      )}
 
-      {editable && (
+      {editable && !alMomento && (
         <div className="flex items-center justify-end gap-3">
           {falta && <span className="text-[0.7rem] text-amber-600">{falta}</span>}
-          <button onClick={() => guardar.mutate()} disabled={!cambio || !!falta || guardar.isPending}
+          <button onClick={() => guardar.mutate(undefined)} disabled={!cambio || !!falta || guardar.isPending}
             className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
             {guardar.isPending ? 'Aplicando…' : 'Guardar y aplicar'}
           </button>
         </div>
+      )}
+    </div>
+  )
+}
+
+// Canales de un skill, dentro del grupo: marcar/desmarcar se guarda al momento
+// (sin recargar el grupo, así no se pierde lo que falta guardar allá) y se
+// puede crear uno nuevo en la campaña. Vincular el número (QR) o credenciales
+// se hace después en la ficha de la campaña → Canales.
+const TIPOS_CANAL_RAPIDO: CCCanalTipo[] = ['whatsapp_baileys', 'web_publica', 'whatsapp', 'messenger', 'instagram', 'messenger_fca', 'instagram_privado']
+const qkSkill = (id: number) => ['grupos-config', 'cc-skills', String(id)]
+
+function ContadorCanales({ skillId, inicial }: { skillId: number; inicial: number }) {
+  // Solo lee lo que ya cargó el panel de canales; si no, el conteo del grupo.
+  const { data } = useQuery({ queryKey: qkSkill(skillId), queryFn: () => gruposService.leerConfig<ConfigSkill>('cc-skills', skillId), enabled: false })
+  return <>{data ? data.canalIds.length : inicial} canal(es)</>
+}
+
+function CanalesDelSkill({ skillId, campaniaId, editable }: { skillId: number; campaniaId: number; editable: boolean }) {
+  const qc = useQueryClient()
+  const { data: cfg, isLoading } = useQuery({ queryKey: qkSkill(skillId), queryFn: () => gruposService.leerConfig<ConfigSkill>('cc-skills', skillId) })
+  const [nuevo, setNuevo] = useState<{ tipo: CCCanalTipo; nombre: string } | null>(null)
+  const recargar = () => { qc.invalidateQueries({ queryKey: qkSkill(skillId) }); qc.invalidateQueries({ queryKey: ['cc-canales'] }) }
+  const guardar = useMutation({
+    mutationFn: (canalIds: number[]) => gruposService.guardarConfig('cc-skills', skillId, { canalIds }),
+    onSuccess: recargar,
+    onError: (e: ErrApi) => toast.error(msg(e, 'No se pudieron guardar los canales')),
+  })
+  const crear = useMutation({
+    mutationFn: async (n: { tipo: CCCanalTipo; nombre: string }) => {
+      const r = await ccService.createCanal({ tipo: n.tipo, nombre: n.nombre })
+      await ccService.updateCanal(r.data.id as number, { campaniaId, grupoId: skillId, habilitado: true })
+    },
+    onSuccess: (_r, n) => {
+      setNuevo(null); recargar()
+      toast.success(['web_publica', 'test'].includes(n.tipo) ? 'Canal creado en este skill' : 'Canal creado en este skill. Vincula su cuenta en la ficha de la campaña → Canales')
+    },
+    onError: (e: ErrApi) => toast.error(msg(e, 'No se pudo crear el canal')),
+  })
+  const toggle = (id: number) => {
+    if (!cfg) return
+    guardar.mutate(cfg.canalIds.includes(id) ? cfg.canalIds.filter((x) => x !== id) : [...cfg.canalIds, id])
+  }
+
+  return (
+    <div className="mb-1 ml-6 mt-1 rounded-xl border border-violet-100 bg-violet-50/30 p-2.5">
+      {isLoading || !cfg ? <Loader2 className="h-4 w-4 animate-spin text-violet-500" /> : (
+        <>
+          <p className="mb-1.5 text-[0.68rem] text-ink-tertiary">Las conversaciones de los canales marcados entran a este skill.</p>
+          {cfg.canales.length === 0 && <p className="text-[0.72rem] text-ink-tertiary">La campaña todavía no tiene canales.</p>}
+          <div className="max-h-40 space-y-1 overflow-y-auto">
+            {cfg.canales.map((cn) => {
+              const marcado = cfg.canalIds.includes(cn.id)
+              const deOtro = cn.grupoId && cn.grupoId !== skillId
+              return (
+                <label key={cn.id} className={clsx('flex items-center gap-2.5 rounded-lg border bg-card px-2.5 py-1 text-[0.78rem]', marcado ? 'border-violet-200' : 'border-gray-100', editable && 'cursor-pointer')}>
+                  <input type="checkbox" disabled={!editable || guardar.isPending} checked={marcado} className="accent-violet-600" onChange={() => toggle(cn.id)} />
+                  <span className="min-w-0 flex-1 truncate">{cn.nombre}</span>
+                  <span className="text-[0.6rem] text-ink-tertiary">{CANAL_LABEL[cn.tipo as CCCanalTipo] ?? cn.tipo}</span>
+                  {!cn.habilitado && <span className="text-[0.6rem] text-amber-600">apagado</span>}
+                  {deOtro && !marcado && <span className="text-[0.6rem] text-amber-600" title="Al marcarlo se mueve a este skill">en {cn.grupoNombre}</span>}
+                </label>
+              )
+            })}
+          </div>
+          {editable && (nuevo ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select className={clsx(field, '!w-auto !py-1.5 text-[0.75rem]')} value={nuevo.tipo} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value as CCCanalTipo })}>
+                {TIPOS_CANAL_RAPIDO.map((t) => <option key={t} value={t}>{CANAL_LABEL[t]}</option>)}
+              </select>
+              <input className={clsx(field, 'min-w-[9rem] flex-1 !py-1.5 text-[0.75rem]')} autoFocus value={nuevo.nombre} placeholder="Nombre del canal"
+                onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter' && nuevo.nombre.trim()) crear.mutate({ tipo: nuevo.tipo, nombre: nuevo.nombre.trim() }) }} />
+              <button onClick={() => crear.mutate({ tipo: nuevo.tipo, nombre: nuevo.nombre.trim() })} disabled={!nuevo.nombre.trim() || crear.isPending}
+                className="rounded-lg bg-violet-600 px-3 text-[0.72rem] font-semibold text-white disabled:opacity-50">
+                {crear.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Crear'}
+              </button>
+              <button onClick={() => setNuevo(null)} className="rounded-lg px-2 text-ink-tertiary hover:bg-gray-100"><X className="h-4 w-4" /></button>
+            </div>
+          ) : (
+            <button onClick={() => setNuevo({ tipo: 'whatsapp_baileys', nombre: '' })} className="mt-1.5 flex items-center gap-1 text-[0.7rem] font-semibold text-violet-600 hover:underline">
+              <Plus className="h-3 w-3" /> Nuevo canal en este skill
+            </button>
+          ))}
+        </>
       )}
     </div>
   )

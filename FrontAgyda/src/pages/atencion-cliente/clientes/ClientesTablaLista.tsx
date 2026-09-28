@@ -51,7 +51,11 @@ export function ClientesTablaLista({ clientes, seleccionadoId, onSeleccionar }: 
                         </p>
                       )}
                     </div>
-                    {c.neusId && <KeyRound className="h-3 w-3 flex-shrink-0 text-blue-400" titleAccess="Con acceso al portal" />}
+                    {c.neusId && (
+                      <span title="Con acceso al portal" className="flex-shrink-0">
+                        <KeyRound className="h-3 w-3 text-blue-400" aria-label="Con acceso al portal" />
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-2.5">

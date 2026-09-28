@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -6,7 +6,7 @@ import {
   ArrowLeft, ArrowRight, Check, Headset, Building2, UsersRound, Layers, UserPlus, Rocket, X, Loader2,
 } from 'lucide-react'
 import { gruposService } from '@/services/grupos.service'
-import { ConfigGrupo, MiembrosGrupo, ClientesDelGrupo } from './GruposTab'
+import { ConfigGrupo, MiembrosGrupo, ClientesDelGrupo, type GuardarPendiente } from './GruposTab'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-ink-secondary'
@@ -34,17 +34,31 @@ export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
   const tipo = resumen?.tipos.find((t) => t.key === tipoKey) ?? null
   const grupo = tipo?.grupos.find((g) => g.id === grupoId) ?? null
   const atiende = tipoKey === 'atencion-clientes'
-  const gente = atiende ? 'Asesores' : 'Agentes'
+  // En un grupo de atención, sus agentes son los asesores de sus clientes.
+  const gente = atiende ? 'Agentes (asesores)' : 'Agentes'
+  // Lo pendiente del paso de campañas se guarda al avanzar.
+  const guardarRef = useRef<(() => Promise<boolean>) | null>(null) as GuardarPendiente
+  const [cambiando, setCambiando] = useState(false)
 
   const PASOS = [
     { key: 'grupo', titulo: 'Grupo', desc: 'Nombre y si atiende clientes', icon: UsersRound },
-    { key: 'asignaciones', titulo: 'Campañas, skills y supervisores', desc: 'Campañas (o una nueva), skills, comunicación, marcador y su link', icon: Layers },
-    { key: 'gente', titulo: gente, desc: 'Quiénes trabajan en el grupo', icon: UserPlus },
+    { key: 'asignaciones', titulo: 'Campañas y skills', desc: 'Campañas (o una nueva), skills, comunicación, marcador y su link', icon: Layers },
+    { key: 'personas', titulo: `Supervisores y ${gente.toLowerCase()}`, desc: 'Quién supervisa y quién trabaja en el grupo', icon: UserPlus },
     ...(atiende ? [{ key: 'clientes', titulo: 'Clientes', desc: 'A qué clientes atiende', icon: Building2 }] : []),
     { key: 'listo', titulo: 'Listo', desc: 'Resumen', icon: Rocket },
   ]
   const actual = PASOS[paso]
   const bloqueado = (i: number) => i > 0 && grupoId == null
+  // Cambiar de paso guardando antes lo pendiente (si no se puede, se queda).
+  const irA = async (i: number) => {
+    if (i === paso) return
+    if (guardarRef.current) {
+      setCambiando(true)
+      const ok = await guardarRef.current().finally(() => setCambiando(false))
+      if (!ok) return
+    }
+    setPaso(i)
+  }
 
   const crear = useMutation({
     mutationFn: async () => {
@@ -63,10 +77,11 @@ export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
 
   const recargar = () => { refetch() }
   const n = (re: RegExp) => Number(grupo?.contexto?.match(re)?.[1] ?? 0)
+  const nSupervisores = n(/(\d+) supervisor/)
   const completo: Record<string, boolean> = {
     grupo: grupoId != null,
     asignaciones: !!grupo?.contexto && !grupo.contexto.startsWith('Sin campaña'),
-    gente: (grupo?.miembros ?? 0) > 0,
+    personas: nSupervisores > 0 && (grupo?.miembros ?? 0) > 0,
     clientes: n(/(\d+) cliente/) > 0,
     listo: false,
   }
@@ -93,7 +108,7 @@ export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
             const activo = i === paso
             const hecho = completo[p.key]
             return (
-              <button key={p.key} disabled={bloqueado(i)} onClick={() => setPaso(i)}
+              <button key={p.key} disabled={bloqueado(i) || cambiando} onClick={() => irA(i)}
                 className={clsx('flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-40',
                   activo ? 'bg-violet-50' : 'hover:bg-gray-50')}>
                 <span className={clsx('mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[0.65rem] font-bold',
@@ -167,10 +182,14 @@ export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
           )}
 
           {tipo && grupo && actual.key === 'asignaciones' && (
-            <ConfigGrupo tipo={tipo} grupo={grupo} editable onCambio={recargar} />
+            <ConfigGrupo tipo={tipo} grupo={grupo} editable onCambio={recargar} seccion="asignaciones" guardarRef={guardarRef} />
           )}
-          {tipo && grupo && actual.key === 'gente' && (
-            <MiembrosGrupo tipo={tipo} grupo={grupo} puedeEditar onCambio={recargar} />
+          {tipo && grupo && actual.key === 'personas' && (
+            <>
+              <ConfigGrupo tipo={tipo} grupo={grupo} editable onCambio={recargar} seccion="personas" />
+              <MiembrosGrupo tipo={tipo} grupo={grupo} puedeEditar onCambio={recargar} titulo={gente}
+                sub={`Trabajan en el grupo: al entrar reciben sus campañas, skills y marcador${atiende ? ', y atienden a sus clientes' : ''}. Cada persona es supervisor o ${atiende ? 'asesor' : 'agente'}, no ambos.`} />
+            </>
           )}
           {tipo && grupo && actual.key === 'clientes' && (
             <ClientesDelGrupo tipo={tipo} grupo={grupo} editable onCambio={recargar} />
@@ -185,7 +204,7 @@ export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
                   <div key={p.key} className={clsx('flex items-center gap-2 rounded-xl border px-3 py-2 text-[0.78rem]',
                     completo[p.key] ? 'border-emerald-100 bg-emerald-50/60 text-emerald-700' : 'border-amber-100 bg-amber-50/60 text-amber-700')}>
                     {completo[p.key] ? <Check className="h-4 w-4" /> : <span className="h-4 w-4 text-center font-bold">!</span>}
-                    {p.titulo}{p.key === 'gente' ? ` (${grupo.miembros})` : ''}
+                    {p.key === 'personas' ? `${nSupervisores} supervisor(es) · ${grupo.miembros} ${atiende ? 'asesor(es)' : 'agente(s)'}` : p.titulo}
                   </div>
                 ))}
               </div>
@@ -203,12 +222,12 @@ export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
           {/* Navegación */}
           {paso > 0 && (
             <div className="flex justify-between">
-              <button onClick={() => setPaso(paso - 1)} className="flex items-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-ink-secondary hover:bg-gray-50">
+              <button onClick={() => irA(paso - 1)} disabled={cambiando} className="flex items-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-ink-secondary hover:bg-gray-50">
                 <ArrowLeft className="h-4 w-4" /> Atrás
               </button>
               {paso < PASOS.length - 1 && (
-                <button onClick={() => setPaso(paso + 1)} className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">
-                  Siguiente <ArrowRight className="h-4 w-4" />
+                <button onClick={() => irA(paso + 1)} disabled={cambiando} className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60">
+                  {cambiando ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : <>Siguiente <ArrowRight className="h-4 w-4" /></>}
                 </button>
               )}
             </div>

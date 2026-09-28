@@ -304,7 +304,7 @@ const ACCIONES_POR_MODULO = {
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   reports: [
-    { key: 'ver-reportes',       nombre: 'Ver reportes',          descripcion: 'Consultar reporte de tiempos por usuario, resumen general y reporte de baño (AD/TI)' },
+    { key: 'ver-reportes',       nombre: 'Ver reportes',          descripcion: 'Consultar reporte de tiempos por usuario, resumen general, reporte detallado por colaborador y reporte de baño (AD/TI). Los reportes de nómina y auditoría además piden su propio permiso' },
     { key: 'gestionar-pausas',    nombre: 'Gestionar pausas',      descripcion: 'Iniciar, terminar y consultar la pausa activa propia' },
     { key: 'ver-equipo',          nombre: 'Ver tiempos del equipo', descripcion: 'Ver el tiempo disponible y en pausa de todos los usuarios del área, en la tarjeta del Inicio' },
     { key: 'notificar-correo', nombre: 'Notificar por correo', descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },

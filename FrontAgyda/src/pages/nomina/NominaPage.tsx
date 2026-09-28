@@ -5,7 +5,7 @@ import {
   Wallet, Plus, RefreshCw, CheckCircle2, LayoutGrid, PieChart,
   DollarSign, TrendingUp, AlertTriangle, Users, X, Coins, Save,
   Pencil, Check, BadgeDollarSign, RotateCcw, Settings, Trophy,
-  UserX, ShieldOff,
+  UserX, ShieldOff, Calculator, Target,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Modal } from '@/components/ui/Modal'
@@ -2089,8 +2089,569 @@ function NominaSueldos() {
   )
 }
 
+/* ── Pre nómina ── */
+interface PreNominaCampana {
+  campanaId: number
+  campana: string
+  tipoTarifa: 'fijo' | 'porcentaje'
+  tarifa: number
+  gananciaNeta: number
+  ventas: number
+  mezcla: number
+  comisionPorVenta: number
+  aportePorVenta: number
+  ventasNecesarias: number | null
+  ventasSoloEstaCampana: number | null
+}
+interface PreNominaAgente {
+  neusId: number
+  nombre: string
+  sueldo: number
+  ventas: number
+  comisiones: number
+  bono: number
+  lugar: number | null
+  total: number
+  ganancia: number
+  pagadoPasado: number
+  ventasMinimas: number | null
+}
+interface PreNominaData {
+  periodo: { id: number; fechaInicio: string; fechaFin: string; estado: string } | null
+  config: { sueldoBase: number; diasQuincena: number }
+  pasado: { nomina: number; sueldos: number; descuentos: number; comisiones: number; bonos: number; ventas: number; empleados: number }
+  proyectado: { sueldos: number; comisiones: number; bonos: number; ganancia: number; ventas: number; empleados: number; nomina: number; resultado: number }
+  equilibrio: { costoFijo: number; aportePromedio: number; gananciaPromedio: number; comisionPromedio: number; ventasNecesarias: number | null; ventasNecesariasPorAgente: number | null }
+  campanas: PreNominaCampana[]
+  agentes: PreNominaAgente[]
+}
+
+/* ── Pre nómina → Metas ── */
+interface MetaCampanaProp { campanaId: number; campana: string; ventasNecesarias: number; metaDiaria: number; metaActual: number }
+interface MetaAsesorProp {
+  neusId: number; nombre: string; asesorId: number | null; campanaId: number | null; campana: string | null
+  ventasBase: number; ventasMinimas: number | null; metaDiaria: number; metaActual: number
+}
+interface PreNominaMetasData {
+  base: { id: number; fechaInicio: string; fechaFin: string }
+  quincena: { inicio: string; fin: string; diasHabiles: number }
+  ventasNecesarias: number | null
+  cobertura: { sumaMetasCampana: number; sumaMetasAsesor: number; comparadaCon: 'campana' | 'asesor' | null; faltan: number | null; cubre: boolean }
+  estatus: { nomina: string[]; metas: string[]; iguales: boolean }
+  errorVentas: string | null
+  propuesta: { campanas: MetaCampanaProp[]; asesores: MetaAsesorProp[] }
+}
+
+function ConvertirMetasModal({ data, onClose }: { data: PreNominaMetasData; onClose: () => void }) {
+  const qc = useQueryClient()
+  const dias = data.quincena.diasHabiles
+  const [crearCampanas, setCrearCampanas] = useState(data.propuesta.campanas.length > 0)
+  const [crearAsesores, setCrearAsesores] = useState(true)
+  const [campanas, setCampanas] = useState(data.propuesta.campanas.map((c) => ({ ...c })))
+  const [asesores, setAsesores] = useState(data.propuesta.asesores.map((a) => ({ ...a, incluir: a.asesorId !== null && a.metaDiaria > 0 })))
+
+  const totalCampanas = campanas.reduce((s, c) => s + c.metaDiaria * dias, 0)
+  const totalAsesores = asesores.filter((a) => a.incluir).reduce((s, a) => s + a.metaDiaria * dias, 0)
+  const necesarias = data.ventasNecesarias ?? 0
+  const sinLigar = asesores.filter((a) => a.asesorId === null).length
+  const nMetas = (crearCampanas ? campanas.filter((c) => c.metaDiaria > 0).length : 0) + (crearAsesores ? asesores.filter((a) => a.incluir && a.metaDiaria > 0).length : 0)
+
+  const crear = useMutation({
+    mutationFn: () => api.post('/nomina/pre-nomina/metas', {
+      inicio: data.quincena.inicio,
+      fin: data.quincena.fin,
+      campanas: crearCampanas ? campanas.map((c) => ({ campanaId: c.campanaId, metaDiaria: c.metaDiaria })) : [],
+      asesores: crearAsesores ? asesores.filter((a) => a.incluir).map((a) => ({ asesorId: a.asesorId, campanaId: a.campanaId, metaDiaria: a.metaDiaria })) : [],
+    }),
+    onSuccess: (r) => {
+      const d = r.data?.data
+      toast.success(`Metas creadas: ${(d?.campanas ?? 0) + (d?.asesores ?? 0)} metas diarias en ${d?.diasHabiles ?? dias} días hábiles`)
+      qc.invalidateQueries({ queryKey: ['nomina-pre-nomina-metas'] })
+      onClose()
+    },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudieron crear las metas'),
+  })
+
+  const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
+    <button type="button" onClick={onClick} className={clsx('inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors', on ? 'bg-brand' : 'bg-gray-200')}>
+      <span className={clsx('inline-block h-4 w-4 rounded-full bg-card shadow transition-transform', on ? 'translate-x-4' : 'translate-x-0.5')} />
+    </button>
+  )
+  const Cobertura = ({ total }: { total: number }) => (
+    <span className={clsx('rounded-full px-2 py-0.5 text-[0.68rem] font-semibold', total >= necesarias ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
+      {total} en la quincena {total >= necesarias ? `· cubre las ${necesarias}` : `· faltan ${necesarias - total}`}
+    </span>
+  )
+
+  return (
+    <Modal isOpen onClose={onClose} title="Convertir la pre nómina en metas" size="xl">
+      <div className="space-y-5">
+        <div className="rounded-xl border border-brand/15 bg-brand/5 px-4 py-3 text-[0.78rem] text-gray-700">
+          Se crea una meta <b>diaria</b> por cada día hábil (lunes a sábado) del <b>{fmtFecha(data.quincena.inicio)}</b> al <b>{fmtFecha(data.quincena.fin)}</b>: {dias} días.
+          Para cubrir la nómina se necesitan <b>{necesarias} ventas</b> en la quincena. Si ya existe una meta ese día para la misma campaña o asesor, se actualiza.
+        </div>
+
+        {!data.estatus.iguales && (
+          <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[0.75rem] text-amber-800">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <p>
+              Metas cuenta como venta: <b>{data.estatus.metas.join(', ')}</b>. Nómina solo paga: <b>{data.estatus.nomina.join(', ')}</b>.
+              El avance que muestre Metas puede ser mayor a lo que Nómina toma en cuenta. Puedes igualarlo en Configuración → CRM → Ventas (Área).
+            </p>
+          </div>
+        )}
+
+        {/* Metas por campaña */}
+        <div className="rounded-2xl border border-gray-100">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Toggle on={crearCampanas} onClick={() => setCrearCampanas((v) => !v)} />
+              <div>
+                <p className="text-[0.82rem] font-bold text-gray-800">Metas por campaña</p>
+                <p className="text-[0.68rem] text-gray-400">La meta del equipo: suma de todos los agentes de la campaña.</p>
+              </div>
+            </div>
+            {crearCampanas && <Cobertura total={totalCampanas} />}
+          </div>
+          {crearCampanas && (
+            campanas.length === 0 ? (
+              <p className="px-4 py-5 text-center text-[0.78rem] text-gray-400">No hay campañas con ventas necesarias.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50/50">
+                    <th className="px-4 py-2 text-left text-[0.68rem] font-semibold text-gray-400 uppercase">Campaña</th>
+                    <th className="px-4 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Necesarias</th>
+                    <th className="px-4 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Meta diaria</th>
+                    <th className="px-4 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Total quincena</th>
+                    <th className="px-4 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Ya capturado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 tabular-nums">
+                  {campanas.map((c, i) => (
+                    <tr key={c.campanaId}>
+                      <td className="px-4 py-2 font-medium text-gray-800">{c.campana}</td>
+                      <td className="px-4 py-2 text-right">{c.ventasNecesarias}</td>
+                      <td className="px-4 py-2">
+                        <input type="number" min="0" step="1" value={c.metaDiaria}
+                          onChange={(e) => setCampanas((cs) => cs.map((x, j) => j === i ? { ...x, metaDiaria: Math.max(0, Math.floor(Number(e.target.value) || 0)) } : x))}
+                          className="field ml-auto w-20 py-1 text-right text-[0.8rem]" />
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold">{c.metaDiaria * dias}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">{c.metaActual || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+        </div>
+
+        {/* Metas por asesor */}
+        <div className="rounded-2xl border border-gray-100">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Toggle on={crearAsesores} onClick={() => setCrearAsesores((v) => !v)} />
+              <div>
+                <p className="text-[0.82rem] font-bold text-gray-800">Metas por asesor</p>
+                <p className="text-[0.68rem] text-gray-400">La meta mínima de cada quien para cubrir su propio sueldo, en su campaña principal.</p>
+              </div>
+            </div>
+            {crearAsesores && <Cobertura total={totalAsesores} />}
+          </div>
+          {crearAsesores && (
+            <div className="max-h-[38vh] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50">
+                  <tr>
+                    <th className="w-10" />
+                    <th className="px-3 py-2 text-left text-[0.68rem] font-semibold text-gray-400 uppercase">Asesor</th>
+                    <th className="px-3 py-2 text-left text-[0.68rem] font-semibold text-gray-400 uppercase">Campaña</th>
+                    <th className="px-3 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Vendió (base)</th>
+                    <th className="px-3 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Mínimo quincena</th>
+                    <th className="px-3 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Meta diaria</th>
+                    <th className="px-3 py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 tabular-nums">
+                  {asesores.map((a, i) => {
+                    const ligado = a.asesorId !== null
+                    return (
+                      <tr key={a.neusId} className={clsx(!a.incluir && 'opacity-50')}>
+                        <td className="px-3 py-2 text-center">
+                          <input type="checkbox" checked={a.incluir} disabled={!ligado}
+                            onChange={() => setAsesores((as) => as.map((x, j) => j === i ? { ...x, incluir: !x.incluir } : x))}
+                            className="h-4 w-4 rounded border-gray-300 text-brand disabled:cursor-not-allowed" />
+                        </td>
+                        <td className="px-3 py-2">
+                          <p className="font-medium text-gray-800">{a.nombre}</p>
+                          {!ligado && <p className="text-[0.65rem] text-red-500">No se encontró en el sistema de Ventas con ese nombre</p>}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500">{a.campana ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{a.ventasBase}</td>
+                        <td className="px-3 py-2 text-right">{a.ventasMinimas ?? '—'}</td>
+                        <td className="px-3 py-2">
+                          <input type="number" min="0" step="1" value={a.metaDiaria} disabled={!a.incluir}
+                            onChange={(e) => setAsesores((as) => as.map((x, j) => j === i ? { ...x, metaDiaria: Math.max(0, Math.floor(Number(e.target.value) || 0)) } : x))}
+                            className="field ml-auto w-20 py-1 text-right text-[0.8rem]" />
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold">{a.incluir ? a.metaDiaria * dias : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {crearAsesores && sinLigar > 0 && (
+            <p className="border-t border-gray-100 px-4 py-2 text-[0.7rem] text-gray-400">{sinLigar} agente(s) no se pueden crear: su nombre en la intranet no coincide con ningún asesor activo del sistema de Ventas.</p>
+          )}
+        </div>
+
+        <p className="text-[0.7rem] text-gray-400">Las metas se redondean hacia arriba para no quedar debajo del punto de equilibrio, por eso el total de la quincena puede pasar de lo necesario.</p>
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[0.75rem] text-gray-500">{nMetas} meta(s) × {dias} días = {nMetas * dias} registros diarios</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button isLoading={crear.isPending} disabled={nMetas === 0} onClick={() => crear.mutate()}>
+              <Target className="h-3.5 w-3.5" /> Crear metas
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function PreNominaMetasCard({ baseId }: { baseId: number }) {
+  const [rango, setRango] = useState<{ inicio: string; fin: string } | null>(null)
+  const [convertir, setConvertir] = useState(false)
+  const { data, isLoading, error } = useQuery<PreNominaMetasData | null>({
+    queryKey: ['nomina-pre-nomina-metas', baseId, rango?.inicio, rango?.fin],
+    queryFn: async () => (await api.get('/nomina/pre-nomina/metas', { params: { basePeriodoId: baseId, inicio: rango?.inicio, fin: rango?.fin } })).data?.data ?? null,
+    retry: false,
+  })
+
+  if (isLoading) return <div className="card h-32 animate-pulse bg-gray-100" />
+  if (error || !data) {
+    return (
+      <div className="card p-5 text-[0.78rem] text-gray-400">
+        {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudo revisar las metas de la próxima quincena.'}
+      </div>
+    )
+  }
+
+  const { cobertura, quincena } = data
+  const necesarias = data.ventasNecesarias
+  const suma = cobertura.comparadaCon === 'campana' ? cobertura.sumaMetasCampana : cobertura.sumaMetasAsesor
+  const pct = necesarias ? Math.min(100, Math.round((suma / necesarias) * 100)) : 0
+
+  return (
+    <div className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[0.8rem] font-bold text-gray-700 flex items-center gap-2"><Target className="h-4 w-4 text-brand" /> Metas de la próxima quincena</h3>
+          <p className="text-[0.7rem] text-gray-400 mt-0.5">¿Las metas capturadas en Metas alcanzan para pagar la nómina?</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-[0.65rem] font-semibold uppercase text-gray-400">Del
+            <input type="date" value={quincena.inicio} onChange={(e) => e.target.value && setRango({ inicio: e.target.value, fin: rango?.fin ?? quincena.fin })} className="field mt-0.5 w-auto py-1 text-[0.78rem]" />
+          </label>
+          <label className="text-[0.65rem] font-semibold uppercase text-gray-400">Al
+            <input type="date" value={quincena.fin} onChange={(e) => e.target.value && setRango({ inicio: rango?.inicio ?? quincena.inicio, fin: e.target.value })} className="field mt-0.5 w-auto py-1 text-[0.78rem]" />
+          </label>
+          <span className="rounded-lg bg-gray-100 px-2.5 py-1.5 text-[0.72rem] font-semibold text-gray-600">{quincena.diasHabiles} días hábiles</span>
+        </div>
+      </div>
+
+      {necesarias === null ? (
+        <p className="mt-4 text-[0.78rem] text-red-600">Con la configuración actual ninguna cantidad de ventas cubre la nómina, así que no hay metas que proponer.</p>
+      ) : (
+        <>
+          <div className="mt-4">
+            <div className="flex items-baseline justify-between text-[0.78rem]">
+              <span className="text-gray-600">
+                {cobertura.comparadaCon === null
+                  ? 'Todavía no hay metas diarias capturadas para esas fechas.'
+                  : `Metas ${cobertura.comparadaCon === 'campana' ? 'de campaña' : 'por asesor'} capturadas: ${suma} ventas`}
+              </span>
+              <span className="font-semibold text-gray-800 tabular-nums">{suma} / {necesarias} necesarias</span>
+            </div>
+            <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+              <div className={clsx('h-full rounded-full transition-all', cobertura.cubre ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${Math.max(pct, suma > 0 ? 4 : 0)}%` }} />
+            </div>
+            <p className={clsx('mt-2 text-[0.78rem] font-semibold', cobertura.cubre ? 'text-emerald-700' : 'text-amber-700')}>
+              {cobertura.cubre
+                ? 'Las metas alcanzan para cubrir la nómina.'
+                : cobertura.comparadaCon === null
+                  ? `Se necesitan ${necesarias} ventas: unas ${Math.ceil(necesarias / Math.max(1, quincena.diasHabiles))} por día hábil.`
+                  : `Faltan ${cobertura.faltan} ventas en las metas para cubrir la nómina.`}
+            </p>
+          </div>
+
+          {!data.estatus.iguales && (
+            <p className="mt-3 flex items-start gap-1.5 text-[0.7rem] text-amber-700">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+              Metas cuenta como venta {data.estatus.metas.join(', ')}; Nómina solo paga {data.estatus.nomina.join(', ')}. El avance en Metas puede verse mayor al que Nómina toma en cuenta.
+            </p>
+          )}
+          {data.errorVentas && (
+            <p className="mt-2 text-[0.7rem] text-red-500">No se pudo leer el sistema de Ventas para ligar asesores: {data.errorVentas}</p>
+          )}
+
+          <div className="mt-4 flex justify-end">
+            <Button onClick={() => setConvertir(true)} className="gap-1.5">
+              <Target className="h-3.5 w-3.5" /> Convertir en metas
+            </Button>
+          </div>
+        </>
+      )}
+
+      {convertir && <ConvertirMetasModal data={data} onClose={() => setConvertir(false)} />}
+    </div>
+  )
+}
+
+function NominaPreNomina({ periodos, periodoActivo }: { periodos: Periodo[]; periodoActivo: Periodo | null }) {
+  const calculados = periodos.filter((p) => p.fechaCalculo !== null)
+  // "La quincena pasada": la última ya calculada anterior al periodo seleccionado arriba
+  const baseDefault = (periodoActivo && calculados.find((p) => p.fechaInicio < periodoActivo.fechaInicio)) ?? calculados[0] ?? null
+  const [baseId, setBaseId] = useState<number | null>(null)
+  const base = calculados.find((p) => p.id === baseId) ?? baseDefault
+  const [ventasSim, setVentasSim] = useState<string>('')
+
+  const { data, isLoading } = useQuery<PreNominaData>({
+    queryKey: ['nomina-pre-nomina', base?.id],
+    enabled: !!base,
+    queryFn: async () => (await api.get('/nomina/pre-nomina', { params: { basePeriodoId: base!.id } })).data?.data,
+  })
+
+  if (!base) {
+    return (
+      <div className="card flex flex-col items-center justify-center gap-3 py-16">
+        <Calculator className="h-10 w-10 text-gray-200" />
+        <p className="text-sm text-gray-400">Calcula al menos una quincena para poder proyectar la pre nómina</p>
+      </div>
+    )
+  }
+  if (isLoading || !data?.periodo) {
+    return <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="card h-24 animate-pulse bg-gray-100" />)}</div>
+  }
+
+  const { pasado, proyectado, equilibrio } = data
+  const ventasNec = equilibrio.ventasNecesarias
+  const faltan = ventasNec !== null ? ventasNec - proyectado.ventas : null
+
+  // Simulador: con N ventas, cuánto cuesta la nómina y cuánto queda
+  const vSim = ventasSim === '' ? proyectado.ventas : Math.max(0, Number(ventasSim) || 0)
+  const simNomina   = equilibrio.costoFijo + vSim * equilibrio.comisionPromedio
+  const simGanancia = vSim * equilibrio.gananciaPromedio
+  const simResultado = simGanancia - simNomina
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      {/* Base de la proyección */}
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <p className="text-[0.8rem] font-bold text-gray-700">Pre nómina de la siguiente quincena</p>
+          <p className="text-[0.7rem] text-gray-400 mt-0.5">
+            Usa los agentes y las ventas de la quincena base, con los sueldos, comisiones, ganancia neta y bonos que hay hoy en Configuración. Asume quincena completa sin faltas.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-[0.72rem] font-semibold text-gray-500">
+          Quincena base
+          <select value={base.id} onChange={(e) => setBaseId(Number(e.target.value))} className="field py-1 text-[0.78rem] w-auto">
+            {calculados.map((p) => (
+              <option key={p.id} value={p.id}>{fmtFecha(p.fechaInicio)} – {fmtFecha(p.fechaFin)}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile icon={Wallet} label={`Nómina pagada ${fmtFecha(data.periodo.fechaInicio)} – ${fmtFecha(data.periodo.fechaFin)}`} value={fmtMoney(pasado.nomina)} tone="brand" />
+        <StatTile icon={Calculator} label="Nómina proyectada (sin faltas)" value={fmtMoney(proyectado.nomina)} tone="warn" />
+        <StatTile icon={Target} label={`Ventas para cubrir la nómina (vendieron ${proyectado.ventas})`} value={ventasNec !== null ? String(ventasNec) : '—'} tone={faltan !== null && faltan > 0 ? 'critical' : 'success'} />
+        <StatTile icon={TrendingUp} label="Ganancia − nómina proyectada" value={fmtMoney(proyectado.resultado)} tone={proyectado.resultado >= 0 ? 'success' : 'critical'} />
+      </div>
+
+      {ventasNec === null ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[0.78rem] text-red-700">
+          Con la configuración actual cada venta cuesta en comisión lo mismo o más de lo que deja de ganancia neta, así que ninguna cantidad de ventas cubre la nómina. Revisa las tarifas y la ganancia neta en Configuración.
+        </div>
+      ) : (
+        <div className={clsx('rounded-xl border px-4 py-3 text-[0.78rem]', faltan! > 0 ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800')}>
+          Para cubrir {fmtMoney(equilibrio.costoFijo)} de sueldos y bonos se necesitan <b>{ventasNec} ventas aprobadas</b> en la quincena
+          (unas <b>{equilibrio.ventasNecesariasPorAgente}</b> por agente entre {proyectado.empleados}). Cada venta deja en promedio {fmtMoney(equilibrio.gananciaPromedio)} y cuesta {fmtMoney(equilibrio.comisionPromedio)} de comisión: aporta {fmtMoney(equilibrio.aportePromedio)}.{' '}
+          {faltan! > 0
+            ? <>Con las {proyectado.ventas} ventas de la quincena base <b>faltarían {faltan} ventas</b>.</>
+            : <>Con las {proyectado.ventas} ventas de la quincena base <b>sobran {-faltan!} ventas</b> sobre el punto de equilibrio.</>}
+        </div>
+      )}
+
+      <PreNominaMetasCard baseId={base.id} />
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Comparativo pagado vs proyectado */}
+        <div className="card p-5">
+          <h3 className="text-[0.8rem] font-bold text-gray-700 mb-3">Quincena base vs proyección</h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="py-2 text-left text-[0.68rem] font-semibold text-gray-400 uppercase">Concepto</th>
+                <th className="py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Pagado</th>
+                <th className="py-2 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Proyectado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 tabular-nums">
+              <tr><td className="py-2 text-gray-600">Agentes</td><td className="py-2 text-right">{pasado.empleados}</td><td className="py-2 text-right">{proyectado.empleados}</td></tr>
+              <tr><td className="py-2 text-gray-600">Sueldos</td><td className="py-2 text-right">{fmtMoney(pasado.sueldos)}</td><td className="py-2 text-right">{fmtMoney(proyectado.sueldos)}</td></tr>
+              <tr><td className="py-2 text-gray-600">Descuentos por faltas</td><td className="py-2 text-right text-red-500">−{fmtMoney(pasado.descuentos)}</td><td className="py-2 text-right text-gray-400">—</td></tr>
+              <tr><td className="py-2 text-gray-600">Comisiones</td><td className="py-2 text-right">{fmtMoney(pasado.comisiones)}</td><td className="py-2 text-right">{fmtMoney(proyectado.comisiones)}</td></tr>
+              <tr><td className="py-2 text-gray-600">Bonos de ranking</td><td className="py-2 text-right">{fmtMoney(pasado.bonos)}</td><td className="py-2 text-right">{fmtMoney(proyectado.bonos)}</td></tr>
+              <tr className="font-bold text-gray-900"><td className="py-2">Total nómina</td><td className="py-2 text-right">{fmtMoney(pasado.nomina)}</td><td className="py-2 text-right">{fmtMoney(proyectado.nomina)}</td></tr>
+              <tr><td className="py-2 text-gray-600">Ventas aprobadas</td><td className="py-2 text-right">{pasado.ventas}</td><td className="py-2 text-right">{proyectado.ventas}</td></tr>
+              <tr className="text-emerald-700"><td className="py-2">Ganancia neta de esas ventas</td><td className="py-2 text-right text-gray-400">—</td><td className="py-2 text-right font-semibold">{fmtMoney(proyectado.ganancia)}</td></tr>
+            </tbody>
+          </table>
+          <p className="mt-2 text-[0.68rem] text-gray-400">La proyección no descuenta faltas (aún no ocurren) y no incluye a los agentes que hoy están en Excluidos.</p>
+        </div>
+
+        {/* Simulador */}
+        <div className="card p-5">
+          <h3 className="text-[0.8rem] font-bold text-gray-700 mb-1">Simulador</h3>
+          <p className="text-[0.7rem] text-gray-400 mb-4">Escribe cuántas ventas aprobadas esperas y ve cuánto costaría la nómina y cuánto quedaría, con la misma mezcla de campañas.</p>
+          <label className="mb-1 block text-xs font-semibold text-gray-500 uppercase tracking-wide">Ventas esperadas</label>
+          <input type="number" min="0" step="1" value={ventasSim} placeholder={String(proyectado.ventas)}
+            onChange={(e) => setVentasSim(e.target.value)} className="field mb-4" />
+          <div className="space-y-2 text-sm tabular-nums">
+            <div className="flex justify-between"><span className="text-gray-600">Nómina (sueldos + bonos + comisiones)</span><span className="font-semibold">{fmtMoney(simNomina)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600">Ganancia neta de las ventas</span><span className="font-semibold text-emerald-600">{fmtMoney(simGanancia)}</span></div>
+            <div className="flex justify-between border-t border-gray-100 pt-2">
+              <span className="font-bold text-gray-800">{simResultado >= 0 ? 'Queda después de pagar nómina' : 'Faltante para cubrir la nómina'}</span>
+              <span className={clsx('font-bold', simResultado >= 0 ? 'text-emerald-600' : 'text-red-600')}>{fmtMoney(Math.abs(simResultado))}</span>
+            </div>
+          </div>
+          <p className="mt-3 text-[0.68rem] text-gray-400">Los bonos se toman del ranking de la quincena base.</p>
+        </div>
+      </div>
+
+      {/* Por campaña */}
+      <div className="card overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-[0.8rem] font-bold text-gray-700">Ventas necesarias por campaña</h3>
+          <p className="text-[0.7rem] text-gray-400 mt-0.5">Reparto de las {ventasNec ?? '—'} ventas según la mezcla de la quincena base, y cuántas harían falta si todas fueran de una sola campaña.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-y border-gray-100 bg-gray-50/50">
+                <th className="px-4 py-2.5 text-left text-[0.68rem] font-semibold text-gray-400 uppercase">Campaña</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Ventas base</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Mezcla</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Ganancia / venta</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Comisión / venta</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Aporte / venta</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Necesarias</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Si solo fuera esta</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 tabular-nums">
+              {data.campanas.map((c) => {
+                const col = campColor(c.campanaId)
+                return (
+                  <tr key={c.campanaId}>
+                    <td className="px-4 py-2.5">
+                      <span className={clsx('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.72rem] font-semibold', col.bg, col.text)}>
+                        <span className={clsx('h-1.5 w-1.5 rounded-full', col.dot)} />{c.campana}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">{c.ventas}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-500">{(c.mezcla * 100).toFixed(0)}%</td>
+                    <td className="px-4 py-2.5 text-right text-emerald-600">{fmtMoney(c.gananciaNeta)}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-600">{fmtMoney(c.comisionPorVenta)}</td>
+                    <td className={clsx('px-4 py-2.5 text-right font-semibold', c.aportePorVenta > 0 ? 'text-gray-900' : 'text-red-600')}>{fmtMoney(c.aportePorVenta)}</td>
+                    <td className="px-4 py-2.5 text-right font-bold">{c.ventasNecesarias ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-500">{c.ventasSoloEstaCampana ?? (c.gananciaNeta <= 0 ? 'Sin ganancia neta' : 'No cubre')}</td>
+                  </tr>
+                )
+              })}
+              {data.campanas.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-[0.8rem] text-gray-400">No hay campañas activas en Configuración</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Por agente */}
+      <div className="card overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-[0.8rem] font-bold text-gray-700">Proyección por agente</h3>
+          <p className="text-[0.7rem] text-gray-400 mt-0.5">Si cada quien repite sus ventas de la quincena base. "Meta mínima" = ventas para que su aporte cubra su propio sueldo.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-y border-gray-100 bg-gray-50/50">
+                <th className="px-4 py-2.5 text-left text-[0.68rem] font-semibold text-gray-400 uppercase">Agente</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Pagado base</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Sueldo</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Ventas</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Comisiones</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Bono</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Total proyectado</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-emerald-600 uppercase">Ganancia</th>
+                <th className="px-4 py-2.5 text-right text-[0.68rem] font-semibold text-gray-400 uppercase">Meta mínima</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 tabular-nums">
+              {data.agentes.map((a) => {
+                const cubre = a.ventasMinimas !== null && a.ventas >= a.ventasMinimas
+                return (
+                  <tr key={a.neusId}>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        {a.lugar !== null && a.lugar <= 3 && (
+                          <span className={clsx('inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[0.6rem] font-bold',
+                            a.lugar === 1 ? 'bg-amber-100 text-amber-700' : a.lugar === 2 ? 'bg-gray-100 text-gray-600' : 'bg-orange-100 text-orange-600')}>
+                            {a.lugar}°
+                          </span>
+                        )}
+                        <span className="font-medium text-gray-800">{a.nombre}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-gray-500">{fmtMoney(a.pagadoPasado)}</td>
+                    <td className="px-4 py-2.5 text-right">{fmtMoney(a.sueldo)}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold">{a.ventas}</td>
+                    <td className="px-4 py-2.5 text-right">{fmtMoney(a.comisiones)}</td>
+                    <td className="px-4 py-2.5 text-right">{a.bono > 0 ? fmtMoney(a.bono) : '—'}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-gray-900">{fmtMoney(a.total)}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{fmtMoney(a.ganancia)}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      {a.ventasMinimas === null ? '—' : (
+                        <span className={clsx('rounded-full px-2 py-0.5 text-[0.7rem] font-semibold', cubre ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600')}>
+                          {a.ventasMinimas} {cubre ? '✓' : `(faltan ${a.ventasMinimas - a.ventas})`}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+              {data.agentes.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-[0.8rem] text-gray-400">La quincena base no tiene agentes calculados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function NominaPage() {
-  const [vista, setVista] = useState<'preview' | 'dashboard' | 'sueldos' | 'config'>('preview')
+  const [vista, setVista] = useState<'preview' | 'prenomina' | 'dashboard' | 'sueldos' | 'config'>('preview')
   const [showCrear, setShowCrear] = useState(false)
   const [periodoId, setPeriodoId] = useState<number | null>(null)
 
@@ -2146,6 +2707,10 @@ export function NominaPage() {
                   className={clsx('flex h-8 w-8 items-center justify-center rounded-md transition-colors', vista === 'preview' ? 'bg-card text-brand' : 'text-white/70 hover:bg-white/10')}>
                   <LayoutGrid className="h-4 w-4" />
                 </button>
+                <button onClick={() => setVista('prenomina')} title="Pre nómina: proyección con la quincena pasada"
+                  className={clsx('flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[0.75rem] font-semibold transition-colors', vista === 'prenomina' ? 'bg-card text-brand' : 'text-white/70 hover:bg-white/10')}>
+                  <Calculator className="h-4 w-4" /> Pre nómina
+                </button>
                 <button onClick={() => setVista('dashboard')} title="Ver dashboard"
                   className={clsx('flex h-8 w-8 items-center justify-center rounded-md transition-colors', vista === 'dashboard' ? 'bg-card text-brand' : 'text-white/70 hover:bg-white/10')}>
                   <PieChart className="h-4 w-4" />
@@ -2172,6 +2737,8 @@ export function NominaPage() {
 
       {vista === 'config' ? (
         <NominaConfig />
+      ) : vista === 'prenomina' ? (
+        <NominaPreNomina periodos={periodos} periodoActivo={periodoActivo} />
       ) : vista === 'dashboard' ? (
         <NominaDashboard />
       ) : vista === 'sueldos' ? (

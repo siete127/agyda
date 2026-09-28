@@ -137,9 +137,15 @@ function CrearEvalModal({ onClose, onCreated }: { onClose: () => void; onCreated
 function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalId: number; soloLectura: boolean; puedeFinalizar: boolean; onClose: () => void }) {
   const qc = useQueryClient()
 
+  // Sin caché entre aperturas: el grid se inicializa una sola vez con lo que
+  // llegue, así que si se usara la copia en memoria de una apertura anterior
+  // (previa a "Guardar borrador") se verían las marcas viejas y un nuevo
+  // guardado las sobrescribiría con esas.
   const { data, isLoading } = useQuery<EvalDetalle>({
     queryKey: ['eval-capacitacion-detalle', evalId],
     queryFn: async () => (await api.get(`/eval-capacitacion/${evalId}`)).data?.data,
+    gcTime: 0,
+    refetchOnMount: 'always',
   })
 
   // Estado local del grid: "criterioKey|1|dia" → valor (subitem siempre 1)
@@ -147,6 +153,18 @@ function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalI
   const [resumen, setResumen] = useState({ fortalezas: '', areasOportunidad: '', planAccion: '' })
   const [initialized, setInitialized] = useState(false)
   const [confirmFinalizar, setConfirmFinalizar] = useState(false)
+  const [sinGuardar, setSinGuardar] = useState(false)
+
+  const cerrar = () => {
+    if (sinGuardar && !window.confirm('Tienes cambios sin guardar en esta evaluación. ¿Cerrar de todos modos?')) return
+    onClose()
+  }
+
+  const mensajeError = (e: unknown, accion: string) => {
+    const err = e as { response?: { status?: number; data?: { message?: string } } }
+    if (!err.response) return `No se pudo conectar con el servidor al ${accion}. Tus marcas siguen en pantalla: intenta de nuevo en un momento.`
+    return err.response.data?.message ?? `Error al ${accion} (código ${err.response.status})`
+  }
 
   if (data && !initialized) {
     const g: Record<string, number | null> = {}
@@ -272,9 +290,10 @@ function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalI
     mutationFn: () => api.put(`/eval-capacitacion/${evalId}`, { detalle: buildDetalle(), ...resumen }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['eval-capacitacion'] })
+      setSinGuardar(false)
       toast.success('Guardado correctamente')
     },
-    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar'),
+    onError: (e: unknown) => toast.error(mensajeError(e, 'guardar'), { duration: 7000 }),
   })
 
   const finalizar = useMutation({
@@ -287,9 +306,10 @@ function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalI
       qc.invalidateQueries({ queryKey: ['eval-capacitacion-detalle', evalId] })
       toast.success('Evaluación finalizada')
       setConfirmFinalizar(false)
+      setSinGuardar(false)
       onClose()
     },
-    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error'),
+    onError: (e: unknown) => toast.error(mensajeError(e, 'finalizar'), { duration: 7000 }),
   })
 
   // subitem is always 1 now (one row per criterion)
@@ -297,6 +317,7 @@ function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalI
     if (soloLectura || data?.estado === 'finalizado') return
     const k = `${key}|1|${dia}`
     setGrid((g) => ({ ...g, [k]: g[k] === valor ? null : valor }))
+    setSinGuardar(true)
   }
 
   const getValor = (key: string, dia: number) => grid[`${key}|1|${dia}`] ?? null
@@ -305,7 +326,7 @@ function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalI
   const readonly = soloLectura || esFinalizado
 
   return (
-    <Modal isOpen onClose={onClose} title="" size="xl">
+    <Modal isOpen onClose={cerrar} title="" size="xl">
       {isLoading || !data ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 animate-pulse rounded-xl bg-gray-100" />)}
@@ -414,7 +435,7 @@ function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalI
                   <label className="mb-1 block text-[0.72rem] font-semibold text-gray-500">{label}</label>
                   <textarea
                     value={resumen[key]}
-                    onChange={(e) => setResumen((r) => ({ ...r, [key]: e.target.value }))}
+                    onChange={(e) => { setResumen((r) => ({ ...r, [key]: e.target.value })); setSinGuardar(true) }}
                     disabled={readonly}
                     rows={2}
                     className="field resize-none text-[0.82rem]"
@@ -431,7 +452,7 @@ function EvalFormModal({ evalId, soloLectura, puedeFinalizar, onClose }: { evalI
                 <Download className="h-3.5 w-3.5" /> Descargar PDF
               </Button>
               <div className="flex gap-2">
-                <Button variant="ghost" onClick={onClose}>Cerrar</Button>
+                <Button variant="ghost" onClick={cerrar}>Cerrar</Button>
                 <Button variant="ghost" isLoading={guardar.isPending} onClick={() => guardar.mutate()}>
                   <Save className="h-3.5 w-3.5" /> Guardar borrador
                 </Button>

@@ -11,6 +11,7 @@ import { useWebphoneStore } from '@/stores/webphone.store'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { parseVista, type VistaWebphone } from '@/components/ui/WebphoneFrame'
+import { SoftphonePanel } from './SoftphonePanel'
 import { configuracionService } from '@/services/configuracion.service'
 import { abrirEnVentana } from '@/lib/popup'
 import toast from 'react-hot-toast'
@@ -102,6 +103,9 @@ export function WebphonePage() {
   const tieneAsignacionFija = vistaAsignadaId != null
 
   const vista = vistas.find((v) => v.id === vistaId) ?? vistas[0] ?? null
+  // Vista PBX = softphone propio (SoftphonePanel); no hay iframe, así que zoom,
+  // flotante, PiP, abrir en ventana y VPN no aplican.
+  const esPbx = vista?.esPbx ?? false
 
   // Si el usuario no eligió una vista a mano en esta sesión, seguir siempre a
   // la vista predeterminada (la de menor orden) aunque cambie en Configuración
@@ -210,6 +214,7 @@ export function WebphonePage() {
                 </p>
               </div>
             </div>
+            {!esPbx && (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 rounded-lg bg-white/10 p-0.5">
                 {ZOOMS.map((z) => (
@@ -280,11 +285,19 @@ export function WebphonePage() {
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
             </div>
+            )}
           </div>
         </div>
       </div>
 
+      {vista && esPbx && (
+        <div className="flex-1 overflow-y-auto pb-4">
+          <SoftphonePanel vista={vista} />
+        </div>
+      )}
+
       {/* ── Hueco donde WebphoneFrame (montado en AppLayout) se superpone ── */}
+      {!esPbx && (
       <div className="relative flex-1 min-h-[600px]">
         <div data-webphone-slot className="absolute inset-0 rounded-2xl" />
 
@@ -341,6 +354,7 @@ export function WebphonePage() {
           </div>
         )}
       </div>
+      )}
 
       {/* ── Modal: cambiar vista ── */}
       {showConfig && (

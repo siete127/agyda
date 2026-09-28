@@ -28,26 +28,33 @@ function EditarCredencialForm({
   })
 
   const puedeGuardar = vdLogin.trim() && (credencial.tieneCredenciales || vdPass.trim())
+  // En vistas PBX (softphone propio) el mismo par se guarda como extensión +
+  // contraseña SIP; no hay campaña.
+  const esPbx = credencial.provider === 'PBX'
 
   return (
     <div className="space-y-3 rounded-xl border-2 border-brand/30 bg-brand/5 p-3">
-      <p className="text-[0.7rem] font-semibold text-gray-500 uppercase tracking-wide">Login de VICIdial — {credencial.vistaLabel}</p>
+      <p className="text-[0.7rem] font-semibold text-gray-500 uppercase tracking-wide">
+        {esPbx ? 'Extensión SIP' : 'Login de VICIdial'} — {credencial.vistaLabel}
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="text-xs font-medium text-gray-600">Usuario VICIdial</label>
+          <label className="text-xs font-medium text-gray-600">{esPbx ? 'Extensión' : 'Usuario VICIdial'}</label>
           <input className="field mt-1 text-sm" value={vdLogin} onChange={(e) => setVdLogin(e.target.value)} placeholder="Ej. 1708" />
         </div>
         <div>
           <label className="text-xs font-medium text-gray-600">
-            Contraseña VICIdial {credencial.tieneCredenciales && <span className="text-gray-400">(dejar en blanco para no cambiar)</span>}
+            {esPbx ? 'Contraseña SIP' : 'Contraseña VICIdial'} {credencial.tieneCredenciales && <span className="text-gray-400">(dejar en blanco para no cambiar)</span>}
           </label>
           <input className="field mt-1 text-sm" type="password" value={vdPass} onChange={(e) => setVdPass(e.target.value)} placeholder="••••••••" />
         </div>
       </div>
-      <div>
-        <label className="text-xs font-medium text-gray-600">Campaña</label>
-        <input className="field mt-1 text-sm" value={campana} onChange={(e) => setCampana(e.target.value)} placeholder="Opcional — se selecciona automáticamente al auto-loguear" />
-      </div>
+      {!esPbx && (
+        <div>
+          <label className="text-xs font-medium text-gray-600">Campaña</label>
+          <input className="field mt-1 text-sm" value={campana} onChange={(e) => setCampana(e.target.value)} placeholder="Opcional — se selecciona automáticamente al auto-loguear" />
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-1">
         <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-100">Cancelar</button>
@@ -92,7 +99,9 @@ function FilaAgente({ agente, vistaId }: { agente: WebphoneCredencial; vistaId: 
             </p>
             <p className="truncate text-xs text-ink-tertiary">
               {cred.tieneCredenciales
-                ? `VICIdial: ${cred.vdLogin}${cred.campana ? ` · Campaña: ${cred.campana}` : ''}`
+                ? (cred.provider === 'PBX'
+                    ? `Extensión: ${cred.vdLogin}`
+                    : `VICIdial: ${cred.vdLogin}${cred.campana ? ` · Campaña: ${cred.campana}` : ''}`)
                 : 'Sin credenciales configuradas para esta vista'}
             </p>
           </div>
@@ -140,10 +149,11 @@ export function WebphoneCredencialesTab() {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        <p className="font-semibold">Credenciales de VICIdial por agente y por vista</p>
+        <p className="font-semibold">Credenciales por agente y por vista</p>
         <p className="mt-0.5 text-amber-700">
           Cada vista de Webphone (Azul 1, Web21 RC9, etc.) puede tener su propio servidor VICIdial — configura las
-          credenciales por separado para cada una. Se guardan cifradas y se usan para auto-loguear al agente.
+          credenciales por separado para cada una. En las vistas PBX (softphone propio) son la extensión y la
+          contraseña SIP. Se guardan cifradas y se usan para conectar al agente automáticamente.
         </p>
       </div>
 

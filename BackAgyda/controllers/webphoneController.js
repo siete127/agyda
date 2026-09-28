@@ -433,8 +433,43 @@ async function guardarTipificacion(req, res) {
   }
 }
 
+// Config del softphone SIP (sip.js) de una vista con proveedor 'PBX' — su
+// WVIS_URL es la base de la API del PBX. El PBX solo permite CORS desde el
+// dominio de producción, así que el navegador la pide aquí (funciona igual en
+// local) y se cachea unos minutos por PBX: cambia muy rara vez.
+const PBX_CONFIG_TTL_MS = 5 * 60_000;
+const _pbxConfigCache = new Map();
+
+async function getPbxConfig(req, res) {
+  try {
+    const vistaId = _toInt(req.query?.vistaId);
+    if (!vistaId) return res.status(400).json({ success: false, message: 'vistaId inválido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().input('vid', sql.Int, vistaId)
+      .query(`SELECT WVIS_URL url FROM WEBPHONE_VISTAS WHERE WVIS_ID=@vid AND WVIS_PROVIDER='PBX'`);
+    const base = String(rs.recordset[0]?.url || '').replace(/\/+$/, '');
+    if (!base) return res.status(404).json({ success: false, message: 'La vista no es de tipo PBX' });
+
+    const cache = _pbxConfigCache.get(base);
+    if (cache && Date.now() - cache.at < PBX_CONFIG_TTL_MS) {
+      return res.json({ success: true, data: cache.data });
+    }
+    const r = await fetch(`${base}/api/webphone/config`, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error(`PBX respondió ${r.status}`);
+    const cfg = await r.json();
+    if (!cfg?.wss || !cfg?.sipDomain) throw new Error('Config del PBX incompleta');
+    const data = { pbx: cfg.pbx ?? null, wss: cfg.wss, sipDomain: cfg.sipDomain };
+    _pbxConfigCache.set(base, { at: Date.now(), data });
+    return res.json({ success: true, data });
+  } catch (err) {
+    logger.warn('[webphoneController.getPbxConfig] error:', err?.message || err);
+    return res.status(502).json({ success: false, message: 'No se pudo obtener la configuración del PBX' });
+  }
+}
+
 module.exports = {
   incomingCall,
   guardarTipificacion,
   pantallaLlamada,
+  getPbxConfig,
 };

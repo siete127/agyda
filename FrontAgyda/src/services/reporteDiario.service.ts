@@ -1,7 +1,7 @@
 import { api } from '@/lib/axios'
 import { useAuthStore } from '@/stores/auth.store'
 import type {
-  ReporteDiario, ReportePostulantes, RdlReporte, RdlCarpeta, RdlRol,
+  ReporteDiario, ReportePostulantes, RdlReporte, RdlCarpeta, RdlRol, RdlOpcion, RdlResultado,
   RbCatalogo, RbDefinicion, RbResultado, RbReporteGuardado,
   InteraccionItem, InteraccionesFiltro, ReporteEjecutivoReclutamiento,
 } from '@/types/reporteDiario.types'
@@ -128,6 +128,18 @@ export const reporteDiarioService = {
 
   async eliminarRdl(id: number): Promise<void> {
     await api.delete(`/operaciones/suite-reportes/rdl/${id}`)
+  },
+
+  /** Opciones de cada parámetro del RDL (listas fijas o de su dataset). */
+  async opcionesRdl(id: number): Promise<{ opciones: Record<string, RdlOpcion[] | { error: string }>; dataSet: string }> {
+    const { data } = await api.get(`/operaciones/suite-reportes/rdl/${id}/opciones`)
+    return data.data
+  },
+
+  /** Ejecuta el RDL en AGYDA (solo lectura) con sus parámetros. */
+  async ejecutarRdl(id: number, parametros: Record<string, string | string[] | null>): Promise<RdlResultado> {
+    const { data } = await api.post(`/operaciones/suite-reportes/rdl/${id}/ejecutar`, { parametros })
+    return data.data
   },
 
   rdlDescargaUrl(id: number): string {

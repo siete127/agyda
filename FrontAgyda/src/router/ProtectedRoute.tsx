@@ -11,6 +11,7 @@ import { ReglamentoAlertModal } from '@/components/ui/ReglamentoAlertModal'
 import { CambiarPasswordObligatorioModal } from '@/components/ui/CambiarPasswordObligatorioModal'
 import { VentaAlertWatcher } from '@/components/ventas/VentaAlertWatcher'
 import { WebphoneFrame } from '@/components/ui/WebphoneFrame'
+import { SoftphoneLlamadaFlotante } from '@/components/ui/SoftphoneLlamadaFlotante'
 
 // Componente separado: los hooks de socket solo corren cuando hay sesión activa.
 // Recibe children para poder renderizar el Outlet desde el padre.
@@ -33,6 +34,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
       {!isCL && <ReglamentoAlertModal />}
       {isAllowed('ventas') && <VentaAlertWatcher />}
       <WebphoneFrame />
+      <SoftphoneLlamadaFlotante />
     </>
   )
 }

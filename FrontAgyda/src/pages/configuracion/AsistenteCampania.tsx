@@ -1,15 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
-  ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, Layers, Loader2, Megaphone, Plug, FileText, Tags, UserCog, Rocket, BarChart3, X,
+  ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, Layers, RotateCcw, Loader2, Megaphone, Plug, FileText, Tags, Rocket, BarChart3, X,
 } from 'lucide-react'
 import { ccService } from '@/services/cc.service'
 import { REPORTES_CAMPANIA } from '@/pages/suite-reportes/reportesCampania'
 import {
-  AsignacionSupervisores, CanalesDeCampaniaPanel, FormularioYMarcadorPanel, SkillsDeCampaniaPanel, TipificacionesDeCampaniaPanel,
+  CanalesDeCampaniaPanel, FormularioYMarcadorPanel, SkillsDeCampaniaPanel, TipificacionesDeCampaniaPanel,
 } from './ContactCenterTabs'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
@@ -22,26 +22,52 @@ const slugDe = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu
 
 const PASOS = [
   { key: 'campania', titulo: 'Campaña', desc: 'Nombre y cómo se asignan las conversaciones', icon: Megaphone },
-  { key: 'skills', titulo: 'Skills y agentes', desc: 'Grupos de atención y quién está en cada uno', icon: Layers },
+  { key: 'skills', titulo: 'Skills', desc: 'Grupos de atención de la campaña (su gente la pone el grupo)', icon: Layers },
   { key: 'canales', titulo: 'Canales', desc: 'WhatsApp, Messenger, Instagram o web', icon: Plug },
   { key: 'formulario', titulo: 'Formulario y marcador', desc: 'Qué se captura y la URL para VICIdial', icon: FileText },
   { key: 'tipificaciones', titulo: 'Tipificaciones', desc: 'Cómo se clasifica cada atención', icon: Tags },
-  { key: 'supervisores', titulo: 'Supervisores', desc: 'Quién supervisa toda la campaña', icon: UserCog },
   { key: 'listo', titulo: 'Listo', desc: 'Resumen y reportes', icon: Rocket },
 ] as const
 type PasoKey = typeof PASOS[number]['key']
 
+// Avance del asistente en este navegador: si se sale (Esc, X o clic fuera),
+// al volver a abrirlo sigue con la misma campaña y en el mismo paso.
+const CLAVE_BORRADOR = 'agyda:asistente-campania'
+type DatosCampania = { nombre: string; slug: string; slugTocado: boolean; modoAsignacion: string }
+type Borrador = { campaniaId: number | null; paso: number; datos: DatosCampania }
+const DATOS_VACIOS: DatosCampania = { nombre: '', slug: '', slugTocado: false, modoAsignacion: 'global' }
+function leerBorrador(): Borrador | null {
+  try {
+    const b = JSON.parse(localStorage.getItem(CLAVE_BORRADOR) || 'null') as Borrador | null
+    return b && typeof b.paso === 'number' && b.datos ? b : null
+  } catch { return null }
+}
+function guardarBorrador(b: Borrador | null) {
+  try {
+    if (b) localStorage.setItem(CLAVE_BORRADOR, JSON.stringify(b))
+    else localStorage.removeItem(CLAVE_BORRADOR)
+  } catch { /* sin almacenamiento: solo no se recuerda */ }
+}
+
 // Asistente para dar de alta una campaña de principio a fin. Reutiliza los
 // mismos paneles de la ficha de campaña (Configuración → Contact Center →
 // Campañas y skills), así que todo lo que se hace aquí se ve igual allá.
-export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
+// onSalir recibe la campaña creada al terminar (null si sale sin terminar).
+export function AsistenteCampania({ onSalir }: { onSalir: (campaniaCreada: number | null) => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const [paso, setPaso] = useState(0)
-  const [campaniaId, setCampaniaId] = useState<number | null>(null)
-  const [datos, setDatos] = useState({ nombre: '', slug: '', slugTocado: false, modoAsignacion: 'global' })
+  const [inicial] = useState(leerBorrador)
+  const [pasoGuardado, setPaso] = useState(inicial?.paso ?? 0)
+  const [campaniaGuardada, setCampaniaId] = useState<number | null>(inicial?.campaniaId ?? null)
+  const [datos, setDatos] = useState<DatosCampania>(inicial?.datos ?? DATOS_VACIOS)
+  useEffect(() => { guardarBorrador({ campaniaId: campaniaGuardada, paso: pasoGuardado, datos }) }, [campaniaGuardada, pasoGuardado, datos])
 
-  const { data: campanias = [] } = useQuery({ queryKey: ['cc-campanias'], queryFn: () => ccService.getCampanias(), enabled: campaniaId != null })
+  const { data: campanias = [], isFetching, isFetched } = useQuery({ queryKey: ['cc-campanias'], queryFn: () => ccService.getCampanias(), enabled: campaniaGuardada != null })
+  // Una campaña retomada que ya no existe (la borraron) no se sigue.
+  const campaniaId = campaniaGuardada != null && (isFetching || !isFetched || campanias.some((c) => c.id === campaniaGuardada)) ? campaniaGuardada : null
+  const paso = campaniaId == null ? 0 : pasoGuardado
+  const empezarOtra = () => { setCampaniaId(null); setPaso(0); setDatos(DATOS_VACIOS) }
+  const terminar = () => { guardarBorrador(null); onSalir(campaniaId) }
   const campania = campanias.find((c) => c.id === campaniaId) ?? (campaniaId ? { id: campaniaId, nombre: datos.nombre } : null)
   const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales(), enabled: campaniaId != null })
   const canales = canalesTodos.filter((c) => c.campaniaId === campaniaId)
@@ -79,14 +105,12 @@ export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
   const bloqueado = (i: number) => i > 0 && campaniaId == null
 
   // Estado de cada paso para el resumen y el indicador.
-  const agentesCount = campanias.find((c) => c.id === campaniaId)?.agentesCount ?? 0
   const completo: Record<PasoKey, boolean> = {
     campania: campaniaId != null,
-    skills: grupos.length > 0 && agentesCount > 0,
+    skills: grupos.length > 0,
     canales: canales.length > 0,
     formulario: (forms?.formularios.length ?? 0) > 0,
     tipificaciones: false, // opcional, sin conteo barato
-    supervisores: false,
     listo: false,
   }
 
@@ -94,7 +118,7 @@ export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
     <div className="space-y-4 pb-20">
       {/* Encabezado */}
       <div className={clsx(card, 'flex items-center gap-3.5')}>
-        <button onClick={onSalir} title="Salir del asistente"
+        <button onClick={() => onSalir(null)} title="Salir del asistente (puedes retomarlo después)"
           className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 text-ink-tertiary transition hover:bg-gray-50">
           <X className="h-4 w-4" />
         </button>
@@ -102,6 +126,12 @@ export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
           <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">Configurar nueva campaña</p>
           <h2 className="truncate text-base font-bold text-ink">{campania?.nombre || 'Campaña nueva'}</h2>
         </div>
+        {(campaniaId != null || datos.nombre) && (
+          <button onClick={empezarOtra} title="Dejar esta campaña como está y empezar otra desde cero"
+            className="flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[0.72rem] font-semibold text-ink-tertiary transition hover:bg-gray-50 hover:text-ink">
+            <RotateCcw className="h-3.5 w-3.5" /> Empezar otra
+          </button>
+        )}
         <span className="flex-shrink-0 text-[0.72rem] text-ink-tertiary">Paso {paso + 1} de {PASOS.length}</span>
       </div>
 
@@ -175,14 +205,6 @@ export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
           {campania && actual.key === 'canales' && <CanalesDeCampaniaPanel campania={campania} canales={canales} onChanged={inval} />}
           {campania && actual.key === 'formulario' && <FormularioYMarcadorPanel campania={campania} onIrAContacto={() => setPaso(0)} />}
           {campania && actual.key === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
-          {campania && actual.key === 'supervisores' && (
-            <div className={card}>
-              <p className="mb-3 text-xs text-ink-tertiary">
-                Supervisores de toda la campaña: ven todos sus skills. Para uno acotado a un solo skill, asígnalo en "Skills y agentes".
-              </p>
-              <AsignacionSupervisores nivel="campania" id={campania.id} onChanged={inval} />
-            </div>
-          )}
 
           {campania && actual.key === 'listo' && (
             <div className="space-y-4">
@@ -190,7 +212,7 @@ export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
                 <p className="mb-3 text-sm font-bold text-ink">Resumen de "{campania.nombre}"</p>
                 <div className="space-y-2">
                   {[
-                    { ok: completo.skills, txt: `${grupos.length} skill(s) con ${agentesCount} agente(s)`, falta: 'Faltan skills o agentes', paso: 1 },
+                    { ok: completo.skills, txt: `${grupos.length} skill(s)`, falta: 'Sin skills', paso: 1 },
                     { ok: completo.canales, txt: `${canales.length} canal(es): ${canales.map((c) => c.nombre).join(', ')}`, falta: 'Sin canales', paso: 2 },
                     { ok: completo.formulario, txt: `${forms?.formularios.length ?? 0} formulario(s): ${(forms?.formularios ?? []).map((f) => f.nombre).join(', ')}`, falta: 'Sin formulario asignado', paso: 3 },
                     {
@@ -224,7 +246,8 @@ export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
               </div>
 
               <p className="px-1 text-[0.72rem] text-ink-tertiary">
-                Después puedes cambiar cualquier cosa en Configuración → Contact Center → Campañas y skills → {campania.nombre}.
+                Agentes y supervisores: agrega la campaña a un grupo en Configuración → Usuarios y Seguridad → Grupos.
+                Lo demás se cambia en Configuración → Contact Center → Campañas y skills → {campania.nombre}.
               </p>
             </div>
           )}
@@ -242,7 +265,7 @@ export function AsistenteCampania({ onSalir }: { onSalir: () => void }) {
                   Siguiente <ArrowRight className="h-4 w-4" />
                 </button>
               ) : (
-                <button onClick={onSalir}
+                <button onClick={terminar}
                   className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
                   <Check className="h-4 w-4" /> Terminar
                 </button>

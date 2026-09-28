@@ -7,6 +7,7 @@ const PROVIDERS: { value: WebphoneProvider; label: string }[] = [
   { value: 'Azul1', label: 'Azul1' },
   { value: 'Vici', label: 'Vici' },
   { value: 'Integra', label: 'Integra' },
+  { value: 'PBX', label: 'PBX (softphone propio)' },
 ]
 
 export function WebphoneVistasTab() {
@@ -65,7 +66,7 @@ export function WebphoneVistasTab() {
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://..."
+            placeholder={provider === 'PBX' ? 'URL del PBX, ej. https://pbx.ardabytec.vip' : 'https://...'}
             className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
           />
           <select

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -37,25 +37,39 @@ function unlockBodyScroll() {
   if (openModalCount === 0) document.body.style.overflow = ''
 }
 
+/* Pila de modales abiertos, en orden de apertura: el último abierto queda
+   encima de los demás (aunque se haya montado antes) y Esc cierra solo ese. */
+const pilaModales: symbol[] = []
+
 export function Modal({ isOpen, onClose, title, children, size = 'md', variant = 'default', elevated = false, bare = false }: ModalProps) {
+  const capa = useRef<HTMLDivElement>(null)
+  // onClose suele ser una función nueva en cada render: se guarda aparte para
+  // no sacar y volver a meter el modal en la pila (lo subiría sobre los de encima).
+  const cerrar = useRef(onClose)
+  useEffect(() => { cerrar.current = onClose })
   useEffect(() => {
     if (!isOpen) return
 
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const id = Symbol('modal')
+    pilaModales.push(id)
+    if (capa.current) capa.current.style.zIndex = String((elevated ? 70 : 60) + pilaModales.length - 1)
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && pilaModales[pilaModales.length - 1] === id) cerrar.current() }
     document.addEventListener('keydown', handler)
     lockBodyScroll()
 
     return () => {
       document.removeEventListener('keydown', handler)
+      pilaModales.splice(pilaModales.indexOf(id), 1)
       unlockBodyScroll()
     }
-  }, [isOpen, onClose])
+  }, [isOpen, elevated])
 
   const isCorporate = variant === 'corporate'
 
   // Siempre montado en el DOM — solo display cambia. Evita insertBefore/removeChild de React.
   return createPortal(
     <div
+      ref={capa}
       className={clsx('fixed inset-0 flex items-center justify-center p-4', elevated ? 'z-[70]' : 'z-[60]')}
       style={{ display: isOpen ? 'flex' : 'none' }}
       aria-hidden={!isOpen}

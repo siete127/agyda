@@ -3,12 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Eye, EyeOff, MessageSquare, RefreshCw, Sparkles,
   LayoutDashboard, ListChecks, Power, Users, DollarSign, ExternalLink, GitBranch,
-  ListOrdered, GripVertical, MessageCircle, Megaphone, Workflow, X, Loader2, Check,
+  ListOrdered, GripVertical, MessageCircle, Megaphone, Workflow, X, Loader2,
   Search, ChevronRight, ChevronDown, FolderOpen, Hand, MessagesSquare, ArrowRight, Map as MapIcon,
 } from 'lucide-react'
 import { chatbotService } from '@/services/chatbot.service'
 import { ccService } from '@/services/cc.service'
-import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { useIsAdmin } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -255,8 +254,6 @@ const TIPO_INFO: Record<TipoEtiquetaMenu, { label: string; icon: React.Component
 function NuevaCampaniaWebInline({ onCreada, onCancel }: { onCreada: (campaniaId: number, grupoId: number) => void; onCancel: () => void }) {
   const [nombreCampania, setNombreCampania] = useState('')
   const [nombreSkill, setNombreSkill] = useState('Atención general')
-  const [agentesIds, setAgentesIds] = useState<number[]>([])
-  const { data: usuarios = [] } = useUsuariosSimple()
 
   const canCrear = nombreCampania.trim().length > 0 && nombreSkill.trim().length > 0
 
@@ -266,9 +263,6 @@ function NuevaCampaniaWebInline({ onCreada, onCancel }: { onCreada: (campaniaId:
       const campaniaId = campania.data.id as number
       const grupo = await ccService.createGrupo({ campaniaId, nombre: nombreSkill.trim() })
       const grupoId = grupo.data.id as number
-      for (const usuarioId of agentesIds) {
-        await ccService.asignarAgente(grupoId, usuarioId)
-      }
       const canal = await ccService.createCanal({ tipo: 'web_publica', nombre: `Widget Web - ${nombreCampania.trim()}` })
       const canalId = canal.data.id as number
       await ccService.updateCanal(canalId, { campaniaId, grupoId, habilitado: true })
@@ -284,10 +278,6 @@ function NuevaCampaniaWebInline({ onCreada, onCancel }: { onCreada: (campaniaId:
     },
   })
 
-  const toggleAgente = (id: number) => {
-    setAgentesIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  }
-
   return (
     <div className="space-y-3 rounded-xl border border-brand/30 bg-brand/5 p-3.5">
       <div className="flex items-center justify-between">
@@ -295,9 +285,9 @@ function NuevaCampaniaWebInline({ onCreada, onCancel }: { onCreada: (campaniaId:
         <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
       </div>
       <p className="text-[0.68rem] text-gray-500">
-        Crea de un golpe la campaña, un skill de atención, el canal "Web pública" ya habilitado con su token, y
-        opcionalmente los agentes que la van a atender. Lo demás (SLA, tipificaciones, motivos de cierre) lo puedes
-        afinar después en Configuración → Contact Center.
+        Crea de un golpe la campaña, un skill de atención y el canal "Web pública" ya habilitado con su token. Quién la
+        atiende se asigna en un grupo (Configuración → Usuarios y Seguridad → Grupos): agrégale esta campaña y su skill.
+        Lo demás (SLA, tipificaciones, motivos de cierre) lo afinas en Configuración → Contact Center.
       </p>
 
       <div>
@@ -308,30 +298,6 @@ function NuevaCampaniaWebInline({ onCreada, onCancel }: { onCreada: (campaniaId:
       <div>
         <label className="mb-1 block text-[0.68rem] font-semibold text-gray-600 uppercase tracking-wide">Nombre del skill / grupo de atención</label>
         <input value={nombreSkill} onChange={(e) => setNombreSkill(e.target.value)} className="field" placeholder="ej. Atención general" />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-[0.68rem] font-semibold text-gray-600 uppercase tracking-wide">
-          Agentes que atenderán <span className="normal-case font-normal text-gray-400">(opcional, puedes asignarlos después)</span>
-        </label>
-        <div className="max-h-32 overflow-y-auto rounded-lg border border-gray-200 bg-card">
-          {usuarios.length === 0 && <p className="px-2.5 py-2 text-[0.7rem] text-gray-400">Cargando usuarios…</p>}
-          {usuarios.map((u) => {
-            const checked = agentesIds.includes(u.id)
-            return (
-              <button
-                key={u.id} type="button" onClick={() => toggleAgente(u.id)}
-                className={clsx('flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.75rem] transition-colors hover:bg-gray-50',
-                  checked && 'bg-brand/10')}
-              >
-                <span className={clsx('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2', checked ? 'border-brand bg-brand' : 'border-gray-300')}>
-                  {checked && <Check className="h-2.5 w-2.5 text-white" />}
-                </span>
-                {u.nombre}
-              </button>
-            )
-          })}
-        </div>
       </div>
 
       <div className="flex justify-end gap-2 pt-1">

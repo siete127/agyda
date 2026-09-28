@@ -486,6 +486,7 @@ exports.getReporteRetardos = async (req, res) => {
       condicionesFalta.push('nu.NEUS_NOMBRES LIKE @nombre');
     }
     const filtrosFalta = condicionesFalta.length ? `AND ${condicionesFalta.join(' AND ')}` : '';
+    const mediosDias = await sqlMediosDias(pool);
 
     let faltas = [];
     if (!estado || estado === 'falta') {
@@ -510,6 +511,7 @@ exports.getReporteRetardos = async (req, res) => {
         LEFT JOIN ASISTENCIA_HORARIOS h ON h.ROL = ea.NEUS_TIPOUSUARIO AND h.ACTIVO = 1
         WHERE NOT EXISTS (SELECT 1 FROM ASISTENCIA_ENTRADAS p WHERE p.FECHA = ff.f AND p.NEUS_ID = ea.NEUS_ID)
           AND NOT EXISTS (SELECT 1 FROM ASISTENCIA_EXCEPCIONES ex WHERE ex.FECHA = ff.f AND ex.NEUS_ID = ea.NEUS_ID)
+          AND NOT EXISTS (SELECT 1 FROM ${mediosDias} md WHERE md.FECHA = ff.f AND md.NEUS_ID = ea.NEUS_ID)
           AND (
             (ISNULL(h.DIA_INICIO, 1) <= ISNULL(h.DIA_FIN, 5)
               AND (DATEPART(WEEKDAY, ff.f) - 1) BETWEEN ISNULL(h.DIA_INICIO, 1) AND ISNULL(h.DIA_FIN, 5))
@@ -565,7 +567,42 @@ exports.getReporteRetardos = async (req, res) => {
       esFalta: false,
     }));
 
-    const data = [...result.recordset.map(r => ({ ...r, esFalta: false })), ...faltas, ...vacacionesSinEntrada]
+    // Medios días (MT de Nómina): tampoco tienen fila de entrada, y el bloque de faltas
+    // los excluye; se agregan como filas propias para que se vean como "Medio día".
+    let mediosDiasFilas = [];
+    if (!estado || estado === 'medio-dia') {
+      const requestMedio = pool.request()
+        .input('fromDate', sql.NVarChar, fromDate)
+        .input('toDate', sql.NVarChar, toDate);
+      if (area) requestMedio.input('area', sql.NVarChar, area.toUpperCase());
+      if (nombre) requestMedio.input('nombre', sql.NVarChar, `%${nombre}%`);
+      const medioResult = await requestMedio.query(`
+        SELECT md.NEUS_ID as usuarioId, nu.NEUS_NOMBRES as nombre, nu.NEUS_TIPOUSUARIO as rol,
+               FORMAT(md.FECHA, 'yyyy-MM-dd') as fecha
+        FROM ${mediosDias} md
+        INNER JOIN NEUS_USUARIOS nu ON nu.NEUS_ID = md.NEUS_ID
+        WHERE md.FECHA >= @fromDate AND md.FECHA <= @toDate ${filtrosFalta}
+          AND NOT EXISTS (SELECT 1 FROM ASISTENCIA_ENTRADAS a WHERE a.NEUS_ID = md.NEUS_ID AND a.FECHA = md.FECHA)
+          AND NOT EXISTS (SELECT 1 FROM ASISTENCIA_EXCEPCIONES e WHERE e.NEUS_ID = md.NEUS_ID AND e.FECHA = md.FECHA)
+      `);
+      mediosDiasFilas = medioResult.recordset.map((m, i) => ({
+        id: -20000 - i,
+        usuarioId: m.usuarioId,
+        nombre: m.nombre,
+        rol: m.rol,
+        fecha: m.fecha,
+        horaEntrada: null,
+        horaEsperada: null,
+        minutosRetardo: 0,
+        esRetardo: false,
+        esVacaciones: false,
+        excepcionId: null,
+        esFalta: false,
+        esMedioDia: true,
+      }));
+    }
+
+    const data = [...result.recordset.map(r => ({ ...r, esFalta: false })), ...faltas, ...vacacionesSinEntrada, ...mediosDiasFilas]
       .sort((a, b) => {
         if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
         const orden = { CC: 1, AD: 2, TI: 3 };
@@ -636,8 +673,10 @@ exports.getResumenMes = async (req, res) => {
         GROUP BY DAY(a.FECHA)
       `);
 
-    // Faltas: empleados activos sin entrada, por día (excluye días marcados como vacaciones y usuarios exentos)
+    // Faltas: empleados activos sin entrada, por día (excluye días marcados como vacaciones,
+    // medios días de Nómina y usuarios exentos)
     // Se calcula generando las fechas del mes (hasta hoy) y cruzando con empleados activos
+    const mediosDias = await sqlMediosDias(pool);
     const faltaResult = await pool.request()
       .input('mes', sql.Int, mes)
       .input('anio', sql.Int, anio)
@@ -659,6 +698,9 @@ exports.getResumenMes = async (req, res) => {
           WHERE YEAR(FECHA) = @anio AND MONTH(FECHA) = @mes
           UNION
           SELECT FECHA, NEUS_ID FROM ASISTENCIA_EXCEPCIONES
+          WHERE YEAR(FECHA) = @anio AND MONTH(FECHA) = @mes
+          UNION
+          SELECT FECHA, NEUS_ID FROM ${mediosDias} md
           WHERE YEAR(FECHA) = @anio AND MONTH(FECHA) = @mes
         )
         SELECT DAY(ff.f) AS dia, COUNT(*) AS total
@@ -728,8 +770,9 @@ exports.getResumenDia = async (req, res) => {
           a.MINUTOS_RETARDO DESC
       `);
 
-    // Faltas: empleados activos con rol conocido que NO tienen entrada ni excepción ese día
-    // Solo roles CC, AD, TI (excluye CL y otros sin horario)
+    // Faltas: empleados activos con rol conocido que NO tienen entrada, excepción ni
+    // medio día de Nómina ese día. Solo roles CC, AD, TI (excluye CL y otros sin horario)
+    const mediosDias = await sqlMediosDias(pool);
     const faltaResult = await pool.request()
       .input('fecha', sql.NVarChar, fechaStr)
       .query(`
@@ -745,6 +788,9 @@ exports.getResumenDia = async (req, res) => {
           )
           AND nu.NEUS_ID NOT IN (
             SELECT NEUS_ID FROM ASISTENCIA_EXCEPCIONES WHERE FECHA = @fecha
+          )
+          AND nu.NEUS_ID NOT IN (
+            SELECT NEUS_ID FROM ${mediosDias} md WHERE md.FECHA = @fecha
           )
           AND nu.NEUS_ID NOT IN (
             SELECT NEUS_ID FROM ASISTENCIA_EXENTOS
@@ -767,11 +813,26 @@ exports.getResumenDia = async (req, res) => {
           nu.NEUS_NOMBRES ASC
       `);
 
+    // Medios días del día (MT de Nómina) — ya no salen como falta, se listan aparte
+    const mediosDiasResult = await pool.request()
+      .input('fecha', sql.NVarChar, fechaStr)
+      .query(`
+        SELECT nu.NEUS_ID AS usuarioId, nu.NEUS_NOMBRES AS nombre, nu.NEUS_TIPOUSUARIO AS rol
+        FROM ${mediosDias} md
+        INNER JOIN NEUS_USUARIOS nu ON nu.NEUS_ID = md.NEUS_ID
+        WHERE md.FECHA = @fecha
+          AND NOT EXISTS (SELECT 1 FROM ASISTENCIA_ENTRADAS a WHERE a.NEUS_ID = md.NEUS_ID AND a.FECHA = md.FECHA)
+        ORDER BY
+          CASE nu.NEUS_TIPOUSUARIO WHEN 'CC' THEN 1 WHEN 'AD' THEN 2 WHEN 'TI' THEN 3 ELSE 4 END,
+          nu.NEUS_NOMBRES ASC
+      `);
+
     return res.json({
       success: true,
       retardos: retResult.recordset,
       faltas: faltaResult.recordset,
       vacaciones: vacacionesResult.recordset,
+      mediosDias: mediosDiasResult.recordset,
     });
   } catch (e) {
     console.error('Error getResumenDia:', e?.message);
@@ -804,6 +865,18 @@ async function ensureExcepcionesTable(pool) {
     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ASISTENCIA_EXCEPCIONES' AND COLUMN_NAME='SOLICITUD_ID')
       ALTER TABLE ASISTENCIA_EXCEPCIONES ADD SOLICITUD_ID INT NULL;
   `);
+}
+
+// Días marcados como "Medio día" (MT) desde Nómina: se guardan como excepción del
+// periodo (NOMINA_EXCEPCIONES, MOTIVO='MEDIO_DIA') y SIN fila en ASISTENCIA_ENTRADAS,
+// para que Nómina los cuente como media falta. Asistencia los lee de ahí para
+// mostrarlos como medio día en lugar de falta. Devuelve una tabla derivada
+// (NEUS_ID, FECHA) para usar en FROM; vacía si la empresa no tiene Nómina.
+async function sqlMediosDias(pool) {
+  const r = await pool.request().query(`SELECT OBJECT_ID('NOMINA_EXCEPCIONES', 'U') AS id`);
+  return r.recordset[0]?.id
+    ? `(SELECT DISTINCT NEUS_ID, CAST(FECHA_INCIDENCIA AS date) AS FECHA FROM NOMINA_EXCEPCIONES WHERE MOTIVO = 'MEDIO_DIA')`
+    : `(SELECT CAST(NULL AS int) AS NEUS_ID, CAST(NULL AS date) AS FECHA WHERE 1 = 0)`;
 }
 
 // POST /api/asistencia/excepciones — marca un día como Vacaciones (AD/TI)
@@ -1217,6 +1290,7 @@ exports.getAlertasBaja = async (req, res) => {
 async function contarRachaFaltasConsecutivas(pool, neusId, rol, hastaFecha) {
   const horarios = await getHorariosPorRol(pool);
   const regla = horarios[rol] || HORARIOS_FALLBACK.AD;
+  const mediosDias = await sqlMediosDias(pool);
   const r = await pool.request()
     .input('neusId', sql.Int, neusId)
     .input('hasta', sql.NVarChar, hastaFecha.toISOString().slice(0, 10))
@@ -1241,6 +1315,7 @@ async function contarRachaFaltasConsecutivas(pool, neusId, rol, hastaFecha) {
           ROW_NUMBER() OVER (ORDER BY f DESC) AS orden,
           CASE WHEN EXISTS (SELECT 1 FROM ASISTENCIA_ENTRADAS p WHERE p.FECHA = f AND p.NEUS_ID = @neusId)
                  OR EXISTS (SELECT 1 FROM ASISTENCIA_EXCEPCIONES ex WHERE ex.FECHA = f AND ex.NEUS_ID = @neusId)
+                 OR EXISTS (SELECT 1 FROM ${mediosDias} md WHERE md.FECHA = f AND md.NEUS_ID = @neusId)
                THEN 1 ELSE 0 END AS presente
         FROM DiasLaborales
       ),

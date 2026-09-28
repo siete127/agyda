@@ -84,6 +84,8 @@ router.delete('/suite-reportes/carpetas/:id', auth.authenticateToken, controller
 router.get('/suite-reportes/rdl', auth.authenticateToken, controller.listRdl);
 router.post('/suite-reportes/rdl', auth.authenticateToken, uploadRdl.single('archivo'), controller.subirRdl);
 router.get('/suite-reportes/rdl/:id/raw', auth.authenticateToken, controller.descargarRdl);
+router.get('/suite-reportes/rdl/:id/opciones', auth.authenticateToken, controller.opcionesRdl);
+router.post('/suite-reportes/rdl/:id/ejecutar', auth.authenticateToken, controller.ejecutarRdl);
 router.patch('/suite-reportes/rdl/:id', auth.authenticateToken, controller.actualizarRdl);
 router.delete('/suite-reportes/rdl/:id', auth.authenticateToken, controller.eliminarRdl);
 

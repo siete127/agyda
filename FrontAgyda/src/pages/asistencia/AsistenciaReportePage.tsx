@@ -5,7 +5,7 @@ import {
   Clock, Download, FileText, FileWarning, Loader2, Table2, Upload, X,
   TrendingUp, CheckCircle2, AlertTriangle, Timer, CalendarDays, UserX,
   Settings2, Save, Edit3, Link2, RefreshCw, ShieldAlert, Umbrella,
-  UserCog, Mail, Bell, History,
+  UserCog, Mail, Bell, History, Hourglass,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { asistenciaReporteService, type AsistenciaActa } from '@/services/asistenciaReporte.service'
@@ -27,6 +27,8 @@ interface AsistenciaRegistro {
   esVacaciones?: boolean
   excepcionId?: number | null
   esFalta?: boolean
+  // Medio día marcado en Nómina (MT): sin entrada, pero no cuenta como falta aquí
+  esMedioDia?: boolean
 }
 
 interface RetardoStat {
@@ -81,7 +83,7 @@ function exportExcel(rows: AsistenciaRegistro[]) {
   const fechaGen = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const estadoLabel = (r: AsistenciaRegistro) =>
-    r.esFalta ? 'Falta' : r.esVacaciones ? 'Vacaciones' : r.esRetardo ? 'Retardo' : 'A tiempo'
+    r.esFalta ? 'Falta' : r.esMedioDia ? 'Medio día' : r.esVacaciones ? 'Vacaciones' : r.esRetardo ? 'Retardo' : 'A tiempo'
 
   const headers = ['#', 'Colaborador', 'Rol', 'Fecha', 'Hora entrada', 'Hora esperada', 'Estado', 'Minutos de retardo']
   const data = rows.map((r, i) => [
@@ -144,8 +146,13 @@ function exportExcel(rows: AsistenciaRegistro[]) {
     fill: { fgColor: { rgb: 'FFE0F2FE' }, patternType: 'solid' },
     alignment: { horizontal: 'center', vertical: 'center' },
   }
+  const medioDiaStyle = {
+    font: { sz: 10, bold: true, color: { rgb: 'FF854D0E' } },
+    fill: { fgColor: { rgb: 'FFFEF9C3' }, patternType: 'solid' },
+    alignment: { horizontal: 'center', vertical: 'center' },
+  }
   const estadoStyle = (estado: string) =>
-    estado === 'Falta' ? faltaStyle : estado === 'Vacaciones' ? vacacionesStyle : estado === 'Retardo' ? retardoStyle : aTiempoStyle
+    estado === 'Falta' ? faltaStyle : estado === 'Medio día' ? medioDiaStyle : estado === 'Vacaciones' ? vacacionesStyle : estado === 'Retardo' ? retardoStyle : aTiempoStyle
 
   const cols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
@@ -408,7 +415,8 @@ function DiaSection({ fecha, filas, defaultOpen }: { fecha: string; filas: Asist
   const retardos = filas.filter(r => r.esRetardo && !r.esVacaciones).length
   const vacaciones = filas.filter(r => r.esVacaciones).length
   const faltas = filas.filter(r => r.esFalta).length
-  const aTiempo = filas.length - retardos - vacaciones - faltas
+  const mediosDias = filas.filter(r => r.esMedioDia).length
+  const aTiempo = filas.length - retardos - vacaciones - faltas - mediosDias
 
   const porArea = useMemo(() => {
     const map = new Map<string, AsistenciaRegistro[]>()
@@ -441,6 +449,11 @@ function DiaSection({ fecha, filas, defaultOpen }: { fecha: string; filas: Asist
           {faltas > 0 && (
             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-300 px-2.5 py-0.5 text-[0.65rem] font-bold text-red-700">
               <UserX className="h-2.5 w-2.5" /> {faltas} falta{faltas !== 1 ? 's' : ''}
+            </span>
+          )}
+          {mediosDias > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 border border-yellow-300 px-2.5 py-0.5 text-[0.65rem] font-semibold text-yellow-700">
+              <Hourglass className="h-2.5 w-2.5" /> {mediosDias} medio{mediosDias !== 1 ? 's' : ''} día{mediosDias !== 1 ? 's' : ''}
             </span>
           )}
           {retardos > 0 && (
@@ -486,14 +499,14 @@ function DiaSection({ fecha, filas, defaultOpen }: { fecha: string; filas: Asist
                   {rows.map((r, i) => (
                     <tr
                       key={r.id}
-                      className={`border-b border-gray-50 hover:bg-gray-50/70 transition-colors ${r.esFalta ? 'bg-red-100/30' : r.esVacaciones ? 'bg-sky-50/20' : r.esRetardo ? 'bg-red-50/20' : ''}`}
+                      className={`border-b border-gray-50 hover:bg-gray-50/70 transition-colors ${r.esFalta ? 'bg-red-100/30' : r.esMedioDia ? 'bg-yellow-50/40' : r.esVacaciones ? 'bg-sky-50/20' : r.esRetardo ? 'bg-red-50/20' : ''}`}
                     >
                       <td className="px-4 py-2.5 text-center text-[0.68rem] text-gray-400 tabular-nums">{i + 1}</td>
                       <td className="px-4 py-2.5">
                         <span className="font-medium text-gray-800 text-[0.8rem]">{r.nombre}</span>
                       </td>
                       <td className="px-4 py-2.5">
-                        {r.esFalta ? (
+                        {r.esFalta || r.esMedioDia ? (
                           <span className="font-mono text-[0.78rem] text-gray-300">—</span>
                         ) : (
                           <span className={`font-mono text-[0.78rem] tabular-nums ${r.esRetardo && !r.esVacaciones ? 'text-red-600 font-semibold' : 'text-gray-700'}`}>
@@ -501,12 +514,17 @@ function DiaSection({ fecha, filas, defaultOpen }: { fecha: string; filas: Asist
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-[0.75rem] tabular-nums text-gray-400">{r.esFalta ? '—' : r.horaEsperada}</td>
+                      <td className="px-4 py-2.5 font-mono text-[0.75rem] tabular-nums text-gray-400">{r.esFalta || r.esMedioDia ? '—' : r.horaEsperada}</td>
                       <td className="px-4 py-2.5">
                         {r.esFalta ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-2.5 py-0.5 text-[0.68rem] font-bold text-red-700">
                             <UserX className="h-2.5 w-2.5" />
                             Falta
+                          </span>
+                        ) : r.esMedioDia ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-yellow-300 bg-yellow-50 px-2.5 py-0.5 text-[0.68rem] font-semibold text-yellow-700">
+                            <Hourglass className="h-2.5 w-2.5" />
+                            Medio día
                           </span>
                         ) : r.esVacaciones ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[0.68rem] font-semibold text-sky-600">
@@ -528,7 +546,8 @@ function DiaSection({ fecha, filas, defaultOpen }: { fecha: string; filas: Asist
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-1.5">
                           {r.esRetardo && !r.esVacaciones && !r.esFalta && <ReporteRetardoButton asistenciaId={r.id} />}
-                          {puedeMarcarVacaciones && <VacacionesButton registro={r} />}
+                          {/* El medio día se gestiona desde Nómina; marcarlo como vacaciones lo contaría doble */}
+                          {puedeMarcarVacaciones && !r.esMedioDia && <VacacionesButton registro={r} />}
                         </div>
                       </td>
                     </tr>
@@ -1025,8 +1044,9 @@ interface ResumenDiaItem {
 }
 
 interface ResumenDia {
-  retardos: ResumenDiaItem[]
-  faltas:   ResumenDiaItem[]
+  retardos:   ResumenDiaItem[]
+  faltas:     ResumenDiaItem[]
+  mediosDias: ResumenDiaItem[]
 }
 
 interface ResumenMesDia { dia: number; total: number }
@@ -1087,7 +1107,7 @@ function CalendarioAsistencia() {
     queryKey: ['asistencia-resumen-dia', fechaSelStr],
     queryFn: async () => {
       const { data } = await api.get('/asistencia/resumen-dia', { params: { fecha: fechaSelStr } })
-      return { retardos: data.retardos ?? [], faltas: data.faltas ?? [] }
+      return { retardos: data.retardos ?? [], faltas: data.faltas ?? [], mediosDias: data.mediosDias ?? [] }
     },
     enabled: !!fechaSelStr,
     staleTime: 60_000,
@@ -1230,7 +1250,13 @@ function CalendarioAsistencia() {
                         {detalleDia.faltas.length} falta{detalleDia.faltas.length !== 1 ? 's' : ''}
                       </span>
                     )}
-                    {detalleDia.retardos.length === 0 && detalleDia.faltas.length === 0 && (
+                    {detalleDia.mediosDias.length > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 border border-yellow-300 px-2 py-0.5 text-[0.62rem] font-semibold text-yellow-700">
+                        <Hourglass className="h-2.5 w-2.5" />
+                        {detalleDia.mediosDias.length} medio{detalleDia.mediosDias.length !== 1 ? 's' : ''} día{detalleDia.mediosDias.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {detalleDia.retardos.length === 0 && detalleDia.faltas.length === 0 && detalleDia.mediosDias.length === 0 && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.62rem] font-semibold text-emerald-600">
                         <CheckCircle2 className="h-2.5 w-2.5" />
                         Sin incidencias
@@ -1244,7 +1270,7 @@ function CalendarioAsistencia() {
                 <div className="flex items-center justify-center gap-2 py-12 text-gray-400 text-xs">
                   <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
                 </div>
-              ) : !detalleDia || (detalleDia.retardos.length === 0 && detalleDia.faltas.length === 0) ? (
+              ) : !detalleDia || (detalleDia.retardos.length === 0 && detalleDia.faltas.length === 0 && detalleDia.mediosDias.length === 0) ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-12 text-gray-400">
                   <CheckCircle2 className="h-6 w-6 text-emerald-300" />
                   <p className="text-[0.75rem]">Sin incidencias este día</p>
@@ -1304,6 +1330,31 @@ function CalendarioAsistencia() {
                             <p className="text-[0.75rem] font-semibold text-gray-800 truncate leading-tight">{f.nombre}</p>
                             <span className={`text-[0.58rem] font-bold px-1.5 py-px rounded-full mt-0.5 inline-block ${ROL_PILL_CAL[f.rol] ?? 'bg-gray-100 text-gray-600'}`}>
                               {ROLES_LABEL[f.rol] ?? f.rol}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Medios días (MT de Nómina) */}
+                  {detalleDia.mediosDias.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 px-4 py-2 bg-yellow-50/70 sticky top-0">
+                        <Hourglass className="h-3 w-3 text-yellow-600" />
+                        <span className="text-[0.62rem] font-bold text-yellow-700 uppercase tracking-wider">
+                          Medio día — {detalleDia.mediosDias.length}
+                        </span>
+                      </div>
+                      {detalleDia.mediosDias.map((m) => (
+                        <div key={m.usuarioId} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50/60 transition-colors">
+                          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-yellow-100 border border-yellow-300 text-[0.6rem] font-bold text-yellow-700">
+                            {m.nombre.trim().split(' ').slice(0,2).map(s => s[0]).join('').toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[0.75rem] font-semibold text-gray-800 truncate leading-tight">{m.nombre}</p>
+                            <span className={`text-[0.58rem] font-bold px-1.5 py-px rounded-full mt-0.5 inline-block ${ROL_PILL_CAL[m.rol] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {ROLES_LABEL[m.rol] ?? m.rol}
                             </span>
                           </div>
                         </div>

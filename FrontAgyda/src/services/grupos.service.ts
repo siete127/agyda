@@ -27,6 +27,8 @@ export interface TipoGrupo {
   puedeCrear: boolean
   puedeEliminar: boolean
   puedeEditarMiembros: boolean
+  /** Dónde se cambian sus miembros cuando aquí son solo consulta. */
+  notaSoloLectura?: string | null
   /** Un usuario solo puede estar en un grupo de este tipo: agregarlo lo mueve. */
   unico: boolean
   crearCampos: ('nombre' | 'descripcion' | 'campaniaId')[]
