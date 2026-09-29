@@ -24,17 +24,19 @@ export function useSocketInit() {
   const puedeMensajeria = modulos.includes('*') || modulos.includes('mensajeria')
 
   // Refs estables — nunca cambian de referencia, así el useEffect no se re-ejecuta
-  const addNotificationRef  = useRef(useNotificationStore.getState().addNotification)
-  const pushTicketAlertRef  = useRef(useNotificationStore.getState().pushTicketAlert)
-  const setNotificationsRef = useRef(useNotificationStore.getState().setNotifications)
-  const setCanalesRef       = useRef(useMensajeriaStore.getState().setCanales)
+  const addNotificationRef     = useRef(useNotificationStore.getState().addNotification)
+  const pushTicketAlertRef     = useRef(useNotificationStore.getState().pushTicketAlert)
+  const pushCitaCierreAlertRef = useRef(useNotificationStore.getState().pushCitaCierreAlert)
+  const setNotificationsRef    = useRef(useNotificationStore.getState().setNotifications)
+  const setCanalesRef          = useRef(useMensajeriaStore.getState().setCanales)
 
   // Mantener las refs actualizadas sin causar re-renders
   useEffect(() => {
     return useNotificationStore.subscribe((s) => {
-      addNotificationRef.current  = s.addNotification
-      pushTicketAlertRef.current  = s.pushTicketAlert
-      setNotificationsRef.current = s.setNotifications
+      addNotificationRef.current     = s.addNotification
+      pushTicketAlertRef.current     = s.pushTicketAlert
+      pushCitaCierreAlertRef.current = s.pushCitaCierreAlert
+      setNotificationsRef.current    = s.setNotifications
     })
   }, [])
 
@@ -81,6 +83,7 @@ export function useSocketInit() {
       addNotificationRef.current(item)
       const ALERT_TIPOS = ['ticket_nuevo', 'ticket_transferido', 'ticket_comentario', 'ticket_estado', 'ticket']
       if (item.tipo && ALERT_TIPOS.includes(item.tipo)) pushTicketAlertRef.current(item)
+      if (item.tipo === 'cita-confirmar-cierre') pushCitaCierreAlertRef.current(item)
     }
 
     // Mensajería: cualquier canal nuevo/mensaje nuevo recarga la lista de canales

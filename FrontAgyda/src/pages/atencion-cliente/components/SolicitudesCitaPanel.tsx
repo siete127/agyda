@@ -77,6 +77,8 @@ function PanelPropuestasReunion({ onResuelta }: { onResuelta?: () => void }) {
   const qc = useQueryClient()
   const [rechazando, setRechazando] = useState<number | null>(null)
   const [comentario, setComentario] = useState('')
+  const [aprobando, setAprobando] = useState<number | null>(null)
+  const [enlace, setEnlace] = useState('')
   const { data: propuestas = [], isLoading } = useQuery({
     queryKey: ['citas-propuestas-reunion'],
     queryFn: () => citaService.getPropuestasReunion(),
@@ -84,17 +86,22 @@ function PanelPropuestasReunion({ onResuelta }: { onResuelta?: () => void }) {
   })
 
   const resolver = useMutation({
-    mutationFn: ({ id, accion, comentario }: { id: number; accion: 'aprobar' | 'rechazar'; comentario?: string }) =>
-      citaService.resolverPropuestaReunion(id, accion, comentario),
+    mutationFn: ({ id, accion, comentario, enlace }: { id: number; accion: 'aprobar' | 'rechazar'; comentario?: string; enlace?: string }) =>
+      citaService.resolverPropuestaReunion(id, accion, comentario, enlace),
     onSuccess: (_d, vars) => {
       toast.success(vars.accion === 'aprobar' ? 'Reunión aprobada y agendada' : 'Propuesta rechazada')
       qc.invalidateQueries({ queryKey: ['citas-propuestas-reunion'] })
       qc.invalidateQueries({ queryKey: ['citas'] })
       setRechazando(null)
       setComentario('')
+      setAprobando(null)
+      setEnlace('')
       onResuelta?.()
     },
-    onError: () => toast.error('No se pudo resolver'),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg ?? 'No se pudo resolver')
+    },
   })
 
   if (isLoading) return <div className="flex justify-center py-6"><Spinner size="sm" /></div>
@@ -119,16 +126,41 @@ function PanelPropuestasReunion({ onResuelta }: { onResuelta?: () => void }) {
                 {p.motivo && <p className="text-[0.7rem] text-gray-400 truncate">"{p.motivo}"</p>}
               </div>
               <div className="flex gap-1.5 flex-shrink-0">
-                <button onClick={() => resolver.mutate({ id: p.id, accion: 'aprobar' })} disabled={resolver.isPending}
-                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[0.7rem] font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                <button
+                  onClick={() => {
+                    if (p.modalidad === 'videollamada') { setAprobando(aprobando === p.id ? null : p.id); setRechazando(null) }
+                    else resolver.mutate({ id: p.id, accion: 'aprobar' })
+                  }}
+                  disabled={resolver.isPending}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[0.7rem] font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                >
                   Aprobar
                 </button>
-                <button onClick={() => setRechazando(rechazando === p.id ? null : p.id)} disabled={resolver.isPending}
+                <button onClick={() => { setRechazando(rechazando === p.id ? null : p.id); setAprobando(null) }} disabled={resolver.isPending}
                   className="rounded-lg bg-white px-3 py-1.5 text-[0.7rem] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50">
                   Rechazar
                 </button>
               </div>
             </div>
+            {aprobando === p.id && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  value={enlace}
+                  onChange={(e) => setEnlace(e.target.value)}
+                  placeholder="Enlace de la videollamada (ej. https://meet.google.com/xxx-xxxx-xxx)"
+                  className="field flex-1 text-[0.75rem]"
+                  maxLength={500}
+                  autoFocus
+                />
+                <button
+                  onClick={() => resolver.mutate({ id: p.id, accion: 'aprobar', enlace: enlace.trim() })}
+                  disabled={resolver.isPending || !enlace.trim()}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[0.7rem] font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  Confirmar y agendar
+                </button>
+              </div>
+            )}
             {rechazando === p.id && (
               <div className="mt-2 flex items-center gap-2">
                 <input

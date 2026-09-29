@@ -18,6 +18,7 @@ export interface NuevaCitaBody {
   duracionMin?: number
   motivo?: string
   telefono?: string
+  enlace?: string
   asignadoA?: number
   recordarMinAntes?: number[]
   tratamientoId?: number
@@ -68,6 +69,11 @@ export const citaService = {
   updateEstatus: (id: number, estatus: CitaEstatus, notaResultado?: string) =>
     api.patch(`${B}/citas/${id}/estatus`, { estatus, notaResultado }).then((r) => r.data),
   cancelar: (id: number, motivo?: string) => api.post(`${B}/citas/${id}/cancelar`, { motivo }).then((r) => r.data),
+  // Responde al modal de "¿ya terminó tu cita?": terminada=false deja la
+  // cita abierta (se volverá a preguntar), terminada=true la cierra con
+  // asistio/no_asistio.
+  confirmarCierre: (id: number, terminada: boolean, asistio?: boolean, notaResultado?: string) =>
+    api.post(`${B}/citas/${id}/confirmar-cierre`, { terminada, asistio, notaResultado }).then((r) => r.data),
   remove: (id: number) => api.delete(`${B}/citas/${id}`).then((r) => r.data),
 
   getTratamientos: async (filtros?: { contactoId?: number; estatus?: string }): Promise<Tratamiento[]> => {
@@ -95,6 +101,6 @@ export const citaService = {
     const { data } = await api.get(`${B}/citas/propuestas`)
     return (data?.data ?? []) as PropuestaReunionAsesor[]
   },
-  resolverPropuestaReunion: (id: number, accion: 'aprobar' | 'rechazar', comentario?: string) =>
-    api.post(`${B}/citas/propuestas/${id}/resolver`, { accion, comentario }).then((r) => r.data),
+  resolverPropuestaReunion: (id: number, accion: 'aprobar' | 'rechazar', comentario?: string, enlace?: string) =>
+    api.post(`${B}/citas/propuestas/${id}/resolver`, { accion, comentario, enlace }).then((r) => r.data),
 }

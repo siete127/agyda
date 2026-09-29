@@ -22,11 +22,11 @@ function fmtFecha(f: string) {
 // asesor (getDisponibilidadAsesor: horario aprobado, menos vacaciones y
 // citas ya ocupadas) — nunca escribe una hora libre. Queda pendiente hasta
 // que el asesor apruebe (ver SolicitudesCitaPanel del lado interno).
-export function SolicitarReunionModal({ onClose }: { onClose: () => void }) {
+export function SolicitarReunionModal({ onClose, modalidadPreset }: { onClose: () => void; modalidadPreset?: 'videollamada' | 'telefonica' | 'generica' }) {
   const qc = useQueryClient()
   const [titulo, setTitulo] = useState('')
   const [motivo, setMotivo] = useState('')
-  const [modalidad, setModalidad] = useState<'videollamada' | 'telefonica' | 'generica'>('videollamada')
+  const [modalidad, setModalidad] = useState<'videollamada' | 'telefonica' | 'generica'>(modalidadPreset ?? 'videollamada')
   const [fecha, setFecha] = useState<string | null>(null)
   const [hora, setHora] = useState<string | null>(null)
   const [duracionMin, setDuracionMin] = useState(30)

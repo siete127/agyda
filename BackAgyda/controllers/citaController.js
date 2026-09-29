@@ -14,18 +14,6 @@ const crmWhatsappService = require('../services/crmWhatsappService');
 // 'citas-gestionar'); aquí no se re-chequea.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Genera un código de sala con el mismo formato que usa Google Meet
-// (xxx-xxxx-xxx, minúsculas, sin vocales/números ambiguos con "0/o"/"1/l").
-// No crea una reunión real en Google Calendar (no hay integración OAuth con
-// Google en el proyecto) — es una sala "ad-hoc" que cualquiera con el link
-// puede solicitar unirse, igual que una sala de Meet creada al vuelo desde
-// meet.google.com sin evento de calendario asociado.
-const MEET_ALFABETO = 'abcdefghijkmnpqrstuvwxyz'; // sin l/o para no confundir con 1/0
-function generarEnlaceMeet() {
-  const seg = (n) => Array.from({ length: n }, () => MEET_ALFABETO[Math.floor(Math.random() * MEET_ALFABETO.length)]).join('');
-  return `https://meet.google.com/${seg(3)}-${seg(4)}-${seg(3)}`;
-}
-
 const MODALIDADES_VALIDAS = ['videollamada', 'telefonica', 'generica'];
 const ESTATUS_VALIDOS = ['agendada', 'confirmada', 'reprogramada', 'cancelada', 'asistio', 'no_asistio'];
 const ESTATUS_QUE_CIERRAN = ['asistio', 'no_asistio', 'cancelada'];
@@ -245,7 +233,7 @@ exports.create = async (req, res) => {
   try {
     const {
       contactoId, tratamientoId, numeroSesion, modalidad, titulo, motivo,
-      fechaHora, duracionMin, telefono, asignadoA, recordarMinAntes,
+      fechaHora, duracionMin, telefono, enlace: enlaceBody, asignadoA, recordarMinAntes,
     } = req.body || {};
 
     const contId = contactoId ? parseInt(contactoId, 10) : null;
@@ -254,8 +242,10 @@ exports.create = async (req, res) => {
     if (!fechaHora) return res.status(400).json({ success: false, message: 'Fecha y hora requeridas' });
 
     const modal = MODALIDADES_VALIDAS.includes(modalidad) ? modalidad : 'videollamada';
-    // Siempre generado — no se acepta un enlace manual desde el formulario.
-    const enlace = modal === 'videollamada' ? generarEnlaceMeet() : null;
+    const enlace = modal === 'videollamada' ? String(enlaceBody || '').trim() : null;
+    if (modal === 'videollamada' && !enlace) {
+      return res.status(400).json({ success: false, message: 'Ingresa el enlace de la videollamada' });
+    }
     const asignado = asignadoA ? parseInt(asignadoA, 10) : null;
     const tratId = tratamientoId ? parseInt(tratamientoId, 10) : null;
     // Normaliza CITA_RECORDAR_MIN_ANTES: acepta CSV o array; default '1440,60'.
@@ -355,6 +345,7 @@ exports.update = async (req, res) => {
     if (b.fechaHora != null) { r.input('fechaHora', sql.VarChar(19), fechaHoraSql(b.fechaHora)); sets.push('CITA_FECHA_HORA=CONVERT(DATETIME, @fechaHora, 120)'); sets.push('CITA_ALERTA_24H_NOTIF=0'); sets.push('CITA_ALERTA_1H_NOTIF=0'); }
     if (b.duracionMin != null) { r.input('duracionMin', sql.Int, parseInt(b.duracionMin, 10) || 30); sets.push('CITA_DURACION_MIN=@duracionMin'); }
     if (b.telefono != null) { r.input('telefono', sql.NVarChar(30), b.telefono || null); sets.push('CITA_TELEFONO=@telefono'); }
+    if (b.enlace != null) { r.input('enlace', sql.NVarChar(500), String(b.enlace).trim() || null); sets.push('CITA_ENLACE=@enlace'); }
     if (b.asignadoA != null) { r.input('asignadoA', sql.Int, b.asignadoA ? parseInt(b.asignadoA, 10) : null); sets.push('CITA_ASIGNADO_A=@asignadoA'); }
     if (b.recordarMinAntes != null) {
       const arr = Array.isArray(b.recordarMinAntes) ? parseRecordar(b.recordarMinAntes.join(',')) : parseRecordar(b.recordarMinAntes);
@@ -419,6 +410,62 @@ exports.updateEstatus = async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('Error updateEstatus cita:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /citas/:id/confirmar-cierre — responde el modal que se dispara cuando
+// el cron (citaCierreCronController) detecta que el tiempo de la cita ya
+// pasó. terminada=false solo apaga CITA_PENDIENTE_CIERRE=0: como el tiempo
+// de la cita ya pasó, el siguiente cron (10 min) la vuelve a marcar pendiente
+// y a notificar, así que el asesor puede seguir usando el enlace y se le
+// volverá a preguntar más adelante. terminada=true cierra la cita con
+// asistio/no_asistio (mismo efecto que updateEstatus) y apaga la marca.
+exports.confirmarCierre = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'id inválido' });
+    const { terminada, asistio, notaResultado } = req.body || {};
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const cur = (await pool.request().input('id', sql.Int, id)
+      .query(`SELECT CITA_TRATAMIENTO_ID as tratamientoId FROM CLI_CITAS WHERE CITA_ID=@id AND CITA_ACTIVO=1`)).recordset[0];
+    if (!cur) return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+
+    if (!terminada) {
+      await pool.request().input('id', sql.Int, id)
+        .query(`UPDATE CLI_CITAS SET CITA_PENDIENTE_CIERRE=0 WHERE CITA_ID=@id AND CITA_ACTIVO=1`);
+      return res.json({ success: true, data: { cerrada: false } });
+    }
+
+    const estatus = asistio ? 'asistio' : 'no_asistio';
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('estatus', sql.NVarChar(20), estatus)
+      .input('nota', sql.NVarChar(sql.MAX), notaResultado || null)
+      .query(`
+        UPDATE CLI_CITAS
+        SET CITA_ESTATUS=@estatus, CITA_NOTA_RESULTADO=@nota, CITA_PENDIENTE_CIERRE=0
+        WHERE CITA_ID=@id AND CITA_ACTIVO=1
+      `);
+
+    if (cur.tratamientoId) {
+      const completadas = await contarSesionesCompletadas(pool, cur.tratamientoId);
+      const trat = (await pool.request().input('t', sql.Int, cur.tratamientoId)
+        .query(`SELECT TRAT_TOTAL_SESIONES as total, TRAT_ESTATUS as estatus FROM CLI_TRATAMIENTOS WHERE TRAT_ID=@t`)).recordset[0];
+      if (trat && trat.total && completadas >= trat.total && trat.estatus === 'activo') {
+        await pool.request().input('t', sql.Int, cur.tratamientoId)
+          .query(`UPDATE CLI_TRATAMIENTOS SET TRAT_ESTATUS='completado' WHERE TRAT_ID=@t`);
+      }
+    }
+
+    await logAudit(pool, {
+      userId: getUserId(req), userName: req.user?.nombre || null,
+      modulo: 'atencion-cliente', accion: 'confirmar-cierre-cita', entidadId: id, detalle: { estatus }, ip: req.ip,
+    });
+    res.json({ success: true, data: { cerrada: true, estatus } });
+  } catch (e) {
+    console.error('Error confirmarCierre cita:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };
@@ -582,7 +629,7 @@ exports.addSesion = async (req, res) => {
   try {
     const tratId = parseInt(req.params.id, 10);
     if (!Number.isFinite(tratId)) return res.status(400).json({ success: false, message: 'id inválido' });
-    const { titulo, motivo, fechaHora, duracionMin, modalidad, telefono, asignadoA, recordarMinAntes } = req.body || {};
+    const { titulo, motivo, fechaHora, duracionMin, modalidad, telefono, enlace: enlaceBody, asignadoA, recordarMinAntes } = req.body || {};
     if (!fechaHora) return res.status(400).json({ success: false, message: 'Fecha y hora requeridas' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -595,9 +642,11 @@ exports.addSesion = async (req, res) => {
     const numeroSesion = maxSes + 1;
 
     const modal = MODALIDADES_VALIDAS.includes(modalidad) ? modalidad : 'videollamada';
-    // Siempre generado — no se acepta un enlace manual desde el formulario.
-    const enlace = modal === 'videollamada' ? generarEnlaceMeet() : null;
     const asignado = (asignadoA ? parseInt(asignadoA, 10) : null) || trat.asignadoA || null;
+    const enlace = modal === 'videollamada' ? String(enlaceBody || '').trim() : null;
+    if (modal === 'videollamada' && !enlace) {
+      return res.status(400).json({ success: false, message: 'Ingresa el enlace de la videollamada' });
+    }
     const recordarArr = Array.isArray(recordarMinAntes) ? parseRecordar(recordarMinAntes.join(',')) : parseRecordar(recordarMinAntes);
     const recordarCsv = recordarArr.length ? recordarArr.join(',') : '1440,60';
 
@@ -739,13 +788,13 @@ exports.listPropuestasReunion = async (req, res) => {
 };
 
 // POST /citas/propuestas/:id/resolver — el asesor aprueba (crea la CLI_CITA
-// real, con Meet automático si aplica) o rechaza (con comentario opcional)
-// la reunión que el cliente propuso.
+// real, con el enlace de videollamada que él mismo pega) o rechaza (con
+// comentario opcional) la reunión que el cliente propuso.
 exports.resolverPropuestaReunion = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'id inválido' });
-    const { accion, comentario } = req.body || {};
+    const { accion, comentario, enlace: enlaceBody } = req.body || {};
     if (!['aprobar', 'rechazar'].includes(accion)) return res.status(400).json({ success: false, message: 'Acción inválida' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -768,7 +817,10 @@ exports.resolverPropuestaReunion = async (req, res) => {
         const errorSolapa = await validarSolapamiento(pool, asignado, prop.fechaPropuesta, prop.duracionMin, null);
         if (errorSolapa) return res.status(400).json({ success: false, message: errorSolapa });
       }
-      const enlace = prop.modalidad === 'videollamada' ? generarEnlaceMeet() : null;
+      const enlace = prop.modalidad === 'videollamada' ? String(enlaceBody || '').trim() : null;
+      if (prop.modalidad === 'videollamada' && !enlace) {
+        return res.status(400).json({ success: false, message: 'Ingresa el enlace de la videollamada para aprobar la reunión' });
+      }
       const rs = await pool.request()
         .input('contactoId', sql.Int, prop.contactoId)
         .input('modalidad', sql.NVarChar(20), prop.modalidad)

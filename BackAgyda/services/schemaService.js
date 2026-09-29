@@ -4921,6 +4921,20 @@ async function ensureCitasSchema(pool) {
     console.warn('⚠️ CliCitasSchema:', err.message);
   }
 
+  // Marca que el tiempo de la cita (CITA_FECHA_HORA + CITA_DURACION_MIN) ya
+  // pasó y se le avisó al asesor para que confirme si terminó y si el
+  // cliente asistió; se limpia al resolverse (ver citaCierreCronController).
+  try {
+    await pool.request().batch(`
+      IF COL_LENGTH('dbo.CLI_CITAS', 'CITA_PENDIENTE_CIERRE') IS NULL
+      BEGIN
+        ALTER TABLE dbo.CLI_CITAS ADD CITA_PENDIENTE_CIERRE BIT NOT NULL DEFAULT 0;
+      END
+    `);
+  } catch (err) {
+    console.warn('⚠️ CliCitasPendienteCierre:', err.message);
+  }
+
   // Solicitudes de cambio del cliente desde el portal (reprogramar/cancelar).
   // El equipo las aprueba desde el CRM; el portal nunca reagenda por sí mismo.
   try {

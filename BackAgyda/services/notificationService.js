@@ -32,6 +32,7 @@ const PUSH_CONFIG_POR_TIPO = {
   'cliente-cita-asignada':          { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/agenda' },
   'cliente-cita-confirmada':        { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/agenda' },
   'cliente-cita-solicitud':         { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/agenda' },
+  'cita-confirmar-cierre':          { titulo: 'AGYDA — Atención al Cliente', url: '/atencion-cliente/agenda' },
   rat_revision_pendiente:     { titulo: 'AGYDA — Protección de Datos', url: '/legal/proteccion-datos' },
   cumplimiento_vencimiento:   { titulo: 'AGYDA — Cumplimiento Normativo', url: '/legal/cumplimiento-normativo' },
   mc_accion_vencimiento:      { titulo: 'AGYDA — Mejora Continua', url: '/direccion-general/mejora-continua' },
