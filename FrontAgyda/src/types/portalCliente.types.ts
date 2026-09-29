@@ -75,6 +75,21 @@ export interface PortalCita {
   solicitudPendienteTipo: 'reprogramar' | 'cancelar' | null
 }
 
+// Reunión nueva propuesta por el cliente desde el portal (sin cita previa) —
+// distinta de "solicitar cambio" (que reprograma/cancela una cita existente).
+export interface PropuestaReunion {
+  id: number
+  titulo: string
+  motivo: string | null
+  modalidad: string
+  fechaPropuesta: string
+  duracionMin: number
+  estatus: 'pendiente' | 'aprobada' | 'rechazada'
+  comentario: string | null
+  citaId: number | null
+  fecha: string
+}
+
 export interface PortalProductoServicio {
   id: number
   productoServicioId: number

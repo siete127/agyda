@@ -79,6 +79,8 @@ router.get('/citas', auth.authenticateToken, requireActionAccess('atencion-clien
 router.post('/citas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.create);
 router.get('/citas/solicitudes', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.listSolicitudes);
 router.patch('/citas/solicitudes/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.resolverSolicitud);
+router.get('/citas/propuestas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.listPropuestasReunion);
+router.post('/citas/propuestas/:id/resolver', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.resolverPropuestaReunion);
 router.post('/citas/recordatorios/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), citaRecordatorioCron.runNow);
 router.get('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.getById);
 router.patch('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.update);

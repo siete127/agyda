@@ -29,6 +29,8 @@ exports.getFiscal = async (req, res) => {
         razonSocial: row.EF_RAZON_SOCIAL || '',
         regimenFiscal: row.EF_REGIMEN_FISCAL || '',
         cp: row.EF_CP || '',
+        clabe: row.EF_CLABE || '',
+        banco: row.EF_BANCO || '',
         csdCargado: !!row.EF_CSD_CARGADO,
         csdNumCert: row.EF_CSD_NUM_CERT || null,
         csdVigenciaHasta: row.EF_CSD_VIGENCIA_HASTA || null,
@@ -49,6 +51,10 @@ exports.updateFiscal = async (req, res) => {
     if (rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc)) {
       return res.status(400).json({ success: false, message: 'El RFC no tiene un formato válido' });
     }
+    const clabe = String(b.clabe || '').replace(/\s/g, '');
+    if (clabe && !/^\d{18}$/.test(clabe)) {
+      return res.status(400).json({ success: false, message: 'La CLABE debe tener exactamente 18 dígitos' });
+    }
     const pool = await databaseService.getPool(req.user?.empresa);
     await ensureRow(pool);
     await pool.request()
@@ -56,8 +62,11 @@ exports.updateFiscal = async (req, res) => {
       .input('rs', sql.NVarChar(255), b.razonSocial ? String(b.razonSocial).slice(0, 255) : null)
       .input('reg', sql.NVarChar(3), b.regimenFiscal ? String(b.regimenFiscal).slice(0, 3) : null)
       .input('cp', sql.NVarChar(5), b.cp ? String(b.cp).slice(0, 5) : null)
+      .input('clabe', sql.NVarChar(18), clabe || null)
+      .input('banco', sql.NVarChar(100), b.banco ? String(b.banco).slice(0, 100) : null)
       .query(`UPDATE dbo.EMPRESA_FISCAL SET
                 EF_RFC=@rfc, EF_RAZON_SOCIAL=@rs, EF_REGIMEN_FISCAL=@reg, EF_CP=@cp,
+                EF_CLABE=@clabe, EF_BANCO=@banco,
                 EF_FECHA_ACTUALIZACION=GETDATE()
               WHERE EF_ID=(SELECT TOP 1 EF_ID FROM dbo.EMPRESA_FISCAL ORDER BY EF_ID DESC)`);
     res.json({ success: true });

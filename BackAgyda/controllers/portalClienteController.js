@@ -61,6 +61,44 @@ exports.marcarTodasNotificacionesLeidas = async (req, res) => {
 };
 
 // GET /resumen — KPIs + actividad reciente para "Principal".
+// GET /facturas/:id/comprobantes — comprobantes que ESTE cliente subió para
+// una factura suya (valida que la factura le pertenezca).
+exports.getComprobantesPagoFactura = async (req, res) => {
+  try {
+    const facturaId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(facturaId)) return res.status(400).json({ success: false, message: 'id inválido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const factura = await pool.request().input('id', sql.Int, facturaId).input('c', sql.Int, req.contacto.id)
+      .query(`SELECT FAC_ID FROM FACTURAS WHERE FAC_ID=@id AND FAC_CLIENTE_ID=@c`);
+    if (!factura.recordset.length) return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+
+    const rs = await pool.request().input('facturaId', sql.Int, facturaId).query(`
+      SELECT DOC_ID as id, DOC_NOMBRE_ORIGINAL as nombreOriginal, DOC_FECHA_SUBIDA as fechaSubida
+      FROM CRM_DOCUMENTOS_CLIENTE
+      WHERE DOC_FACTURA_ID = @facturaId AND DOC_ACTIVO = 1
+      ORDER BY DOC_FECHA_SUBIDA DESC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /datos-pago — CLABE/banco de la empresa para que el cliente transfiera
+// (Facturas → "CLABE interbancaria"). Solo expone estos 2 campos, nunca el
+// resto de EMPRESA_FISCAL (CSD, RFC, etc.).
+exports.getDatosPago = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const r = await pool.request().query('SELECT TOP 1 EF_CLABE as clabe, EF_BANCO as banco FROM dbo.EMPRESA_FISCAL ORDER BY EF_ID DESC');
+    const row = r.recordset[0] || {};
+    res.json({ success: true, data: { clabe: row.clabe || '', banco: row.banco || '' } });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.getResumen = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -650,6 +688,91 @@ exports.solicitarCambioCita = async (req, res) => {
     res.status(201).json({ success: true });
   } catch (e) {
     console.error('Error solicitarCambioCita (portal-cliente):', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /reuniones/propuestas — propuestas de reunión nueva que ESTE cliente
+// mandó, con su estatus (para que el portal muestre "en revisión"/rechazada
+// sin tener que adivinar por la ausencia de una cita).
+exports.getMisPropuestasReunion = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().input('c', sql.Int, req.contacto.id).query(`
+      SELECT PRN_ID as id, PRN_TITULO as titulo, PRN_MOTIVO as motivo, PRN_MODALIDAD as modalidad,
+             CONVERT(NVARCHAR(19), PRN_FECHA_PROPUESTA, 126) as fechaPropuesta, PRN_DURACION_MIN as duracionMin,
+             PRN_ESTATUS as estatus, PRN_COMENTARIO as comentario, PRN_CITA_ID as citaId,
+             CONVERT(NVARCHAR(19), PRN_FECHA, 126) as fecha
+      FROM CLI_CITAS_PROPUESTAS_NUEVAS
+      WHERE PRN_CONTACTO_ID=@c
+      ORDER BY PRN_FECHA DESC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /reuniones/propuestas — el cliente propone una reunión nueva (día/hora
+// dentro de la disponibilidad real de su asesor, ver getDisponibilidadAsesor).
+// Nunca crea la cita directo: queda 'pendiente' hasta que el asesor apruebe.
+exports.crearPropuestaReunion = async (req, res) => {
+  try {
+    const { titulo, motivo, modalidad, fechaPropuesta, duracionMin } = req.body || {};
+    const tit = String(titulo || '').trim();
+    if (!tit || tit.length > 200) return res.status(400).json({ success: false, message: 'El título es requerido (máx. 200 caracteres)' });
+    if (!fechaPropuesta) return res.status(400).json({ success: false, message: 'Fecha y hora requeridas' });
+    const modal = ['videollamada', 'telefonica', 'generica'].includes(modalidad) ? modalidad : 'videollamada';
+    const dur = Number.isFinite(Number(duracionMin)) && Number(duracionMin) > 0 ? Math.min(Number(duracionMin), 240) : 30;
+
+    if (!_rateLimitCita(req.contacto.id)) {
+      return res.status(429).json({ success: false, message: 'Espera un momento antes de enviar otra solicitud' });
+    }
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const contacto = (await pool.request().input('id', sql.Int, req.contacto.id)
+      .query(`SELECT CONT_RESPONSABLE_ID as responsableId FROM CRM_CONTACTOS WHERE CONT_ID=@id`)).recordset[0];
+    const asesorId = contacto?.responsableId || null;
+
+    const fh = fechaHoraSql(fechaPropuesta);
+    if (!fh) return res.status(400).json({ success: false, message: 'Fecha inválida' });
+
+    const rs = await pool.request()
+      .input('contactoId', sql.Int, req.contacto.id)
+      .input('asesorId', sql.Int, asesorId)
+      .input('titulo', sql.NVarChar(200), tit)
+      .input('motivo', sql.NVarChar(500), motivo ? String(motivo).slice(0, 500) : null)
+      .input('modalidad', sql.NVarChar(20), modal)
+      .input('fecha', sql.VarChar(19), fh)
+      .input('duracionMin', sql.Int, dur)
+      .query(`
+        INSERT INTO CLI_CITAS_PROPUESTAS_NUEVAS
+          (PRN_CONTACTO_ID, PRN_ASESOR_ID, PRN_TITULO, PRN_MOTIVO, PRN_MODALIDAD, PRN_FECHA_PROPUESTA, PRN_DURACION_MIN)
+        OUTPUT INSERTED.PRN_ID
+        VALUES (@contactoId, @asesorId, @titulo, @motivo, @modalidad, CONVERT(DATETIME, @fecha, 120), @duracionMin)
+      `);
+    const id = rs.recordset[0].PRN_ID;
+
+    try {
+      const destinatarios = new Set();
+      if (asesorId) destinatarios.add(asesorId);
+      for (const s of await getUsuariosParaNotificarCorreo('atencion-cliente', req.user?.empresa)) destinatarios.add(s);
+      for (const uid of destinatarios) {
+        await notificationService.createNotification({
+          usuarioId: uid,
+          mensaje: `${req.contacto.nombre || 'Un cliente'} propuso una reunión: ${tit}`,
+          tipo: 'cliente-reunion-propuesta',
+          dataExtra: { propuestaId: id },
+          tenantKey: req.user?.empresa,
+        });
+      }
+    } catch (e) {
+      console.warn('[portal-cliente reunion] notif asesor:', e.message);
+    }
+
+    res.status(201).json({ success: true, data: { id } });
+  } catch (e) {
+    console.error('Error crearPropuestaReunion (portal-cliente):', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

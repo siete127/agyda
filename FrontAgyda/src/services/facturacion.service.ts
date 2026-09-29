@@ -5,9 +5,21 @@ export interface EmpresaFiscal {
   razonSocial: string
   regimenFiscal: string
   cp: string
+  clabe: string
+  banco: string
   csdCargado: boolean
   csdNumCert: string | null
   csdVigenciaHasta: string | null
+}
+
+export interface ComprobantePago {
+  id: number
+  contactoId: number
+  nombreOriginal: string
+  mimeType: string | null
+  tamanoBytes: number
+  descripcion: string | null
+  fechaSubida: string
 }
 
 export interface PacConfig {
@@ -101,7 +113,7 @@ export const facturacionService = {
     const { data } = await api.get('/facturacion/emisor')
     return data.data
   },
-  updateEmisor: (b: Partial<Pick<EmpresaFiscal, 'rfc' | 'razonSocial' | 'regimenFiscal' | 'cp'>>) =>
+  updateEmisor: (b: Partial<Pick<EmpresaFiscal, 'rfc' | 'razonSocial' | 'regimenFiscal' | 'cp' | 'clabe' | 'banco'>>) =>
     api.put('/facturacion/emisor', b).then((r) => r.data),
   subirCSD: (b: { cerBase64: string; keyBase64: string; passwordCsd: string }) =>
     api.post('/facturacion/emisor/csd', b).then((r) => r.data),
@@ -152,4 +164,9 @@ export const facturacionService = {
   cancelarNotaCredito: (ncId: number, motivo = '02') =>
     api.post(`/facturas/notas-credito/${ncId}/cancelar`, { motivo }).then((r) => r.data),
   notaCreditoDocumentoUrl: (ncId: number, formato: 'pdf' | 'xml') => `/api/facturas/notas-credito/${ncId}/documento/${formato}`,
+
+  listComprobantesPago: async (facturaId: number): Promise<ComprobantePago[]> => {
+    const { data } = await api.get(`/crm/facturas/${facturaId}/comprobantes`)
+    return data.data ?? []
+  },
 }

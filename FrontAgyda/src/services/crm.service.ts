@@ -106,6 +106,7 @@ export const crmService = {
     tipoClienteId?: number; segmentoId?: number; categoriaId?: number; industriaId?: number
     clasificacionId?: number; etiquetaIds?: number[]
     generarAccesoPortal?: boolean; passwordPortal?: string; tipoAccesoId?: number; enviarInvitacion?: boolean
+    metodoPagoDefault?: 'PPD' | 'PUE'
   }) => {
     const { data } = await api.put(`/crm/contactos/${id}/alta-cliente`, body)
     return data

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Spinner } from '@/components/ui/Spinner'
@@ -8,8 +9,9 @@ function fmt(f: string) {
   catch { return f }
 }
 
-// Solicitudes de reprogramación/cancelación que el cliente mandó desde el portal.
-export function SolicitudesCitaPanel({ onResuelta }: { onResuelta?: () => void }) {
+// Solicitudes de reprogramación/cancelación que el cliente mandó desde el
+// portal, sobre una cita ya existente.
+function PanelSolicitudesCambio({ onResuelta }: { onResuelta?: () => void }) {
   const qc = useQueryClient()
   const { data: solicitudes = [], isLoading } = useQuery({
     queryKey: ['citas-solicitudes'],
@@ -64,6 +66,99 @@ export function SolicitudesCitaPanel({ onResuelta }: { onResuelta?: () => void }
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Reuniones NUEVAS propuestas por el cliente desde el portal (sin cita previa
+// — a diferencia de PanelSolicitudesCambio). Al aprobar, el backend crea la
+// cita real (con Meet automático si la modalidad es videollamada).
+function PanelPropuestasReunion({ onResuelta }: { onResuelta?: () => void }) {
+  const qc = useQueryClient()
+  const [rechazando, setRechazando] = useState<number | null>(null)
+  const [comentario, setComentario] = useState('')
+  const { data: propuestas = [], isLoading } = useQuery({
+    queryKey: ['citas-propuestas-reunion'],
+    queryFn: () => citaService.getPropuestasReunion(),
+    staleTime: 15_000,
+  })
+
+  const resolver = useMutation({
+    mutationFn: ({ id, accion, comentario }: { id: number; accion: 'aprobar' | 'rechazar'; comentario?: string }) =>
+      citaService.resolverPropuestaReunion(id, accion, comentario),
+    onSuccess: (_d, vars) => {
+      toast.success(vars.accion === 'aprobar' ? 'Reunión aprobada y agendada' : 'Propuesta rechazada')
+      qc.invalidateQueries({ queryKey: ['citas-propuestas-reunion'] })
+      qc.invalidateQueries({ queryKey: ['citas'] })
+      setRechazando(null)
+      setComentario('')
+      onResuelta?.()
+    },
+    onError: () => toast.error('No se pudo resolver'),
+  })
+
+  if (isLoading) return <div className="flex justify-center py-6"><Spinner size="sm" /></div>
+  if (propuestas.length === 0) return null
+
+  return (
+    <div className="rounded-2xl border border-sky-200 bg-sky-50 overflow-hidden">
+      <div className="border-b border-sky-200 px-4 py-2.5">
+        <p className="text-[0.8rem] font-bold text-sky-800">
+          Reuniones propuestas por clientes ({propuestas.length})
+        </p>
+      </div>
+      <div className="divide-y divide-sky-100">
+        {propuestas.map((p) => (
+          <div key={p.id} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[0.8rem] font-semibold text-gray-800 truncate">
+                  {p.contactoNombre || 'Cliente'} — {p.titulo}
+                </p>
+                <p className="text-[0.7rem] text-gray-500">Propone: {fmt(p.fechaPropuesta)} · {p.duracionMin} min</p>
+                {p.motivo && <p className="text-[0.7rem] text-gray-400 truncate">"{p.motivo}"</p>}
+              </div>
+              <div className="flex gap-1.5 flex-shrink-0">
+                <button onClick={() => resolver.mutate({ id: p.id, accion: 'aprobar' })} disabled={resolver.isPending}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[0.7rem] font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                  Aprobar
+                </button>
+                <button onClick={() => setRechazando(rechazando === p.id ? null : p.id)} disabled={resolver.isPending}
+                  className="rounded-lg bg-white px-3 py-1.5 text-[0.7rem] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                  Rechazar
+                </button>
+              </div>
+            </div>
+            {rechazando === p.id && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  value={comentario}
+                  onChange={(e) => setComentario(e.target.value)}
+                  placeholder="Motivo del rechazo (opcional)"
+                  className="field flex-1 text-[0.75rem]"
+                  maxLength={500}
+                />
+                <button
+                  onClick={() => resolver.mutate({ id: p.id, accion: 'rechazar', comentario: comentario.trim() || undefined })}
+                  disabled={resolver.isPending}
+                  className="rounded-lg bg-red-600 px-3 py-1.5 text-[0.7rem] font-bold text-white hover:bg-red-700 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  Confirmar rechazo
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function SolicitudesCitaPanel({ onResuelta }: { onResuelta?: () => void }) {
+  return (
+    <div className="space-y-3">
+      <PanelPropuestasReunion onResuelta={onResuelta} />
+      <PanelSolicitudesCambio onResuelta={onResuelta} />
     </div>
   )
 }

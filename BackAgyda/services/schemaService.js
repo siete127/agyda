@@ -2865,12 +2865,21 @@ CREATE TABLE dbo.NOTA_CREDITO_ITEMS (
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_PAIS') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_PAIS NVARCHAR(60) NULL;`,
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CIUDAD') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CIUDAD NVARCHAR(120) NULL;`,
     `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_CORREO_FACTURACION') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_CORREO_FACTURACION NVARCHAR(200) NULL;`,
+    // Método de pago CFDI default de este cliente (PPD/PUE) — se usa para
+    // prellenar el formulario al emitirle una factura, no obliga nada.
+    `IF COL_LENGTH('dbo.CRM_CONTACTOS','CONT_METODO_PAGO_DEFAULT') IS NULL ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_METODO_PAGO_DEFAULT NVARCHAR(4) NULL;`,
   ];
   const facturaCols = [
     `IF COL_LENGTH('dbo.FACTURAS','FAC_SALDO') IS NULL ALTER TABLE dbo.FACTURAS ADD FAC_SALDO DECIMAL(18,2) NULL;`,
     `IF COL_LENGTH('dbo.FACTURAS','FAC_PAGADA') IS NULL ALTER TABLE dbo.FACTURAS ADD FAC_PAGADA BIT NOT NULL CONSTRAINT DF_FAC_PAGADA DEFAULT 0;`,
   ];
-  for (const q of [...stmts, ...contactoCols, ...facturaCols]) {
+  // CLABE interbancaria de la empresa (para que el cliente transfiera desde
+  // el portal) — un solo valor por tenant, junto a los demás datos del emisor.
+  const empresaFiscalCols = [
+    `IF COL_LENGTH('dbo.EMPRESA_FISCAL','EF_CLABE') IS NULL ALTER TABLE dbo.EMPRESA_FISCAL ADD EF_CLABE NVARCHAR(18) NULL;`,
+    `IF COL_LENGTH('dbo.EMPRESA_FISCAL','EF_BANCO') IS NULL ALTER TABLE dbo.EMPRESA_FISCAL ADD EF_BANCO NVARCHAR(100) NULL;`,
+  ];
+  for (const q of [...stmts, ...contactoCols, ...facturaCols, ...empresaFiscalCols]) {
     try { await pool.request().query(q); }
     catch (err) { console.warn('⚠️ Facturacion schema:', err.message); }
   }
@@ -2925,6 +2934,19 @@ BEGIN
   );
   CREATE INDEX IX_DOC_CONTACTO ON dbo.CRM_DOCUMENTOS_CLIENTE(DOC_CONTACTO_ID, DOC_ACTIVO);
   CREATE INDEX IX_DOC_PORTAL ON dbo.CRM_DOCUMENTOS_CLIENTE(DOC_CONTACTO_ID, DOC_VISIBLE_PORTAL) WHERE DOC_ACTIVO = 1;
+END`,
+    // Comprobante de pago que el cliente sube desde el Portal, ligado a una
+    // factura específica (mismo cifrado que el resto de CRM_DOCUMENTOS_CLIENTE).
+    // Sin FK a FACTURAS: ensureFacturacionSchema corre después en el arranque
+    // (ver ensureAllSchemas), así que la tabla FACTURAS podría no existir aún
+    // la primera vez que se crea esta columna. El CREATE INDEX va en un batch
+    // aparte: dentro del mismo batch que el ALTER, SQL Server resuelve nombres
+    // de columna en tiempo de compilación y el índice fallaría (columna
+    // "inexistente" hasta que el batch completo termine de ejecutarse).
+    `IF COL_LENGTH('dbo.CRM_DOCUMENTOS_CLIENTE','DOC_FACTURA_ID') IS NULL ALTER TABLE dbo.CRM_DOCUMENTOS_CLIENTE ADD DOC_FACTURA_ID INT NULL;`,
+    `IF COL_LENGTH('dbo.CRM_DOCUMENTOS_CLIENTE','DOC_FACTURA_ID') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_DOC_FACTURA' AND object_id=OBJECT_ID('dbo.CRM_DOCUMENTOS_CLIENTE'))
+BEGIN
+  CREATE INDEX IX_DOC_FACTURA ON dbo.CRM_DOCUMENTOS_CLIENTE(DOC_FACTURA_ID) WHERE DOC_FACTURA_ID IS NOT NULL;
 END`,
     `IF OBJECT_ID('dbo.CRM_ENCUESTAS_ENVIADAS', 'U') IS NULL
 BEGIN
@@ -4923,6 +4945,42 @@ async function ensureCitasSchema(pool) {
     `);
   } catch (err) {
     console.warn('⚠️ CliCitasSolicitudesSchema:', err.message);
+  }
+
+  // Propuestas de reunión NUEVA hechas por el cliente desde el portal (sin
+  // cita previa que reprogramar — a diferencia de CLI_CITAS_SOLICITUDES). El
+  // asesor responsable las aprueba (crea la CLI_CITA real, con Meet
+  // automático si la modalidad es videollamada) o las rechaza.
+  try {
+    await pool.request().batch(`
+      IF OBJECT_ID('dbo.CLI_CITAS_PROPUESTAS_NUEVAS', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.CLI_CITAS_PROPUESTAS_NUEVAS (
+          PRN_ID                INT IDENTITY(1,1) PRIMARY KEY,
+          PRN_CONTACTO_ID       INT NOT NULL,
+          PRN_ASESOR_ID         INT NULL,
+          PRN_TITULO            NVARCHAR(200) NOT NULL,
+          PRN_MOTIVO            NVARCHAR(500) NULL,
+          PRN_MODALIDAD         NVARCHAR(20) NOT NULL DEFAULT 'videollamada',
+          PRN_FECHA_PROPUESTA   DATETIME NOT NULL,
+          PRN_DURACION_MIN      INT NOT NULL DEFAULT 30,
+          PRN_ESTATUS           NVARCHAR(20) NOT NULL DEFAULT 'pendiente',
+          PRN_COMENTARIO        NVARCHAR(500) NULL,
+          PRN_CITA_ID           INT NULL,
+          PRN_RESUELTA_POR      INT NULL,
+          PRN_FECHA_RESOLUCION  DATETIME NULL,
+          PRN_FECHA             DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT FK_PRN_CONTACTO FOREIGN KEY (PRN_CONTACTO_ID) REFERENCES dbo.CRM_CONTACTOS(CONT_ID),
+          CONSTRAINT FK_PRN_CITA FOREIGN KEY (PRN_CITA_ID) REFERENCES dbo.CLI_CITAS(CITA_ID)
+        );
+        CREATE INDEX IX_CLI_CITAS_PRN_CONTACTO ON dbo.CLI_CITAS_PROPUESTAS_NUEVAS(PRN_CONTACTO_ID);
+        CREATE INDEX IX_CLI_CITAS_PRN_ASESOR ON dbo.CLI_CITAS_PROPUESTAS_NUEVAS(PRN_ASESOR_ID);
+        CREATE INDEX IX_CLI_CITAS_PRN_ESTATUS ON dbo.CLI_CITAS_PROPUESTAS_NUEVAS(PRN_ESTATUS);
+      END
+    `);
+    logger.info('✅ Esquema de propuestas de reunión nueva (Portal de Cliente) asegurado');
+  } catch (err) {
+    console.warn('⚠️ CliCitasPropuestasNuevasSchema:', err.message);
   }
 
   // Bitácora de recordatorios de cita enviados — alimenta el reporte de

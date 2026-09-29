@@ -33,6 +33,7 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
   const [medioContacto, setMedioContacto] = useState(cliente.medioContacto ?? '')
   const [estatusCliente, setEstatusCliente] = useState<ClienteEstatusColor>(cliente.estatusCliente)
   const [observacionesIniciales, setObservacionesIniciales] = useState(cliente.observacionesIniciales ?? '')
+  const [metodoPagoDefault, setMetodoPagoDefault] = useState<'PPD' | 'PUE' | ''>(cliente.metodoPagoDefault ?? '')
 
   const responsableNombre = usuarios?.find((u) => u.id === cliente.responsableId)?.nombre
 
@@ -44,6 +45,7 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
       estatusCliente,
       medioContacto: medioContacto || undefined,
       observacionesIniciales: observacionesIniciales || undefined,
+      metodoPagoDefault: metodoPagoDefault || undefined,
     }),
     onSuccess: () => {
       toast.success('Datos actualizados')
@@ -86,6 +88,7 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
             <Campo label="Dirección" value={cliente.direccion} />
             <Campo label="Producto/servicio contratado" value={cliente.productoServicio} />
             <Campo label="Medio de contacto" value={cliente.medioContacto} />
+            <Campo label="Método de pago" value={cliente.metodoPagoDefault === 'PPD' ? 'PPD — Pago en parcialidades o diferido' : cliente.metodoPagoDefault === 'PUE' ? 'PUE — Pago en una sola exhibición' : null} />
           </div>
           {cliente.observacionesIniciales && (
             <div className="rounded-lg bg-gray-50 px-3 py-2">
@@ -121,6 +124,14 @@ export function DatosGeneralesTab({ cliente }: { cliente: CRMContacto }) {
             <select value={medioContacto} onChange={(e) => setMedioContacto(e.target.value)} className="field">
               <option value="">Sin especificar</option>
               {MEDIOS_CONTACTO.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Método de pago</label>
+            <select value={metodoPagoDefault} onChange={(e) => setMetodoPagoDefault(e.target.value as 'PPD' | 'PUE' | '')} className="field">
+              <option value="">Sin especificar</option>
+              <option value="PUE">PUE — Pago en una sola exhibición</option>
+              <option value="PPD">PPD — Pago en parcialidades o diferido</option>
             </select>
           </div>
           <div className="col-span-2">
