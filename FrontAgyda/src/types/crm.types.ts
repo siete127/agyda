@@ -46,6 +46,7 @@ export interface CRMContacto {
   tipoAccesoNombre: string | null
   ultimaActividad: string | null
   ultimaActividadTitulo: string | null
+  metodoPagoDefault: 'PPD' | 'PUE' | null
 }
 
 export interface CRMOportunidad {
@@ -150,6 +151,7 @@ export function parseCRMContacto(raw: Record<string, unknown>): CRMContacto {
     tipoAccesoNombre:        pick(raw, 'tipoAccesoNombre') as string | null,
     ultimaActividad:         pick(raw, 'ultimaActividad') as string | null,
     ultimaActividadTitulo:   pick(raw, 'ultimaActividadTitulo') as string | null,
+    metodoPagoDefault:       pick(raw, 'metodoPagoDefault', 'CONT_METODO_PAGO_DEFAULT') as 'PPD' | 'PUE' | null,
   }
 }
 

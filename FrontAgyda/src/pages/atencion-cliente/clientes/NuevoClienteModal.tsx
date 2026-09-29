@@ -39,6 +39,7 @@ export function NuevoClienteModal({ onClose, onCreated }: { onClose: () => void;
   const [medioContacto, setMedioContacto] = useState('')
   const [estatusCliente, setEstatusCliente] = useState<ClienteEstatusColor>('verde')
   const [observacionesIniciales, setObservacionesIniciales] = useState('')
+  const [metodoPagoDefault, setMetodoPagoDefault] = useState<'PPD' | 'PUE' | ''>('')
   const [generarAccesoPortal, setGenerarAccesoPortal] = useState(false)
   const [passwordPortal, setPasswordPortal] = useState('')
   const [tipoAccesoId, setTipoAccesoId] = useState('')
@@ -65,6 +66,7 @@ export function NuevoClienteModal({ onClose, onCreated }: { onClose: () => void;
         industriaId: industriaId ? Number(industriaId) : undefined,
         clasificacionId: clasificacionId ? Number(clasificacionId) : undefined,
         etiquetaIds,
+        metodoPagoDefault: metodoPagoDefault || undefined,
         generarAccesoPortal: generarAccesoPortal || undefined,
         passwordPortal: generarAccesoPortal && passwordPortal ? passwordPortal : undefined,
         tipoAccesoId: generarAccesoPortal && tipoAccesoId ? Number(tipoAccesoId) : undefined,
@@ -157,6 +159,14 @@ export function NuevoClienteModal({ onClose, onCreated }: { onClose: () => void;
             <select value={medioContacto} onChange={(e) => setMedioContacto(e.target.value)} className="field">
               <option value="">Sin especificar</option>
               {MEDIOS_CONTACTO.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Método de pago</label>
+            <select value={metodoPagoDefault} onChange={(e) => setMetodoPagoDefault(e.target.value as 'PPD' | 'PUE' | '')} className="field">
+              <option value="">Sin especificar</option>
+              <option value="PUE">PUE — Pago en una sola exhibición</option>
+              <option value="PPD">PPD — Pago en parcialidades o diferido</option>
             </select>
           </div>
         </div>

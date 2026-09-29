@@ -148,6 +148,7 @@ router.post('/recordatorios/run-cron', authenticateToken, verificarRol(['AD']), 
 // dos UIs (ver Fase 7 del plan de migración: se retira 'crm' al cerrar).
 router.post('/contactos/:id/documentos', authenticateToken, requireAnyActionAccess([['crm','seguimiento-documentos'],['atencion-cliente','clientes-documentos']]), uploadCrmDocumento.single('file'), crmDocumentosCliente.upload);
 router.get('/contactos/:id/documentos', authenticateToken, requireAnyActionAccess([['crm','seguimiento-ver'],['atencion-cliente','clientes-ver']]), crmDocumentosCliente.listByContacto);
+router.get('/facturas/:facturaId/comprobantes', authenticateToken, requireAnyActionAccess([['crm','seguimiento-ver'],['atencion-cliente','clientes-ver']]), crmDocumentosCliente.listByFactura);
 router.get('/documentos/:docId/download', authenticateToken, requireAnyActionAccess([['crm','seguimiento-ver'],['atencion-cliente','clientes-ver']]), crmDocumentosCliente.download);
 router.patch('/documentos/:docId/portal', authenticateToken, requireAnyActionAccess([['crm','seguimiento-documentos'],['atencion-cliente','clientes-documentos']]), crmDocumentosCliente.toggleVisiblePortal);
 router.delete('/documentos/:docId', authenticateToken, requireAnyActionAccess([['crm','seguimiento-documentos'],['atencion-cliente','clientes-documentos']]), crmDocumentosCliente.delete);

@@ -17,12 +17,26 @@ export interface NuevaCitaBody {
   fechaHora: string
   duracionMin?: number
   motivo?: string
-  enlace?: string
   telefono?: string
   asignadoA?: number
   recordarMinAntes?: number[]
   tratamientoId?: number
   numeroSesion?: number
+}
+
+// Reunión nueva propuesta por un cliente desde el Portal (ver
+// citaController.listPropuestasReunion/resolverPropuestaReunion).
+export interface PropuestaReunionAsesor {
+  id: number
+  contactoId: number
+  contactoNombre: string | null
+  asesorId: number | null
+  titulo: string
+  motivo: string | null
+  modalidad: CitaModalidad
+  fechaPropuesta: string
+  duracionMin: number
+  fecha: string
 }
 
 export interface NuevoTratamientoBody {
@@ -76,4 +90,11 @@ export const citaService = {
   },
   resolverSolicitud: (id: number, accion: 'aprobar' | 'rechazar') =>
     api.patch(`${B}/citas/solicitudes/${id}`, { accion }).then((r) => r.data),
+
+  getPropuestasReunion: async (): Promise<PropuestaReunionAsesor[]> => {
+    const { data } = await api.get(`${B}/citas/propuestas`)
+    return (data?.data ?? []) as PropuestaReunionAsesor[]
+  },
+  resolverPropuestaReunion: (id: number, accion: 'aprobar' | 'rechazar', comentario?: string) =>
+    api.post(`${B}/citas/propuestas/${id}/resolver`, { accion, comentario }).then((r) => r.data),
 }

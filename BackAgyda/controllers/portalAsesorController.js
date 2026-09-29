@@ -183,3 +183,47 @@ exports.subirDocumento = async (req, res) => {
   };
   return crmDocumentosCliente.upload(req, res);
 };
+
+const EXT_COMPROBANTE_PERMITIDAS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.webp']);
+
+// POST /portal-cliente/facturas/:facturaId/comprobante-pago — el cliente sube
+// su comprobante de transferencia/depósito para una factura puntual. Delega
+// en crmDocumentosCliente.upload igual que subirDocumento, pero valida que la
+// factura sea de este mismo contacto y la liga vía DOC_FACTURA_ID.
+exports.subirComprobantePago = async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: 'Selecciona un archivo' });
+  const ext = path.extname(req.file.originalname || '').toLowerCase();
+  if (!EXT_COMPROBANTE_PERMITIDAS.has(ext)) {
+    return res.status(400).json({ success: false, message: 'Sube el comprobante como imagen (JPG/PNG) o PDF' });
+  }
+  const facturaId = parseInt(req.params.facturaId, 10);
+  if (!Number.isFinite(facturaId)) return res.status(400).json({ success: false, message: 'facturaId inválido' });
+
+  const pool = await databaseService.getPool(req.user?.empresa);
+  const factura = await pool.request().input('id', sql.Int, facturaId).input('c', sql.Int, req.contacto.id)
+    .query(`SELECT FAC_ID FROM FACTURAS WHERE FAC_ID=@id AND FAC_CLIENTE_ID=@c`);
+  if (!factura.recordset.length) return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+
+  req.params.id = String(req.contacto.id);
+  req.body = { descripcion: req.body?.descripcion, categoria: 'Comprobante de pago', visiblePortal: 'true', facturaId: String(facturaId) };
+
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    if (body?.success) {
+      (async () => {
+        const asesor = await asesorDe(pool, req.contacto.id);
+        if (asesor) {
+          await notificationService.createNotification({
+            usuarioId: asesor.id,
+            mensaje: `${req.contacto.empresa || req.contacto.nombre} subió un comprobante de pago`,
+            tipo: 'cliente-comprobante-pago',
+            dataExtra: { contactoId: req.contacto.id, facturaId, docClienteId: body.data?.id },
+            tenantKey: req.user?.empresa,
+          });
+        }
+      })().catch((e) => console.warn('portalAsesor.subirComprobantePago aviso:', e.message));
+    }
+    return json(body);
+  };
+  return crmDocumentosCliente.upload(req, res);
+};

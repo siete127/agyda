@@ -26,10 +26,13 @@ router.get('/disponibilidad-asesor', requirePortalAction('ver-cotizaciones'), ho
 router.get('/proyectos', requirePortalAction('ver-proyectos'), ctrl.getProyectos);
 router.get('/cotizaciones', requirePortalAction('ver-cotizaciones'), ctrl.getCotizaciones);
 router.get('/facturas', requirePortalAction('ver-facturas'), ctrl.getFacturas);
+router.get('/datos-pago', requirePortalAction('ver-facturas'), ctrl.getDatosPago);
 router.get('/facturas/:id/documento/:formato', requirePortalAction('descargar-documentos'), ctrl.descargarFacturaDocumento);
+router.get('/facturas/:id/comprobantes', requirePortalAction('ver-facturas'), ctrl.getComprobantesPagoFactura);
 router.get('/documentos', requirePortalAction('descargar-documentos'), ctrl.getDocumentos);
 router.get('/documentos/:id/download', requirePortalAction('descargar-documentos'), ctrl.descargarDocumento);
 router.post('/documentos', requirePortalAction('subir-documentos'), uploadCrmDocumento.single('file'), asesorCtrl.subirDocumento);
+router.post('/facturas/:facturaId/comprobante-pago', requirePortalAction('subir-documentos'), uploadCrmDocumento.single('file'), asesorCtrl.subirComprobantePago);
 
 // Su asesor (responsable del contacto), chat con él y aviso si no tiene.
 router.get('/asesor', requirePortalAction('chatear-asesor'), asesorCtrl.getAsesor);
@@ -39,6 +42,8 @@ router.get('/citas', requirePortalAction('ver-citas'), ctrl.getCitas);
 router.get('/citas/historial', requirePortalAction('ver-citas'), ctrl.getCitasHistorial);
 router.post('/citas/:id/confirmar', requirePortalAction('gestionar-citas'), ctrl.confirmarCita);
 router.post('/citas/:id/solicitar-cambio', requirePortalAction('gestionar-citas'), ctrl.solicitarCambioCita);
+router.get('/reuniones/propuestas', requirePortalAction('gestionar-citas'), ctrl.getMisPropuestasReunion);
+router.post('/reuniones/propuestas', requirePortalAction('gestionar-citas'), ctrl.crearPropuestaReunion);
 router.get('/categorias-caso', requirePortalAction('ver-incidencias'), ctrl.getCategoriasCaso);
 router.get('/incidencias', requirePortalAction('ver-incidencias'), ctrl.getIncidencias);
 router.post('/incidencias', requirePortalAction('crear-incidencias'), ctrl.crearIncidencia);

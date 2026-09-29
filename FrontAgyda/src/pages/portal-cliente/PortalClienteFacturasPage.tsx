@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   Receipt, ChevronRight, ChevronDown, ChevronLeft, Search,
-  FileText, FileCode, Download, Share2, CreditCard, CheckCircle2,
+  FileText, FileCode, Download, Share2, CheckCircle2,
   Clock, AlertCircle, RefreshCcw, MoreVertical, X, Lock, Loader2,
+  Copy, Landmark, Upload, Paperclip,
 } from 'lucide-react'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
 import { PortalBreadcrumb } from '@/pages/portal-cliente/components/PortalBreadcrumb'
@@ -349,6 +350,103 @@ function NoDisponibleAun({ texto }: { texto: string }) {
   )
 }
 
+// Muestra la CLABE configurada en Configuración → Facturación → Datos
+// fiscales del emisor (un solo valor para toda la empresa, no por factura).
+// Reemplaza al antiguo botón "Pagar ahora" — no hay pasarela de pago en
+// línea, el cliente transfiere manualmente y luego sube su comprobante.
+function ClabeInterbancaria() {
+  const { data, isLoading } = useQuery({ queryKey: ['portal-datos-pago'], queryFn: () => portalClienteService.getDatosPago() })
+  const [copiado, setCopiado] = useState(false)
+
+  function copiar() {
+    if (!data?.clabe) return
+    navigator.clipboard?.writeText(data.clabe)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 1500)
+  }
+
+  if (isLoading) return null
+  if (!data?.clabe) {
+    return (
+      <p className="rounded-xl bg-surface px-3 py-2.5 text-center text-[11px] text-ink-tertiary">
+        La CLABE para transferencia aún no está configurada. Contacta a tu asesor.
+      </p>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-surface-border bg-surface p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-tertiary">
+        <Landmark className="h-3.5 w-3.5" />
+        Clabe interbancaria:
+        {data.banco && <span className="font-normal normal-case text-ink-tertiary">{data.banco}</span>}
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <span className="font-mono text-sm font-bold tracking-wide text-ink">{data.clabe}</span>
+        <button type="button" onClick={copiar} className="flex flex-shrink-0 items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-[11px] font-bold text-white hover:bg-brand-dark transition-colors">
+          <Copy className="h-3.5 w-3.5" />
+          {copiado ? '¡Copiada!' : 'Copiar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// El cliente sube una imagen/PDF de su comprobante de transferencia para
+// esta factura; el equipo interno lo revisa desde Facturación/Clientes.
+function SubirComprobantePago({ facturaId }: { facturaId: number }) {
+  const qc = useQueryClient()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const { data: lista, isLoading: cargando } = useQuery({
+    queryKey: ['portal-comprobante-factura', facturaId],
+    queryFn: () => portalClienteService.getComprobantesPago(facturaId),
+  })
+
+  const subir = useMutation({
+    mutationFn: (archivo: File) => portalClienteService.subirComprobantePago(facturaId, archivo),
+    onSuccess: () => {
+      toast.success('Comprobante enviado')
+      qc.invalidateQueries({ queryKey: ['portal-comprobante-factura', facturaId] })
+    },
+    onError: () => toast.error('No se pudo subir el comprobante'),
+  })
+
+  function onElegirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0]
+    if (archivo) subir.mutate(archivo)
+    e.target.value = ''
+  }
+
+  return (
+    <div className="space-y-3">
+      <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={onElegirArchivo} />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={subir.isPending}
+        className="flex w-full items-center justify-center gap-1.5 rounded-full border-2 border-dashed border-surface-border py-3 text-xs font-semibold text-ink-secondary hover:border-brand hover:text-brand transition-colors disabled:opacity-50"
+      >
+        {subir.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+        Subir comprobante de pago
+      </button>
+
+      {!cargando && lista && lista.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary">Comprobantes enviados</p>
+          {(lista as { id: number; nombreOriginal: string; fechaSubida: string }[]).map((c) => (
+            <div key={c.id} className="flex items-center gap-2 rounded-lg border border-surface-border px-3 py-2 text-xs text-ink">
+              <Paperclip className="h-3.5 w-3.5 flex-shrink-0 text-ink-tertiary" />
+              <span className="min-w-0 flex-1 truncate">{c.nombreOriginal}</span>
+              <span className="flex-shrink-0 text-[11px] text-ink-tertiary">{new Date(c.fechaSubida).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DetalleFactura({ f }: { f: PortalFactura }) {
   const [subtab, setSubtab] = useState<(typeof SUBTABS)[number]>('Información')
   const { abierto, setAbierto } = usePopover()
@@ -428,29 +526,25 @@ function DetalleFactura({ f }: { f: PortalFactura }) {
         )}
 
         {subtab === 'Conceptos' && <NoDisponibleAun texto="El desglose de conceptos no está disponible aún." />}
-        {subtab === 'Pagos' && <NoDisponibleAun texto="El historial de pagos no está disponible aún." />}
+        {subtab === 'Pagos' && (
+          <div className="space-y-4 py-2">
+            {grupo === 'Pendiente' && (
+              <>
+                <div>
+                  <p className="text-xs font-semibold text-ink">Total a pagar</p>
+                  <p className="mt-0.5 text-lg font-extrabold text-ink">${formatoMoneda(f.total)} MXN</p>
+                </div>
+                <ClabeInterbancaria />
+                <SubirComprobantePago facturaId={f.id} />
+              </>
+            )}
+            {grupo !== 'Pendiente' && <NoDisponibleAun texto="Esta factura no tiene un pago pendiente." />}
+          </div>
+        )}
         {subtab === 'Archivos' && <NoDisponibleAun texto="La descarga de archivos no está disponible aún." />}
       </div>
 
-      {grupo === 'Pendiente' && (
-        <div className="border-t border-surface-border pt-4">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-ink">Total a pagar</span>
-          </div>
-          <p className="mt-1 text-lg font-extrabold text-ink">${formatoMoneda(f.total)} MXN</p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          disabled
-          title="El pago en línea estará disponible próximamente"
-          className="flex items-center justify-center gap-1.5 rounded-full bg-brand py-2.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <CreditCard className="h-3.5 w-3.5" />
-          Pagar ahora
-        </button>
+      <div className="grid grid-cols-3 gap-2">
         <button
           type="button"
           disabled={!timbrada || descargando !== null}

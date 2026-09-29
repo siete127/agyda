@@ -1,7 +1,7 @@
 import { api } from '@/lib/axios'
 import type {
   PortalResumen, PortalProyecto, PortalCotizacion, PortalFactura, PortalDocumento, PortalCita, PortalIncidencia,
-  PortalProductoServicio, PortalCatalogoItem, PortalAsesor, PortalCategoriaCaso,
+  PortalProductoServicio, PortalCatalogoItem, PortalAsesor, PortalCategoriaCaso, PropuestaReunion,
 } from '@/types/portalCliente.types'
 import { parseMensajeriaCanal, type MensajeriaCanal } from '@/types/mensajeria.types'
 
@@ -108,6 +108,19 @@ export const portalClienteService = {
     const { data } = await api.get('/portal-cliente/facturas')
     return (data?.data ?? []) as PortalFactura[]
   },
+  async getDatosPago(): Promise<{ clabe: string; banco: string }> {
+    const { data } = await api.get('/portal-cliente/datos-pago')
+    return data?.data ?? { clabe: '', banco: '' }
+  },
+  async subirComprobantePago(facturaId: number, archivo: File): Promise<void> {
+    const fd = new FormData()
+    fd.append('file', archivo)
+    await api.post(`/portal-cliente/facturas/${facturaId}/comprobante-pago`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  async getComprobantesPago(facturaId: number): Promise<{ id: number; nombreOriginal: string; fechaSubida: string }[]> {
+    const { data } = await api.get(`/portal-cliente/facturas/${facturaId}/comprobantes`)
+    return data?.data ?? []
+  },
   // Blob + link temporal (no un <a href> plano) porque el JWT vive en
   // localStorage y solo se adjunta vía el interceptor de axios — un <a href>
   // normal no lo llevaría y la descarga fallaría con 401.
@@ -177,6 +190,14 @@ export const portalClienteService = {
   },
   async solicitarCambioCita(id: number, body: { tipo: 'reprogramar' | 'cancelar'; fechaPropuesta?: string; motivo?: string }): Promise<void> {
     await api.post(`/portal-cliente/citas/${id}/solicitar-cambio`, body)
+  },
+  async getMisPropuestasReunion(): Promise<PropuestaReunion[]> {
+    const { data } = await api.get('/portal-cliente/reuniones/propuestas')
+    return (data?.data ?? []) as PropuestaReunion[]
+  },
+  async crearPropuestaReunion(body: { titulo: string; motivo?: string; modalidad: string; fechaPropuesta: string; duracionMin: number }): Promise<{ id: number }> {
+    const { data } = await api.post('/portal-cliente/reuniones/propuestas', body)
+    return data?.data
   },
   async getCategoriasCaso(): Promise<PortalCategoriaCaso[]> {
     const { data } = await api.get('/portal-cliente/categorias-caso')

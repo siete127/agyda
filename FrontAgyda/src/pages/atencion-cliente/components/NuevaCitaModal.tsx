@@ -43,7 +43,6 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
   const [fecha, setFecha] = useState(fechaHoraPreset ? fechaHoraPreset.slice(0, 10) : '')
   const [hora, setHora] = useState(fechaHoraPreset ? fechaHoraPreset.slice(11, 16) : '')
   const [duracionMin, setDuracionMin] = useState('30')
-  const [enlace, setEnlace] = useState('')
   const [telefono, setTelefono] = useState('')
   const [recordar, setRecordar] = useState<number[]>([1440, 60])
   const [tratamientoId, setTratamientoId] = useState(tratamientoPreset ? String(tratamientoPreset.id) : '')
@@ -125,7 +124,6 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
         fechaHora,
         duracionMin: Number(duracionMin) || 30,
         motivo: motivo.trim() || undefined,
-        enlace: modalidad === 'videollamada' && enlace.trim() ? enlace.trim() : undefined,
         telefono: modalidad === 'telefonica' && telefono.trim() ? telefono.trim() : undefined,
         asignadoA: asignadoAIdNum || undefined,
         recordarMinAntes: recordar,
@@ -231,10 +229,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
         {errorHorario && <p className="-mt-2 text-[0.72rem] font-semibold text-red-500">{errorHorario}</p>}
 
         {modalidad === 'videollamada' && (
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Enlace de la videollamada</label>
-            <input value={enlace} onChange={(e) => setEnlace(e.target.value)} className="field" placeholder="https://meet..." maxLength={500} />
-          </div>
+          <p className="-mt-1 text-[0.72rem] text-gray-400">El enlace de la videollamada se genera automáticamente al agendar.</p>
         )}
         {modalidad === 'telefonica' && (
           <div>

@@ -21,7 +21,8 @@ const CONTACTO_SELECT_FIELDS = `
   CONT_INDUSTRIA_ID as industriaId, id2.IND_NOMBRE as industriaNombre,
   CONT_CLASIFICACION_ID as clasificacionId, clc.CLC_NOMBRE as clasificacionNombre,
   CONT_NEUS_ID as neusId,
-  CONT_TIPO_ACCESO_ID as tipoAccesoId, tap.TAP_NOMBRE as tipoAccesoNombre
+  CONT_TIPO_ACCESO_ID as tipoAccesoId, tap.TAP_NOMBRE as tipoAccesoNombre,
+  CONT_METODO_PAGO_DEFAULT as metodoPagoDefault
 `;
 
 // Joins de los catálogos de Clientes — se concatenan al FROM base donde se usa
@@ -277,10 +278,11 @@ exports.altaCliente = async (req, res) => {
       tipoCliente, direccion, productoServicio, responsableId,
       estatusCliente, medioContacto, observacionesIniciales,
       tipoClienteId, segmentoId, categoriaId, industriaId, clasificacionId, etiquetaIds,
-      generarAccesoPortal, passwordPortal, tipoAccesoId, enviarInvitacion,
+      generarAccesoPortal, passwordPortal, tipoAccesoId, enviarInvitacion, metodoPagoDefault,
     } = req.body || {};
 
     const estatus = estatusCliente && ESTATUS_CLIENTE_VALIDOS.includes(estatusCliente) ? estatusCliente : 'verde';
+    const metodoPago = ['PPD', 'PUE'].includes(metodoPagoDefault) ? metodoPagoDefault : null;
 
     const pool = await databaseService.getPool(req.user?.empresa);
     const existe = await pool.request()
@@ -318,6 +320,7 @@ exports.altaCliente = async (req, res) => {
       .input('clasificacionId', sql.Int, toIdOrNull(clasificacionId))
       .input('neusId', sql.Int, neusId)
       .input('tipoAccesoId', sql.Int, toIdOrNull(tipoAccesoId))
+      .input('metodoPago', sql.NVarChar(4), metodoPago)
       .query(`
         UPDATE CRM_CONTACTOS SET
           CONT_TIPO_CLIENTE=@tipoCliente, CONT_DIRECCION=@direccion, CONT_PRODUCTO_SERVICIO=@productoServicio,
@@ -325,7 +328,7 @@ exports.altaCliente = async (req, res) => {
           CONT_OBSERVACIONES_INICIALES=@observacionesIniciales, CONT_ES_CLIENTE=1,
           CONT_TIPO_CLIENTE_ID=@tipoClienteId, CONT_SEGMENTO_ID=@segmentoId, CONT_CATEGORIA_ID=@categoriaId,
           CONT_INDUSTRIA_ID=@industriaId, CONT_CLASIFICACION_ID=@clasificacionId, CONT_NEUS_ID=@neusId,
-          CONT_TIPO_ACCESO_ID=@tipoAccesoId
+          CONT_TIPO_ACCESO_ID=@tipoAccesoId, CONT_METODO_PAGO_DEFAULT=@metodoPago
         WHERE CONT_ID=@id
       `);
     await setEtiquetasContacto(pool, id, etiquetaIds);

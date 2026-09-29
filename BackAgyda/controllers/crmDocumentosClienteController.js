@@ -26,6 +26,7 @@ exports.upload = async (req, res) => {
     const descripcion = req.body && req.body.descripcion ? String(req.body.descripcion) : null;
     const categoria = req.body && req.body.categoria ? String(req.body.categoria) : null;
     const visiblePortal = req.body && (req.body.visiblePortal === 'false' || req.body.visiblePortal === false) ? false : true;
+    const facturaId = req.body && req.body.facturaId ? parseInt(req.body.facturaId, 10) : null;
     const sha256 = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
 
     let encrypted;
@@ -65,14 +66,15 @@ exports.upload = async (req, res) => {
       .input('keyId', sql.NVarChar(50), keyId)
       .input('visiblePortal', sql.Bit, visiblePortal)
       .input('subidoPor', sql.Int, getUserId(req))
+      .input('facturaId', sql.Int, facturaId)
       .query(`
         INSERT INTO CRM_DOCUMENTOS_CLIENTE
           (DOC_CONTACTO_ID, DOC_NOMBRE_ORIGINAL, DOC_MIME_TYPE, DOC_TAMANO_BYTES, DOC_DESCRIPCION, DOC_CATEGORIA,
-           DOC_ENCRYPTED_DATA, DOC_CONTENT_HASH, DOC_ENC_ALGO, DOC_ENC_IV, DOC_ENC_TAG, DOC_KEY_ID, DOC_VISIBLE_PORTAL, DOC_SUBIDO_POR)
+           DOC_ENCRYPTED_DATA, DOC_CONTENT_HASH, DOC_ENC_ALGO, DOC_ENC_IV, DOC_ENC_TAG, DOC_KEY_ID, DOC_VISIBLE_PORTAL, DOC_SUBIDO_POR, DOC_FACTURA_ID)
         OUTPUT INSERTED.DOC_ID, INSERTED.DOC_FECHA_SUBIDA
         VALUES
           (@contactoId, @nombreOriginal, @mime, @sizeBytes, @descripcion, @categoria,
-           @data, @hash, @encAlgo, @iv, @tag, @keyId, @visiblePortal, @subidoPor)
+           @data, @hash, @encAlgo, @iv, @tag, @keyId, @visiblePortal, @subidoPor, @facturaId)
       `);
 
     await logAudit(pool, {
@@ -118,6 +120,30 @@ exports.listByContacto = async (req, res) => {
     res.json({ success: true, data: result.recordset });
   } catch (e) {
     console.error('Error listByContacto documentos CRM:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Comprobantes de pago subidos para una factura específica (DOC_FACTURA_ID).
+exports.listByFactura = async (req, res) => {
+  try {
+    const facturaId = parseInt(req.params.facturaId, 10);
+    if (!Number.isFinite(facturaId)) return res.status(400).json({ success: false, message: 'facturaId inválido' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request()
+      .input('facturaId', sql.Int, facturaId)
+      .query(`
+        SELECT DOC_ID as id, DOC_CONTACTO_ID as contactoId, DOC_NOMBRE_ORIGINAL as nombreOriginal,
+               DOC_MIME_TYPE as mimeType, DOC_TAMANO_BYTES as tamanoBytes, DOC_DESCRIPCION as descripcion,
+               DOC_FECHA_SUBIDA as fechaSubida
+        FROM CRM_DOCUMENTOS_CLIENTE
+        WHERE DOC_FACTURA_ID = @facturaId AND DOC_ACTIVO = 1
+        ORDER BY DOC_FECHA_SUBIDA DESC
+      `);
+    res.json({ success: true, data: result.recordset });
+  } catch (e) {
+    console.error('Error listByFactura documentos CRM:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

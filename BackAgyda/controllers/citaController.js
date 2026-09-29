@@ -14,6 +14,18 @@ const crmWhatsappService = require('../services/crmWhatsappService');
 // 'citas-gestionar'); aquí no se re-chequea.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Genera un código de sala con el mismo formato que usa Google Meet
+// (xxx-xxxx-xxx, minúsculas, sin vocales/números ambiguos con "0/o"/"1/l").
+// No crea una reunión real en Google Calendar (no hay integración OAuth con
+// Google en el proyecto) — es una sala "ad-hoc" que cualquiera con el link
+// puede solicitar unirse, igual que una sala de Meet creada al vuelo desde
+// meet.google.com sin evento de calendario asociado.
+const MEET_ALFABETO = 'abcdefghijkmnpqrstuvwxyz'; // sin l/o para no confundir con 1/0
+function generarEnlaceMeet() {
+  const seg = (n) => Array.from({ length: n }, () => MEET_ALFABETO[Math.floor(Math.random() * MEET_ALFABETO.length)]).join('');
+  return `https://meet.google.com/${seg(3)}-${seg(4)}-${seg(3)}`;
+}
+
 const MODALIDADES_VALIDAS = ['videollamada', 'telefonica', 'generica'];
 const ESTATUS_VALIDOS = ['agendada', 'confirmada', 'reprogramada', 'cancelada', 'asistio', 'no_asistio'];
 const ESTATUS_QUE_CIERRAN = ['asistio', 'no_asistio', 'cancelada'];
@@ -233,7 +245,7 @@ exports.create = async (req, res) => {
   try {
     const {
       contactoId, tratamientoId, numeroSesion, modalidad, titulo, motivo,
-      fechaHora, duracionMin, enlace, telefono, asignadoA, recordarMinAntes,
+      fechaHora, duracionMin, telefono, asignadoA, recordarMinAntes,
     } = req.body || {};
 
     const contId = contactoId ? parseInt(contactoId, 10) : null;
@@ -242,6 +254,8 @@ exports.create = async (req, res) => {
     if (!fechaHora) return res.status(400).json({ success: false, message: 'Fecha y hora requeridas' });
 
     const modal = MODALIDADES_VALIDAS.includes(modalidad) ? modalidad : 'videollamada';
+    // Siempre generado — no se acepta un enlace manual desde el formulario.
+    const enlace = modal === 'videollamada' ? generarEnlaceMeet() : null;
     const asignado = asignadoA ? parseInt(asignadoA, 10) : null;
     const tratId = tratamientoId ? parseInt(tratamientoId, 10) : null;
     // Normaliza CITA_RECORDAR_MIN_ANTES: acepta CSV o array; default '1440,60'.
@@ -268,7 +282,7 @@ exports.create = async (req, res) => {
       .input('motivo', sql.NVarChar(sql.MAX), motivo || null)
       .input('fechaHora', sql.VarChar(19), fechaHoraSql(fechaHora))
       .input('duracionMin', sql.Int, duracionMin ? parseInt(duracionMin, 10) : 30)
-      .input('enlace', sql.NVarChar(500), modal === 'videollamada' ? (enlace || null) : null)
+      .input('enlace', sql.NVarChar(500), enlace)
       .input('telefono', sql.NVarChar(30), modal === 'telefonica' ? (telefono || null) : null)
       .input('asignadoA', sql.Int, asignado)
       .input('recordar', sql.NVarChar(60), recordarCsv)
@@ -340,7 +354,6 @@ exports.update = async (req, res) => {
     if (b.motivo != null) { r.input('motivo', sql.NVarChar(sql.MAX), b.motivo || null); sets.push('CITA_MOTIVO=@motivo'); }
     if (b.fechaHora != null) { r.input('fechaHora', sql.VarChar(19), fechaHoraSql(b.fechaHora)); sets.push('CITA_FECHA_HORA=CONVERT(DATETIME, @fechaHora, 120)'); sets.push('CITA_ALERTA_24H_NOTIF=0'); sets.push('CITA_ALERTA_1H_NOTIF=0'); }
     if (b.duracionMin != null) { r.input('duracionMin', sql.Int, parseInt(b.duracionMin, 10) || 30); sets.push('CITA_DURACION_MIN=@duracionMin'); }
-    if (b.enlace != null) { r.input('enlace', sql.NVarChar(500), b.enlace || null); sets.push('CITA_ENLACE=@enlace'); }
     if (b.telefono != null) { r.input('telefono', sql.NVarChar(30), b.telefono || null); sets.push('CITA_TELEFONO=@telefono'); }
     if (b.asignadoA != null) { r.input('asignadoA', sql.Int, b.asignadoA ? parseInt(b.asignadoA, 10) : null); sets.push('CITA_ASIGNADO_A=@asignadoA'); }
     if (b.recordarMinAntes != null) {
@@ -569,7 +582,7 @@ exports.addSesion = async (req, res) => {
   try {
     const tratId = parseInt(req.params.id, 10);
     if (!Number.isFinite(tratId)) return res.status(400).json({ success: false, message: 'id inválido' });
-    const { titulo, motivo, fechaHora, duracionMin, modalidad, enlace, telefono, asignadoA, recordarMinAntes } = req.body || {};
+    const { titulo, motivo, fechaHora, duracionMin, modalidad, telefono, asignadoA, recordarMinAntes } = req.body || {};
     if (!fechaHora) return res.status(400).json({ success: false, message: 'Fecha y hora requeridas' });
 
     const pool = await databaseService.getPool(req.user?.empresa);
@@ -582,6 +595,8 @@ exports.addSesion = async (req, res) => {
     const numeroSesion = maxSes + 1;
 
     const modal = MODALIDADES_VALIDAS.includes(modalidad) ? modalidad : 'videollamada';
+    // Siempre generado — no se acepta un enlace manual desde el formulario.
+    const enlace = modal === 'videollamada' ? generarEnlaceMeet() : null;
     const asignado = (asignadoA ? parseInt(asignadoA, 10) : null) || trat.asignadoA || null;
     const recordarArr = Array.isArray(recordarMinAntes) ? parseRecordar(recordarMinAntes.join(',')) : parseRecordar(recordarMinAntes);
     const recordarCsv = recordarArr.length ? recordarArr.join(',') : '1440,60';
@@ -595,7 +610,7 @@ exports.addSesion = async (req, res) => {
       .input('motivo', sql.NVarChar(sql.MAX), motivo || null)
       .input('fechaHora', sql.VarChar(19), fechaHoraSql(fechaHora))
       .input('duracionMin', sql.Int, duracionMin ? parseInt(duracionMin, 10) : 30)
-      .input('enlace', sql.NVarChar(500), modal === 'videollamada' ? (enlace || null) : null)
+      .input('enlace', sql.NVarChar(500), enlace)
       .input('telefono', sql.NVarChar(30), modal === 'telefonica' ? (telefono || null) : null)
       .input('asignadoA', sql.Int, asignado)
       .input('recordar', sql.NVarChar(60), recordarCsv)
@@ -697,6 +712,122 @@ exports.resolverSolicitud = async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('Error resolverSolicitud:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /citas/propuestas — reuniones NUEVAS propuestas por clientes desde el
+// portal (CLI_CITAS_PROPUESTAS_NUEVAS), pendientes de aprobación.
+exports.listPropuestasReunion = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT P.PRN_ID as id, P.PRN_CONTACTO_ID as contactoId, C.CONT_NOMBRE as contactoNombre,
+             P.PRN_ASESOR_ID as asesorId, P.PRN_TITULO as titulo, P.PRN_MOTIVO as motivo,
+             P.PRN_MODALIDAD as modalidad, CONVERT(NVARCHAR(19), P.PRN_FECHA_PROPUESTA, 126) as fechaPropuesta,
+             P.PRN_DURACION_MIN as duracionMin, CONVERT(NVARCHAR(19), P.PRN_FECHA, 126) as fecha
+      FROM CLI_CITAS_PROPUESTAS_NUEVAS P
+      LEFT JOIN CRM_CONTACTOS C ON C.CONT_ID = P.PRN_CONTACTO_ID
+      WHERE P.PRN_ESTATUS = 'pendiente'
+      ORDER BY P.PRN_FECHA ASC
+    `);
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error listPropuestasReunion:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /citas/propuestas/:id/resolver — el asesor aprueba (crea la CLI_CITA
+// real, con Meet automático si aplica) o rechaza (con comentario opcional)
+// la reunión que el cliente propuso.
+exports.resolverPropuestaReunion = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'id inválido' });
+    const { accion, comentario } = req.body || {};
+    if (!['aprobar', 'rechazar'].includes(accion)) return res.status(400).json({ success: false, message: 'Acción inválida' });
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const prop = (await pool.request().input('id', sql.Int, id).query(`
+      SELECT PRN_CONTACTO_ID as contactoId, PRN_ASESOR_ID as asesorId, PRN_TITULO as titulo,
+             PRN_MOTIVO as motivo, PRN_MODALIDAD as modalidad,
+             CONVERT(NVARCHAR(19), PRN_FECHA_PROPUESTA, 126) as fechaPropuesta,
+             PRN_DURACION_MIN as duracionMin, PRN_ESTATUS as estatus
+      FROM CLI_CITAS_PROPUESTAS_NUEVAS WHERE PRN_ID=@id
+    `)).recordset[0];
+    if (!prop) return res.status(404).json({ success: false, message: 'Propuesta no encontrada' });
+    if (prop.estatus !== 'pendiente') return res.status(409).json({ success: false, message: 'Esta propuesta ya fue resuelta' });
+
+    let citaId = null;
+    if (accion === 'aprobar') {
+      const asignado = prop.asesorId || getUserId(req);
+      if (asignado) {
+        const errorHorario = await validarHorarioAsesor(pool, asignado, prop.fechaPropuesta);
+        if (errorHorario) return res.status(400).json({ success: false, message: errorHorario });
+        const errorSolapa = await validarSolapamiento(pool, asignado, prop.fechaPropuesta, prop.duracionMin, null);
+        if (errorSolapa) return res.status(400).json({ success: false, message: errorSolapa });
+      }
+      const enlace = prop.modalidad === 'videollamada' ? generarEnlaceMeet() : null;
+      const rs = await pool.request()
+        .input('contactoId', sql.Int, prop.contactoId)
+        .input('modalidad', sql.NVarChar(20), prop.modalidad)
+        .input('titulo', sql.NVarChar(200), prop.titulo)
+        .input('motivo', sql.NVarChar(sql.MAX), prop.motivo)
+        .input('fechaHora', sql.VarChar(19), fechaHoraSql(prop.fechaPropuesta))
+        .input('duracionMin', sql.Int, prop.duracionMin)
+        .input('enlace', sql.NVarChar(500), enlace)
+        .input('asignadoA', sql.Int, asignado)
+        .input('creadoPor', sql.Int, getUserId(req))
+        .query(`
+          INSERT INTO CLI_CITAS
+            (CITA_CONTACTO_ID, CITA_MODALIDAD, CITA_TITULO, CITA_MOTIVO, CITA_FECHA_HORA,
+             CITA_DURACION_MIN, CITA_ENLACE, CITA_ASIGNADO_A, CITA_RECORDAR_MIN_ANTES, CITA_CREADO_POR)
+          OUTPUT INSERTED.CITA_ID
+          VALUES (@contactoId, @modalidad, @titulo, @motivo, CONVERT(DATETIME, @fechaHora, 120),
+                  @duracionMin, @enlace, @asignadoA, '1440,60', @creadoPor)
+        `);
+      citaId = rs.recordset[0].CITA_ID;
+    }
+
+    await pool.request()
+      .input('id', sql.Int, id)
+      .input('est', sql.NVarChar(20), accion === 'aprobar' ? 'aprobada' : 'rechazada')
+      .input('comentario', sql.NVarChar(500), comentario ? String(comentario).slice(0, 500) : null)
+      .input('citaId', sql.Int, citaId)
+      .input('uid', sql.Int, getUserId(req))
+      .query(`
+        UPDATE CLI_CITAS_PROPUESTAS_NUEVAS
+        SET PRN_ESTATUS=@est, PRN_COMENTARIO=@comentario, PRN_CITA_ID=@citaId,
+            PRN_RESUELTA_POR=@uid, PRN_FECHA_RESOLUCION=GETDATE()
+        WHERE PRN_ID=@id
+      `);
+
+    await logAudit(pool, {
+      userId: getUserId(req), userName: req.user?.nombre || null,
+      modulo: 'atencion-cliente', accion: 'resolver-propuesta-reunion', entidadId: id,
+      detalle: { contactoId: prop.contactoId, accion, citaId }, ip: req.ip,
+    });
+
+    try {
+      const usuariosPortal = await pool.request().input('cid', sql.Int, prop.contactoId)
+        .query(`SELECT PU_NEUS_ID as neusId FROM PORTAL_USUARIOS WHERE PU_CONT_ID=@cid`);
+      for (const { neusId } of usuariosPortal.recordset) {
+        await notificationService.createNotification({
+          usuarioId: neusId,
+          mensaje: accion === 'aprobar'
+            ? `Tu reunión "${prop.titulo}" fue aprobada`
+            : `Tu reunión "${prop.titulo}" fue rechazada${comentario ? `: ${comentario}` : ''}`,
+          tipo: accion === 'aprobar' ? 'reunion-propuesta-aprobada' : 'reunion-propuesta-rechazada',
+          dataExtra: { propuestaId: id, citaId },
+          tenantKey: req.user?.empresa,
+        });
+      }
+    } catch (e) { console.warn('[resolverPropuestaReunion] notif cliente:', e.message); }
+
+    res.json({ success: true, data: { citaId } });
+  } catch (e) {
+    console.error('Error resolverPropuestaReunion:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 };

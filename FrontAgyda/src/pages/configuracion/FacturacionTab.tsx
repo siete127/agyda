@@ -44,12 +44,12 @@ export function FacturacionTab() {
   const { data: config } = useQuery({ queryKey: ['facturacion-config'], queryFn: () => facturacionService.getConfig() })
   const { data: regimenes = [] } = useQuery({ queryKey: ['sat', 'regimen'], queryFn: () => satService.regimenFiscal(), staleTime: Infinity })
 
-  const [ef, setEf] = useState({ rfc: '', razonSocial: '', regimenFiscal: '', cp: '' })
+  const [ef, setEf] = useState({ rfc: '', razonSocial: '', regimenFiscal: '', cp: '', clabe: '', banco: '' })
   const [efSeed, setEfSeed] = useState<string | null>(null)
   useEffect(() => {
     if (emisor && JSON.stringify(emisor) !== efSeed) {
       setEfSeed(JSON.stringify(emisor))
-      setEf({ rfc: emisor.rfc, razonSocial: emisor.razonSocial, regimenFiscal: emisor.regimenFiscal, cp: emisor.cp })
+      setEf({ rfc: emisor.rfc, razonSocial: emisor.razonSocial, regimenFiscal: emisor.regimenFiscal, cp: emisor.cp, clabe: emisor.clabe, banco: emisor.banco })
     }
   }, [emisor, efSeed])
 
@@ -163,7 +163,20 @@ export function FacturacionTab() {
             <input className={field} value={ef.cp} maxLength={5}
               onChange={(e) => setEf({ ...ef, cp: e.target.value.replace(/\D/g, '') })} placeholder="64000" />
           </label>
+          <label className="block">
+            <span className="mb-1 block text-[0.72rem] font-semibold text-gray-500">CLABE interbancaria</span>
+            <input className={field} value={ef.clabe} maxLength={18} inputMode="numeric"
+              onChange={(e) => setEf({ ...ef, clabe: e.target.value.replace(/\D/g, '') })} placeholder="18 dígitos" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[0.72rem] font-semibold text-gray-500">Banco</span>
+            <input className={field} value={ef.banco}
+              onChange={(e) => setEf({ ...ef, banco: e.target.value })} placeholder="Ej. BBVA" />
+          </label>
         </div>
+        <p className="mt-2 text-[0.7rem] text-gray-400">
+          La CLABE se muestra a los clientes en el Portal de Cliente → Facturas, para que hagan su transferencia.
+        </p>
         <div className="mt-3 flex justify-end">
           <button onClick={() => guardarEmisor.mutate()} disabled={guardarEmisor.isPending}
             className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-[0.8rem] font-semibold text-white hover:bg-violet-700 disabled:opacity-60">

@@ -4,24 +4,18 @@ import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Box, Monitor, Calendar, ChevronRight, FileText,
-  Star, Mail, Phone, Globe, Headphones, Receipt, Plus, MessageCircle,
+  Star, Headphones, Receipt, Plus, MessageCircle,
   FolderOpen, Wrench, DollarSign,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { useThemeStore, resolveTheme } from '@/stores/theme.store'
 import { portalClienteService } from '@/services/portalCliente.service'
+import { personalizacionService } from '@/services/personalizacion.service'
 import type { PortalProyecto, PortalCita, PortalFactura } from '@/types/portalCliente.types'
 import { ProgressGauge } from '@/pages/portal-cliente/components/ProgressGauge'
 import { CountUp } from '@/pages/portal-cliente/components/CountUp'
 import { Reveal } from '@/pages/portal-cliente/components/Reveal'
-
-const CANALES = [
-  { nombre: 'WhatsApp', desc: 'Chat directo', img: '/whatsapp.png', color: '', accion: 'Abrir' },
-  { nombre: 'Messenger', desc: 'Chat directo', img: '/messenger.png', color: '', accion: 'Abrir' },
-  { nombre: 'Email', desc: 'Escríbenos', icon: Mail, color: 'text-red-500 bg-red-50', accion: 'Redactar' },
-  { nombre: 'Teléfono', desc: 'Llámanos', icon: Phone, color: 'text-emerald-500 bg-emerald-50', accion: 'Llamar' },
-  { nombre: 'Sitio web', desc: 'Visita nuestro sitio', icon: Globe, color: 'text-sky-500 bg-sky-50', accion: 'Ir al sitio' },
-]
+import { construirCanales, CanalCardCompacta } from '@/pages/portal-cliente/components/CanalesComunicacion'
 
 function saludoFecha() {
   const hoy = new Date()
@@ -449,33 +443,20 @@ function ActividadReciente() {
 }
 
 function CanalesComunicacion() {
+  const { data } = useQuery({ queryKey: ['personalizacion'], queryFn: () => personalizacionService.get() })
+  const canales = construirCanales(data?.canalesPortal)
+
   return (
     <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
       <h3 className="text-sm font-bold text-ink">Canales de comunicación</h3>
       <p className="mt-1 text-xs text-ink-tertiary">Conecta con nosotros por el canal que prefieras.</p>
-      <div className="mt-4 grid grid-cols-5 gap-3">
-        {CANALES.map((c) => (
-          <div key={c.nombre} className="flex flex-col items-center gap-2 rounded-xl border border-surface-border p-3 text-center">
-            {c.img ? (
-              <img src={c.img} alt={c.nombre} className="h-10 w-10 object-contain" />
-            ) : (
-              <span className={clsx('flex h-10 w-10 items-center justify-center rounded-full', c.color)}>
-                {c.icon && <c.icon className="h-5 w-5" />}
-              </span>
-            )}
-            <div>
-              <p className="text-xs font-bold text-ink">{c.nombre}</p>
-              <p className="text-[10px] text-ink-tertiary">{c.desc}</p>
-            </div>
-            <button
-              type="button"
-              className="mt-1 w-full rounded-full border border-brand py-1.5 text-[11px] font-semibold text-brand hover:bg-brand/5"
-            >
-              {c.accion}
-            </button>
-          </div>
-        ))}
-      </div>
+      {canales.length === 0 ? (
+        <p className="mt-4 text-center text-xs text-ink-tertiary">Aún no hay canales de contacto configurados.</p>
+      ) : (
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {canales.map((c) => <CanalCardCompacta key={c.nombre} c={c} />)}
+        </div>
+      )}
     </div>
   )
 }

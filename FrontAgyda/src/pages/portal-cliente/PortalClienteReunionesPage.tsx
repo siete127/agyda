@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
@@ -12,6 +11,7 @@ import { PortalBreadcrumb } from '@/pages/portal-cliente/components/PortalBreadc
 import { Modal } from '@/components/ui/Modal'
 import { portalClienteService } from '@/services/portalCliente.service'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
+import { SolicitarReunionModal } from '@/pages/portal-cliente/components/SolicitarReunionModal'
 import type { PortalCita } from '@/types/portalCliente.types'
 import reunionesHero from '@/assets/reuniones-hero.png'
 
@@ -587,11 +587,13 @@ function VistaCalendario({ citas, onSeleccionarCita }: { citas: PortalCita[]; on
 const TABS_PRINCIPALES = ['Próximas', 'Historial'] as const
 
 export function PortalClienteReunionesPage() {
-  const navigate = useNavigate()
+  const { puede } = usePortalAcciones()
+  const puedeGestionarCitas = puede('gestionar-citas')
   const [tab, setTab] = useState<(typeof TABS_PRINCIPALES)[number]>('Próximas')
   const [seleccionadaId, setSeleccionadaId] = useState<number | null>(null)
   const [seleccionadaHistorialId, setSeleccionadaHistorialId] = useState<number | null>(null)
   const [filtros, setFiltros] = useState<Filtros>({ busqueda: '', orden: 'proximas' })
+  const [solicitarAbierto, setSolicitarAbierto] = useState(false)
 
   const proximasQuery = useQuery({ queryKey: ['portal-citas'], queryFn: () => portalClienteService.getCitas(), enabled: tab === 'Próximas' })
   const historialQuery = useQuery({ queryKey: ['portal-citas-historial'], queryFn: () => portalClienteService.getCitasHistorial(), enabled: tab === 'Historial' })
@@ -634,15 +636,19 @@ export function PortalClienteReunionesPage() {
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={() => navigate('/portal-cliente/atencion/nueva')}
-          className="mb-2 flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-opacity hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" />
-          Solicitar reunión
-        </button>
+        {puedeGestionarCitas && (
+          <button
+            type="button"
+            onClick={() => setSolicitarAbierto(true)}
+            className="mb-2 flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            Solicitar reunión
+          </button>
+        )}
       </div>
+
+      {solicitarAbierto && <SolicitarReunionModal onClose={() => setSolicitarAbierto(false)} />}
 
       {tab === 'Próximas' && (
         proximasQuery.isLoading ? (
