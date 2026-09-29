@@ -24,6 +24,7 @@ router.get('/catalogo-productos-servicios', requirePortalAction('ver-cotizacione
 router.post('/solicitar-cotizacion', requirePortalAction('ver-cotizaciones'), ctrl.solicitarCotizacion);
 router.get('/disponibilidad-asesor', requirePortalAction('ver-cotizaciones'), horarioAsesorCtrl.getDisponibilidadAsesor);
 router.get('/proyectos', requirePortalAction('ver-proyectos'), ctrl.getProyectos);
+router.get('/proyectos/:id', requirePortalAction('ver-proyectos'), ctrl.getProyecto);
 router.get('/cotizaciones', requirePortalAction('ver-cotizaciones'), ctrl.getCotizaciones);
 router.get('/facturas', requirePortalAction('ver-facturas'), ctrl.getFacturas);
 router.get('/datos-pago', requirePortalAction('ver-facturas'), ctrl.getDatosPago);

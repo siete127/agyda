@@ -93,6 +93,8 @@ router.delete('/suite-reportes/rdl/:id', auth.authenticateToken, controller.elim
 router.get('/suite-reportes/builder/catalogo', auth.authenticateToken, controller.getBuilderCatalogo);
 router.get('/suite-reportes/builder/catalogo-filtro/:catalogo', auth.authenticateToken, controller.getBuilderCatalogoFiltro);
 router.post('/suite-reportes/builder/ejecutar', auth.authenticateToken, controller.ejecutarBuilder);
+router.get('/suite-reportes/builder/plantillas', auth.authenticateToken, controller.listPlantillasBuilder);
+router.post('/suite-reportes/builder/adaptar', auth.authenticateToken, controller.adaptarDefinicionBuilder);
 router.get('/suite-reportes/builder/reportes', auth.authenticateToken, controller.listReportesConstruidos);
 router.post('/suite-reportes/builder/reportes', auth.authenticateToken, controller.guardarReporteConstruido);
 router.patch('/suite-reportes/builder/reportes/:id', auth.authenticateToken, controller.actualizarReporteConstruido);

@@ -51,7 +51,7 @@ function ProyectoCard() {
   if (!isLoading && !proyecto) {
     return (
       <div className="rounded-2xl border border-surface-border bg-card p-5 shadow-card">
-        <CardHeader icon={<Box className="h-4 w-4 text-brand" />} title="Mis proyectos" cta="Ver todos" onCta={() => navigate('/portal-cliente/atencion')} />
+        <CardHeader icon={<Box className="h-4 w-4 text-brand" />} title="Mis proyectos" cta="Ver todos" onCta={() => navigate('/portal-cliente/proyectos')} />
         <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
           <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-ink-tertiary">
             <FolderOpen className="h-7 w-7" />
@@ -79,6 +79,11 @@ function ProyectoCard() {
           <Box className="h-4 w-4 text-white" />
           <h3 className="text-sm font-bold text-white">Mis proyectos</h3>
         </div>
+        {(proyectos?.length ?? 0) > 1 && (
+          <button type="button" onClick={() => navigate('/portal-cliente/proyectos')} className="flex items-center gap-1 text-xs font-semibold text-white/80 hover:text-white hover:underline">
+            Ver todos ({proyectos?.length}) <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {isLoading || !proyecto ? (
@@ -135,7 +140,7 @@ function ProyectoCard() {
           </div>
 
           <div className="mt-4 flex items-center justify-end">
-            <button type="button" onClick={() => navigate('/portal-cliente/atencion')} className="flex items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-bold text-[#0a2f71] hover:bg-white/90">
+            <button type="button" onClick={() => navigate(`/portal-cliente/proyectos?id=${proyecto.id}`)} className="flex items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-bold text-[#0a2f71] hover:bg-white/90">
               Ver proyecto
               <ChevronRight className="h-3.5 w-3.5" />
             </button>

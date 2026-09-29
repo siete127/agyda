@@ -19,6 +19,8 @@ import { productoServicioService } from '@/services/productoServicio.service'
 import { RECURRENCIA_LABEL, RECURRENCIA_CHIP, money } from './productoServicioUi'
 import { CatalogoProductosModal } from './CatalogoProductosModal'
 import { NuevaFacturaModal, type PresetFacturaCliente } from '@/pages/facturacion/NuevaFacturaModal'
+import { ProyectosDesdeProductosModal } from '@/pages/proyectos/ProyectosDesdeProductosModal'
+import { useActionAccess } from '@/hooks/useActionAccess'
 
 interface FinanzasCliente {
   totalIngresado: number
@@ -184,12 +186,18 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
   // cliente lo recibe —y se le avisa— hasta que se valida el pago.
   const [facturarPreset, setFacturarPreset] = useState<PresetFacturaCliente | null>(null)
 
+  // Al asignar productos se propone crear (o vincular) el proyecto de cada uno.
+  const { can } = useActionAccess()
+  const puedeProyectos = can('proyectos', 'crear')
+  const [proyectosPara, setProyectosPara] = useState<number[] | null>(null)
+
   // Asignación directa: solo para lo que no tiene precio (no hay nada que cobrar).
   const asignar = useMutation({
     mutationFn: (psIds: number[]) => productoServicioService.asignarVariosACliente(clienteId, psIds),
-    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; usuarios: number; correos: number; productos?: number } | null } }) => {
+    onSuccess: (r: { data?: { aviso?: { conPortal: boolean; usuarios: number; correos: number; productos?: number } | null } }, psIds) => {
       qc.invalidateQueries({ queryKey: ['cliente-productos-servicios', clienteId] })
       setCatalogoAbierto(false)
+      if (puedeProyectos) setProyectosPara(psIds)
       // El backend avisa al cliente (portal + correo con "Soporte técnico").
       const a = r?.data?.aviso
       const que = (a?.productos ?? 1) > 1 ? `${a?.productos} productos asignados` : 'Producto asignado'
@@ -338,7 +346,12 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
       )}
 
       {facturarPreset && (
-        <NuevaFacturaModal preset={facturarPreset} onClose={() => setFacturarPreset(null)} />
+        <NuevaFacturaModal preset={facturarPreset} onClose={() => setFacturarPreset(null)}
+          onDone={() => { if (puedeProyectos) setProyectosPara(facturarPreset.productos.map((p) => p.id)) }} />
+      )}
+
+      {proyectosPara && (
+        <ProyectosDesdeProductosModal clienteId={clienteId} clienteNombre={clienteNombre} productoIds={proyectosPara} onClose={() => setProyectosPara(null)} />
       )}
     </div>
   )

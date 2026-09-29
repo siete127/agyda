@@ -11,6 +11,10 @@ router.use(authenticateToken);
 router.get('/',    requireActionAccess('proyectos', 'ver'), proyectoController.getProyectos);
 router.get('/config/ad-ve-todos',  requireActionAccess('proyectos', 'ver'), proyectoController.getConfigProyectosAD);
 router.put('/config/ad-ve-todos',  requireActionAccess('proyectos', 'editar'), proyectoController.setConfigProyectosAD);
+// Proyectos ligados a cliente + producto (Clientes → asignar productos, y Nuevo proyecto)
+router.get('/opciones', requireActionAccess('proyectos', 'ver'), proyectoController.getOpcionesVinculo);
+router.get('/prellenado', requireActionAccess('proyectos', 'crear'), proyectoController.getPrellenado);
+router.post('/desde-productos', requireActionAccess('proyectos', 'crear'), proyectoController.crearDesdeProductos);
 router.get('/:id', requireActionAccess('proyectos', 'ver'), proyectoController.getProyectoById);
 router.post('/', requireActionAccess('proyectos', 'crear'), proyectoController.createProyecto);
 router.put('/:id', requireActionAccess('proyectos', 'editar'), proyectoController.updateProyecto);

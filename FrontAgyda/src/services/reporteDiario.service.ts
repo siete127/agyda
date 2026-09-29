@@ -2,7 +2,7 @@ import { api } from '@/lib/axios'
 import { useAuthStore } from '@/stores/auth.store'
 import type {
   ReporteDiario, ReportePostulantes, RdlReporte, RdlCarpeta, RdlRol, RdlOpcion, RdlResultado,
-  RbCatalogo, RbDefinicion, RbResultado, RbReporteGuardado,
+  RbCatalogo, RbDefinicion, RbResultado, RbReporteGuardado, RbPlantilla, RbAdaptado,
   InteraccionItem, InteraccionesFiltro, ReporteEjecutivoReclutamiento,
 } from '@/types/reporteDiario.types'
 import { parseRdl } from '@/lib/rdl'
@@ -155,14 +155,29 @@ export const reporteDiarioService = {
     return data?.data as RbCatalogo
   },
 
-  async builderCatalogoFiltro(catalogo: string): Promise<{ id: number; nombre: string }[]> {
-    const { data } = await api.get(`/operaciones/suite-reportes/builder/catalogo-filtro/${catalogo}`)
+  // `grupoId` acota las opciones a un grupo de Configuración. El id es texto en
+  // catálogos por clave (estados de tiempo).
+  async builderCatalogoFiltro(catalogo: string, grupoId?: number | null): Promise<{ id: number; nombre: string }[]> {
+    const { data } = await api.get(`/operaciones/suite-reportes/builder/catalogo-filtro/${catalogo}`, {
+      params: grupoId ? { grupoId } : undefined,
+    })
     return (data?.data ?? []) as { id: number; nombre: string }[]
   },
 
   async builderEjecutar(definicion: RbDefinicion): Promise<RbResultado> {
     const { data } = await api.post('/operaciones/suite-reportes/builder/ejecutar', { definicion })
     return data?.data as RbResultado
+  },
+
+  async builderPlantillas(): Promise<RbPlantilla[]> {
+    const { data } = await api.get('/operaciones/suite-reportes/builder/plantillas')
+    return (data?.data ?? []) as RbPlantilla[]
+  },
+
+  // Copia una definición (plantilla u otro reporte) ajustada a un grupo. No guarda nada.
+  async builderAdaptar(definicion: RbDefinicion, grupoId: number | null): Promise<RbAdaptado> {
+    const { data } = await api.post('/operaciones/suite-reportes/builder/adaptar', { definicion, grupoId })
+    return data?.data as RbAdaptado
   },
 
   async builderListReportes(): Promise<RbReporteGuardado[]> {

@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, ArrowRight, Check, Headset, Building2, UsersRound, Layers, UserPlus, Rocket, X, Loader2,
-  Plus, Search, MessagesSquare, Phone, Trash2, AlertTriangle, CloudCheck, FileClock, RotateCcw, Pencil, CircleDashed,
+  Plus, Search, MessagesSquare, Phone, Trash2, AlertTriangle, CloudCheck, FileClock, RotateCcw, Pencil, CircleDashed, FileBarChart,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -12,9 +12,10 @@ import { useActionAccess } from '@/hooks/useActionAccess'
 import {
   gruposService, grupoAsistenteService as svc,
   type CatalogoAsistenteGrupo, type DatosGrupoBorrador, type BorradorGrupoResumen, type PendienteGrupo,
-  type ModalidadGrupo, type TipoGrupoAsistente,
+  type ModalidadGrupo, type TipoGrupoAsistente, type PlantillaReporteGrupo,
 } from '@/services/grupos.service'
 import { AsistenteCampania } from './AsistenteCampania'
+import { RbMiniatura } from '@/pages/suite-reportes/RbMiniatura'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50'
 const label = 'mb-1.5 block text-[0.72rem] font-semibold text-ink-secondary'
@@ -54,6 +55,13 @@ function pendientesDe(d: DatosGrupoBorrador, cat: CatalogoAsistenteGrupo | undef
   if (!d.agentes.length) p.push({ paso: 'personas', texto: `Falta al menos un ${atencion ? 'asesor' : 'agente'}` })
   if (atencion && !d.clientes.length) p.push({ paso: 'clientes', texto: 'Asigna al menos un cliente' })
   return p
+}
+const recomendadasDe = (cat: CatalogoAsistenteGrupo) => (cat.plantillasReportes ?? []).filter((p) => p.recomendada).map((p) => p.id)
+// Plantillas elegidas que aplican a la modalidad del grupo (las demás se omiten al crear).
+const plantillaAplica = (p: PlantillaReporteGrupo, modalidad: ModalidadGrupo) => !p.requiere || p.requiere.includes(modalidad)
+function reportesQueAplican(d: DatosGrupoBorrador, cat: CatalogoAsistenteGrupo | undefined) {
+  const sel = new Set(d.reportes ?? [])
+  return (cat?.plantillasReportes ?? []).filter((p) => sel.has(p.id) && plantillaAplica(p, d.modalidad))
 }
 // Solo cuentan los skills de las campañas elegidas.
 function skillsDeCampanias(d: DatosGrupoBorrador, cat: CatalogoAsistenteGrupo | undefined) {
@@ -107,7 +115,7 @@ function ElegirBorrador({ borradores, onContinuar, onNuevo, onSalir, onDescartad
     b.estado === 'creado' ? 'Creado · falta revisar y terminar'
       : b.estado === 'error' ? `No se pudo terminar de crear: ${b.error ?? 'error'}`
         : b.estado === 'creando' ? (b.interrumpido ? 'La creación se interrumpió a la mitad' : 'Creándose…')
-          : `Borrador · paso ${Math.min(b.paso + 1, 5)}`
+          : `Borrador · paso ${Math.min(b.paso + 1, 6)}`
   return (
     <div className="space-y-4">
       <div className={clsx(card, 'flex items-center gap-3.5')}>
@@ -153,7 +161,8 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
   onBorradorCreado: (id: number) => void; onCreado: () => void; onSalir: () => void
 }) {
   const qc = useQueryClient()
-  const [datos, setDatos] = useState<DatosGrupoBorrador | null>(cargar ? null : vacio())
+  // Las plantillas recomendadas quedan marcadas de inicio (también en borradores viejos que no las tenían).
+  const [datos, setDatos] = useState<DatosGrupoBorrador | null>(cargar ? null : { ...vacio(), reportes: recomendadasDe(catalogo) })
   const [paso, setPaso] = useState(0)
   const [grupoYaCreado, setGrupoYaCreado] = useState(false)
   const [guardado, setGuardado] = useState<'guardado' | 'guardando' | 'pendiente' | 'error'>('guardado')
@@ -166,10 +175,10 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
   const { data: cargado } = useQuery({ queryKey: ['grupo-asistente-borrador', borradorId], queryFn: () => svc.borrador(borradorId!), enabled: cargar && !!borradorId, gcTime: 0 })
   useEffect(() => {
     if (!cargado || datos) return
-    setDatos({ ...vacio(), ...cargado.datos })
-    setPaso(Math.min(cargado.paso ?? 0, 4))
+    setDatos({ ...vacio(), reportes: recomendadasDe(catalogo), ...cargado.datos })
+    setPaso(Math.min(cargado.paso ?? 0, 5))
     setGrupoYaCreado(!!cargado.grupoId)
-  }, [cargado, datos])
+  }, [cargado, datos, catalogo])
 
   const guardarAhora = async (d: DatosGrupoBorrador, p: number) => {
     if (!idRef.current) return true
@@ -188,11 +197,14 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
 
   const atiende = datos.tipo === 'atencion-clientes'
   const gente = atiende ? 'Asesores' : 'Agentes'
+  const conReportes = !!catalogo.reportes && (catalogo.plantillasReportes ?? []).length > 0
+  const nReportes = reportesQueAplican(datos, catalogo).length
   const PASOS = [
     { key: 'grupo', titulo: 'Grupo', desc: 'Tipo, nombre y descripción', icon: UsersRound },
     { key: 'asignaciones', titulo: 'Campañas y skills', desc: 'Campañas, skills, comunicación, marcador', icon: Layers },
     { key: 'personas', titulo: `Supervisores y ${gente.toLowerCase()}`, desc: 'Quién supervisa y quién trabaja', icon: UserPlus },
     ...(atiende ? [{ key: 'clientes', titulo: 'Clientes', desc: 'A qué clientes atiende', icon: Building2 }] : []),
+    ...(conReportes ? [{ key: 'reportes', titulo: 'Reportes', desc: 'Sus reportes en la Suite', icon: FileBarChart }] : []),
     { key: 'revisar', titulo: 'Revisar y crear', desc: 'Todo se crea al final', icon: Rocket },
   ]
   const actual = PASOS[Math.min(paso, PASOS.length - 1)]
@@ -317,6 +329,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
           {actual.key === 'asignaciones' && <PasoAsignaciones datos={datos} setDatos={setDatos} catalogo={catalogo} recargarCatalogo={recargarCatalogo} />}
           {actual.key === 'personas' && <PasoPersonas datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'clientes' && <PasoClientes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
+          {actual.key === 'reportes' && <PasoReportes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'revisar' && (
             <div className={clsx(card, 'space-y-4')}>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -325,6 +338,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
                   { paso: 'asignaciones', texto: `${datos.campanias.length} campaña(s) · ${MODALIDADES.find((m) => m.key === datos.modalidad)?.nombre} · ${skillsDeCampanias(datos, catalogo).length} skill(s)` },
                   { paso: 'personas', texto: `${datos.supervisores.length} supervisor(es) · ${datos.agentes.length} ${gente.toLowerCase()}` },
                   ...(atiende ? [{ paso: 'clientes', texto: `${datos.clientes.length} cliente(s)` }] : []),
+                  ...(conReportes ? [{ paso: 'reportes', texto: nReportes ? `${nReportes} reporte(s) en la Suite` : 'Sin reportes (puedes crearlos después)' }] : []),
                 ].map((r) => {
                   const falta = pend.some((x) => x.paso === r.paso)
                   return (
@@ -349,7 +363,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
                   <p className="mt-1.5 text-[0.68rem] text-amber-700">Puedes salir cuando quieras: el borrador queda guardado y al volver te preguntará si continúas.</p>
                 </div>
               ) : (
-                <p className="rounded-xl bg-emerald-50 px-3 py-2 text-[0.78rem] text-emerald-800">Todo listo. Al crearlo se aplica de una vez: campañas, skills, marcador, supervisores, {gente.toLowerCase()}{atiende ? ' y clientes' : ''}.</p>
+                <p className="rounded-xl bg-emerald-50 px-3 py-2 text-[0.78rem] text-emerald-800">Todo listo. Al crearlo se aplica de una vez: campañas, skills, marcador, supervisores, {gente.toLowerCase()}{atiende ? ' y clientes' : ''}{nReportes ? `, y ${nReportes} reporte(s) en la Suite` : ''}.</p>
               )}
               <div className="flex justify-end">
                 <button onClick={() => setConfirmCrear(true)} disabled={pend.length > 0 || creando} className={btnPrim}>
@@ -645,7 +659,70 @@ const ETAPAS: { key: string; texto: string }[] = [
   { key: 'config', texto: 'Aplicar campañas, skills, marcador y supervisores' },
   { key: 'agentes', texto: 'Agregar a su gente' },
   { key: 'clientes', texto: 'Asignar sus clientes' },
+  { key: 'reportes', texto: 'Crear sus reportes en la Suite' },
 ]
+
+/* ─────────────── Paso: Reportes (plantillas de la Suite) ─────────────── */
+function PasoReportes({ datos, setDatos, catalogo }: { datos: DatosGrupoBorrador; setDatos: SetDatos; catalogo: CatalogoAsistenteGrupo }) {
+  const plantillas = catalogo.plantillasReportes ?? []
+  const sel = new Set(datos.reportes ?? [])
+  const categorias = [...new Set(plantillas.map((p) => p.categoria))]
+  const n = reportesQueAplican(datos, catalogo).length
+  const modalidad = MODALIDADES.find((m) => m.key === datos.modalidad)?.nombre.toLowerCase() ?? datos.modalidad
+  const gente = datos.tipo === 'atencion-clientes' ? 'asesores' : 'agentes'
+  const fijar = (ids: string[]) => upd(setDatos, (d) => ({ ...d, reportes: ids }))
+  const toggle = (id: string) => fijar(sel.has(id) ? [...sel].filter((x) => x !== id) : [...sel, id])
+
+  return (
+    <div className={clsx(card, 'space-y-4')}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[0.85rem] font-bold text-ink">Reportes del grupo ({n})</p>
+          <p className="max-w-2xl text-[0.7rem] text-ink-tertiary">
+            Se crean en la Suite de reportes, en la carpeta <span className="font-semibold">"Grupo {datos.nombre || '…'}"</span>, ya limitados a este grupo.
+            Los ven los administradores y los supervisores del grupo (los {gente} no). Cada uno es una copia: se puede editar después sin afectar la plantilla.
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          <button onClick={() => fijar(plantillas.filter((p) => p.recomendada).map((p) => p.id))} className={btnSec}>Recomendadas</button>
+          <button onClick={() => fijar(plantillas.filter((p) => plantillaAplica(p, datos.modalidad)).map((p) => p.id))} className={btnSec}>Todas</button>
+          <button onClick={() => fijar([])} className={btnSec}>Ninguna</button>
+        </div>
+      </div>
+
+      {categorias.map((cat) => (
+        <div key={cat}>
+          <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">{cat}</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {plantillas.filter((p) => p.categoria === cat).map((p) => {
+              const ok = plantillaAplica(p, datos.modalidad)
+              const on = ok && sel.has(p.id)
+              return (
+                <button key={p.id} type="button" disabled={!ok} onClick={() => toggle(p.id)}
+                  title={ok ? undefined : `No aplica a un grupo ${modalidad}`}
+                  className={clsx('flex gap-3 rounded-xl border p-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-45',
+                    on ? 'border-violet-300 bg-violet-50/60' : 'border-gray-100 hover:border-gray-200')}>
+                  <RbMiniatura tipo={p.tipoVisual} series={p.series} className="h-14 w-24 flex-shrink-0 rounded-lg" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className={clsx('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border', on ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-300')}>
+                        {on && <Check className="h-3 w-3" />}
+                      </span>
+                      <span className="truncate text-[0.8rem] font-semibold text-ink">{p.nombre}</span>
+                    </span>
+                    <span className="mt-0.5 block text-[0.66rem] leading-snug text-ink-tertiary">{ok ? p.descripcion : `No aplica a un grupo ${modalidad} (${p.origenLabel.toLowerCase()})`}</span>
+                    {p.recomendada && ok && <span className="mt-1 inline-block rounded-full bg-violet-100 px-1.5 text-[0.58rem] font-bold text-violet-700">Recomendada</span>}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+      <p className="text-[0.68rem] text-ink-tertiary">Opcional: puedes dejarlo sin reportes y crearlos después desde el Constructor de reportes (Plantillas y copias).</p>
+    </div>
+  )
+}
 
 function VistaResultado({ borradorId, onEditar, onSalir }: { borradorId: number; onEditar: () => void; onSalir: () => void }) {
   const qc = useQueryClient()
@@ -664,7 +741,10 @@ function VistaResultado({ borradorId, onEditar, onSalir }: { borradorId: number;
   const hechas = new Set(b.avance?.completadas ?? [])
   const fallo = b.estado === 'error' || b.interrumpido
   const r = b.avance?.resultado
-  const etapas = ETAPAS.filter((e) => e.key !== 'clientes' || b.tipo === 'atencion-clientes')
+  const etapas = ETAPAS.filter((e) =>
+    (e.key !== 'clientes' || b.tipo === 'atencion-clientes') &&
+    (e.key !== 'reportes' || hechas.has('reportes') || (b.datos?.reportes?.length ?? 0) > 0))
+  const rep = b.avance?.reportes
   return (
     <div className="space-y-4 pb-20">
       <div className={clsx(card, 'flex items-center gap-3.5')}>
@@ -707,6 +787,15 @@ function VistaResultado({ borradorId, onEditar, onSalir }: { borradorId: number;
           <p className="flex items-center gap-2 text-[0.9rem] font-bold text-emerald-700"><Check className="h-5 w-5" /> {b.nombre} quedó creado y aplicado</p>
           {r && <p className="text-[0.78rem] text-ink-secondary">{r.campanias ?? 0} campaña(s) · {r.skills ?? 0} skill(s) · {r.supervisores ?? 0} supervisor(es) · {r.agentes ?? 0} agente(s){r.conMarcador ? ` · marcador a ${r.conMarcador}` : ''}</p>}
           {!!b.avance?.agentesOmitidos && <p className="text-[0.72rem] text-amber-700">{b.avance.agentesOmitidos} persona(s) no se agregaron porque ya no están activas.</p>}
+          {rep && (rep.creados + rep.yaExistian) > 0 && (
+            <p className="flex items-center gap-1.5 text-[0.78rem] text-ink-secondary">
+              <FileBarChart className="h-4 w-4 text-violet-500" />
+              {rep.creados + rep.yaExistian} reporte(s) en la Suite de reportes, carpeta "{rep.carpeta}".
+            </p>
+          )}
+          {rep && rep.omitidos.length > 0 && (
+            <p className="text-[0.72rem] text-ink-tertiary">No se crearon por no aplicar a su modalidad: {rep.omitidos.map((o) => o.nombre).join(', ')}.</p>
+          )}
           <p className="text-[0.72rem] text-ink-tertiary">Puedes cambiar todo después en Configuración → Usuarios y Seguridad → Grupos. Quien entre o salga del grupo recibe o pierde su configuración automáticamente.</p>
           <div className="flex justify-end">
             <button onClick={() => terminar.mutate()} disabled={terminar.isPending} className={btnPrim}>

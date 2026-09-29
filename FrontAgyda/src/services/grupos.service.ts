@@ -1,4 +1,5 @@
 import { api } from '@/lib/axios'
+import type { RbTipoVisual } from '@/types/reporteDiario.types'
 
 // Configuración → Usuarios y Seguridad → Grupos: todos los grupos de usuarios
 // de AGYDA (skills, supervisores, niveles de soporte, avisos…) en un solo lugar.
@@ -152,6 +153,20 @@ export interface CatalogoAsistenteGrupo {
   clientes: { id: number; nombre: string; grupo: string | null }[]
   atencion: boolean
   marcador: boolean
+  // Suite de reportes activa: el grupo puede nacer con sus reportes (plantillas)
+  reportes?: boolean
+  plantillasReportes?: PlantillaReporteGrupo[]
+}
+export interface PlantillaReporteGrupo {
+  id: string
+  categoria: string
+  nombre: string
+  descripcion: string
+  origenLabel: string
+  requiere: ModalidadGrupo[] | null
+  recomendada: boolean
+  tipoVisual: RbTipoVisual
+  series: number
 }
 export interface DatosGrupoBorrador {
   tipo: TipoGrupoAsistente
@@ -165,13 +180,18 @@ export interface DatosGrupoBorrador {
   supervisores: { usuarioId: number; nombre: string }[]
   agentes: { usuarioId: number; nombre: string }[]
   clientes: { clienteId: number; nombre: string }[]
+  // Plantillas de reportes que se crean con el grupo (ids)
+  reportes?: string[]
 }
 export interface PendienteGrupo { paso: string; texto: string }
 export interface BorradorGrupoResumen {
   id: number; tipo: TipoGrupoAsistente; nombre: string | null; paso: number
   estado: 'borrador' | 'creando' | 'error' | 'creado' | 'terminado'; grupoId: number | null
   usuarioNombre: string | null; esMio: boolean; actualizado: string; interrumpido: boolean
-  avance: { etapa?: string; completadas: string[]; resultado?: ResultadoSyncEquipo | null; agentesOmitidos?: number } | null
+  avance: {
+    etapa?: string; completadas: string[]; resultado?: ResultadoSyncEquipo | null; agentesOmitidos?: number
+    reportes?: { creados: number; yaExistian: number; omitidos: { nombre: string; motivo: string | null }[]; carpeta: string }
+  } | null
   error: string | null
   resumen: { campanias: number; supervisores: number; agentes: number; clientes: number }
 }

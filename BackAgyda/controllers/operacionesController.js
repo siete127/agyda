@@ -9,9 +9,11 @@ const { TIPIFICACIONES_LLAMADA_LABEL } = require('../utils/tipificacionesLlamada
 const { RDL_DIR } = require('../middleware/rdlUpload');
 const reportBuilderCatalog = require('../services/reportBuilderCatalog');
 const reportBuilderRunner = require('../services/reportBuilderRunner');
+const reportBuilderPlantillas = require('../services/reportBuilderPlantillas');
 const pausaTiposService = require('../services/pausaTiposService');
 const { equiposDeCampania } = require('../services/ccEquiposService');
 const rdlEjecutor = require('../services/rdlEjecutorService');
+const { esSuperAdminFijo } = require('../utils/superAdmin');
 const logger = global.logger || require('../utils/logger');
 
 async function listCampanias(req, res) {
@@ -1970,10 +1972,65 @@ function _mapReporteConstruido(r) {
   };
 }
 
+/* Alcance del constructor según quién consulta (Configuración → Grupos):
+   - administradores (AD/TI y super admin): todos los datos y todos los grupos;
+   - supervisores de uno o más grupos activos: solo lo de sus grupos;
+   - cualquier otro (agentes incluidos): sin acceso.
+   Devuelve { todos, grupos: [{ id, nombre, modalidad }] } o null (sin acceso). */
+async function _alcanceBuilder(req, pool) {
+  const tipo = (req.user?.tipoUsuario || '').toString().toUpperCase();
+  const esAdmin = tipo === 'AD' || tipo === 'TI' || esSuperAdminFijo(req);
+  let grupos = [];
+  try {
+    const rs = await pool.request()
+      .input('uid', sql.Int, parseInt(req.user?.id, 10) || 0)
+      .input('todos', sql.Bit, esAdmin ? 1 : 0)
+      .query(`
+        SELECT e.EQ_ID AS id, e.EQ_NOMBRE AS nombre, ISNULL(e.EQ_MODALIDAD, 'omnicanal') AS modalidad
+        FROM dbo.CC_EQUIPOS e
+        WHERE e.EQ_ACTIVO = 1
+          AND (@todos = 1 OR EXISTS (SELECT 1 FROM dbo.CC_EQUIPO_MIEMBROS m
+                 WHERE m.EQM_EQUIPO_ID = e.EQ_ID AND m.EQM_USUARIO_ID = @uid AND m.EQM_ROL = 'supervisor'))
+        ORDER BY e.EQ_NOMBRE`);
+    grupos = rs.recordset;
+  } catch (e) {
+    // Empresa sin el módulo de grupos (tablas CC_EQUIPOS aún no creadas).
+    logger.warn('operacionesController._alcanceBuilder', e && e.message);
+  }
+  if (esAdmin) return { todos: true, grupos };
+  if (!grupos.length) return null;
+  return { todos: false, grupos };
+}
+
+const SIN_ACCESO_BUILDER = 'El constructor de reportes es solo para administradores y supervisores de un grupo.';
+const CATALOGOS_SIN_CONSTRUCTOR = new Set(['agente', 'tipificacion']);
+
+/* Alcance efectivo de una definición: si el reporte es de un grupo (def.grupoId)
+   se limita a ese grupo — y un supervisor solo puede pedir los suyos. */
+function _alcanceDeDefinicion(alcance, def) {
+  const gid = parseInt(def?.grupoId, 10);
+  if (Number.isInteger(gid)) {
+    if (!alcance.todos && !alcance.grupos.some((g) => g.id === gid)) return false;
+    return { grupoIds: [gid] };
+  }
+  return alcance.todos ? null : { grupoIds: alcance.grupos.map((g) => g.id) };
+}
+
 // GET /api/operaciones/suite-reportes/builder/catalogo — orígenes, campos y filtros disponibles.
 async function getBuilderCatalogo(req, res) {
   try {
-    res.json({ success: true, data: reportBuilderCatalog.catalogoPublico() });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+    res.json({
+      success: true,
+      data: {
+        ...reportBuilderCatalog.catalogoPublico(),
+        acceso: alcance.todos ? 'todos' : 'supervisor',
+        grupos: alcance.grupos,
+        presetsFecha: reportBuilderRunner.PRESETS_FECHA,
+      },
+    });
   } catch (err) {
     logger.error('operacionesController.getBuilderCatalogo', err);
     res.status(500).json({ success: false, message: 'Error al obtener el catálogo del constructor' });
@@ -1981,10 +2038,20 @@ async function getBuilderCatalogo(req, res) {
 }
 
 // GET /api/operaciones/suite-reportes/builder/catalogo-filtro/:catalogo — opciones de un selector.
+// ?grupoId= acota las opciones a un grupo (el supervisor siempre queda acotado a los suyos).
 async function getBuilderCatalogoFiltro(req, res) {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
-    const data = await reportBuilderRunner.catalogoFiltro(pool, req.params.catalogo);
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) {
+      // El buscador de Interacciones de la Suite usa estos dos selectores y no
+      // depende del constructor: se siguen sirviendo como antes.
+      if (!CATALOGOS_SIN_CONSTRUCTOR.has(req.params.catalogo)) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+      return res.json({ success: true, data: await reportBuilderRunner.catalogoFiltro(pool, req.params.catalogo) });
+    }
+    const efectivo = _alcanceDeDefinicion(alcance, { grupoId: req.query.grupoId });
+    if (efectivo === false) return res.status(403).json({ success: false, message: 'No supervisas ese grupo' });
+    const data = await reportBuilderRunner.catalogoFiltro(pool, req.params.catalogo, { grupoIds: efectivo ? efectivo.grupoIds : null });
     res.json({ success: true, data });
   } catch (err) {
     if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
@@ -1997,7 +2064,12 @@ async function getBuilderCatalogoFiltro(req, res) {
 async function ejecutarBuilder(req, res) {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
-    const resultado = await reportBuilderRunner.ejecutar(pool, req.body?.definicion ?? req.body);
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+    const definicion = req.body?.definicion ?? req.body;
+    const efectivo = _alcanceDeDefinicion(alcance, definicion);
+    if (efectivo === false) return res.status(403).json({ success: false, message: 'No supervisas el grupo de este reporte' });
+    const resultado = await reportBuilderRunner.ejecutar(pool, definicion, { alcance: efectivo });
     res.json({ success: true, data: resultado });
   } catch (err) {
     if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
@@ -2006,15 +2078,56 @@ async function ejecutarBuilder(req, res) {
   }
 }
 
+// GET /api/operaciones/suite-reportes/builder/plantillas — plantillas del sistema.
+async function listPlantillasBuilder(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+    res.json({ success: true, data: reportBuilderPlantillas.listarPlantillas() });
+  } catch (err) {
+    logger.error('operacionesController.listPlantillasBuilder', err);
+    res.status(500).json({ success: false, message: 'Error al obtener las plantillas' });
+  }
+}
+
+// POST /api/operaciones/suite-reportes/builder/adaptar — copia una definición
+// (plantilla u otro reporte) y la ajusta al grupo elegido. No guarda nada.
+async function adaptarDefinicionBuilder(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+    const { definicion } = req.body || {};
+    const gid = parseInt(req.body?.grupoId, 10);
+    let grupo = null;
+    if (Number.isInteger(gid)) {
+      grupo = alcance.grupos.find((g) => g.id === gid) || null;
+      if (!grupo) return res.status(403).json({ success: false, message: 'No supervisas ese grupo' });
+    }
+    const r = reportBuilderPlantillas.adaptarAGrupo(definicion, grupo);
+    if (r.aplica) reportBuilderRunner.compilar(r.definicion); // valida que siga siendo ejecutable
+    res.json({ success: true, data: r });
+  } catch (err) {
+    if (err.code === 'REPORT_BUILDER_INVALID') return res.status(400).json({ success: false, message: err.message });
+    logger.error('operacionesController.adaptarDefinicionBuilder', err);
+    res.status(500).json({ success: false, message: 'Error al adaptar el reporte' });
+  }
+}
+
 // GET /api/operaciones/suite-reportes/builder/reportes — reportes guardados visibles.
 async function listReportesConstruidos(req, res) {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     await ensureReportBuilderSchema(pool);
+    // Sin alcance en el constructor (agentes, etc.) no se listan: al abrirlos no podrían correrlos.
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.json({ success: true, data: [] });
     const rs = await pool.request().query(`SELECT * FROM CC_REPORTES_CONSTRUIDOS ORDER BY RC_CARPETA, RC_NOMBRE`);
     const visibles = rs.recordset
       .filter((r) => _puedeVerRdl(req.user, { RDL_ROLES: r.RC_ROLES, RDL_USUARIOS: r.RC_USUARIOS }))
-      .map(_mapReporteConstruido);
+      .map(_mapReporteConstruido)
+      .filter((r) => _alcanceDeDefinicion(alcance, r.definicion) !== false);
     res.json({ success: true, data: visibles });
   } catch (err) {
     logger.error('operacionesController.listReportesConstruidos', err);
@@ -2035,6 +2148,9 @@ async function guardarReporteConstruido(req, res) {
     const usuarios = _parseUsuarios(req.body.usuarios).join(',') || null;
 
     const pool = await databaseService.getPool(req.user?.empresa);
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+    if (_alcanceDeDefinicion(alcance, definicion) === false) return res.status(403).json({ success: false, message: 'No supervisas ese grupo' });
     await ensureRdlSchema(pool);
     await ensureReportBuilderSchema(pool);
     const carpeta = await _resolverCarpeta(pool, req);
@@ -2076,8 +2192,18 @@ async function actualizarReporteConstruido(req, res) {
     if (actual.recordset.length === 0) return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
     const row = actual.recordset[0];
 
+    // Admin edita cualquiera; un supervisor solo los que él creó.
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+    if (!alcance.todos && Number(row.RC_CREADO_POR) !== Number(req.user?.id)) {
+      return res.status(403).json({ success: false, message: 'Solo puedes editar los reportes que tú creaste' });
+    }
+
     const { nombre, descripcion, definicion } = req.body || {};
-    if (definicion !== undefined) reportBuilderRunner.compilar(definicion);
+    if (definicion !== undefined) {
+      reportBuilderRunner.compilar(definicion);
+      if (_alcanceDeDefinicion(alcance, definicion) === false) return res.status(403).json({ success: false, message: 'No supervisas ese grupo' });
+    }
 
     const carpeta = (req.body.carpeta !== undefined || req.body.carpetaId !== undefined)
       ? await _resolverCarpeta(pool, req)
@@ -2119,6 +2245,15 @@ async function eliminarReporteConstruido(req, res) {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
     await ensureReportBuilderSchema(pool);
+    const alcance = await _alcanceBuilder(req, pool);
+    if (!alcance) return res.status(403).json({ success: false, message: SIN_ACCESO_BUILDER });
+    if (!alcance.todos) {
+      const rs = await pool.request().input('id', sql.Int, req.params.id)
+        .query('SELECT RC_CREADO_POR FROM CC_REPORTES_CONSTRUIDOS WHERE RC_ID = @id');
+      if (rs.recordset.length && Number(rs.recordset[0].RC_CREADO_POR) !== Number(req.user?.id)) {
+        return res.status(403).json({ success: false, message: 'Solo puedes eliminar los reportes que tú creaste' });
+      }
+    }
     await pool.request().input('id', sql.Int, req.params.id)
       .query('DELETE FROM CC_REPORTES_CONSTRUIDOS WHERE RC_ID = @id');
     res.json({ success: true });
@@ -2128,7 +2263,15 @@ async function eliminarReporteConstruido(req, res) {
   }
 }
 
+// Crea las tablas de la Suite (carpetas + reportes construidos) si faltan.
+// La usa el asistente "Crear grupo" antes de crear los reportes del grupo.
+async function asegurarTablasSuite(pool) {
+  await ensureRdlSchema(pool);
+  await ensureReportBuilderSchema(pool);
+}
+
 module.exports = {
+  asegurarTablasSuite,
   listCampanias,
   crearCampania,
   listAsignaciones,
@@ -2169,6 +2312,8 @@ module.exports = {
   getBuilderCatalogo,
   getBuilderCatalogoFiltro,
   ejecutarBuilder,
+  listPlantillasBuilder,
+  adaptarDefinicionBuilder,
   listReportesConstruidos,
   guardarReporteConstruido,
   actualizarReporteConstruido,

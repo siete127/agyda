@@ -9,14 +9,46 @@ export interface PortalProyectoMiembro {
   rol: string
 }
 
+export interface PortalProyectoEstatus {
+  nombre: string
+  color: string
+  total: number
+  // Estatus que cuenta como terminado (el último del tablero)
+  completa: boolean
+}
+
 export interface PortalProyecto {
   id: number
   nombre: string
+  descripcion: string | null
   estatus: string
   fechaInicio: string | null
   fechaFin: string | null
+  productoNombre: string | null
   equipo: PortalProyectoMiembro[]
+  // % de tareas completadas
   avance: number
+  tareas: { total: number; completadas: number; pendientes: number; vencidas: number }
+  porEstatus: PortalProyectoEstatus[]
+  proximaEntrega: string | null
+}
+
+export interface PortalProyectoTarea {
+  id: number
+  titulo: string
+  descripcion: string
+  estado: string
+  completada: boolean
+  fechaInicio: string | null
+  fechaFin: string | null
+  fechaAprobacion: string | null
+  responsables: string[]
+}
+
+// Detalle de solo lectura: el tablero del proyecto tal como lo ve el equipo.
+export interface PortalProyectoDetalle extends PortalProyecto {
+  columnas: { nombre: string; color: string }[]
+  listaTareas: PortalProyectoTarea[]
 }
 
 export interface PortalCotizacion {

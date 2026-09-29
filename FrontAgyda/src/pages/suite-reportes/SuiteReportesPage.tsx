@@ -26,7 +26,7 @@ import { EjecutarRdl } from './EjecutarRdl'
 import { useSearchParams } from 'react-router-dom'
 import { CarpetaCampanias, EncabezadoCampania, RegistrosDeCampania, ProductividadCampaniaView } from './CampaniasSuite'
 import { REPORTES_CAMPANIA, type ReporteCampaniaId } from './reportesCampania'
-import type { RdlReporte, RdlCarpeta, RdlRol, RbDefinicion, RbReporteGuardado } from '@/types/reporteDiario.types'
+import type { RdlReporte, RdlCarpeta, RdlRol, RbDefinicion, RbReporteGuardado, RbSugerencia } from '@/types/reporteDiario.types'
 
 function hoy() {
   return new Date().toISOString().slice(0, 10)
@@ -118,7 +118,15 @@ export function SuiteReportesPage() {
     queryFn: () => reporteDiarioService.builderListReportes(),
   })
 
-  const [guardarBuilderOpen, setGuardarBuilderOpen] = useState<{ def: RbDefinicion; origen: string } | null>(null)
+  // El constructor es solo para administradores y supervisores de un grupo (403 para el resto).
+  const { isSuccess: puedeUsarConstructor } = useQuery({
+    queryKey: ['rb-catalogo'],
+    queryFn: () => reporteDiarioService.builderCatalogo(),
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
+
+  const [guardarBuilderOpen, setGuardarBuilderOpen] = useState<{ def: RbDefinicion; origen: string; sugerencia?: RbSugerencia } | null>(null)
 
   const eliminar = useMutation({
     mutationFn: (id: number) => reporteDiarioService.eliminarRdl(id),
@@ -226,7 +234,7 @@ export function SuiteReportesPage() {
           </div>
 
           {/* Entrada fija: Constructor de reportes */}
-          <button
+          {puedeUsarConstructor && <button
             onClick={() => setSel({ tipo: 'builder' })}
             className={clsx(
               'flex w-full items-center gap-2 border-b border-gray-100 px-3 py-2 text-left text-[0.8rem] font-semibold transition',
@@ -234,7 +242,7 @@ export function SuiteReportesPage() {
             )}
           >
             <Wrench className="h-4 w-4 flex-shrink-0" /> Constructor de reportes
-          </button>
+          </button>}
 
           {cargandoRdls ? (
             <div className="flex justify-center py-10"><Spinner /></div>
@@ -375,7 +383,7 @@ export function SuiteReportesPage() {
           )}
 
           {sel?.tipo === 'builder' && (
-            <ReportBuilder onGuardar={(def, origen) => setGuardarBuilderOpen({ def, origen })} />
+            <ReportBuilder onGuardar={(def, origen, sugerencia) => setGuardarBuilderOpen({ def, origen, sugerencia })} />
           )}
 
           {sel?.tipo === 'rb' && rbSel && (
@@ -457,6 +465,7 @@ export function SuiteReportesPage() {
         <GuardarReporteModal
           def={guardarBuilderOpen.def}
           origen={guardarBuilderOpen.origen}
+          sugerencia={guardarBuilderOpen.sugerencia}
           carpetas={carpetas}
           onClose={() => setGuardarBuilderOpen(null)}
           onGuardado={(nuevo) => {
@@ -610,18 +619,20 @@ function EditarAccesoRbModal({
 function GuardarReporteModal({
   def,
   origen,
+  sugerencia,
   carpetas,
   onClose,
   onGuardado,
 }: {
   def: RbDefinicion
   origen: string
+  sugerencia?: RbSugerencia
   carpetas: RdlCarpeta[]
   onClose: () => void
   onGuardado: (r: RbReporteGuardado) => void
 }) {
-  const [nombre, setNombre] = useState('')
-  const [descripcion, setDescripcion] = useState('')
+  const [nombre, setNombre] = useState(sugerencia?.nombre ?? '')
+  const [descripcion, setDescripcion] = useState(sugerencia?.descripcion ?? '')
   const [carpeta, setCarpeta] = useState('General')
   const [roles, setRoles] = useState<RdlRol[]>([])
   const [usuarios, setUsuarios] = useState<number[]>([])

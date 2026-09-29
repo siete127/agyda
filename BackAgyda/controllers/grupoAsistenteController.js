@@ -3,6 +3,7 @@ const databaseService = require('../services/databaseService');
 const { logAudit } = require('../services/auditService');
 const { porKey, ids, catalogoNuevoGrupo } = require('../services/gruposService');
 const { getEmpresaModulosBloqueados, getUserAllowedActions, esSuperAdminFijo } = require('../middleware/moduleAccess');
+const { listarPlantillas, crearReportesDeGrupo } = require('../services/reportBuilderPlantillas');
 
 // Asistente "Crear grupo" (portada de Configuración). Igual que "Crear
 // empresa": todo lo capturado es un BORRADOR (INTRANET_GRUPOS_BORRADORES, en
@@ -20,6 +21,8 @@ const REQUISITOS = {
   base: [{ key: 'contact-center', nombre: 'Contact Center' }, { key: 'usuarios', nombre: 'Usuarios' }],
   atencion: [{ key: 'atencion-cliente', nombre: 'Atención al Cliente' }],
   marcador: [{ key: 'webphone', nombre: 'Webphone' }],
+  // Reportes del grupo (plantillas del constructor) en la Suite de reportes.
+  reportes: [{ key: 'operaciones', nombre: 'Suite de reportes' }],
 };
 const TIPOS_ASISTENTE = ['cc-equipos', 'atencion-clientes'];
 const enProceso = new Set();
@@ -57,6 +60,7 @@ async function disponibilidad(req) {
     disponible: permiso && faltan.length === 0,
     atencion: !REQUISITOS.atencion.some((m) => bloqueados.has(m.key)),
     marcador: !REQUISITOS.marcador.some((m) => bloqueados.has(m.key)),
+    reportes: !REQUISITOS.reportes.some((m) => bloqueados.has(m.key)),
   };
 }
 
@@ -91,7 +95,14 @@ exports.catalogo = async (req, res) => {
       LEFT JOIN CC_EQUIPO_CLIENTES gc ON gc.EQCL_CONT_ID = c.CONT_ID
       LEFT JOIN CC_EQUIPOS e ON e.EQ_ID = gc.EQCL_EQUIPO_ID AND e.EQ_ACTIVO = 1
       WHERE c.CONT_ES_CLIENTE = 1 AND c.CONT_ACTIVO = 1 ORDER BY nombre`).catch(() => ({ recordset: [] }))).recordset : [];
-    res.json({ success: true, data: { ...cat, usuarios, clientes, atencion: d.atencion, marcador: d.marcador } });
+    // Plantillas de reportes que se pueden crear con el grupo (sin la definición: basta el boceto).
+    const plantillasReportes = d.reportes
+      ? listarPlantillas().map(({ definicion, ...p }) => ({
+        ...p, tipoVisual: definicion.visual?.tipo || 'tabla',
+        series: definicion.dimensiones.length === 2 ? 3 : definicion.metricas.length,
+      }))
+      : [];
+    res.json({ success: true, data: { ...cat, usuarios, clientes, atencion: d.atencion, marcador: d.marcador, reportes: d.reportes, plantillasReportes } });
   } catch (e) {
     responderError(res, e, 'catalogo');
   }
@@ -127,7 +138,7 @@ function filaABorrador(r, req, conDatos = false) {
     usuarioNombre: r.BOR_USUARIO_NOMBRE, esMio: r.BOR_USUARIO_ID === uid(req), actualizado: r.BOR_ACTUALIZADO,
     interrumpido: r.BOR_ESTADO === 'creando' && !enProceso.has(r.BOR_ID),
     avance: parse(r.BOR_AVANCE, null), error: r.BOR_ERROR,
-    resumen: { campanias: (datos.campanias || []).length, supervisores: (datos.supervisores || []).length, agentes: (datos.agentes || []).length, clientes: (datos.clientes || []).length },
+    resumen: { campanias: (datos.campanias || []).length, supervisores: (datos.supervisores || []).length, agentes: (datos.agentes || []).length, clientes: (datos.clientes || []).length, reportes: (datos.reportes || []).length },
     ...(conDatos ? { datos, pendientes: pendientesDe(datos, req.disponibilidadGrupos) } : {}),
   };
 }
@@ -277,6 +288,21 @@ exports.crearGrupo = async (req, res) => {
         if (!pedidos.length) return;
         const validos = (await pool.request().query(`SELECT CONT_ID id FROM CRM_CONTACTOS WHERE CONT_ES_CLIENTE = 1 AND CONT_ID IN (${pedidos.join(',')})`)).recordset.map((x) => x.id);
         if (validos.length) await t.agregarClientes(pool, grupoId, validos, ctx);
+      });
+    }
+
+    // 5. Reportes del grupo en la Suite (copias de plantillas ajustadas al grupo).
+    const plantillaIds = Array.isArray(datos.reportes) ? datos.reportes.map(String) : [];
+    if (req.disponibilidadGrupos?.reportes && plantillaIds.length) {
+      await etapa('reportes', async () => {
+        // Se requiere aquí para no cargar el controlador de operaciones al iniciar este.
+        const { asegurarTablasSuite } = require('./operacionesController');
+        avance.reportes = await crearReportesDeGrupo(pool, {
+          grupo: { id: grupoId, nombre: String(datos.nombre).trim(), modalidad },
+          plantillaIds,
+          usuario: { id: uid(req), nombre: req.user?.nombre || req.user?.username || null },
+          asegurarTablas: asegurarTablasSuite,
+        });
       });
     }
 

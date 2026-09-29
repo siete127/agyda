@@ -1,6 +1,6 @@
 import { api } from '@/lib/axios'
 import type {
-  PortalResumen, PortalProyecto, PortalCotizacion, PortalFactura, PortalDocumento, PortalCita, PortalIncidencia,
+  PortalResumen, PortalProyecto, PortalProyectoDetalle, PortalCotizacion, PortalFactura, PortalDocumento, PortalCita, PortalIncidencia,
   PortalProductoServicio, PortalCatalogoItem, PortalAsesor, PortalCategoriaCaso, PropuestaReunion,
 } from '@/types/portalCliente.types'
 import { parseMensajeriaCanal, type MensajeriaCanal } from '@/types/mensajeria.types'
@@ -99,6 +99,10 @@ export const portalClienteService = {
   async getProyectos(): Promise<PortalProyecto[]> {
     const { data } = await api.get('/portal-cliente/proyectos')
     return (data?.data ?? []) as PortalProyecto[]
+  },
+  async getProyecto(id: number): Promise<PortalProyectoDetalle> {
+    const { data } = await api.get(`/portal-cliente/proyectos/${id}`)
+    return data?.data as PortalProyectoDetalle
   },
   async getCotizaciones(): Promise<PortalCotizacion[]> {
     const { data } = await api.get('/portal-cliente/cotizaciones')

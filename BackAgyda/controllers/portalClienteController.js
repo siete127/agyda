@@ -9,6 +9,7 @@ const { sanitizeFilename, decryptBuffer } = require('../utils/cryptoDocs');
 const { getPortalRolAcciones } = require('../middleware/portalCliente');
 const facturacionService = require('../services/facturacionService');
 const cotizacionesController = require('./crmCotizacionesController');
+const { asegurarColumnasVinculo } = require('./proyectoController');
 
 // Portal del cliente (login real, NEUS_TIPOUSUARIO='CL') — mismo shape de
 // datos que crmPortalController.js (el portal por liga/token), pero
@@ -357,33 +358,135 @@ exports.solicitarCotizacion = async (req, res) => {
   }
 };
 
-// GET /proyectos — oportunidades del contacto que ya generaron un proyecto real.
+/* ── Proyectos del cliente (solo lectura: el cliente es espectador) ──
+   Son suyos los proyectos ligados a su contacto (PROY_CONT_ID: creados desde
+   Clientes o ligados en Proyectos) y los generados desde una oportunidad suya
+   del CRM. El avance sale de sus tareas: completadas / total, donde una tarea
+   está completada si está en el último estatus del tablero del proyecto (o en
+   uno de nombre "completada/aprobado"). PTAR_PROGRESO casi nunca se llena. */
+const ESTATUS_BASE_PROYECTO = [
+  { nombre: 'Pendiente', color: '#6B7280', orden: 1 },
+  { nombre: 'En progreso', color: '#1B4FD8', orden: 2 },
+  { nombre: 'Completada', color: '#059669', orden: 3 },
+];
+const NOMBRES_COMPLETADA = new Set(['completada', 'completado', 'aprobado', 'aprobada', 'done', 'completed', 'terminada', 'terminado']);
+const norm = (s) => String(s || '').trim().toLowerCase();
+
+function whereProyectosDelContacto(alias = 'p') {
+  return `(${alias}.PROY_CONT_ID = @cid OR ${alias}.PROY_ID IN (
+    SELECT o.OPO_PROYECTO_ID FROM CRM_OPORTUNIDADES o WHERE o.OPO_CONTACTO_ID = @cid AND o.OPO_ACTIVO = 1 AND o.OPO_PROYECTO_ID IS NOT NULL))`;
+}
+
+// Columnas de PROYECTO_TAREAS de esta BD: no todas las empresas tienen las
+// mismas (las más viejas no traen eliminada/fecha límite/aprobación).
+const columnasTareasCache = new WeakMap();
+async function columnasTareas(pool) {
+  if (!columnasTareasCache.has(pool)) {
+    const rs = await pool.request().query(`SELECT COLUMN_NAME c FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'PROYECTO_TAREAS'`);
+    columnasTareasCache.set(pool, new Set(rs.recordset.map((r) => r.c.toUpperCase())));
+  }
+  return columnasTareasCache.get(pool);
+}
+
+// Resumen de avance de un proyecto a partir de su tablero y sus tareas.
+async function avanceDeProyecto(pool, proyId, conTareas = false) {
+  const col = await columnasTareas(pool);
+  const tiene = (c) => col.has(c);
+  const fechasFin = ['PTAR_FECHA_FIN', 'PTAR_FECHA_LIMITE'].filter(tiene);
+  const fin = fechasFin.length > 1 ? `COALESCE(${fechasFin.join(', ')})` : (fechasFin[0] || 'NULL');
+  const inicio = tiene('PTAR_FECHA_INICIO') ? 'PTAR_FECHA_INICIO' : 'NULL';
+  const [est, tar] = await Promise.all([
+    pool.request().input('pid', sql.Int, proyId)
+      .query(`SELECT PEST_NOMBRE nombre, PEST_COLOR color, PEST_ORDEN orden FROM PROYECTO_ESTATUS WHERE PEST_PROY_ID = @pid ORDER BY PEST_ORDEN`)
+      .catch(() => ({ recordset: [] })),
+    pool.request().input('pid', sql.Int, proyId).query(`
+      SELECT PTAR_ID id, PTAR_TITULO titulo, PTAR_DESCRIPCION descripcion, PTAR_ESTADO estado, PTAR_ASIGNADO_A asignadoA,
+             CONVERT(NVARCHAR(10), ${inicio}, 23) fechaInicio,
+             CONVERT(NVARCHAR(10), ${fin}, 23) fechaFin,
+             ${tiene('PTAR_FECHA_APROBACION') ? 'CONVERT(NVARCHAR(10), PTAR_FECHA_APROBACION, 23)' : 'NULL'} fechaAprobacion
+      FROM PROYECTO_TAREAS WHERE PTAR_PROY_ID = @pid ${tiene('PTAR_ELIMINADA') ? 'AND ISNULL(PTAR_ELIMINADA, 0) = 0' : ''}
+      ORDER BY CASE WHEN ${fin} IS NULL THEN 1 ELSE 0 END, ${fin}, PTAR_ID`),
+  ]);
+  const columnas = (est.recordset.length ? est.recordset : ESTATUS_BASE_PROYECTO).map((e) => ({ nombre: e.nombre, color: e.color || '#6B7280' }));
+  const ultimo = norm(columnas[columnas.length - 1]?.nombre);
+  const esCompleta = (estado) => norm(estado) === ultimo || NOMBRES_COMPLETADA.has(norm(estado));
+  const tareas = tar.recordset.map((t) => ({ ...t, completada: esCompleta(t.estado) }));
+
+  // Conteo por estatus en el orden del tablero; estatus que no están en él (p. ej. "Rechazado") al final.
+  const porEstatus = columnas.map((c) => ({ nombre: c.nombre, color: c.color, total: 0, completa: esCompleta(c.nombre) }));
+  for (const t of tareas) {
+    const col = porEstatus.find((c) => norm(c.nombre) === norm(t.estado));
+    if (col) col.total++;
+    else porEstatus.push({ nombre: t.estado || 'Sin estatus', color: '#9CA3AF', total: 1, completa: t.completada });
+  }
+  const hoy = new Date().toISOString().slice(0, 10);
+  const completadas = tareas.filter((t) => t.completada).length;
+  const pendientes = tareas.filter((t) => !t.completada);
+  const resumen = {
+    avance: tareas.length ? Math.round((completadas * 100) / tareas.length) : 0,
+    tareas: { total: tareas.length, completadas, pendientes: pendientes.length, vencidas: pendientes.filter((t) => t.fechaFin && t.fechaFin < hoy).length },
+    porEstatus: porEstatus.filter((c, i) => c.total > 0 || i < columnas.length),
+    proximaEntrega: pendientes.map((t) => t.fechaFin).filter((f) => f && f >= hoy).sort()[0] || null,
+  };
+  if (!conTareas) return resumen;
+  return {
+    ...resumen,
+    columnas,
+    listaTareas: tareas.map((t) => ({
+      id: t.id, titulo: t.titulo, descripcion: t.descripcion || '', estado: t.estado || 'Sin estatus', completada: t.completada,
+      fechaInicio: t.fechaInicio, fechaFin: t.fechaFin, fechaAprobacion: t.fechaAprobacion,
+      responsables: String(t.asignadoA || '').split(',').map((s) => s.trim()).filter(Boolean),
+    })),
+  };
+}
+
+// GET /proyectos — proyectos del cliente con su avance.
 exports.getProyectos = async (req, res) => {
   try {
     const pool = await databaseService.getPool(req.user?.empresa);
-    const id = req.contacto.id;
-
-    const proyectos = (await pool.request().input('id', sql.Int, id).query(`
-      SELECT p.PROY_ID as id, p.PROY_NOMBRE as nombre, p.PROY_ESTADO as estatus,
+    await asegurarColumnasVinculo(pool);
+    const proyectos = (await pool.request().input('cid', sql.Int, req.contacto.id).query(`
+      SELECT p.PROY_ID as id, p.PROY_NOMBRE as nombre, p.PROY_DESCRIPCION as descripcion, p.PROY_ESTADO as estatus,
              CONVERT(NVARCHAR(10), p.PROY_FECHA_INICIO, 23) as fechaInicio,
-             CONVERT(NVARCHAR(10), p.PROY_FECHA_FIN, 23) as fechaFin
-      FROM CRM_OPORTUNIDADES o
-      JOIN PROYECTOS p ON p.PROY_ID = o.OPO_PROYECTO_ID
-      WHERE o.OPO_CONTACTO_ID=@id AND o.OPO_ACTIVO=1
-      ORDER BY p.PROY_FECHA_INICIO DESC
+             CONVERT(NVARCHAR(10), p.PROY_FECHA_FIN, 23) as fechaFin,
+             ps.PS_NOMBRE as productoNombre
+      FROM PROYECTOS p LEFT JOIN PRODUCTOS_SERVICIOS ps ON ps.PS_ID = p.PROY_PS_ID
+      WHERE ${whereProyectosDelContacto('p')}
+      ORDER BY CASE WHEN p.PROY_ESTADO = 'Activo' THEN 0 ELSE 1 END, p.PROY_FECHA_INICIO DESC
     `)).recordset;
 
     for (const proy of proyectos) {
-      const [miembros, tareas] = await Promise.all([
-        pool.request().input('pid', sql.Int, proy.id).query(`SELECT PMEM_NOMBRE as nombre, PMEM_ROL as rol FROM PROYECTO_MIEMBROS WHERE PMEM_PROY_ID=@pid`),
-        pool.request().input('pid', sql.Int, proy.id).query(`SELECT PTAR_PROGRESO as progreso FROM PROYECTO_TAREAS WHERE PTAR_PROY_ID=@pid`),
-      ]);
+      const miembros = await pool.request().input('pid', sql.Int, proy.id)
+        .query(`SELECT PMEM_NOMBRE as nombre, PMEM_ROL as rol FROM PROYECTO_MIEMBROS WHERE PMEM_PROY_ID=@pid ORDER BY PMEM_ID`);
       proy.equipo = miembros.recordset;
-      const progresos = tareas.recordset.map((t) => Number(t.progreso) || 0);
-      proy.avance = progresos.length ? Math.round(progresos.reduce((s, p) => s + p, 0) / progresos.length) : 0;
+      Object.assign(proy, await avanceDeProyecto(pool, proy.id));
     }
-
     res.json({ success: true, data: proyectos });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /proyectos/:id — detalle de solo lectura: tablero por estatus, tareas y seguimiento.
+exports.getProyecto = async (req, res) => {
+  try {
+    const proyId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(proyId)) return res.status(400).json({ success: false, message: 'id inválido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await asegurarColumnasVinculo(pool);
+    const rs = await pool.request().input('cid', sql.Int, req.contacto.id).input('pid', sql.Int, proyId).query(`
+      SELECT p.PROY_ID as id, p.PROY_NOMBRE as nombre, p.PROY_DESCRIPCION as descripcion, p.PROY_ESTADO as estatus,
+             CONVERT(NVARCHAR(10), p.PROY_FECHA_INICIO, 23) as fechaInicio,
+             CONVERT(NVARCHAR(10), p.PROY_FECHA_FIN, 23) as fechaFin,
+             ps.PS_NOMBRE as productoNombre
+      FROM PROYECTOS p LEFT JOIN PRODUCTOS_SERVICIOS ps ON ps.PS_ID = p.PROY_PS_ID
+      WHERE p.PROY_ID = @pid AND ${whereProyectosDelContacto('p')}`);
+    // Un proyecto de otro cliente responde igual que uno inexistente.
+    if (!rs.recordset.length) return res.status(404).json({ success: false, message: 'Proyecto no encontrado' });
+    const proy = rs.recordset[0];
+    const miembros = await pool.request().input('pid', sql.Int, proyId)
+      .query(`SELECT PMEM_NOMBRE as nombre, PMEM_ROL as rol FROM PROYECTO_MIEMBROS WHERE PMEM_PROY_ID=@pid ORDER BY PMEM_ID`);
+    res.json({ success: true, data: { ...proy, equipo: miembros.recordset, ...(await avanceDeProyecto(pool, proyId, true)) } });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }

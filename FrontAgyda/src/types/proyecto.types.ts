@@ -18,6 +18,60 @@ export interface Proyecto {
   estado: ProyectoEstado
   cliente: string
   creadorId: number | null
+  // Cliente (CRM) y producto/servicio al que está ligado el proyecto
+  clienteId: number | null
+  productoId: number | null
+  productoNombre: string
+}
+
+/* ── Proyectos ligados a cliente + producto ── */
+export type RolProyecto = 'lider' | 'miembro' | 'revisor'
+export const ROL_PROYECTO_LABEL: Record<RolProyecto, string> = { lider: 'Líder', miembro: 'Miembro', revisor: 'Revisor' }
+export interface IntegranteProyecto { nombre: string; rol: RolProyecto }
+
+export interface OpcionesVinculoProyecto {
+  clientes: { id: number; nombre: string }[]
+  productos: { id: number; nombre: string; tipo: string; recurrencia: string }[]
+  // Qué producto tiene contratado cada cliente
+  contratados: { clienteId: number; productoId: number }[]
+}
+export interface ProyectoExistente {
+  id: number
+  nombre: string
+  estado: string
+  productoId: number | null
+  productoNombre: string | null
+}
+export interface SugerenciaProyecto {
+  productoId: number
+  productoNombre: string
+  productoTipo: string
+  recurrencia: string
+  nombre: string
+  descripcion: string
+  fechaInicio: string
+  fechaFin: string
+  miembros: IntegranteProyecto[]
+  // De dónde salieron los integrantes precargados
+  origenMiembros: { tipo: 'proyecto' | 'responsable' | 'creador'; proyectoId?: number; nombre?: string } | null
+  // Proyectos que el cliente ya tiene para este producto
+  yaTiene: ProyectoExistente[]
+}
+export interface PrellenadoProyectos {
+  cliente: { id: number; nombre: string } | null
+  sugerencias: SugerenciaProyecto[]
+  existentes: ProyectoExistente[]
+}
+export interface ItemProyectoProducto {
+  productoId: number
+  modo: 'nuevo' | 'existente'
+  proyectoId?: number
+  nombre?: string
+  descripcion?: string
+  fechaInicio?: string
+  fechaFin?: string
+  estado?: ProyectoEstado
+  miembros?: IntegranteProyecto[]
 }
 
 export interface Tarea {
@@ -99,6 +153,9 @@ export function parseProyecto(raw: Record<string, unknown>): Proyecto {
     estado: normalizeEstado(raw['status'] ?? raw['PROY_ESTADO'] ?? raw['estado']),
     cliente: String(raw['clientName'] ?? raw['PROY_CLIENTE'] ?? raw['cliente'] ?? ''),
     creadorId: creadorRaw !== null ? (Number(creadorRaw) || null) : null,
+    clienteId: Number(raw['clienteId']) || null,
+    productoId: Number(raw['productoId']) || null,
+    productoNombre: String(raw['productoNombre'] ?? ''),
   }
 }
 

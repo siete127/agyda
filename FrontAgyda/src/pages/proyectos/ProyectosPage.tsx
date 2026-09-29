@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Plus, RefreshCw, ChevronLeft, Users, Calendar,
   Briefcase, CheckCircle2, Circle, Clock, Ban,
-  Pencil, Trash2, GripVertical, X, Settings,
+  Pencil, Trash2, GripVertical, X, Settings, Package,
 } from 'lucide-react'
 import { proyectosService } from '@/services/proyectos.service'
 import { api, getApiError } from '@/lib/axios'
@@ -17,8 +17,10 @@ import { ProyectoCronograma } from './ProyectoCronograma'
 import { ProyectoCalendario } from './ProyectoCalendario'
 import {
   type Proyecto, type Tarea, type TareaEstado, type TareaPrioridad, type ProyectoEstado,
+  type IntegranteProyecto, type RolProyecto, type SugerenciaProyecto,
   PROYECTO_ESTADO_COLORS, TAREA_ESTADO_LABELS, TAREA_COLUMNAS,
 } from '@/types/proyecto.types'
+import { IntegrantesEditor } from './IntegrantesEditor'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -813,7 +815,10 @@ function ProyectoCard({
         {/* Footer */}
         <div className="flex items-center gap-3 text-[0.68rem] text-gray-400 mt-auto pt-2 border-t border-gray-100">
           {proyecto.cliente && (
-            <span className="flex items-center gap-1"><Users className="h-3 w-3" />{proyecto.cliente}</span>
+            <span className="flex min-w-0 items-center gap-1"><Users className="h-3 w-3 flex-shrink-0" /><span className="truncate">{proyecto.cliente}</span></span>
+          )}
+          {proyecto.productoNombre && (
+            <span className="flex min-w-0 items-center gap-1" title="Producto o servicio"><Package className="h-3 w-3 flex-shrink-0" /><span className="truncate">{proyecto.productoNombre}</span></span>
           )}
           <span className={clsx('flex items-center gap-1 ml-auto', vencido ? 'text-red-500' : '')}>
             <Calendar className="h-3 w-3" />
@@ -825,84 +830,54 @@ function ProyectoCard({
   )
 }
 
-/* ── Selector de miembros reutilizable ── */
-function MiembrosSelector({
-  seleccionados,
-  onChange,
-}: {
-  seleccionados: string[]
-  onChange: (nombres: string[]) => void
+/* ── Cliente + producto del proyecto ── */
+const ALIAS_ROL: Record<string, RolProyecto> = { lider: 'lider', 'líder': 'lider', leader: 'lider', miembro: 'miembro', member: 'miembro', developer: 'miembro', revisor: 'revisor', reviewer: 'revisor' }
+const rolDe = (r: string): RolProyecto => ALIAS_ROL[String(r || '').toLowerCase()] ?? 'miembro'
+
+// El cliente es opcional; el producto o servicio es obligatorio. Con un
+// cliente elegido, primero se listan los productos que tiene contratados.
+function ClienteProductoCampos({ clienteId, productoId, onCliente, onProducto, cargando, clienteTexto }: {
+  clienteId: number | null
+  productoId: number | null
+  onCliente: (id: number | null) => void
+  onProducto: (id: number | null) => void
+  cargando?: boolean
+  clienteTexto?: string
 }) {
-  const [busqueda, setBusqueda] = useState('')
-
-  const { data: usuarios = [] } = useQuery({
-    queryKey: ['usuarios-todos'],
-    queryFn: async () => {
-      const { data } = await api.get('/usuarios')
-      const list = Array.isArray(data) ? data : (data?.data ?? data?.usuarios ?? [])
-      return (list as Record<string, unknown>[])
-        .map((r) => ({
-          id: Number(r['id'] ?? r['ID'] ?? 0),
-          nombre: String(r['nombres'] ?? r['NOMBRES'] ?? r['nombre'] ?? ''),
-          tipoUsuario: String(r['tipoUsuario'] ?? r['TIPO_USUARIO'] ?? '').toUpperCase(),
-          activo: Boolean(r['activo'] ?? r['ACTIVO'] ?? true),
-        }))
-        .filter((u) => u.activo && u.nombre)
-    },
-  })
-
-  const filtrados = busqueda
-    ? usuarios.filter((u) => u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
-    : usuarios
-
-  const toggle = (nombre: string) => {
-    onChange(
-      seleccionados.includes(nombre)
-        ? seleccionados.filter((n) => n !== nombre)
-        : [...seleccionados, nombre]
-    )
-  }
-
+  const { data: op } = useQuery({ queryKey: ['proyectos-opciones-vinculo'], queryFn: () => proyectosService.opcionesVinculo(), staleTime: 60_000 })
+  const contratados = new Set((op?.contratados ?? []).filter((c) => c.clienteId === clienteId).map((c) => c.productoId))
+  const productos = op?.productos ?? []
+  const delCliente = productos.filter((p) => contratados.has(p.id))
+  const otros = productos.filter((p) => !contratados.has(p.id))
+  const opcion = (p: { id: number; nombre: string; tipo: string }) => (
+    <option key={p.id} value={p.id}>{p.nombre}{p.tipo === 'SERVICIO' ? ' (servicio)' : ''}</option>
+  )
   return (
-    <div className="space-y-2">
-      <input
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-        placeholder="Buscar usuario..."
-        className="field text-sm"
-      />
-      <div className="max-h-36 overflow-y-auto rounded-lg border border-gray-200 p-1 space-y-0.5">
-        {filtrados.length === 0 ? (
-          <p className="px-2 py-1.5 text-[0.72rem] text-gray-400">Sin resultados</p>
-        ) : (
-          filtrados.map((u) => {
-            const checked = seleccionados.includes(u.nombre)
-            return (
-              <label key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[0.78rem] text-gray-700 hover:bg-gray-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(u.nombre)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 text-brand focus:ring-brand"
-                />
-                <span className="flex-1">{u.nombre}</span>
-                <span className="text-[0.65rem] text-gray-400">{u.tipoUsuario}</span>
-              </label>
-            )
-          })
-        )}
+    <>
+      <div>
+        <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Cliente</label>
+        <select value={clienteId ?? ''} onChange={(e) => onCliente(e.target.value ? Number(e.target.value) : null)} className="field">
+          <option value="">Sin cliente</option>
+          {(op?.clientes ?? []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+        {!clienteId && clienteTexto && <p className="mt-1 text-[0.66rem] text-amber-600">Tenía "{clienteTexto}" escrito a mano: elige el cliente para ligarlo.</p>}
       </div>
-      {seleccionados.length > 0 && (
-        <div className="flex flex-wrap gap-1 pt-1">
-          {seleccionados.map((n) => (
-            <span key={n} className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[0.68rem] font-medium text-brand">
-              {n}
-              <button onClick={() => toggle(n)} className="hover:text-red-500 transition-colors"><X className="h-2.5 w-2.5" /></button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+      <div>
+        <label className="mb-1 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Producto o servicio <span className="text-red-500">*</span>
+          {cargando && <RefreshCw className="h-3 w-3 animate-spin text-brand" />}
+        </label>
+        <select value={productoId ?? ''} onChange={(e) => onProducto(e.target.value ? Number(e.target.value) : null)} className={clsx('field', !productoId && 'border-amber-300')}>
+          <option value="">Elige el producto…</option>
+          {clienteId && delCliente.length > 0 ? (
+            <>
+              <optgroup label="Contratados por el cliente">{delCliente.map(opcion)}</optgroup>
+              <optgroup label="Otros del catálogo">{otros.map(opcion)}</optgroup>
+            </>
+          ) : productos.map(opcion)}
+        </select>
+      </div>
+    </>
   )
 }
 
@@ -910,18 +885,46 @@ function MiembrosSelector({
 function NuevoProyectoModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
   const [form, setForm] = useState<{
-    nombre: string; descripcion: string; cliente: string;
-    fechaInicio: string; fechaFin: string; estado: ProyectoEstado;
+    nombre: string; descripcion: string; fechaInicio: string; fechaFin: string; estado: ProyectoEstado;
   }>({
-    nombre: '', descripcion: '', cliente: '',
+    nombre: '', descripcion: '',
     fechaInicio: new Date().toISOString().slice(0, 10),
     fechaFin: '', estado: 'Activo',
   })
-  const [miembros, setMiembros] = useState<string[]>([])
+  const [clienteId, setClienteId] = useState<number | null>(null)
+  const [productoId, setProductoId] = useState<number | null>(null)
+  const [integrantes, setIntegrantes] = useState<IntegranteProyecto[]>([])
+  const [sugerencia, setSugerencia] = useState<SugerenciaProyecto | null>(null)
+  const [cargando, setCargando] = useState(false)
+  // Lo último que se precargó: solo se reemplaza lo que el usuario no ha tocado.
+  const precargado = useRef({ nombre: '', descripcion: '', fechaFin: '', miembros: '[]' })
+
+  const precargar = async (cId: number | null, pId: number | null) => {
+    if (!pId) { setSugerencia(null); return }
+    setCargando(true)
+    try {
+      const s = (await proyectosService.prellenado(cId, [pId])).sugerencias[0]
+      if (!s) return
+      const prev = precargado.current
+      setSugerencia(s)
+      setForm((f) => ({
+        ...f,
+        nombre: !f.nombre.trim() || f.nombre === prev.nombre ? s.nombre : f.nombre,
+        descripcion: !f.descripcion.trim() || f.descripcion === prev.descripcion ? s.descripcion : f.descripcion,
+        fechaFin: !f.fechaFin || f.fechaFin === prev.fechaFin ? s.fechaFin : f.fechaFin,
+      }))
+      setIntegrantes((v) => (!v.length || JSON.stringify(v) === prev.miembros ? s.miembros : v))
+      precargado.current = { nombre: s.nombre, descripcion: s.descripcion, fechaFin: s.fechaFin, miembros: JSON.stringify(s.miembros) }
+    } catch {
+      /* sin precarga: se captura a mano */
+    } finally {
+      setCargando(false)
+    }
+  }
 
   const crear = useMutation({
     mutationFn: async () => {
-      const { data } = await api.post('/proyectos', { ...form, miembros: miembros.map((n) => ({ nombre: n, rol: 'miembro' })) })
+      const { data } = await api.post('/proyectos', { ...form, clienteId, productoId, miembros: integrantes })
       return data
     },
     onSuccess: () => {
@@ -937,6 +940,18 @@ function NuevoProyectoModal({ onClose }: { onClose: () => void }) {
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {/* Columna izquierda: datos */}
         <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <ClienteProductoCampos
+              clienteId={clienteId} productoId={productoId} cargando={cargando}
+              onCliente={(id) => { setClienteId(id); precargar(id, productoId) }}
+              onProducto={(id) => { setProductoId(id); precargar(clienteId, id) }}
+            />
+          </div>
+          {sugerencia && sugerencia.yaTiene.length > 0 && (
+            <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[0.7rem] text-amber-700">
+              Este cliente ya tiene {sugerencia.yaTiene.length === 1 ? `"${sugerencia.yaTiene[0].nombre}"` : `${sugerencia.yaTiene.length} proyectos`} de este producto.
+            </p>
+          )}
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Nombre</label>
             <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="field" />
@@ -945,11 +960,7 @@ function NuevoProyectoModal({ onClose }: { onClose: () => void }) {
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Descripción</label>
             <textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} rows={3} className="field resize-none" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Cliente</label>
-              <input value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} className="field" />
-            </div>
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Estado</label>
               <select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as ProyectoEstado })} className="field">
@@ -965,23 +976,27 @@ function NuevoProyectoModal({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Fecha fin</label>
-              <input type="date" value={form.fechaFin} onChange={(e) => setForm({ ...form, fechaFin: e.target.value })} className="field" />
+              <input type="date" min={form.fechaInicio || undefined} value={form.fechaFin} onChange={(e) => setForm({ ...form, fechaFin: e.target.value })} className="field" />
             </div>
           </div>
         </div>
 
-        {/* Columna derecha: miembros */}
+        {/* Columna derecha: integrantes con rol */}
         <div>
           <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">
-            Miembros <span className="text-gray-400 normal-case font-normal">({miembros.length} seleccionados)</span>
+            Integrantes <span className="text-gray-400 normal-case font-normal">({integrantes.length})</span>
           </label>
-          <MiembrosSelector seleccionados={miembros} onChange={setMiembros} />
+          {sugerencia?.origenMiembros?.tipo === 'proyecto' && (
+            <p className="mb-1.5 text-[0.66rem] text-gray-400">Precargados del último proyecto de este producto ("{sugerencia.origenMiembros.nombre}").</p>
+          )}
+          <IntegrantesEditor value={integrantes} onChange={setIntegrantes} alto="max-h-56" />
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-4 mt-2 border-t border-gray-100">
+      <div className="flex items-center justify-end gap-2 pt-4 mt-2 border-t border-gray-100">
+        {!productoId && <span className="mr-auto text-[0.7rem] text-amber-600">Elige el producto o servicio del proyecto.</span>}
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button isLoading={crear.isPending} disabled={!form.nombre.trim() || !form.fechaFin} onClick={() => crear.mutate()}>
+        <Button isLoading={crear.isPending} disabled={!form.nombre.trim() || !form.fechaFin || !productoId} onClick={() => crear.mutate()}>
           Crear proyecto
         </Button>
       </div>
@@ -993,59 +1008,45 @@ function NuevoProyectoModal({ onClose }: { onClose: () => void }) {
 function EditarProyectoModal({ proyecto, onClose }: { proyecto: Proyecto; onClose: () => void }) {
   const qc = useQueryClient()
   const [form, setForm] = useState<{
-    nombre: string; descripcion: string; cliente: string;
-    fechaInicio: string; fechaFin: string; estado: ProyectoEstado;
+    nombre: string; descripcion: string; fechaInicio: string; fechaFin: string; estado: ProyectoEstado;
   }>({
     nombre:      proyecto.nombre,
     descripcion: proyecto.descripcion ?? '',
-    cliente:     proyecto.cliente ?? '',
     fechaInicio: proyecto.fechaInicio?.slice(0, 10) ?? '',
     fechaFin:    proyecto.fechaFin?.slice(0, 10) ?? '',
     estado:      proyecto.estado,
   })
+  const [clienteId, setClienteId] = useState<number | null>(proyecto.clienteId)
+  const [productoId, setProductoId] = useState<number | null>(proyecto.productoId)
 
   // Cargar miembros actuales
-  const { data: miembrosActuales = [] } = useQuery({
+  const { data: miembrosActuales = [], isSuccess: miembrosListos } = useQuery({
     queryKey: ['miembros', proyecto.id],
     queryFn: () => proyectosService.getMiembros(proyecto.id),
   })
 
-  const [miembros, setMiembros] = useState<string[]>([])
-
-  // Inicializar miembros cuando carguen
-  useState(() => {
-    if (miembrosActuales.length > 0 && miembros.length === 0) {
-      setMiembros(miembrosActuales.map((m) => m.nombre))
-    }
-  })
-
-  // Sincronizar cuando llegan los datos
-  const miembrosRef = React.useRef(false)
-  if (!miembrosRef.current && miembrosActuales.length > 0) {
-    miembrosRef.current = true
-    if (miembros.length === 0) setMiembros(miembrosActuales.map((m) => m.nombre))
-  }
+  // Integrantes con rol; se inicializan cuando llegan los actuales.
+  const [integrantes, setIntegrantes] = useState<IntegranteProyecto[] | null>(null)
+  const lista = integrantes ?? (miembrosListos ? miembrosActuales.map((m) => ({ nombre: m.nombre, rol: rolDe(m.rol) })) : [])
 
   const guardar = useMutation({
     mutationFn: async () => {
-      // Actualizar datos del proyecto
-      await proyectosService.update(proyecto.id, form)
+      // Datos del proyecto + cliente/producto (sin cliente ligado se conserva el texto que tenía)
+      await proyectosService.update(proyecto.id, {
+        ...form, clienteId, productoId, cliente: clienteId ? undefined : proyecto.cliente,
+      } as Partial<Proyecto>)
+      if (integrantes === null) return
 
-      // Sincronizar miembros: agregar nuevos, eliminar removidos
-      const nombresActuales = new Set(miembrosActuales.map((m) => m.nombre))
-      const nombresNuevos = new Set(miembros)
-
-      // Agregar los que no estaban
-      for (const nombre of miembros) {
-        if (!nombresActuales.has(nombre)) {
-          await proyectosService.addMiembro(proyecto.id, nombre, 'miembro')
-        }
+      // Sincronizar integrantes: agregar nuevos, cambiar rol, eliminar removidos
+      const porNombre = new Map(miembrosActuales.map((m) => [m.nombre, m]))
+      const nuevos = new Set(integrantes.map((i) => i.nombre))
+      for (const i of integrantes) {
+        const actual = porNombre.get(i.nombre)
+        if (!actual) await proyectosService.addMiembro(proyecto.id, i.nombre, i.rol)
+        else if (rolDe(actual.rol) !== i.rol) await proyectosService.updateMiembro(proyecto.id, actual.id, i.rol)
       }
-      // Eliminar los que se quitaron
       for (const m of miembrosActuales) {
-        if (!nombresNuevos.has(m.nombre)) {
-          await proyectosService.deleteMiembro(proyecto.id, m.id)
-        }
+        if (!nuevos.has(m.nombre)) await proyectosService.deleteMiembro(proyecto.id, m.id)
       }
     },
     onSuccess: () => {
@@ -1062,6 +1063,12 @@ function EditarProyectoModal({ proyecto, onClose }: { proyecto: Proyecto; onClos
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {/* Columna izquierda: datos */}
         <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <ClienteProductoCampos
+              clienteId={clienteId} productoId={productoId} clienteTexto={proyecto.clienteId ? undefined : proyecto.cliente}
+              onCliente={setClienteId} onProducto={setProductoId}
+            />
+          </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Nombre</label>
             <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="field" />
@@ -1070,11 +1077,7 @@ function EditarProyectoModal({ proyecto, onClose }: { proyecto: Proyecto; onClos
             <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Descripción</label>
             <textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} rows={3} className="field resize-none" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Cliente</label>
-              <input value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} className="field" />
-            </div>
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Estado</label>
               <select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as ProyectoEstado })} className="field">
@@ -1090,23 +1093,24 @@ function EditarProyectoModal({ proyecto, onClose }: { proyecto: Proyecto; onClos
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Fecha fin</label>
-              <input type="date" value={form.fechaFin} onChange={(e) => setForm({ ...form, fechaFin: e.target.value })} className="field" />
+              <input type="date" min={form.fechaInicio || undefined} value={form.fechaFin} onChange={(e) => setForm({ ...form, fechaFin: e.target.value })} className="field" />
             </div>
           </div>
         </div>
 
-        {/* Columna derecha: miembros */}
+        {/* Columna derecha: integrantes con rol */}
         <div>
           <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">
-            Miembros <span className="text-gray-400 normal-case font-normal">({miembros.length} seleccionados)</span>
+            Integrantes <span className="text-gray-400 normal-case font-normal">({lista.length})</span>
           </label>
-          <MiembrosSelector seleccionados={miembros} onChange={setMiembros} />
+          <IntegrantesEditor value={lista} onChange={setIntegrantes} alto="max-h-56" />
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-4 mt-2 border-t border-gray-100">
+      <div className="flex items-center justify-end gap-2 pt-4 mt-2 border-t border-gray-100">
+        {!productoId && <span className="mr-auto text-[0.7rem] text-amber-600">Elige el producto o servicio del proyecto.</span>}
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button isLoading={guardar.isPending} disabled={!form.nombre.trim() || !form.fechaFin} onClick={() => guardar.mutate()}>
+        <Button isLoading={guardar.isPending} disabled={!form.nombre.trim() || !form.fechaFin || !productoId} onClick={() => guardar.mutate()}>
           Guardar cambios
         </Button>
       </div>

@@ -1,5 +1,8 @@
 import { api } from '@/lib/axios'
-import { parseProyecto, parseTarea, joinAsignados, type Proyecto, type Tarea, type MiembroProyecto, type TareaEstado, type EstatusProyecto } from '@/types/proyecto.types'
+import {
+  parseProyecto, parseTarea, joinAsignados, type Proyecto, type Tarea, type MiembroProyecto, type TareaEstado, type EstatusProyecto,
+  type OpcionesVinculoProyecto, type PrellenadoProyectos, type ItemProyectoProducto,
+} from '@/types/proyecto.types'
 
 /** Traduce { asignados: string[] } del modelo de UI a { asignadoA: string } que espera el backend */
 function toTareaBody(payload: Partial<Tarea>): Record<string, unknown> {
@@ -49,6 +52,26 @@ export const proyectosService = {
 
   async delete(id: number): Promise<void> {
     await api.delete(`/proyectos/${id}`)
+  },
+
+  // Vínculo con cliente + producto
+  async opcionesVinculo(): Promise<OpcionesVinculoProyecto> {
+    const { data } = await api.get('/proyectos/opciones')
+    return data.data as OpcionesVinculoProyecto
+  },
+
+  /** Lo que se puede precargar del proyecto de cada producto (nombre, fechas, integrantes con rol…). */
+  async prellenado(clienteId: number | null, productoIds: number[]): Promise<PrellenadoProyectos> {
+    const { data } = await api.get('/proyectos/prellenado', {
+      params: { ...(clienteId ? { clienteId } : {}), productoIds: productoIds.join(',') },
+    })
+    return data.data as PrellenadoProyectos
+  },
+
+  /** Crea (o vincula) los proyectos de los productos de un cliente, todo junto. */
+  async crearDesdeProductos(clienteId: number, items: ItemProyectoProducto[]): Promise<{ creados: { id: number; nombre: string; productoId: number }[]; vinculados: number }> {
+    const { data } = await api.post('/proyectos/desde-productos', { clienteId, items })
+    return data.data
   },
 
   // Tareas (Kanban)
@@ -103,6 +126,10 @@ export const proyectosService = {
       nombre: String(r['nombre'] ?? nombre),
       rol: String(r['rol'] ?? rol),
     }
+  },
+
+  async updateMiembro(proyectoId: number, miembroId: number, rol: string): Promise<void> {
+    await api.put(`/proyectos/${proyectoId}/miembros/${miembroId}`, { rol })
   },
 
   async deleteMiembro(proyectoId: number, miembroId: number): Promise<void> {

@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Home, Calendar, Headphones, Megaphone, Receipt, LogOut,
-  PanelLeftClose, PanelLeftOpen, Users, Box, FileText, FileSpreadsheet,
+  PanelLeftClose, PanelLeftOpen, Users, Box, FileText, FileSpreadsheet, FolderKanban,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { usePortalAcciones } from '@/hooks/usePortalAcciones'
@@ -17,6 +17,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Principal', to: '/portal-cliente', icon: <Home className="h-5 w-5 flex-shrink-0" /> },
+  { label: 'Proyectos', to: '/portal-cliente/proyectos', icon: <FolderKanban className="h-5 w-5 flex-shrink-0" />, requiereAccion: 'ver-proyectos' },
   { label: 'Reuniones', to: '/portal-cliente/reuniones', icon: <Calendar className="h-5 w-5 flex-shrink-0" /> },
   { label: 'Atención', to: '/portal-cliente/atencion', icon: <Headphones className="h-5 w-5 flex-shrink-0" /> },
   { label: 'Canales', to: '/portal-cliente/canales', icon: <Megaphone className="h-5 w-5 flex-shrink-0" /> },
