@@ -7,6 +7,7 @@ const clienteFechasCron = require('../controllers/clienteFechasCronController');
 const clienteAgendaCron = require('../controllers/clienteAgendaCronController');
 const clienteIncSlaCron = require('../controllers/clienteIncidenciasSlaCronController');
 const citaRecordatorioCron = require('../controllers/citaRecordatorioCronController');
+const citaCierreCron = require('../controllers/citaCierreCronController');
 const caso = require('../controllers/casoController');
 const casoCategoria = require('../controllers/casoCategoriaController');
 const cita = require('../controllers/citaController');
@@ -82,6 +83,8 @@ router.patch('/citas/solicitudes/:id', auth.authenticateToken, requireActionAcce
 router.get('/citas/propuestas', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.listPropuestasReunion);
 router.post('/citas/propuestas/:id/resolver', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.resolverPropuestaReunion);
 router.post('/citas/recordatorios/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), citaRecordatorioCron.runNow);
+router.post('/citas/cierre/run-cron', auth.authenticateToken, auth.verificarRol(['AD']), citaCierreCron.runNow);
+router.post('/citas/:id/confirmar-cierre', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.confirmarCierre);
 router.get('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-ver'), cita.getById);
 router.patch('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.update);
 router.delete('/citas/:id', auth.authenticateToken, requireActionAccess('atencion-cliente', 'citas-gestionar'), cita.remove);

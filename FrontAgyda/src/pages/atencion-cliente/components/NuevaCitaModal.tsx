@@ -44,6 +44,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
   const [hora, setHora] = useState(fechaHoraPreset ? fechaHoraPreset.slice(11, 16) : '')
   const [duracionMin, setDuracionMin] = useState('30')
   const [telefono, setTelefono] = useState('')
+  const [enlace, setEnlace] = useState('')
   const [recordar, setRecordar] = useState<number[]>([1440, 60])
   const [tratamientoId, setTratamientoId] = useState(tratamientoPreset ? String(tratamientoPreset.id) : '')
   // Solo el supervisor puede elegir otro asesor; para cualquier otro usuario
@@ -115,6 +116,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
 
   const fechaHora = fecha && hora ? `${fecha}T${hora}:00` : ''
   const puedeGuardar = (contactoId || contactoPreset) && titulo.trim() && fechaHora && !errorHorario
+    && (modalidad !== 'videollamada' || enlace.trim())
 
   const crear = useMutation({
     mutationFn: async () => {
@@ -125,6 +127,7 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
         duracionMin: Number(duracionMin) || 30,
         motivo: motivo.trim() || undefined,
         telefono: modalidad === 'telefonica' && telefono.trim() ? telefono.trim() : undefined,
+        enlace: modalidad === 'videollamada' ? enlace.trim() : undefined,
         asignadoA: asignadoAIdNum || undefined,
         recordarMinAntes: recordar,
       }
@@ -229,7 +232,10 @@ export function NuevaCitaModal({ onClose, onCreated, contactoPreset, tratamiento
         {errorHorario && <p className="-mt-2 text-[0.72rem] font-semibold text-red-500">{errorHorario}</p>}
 
         {modalidad === 'videollamada' && (
-          <p className="-mt-1 text-[0.72rem] text-gray-400">El enlace de la videollamada se genera automáticamente al agendar.</p>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Enlace de la videollamada</label>
+            <input value={enlace} onChange={(e) => setEnlace(e.target.value)} className="field" placeholder="https://meet.google.com/xxx-xxxx-xxx" />
+          </div>
         )}
         {modalidad === 'telefonica' && (
           <div>

@@ -7,6 +7,7 @@ import { useSocketInit } from '@/hooks/useSocket'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { BanioAlertWatcher } from '@/components/ui/BanioAlertWatcher'
 import { TicketAlertModal } from '@/components/ui/TicketAlertModal'
+import { CitaCierreModal } from '@/components/ui/CitaCierreModal'
 import { ReglamentoAlertModal } from '@/components/ui/ReglamentoAlertModal'
 import { CambiarPasswordObligatorioModal } from '@/components/ui/CambiarPasswordObligatorioModal'
 import { VentaAlertWatcher } from '@/components/ventas/VentaAlertWatcher'
@@ -31,6 +32,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
       <CambiarPasswordObligatorioModal />
       <BanioAlertWatcher />
       <TicketAlertModal />
+      <CitaCierreModal />
       {!isCL && <ReglamentoAlertModal />}
       {isAllowed('ventas') && <VentaAlertWatcher />}
       <WebphoneFrame />

@@ -15,6 +15,7 @@ interface NotificationState {
   unreadCount: number
   isLoading: boolean
   ticketAlerts: NotificationItem[]
+  citaCierreAlerts: NotificationItem[]
   setNotifications: (items: NotificationItem[]) => void
   addNotification: (item: NotificationItem) => void
   markAsRead: (id: number) => void
@@ -22,6 +23,8 @@ interface NotificationState {
   setLoading: (v: boolean) => void
   pushTicketAlert: (item: NotificationItem) => void
   dismissTicketAlert: (id: number) => void
+  pushCitaCierreAlert: (item: NotificationItem) => void
+  dismissCitaCierreAlert: (id: number) => void
 }
 
 export const useNotificationStore = create<NotificationState>()((set) => ({
@@ -29,6 +32,7 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
   unreadCount: 0,
   isLoading: false,
   ticketAlerts: [],
+  citaCierreAlerts: [],
 
   setNotifications: (items) =>
     set({ notifications: items, unreadCount: items.filter((n) => !n.leida).length }),
@@ -79,4 +83,10 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
 
   dismissTicketAlert: (id) =>
     set((s) => ({ ticketAlerts: s.ticketAlerts.filter((a) => a.id !== id) })),
+
+  pushCitaCierreAlert: (item) =>
+    set((s) => ({ citaCierreAlerts: [...s.citaCierreAlerts, item] })),
+
+  dismissCitaCierreAlert: (id) =>
+    set((s) => ({ citaCierreAlerts: s.citaCierreAlerts.filter((a) => a.id !== id) })),
 }))

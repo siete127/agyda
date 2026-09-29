@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { EmojiPicker } from '@/components/ui/EmojiPicker'
 import type { MensajeriaCanal, MensajeriaMensaje, MensajeriaReaccion } from '@/types/mensajeria.types'
 import { parseMensajeriaMensaje } from '@/types/mensajeria.types'
+import { SolicitarReunionModal } from '@/pages/portal-cliente/components/SolicitarReunionModal'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -84,6 +85,8 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
   const [textoEdicion, setTextoEdicion] = useState('')
   const [confirmarEliminarId, setConfirmarEliminarId] = useState<number | null>(null)
   const [miembrosOpen, setMiembrosOpen] = useState(false)
+  const [solicitarReunionModalidad, setSolicitarReunionModalidad] = useState<'videollamada' | 'telefonica' | null>(null)
+  const esPortalCliente = user?.tipoUsuario?.toUpperCase() === 'CL'
   const bottomRef = useRef<HTMLDivElement>(null)
   const mensajesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -444,12 +447,32 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
             )}
           </div>
         )}
-        <button className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/70 opacity-50 cursor-not-allowed" title="Llamada de voz (no disponible)" disabled>
-          <Phone className="h-3.5 w-3.5" />
-        </button>
-        <button className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/70 opacity-50 cursor-not-allowed" title="Videollamada (no disponible)" disabled>
-          <Video className="h-3.5 w-3.5" />
-        </button>
+        {esPortalCliente ? (
+          <button
+            onClick={() => setSolicitarReunionModalidad('telefonica')}
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white hover:bg-white/15 transition-colors"
+            title="Solicitar llamada"
+          >
+            <Phone className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <button className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/70 opacity-50 cursor-not-allowed" title="Llamada de voz (no disponible)" disabled>
+            <Phone className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {esPortalCliente ? (
+          <button
+            onClick={() => setSolicitarReunionModalidad('videollamada')}
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white hover:bg-white/15 transition-colors"
+            title="Solicitar reunión"
+          >
+            <Video className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <button className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/70 opacity-50 cursor-not-allowed" title="Videollamada (no disponible)" disabled>
+            <Video className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           onClick={() => minimizarChatFlotante(canal.id)}
           className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white hover:bg-white/15 transition-colors"
@@ -753,6 +776,13 @@ export function MensajeriaChatWindow({ canal, offset }: MensajeriaChatWindowProp
           </button>
         </div>
       </div>
+
+      {solicitarReunionModalidad && (
+        <SolicitarReunionModal
+          modalidadPreset={solicitarReunionModalidad}
+          onClose={() => setSolicitarReunionModalidad(null)}
+        />
+      )}
     </div>
   )
 }
