@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Menu, PanelLeftClose, PanelLeftOpen, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
+import { Menu, Search, LifeBuoy, Newspaper, LayoutDashboard, Headset, Sun, Moon, MonitorSmartphone, LayoutGrid } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/stores/ui.store'
@@ -68,7 +68,7 @@ function urlConAgenteSiAplica(url: string, user: { id: number; nombres: string }
 }
 
 export function Topbar() {
-  const { sidebarCollapsed, toggleSidebar, setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
+  const { setMobileMenuOpen, isMobileMenuOpen } = useUIStore()
   const dashboardEditMode = useUIStore((s) => s.dashboardEditMode)
   const setDashboardEditMode = useUIStore((s) => s.setDashboardEditMode)
   const user = useCurrentUser()
@@ -211,7 +211,7 @@ export function Topbar() {
 
   return (
     <>
-    <header className="flex h-[64px] flex-shrink-0 items-center gap-3 border-b border-surface-border bg-card px-5">
+    <header className="flex h-[64px] flex-shrink-0 items-center gap-3 bg-surface px-5">
 
       {/* Izquierda: toggle + logo */}
       <div className="flex items-center gap-2 min-w-0">
@@ -223,28 +223,15 @@ export function Topbar() {
           <Menu className="h-5 w-5" />
         </button>
 
-        {/* Desktop collapse */}
-        <button
-          onClick={toggleSidebar}
-          className="hidden rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 transition-colors md:flex"
-          title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
-        >
-          {sidebarCollapsed
-            ? <PanelLeftOpen  className="h-4 w-4" />
-            : <PanelLeftClose className="h-4 w-4" />}
-        </button>
-
-        <div className="mx-1 h-5 w-px bg-surface-border hidden md:block" />
-
         {/* Logo */}
-        <div className="hidden items-center gap-2 md:flex">
-          <img src={logoSrc} alt={branding.nombreCorto} className="h-8 w-auto max-w-[120px] flex-shrink-0 object-contain" />
+        <div className="hidden items-center gap-3 md:flex">
+          <img src={logoSrc} alt={branding.nombreCorto} className="h-9 w-auto max-w-[130px] flex-shrink-0 object-contain" />
           <div className="leading-tight">
-            <p className="text-[1rem] font-extrabold tracking-tight text-ink">
+            <p className="text-[15px] font-extrabold tracking-tight text-ink">
               {branding.nombreCorto}
             </p>
             {branding.eslogan && (
-              <p className="text-[7.5px] font-semibold -mt-0.5 text-ink-tertiary uppercase" style={{ letterSpacing: '0.12em' }}>
+              <p className="text-[10px] font-semibold text-ink-tertiary uppercase tracking-wide">
                 {branding.eslogan}
               </p>
             )}
@@ -254,10 +241,13 @@ export function Topbar() {
         <h1 className="text-[0.9rem] font-semibold text-ink truncate md:hidden">{pageTitle}</h1>
       </div>
 
-      {/* Centro: buscador */}
-      <div ref={containerRef} className="hidden flex-1 max-w-sm mx-auto sm:flex relative">
-        <div className="relative w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-tertiary" />
+      {/* Centro: buscador — flex-1 + justify-center: centra la barra en el
+         espacio disponible entre el logo y los íconos de la derecha, no
+         queda descuadrada como con un simple mx-auto si ambos lados pesan
+         distinto (igual técnica que PortalClienteHeader). */}
+      <div ref={containerRef} className="hidden flex-1 justify-center sm:flex relative">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#0a2f71]" />
           <input
             ref={inputRef}
             type="search"
@@ -266,10 +256,8 @@ export function Topbar() {
             onFocus={() => query && setOpen(true)}
             onKeyDown={handleKey}
             placeholder="Buscar en AGYDA…"
-            className="w-full rounded-full border-0 py-2 pl-9 pr-4 text-xs text-ink placeholder-ink-tertiary outline-none transition focus:ring-2 focus:ring-brand/15"
-            style={{ background: '#F2F4F8' }}
+            className="w-full rounded-full border border-[#0a2f71] bg-card py-2 pl-9 pr-4 text-xs text-ink placeholder-ink-tertiary outline-none transition focus:border-[#0a2f71] focus:ring-2 focus:ring-[#0a2f71]/20"
           />
-        </div>
 
         {open && results.length > 0 && (
           <div className="absolute top-full mt-1.5 w-72 rounded-2xl border border-surface-border bg-card shadow-lg z-50 overflow-hidden">
@@ -293,6 +281,7 @@ export function Topbar() {
             })}
           </div>
         )}
+        </div>
       </div>
 
       {/* Derecha: notificaciones + perfil */}

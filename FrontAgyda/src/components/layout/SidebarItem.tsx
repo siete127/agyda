@@ -35,14 +35,13 @@ export function SidebarItem({ to, label, icon, isCollapsed, badge, onClick }: Si
       type="button"
       onClick={handleClick}
       className={clsx(
-        'group relative flex w-full items-center gap-3 rounded-xl text-[0.85rem] font-medium',
-        'transition-all duration-150 select-none outline-none',
-        isCollapsed ? 'justify-center px-0 py-3' : 'px-3 py-2.5',
+        'group relative flex w-full items-center gap-3 rounded-full text-sm font-semibold',
+        'transition-colors select-none outline-none',
+        isCollapsed ? 'justify-center px-0 py-3' : 'px-4 py-2.5',
         isActive
-          ? 'text-brand-muted'
-          : 'text-[#B8C2E0] hover:bg-white/[0.05] hover:text-[#DCE3F5]',
+          ? 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md'
+          : 'text-white/70 hover:bg-white/10 hover:text-white',
       )}
-      style={isActive ? { backgroundColor: 'rgba(47,111,237,0.16)' } : undefined}
     >
       {/* Tooltip en modo colapsado */}
       {isCollapsed && (
@@ -52,27 +51,19 @@ export function SidebarItem({ to, label, icon, isCollapsed, badge, onClick }: Si
       )}
 
       {/* Ícono */}
-      <span className={clsx(
-        'flex flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150',
-        isCollapsed ? 'h-8 w-8' : 'h-7 w-7',
-        isActive
-          ? 'text-brand-muted'
-          : 'text-[#8B96A8] group-hover:text-[#C5CDD8] group-hover:bg-white/[0.04]',
-      )}>
-        <IconComponent className={clsx(
-          'transition-colors',
-          isCollapsed ? 'h-[1.05rem] w-[1.05rem]' : 'h-[0.95rem] w-[0.95rem]',
-        )} />
-      </span>
+      <IconComponent className={clsx('flex-shrink-0', isCollapsed ? 'h-[1.05rem] w-[1.05rem]' : 'h-[0.95rem] w-[0.95rem]')} />
 
       {/* Etiqueta + badge */}
       {!isCollapsed && (
         <span className="flex flex-1 items-center justify-between gap-2 min-w-0">
-          <span className={clsx('truncate leading-none', isActive ? 'text-brand-muted' : '')}>
+          <span className="truncate leading-none">
             {label}
           </span>
           {!!badge && badge > 0 && (
-            <span className="flex-shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[0.6rem] font-bold text-white leading-none">
+            <span className={clsx(
+              'flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold leading-none',
+              isActive ? 'bg-white/90 text-[#00537f]' : 'bg-brand text-white',
+            )}>
               {badge > 99 ? '99+' : badge}
             </span>
           )}
@@ -81,7 +72,7 @@ export function SidebarItem({ to, label, icon, isCollapsed, badge, onClick }: Si
 
       {/* Badge en modo colapsado — punto */}
       {isCollapsed && !!badge && badge > 0 && (
-        <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand border-2 border-[#0B1730]" />
+        <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand border-2 border-[#0a2f71]" />
       )}
     </button>
   )

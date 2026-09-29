@@ -28,7 +28,7 @@ const DASHBOARD_CARD_IDS = [
   'r-mis-enlaces',
 ];
 
-const SIDEBAR_STYLES = ['degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];
+const SIDEBAR_STYLES = ['solido-portal', 'degradado-azul', 'solido-oscuro', 'color-marca', 'gradiente-marca'];
 
 // Config por defecto — refleja lo que hoy está hardcodeado en el frontend.
 const DEFAULT_CONFIG = {
@@ -41,8 +41,8 @@ const DEFAULT_CONFIG = {
     faviconId: null,
     loginImagenId: null,
     colorBrand: '#2F6FED',
-    sidebarEstilo: 'degradado-azul',
-    sidebarBurbujas: true,
+    sidebarEstilo: 'solido-portal',
+    sidebarBurbujas: false,
     fondoClaro: '#F7F9FC',
     fondoOscuro: '#0F131B',
   },

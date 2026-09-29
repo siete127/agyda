@@ -84,7 +84,7 @@ export function SidebarFlyout({ groupLabel, groupIcon, routes, position, onClose
       ref={panelRef}
       role="menu"
       className={clsx(
-        'flex animate-flyout-in flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-[#0D1B3E] via-[#1a2f5e] to-[#0D1B3E] shadow-2xl',
+        'flex animate-flyout-in flex-col rounded-2xl border border-white/10 bg-[#0a2f71] shadow-2xl',
         hasDescriptions ? 'w-[340px]' : 'w-[260px]',
       )}
       style={{
@@ -117,7 +117,7 @@ export function SidebarFlyout({ groupLabel, groupIcon, routes, position, onClose
                   className={clsx(
                     'group flex items-start gap-2.5 rounded-xl border p-2 text-left transition-all',
                     isActive
-                      ? 'border-white/20 bg-white/10'
+                      ? 'border-transparent bg-gradient-to-br from-[#19b6bc] to-[#00537f] shadow-md'
                       : 'border-transparent hover:border-white/10 hover:bg-white/[0.06]',
                   )}
                 >
@@ -156,7 +156,7 @@ export function SidebarFlyout({ groupLabel, groupIcon, routes, position, onClose
                 >
                   <span className={clsx(
                     'inline-flex items-center gap-2.5 rounded-full px-2 py-1.5 transition-colors',
-                    isActive ? 'bg-white/15 text-white' : 'text-[#DCE3F5]',
+                    isActive ? 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md' : 'text-[#DCE3F5]',
                   )}>
                     {renderIcon(route.icon, 'h-3.5 w-3.5 flex-shrink-0')}
                     {route.label}

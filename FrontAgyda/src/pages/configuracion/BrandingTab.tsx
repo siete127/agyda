@@ -21,6 +21,7 @@ const PASOS = [
 ] as const
 
 const SIDEBAR_PRESETS: { key: SidebarEstilo; label: string; bg: string }[] = [
+  { key: 'solido-portal',   label: 'Sólido azul (Portal)', bg: '#0a2f71' },
   { key: 'degradado-azul',  label: 'Degradado azul',   bg: 'linear-gradient(180deg,#14225C,#2C57C4)' },
   { key: 'solido-oscuro',   label: 'Sólido oscuro',    bg: '#0B1730' },
   { key: 'color-marca',     label: 'Color de marca',   bg: 'rgb(var(--color-brand-dark))' },
@@ -299,7 +300,7 @@ export function BrandingTab() {
             <p className="mb-2 text-[0.8rem] font-semibold text-gray-700">Estilo del menú lateral</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {SIDEBAR_PRESETS.map((p) => {
-                const activo = (form.sidebarEstilo ?? 'degradado-azul') === p.key
+                const activo = (form.sidebarEstilo ?? 'solido-portal') === p.key
                 return (
                   <button
                     key={p.key}
@@ -322,22 +323,6 @@ export function BrandingTab() {
                 )
               })}
             </div>
-
-            <label className="mt-4 flex cursor-pointer items-center gap-2.5 select-none">
-              <span className={clsx(
-                'relative inline-flex h-5 w-9 rounded-full border-2 border-transparent transition-colors',
-                (form.sidebarBurbujas ?? true) ? 'bg-violet-600' : 'bg-gray-200',
-              )}>
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={form.sidebarBurbujas ?? true}
-                  onChange={(e) => set('sidebarBurbujas', e.target.checked)}
-                />
-                <span className={clsx('inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', (form.sidebarBurbujas ?? true) ? 'translate-x-4' : 'translate-x-0')} />
-              </span>
-              <span className="text-[0.8rem] font-semibold text-gray-700">Burbujas animadas en el menú</span>
-            </label>
 
             {/* Fondo de la app */}
             <p className="mb-2 mt-6 text-[0.8rem] font-semibold text-gray-700">Color de fondo de la aplicación</p>

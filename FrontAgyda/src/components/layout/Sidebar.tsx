@@ -1,4 +1,4 @@
-import { X, LogOut, ChevronRight, Rocket } from 'lucide-react'
+import { X, LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import * as Icons from 'lucide-react'
 import { useState } from 'react'
 import { useUIStore } from '@/stores/ui.store'
@@ -16,12 +16,12 @@ import { ROUTES } from '@/router/routes.config'
 import { NAV_GROUPS } from '@/router/navGroups'
 import { disconnectSocket } from '@/lib/socket'
 import { usePersonalizacion } from '@/providers/personalizacion.context'
-import { personalizacionService } from '@/services/personalizacion.service'
 import { clsx } from 'clsx'
 import { useNavigate, useLocation } from 'react-router-dom'
 
-// Burbujas del efecto de agua: posición horizontal (%), tamaño (px), opacidad,
-// duración del ascenso (s) y retraso inicial (s) — variados para que no suban en fila.
+// Burbujas del efecto de agua (opcional, ver branding.sidebarBurbujas):
+// posición horizontal (%), tamaño (px), opacidad, duración del ascenso (s) y
+// retraso inicial (s) — variados para que no suban en fila.
 const BUBBLES = [
   { left: 8,  size: 10, opacity: 0.35, duration: 10, delay: 0    },
   { left: 22, size: 16, opacity: 0.25, duration: 13, delay: 2.5  },
@@ -42,7 +42,7 @@ const GROUPS = NAV_GROUPS
 export function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { sidebarCollapsed, isMobileMenuOpen, setMobileMenuOpen } = useUIStore()
+  const { sidebarCollapsed, toggleSidebar, isMobileMenuOpen, setMobileMenuOpen } = useUIStore()
   const clearSession  = useAuthStore((s) => s.clearSession)
   const user          = useCurrentUser()
   const userRole      = user?.tipoUsuario?.toUpperCase() ?? ''
@@ -50,17 +50,18 @@ export function Sidebar() {
   const { isLoading: cargandoAcciones, can } = useActionAccess()
   const unreadCount   = useNotificationStore((s) => s.unreadCount)
   const { branding }  = usePersonalizacion()
-  const logoCompactoSrc = personalizacionService.assetUrl(branding.logoCompactoId)
 
-  // ── Estilo del sidebar (preset por empresa). Los 4 presets son oscuros para
-  //    que el texto claro del menú (text-[#B8C2E0]…) siga legible. ──
-  const estilo = branding.sidebarEstilo ?? 'degradado-azul'
+  // ── Estilo del sidebar (preset por empresa). Los 5 presets son oscuros para
+  //    que el texto claro del menú (text-[#B8C2E0]…) siga legible. Default
+  //    actual: mismo azul sólido del sidebar del Portal de Cliente. ──
+  const estilo = branding.sidebarEstilo ?? 'solido-portal'
   const sidebarBg: React.CSSProperties =
     estilo === 'solido-oscuro'    ? { background: '#0B1730' }
     : estilo === 'color-marca'    ? { background: 'rgb(var(--color-brand-dark))' }
     : estilo === 'gradiente-marca' ? { background: 'linear-gradient(180deg, rgb(var(--color-brand-dark)) 0%, rgb(var(--color-brand)) 100%)' }
-    : /* degradado-azul */          { background: 'linear-gradient(180deg, #14225C 0%, #1E3D8F 55%, #2C57C4 100%)' }
-  const mostrarBurbujas = branding.sidebarBurbujas ?? true
+    : estilo === 'degradado-azul'  ? { background: 'linear-gradient(180deg, #14225C 0%, #1E3D8F 55%, #2C57C4 100%)' }
+    : /* solido-portal */            { background: '#0a2f71' }
+  const mostrarBurbujas = branding.sidebarBurbujas ?? false
 
   const ticketsPendientes = 0
 
@@ -158,7 +159,11 @@ export function Sidebar() {
 
       <aside
         className={clsx(
-          'relative flex h-screen flex-col overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0',
+          // "Flotante": separado de los bordes de la ventana (my-4 ml-4) y con
+          // esquinas redondeadas + sombra propia, igual que el sidebar del
+          // Portal de Cliente — en vez de pegado a la izquierda ocupando toda
+          // la altura de la pantalla.
+          'relative my-4 ml-4 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-3xl shadow-2xl shadow-black/30 transition-[width] duration-300 ease-in-out flex-shrink-0',
           sidebarCollapsed ? 'w-[76px]' : 'w-[240px]',
           'fixed left-0 top-0 z-40 md:relative md:z-auto',
           isMobileMenuOpen ? 'flex' : 'hidden md:flex',
@@ -205,23 +210,23 @@ export function Sidebar() {
           </button>
         )}
 
-        {/* ── Logo — solo visible en modo colapsado, para no perder identidad ── */}
-        {sidebarCollapsed && (
-          <div className="relative z-10 flex h-[64px] flex-shrink-0 items-center justify-center">
-            {logoCompactoSrc ? (
-              <img src={logoCompactoSrc} alt={branding.nombreCorto} className="h-9 w-9 rounded-lg object-contain" />
-            ) : (
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand">
-                <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 1 L23 13 L13 23" />
-                </svg>
-              </div>
-            )}
-          </div>
-        )}
+        {/* ── Contraer/expandir — mismo botón que el sidebar del Portal de Cliente ── */}
+        <button
+          type="button"
+          onClick={() => toggleSidebar()}
+          title={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'}
+          aria-label={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'}
+          className={clsx(
+            'relative z-20 mt-3 flex w-full flex-shrink-0 cursor-pointer items-center gap-2 py-3 text-sm font-semibold text-white/60 outline-none transition-colors hover:bg-white/10 hover:text-white',
+            sidebarCollapsed ? 'justify-center px-0' : 'mx-3 w-[calc(100%-1.5rem)] rounded-full px-3'
+          )}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5 flex-shrink-0" /> : <PanelLeftClose className="h-5 w-5 flex-shrink-0" />}
+          {!sidebarCollapsed && <span>Contraer</span>}
+        </button>
 
         {/* ── Navegación: items grandes tipo botón ── */}
-        <nav className="relative z-10 flex-1 overflow-y-auto px-3 pt-5 pb-3 space-y-1.5">
+        <nav className="relative z-10 flex-1 overflow-y-auto px-3 pt-3 pb-3 space-y-2.5">
           {GROUPS.map((group) => {
             const routes = getGroupRoutes(group.keys)
             if (routes.length === 0) return null
@@ -243,25 +248,21 @@ export function Sidebar() {
                   }}
                   title={sidebarCollapsed ? group.label : undefined}
                   className={clsx(
-                    'group flex w-full items-center gap-3 rounded-xl transition-colors',
-                    sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-3.5 py-3',
-                    isActive ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]',
+                    'group flex w-full items-center gap-3 rounded-full font-semibold transition-colors',
+                    sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-4 py-3.5',
+                    isActive
+                      ? 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
                   )}
                 >
-                  <span className={clsx(
-                    'flex flex-shrink-0 items-center justify-center rounded-full',
-                    sidebarCollapsed ? 'h-11 w-11' : 'h-9 w-9',
-                    isActive ? 'bg-brand/25 text-brand-muted' : 'text-[#B8C2E0] group-hover:text-white',
-                  )}>
-                    {GroupIcon && <GroupIcon className={sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]'} />}
-                  </span>
+                  {GroupIcon && <GroupIcon className={clsx('flex-shrink-0', sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]')} />}
                   {!sidebarCollapsed && (
-                    <span className={clsx('flex-1 text-left text-[0.9rem] font-medium', isActive ? 'text-white' : 'text-[#DCE3F5]')}>
+                    <span className="flex-1 text-left text-sm">
                       {group.label}
                     </span>
                   )}
                   {!sidebarCollapsed && !!BADGES[routes[0].path] && BADGES[routes[0].path] > 0 && (
-                    <span className="flex-shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[0.6rem] font-bold text-white leading-none">
+                    <span className="flex-shrink-0 rounded-full bg-white/90 px-1.5 py-0.5 text-[0.6rem] font-bold text-[#00537f] leading-none">
                       {BADGES[routes[0].path] > 99 ? '99+' : BADGES[routes[0].path]}
                     </span>
                   )}
@@ -285,25 +286,19 @@ export function Sidebar() {
                     }
                   }}
                   className={clsx(
-                    'group flex w-full items-center gap-3 rounded-xl transition-colors',
-                    sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-3.5 py-3',
-                    (isOpen || isFlyoutOpen) ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]',
+                    'group flex w-full items-center gap-3 rounded-full font-semibold transition-colors',
+                    sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-4 py-3.5',
+                    (isOpen || isFlyoutOpen) ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white',
                   )}
                 >
-                  <span className={clsx(
-                    'flex flex-shrink-0 items-center justify-center rounded-full',
-                    sidebarCollapsed ? 'h-11 w-11' : 'h-9 w-9',
-                    (isOpen || isFlyoutOpen) ? 'bg-brand/25 text-brand-muted' : 'text-[#B8C2E0] group-hover:text-white',
-                  )}>
-                    {GroupIcon && <GroupIcon className={sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]'} />}
-                  </span>
+                  {GroupIcon && <GroupIcon className={clsx('flex-shrink-0', sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]')} />}
                   {!sidebarCollapsed && (
                     <>
-                      <span className={clsx('flex-1 text-left text-[0.9rem] font-medium', isOpen ? 'text-white' : 'text-[#DCE3F5]')}>
+                      <span className="flex-1 text-left text-sm">
                         {group.label}
                       </span>
                       <ChevronRight
-                        className="h-4 w-4 flex-shrink-0 text-[#8E9FD4] transition-transform duration-200"
+                        className="h-4 w-4 flex-shrink-0 transition-transform duration-200"
                         style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}
                       />
                     </>
@@ -312,8 +307,8 @@ export function Sidebar() {
 
                 {!sidebarCollapsed && (
                   <div
-                    className="space-y-0.5 overflow-hidden pl-4 transition-all duration-200"
-                    style={{ maxHeight: isOpen ? '999px' : '0px', opacity: isOpen ? 1 : 0, marginTop: isOpen ? '0.25rem' : 0 }}
+                    className="space-y-2.5 overflow-hidden pl-4 transition-all duration-200"
+                    style={{ maxHeight: isOpen ? '999px' : '0px', opacity: isOpen ? 1 : 0, marginTop: isOpen ? '0.5rem' : 0 }}
                   >
                     {routes.map((route) => (
                       <SidebarItem
@@ -333,37 +328,22 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* ── Tarjeta de tagline ── */}
-        {!sidebarCollapsed && (
-          <div className="relative z-10 flex-shrink-0 px-3 pb-4">
-            <div className="flex items-start gap-2.5 rounded-2xl p-4" style={{ background: 'rgba(47,111,237,0.14)' }}>
-              <Rocket className="h-4 w-4 flex-shrink-0 mt-0.5 text-brand-muted" />
-              <p className="text-[0.78rem] leading-snug text-[#DCE3F5]">
-                Conectados hoy, resolvemos el mañana.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* ── Footer: perfil + logout ── */}
-        <div className="relative z-10 flex-shrink-0 px-3 pb-4">
-          <div className="h-px bg-white/[0.06] mb-3" />
-
+        <div className={clsx('relative z-10 mt-4 flex flex-shrink-0 flex-col gap-2.5 border-t border-white/10 pb-4 pt-4', sidebarCollapsed ? 'px-0' : 'px-3')}>
           <button
             onClick={handleLogout}
             title={sidebarCollapsed ? 'Cerrar sesión' : undefined}
             className={clsx(
-              'flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[0.78rem] font-medium transition-colors',
-              'text-[#A9B4DE] hover:bg-red-500/10 hover:text-red-400',
-              sidebarCollapsed && 'justify-center px-2',
+              'flex items-center gap-3 rounded-full py-3 text-left text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white',
+              sidebarCollapsed ? 'justify-center px-0' : 'px-4'
             )}
           >
-            <LogOut className="h-4 w-4 flex-shrink-0" />
+            <LogOut className="h-5 w-5 flex-shrink-0" />
             {!sidebarCollapsed && <span>Cerrar sesión</span>}
           </button>
 
           {!sidebarCollapsed && (
-            <p className="mt-3 px-2 text-[0.6rem] text-[#6B79AD]">
+            <p className="px-2 text-[0.6rem] text-white/40">
               © {new Date().getFullYear()} {branding.nombreLargo} · Todos los derechos reservados
             </p>
           )}
