@@ -85,11 +85,22 @@ export const ccFormulariosService = {
   setModoFormulario: (formularioId: number, modo: CCFormModo) =>
     api.put(`/contact-center/formularios/${formularioId}/modo`, { modo }).then((r) => r.data),
 
-  // Guardar/leer respuestas de una atención real.
+  // Guardar/leer respuestas de una atención real. archivos: igual que en
+  // ccFormularioPublicoService.guardarRespuestas — File real por campoId,
+  // para reabrir un registro (con interaccionId) y reemplazar su evidencia.
   guardarRespuestas: (versionId: number, body: {
     interaccionId?: number; respuestas: CCFormRespuestaInput[]
     clienteNombre?: string; clienteTelefono?: string; canalId?: number
-  }) => d<CCFormGuardarRespuestasResultado>(api.post(`/contact-center/formularios/versiones/${versionId}/respuestas`, body)),
+  }, archivos?: Record<number, File>) => {
+    const entradas = archivos ? Object.entries(archivos) : []
+    if (!entradas.length) {
+      return d<CCFormGuardarRespuestasResultado>(api.post(`/contact-center/formularios/versiones/${versionId}/respuestas`, body))
+    }
+    const fd = new FormData()
+    fd.append('payload', JSON.stringify(body))
+    for (const [campoId, file] of entradas) fd.append(`campo_${campoId}`, file)
+    return d<CCFormGuardarRespuestasResultado>(api.post(`/contact-center/formularios/versiones/${versionId}/respuestas`, fd))
+  },
   getRespuestas: (versionId: number, interaccionId: number) =>
     d<CCFormRespuestaInput[]>(api.get(`/contact-center/formularios/versiones/${versionId}/respuestas/${interaccionId}`)),
 

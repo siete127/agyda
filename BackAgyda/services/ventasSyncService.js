@@ -13,12 +13,38 @@
  * venta generó cada interacción; si el registro se vuelve a guardar, se
  * actualiza esa venta (y solo se agrega otra gestión si cambió el estatus).
  *
- * Evidencia: pendiente de definir cómo se comparte con el servidor de Ventas.
- * Por ahora Ventas.evidencia queda vacía y la ruta del archivo de AGYDA va en
- * los datos de la gestión, para no perderla.
+ * Evidencia: AGYDA y el sistema de Ventas corren en el mismo servidor físico
+ * (ventas.ardabytec.vip resuelve a esta misma máquina), así que el archivo
+ * que sube el agente en AGYDA (public/uploads/cc-evidencia/<archivo>) se
+ * copia tal cual a la carpeta que sirve Ventas (C:\inetpub\wwwroot\ventas\
+ * evidencia\<archivo>) y Ventas.evidencia queda con la misma ruta relativa
+ * que usa el sistema de Ventas al subir la suya (/evidencia/<archivo>) — así
+ * se ve igual sea cual sea el sistema donde se abra la venta. Si algún día
+ * Ventas se muda a otro servidor, esto necesita volver a resolverse por red
+ * (subir el archivo por su API) en vez de una copia de archivo local.
  */
+const fs = require('fs');
+const path = require('path');
 const sql = require('mssql');
 const dbVentas = require('../config/database_ventas');
+const { CC_EVIDENCIA_DIR } = require('../middleware/ccMediaUpload');
+
+const VENTAS_EVIDENCIA_DIR = process.env.VENTAS_EVIDENCIA_DIR || 'C:/inetpub/wwwroot/ventas/evidencia';
+
+// Copia el archivo de evidencia de AGYDA a la carpeta de Ventas y devuelve
+// la ruta relativa (/evidencia/<archivo>) para guardar en Ventas.evidencia,
+// o null si no hay evidencia o la copia falla (nunca debe tumbar el guardado
+// del agente — ver el try/catch del único caller, sincronizarRegistro).
+function copiarEvidenciaAVentas(rutaAgyda) {
+  if (!rutaAgyda) return null;
+  const archivo = path.basename(rutaAgyda);
+  const origen = path.join(CC_EVIDENCIA_DIR, archivo);
+  if (!fs.existsSync(origen)) return null;
+  if (!fs.existsSync(VENTAS_EVIDENCIA_DIR)) fs.mkdirSync(VENTAS_EVIDENCIA_DIR, { recursive: true });
+  const destino = path.join(VENTAS_EVIDENCIA_DIR, archivo);
+  fs.copyFileSync(origen, destino);
+  return `/evidencia/${archivo}`;
+}
 
 let _poolVentas = null;
 async function poolVentas() {
@@ -86,6 +112,11 @@ async function sincronizarRegistro(p, interaccionId, opts = {}) {
     WHERE r.FIR_INTERACCION_ID = @id`)).recordset;
   const evidencia = extra.find((x) => ['imagen', 'archivo'].includes(x.tipo) && /^\/uploads\//.test(String(x.texto || '')))?.texto || null;
   const notas = extra.find((x) => x.tipo === 'texto_largo' && /nota|observ|coment/i.test(`${x.codigo} ${x.etiqueta}`))?.texto || '';
+  // Nunca tumba el guardado del agente si la copia falla (disco lleno, ruta
+  // sin permisos, etc.) — la venta y su gestión se sincronizan igual, solo
+  // sin evidencia visible del lado de Ventas.
+  let evidenciaVentas = null;
+  try { evidenciaVentas = copiarEvidenciaAVentas(evidencia); } catch (e) { console.error('ventasSync → copiar evidencia:', e.message); }
 
   const pv = opts.pv || await poolVentas();
   // Agente: su usuario en Ventas por nombre (como el inicio de sesión); si no existe, 0.
@@ -107,12 +138,15 @@ async function sincronizarRegistro(p, interaccionId, opts = {}) {
   let ventaId = previo?.ventaId ?? null;
   let nueva = false;
   if (ventaId) {
+    // La evidencia solo se pisa si este guardado trajo una nueva — un
+    // reguardado que solo cambia el estatus no debe borrar la que ya había.
     const up = await pv.request()
       .input('id', sql.Int, ventaId).input('idUser', sql.Int, idUser).input('agente', sql.NVarChar, nombreAgente)
       .input('cliente', sql.NVarChar, nombreCliente).input('tel', sql.NVarChar, telefono)
       .input('estatus', sql.NVarChar, estatus).input('camp', sql.Int, campanaVentasId)
+      .input('ev', sql.NVarChar, evidenciaVentas)
       .query(`UPDATE Ventas SET idUser = @idUser, nombreAgente = @agente, nombreCliente = @cliente, telefonoCliente = @tel,
-                estatus = @estatus, campaignId = @camp WHERE idVenta = @id`);
+                estatus = @estatus, campaignId = @camp${evidenciaVentas ? ', evidencia = @ev' : ''} WHERE idVenta = @id`);
     if (!up.rowsAffected[0]) ventaId = null; // la borraron en Ventas: se vuelve a crear
   }
   if (!ventaId) {
@@ -120,9 +154,10 @@ async function sincronizarRegistro(p, interaccionId, opts = {}) {
       .input('idUser', sql.Int, idUser).input('agente', sql.NVarChar, nombreAgente)
       .input('cliente', sql.NVarChar, nombreCliente).input('tel', sql.NVarChar, telefono)
       .input('estatus', sql.NVarChar, estatus).input('camp', sql.Int, campanaVentasId)
+      .input('ev', sql.NVarChar, evidenciaVentas)
       .query(`INSERT INTO Ventas (idUser, nombreAgente, nombreCliente, telefonoCliente, estatus, evidencia, campaignId, fecha)
               OUTPUT INSERTED.idVenta id
-              VALUES (@idUser, @agente, @cliente, @tel, @estatus, NULL, @camp, GETDATE())`);
+              VALUES (@idUser, @agente, @cliente, @tel, @estatus, @ev, @camp, GETDATE())`);
     ventaId = ins.recordset[0].id;
     nueva = true;
   }

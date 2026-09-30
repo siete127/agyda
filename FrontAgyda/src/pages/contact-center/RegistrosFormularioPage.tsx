@@ -1,10 +1,11 @@
 import { Fragment, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { CalendarCheck, RefreshCw, Search, Phone, ChevronDown, ExternalLink, Paperclip } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { CalendarCheck, RefreshCw, Search, Phone, ChevronDown, ExternalLink, Paperclip, Pencil, X, Loader2, Save } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { clsx } from 'clsx'
+import toast from 'react-hot-toast'
 import { ccFormulariosService } from '@/services/ccFormularios.service'
-import type { CCFormRegistro, CCFormRegistros } from '@/types/ccFormularios.types'
+import type { CCFormRegistro, CCFormRegistros, CCFormCampo, CCFormTipoCampo } from '@/types/ccFormularios.types'
 
 // Vista rápida de lo capturado en un formulario de Contact Center (p. ej.
 // "Reclutamiento Totis"): quién, cuándo viene y con quién — con las citas
@@ -204,6 +205,7 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
   }
   const [abiertos, setAbiertos] = useState<Set<number>>(new Set())
   const alternar = (id: number) => setAbiertos((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const [editando, setEditando] = useState<number | null>(null)
 
   const hayAsistencia = !!campos.asistencia
   const conteo = {
@@ -383,12 +385,18 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                         <td key={c.codigo} className="px-4 py-2.5 text-[0.8rem]"><ValorCampo col={c} valor={f.r.valores[c.codigo]} /></td>
                       ))}
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                        {url && (
-                          <a href={url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg border border-violet-200 px-2.5 py-1 text-[0.72rem] font-semibold text-violet-700 hover:bg-violet-50">
-                            <ExternalLink className="h-3 w-3" /> Dar seguimiento
-                          </a>
-                        )}
+                        <div className="inline-flex items-center gap-1.5">
+                          <button onClick={() => setEditando(f.r.interaccionId)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50">
+                            <Pencil className="h-3 w-3" /> Editar
+                          </button>
+                          {url && (
+                            <a href={url} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-violet-200 px-2.5 py-1 text-[0.72rem] font-semibold text-violet-700 hover:bg-violet-50">
+                              <ExternalLink className="h-3 w-3" /> Dar seguimiento
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {abierto && (
@@ -410,6 +418,12 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                                       <ValorCampo col={c} valor={s.r.valores[c.codigo]} />
                                     </td>
                                   ))}
+                                  <td className="whitespace-nowrap py-1 pl-2 text-right">
+                                    <button onClick={() => setEditando(s.r.interaccionId)}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 text-[0.68rem] font-semibold text-gray-600 hover:bg-gray-50">
+                                      <Pencil className="h-2.5 w-2.5" /> Editar
+                                    </button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -425,7 +439,173 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
           </div>
         )}
       </div>
+
+      {editando != null && formId != null && (
+        <EditarRegistroModal formId={formId} interaccionId={editando} onClose={() => setEditando(null)}
+          onSaved={() => { setEditando(null); refetch() }} />
+      )}
     </div>
+  )
+}
+
+// Edita un registro ya guardado (cambiar estatus, corregir un dato, volver a
+// adjuntar evidencia…) desde donde se ve la lista — Registros de formularios
+// y, vía RegistrosDeCampania, el Suite de Reportes de la campaña. Reabre la
+// interacción con su versión publicada (mismo campoId de siempre — si el
+// campo se editó después de esa respuesta, ver advertencia en el comentario
+// de cabecera del archivo del backend) y guarda con guardarRespuestas pasando
+// interaccionId, que actualiza en vez de crear.
+function EditarRegistroModal({ formId, interaccionId, onClose, onSaved }: {
+  formId: number; interaccionId: number; onClose: () => void; onSaved: () => void
+}) {
+  const qc = useQueryClient()
+  const { data: formulario } = useQuery({
+    queryKey: ['ccf-formulario', formId],
+    queryFn: () => ccFormulariosService.getFormulario(formId),
+  })
+  const versionId = formulario?.versiones.find((v) => v.estado === 'publicado')?.id ?? null
+
+  const { data: version, isLoading: cargandoVersion } = useQuery({
+    queryKey: ['ccf-version-completa', versionId],
+    queryFn: () => ccFormulariosService.getVersionCompleta(versionId!),
+    enabled: versionId != null,
+  })
+  const { data: respuestas, isLoading: cargandoRespuestas } = useQuery({
+    queryKey: ['ccf-respuestas', versionId, interaccionId],
+    queryFn: () => ccFormulariosService.getRespuestas(versionId!, interaccionId),
+    enabled: versionId != null,
+  })
+
+  const [valores, setValores] = useState<Record<number, unknown>>({})
+  const [archivos, setArchivos] = useState<Record<number, File>>({})
+  const [cargado, setCargado] = useState(false)
+  if (respuestas && !cargado) {
+    const iniciales: Record<number, unknown> = {}
+    for (const r of respuestas) iniciales[r.campoId] = r.valor
+    setValores(iniciales)
+    setCargado(true)
+  }
+  const setValor = (campoId: number, valor: unknown) => setValores((v) => ({ ...v, [campoId]: valor }))
+  const setArchivo = (campoId: number, archivo: File | null) => {
+    setArchivos((a) => { if (!archivo) { const { [campoId]: _o, ...r } = a; return r } return { ...a, [campoId]: archivo } })
+    setValor(campoId, archivo ? archivo.name : undefined)
+  }
+
+  const guardar = useMutation({
+    mutationFn: () => {
+      const campos = (version?.secciones ?? []).flatMap((s) => s.campos)
+      const capturables = campos.filter((c) => !['titulo', 'separador', 'buscador', 'pendientes'].includes(c.tipo))
+      return ccFormulariosService.guardarRespuestas(versionId!, {
+        interaccionId,
+        respuestas: capturables.filter((c) => valores[c.id] !== undefined).map((c) => ({ campoId: c.id, valor: valores[c.id] as any })),
+      }, archivos)
+    },
+    onSuccess: () => {
+      toast.success('Registro actualizado')
+      qc.invalidateQueries({ queryKey: ['ccf-registros'] })
+      onSaved()
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al guardar'),
+  })
+
+  const cargando = cargandoVersion || cargandoRespuestas || !cargado
+  const secciones = version?.secciones ?? []
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
+          <h2 className="text-sm font-bold text-gray-900">Editar registro</h2>
+          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
+        </div>
+        {cargando ? (
+          <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
+        ) : (
+          <div className="space-y-5 p-5">
+            {secciones.map((s) => (
+              <div key={s.id}>
+                <p className="mb-2 text-sm font-bold text-gray-900">{s.titulo}</p>
+                <div className="grid grid-cols-1 items-end gap-x-4 gap-y-3 sm:grid-cols-2">
+                  {s.campos.filter((c) => !['titulo', 'separador', 'buscador', 'pendientes'].includes(c.tipo)).map((c) => (
+                    <CampoEdicion key={c.id} campo={c} formId={formId} valor={valores[c.id]}
+                      onChange={(v) => setValor(c.id, v)} onArchivo={(f) => setArchivo(c.id, f)} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-3.5">
+          <button onClick={onClose} className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={() => guardar.mutate()} disabled={cargando || guardar.isPending}
+            className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+            {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Un campo del modal de edición — mismos tipos que el runtime del
+// formulario, sin buscador/pendientes/catálogo estático dinámico complejo
+// (la edición es de datos ya capturados, no de flujo de atención en vivo).
+function CampoEdicion({ campo, formId, valor, onChange, onArchivo }: {
+  campo: CCFormCampo; formId: number; valor: unknown; onChange: (v: unknown) => void; onArchivo: (f: File | null) => void
+}) {
+  const field = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
+  const label = 'mb-1.5 block text-[0.72rem] font-semibold text-gray-500'
+  const etiqueta = <span className={label}>{campo.etiqueta} {campo.obligatorio && <span className="text-red-500">*</span>}</span>
+
+  const [opcionesDinamicas, setOpcionesDinamicas] = useState<{ valor: string; etiqueta: string }[] | null>(null)
+  const necesitaCatalogo = campo.tipo === 'catalogo' && !!campo.catalogoFuente && campo.catalogoFuente !== 'estatico'
+  if (necesitaCatalogo && opcionesDinamicas === null) {
+    ccFormulariosService.getOpcionesCatalogo(formId, campo.catalogoFuente!).then(setOpcionesDinamicas).catch(() => setOpcionesDinamicas([]))
+  }
+
+  if (campo.tipo === 'texto_largo') {
+    return <label>{etiqueta}<textarea className={clsx(field, 'h-20')} value={(valor as string) ?? ''} onChange={(e) => onChange(e.target.value)} /></label>
+  }
+  if (campo.tipo === 'si_no' || campo.tipo === 'checkbox') {
+    return (
+      <label>{etiqueta}
+        <select className={field} value={valor === true ? 'si' : valor === false ? 'no' : ''} onChange={(e) => onChange(e.target.value === 'si')}>
+          <option value="">Selecciona…</option><option value="si">Sí</option><option value="no">No</option>
+        </select>
+      </label>
+    )
+  }
+  if (['lista', 'radio', 'catalogo'].includes(campo.tipo)) {
+    const opciones = necesitaCatalogo ? (opcionesDinamicas ?? []) : campo.opciones
+    return (
+      <label>{etiqueta}
+        <select className={field} value={(valor as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
+          <option value="">{necesitaCatalogo && opcionesDinamicas === null ? 'Cargando…' : 'Selecciona…'}</option>
+          {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+        </select>
+      </label>
+    )
+  }
+  if (campo.tipo === 'archivo' || campo.tipo === 'imagen') {
+    const actual = typeof valor === 'string' && /^(https?:\/\/|\/uploads\/)/i.test(valor) ? valor : null
+    return (
+      <label>{etiqueta}
+        {actual && <a href={actual} target="_blank" rel="noopener noreferrer" className="mb-1 block text-[0.72rem] text-brand hover:underline">Ver archivo actual</a>}
+        <input type="file" accept={campo.tipo === 'imagen' ? 'image/*' : undefined}
+          className={clsx(field, 'file:mr-2 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-violet-700')}
+          onChange={(e) => onArchivo(e.target.files?.[0] ?? null)} />
+      </label>
+    )
+  }
+  const tipoInput: Record<string, string> = {
+    numero: 'number', telefono: 'tel', email: 'email', fecha: 'date', hora: 'time',
+    fecha_hora: 'datetime-local', url: 'url', moneda: 'number', porcentaje: 'number',
+  }
+  return (
+    <label>{etiqueta}
+      <input type={tipoInput[campo.tipo as CCFormTipoCampo] ?? 'text'} className={field} value={(valor as string) ?? ''}
+        onChange={(e) => onChange(campo.tipo === 'numero' || campo.tipo === 'moneda' || campo.tipo === 'porcentaje' ? Number(e.target.value) : e.target.value)} />
+    </label>
   )
 }
 
