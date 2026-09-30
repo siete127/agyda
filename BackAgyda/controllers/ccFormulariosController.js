@@ -1287,6 +1287,7 @@ exports.listRegistrosDelFormulario = async (req, res) => {
         const codTipificacion = colCod((c) => c.tipo === 'catalogo');
 
         const pv = await ventasSync.poolVentas();
+        await ventasSync.asegurarTabla(p);
         const sincronizadas = await p.request().input('c', sql.Int, campanaVentasId)
           .query('SELECT VS_VENTA_ID id FROM dbo.CC_VENTAS_SYNC WHERE VS_CAMPANA_VENTAS_ID = @c');
         const yaSincronizadas = sincronizadas.recordset.map((x) => x.id);

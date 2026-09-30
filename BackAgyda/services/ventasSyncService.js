@@ -204,4 +204,4 @@ async function campanaVentasDelFormulario(p, formularioId) {
   return r.recordset[0]?.ventasId ?? null;
 }
 
-module.exports = { sincronizarRegistro, normalizarTelefono, campanaVentasDelFormulario, poolVentas };
+module.exports = { sincronizarRegistro, normalizarTelefono, campanaVentasDelFormulario, poolVentas, asegurarTabla };
