@@ -52,7 +52,13 @@ function detectarCampos(columnas: CCFormRegistros['columnas']): Partial<Record<R
 
 /* ── Resto de campos del formulario (los que no tienen columna fija) ── */
 type Columna = CCFormRegistros['columnas'][number]
-const esRutaArchivo = (v: string) => /^(https?:\/\/|\/uploads\/)/i.test(v)
+// '/evidencia/…' es del histórico de Ventas (plata_prospectPRO) — ese
+// archivo vive físicamente en el sitio de Ventas (ventas.ardabytec.vip), no
+// en AGYDA, así que se sirve completando el dominio; el resto son rutas
+// propias de AGYDA (/uploads/…) o absolutas.
+const VENTAS_ORIGIN = 'https://ventas.ardabytec.vip'
+const esRutaArchivo = (v: string) => /^(https?:\/\/|\/uploads\/|\/evidencia\/)/i.test(v)
+const urlArchivo = (v: string) => v.startsWith('/evidencia/') ? `${VENTAS_ORIGIN}${v}` : v
 const nombreArchivo = (v: string) => decodeURIComponent(v.split('/').pop() ?? '').replace(/^fir_\d+_/, '')
 
 // Un valor según el tipo de campo: imagen con miniatura, archivo con enlace, fechas legibles…
@@ -62,8 +68,8 @@ function ValorCampo({ col, valor }: { col: Columna; valor: unknown }) {
   if (col.tipo === 'imagen' || col.tipo === 'firma') {
     if (!esRutaArchivo(v)) return <span className="text-[0.7rem] text-gray-400" title={v}>Sin imagen guardada</span>
     return (
-      <a href={v} target="_blank" rel="noopener noreferrer" title="Abrir imagen" className="inline-block">
-        <img src={v} alt={col.etiqueta} loading="lazy"
+      <a href={urlArchivo(v)} target="_blank" rel="noopener noreferrer" title="Abrir imagen" className="inline-block">
+        <img src={urlArchivo(v)} alt={col.etiqueta} loading="lazy"
           className="h-10 w-10 rounded-lg border border-gray-200 object-cover transition hover:scale-105" />
       </a>
     )
@@ -71,7 +77,7 @@ function ValorCampo({ col, valor }: { col: Columna; valor: unknown }) {
   if (col.tipo === 'archivo') {
     if (!esRutaArchivo(v)) return <span className="text-[0.7rem] text-gray-400" title={v}>Sin archivo guardado</span>
     return (
-      <a href={v} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-[12rem] items-center gap-1 text-[0.78rem] text-brand hover:underline">
+      <a href={urlArchivo(v)} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-[12rem] items-center gap-1 text-[0.78rem] text-brand hover:underline">
         <Paperclip className="h-3 w-3 flex-shrink-0" /> <span className="truncate">{nombreArchivo(v) || 'Ver archivo'}</span>
       </a>
     )
@@ -386,10 +392,14 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                       ))}
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
-                          <button onClick={() => setEditando(f.r.interaccionId)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50">
-                            <Pencil className="h-3 w-3" /> Editar
-                          </button>
+                          {/* interaccionId negativo = viene del histórico de Ventas
+                              (plata_prospectPRO), no es una interacción CCF real — no editable aquí. */}
+                          {f.r.interaccionId > 0 && (
+                            <button onClick={() => setEditando(f.r.interaccionId)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50">
+                              <Pencil className="h-3 w-3" /> Editar
+                            </button>
+                          )}
                           {url && (
                             <a href={url} target="_blank" rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 rounded-lg border border-violet-200 px-2.5 py-1 text-[0.72rem] font-semibold text-violet-700 hover:bg-violet-50">
@@ -419,10 +429,12 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                                     </td>
                                   ))}
                                   <td className="whitespace-nowrap py-1 pl-2 text-right">
-                                    <button onClick={() => setEditando(s.r.interaccionId)}
-                                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 text-[0.68rem] font-semibold text-gray-600 hover:bg-gray-50">
-                                      <Pencil className="h-2.5 w-2.5" /> Editar
-                                    </button>
+                                    {s.r.interaccionId > 0 && (
+                                      <button onClick={() => setEditando(s.r.interaccionId)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 text-[0.68rem] font-semibold text-gray-600 hover:bg-gray-50">
+                                        <Pencil className="h-2.5 w-2.5" /> Editar
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               ))}

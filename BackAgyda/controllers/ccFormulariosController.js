@@ -1258,22 +1258,74 @@ exports.listRegistrosDelFormulario = async (req, res) => {
       if (v !== null || !(campo.codigo in destino)) destino[campo.codigo] = typeof v === 'string' ? v.trim() : v;
     }
 
+    let registros = interacciones.map((i) => ({
+      interaccionId: i.id,
+      fecha: i.fecha,
+      estado: i.estado,
+      agenteNombre: i.agenteNombre ? String(i.agenteNombre).trim() : null,
+      clienteNombre: i.clienteNombre ? String(i.clienteNombre).trim() : null,
+      clienteTelefono: i.clienteTelefono ? String(i.clienteTelefono).trim() : null,
+      valores: valoresPorInteraccion.get(i.id) ?? {},
+    }));
+    let totalConHistorico = total;
+
+    // Histórico de Ventas (plata_prospectPRO): si este formulario reemplaza
+    // al sistema de Ventas para alguna campaña (CC_EQUIPOS.EQ_VENTAS_CAMPANA_ID),
+    // el listado se completa con SUS ventas — así "Registros del formulario"
+    // se ve completo desde el día uno, sin migrar ni duplicar nada; lo que ya
+    // se sincronizó desde AGYDA (CC_VENTAS_SYNC) no se repite aquí porque ya
+    // viene arriba desde CCO_INTERACCIONES. interaccionId negativo (-idVenta)
+    // marca estas filas como de solo lectura (no existen como interacción CCF,
+    // el modal de edición las debe ignorar).
+    const campanaVentasId = await ventasSync.campanaVentasDelFormulario(p, id);
+    if (campanaVentasId) {
+      try {
+        const colCod = (pred) => columnas.find(pred)?.codigo ?? null;
+        const codTel = colCod((c) => c.tipo === 'telefono');
+        const codNombre = colCod((c) => c.tipo === 'texto_corto');
+        const codImagen = colCod((c) => c.tipo === 'imagen' || c.tipo === 'archivo');
+        const codTipificacion = colCod((c) => c.tipo === 'catalogo');
+
+        const pv = await ventasSync.poolVentas();
+        const sincronizadas = await p.request().input('c', sql.Int, campanaVentasId)
+          .query('SELECT VS_VENTA_ID id FROM dbo.CC_VENTAS_SYNC WHERE VS_CAMPANA_VENTAS_ID = @c');
+        const yaSincronizadas = sincronizadas.recordset.map((x) => x.id);
+        const excluir = yaSincronizadas.length ? `AND idVenta NOT IN (${yaSincronizadas.join(',')})` : '';
+        const ventas = await pv.request().input('c', sql.Int, campanaVentasId).query(`
+          SELECT TOP (${MAX_REGISTROS}) idVenta, nombreCliente, telefonoCliente, nombreAgente, estatus, evidencia, fecha
+          FROM Ventas WHERE campaignId = @c ${excluir} ORDER BY idVenta DESC`);
+
+        totalConHistorico += ventas.recordset.length;
+        const deVentas = ventas.recordset.map((v) => {
+          const valores = {};
+          if (codTel) valores[codTel] = v.telefonoCliente ? String(v.telefonoCliente).trim() : null;
+          if (codNombre) valores[codNombre] = v.nombreCliente ? String(v.nombreCliente).trim() : null;
+          if (codImagen) valores[codImagen] = v.evidencia ? String(v.evidencia).trim() : null;
+          if (codTipificacion) valores[codTipificacion] = v.estatus ? String(v.estatus).trim() : null;
+          return {
+            interaccionId: -v.idVenta,
+            fecha: v.fecha,
+            estado: 'cerrada',
+            agenteNombre: v.nombreAgente ? String(v.nombreAgente).trim() : null,
+            clienteNombre: v.nombreCliente ? String(v.nombreCliente).trim() : null,
+            clienteTelefono: v.telefonoCliente ? String(v.telefonoCliente).trim() : null,
+            valores,
+          };
+        });
+        registros = [...registros, ...deVentas].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+      } catch (e) {
+        console.error('ccFormularios.listRegistrosDelFormulario → histórico Ventas:', e.message);
+      }
+    }
+
     res.json({
       success: true,
       data: {
         formulario: fr.recordset[0],
         columnas,
-        total,
+        total: totalConHistorico,
         limite: MAX_REGISTROS,
-        registros: interacciones.map((i) => ({
-          interaccionId: i.id,
-          fecha: i.fecha,
-          estado: i.estado,
-          agenteNombre: i.agenteNombre ? String(i.agenteNombre).trim() : null,
-          clienteNombre: i.clienteNombre ? String(i.clienteNombre).trim() : null,
-          clienteTelefono: i.clienteTelefono ? String(i.clienteTelefono).trim() : null,
-          valores: valoresPorInteraccion.get(i.id) ?? {},
-        })),
+        registros,
       },
     });
   } catch (e) {

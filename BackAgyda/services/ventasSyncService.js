@@ -186,4 +186,22 @@ async function sincronizarRegistro(p, interaccionId, opts = {}) {
   return { ventaId, nueva, campanaVentasId, estatus, idUser };
 }
 
-module.exports = { sincronizarRegistro, normalizarTelefono };
+// Resuelve la campaña de Ventas (si la hay) de un formulario, a partir de
+// las campañas a las que está asignado — mismo criterio de CC_EQUIPOS que
+// usa sincronizarRegistro, pero por formularioId en vez de por una
+// interacción ya creada (lo usa listRegistrosDelFormulario para saber si
+// debe completar el listado con el histórico de Ventas). Null si el
+// formulario no está en ninguna campaña con campaña de ventas asignada.
+async function campanaVentasDelFormulario(p, formularioId) {
+  const r = await p.request().input('id', sql.Int, formularioId).query(`
+    SELECT DISTINCT e.EQ_VENTAS_CAMPANA_ID ventasId
+    FROM dbo.CCF_FORM_ASIGNACIONES fa
+    JOIN dbo.CCF_FORM_VERSIONES fv ON fv.FV_ID = fa.FA_FORM_VERSION_ID
+    JOIN dbo.CC_EQUIPOS e ON e.EQ_ACTIVO = 1 AND e.EQ_VENTAS_CAMPANA_ID IS NOT NULL
+      AND (e.EQ_CAMPANIA_ID = fa.FA_CAMPANIA_ID OR EXISTS (
+        SELECT 1 FROM dbo.CC_EQUIPO_CAMPANIAS ec WHERE ec.EQC_EQUIPO_ID = e.EQ_ID AND ec.EQC_CAMPANIA_ID = fa.FA_CAMPANIA_ID))
+    WHERE fv.FV_FORMULARIO_ID = @id AND fa.FA_ACTIVO = 1`);
+  return r.recordset[0]?.ventasId ?? null;
+}
+
+module.exports = { sincronizarRegistro, normalizarTelefono, campanaVentasDelFormulario, poolVentas };
