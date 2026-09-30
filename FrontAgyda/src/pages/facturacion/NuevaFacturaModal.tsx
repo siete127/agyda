@@ -99,6 +99,10 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   const [recEditado, setRec] = useState<ReceptorFiscal | null>(null)
   const [formaPago, setFormaPago] = useState('99')
   const [metodoPago, setMetodoPago] = useState('PUE')
+  // Solo aplica si la factura queda como pre-factura (sin timbrar) — el
+  // backend ignora esto si sí se timbra de verdad, ver NuevaFacturaModal
+  // más abajo (nota junto al selector) y facturasController.js.
+  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
   // Alta rápida de cliente / producto desde aquí mismo
   const { can } = useActionAccess()
   const puedeCrearCliente = can('clientes', 'crear')
@@ -179,11 +183,11 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   const facturar = useMutation({
     mutationFn: async () => {
       if (modo === 'cotizacion' && cot) {
-        const r = await facturacionService.facturarCotizacion(cot.id, { receptor: rec, formaPago, metodoPago })
+        const r = await facturacionService.facturarCotizacion(cot.id, { receptor: rec, formaPago, metodoPago, fecha })
         return r?.data as { modo?: string; folio?: string | number; serie?: string; asignados?: number } | undefined
       }
       const r = await facturacionService.facturarManual({
-        clienteId: clienteId!, receptor: rec, formaPago, metodoPago,
+        clienteId: clienteId!, receptor: rec, formaPago, metodoPago, fecha,
         conceptos: lineas.map((l) => ({ psId: l.psId, descripcion: l.descripcion.trim(), cantidad: l.cantidad, precioUnit: l.precioUnit, ivaTasa: l.ivaTasa })),
       })
       return r?.data
@@ -466,9 +470,14 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
                   <option value="PPD">PPD — parcialidades/diferido</option>
                 </select>
               </label>
+              <label className="block">
+                <span className={label}>Fecha de registro</span>
+                <input type="date" className={field} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </label>
             </div>
             <p className="text-[0.7rem] text-gray-400">
               Si el timbrado no está configurado se genera como pre-factura (sin validez fiscal). En ambos casos queda en Cuentas por cobrar hasta que se registre el pago.
+              La fecha de registro solo aplica a la pre-factura: si sí se timbra, el CFDI siempre lleva la fecha real de emisión, como exige el SAT.
             </p>
 
             <div className="flex justify-between gap-2 border-t border-gray-100 pt-3">

@@ -170,6 +170,11 @@ exports.manual = async (req, res) => {
     const estatus = resultado.modo === 'timbrada' ? 'timbrada' : 'pre-factura';
     const concepto = (conceptos.length === 1 ? conceptos[0].descripcion
       : `${conceptos[0].descripcion} y ${conceptos.length - 1} concepto${conceptos.length > 2 ? 's' : ''} más`).slice(0, 255);
+    // Fecha de registro elegible SOLO para pre-facturas (sin validez fiscal):
+    // un CFDI timbrado de verdad lleva la fecha real de emisión que exige el
+    // SAT, nunca una elegida a mano — ver comentario de cabecera del frontend
+    // (NuevaFacturaModal) sobre esta misma regla.
+    const fechaRegistro = estatus !== 'timbrada' && b.fecha ? new Date(b.fecha) : new Date();
 
     const ins = await pool.request()
       .input('cli', sql.Int, cont.id)
@@ -182,13 +187,14 @@ exports.manual = async (req, res) => {
       .input('fp', sql.NVarChar(3), cfdi.formaPago).input('mp', sql.NVarChar(4), cfdi.metodoPago)
       .input('est', sql.NVarChar(20), estatus).input('xml', sql.NVarChar(sql.MAX), resultado.xml || null)
       .input('ft', sql.DateTime, estatus === 'timbrada' ? new Date() : null)
+      .input('fecha', sql.DateTime, fechaRegistro)
       .input('by', sql.Int, req.user?.id || null).input('con', sql.NVarChar(255), concepto)
       .query(`INSERT INTO dbo.FACTURAS
         (FAC_CLIENTE_ID,FAC_UUID,FAC_PAC_ID,FAC_SERIE,FAC_FOLIO,FAC_EMISOR_RFC,FAC_RECEPTOR_RFC,FAC_RECEPTOR_NOMBRE,
-         FAC_SUBTOTAL,FAC_IVA,FAC_TOTAL,FAC_USO_CFDI,FAC_FORMA_PAGO,FAC_METODO_PAGO,FAC_ESTATUS,FAC_XML,FAC_FECHA_TIMBRADO,
+         FAC_SUBTOTAL,FAC_IVA,FAC_TOTAL,FAC_USO_CFDI,FAC_FORMA_PAGO,FAC_METODO_PAGO,FAC_ESTATUS,FAC_XML,FAC_FECHA_TIMBRADO,FAC_FECHA,
          FAC_CREADO_POR,FAC_SALDO,FAC_CONCEPTO)
         OUTPUT INSERTED.FAC_ID id
-        VALUES (@cli,@uuid,@pac,@serie,@folio,@erfc,@rrfc,@rnom,@sub,@iva,@tot,@uso,@fp,@mp,@est,@xml,@ft,@by,@tot,@con)`);
+        VALUES (@cli,@uuid,@pac,@serie,@folio,@erfc,@rrfc,@rnom,@sub,@iva,@tot,@uso,@fp,@mp,@est,@xml,@ft,@fecha,@by,@tot,@con)`);
     const facId = ins.recordset[0].id;
 
     await guardarConceptos(pool, facId, conceptos);
@@ -331,6 +337,9 @@ exports.desdeCotizacion = async (req, res) => {
 
     const emisor = await facturacionService.getEmpresaFiscal(req.user?.empresa);
     const estatus = resultado.modo === 'timbrada' ? 'timbrada' : 'pre-factura';
+    // Mismo criterio que facturas.manual: fecha elegible solo si quedó como
+    // pre-factura — una timbrada de verdad siempre lleva la fecha real.
+    const fechaRegistro = estatus !== 'timbrada' && b.fecha ? new Date(b.fecha) : new Date();
 
     const ins = await pool.request()
       .input('cot', sql.Int, cotId).input('opo', sql.Int, c.COT_OPO_ID)
@@ -352,15 +361,16 @@ exports.desdeCotizacion = async (req, res) => {
       .input('est', sql.NVarChar(20), estatus)
       .input('xml', sql.NVarChar(sql.MAX), resultado.xml || null)
       .input('ft', sql.DateTime, estatus === 'timbrada' ? new Date() : null)
+      .input('fecha', sql.DateTime, fechaRegistro)
       .input('by', sql.Int, req.headers['usuarioid'] ? Number(req.headers['usuarioid']) : null)
       .query(`INSERT INTO dbo.FACTURAS
         (FAC_COT_ID,FAC_OPO_ID,FAC_CLIENTE_ID,FAC_UUID,FAC_PAC_ID,FAC_SERIE,FAC_FOLIO,
          FAC_EMISOR_RFC,FAC_RECEPTOR_RFC,FAC_RECEPTOR_NOMBRE,FAC_SUBTOTAL,FAC_IVA,FAC_TOTAL,
-         FAC_USO_CFDI,FAC_FORMA_PAGO,FAC_METODO_PAGO,FAC_ESTATUS,FAC_XML,FAC_FECHA_TIMBRADO,FAC_CREADO_POR,
+         FAC_USO_CFDI,FAC_FORMA_PAGO,FAC_METODO_PAGO,FAC_ESTATUS,FAC_XML,FAC_FECHA_TIMBRADO,FAC_FECHA,FAC_CREADO_POR,
          FAC_SALDO)
         OUTPUT INSERTED.FAC_ID id
         VALUES (@cot,@opo,@cli,@uuid,@pac,@serie,@folio,@erfc,@rrfc,@rnom,@sub,@iva,@tot,
-                @uso,@fp,@mp,@est,@xml,@ft,@by,
+                @uso,@fp,@mp,@est,@xml,@ft,@fecha,@by,
                 @tot)`);
     const facId = ins.recordset[0].id;
 
