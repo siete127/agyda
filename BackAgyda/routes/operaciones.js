@@ -70,9 +70,16 @@ router.get('/reportes-diarios', auth.authenticateToken, controller.getReporteDia
 router.get('/reportes-postulantes', auth.authenticateToken, controller.getReportePostulantes);
 router.get('/reportes-postulantes/excel', auth.authenticateToken, controller.exportarReportePostulantes);
 router.get('/reportes-postulantes/ejecutivo-reclutamiento', auth.authenticateToken, controller.getReporteEjecutivoReclutamiento);
+// Panorama general de la Suite: todas las campañas activas en un rango
+router.get('/panorama', auth.authenticateToken, controller.getPanoramaCampanias);
+// Reportes de una campaña en la Suite (carpeta Campañas) ligados a la BD de Ventas
+router.get('/campanias/:id/contexto-reportes', auth.authenticateToken, controller.getContextoReportesCampania);
+router.get('/campanias/:id/reporte-ejecutivo-ventas', auth.authenticateToken, controller.getReporteEjecutivoVentas);
+router.get('/campanias/:id/ventas-por-agente', auth.authenticateToken, controller.getVentasPorAgente);
 
 // Interacciones cerradas — listado general con buscador (todas las campañas/canales)
 router.get('/interacciones', auth.authenticateToken, controller.listInteracciones);
+router.get('/agentes-catalogo', auth.authenticateToken, controller.listAgentesCatalogo);
 router.get('/interacciones/excel', auth.authenticateToken, controller.exportarInteracciones);
 
 // Suite de reportes — catálogo de definiciones .rdl / .rdlc de Reporting Services

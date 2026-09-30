@@ -1527,6 +1527,8 @@ async function calcularPreNomina(pool, basePeriodoId) {
         .sort((x, y) => (x.lugar ?? 999) - (y.lugar ?? 999) || x.nombre.localeCompare(y.nombre)),
     };
 }
+// Lo usan los reportes de campañas de ventas de la Suite (operacionesController).
+exports.calcularPreNomina = calcularPreNomina;
 
 // ── Pre nómina → Metas ────────────────────────────────────────────────────────
 // Convierte las ventas necesarias de la pre nómina en metas DIARIAS de Ventas

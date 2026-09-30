@@ -4,7 +4,9 @@ import type {
   ReporteDiario, ReportePostulantes, RdlReporte, RdlCarpeta, RdlRol, RdlOpcion, RdlResultado,
   RbCatalogo, RbDefinicion, RbResultado, RbReporteGuardado, RbPlantilla, RbAdaptado,
   InteraccionItem, InteraccionesFiltro, ReporteEjecutivoReclutamiento,
+  ContextoReportesCampania, ReporteEjecutivoVentas, PanoramaCampanias,
 } from '@/types/reporteDiario.types'
+import type { StatsDynamicResponse } from '@/types/ventas.types'
 import { parseRdl } from '@/lib/rdl'
 
 export const reporteDiarioService = {
@@ -21,6 +23,37 @@ export const reporteDiarioService = {
   async getReporteEjecutivoReclutamiento(params: { desde?: string; hasta?: string; campaniaId: number }): Promise<ReporteEjecutivoReclutamiento> {
     const { data } = await api.get('/operaciones/reportes-postulantes/ejecutivo-reclutamiento', { params })
     return data?.data as ReporteEjecutivoReclutamiento
+  },
+
+  // Panorama general: todas las campañas activas en un rango.
+  async getPanorama(params: { desde: string; hasta: string }): Promise<PanoramaCampanias> {
+    const { data } = await api.get('/operaciones/panorama', { params })
+    return data?.data as PanoramaCampanias
+  },
+
+  /* ── Reportes de una campaña (carpeta Campañas) ligados a la BD de Ventas ── */
+
+  async getContextoReportesCampania(campaniaId: number): Promise<ContextoReportesCampania> {
+    const { data } = await api.get(`/operaciones/campanias/${campaniaId}/contexto-reportes`)
+    return data?.data as ContextoReportesCampania
+  },
+
+  // Todos los agentes: activos y deshabilitados (para los selectores).
+  async getAgentesCatalogo(): Promise<{ activos: { id: number; nombre: string }[]; deshabilitados: { id: number; nombre: string }[] }> {
+    const { data } = await api.get('/operaciones/agentes-catalogo')
+    return data?.data ?? { activos: [], deshabilitados: [] }
+  },
+
+  // Registros de Ventas por asesor y estatus (barras apiladas). null si la campaña no es de ventas.
+  async getVentasPorAgente(campaniaId: number, params: { periodo: 'day' | 'week' | 'month'; fecha: string }): Promise<(StatsDynamicResponse & { desde: string; hasta: string }) | null> {
+    const { data } = await api.get(`/operaciones/campanias/${campaniaId}/ventas-por-agente`, { params })
+    return data?.data ?? null
+  },
+
+  // null si la campaña no tiene campaña de Ventas en sus grupos.
+  async getReporteEjecutivoVentas(campaniaId: number, params: { desde?: string; hasta?: string }): Promise<ReporteEjecutivoVentas | null> {
+    const { data } = await api.get(`/operaciones/campanias/${campaniaId}/reporte-ejecutivo-ventas`, { params })
+    return (data?.data ?? null) as ReporteEjecutivoVentas | null
   },
 
   // Descarga directa (no JSON) — mismo patrón que ccService.tipificacionesExcelUrl:
@@ -67,6 +100,7 @@ export const reporteDiarioService = {
     if (filtro.texto) qs.set('texto', filtro.texto)
     if (filtro.agenteId) qs.set('agenteId', String(filtro.agenteId))
     if (filtro.tipificacionId) qs.set('tipificacionId', String(filtro.tipificacionId))
+    if (filtro.tipificacion) qs.set('tipificacion', filtro.tipificacion)
     if (filtro.campaniaId) qs.set('campaniaId', String(filtro.campaniaId))
     if (filtro.desde) qs.set('desde', filtro.desde)
     if (filtro.hasta) qs.set('hasta', filtro.hasta)

@@ -1,10 +1,12 @@
 import { Fragment, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { CalendarCheck, RefreshCw, Search, Phone, ChevronDown, ExternalLink, Paperclip, Pencil, X, Loader2, Save } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { ccFormulariosService } from '@/services/ccFormularios.service'
+import { SelectorAgente, type VistaAgentes } from '@/components/ui/SelectorAgente'
 import type { CCFormRegistro, CCFormRegistros, CCFormCampo, CCFormTipoCampo } from '@/types/ccFormularios.types'
 
 // Vista rápida de lo capturado en un formulario de Contact Center (p. ej.
@@ -212,6 +214,7 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
   const [abiertos, setAbiertos] = useState<Set<number>>(new Set())
   const alternar = (id: number) => setAbiertos((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const [editando, setEditando] = useState<number | null>(null)
+  const [editandoVenta, setEditandoVenta] = useState<number | null>(null)
 
   const hayAsistencia = !!campos.asistencia
   const conteo = {
@@ -392,10 +395,15 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                       ))}
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
-                          {/* interaccionId negativo = viene del histórico de Ventas
-                              (plata_prospectPRO), no es una interacción CCF real — no editable aquí. */}
-                          {f.r.interaccionId > 0 && (
+                          {/* interaccionId negativo = venta del histórico de Ventas
+                              (plata_prospectPRO): se edita contra Ventas (EditarVentaModal). */}
+                          {f.r.interaccionId > 0 ? (
                             <button onClick={() => setEditando(f.r.interaccionId)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50">
+                              <Pencil className="h-3 w-3" /> Editar
+                            </button>
+                          ) : data?.puedeEditarHistorico && (
+                            <button onClick={() => setEditandoVenta(-f.r.interaccionId)} title="Venta del histórico de Ventas"
                               className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[0.72rem] font-semibold text-gray-600 hover:bg-gray-50">
                               <Pencil className="h-3 w-3" /> Editar
                             </button>
@@ -429,8 +437,8 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                                     </td>
                                   ))}
                                   <td className="whitespace-nowrap py-1 pl-2 text-right">
-                                    {s.r.interaccionId > 0 && (
-                                      <button onClick={() => setEditando(s.r.interaccionId)}
+                                    {(s.r.interaccionId > 0 || data?.puedeEditarHistorico) && (
+                                      <button onClick={() => (s.r.interaccionId > 0 ? setEditando(s.r.interaccionId) : setEditandoVenta(-s.r.interaccionId))}
                                         className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 text-[0.68rem] font-semibold text-gray-600 hover:bg-gray-50">
                                         <Pencil className="h-2.5 w-2.5" /> Editar
                                       </button>
@@ -455,6 +463,10 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
       {editando != null && formId != null && (
         <EditarRegistroModal formId={formId} interaccionId={editando} onClose={() => setEditando(null)}
           onSaved={() => { setEditando(null); refetch() }} />
+      )}
+      {editandoVenta != null && formId != null && (
+        <EditarVentaModal formId={formId} idVenta={editandoVenta} onClose={() => setEditandoVenta(null)}
+          onSaved={() => { setEditandoVenta(null); refetch() }} />
       )}
     </div>
   )
@@ -523,7 +535,7 @@ function EditarRegistroModal({ formId, interaccionId, onClose, onSaved }: {
   const cargando = cargandoVersion || cargandoRespuestas || !cargado
   const secciones = version?.secciones ?? []
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
@@ -555,7 +567,189 @@ function EditarRegistroModal({ formId, interaccionId, onClose, onSaved }: {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
+  )
+}
+
+const mensajeError = (e: unknown) => (e as { response?: { data?: { message?: string } } } | null)?.response?.data?.message
+
+// Edita una venta del histórico de Ventas (fila con interaccionId negativo):
+// se guarda directo en la BD de Ventas. Si cambia el estatus, Ventas lo
+// registra en el historial de la venta con quién lo cambió desde AGYDA.
+function EditarVentaModal({ formId, idVenta, onClose, onSaved }: {
+  formId: number; idVenta: number; onClose: () => void; onSaved: () => void
+}) {
+  const qc = useQueryClient()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['ccf-venta-historico', formId, idVenta],
+    queryFn: () => ccFormulariosService.getVentaHistorico(formId, idVenta),
+    retry: false,
+  })
+  const [f, setF] = useState<{
+    nombreCliente: string; telefonoCliente: string; estatus: string; fecha: string
+    fechaAgendada: string; horaAgendada: string; idUser: number | ''; notas: string
+  } | null>(null)
+  const [evidencia, setEvidencia] = useState<File | null>(null)
+  if (data && !f) {
+    const v = data.venta
+    setF({
+      nombreCliente: v.nombreCliente ?? '', telefonoCliente: v.telefonoCliente ?? '', estatus: v.estatus ?? '',
+      // Ventas guarda la hora local y llega como si fuera UTC: el día real son los primeros 10 caracteres.
+      fecha: String(v.fecha).slice(0, 10),
+      fechaAgendada: v.fechaAgendada ?? '', horaAgendada: v.horaAgendada ?? '', idUser: v.idUser || '', notas: '',
+    })
+  }
+  const set = <K extends keyof NonNullable<typeof f>>(k: K, val: NonNullable<typeof f>[K]) => setF((x) => (x ? { ...x, [k]: val } : x))
+
+  const guardar = useMutation({
+    mutationFn: () => ccFormulariosService.editarVentaHistorico(formId, idVenta, { ...f!, evidencia }),
+    onSuccess: (r) => {
+      toast.success(r?.data?.cambioEstatus ? `Venta actualizada · estatus ${r.data.estatus}` : 'Venta actualizada')
+      qc.invalidateQueries({ queryKey: ['ccf-registros'] })
+      qc.invalidateQueries({ queryKey: ['ccf-venta-historico', formId, idVenta] })
+      onSaved()
+    },
+    onError: (e: unknown) => toast.error(mensajeError(e) ?? 'Error al guardar'),
+  })
+
+  const cambioEstatus =!!data && !!f && f.estatus !== (data.venta.estatus ?? '')
+  const esAgendada = /agend/i.test(f?.estatus ?? '')
+  const vistasAsesor: VistaAgentes[] = data ? [
+    { id: 'activos', label: 'Activos', agentes: data.asesores.filter((a) => a.activo) },
+    { id: 'inactivos', label: 'Inactivos', agentes: data.asesores.filter((a) => !a.activo), deshabilitados: true },
+  ] : []
+  const errorMsg = mensajeError(error)
+  const vistaPrevia = useMemo(() => (evidencia ? URL.createObjectURL(evidencia) : null), [evidencia])
+
+  // Portal: la vista tiene animate-fade-in (deja un transform) y un `fixed`
+  // dentro se centraría en toda la lista, fuera de la pantalla.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Editar venta #{idVenta}</h2>
+            <p className="text-[0.7rem] text-gray-400">
+              Histórico de Ventas{data ? ` · capturada el ${fmtDia(String(data.venta.fecha).slice(0, 10))}` : ''} · se guarda en la BD de Ventas
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
+        ) : errorMsg || !data || !f ? (
+          <p className="px-5 py-12 text-center text-sm text-gray-500">{errorMsg ?? 'No se pudo abrir la venta'}</p>
+        ) : (
+          <div className="space-y-5 p-5">
+            <div>
+              <p className="mb-2 text-[0.7rem] font-semibold uppercase tracking-wide text-gray-400">Tipificación</p>
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tipificación">
+                {data.estatus.map((e) => {
+                  const sel = f.estatus === e.nombre
+                  return (
+                    <button key={e.nombre} role="radio" aria-checked={sel} onClick={() => set('estatus', e.nombre)}
+                      className={clsx('flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.8rem] font-semibold transition',
+                        sel ? 'border-transparent text-white shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300')}
+                      style={sel ? { backgroundColor: e.color ?? '#6d28d9' } : undefined}>
+                      {!sel && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: e.color ?? '#9ca3af' }} />}
+                      {e.nombre}
+                    </button>
+                  )
+                })}
+              </div>
+              {cambioEstatus && (
+                <p className="mt-2 text-[0.72rem] text-violet-700">
+                  Cambia de <b>{data.venta.estatus || '—'}</b> a <b>{f.estatus}</b>: quedará en el historial de la venta y en el CRM de Ventas.
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Nombre del cliente</span>
+                <input className="field" value={f.nombreCliente} maxLength={100} onChange={(e) => set('nombreCliente', e.target.value)} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Teléfono</span>
+                <input className="field" value={f.telefonoCliente} inputMode="tel" maxLength={20} onChange={(e) => set('telefonoCliente', e.target.value)} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Fecha de la venta</span>
+                <input type="date" className="field" value={f.fecha} max={diaLocal()} onChange={(e) => e.target.value && set('fecha', e.target.value)} />
+                {f.fecha !== String(data.venta.fecha).slice(0, 10) && (
+                  <span className="mt-1 block text-[0.68rem] text-amber-600">Cambia el día en que cuenta para Metas y Nómina.</span>
+                )}
+              </label>
+              <div>
+                <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Asesor</span>
+                <SelectorAgente vistas={vistasAsesor} value={f.idUser} onChange={(id) => set('idUser', id)} placeholder="Sin asesor" />
+              </div>
+              {(esAgendada || f.fechaAgendada) && (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Fecha agendada</span>
+                    <input type="date" className="field" value={f.fechaAgendada} onChange={(e) => set('fechaAgendada', e.target.value)} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Hora</span>
+                    <input type="time" className="field" value={f.horaAgendada} onChange={(e) => set('horaAgendada', e.target.value)} />
+                  </label>
+                </>
+              )}
+            </div>
+
+            <div>
+              <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Evidencia</span>
+              <div className="flex items-center gap-3">
+                {(vistaPrevia || data.venta.evidencia) && (
+                  <a href={vistaPrevia ?? urlArchivo(data.venta.evidencia!)} target="_blank" rel="noopener noreferrer">
+                    <img src={vistaPrevia ?? urlArchivo(data.venta.evidencia!)} alt="Evidencia" className="h-16 w-16 rounded-lg border border-gray-200 object-cover" />
+                  </a>
+                )}
+                <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-[0.78rem] font-semibold text-gray-600 hover:border-violet-400 hover:text-violet-700">
+                  <Paperclip className="h-3.5 w-3.5" /> {evidencia ? evidencia.name : data.venta.evidencia ? 'Reemplazar evidencia' : 'Subir evidencia'}
+                  <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)} />
+                </label>
+                {evidencia && <button onClick={() => setEvidencia(null)} className="text-[0.72rem] text-gray-400 hover:text-gray-600">Quitar</button>}
+              </div>
+            </div>
+
+            <label className="block">
+              <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Comentario {cambioEstatus ? '(queda en el historial de la venta)' : '(opcional)'}</span>
+              <textarea className="field min-h-[64px]" value={f.notas} maxLength={2000} onChange={(e) => set('notas', e.target.value)}
+                placeholder="Por qué se hace el cambio…" />
+            </label>
+
+            {data.seguimientos.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-gray-400">Historial de estatus</p>
+                <ul className="space-y-1 rounded-xl border border-gray-100 p-2 text-[0.75rem]">
+                  {data.seguimientos.map((s, i) => (
+                    <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-gray-600">
+                      <span className="whitespace-nowrap text-gray-400">{new Date(s.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                      <b className="text-gray-800">{s.estatus}</b>
+                      <span>· {s.nombreAgente}</span>
+                      {s.notas && <span className="w-full pl-1 text-gray-500">“{s.notas}”</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-3.5">
+          <button onClick={onClose} className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={() => guardar.mutate()} disabled={!f || !f.nombreCliente.trim() || !f.estatus || guardar.isPending}
+            className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+            {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar en Ventas
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

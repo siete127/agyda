@@ -109,15 +109,95 @@ export interface InteraccionItem {
   canalNombre: string | null
   campaniaNombre: string | null
   tipificacionNombre: string | null
+  // 'ventas': registro del histórico de Ventas (id = -idVenta, solo lectura).
+  origen?: 'agyda' | 'ventas'
 }
 
 export interface InteraccionesFiltro {
   texto?: string
   agenteId?: number
   tipificacionId?: number
+  // Por nombre (apartado de una campaña: tipificaciones de AGYDA + estatus de Ventas).
+  tipificacion?: string
   campaniaId?: number
   desde?: string
   hasta?: string
+}
+
+// Panorama general de la Suite (GET /operaciones/panorama).
+export interface PanoramaCampania {
+  id: number
+  nombre: string
+  ventasNombre: string | null
+  modalidad: 'omnicanal' | 'marcador' | 'ambos' | null
+  // Interacciones + postulantes + ventas que no salieron de AGYDA.
+  registros: number
+  interacciones: number
+  cerradas: number
+  postulantes: number
+  ventasRegistros: number
+  ventas: number
+  conversion: number | null
+  // Registros por día, alineados con PanoramaCampanias.dias.
+  serie: number[]
+}
+export interface PanoramaCampanias {
+  desde: string
+  hasta: string
+  dias: string[]
+  errorVentas: string | null
+  totales: {
+    campanias: number; conActividad: number; registros: number; interacciones: number; cerradas: number
+    postulantes: number; ventasRegistros: number; ventas: number; conversion: number | null
+  }
+  campanias: PanoramaCampania[]
+}
+
+// Lo que los reportes de una campaña necesitan saber de ella.
+export interface ContextoReportesCampania {
+  campaniaId: number
+  ventas: {
+    campanaVentasId: number
+    campanaVentasNombre: string
+    // Todos sus grupos son de marcador: las tipificaciones son los estatus de Ventas.
+    soloMarcador: boolean
+    grupos: { id: number; nombre: string; modalidad: string }[]
+    error?: string
+  } | null
+  tipificaciones: { nombre: string; color: string | null; origen: 'agyda' | 'ventas' }[]
+  // Agentes de sus skills y de sus grupos.
+  agentes: { id: number; nombre: string }[]
+}
+
+export interface ReporteEjecutivoVentas {
+  desde: string
+  hasta: string
+  campaniaId: number
+  campana: { id: number; nombre: string; soloMarcador: boolean }
+  estatusContados: string[]
+  indicadores: {
+    total: number
+    contadas: number
+    conversion: number | null
+    capturadasAgyda: number
+    asesores: number
+    meta: number | null
+    metaDeEquipo: boolean
+    cumplimiento: number | null
+  }
+  embudo: { estatus: string; cantidad: number; porcentaje: number; color: string | null; cuentaComoVenta: boolean }[]
+  asesores: { asesorId: number | null; nombre: string; total: number; contadas: number; conversion: number | null; meta: number | null; cumplimiento: number | null }[]
+  porDia: { dia: string; total: number; contadas: number; meta: number | null }[]
+  preNomina: {
+    base: { id: number; fechaInicio: string; fechaFin: string; estado: string }
+    configurada: boolean
+    quincena: { desde: string; hasta: string }
+    ventasNecesarias: number | null
+    ventasSoloEstaCampana: number | null
+    ventasQuincena: number
+    comisionPorVenta: number | null
+    gananciaPorVenta: number | null
+  } | null
 }
 
 // ── Suite de reportes: definiciones .rdl / .rdlc del catálogo ──

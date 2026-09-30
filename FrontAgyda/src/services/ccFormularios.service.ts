@@ -4,7 +4,7 @@ import type {
   CCFormCampoInput, CCFormTipoCampo, CCFormTipificacionesDelFormulario, CCFormInteraccionBuscada,
   CCFormBuscadorResultado, CCFormCanalDisponible, CCFormModo, CCFormPublicoDefinicion,
   CCFormAccionPost, CCFormAccionTipo, CCFormRespuestaInput, CCFormGuardarRespuestasResultado,
-  CCFormOpcion, CCFormRegistros, CCFormPrellenado, CCFormPendientes,
+  CCFormOpcion, CCFormRegistros, CCFormPrellenado, CCFormPendientes, CCVentaHistorico,
 } from '@/types/ccFormularios.types'
 
 const d = <T>(p: Promise<{ data: { data?: T } }>): Promise<T> => p.then((r) => (r.data.data ?? ([] as unknown as T)))
@@ -17,6 +17,18 @@ export const ccFormulariosService = {
   listFormularios: () => d<CCFormulario[]>(api.get('/contact-center/formularios')),
   // Lo capturado en un formulario, con cada valor ya legible (vista "Registros de formularios").
   listRegistros: (id: number) => api.get(`/contact-center/formularios/${id}/registros`).then((r) => r.data.data as CCFormRegistros),
+  // Ventas del histórico (BD de Ventas) de las filas de Registros.
+  getVentaHistorico: (formId: number, idVenta: number) =>
+    api.get(`/contact-center/formularios/${formId}/ventas/${idVenta}`).then((r) => r.data.data as CCVentaHistorico),
+  editarVentaHistorico: (formId: number, idVenta: number, datos: {
+    nombreCliente: string; telefonoCliente: string; estatus: string; fecha: string; fechaAgendada: string; horaAgendada: string
+    idUser: number | ''; notas: string; evidencia?: File | null
+  }) => {
+    const fd = new FormData()
+    for (const [k, v] of Object.entries(datos)) if (k !== 'evidencia' && v != null) fd.append(k, String(v))
+    if (datos.evidencia) fd.append('evidencia', datos.evidencia)
+    return api.put(`/contact-center/formularios/${formId}/ventas/${idVenta}`, fd).then((r) => r.data)
+  },
   getFormulario: (id: number) => d<CCFormularioDetalle>(api.get(`/contact-center/formularios/${id}`)),
   createFormulario: (body: { nombre: string; codigo?: string; descripcion?: string }) =>
     api.post('/contact-center/formularios', body).then((r) => r.data),

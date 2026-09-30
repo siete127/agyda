@@ -169,6 +169,40 @@ const PLANTILLAS = [
     },
   },
 
+  {
+    id: 'ventas_resumen_mes',
+    categoria: 'Marcador',
+    nombre: 'Resumen de ventas del mes',
+    descripcion: 'Registros, ventas, conversión y ventas por asesor del mes, contra el mes anterior (BD de Ventas).',
+    definicion: {
+      origen: 'ventas', dimensiones: [],
+      metricas: ['total', 'ventas', 'pct_conversion', 'asesores', 'ventas_por_asesor'],
+      filtros: [{ id: 'fecha', preset: 'mes_actual' }], comparar: 'periodo_anterior',
+      visual: { tipo: 'kpi' },
+    },
+  },
+  {
+    id: 'ventas_asesor',
+    categoria: 'Marcador',
+    nombre: 'Ventas por asesor',
+    descripcion: 'Ventas, registros y conversión de cada asesor en el mes.',
+    definicion: {
+      origen: 'ventas', dimensiones: ['asesor'], metricas: ['ventas', 'total', 'pct_conversion'],
+      filtros: [{ id: 'fecha', preset: 'mes_actual' }], orden: { campo: 'ventas', dir: 'desc' },
+      visual: { tipo: 'barras_h' },
+    },
+  },
+  {
+    id: 'ventas_dia_estatus',
+    categoria: 'Marcador',
+    nombre: 'Ventas por día y estatus',
+    descripcion: 'Cada día, cuántos registros quedaron aprobados, rechazados, agendados…',
+    definicion: {
+      origen: 'ventas', dimensiones: ['fecha', 'estatus'], metricas: ['total'],
+      filtros: [{ id: 'fecha', preset: 'ult30' }], visual: { tipo: 'apiladas' }, limite: 2000,
+    },
+  },
+
   /* ── Reclutamiento ── */
   {
     id: 'postulantes_campania',
@@ -247,7 +281,7 @@ function adaptarAGrupo(definicion, grupo /* { id, modalidad } | null */) {
 
 // Las que el asistente "Crear grupo" deja marcadas de inicio (se crean solo
 // las que apliquen a la modalidad del grupo).
-const RECOMENDADAS = new Set(['resumen_mes', 'volumen_diario', 'productividad_agente', 'pausas_agente', 'llamadas_dia', 'llamadas_tipificacion']);
+const RECOMENDADAS = new Set(['resumen_mes', 'volumen_diario', 'productividad_agente', 'pausas_agente', 'llamadas_dia', 'llamadas_tipificacion', 'ventas_resumen_mes', 'ventas_asesor']);
 
 /** Plantillas en formato público, con el origen y a qué modalidades aplica. */
 function listarPlantillas() {

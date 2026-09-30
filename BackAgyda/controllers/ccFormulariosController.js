@@ -26,6 +26,7 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 const ventasSync = require('../services/ventasSyncService');
+const ventasCampania = require('../services/ventasCampaniaService');
 
 // Cuando el guardado de respuestas llega como multipart/form-data (trae
 // evidencia adjunta para un campo tipo 'imagen'/'archivo'), el body real
@@ -1285,6 +1286,17 @@ exports.listRegistrosDelFormulario = async (req, res) => {
         const codNombre = colCod((c) => c.tipo === 'texto_corto');
         const codImagen = colCod((c) => c.tipo === 'imagen' || c.tipo === 'archivo');
         const codTipificacion = colCod((c) => c.tipo === 'catalogo');
+        const codAgente = colCod((c) => c.tipo === 'usuario_agente');
+        // Fecha: un campo de cita/agenda toma Ventas.fechaAgendada; el primer
+        // otro campo de fecha, la fecha de la venta. Ventas guarda la hora
+        // local del servidor y mssql la lee como UTC: cortar en UTC da el día real.
+        const esAgenda = (c) => /agend|cita/i.test(`${c.codigo} ${c.etiqueta}`);
+        const codAgendada = colCod((c) => c.tipo === 'fecha' && esAgenda(c));
+        const codFecha = colCod((c) => c.tipo === 'fecha' && !esAgenda(c));
+        const dia = (f) => {
+          const d = f ? new Date(f) : null;
+          return d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : null;
+        };
 
         const pv = await ventasSync.poolVentas();
         await ventasSync.asegurarTabla(p);
@@ -1293,7 +1305,7 @@ exports.listRegistrosDelFormulario = async (req, res) => {
         const yaSincronizadas = sincronizadas.recordset.map((x) => x.id);
         const excluir = yaSincronizadas.length ? `AND idVenta NOT IN (${yaSincronizadas.join(',')})` : '';
         const ventas = await pv.request().input('c', sql.Int, campanaVentasId).query(`
-          SELECT TOP (${MAX_REGISTROS}) idVenta, nombreCliente, telefonoCliente, nombreAgente, estatus, evidencia, fecha
+          SELECT TOP (${MAX_REGISTROS}) idVenta, nombreCliente, telefonoCliente, nombreAgente, estatus, evidencia, fecha, fechaAgendada
           FROM Ventas WHERE campaignId = @c ${excluir} ORDER BY idVenta DESC`);
 
         totalConHistorico += ventas.recordset.length;
@@ -1303,6 +1315,9 @@ exports.listRegistrosDelFormulario = async (req, res) => {
           if (codNombre) valores[codNombre] = v.nombreCliente ? String(v.nombreCliente).trim() : null;
           if (codImagen) valores[codImagen] = v.evidencia ? String(v.evidencia).trim() : null;
           if (codTipificacion) valores[codTipificacion] = v.estatus ? String(v.estatus).trim() : null;
+          if (codAgente) valores[codAgente] = v.nombreAgente ? String(v.nombreAgente).trim() : null;
+          if (codFecha) valores[codFecha] = dia(v.fecha);
+          if (codAgendada) valores[codAgendada] = dia(v.fechaAgendada);
           return {
             interaccionId: -v.idVenta,
             fecha: v.fecha,
@@ -1327,11 +1342,177 @@ exports.listRegistrosDelFormulario = async (req, res) => {
         total: totalConHistorico,
         limite: MAX_REGISTROS,
         registros,
+        // Las filas del histórico (interaccionId < 0) se editan con editarVentaHistorico.
+        puedeEditarHistorico: campanaVentasId ? await ventasCampania.puedeEditarVentas(p, req, campanaVentasId) : false,
       },
     });
   } catch (e) {
     console.error('ccFormularios.listRegistrosDelFormulario:', e.message);
     res.status(500).json({ success: false, message: 'Error al obtener los registros del formulario' });
+  }
+};
+
+// ── Ventas del histórico (plata_prospectPRO) desde Registros ──────────────
+// Las filas con interaccionId negativo son ventas de la BD de Ventas, no
+// interacciones de AGYDA: se ven y se editan contra Ventas directamente.
+// Solo las de la campaña de Ventas del formulario y que NO salieron de una
+// interacción de AGYDA (esas se editan con su formulario y se vuelven a
+// sincronizar). Pueden editar los administradores y los supervisores de la
+// campaña o del grupo (ventasCampaniaService.puedeEditarVentas).
+
+// Resuelve y valida la venta; devuelve { venta, campanaVentasId } o responde el error.
+async function _ventaDelFormulario(p, req, res) {
+  const formId = Number(req.params.id);
+  const idVenta = Number(req.params.idVenta);
+  if (!Number.isInteger(formId) || formId < 1 || !Number.isInteger(idVenta) || idVenta < 1) {
+    res.status(400).json({ success: false, message: 'Id inválido' }); return null;
+  }
+  const campanaVentasId = await ventasSync.campanaVentasDelFormulario(p, formId);
+  if (!campanaVentasId) { res.status(404).json({ success: false, message: 'Este formulario no tiene campaña de Ventas' }); return null; }
+  if (!await ventasCampania.puedeEditarVentas(p, req, campanaVentasId)) {
+    res.status(403).json({ success: false, message: 'Solo administradores y supervisores de la campaña pueden editar sus ventas' }); return null;
+  }
+  const pv = await ventasSync.poolVentas();
+  const venta = (await pv.request().input('id', sql.Int, idVenta).query(`
+    SELECT idVenta, idUser, LTRIM(RTRIM(nombreCliente)) nombreCliente, LTRIM(RTRIM(telefonoCliente)) telefonoCliente,
+           LTRIM(RTRIM(estatus)) estatus, CONVERT(varchar(10), fechaAgendada, 23) fechaAgendada, horaAgendada,
+           LTRIM(RTRIM(nombreAgente)) nombreAgente, CAST(evidencia AS nvarchar(max)) evidencia, fecha, campaignId
+    FROM Ventas WHERE idVenta = @id`)).recordset[0];
+  if (!venta || venta.campaignId !== campanaVentasId) { res.status(404).json({ success: false, message: 'La venta no es de esta campaña' }); return null; }
+  await ventasSync.asegurarTabla(p);
+  const deAgyda = (await p.request().input('v', sql.Int, idVenta)
+    .query('SELECT VS_INTERACCION_ID i FROM dbo.CC_VENTAS_SYNC WHERE VS_VENTA_ID = @v')).recordset[0];
+  if (deAgyda) {
+    res.status(409).json({ success: false, message: 'Esta venta se capturó en AGYDA: edítala con su formulario (botón Editar de su registro).' }); return null;
+  }
+  return { venta, campanaVentasId, pv };
+}
+
+// GET /formularios/:id/ventas/:idVenta — la venta, sus opciones y su historial de estatus.
+exports.getVentaHistorico = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const r = await _ventaDelFormulario(p, req, res);
+    if (!r) return;
+    const { venta, campanaVentasId, pv } = r;
+    const [estatus, asesores, seguimientos] = await Promise.all([
+      ventasCampania.estatusDeCampana(pv, campanaVentasId),
+      pv.request().input('u', sql.Int, venta.idUser || 0).query(`
+        SELECT idUser id, LTRIM(RTRIM(nombreAgente)) nombre, CAST(ISNULL(Activo, 0) AS bit) activo FROM Users
+        WHERE NULLIF(LTRIM(RTRIM(nombreAgente)), '') IS NOT NULL AND ((role = 'agente' AND Activo = 1) OR idUser = @u)
+        ORDER BY nombreAgente`),
+      pv.request().input('id', sql.Int, venta.idVenta).query(`
+        SELECT TOP 50 estatusNombre estatus, nombreAgente, notas, evidencia, fechaSeguimiento fecha
+        FROM VentasSeguimiento WHERE ventaId = @id ORDER BY id DESC`),
+    ]);
+    res.json({
+      success: true,
+      data: {
+        venta: { ...venta, evidencia: venta.evidencia ? String(venta.evidencia).trim() : null },
+        estatus,
+        asesores: asesores.recordset.map((a) => ({ id: a.id, nombre: a.nombre, activo: !!a.activo })),
+        seguimientos: seguimientos.recordset,
+      },
+    });
+  } catch (e) {
+    console.error('ccFormularios.getVentaHistorico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al leer la venta' });
+  }
+};
+
+// PUT /formularios/:id/ventas/:idVenta (multipart) — nombreCliente, telefonoCliente,
+// estatus, fecha (día de la venta), fechaAgendada, horaAgendada, idUser, notas y,
+// opcional, un archivo de evidencia.
+// Si cambia el estatus se registra como lo hace Ventas: VentasSeguimiento (historial
+// de la venta) y la gestión 'tipificacion' en CRMGestiones.
+exports.editarVentaHistorico = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const r = await _ventaDelFormulario(p, req, res);
+    if (!r) return;
+    const { venta, campanaVentasId, pv } = r;
+    const b = req.body || {};
+    const corta = (v, n) => (v == null ? '' : String(v).trim().slice(0, n));
+
+    const nombreCliente = corta(b.nombreCliente, 100);
+    const telefono = corta(ventasSync.normalizarTelefono(b.telefonoCliente), 20);
+    if (!nombreCliente) return res.status(400).json({ success: false, message: 'El nombre del cliente es obligatorio' });
+    if (telefono && telefono.length < 10) return res.status(400).json({ success: false, message: 'El teléfono debe tener 10 dígitos' });
+
+    const opciones = await ventasCampania.estatusDeCampana(pv, campanaVentasId);
+    const estatus = opciones.find((o) => ventasCampania.normalizar(o.nombre) === ventasCampania.normalizar(b.estatus))?.nombre;
+    if (!estatus) return res.status(400).json({ success: false, message: 'Estatus no válido para esta campaña' });
+
+    const fechaAgendada = /^\d{4}-\d{2}-\d{2}$/.test(String(b.fechaAgendada || '')) ? b.fechaAgendada : null;
+    // Fecha de la venta (la columna Fecha de Registros): cambia el día y conserva la hora de captura.
+    const fechaVenta = /^\d{4}-\d{2}-\d{2}$/.test(String(b.fecha || '')) ? b.fecha : null;
+    if (fechaVenta && fechaVenta > new Date().toISOString().slice(0, 10)) {
+      return res.status(400).json({ success: false, message: 'La fecha de la venta no puede ser futura' });
+    }
+    const horaAgendada = /^\d{2}:\d{2}$/.test(String(b.horaAgendada || '')) ? b.horaAgendada : null;
+
+    const idUser = Number(b.idUser) || 0;
+    const asesor = idUser
+      ? (await pv.request().input('u', sql.Int, idUser).query('SELECT idUser, LTRIM(RTRIM(nombreAgente)) nombre FROM Users WHERE idUser = @u')).recordset[0]
+      : null;
+    if (idUser && !asesor) return res.status(400).json({ success: false, message: 'Asesor no encontrado en Ventas' });
+
+    // Evidencia nueva: el archivo que subió multer (carpeta de AGYDA) se copia a la de Ventas.
+    const archivo = (req.files || [])[0];
+    let evidencia = null;
+    if (archivo) {
+      evidencia = ventasSync.copiarEvidenciaAVentas(archivo.filename);
+      if (!evidencia) return res.status(500).json({ success: false, message: 'No se pudo guardar la evidencia en Ventas' });
+    }
+
+    // Quién edita: su usuario de Ventas si lo tiene (por nombre, como Nómina), si no 0.
+    const editor = (await p.request().input('u', sql.Int, Number(req.user?.id) || 0)
+      .query('SELECT LTRIM(RTRIM(NEUS_NOMBRES)) nombre FROM NEUS_USUARIOS WHERE NEUS_ID = @u')).recordset[0]?.nombre || 'AGYDA';
+    const editorVentas = ventasCampania.idsVentasDe(await ventasCampania.asesoresVentas(pv), editor)[0] ?? 0;
+    const notas = corta(b.notas, 2000);
+    const cambioEstatus = ventasCampania.normalizar(venta.estatus) !== ventasCampania.normalizar(estatus);
+
+    const tx = new sql.Transaction(pv);
+    await tx.begin();
+    try {
+      await new sql.Request(tx)
+        .input('id', sql.Int, venta.idVenta).input('cliente', sql.VarChar(100), nombreCliente).input('tel', sql.VarChar(20), telefono)
+        .input('estatus', sql.VarChar(20), estatus).input('fa', sql.Date, fechaAgendada).input('ha', sql.VarChar(5), horaAgendada)
+        .input('idUser', sql.Int, asesor ? asesor.idUser : venta.idUser).input('agente', sql.VarChar(100), corta(asesor ? asesor.nombre : venta.nombreAgente, 100))
+        .input('ev', sql.NVarChar(sql.MAX), evidencia).input('fv', sql.NVarChar(10), fechaVenta)
+        .query(`UPDATE Ventas SET nombreCliente = @cliente, telefonoCliente = @tel, estatus = @estatus,
+                  fechaAgendada = @fa, horaAgendada = @ha, idUser = @idUser, nombreAgente = @agente
+                  ${evidencia ? ', evidencia = @ev' : ''}
+                  ${fechaVenta ? ', fecha = DATEADD(DAY, DATEDIFF(DAY, CAST(fecha AS date), CAST(@fv AS date)), fecha)' : ''}
+                WHERE idVenta = @id`);
+      if (cambioEstatus) {
+        const quien = `${editor} (AGYDA)`.slice(0, 200);
+        await new sql.Request(tx)
+          .input('v', sql.Int, venta.idVenta).input('e', sql.NVarChar(100), estatus).input('u', sql.Int, editorVentas)
+          .input('n', sql.NVarChar(200), quien).input('c', sql.Int, campanaVentasId).input('notas', sql.NVarChar(sql.MAX), notas || `Estatus cambiado de ${venta.estatus || '—'} a ${estatus} desde AGYDA`)
+          .input('ev', sql.NVarChar(500), evidencia)
+          .query(`INSERT INTO VentasSeguimiento (ventaId, estatusNombre, idUser, nombreAgente, campaignId, notas, evidencia, fechaSeguimiento)
+                  VALUES (@v, @e, @u, @n, @c, @notas, @ev, GETDATE())`);
+        const datos = { resultado: estatus, notas, origen: 'AGYDA', ventaId: venta.idVenta, anterior: venta.estatus, editadoPor: { id: req.user?.id ?? null, nombre: editor } };
+        await new sql.Request(tx)
+          .input('tel', sql.NVarChar(30), telefono).input('c', sql.Int, campanaVentasId).input('u', sql.Int, editorVentas)
+          .input('n', sql.NVarChar(200), quien).input('d', sql.NVarChar(sql.MAX), JSON.stringify(datos))
+          .query(`INSERT INTO CRMGestiones (telefono, campaignId, idUser, nombreAgente, tipo, datos, fecha)
+                  VALUES (@tel, @c, @u, @n, 'tipificacion', @d, GETDATE())`);
+        if (telefono) {
+          await new sql.Request(tx).input('tel', sql.NVarChar(30), telefono)
+            .query('UPDATE CRMInteracciones SET ultimaGestion = GETDATE() WHERE telefono = @tel');
+        }
+      }
+      await tx.commit();
+    } catch (e) {
+      await tx.rollback().catch(() => {});
+      throw e;
+    }
+    res.json({ success: true, data: { idVenta: venta.idVenta, estatus, cambioEstatus, evidencia } });
+  } catch (e) {
+    console.error('ccFormularios.editarVentaHistorico:', e.message);
+    res.status(500).json({ success: false, message: 'Error al guardar la venta' });
   }
 };
 

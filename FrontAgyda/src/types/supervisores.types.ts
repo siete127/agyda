@@ -75,6 +75,30 @@ export interface ProductividadAgente {
   avgSemanalMin: number | null
   // Interacciones que cerró ese día en las campañas consultadas.
   atenciones?: number
+  // Solo en una campaña de ventas (su grupo tiene campaña de Ventas).
+  ventas?: ProductividadVentas | null
+}
+
+// Ventas del agente en la BD de Ventas: el día contra su meta (Metas, o la
+// sugerida por la pre nómina) y la quincena contra sus ventas mínimas.
+export interface ProductividadVentas {
+  ligadoAVentas: boolean
+  totalDia: number
+  contadasDia: number
+  metaDia: number | null
+  metaOrigen: 'metas' | 'pre_nomina' | null
+  cumplimientoDia: number | null
+  pagablesQuincena: number
+  minimasQuincena: number | null
+  sueldo: number | null
+  comisionEstimada: number | null
+  campana: {
+    nombre: string
+    quincena: { desde: string; hasta: string }
+    pagablesQuincena: number
+    necesariasQuincena: number | null
+    preNominaBase: { id: number; fechaInicio: string; fechaFin: string; estado: string } | null
+  }
 }
 
 export const TIPO_PAUSA_LABELS: Record<string, string> = {

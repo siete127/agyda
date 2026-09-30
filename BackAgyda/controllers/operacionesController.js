@@ -12,6 +12,7 @@ const reportBuilderRunner = require('../services/reportBuilderRunner');
 const reportBuilderPlantillas = require('../services/reportBuilderPlantillas');
 const pausaTiposService = require('../services/pausaTiposService');
 const { equiposDeCampania } = require('../services/ccEquiposService');
+const ventasCampania = require('../services/ventasCampaniaService');
 const rdlEjecutor = require('../services/rdlEjecutorService');
 const { esSuperAdminFijo } = require('../utils/superAdmin');
 const logger = global.logger || require('../utils/logger');
@@ -349,7 +350,18 @@ async function getProductividadDia(req, res) {
       INNER JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
       WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${campaniaIds.join(',')})
     `);
-    const agenteIds = agentesRs.recordset.map((a) => a.agenteId);
+    // Los agentes de un grupo solo de marcador no entran a los skills
+    // (ccEquiposService): se toman de los miembros de los grupos de la campaña.
+    const miembrosRs = await pool.request().query(`
+      SELECT DISTINCT m.EQM_USUARIO_ID as agenteId
+      FROM CC_EQUIPO_MIEMBROS m
+      INNER JOIN CC_EQUIPOS e ON e.EQ_ID = m.EQM_EQUIPO_ID AND e.EQ_ACTIVO = 1
+      INNER JOIN NEUS_USUARIOS u ON u.NEUS_ID = m.EQM_USUARIO_ID AND u.NEUS_ACTIVO = 1
+      WHERE m.EQM_ROL = 'agente'
+        AND (e.EQ_CAMPANIA_ID IN (${campaniaIds.join(',')})
+          OR EXISTS (SELECT 1 FROM CC_EQUIPO_CAMPANIAS ec WHERE ec.EQC_EQUIPO_ID = e.EQ_ID AND ec.EQC_CAMPANIA_ID IN (${campaniaIds.join(',')})))
+    `).catch(() => ({ recordset: [] }));
+    const agenteIds = [...new Set([...agentesRs.recordset, ...miembrosRs.recordset].map((a) => a.agenteId))];
     if (agenteIds.length === 0) return res.json({ success: true, data: [] });
 
     const pausasRs = await pool.request()
@@ -419,6 +431,17 @@ async function getProductividadDia(req, res) {
       `);
     const atencionesPorAgente = new Map(atencionesRs.recordset.map((a) => [a.agenteId, a.atenciones]));
 
+    // Campaña de ventas: ventas del día contra su meta y la quincena contra la pre nómina.
+    let ventasPorAgente = null;
+    const ctxVentas = campaniaFiltro ? await ventasCampania.contextoVentas(pool, campaniaFiltro) : null;
+    if (ctxVentas) {
+      try {
+        ventasPorAgente = await _productividadVentas(pool, ctxVentas, fecha, agenteIds, nombrePorId);
+      } catch (e) {
+        logger.error('operacionesController.getProductividadDia → Ventas', e);
+      }
+    }
+
     const porAgente = new Map();
     for (const id of agenteIds) {
       const pausaActiva = pausaActivaPorAgente.get(id);
@@ -440,6 +463,7 @@ async function getProductividadDia(req, res) {
         ultimaConexion: est?.ultimaConexion ?? null,
         avgSemanalMin: avgSemanalPorAgente.get(id) ?? null,
         atenciones: atencionesPorAgente.get(id) ?? 0,
+        ...(ventasPorAgente ? { ventas: ventasPorAgente.get(id) ?? null } : {}),
       });
     }
     for (const p of pausasRs.recordset) {
@@ -1149,6 +1173,468 @@ async function getReporteEjecutivoReclutamiento(req, res) {
   }
 }
 
+/* ── Campañas de ventas: reporte ejecutivo y pre nómina ──
+   Para una campaña de AGYDA cuyo grupo tiene campaña de ventas (ver
+   ventasCampaniaService), los números salen de la BD de Ventas — ahí caen
+   tanto el histórico como lo que se captura en AGYDA (ventasSyncService). */
+
+const esFechaISO = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+
+// Quincena de Nómina que contiene `fecha` (NOMINA_PERIODOS) o, si aún no se
+// crea, la del calendario: 1–15 o 16–fin de mes.
+async function _quincenaDe(pool, fecha) {
+  const r = await pool.request().input('f', sql.NVarChar(10), fecha).query(`
+    SELECT TOP 1 CONVERT(VARCHAR(10), FECHA_INICIO, 23) desde, CONVERT(VARCHAR(10), FECHA_FIN, 23) hasta
+    FROM NOMINA_PERIODOS WHERE CAST(@f AS date) BETWEEN CAST(FECHA_INICIO AS date) AND CAST(FECHA_FIN AS date)
+    ORDER BY FECHA_INICIO DESC`).catch(() => ({ recordset: [] }));
+  if (r.recordset[0]) return r.recordset[0];
+  const [a, m, d] = fecha.split('-').map(Number);
+  const mm = String(m).padStart(2, '0');
+  const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  return d <= 15 ? { desde: `${a}-${mm}-01`, hasta: `${a}-${mm}-15` } : { desde: `${a}-${mm}-16`, hasta: `${a}-${mm}-${ultimo}` };
+}
+
+// Días hábiles (lunes a sábado) de un rango, como las faltas de Nómina.
+function _diasHabiles(desde, hasta) {
+  let n = 0;
+  const d = new Date(`${desde}T12:00:00Z`);
+  const fin = new Date(`${hasta}T12:00:00Z`);
+  for (let guard = 0; d <= fin && guard < 62; guard++) {
+    if (d.getUTCDay() !== 0) n++;
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return n;
+}
+
+// Pre nómina (última quincena calculada) — null si la empresa no usa Nómina.
+async function _preNomina(pool) {
+  try {
+    const pre = await require('./nominaController').calcularPreNomina(pool, null);
+    return pre?.periodo ? pre : null;
+  } catch (e) {
+    logger.error('operacionesController → pre nómina', e);
+    return null;
+  }
+}
+
+// Comisión por venta de un agente en una campaña de la pre nómina (misma
+// regla que calcularPreNomina: tarifa fija o % del sueldo).
+const _comisionPorVenta = (camp, sueldo) => (!camp ? null : camp.tipoTarifa === 'porcentaje' ? (sueldo ?? 0) * (camp.tarifa / 100) : camp.tarifa);
+
+// GET /api/operaciones/campanias/:id/reporte-ejecutivo-ventas?desde=&hasta=
+// Embudo por estatus, conversión, asesores, días contra meta (VENTAS_METAS)
+// y la quincena contra lo que pide la pre nómina. data = null si la campaña
+// no es de ventas (la Suite muestra entonces el reporte de reclutamiento).
+async function getReporteEjecutivoVentas(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    if (!esFechaISO(desde) || !esFechaISO(hasta)) return res.status(400).json({ success: false, message: 'Fechas inválidas' });
+    const campaniaId = Number(req.params.id);
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ctx = await ventasCampania.contextoVentas(pool, campaniaId);
+    if (!ctx) return res.json({ success: true, data: null });
+
+    const pv = await ventasCampania.poolVentas();
+    const contados = await ventasCampania.estatusContados(pool, 'metas');
+    const inContados = ventasCampania.sqlIn(contados);
+    const c = ctx.campanaVentasId;
+    const enRango = () => pv.request().input('c', sql.Int, c).input('desde', sql.NVarChar(10), desde).input('hasta', sql.NVarChar(10), hasta);
+    const RANGO = 'campaignId = @c AND fecha >= @desde AND fecha < DATEADD(DAY, 1, CAST(@hasta AS date))';
+    const CONTADA = `CASE WHEN LTRIM(RTRIM(estatus)) IN (${inContados}) THEN 1 ELSE 0 END`;
+
+    const [estRs, asesorRs, diaRs, estatusConf] = await Promise.all([
+      enRango().query(`SELECT ISNULL(NULLIF(LTRIM(RTRIM(estatus)), ''), '(sin estatus)') estatus, COUNT(*) n
+        FROM Ventas WHERE ${RANGO} GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(estatus)), ''), '(sin estatus)')`),
+      enRango().query(`SELECT idUser, LTRIM(RTRIM(nombreAgente)) nombre, COUNT(*) total, SUM(${CONTADA}) contadas
+        FROM Ventas WHERE ${RANGO} GROUP BY idUser, LTRIM(RTRIM(nombreAgente))`),
+      enRango().query(`SELECT CONVERT(varchar(10), fecha, 23) dia, COUNT(*) total, SUM(${CONTADA}) contadas
+        FROM Ventas WHERE ${RANGO} GROUP BY CONVERT(varchar(10), fecha, 23)`),
+      ventasCampania.estatusDeCampana(pv, c).catch(() => []),
+    ]);
+
+    // Metas diarias de la campaña en el rango: las de campaña (meta del
+    // equipo) si las hay; si no, la suma de las de cada asesor.
+    const metasRs = await pool.request().input('c', sql.Int, c).input('desde', sql.NVarChar(10), desde).input('hasta', sql.NVarChar(10), hasta)
+      .query(`SELECT VM_ALCANCE alcance, VM_ASESOR_ID asesorId, VM_PERIODO dia, SUM(ISNULL(VM_META_UNIDADES, 0)) meta
+              FROM VENTAS_METAS WHERE VM_TIPO = 'diaria' AND VM_CAMPANA_ID = @c AND VM_PERIODO BETWEEN @desde AND @hasta
+              GROUP BY VM_ALCANCE, VM_ASESOR_ID, VM_PERIODO`).catch(() => ({ recordset: [] }));
+    const metaCampanaDia = new Map(); const metaAsesorDia = new Map(); const metaPorAsesor = new Map();
+    for (const m of metasRs.recordset) {
+      const v = Number(m.meta) || 0;
+      if (m.alcance === 'campana') metaCampanaDia.set(m.dia, (metaCampanaDia.get(m.dia) ?? 0) + v);
+      else {
+        metaAsesorDia.set(m.dia, (metaAsesorDia.get(m.dia) ?? 0) + v);
+        metaPorAsesor.set(m.asesorId, (metaPorAsesor.get(m.asesorId) ?? 0) + v);
+      }
+    }
+    const metaDeEquipo = metaCampanaDia.size > 0;
+    const metaDia = metaDeEquipo ? metaCampanaDia : metaAsesorDia;
+    const metaTotal = [...metaDia.values()].reduce((s, n) => s + n, 0);
+
+    const total = estRs.recordset.reduce((s, r) => s + r.n, 0);
+    const contadas = asesorRs.recordset.reduce((s, r) => s + (r.contadas || 0), 0);
+    const pct = (num, den) => (den > 0 ? Math.round((num / den) * 1000) / 10 : null);
+    const n = ventasCampania.normalizar;
+
+    const colorDe = new Map(estatusConf.map((e) => [n(e.nombre), e.color]));
+    const ordenDe = new Map(estatusConf.map((e, i) => [n(e.nombre), i]));
+    const embudo = estRs.recordset
+      .map((r) => ({
+        estatus: r.estatus, cantidad: r.n, porcentaje: pct(r.n, total) ?? 0,
+        color: colorDe.get(n(r.estatus)) ?? null,
+        cuentaComoVenta: contados.some((e) => n(e) === n(r.estatus)),
+      }))
+      .sort((a, b) => (ordenDe.get(n(a.estatus)) ?? 99) - (ordenDe.get(n(b.estatus)) ?? 99) || b.cantidad - a.cantidad);
+
+    // Asesores: uno por usuario de Ventas (o por nombre si la venta no trae
+    // usuario, como las que llegan de AGYDA sin asesor ligado).
+    const porAsesor = new Map();
+    for (const r of asesorRs.recordset) {
+      const clave = r.idUser ? `u${r.idUser}` : `n${n(r.nombre)}`;
+      const f = porAsesor.get(clave) ?? { asesorId: r.idUser || null, nombre: r.nombre || '(sin asesor)', total: 0, contadas: 0 };
+      f.total += r.total; f.contadas += r.contadas || 0;
+      porAsesor.set(clave, f);
+    }
+    const sinVentas = [...metaPorAsesor.keys()].filter((id) => id && !porAsesor.has(`u${id}`));
+    if (sinVentas.length) {
+      const us = (await pv.request().query(`SELECT idUser id, nombreAgente nombre FROM Users WHERE idUser IN (${sinVentas.map(Number).join(',')})`)).recordset;
+      for (const u of us) porAsesor.set(`u${u.id}`, { asesorId: u.id, nombre: String(u.nombre || '').trim(), total: 0, contadas: 0 });
+    }
+    const asesores = [...porAsesor.values()].map((f) => {
+      const meta = f.asesorId ? metaPorAsesor.get(f.asesorId) ?? null : null;
+      return { ...f, conversion: pct(f.contadas, f.total), meta, cumplimiento: meta ? pct(f.contadas, meta) : null };
+    }).sort((a, b) => b.contadas - a.contadas || b.total - a.total);
+
+    const diasConDatos = new Set([...diaRs.recordset.map((d) => d.dia), ...metaDia.keys()]);
+    const porDia = [...diasConDatos].sort().map((dia) => {
+      const d = diaRs.recordset.find((x) => x.dia === dia);
+      return { dia, total: d?.total ?? 0, contadas: d?.contadas ?? 0, meta: metaDia.get(dia) ?? null };
+    });
+
+    await ventasCampania.asegurarTabla(pool);
+    const agyda = (await pool.request().input('c', sql.Int, c).input('desde', sql.NVarChar(10), desde).input('hasta', sql.NVarChar(10), hasta)
+      .query(`SELECT COUNT(*) n FROM dbo.CC_VENTAS_SYNC WHERE VS_CAMPANA_VENTAS_ID = @c
+              AND VS_FECHA >= @desde AND VS_FECHA < DATEADD(DAY, 1, CAST(@hasta AS date))`)).recordset[0].n;
+
+    // Pre nómina: ventas (de las que paga Nómina) que la campaña necesita por
+    // quincena para cubrir la nómina, contra lo que lleva la quincena actual.
+    let preNomina = null;
+    const pre = await _preNomina(pool);
+    if (pre) {
+      const camp = pre.campanas.find((x) => x.campanaId === c) ?? null;
+      const quincena = await _quincenaDe(pool, new Date().toISOString().slice(0, 10));
+      const llevaRs = await pv.request().input('c', sql.Int, c).input('qd', sql.NVarChar(10), quincena.desde).input('qh', sql.NVarChar(10), quincena.hasta)
+        .query(`SELECT COUNT(*) n FROM Ventas WHERE campaignId = @c AND fecha >= @qd AND fecha < DATEADD(DAY, 1, CAST(@qh AS date))
+                AND LTRIM(RTRIM(estatus)) IN (${ventasCampania.sqlIn(ventasCampania.ESTATUS_NOMINA)})`);
+      preNomina = {
+        base: pre.periodo,
+        configurada: !!camp,
+        quincena,
+        ventasNecesarias: camp?.ventasNecesarias ?? null,
+        ventasSoloEstaCampana: camp?.ventasSoloEstaCampana ?? null,
+        ventasQuincena: llevaRs.recordset[0].n,
+        comisionPorVenta: camp?.comisionPorVenta ?? null,
+        gananciaPorVenta: camp?.gananciaNeta ?? null,
+      };
+    }
+
+    res.json({
+      success: true,
+      data: {
+        desde, hasta, campaniaId,
+        campana: { id: c, nombre: ctx.campanaVentasNombre, soloMarcador: ctx.soloMarcador },
+        estatusContados: contados,
+        indicadores: {
+          total, contadas, conversion: pct(contadas, total),
+          capturadasAgyda: agyda,
+          asesores: asesores.filter((a) => a.total > 0).length,
+          meta: metaTotal || null, metaDeEquipo,
+          cumplimiento: metaTotal ? pct(contadas, metaTotal) : null,
+        },
+        embudo,
+        asesores,
+        porDia,
+        preNomina,
+      },
+    });
+  } catch (err) {
+    logger.error('operacionesController.getReporteEjecutivoVentas', err);
+    res.status(500).json({ success: false, message: 'Error al obtener el reporte ejecutivo de ventas' });
+  }
+}
+
+// GET /api/operaciones/panorama?desde=&hasta= — primera vista de la Suite:
+// cada campaña activa con lo que movió en el rango, en una sola unidad
+// ("registros") para poder compararlas: interacciones de sus canales +
+// postulantes registrados + registros de su campaña de Ventas que no salieron
+// de AGYDA (esos ya cuentan como interacción). Más el desglose de cada fuente,
+// las ventas (estatus que paga Nómina) y la serie por día.
+async function getPanoramaCampanias(req, res) {
+  try {
+    const { desde, hasta } = _rangoFechas(req);
+    if (!esFechaISO(desde) || !esFechaISO(hasta)) return res.status(400).json({ success: false, message: 'Fechas inválidas' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const campanias = (await pool.request().query(`
+      SELECT CM2_ID id, LTRIM(RTRIM(CM2_NOMBRE)) nombre FROM dbo.CCO_CAMPANIAS WHERE CM2_ACTIVO = 1 ORDER BY CM2_NOMBRE`)).recordset;
+    const vacio = { desde, hasta, dias: [], totales: {}, campanias: [] };
+    if (!campanias.length) return res.json({ success: true, data: vacio });
+    const ids = campanias.map((c) => c.id).join(',');
+    const rango = () => pool.request().input('desde', sql.NVarChar(10), desde).input('hasta', sql.NVarChar(10), hasta);
+
+    const [interRs, postRs, gruposRs] = await Promise.all([
+      rango().query(`
+        SELECT CI_CAMPANIA_ID c, CONVERT(varchar(10), CI_FECHA_INICIO, 23) dia, COUNT(*) total,
+               SUM(CASE WHEN CI_ESTADO = 'cerrada' THEN 1 ELSE 0 END) cerradas
+        FROM dbo.CCO_INTERACCIONES
+        WHERE CI_CAMPANIA_ID IN (${ids}) AND CI_FECHA_INICIO >= @desde AND CI_FECHA_INICIO < DATEADD(DAY, 1, CAST(@hasta AS date))
+        GROUP BY CI_CAMPANIA_ID, CONVERT(varchar(10), CI_FECHA_INICIO, 23)`),
+      rango().query(`
+        SELECT CP_CAMPANIA_ID c, CONVERT(varchar(10), CP_FECHA_REGISTRO, 23) dia, COUNT(*) total
+        FROM dbo.CCO_CAMPANIA_POSTULANTES
+        WHERE CP_CAMPANIA_ID IN (${ids}) AND CP_FECHA_REGISTRO >= @desde AND CP_FECHA_REGISTRO < DATEADD(DAY, 1, CAST(@hasta AS date))
+        GROUP BY CP_CAMPANIA_ID, CONVERT(varchar(10), CP_FECHA_REGISTRO, 23)`).catch(() => ({ recordset: [] })),
+      pool.request().query(`
+        SELECT c.CM2_ID campaniaId, e.EQ_MODALIDAD modalidad, e.EQ_VENTAS_CAMPANA_ID ventasId, e.EQ_VENTAS_CAMPANA_NOMBRE ventasNombre
+        FROM dbo.CCO_CAMPANIAS c
+        JOIN dbo.CC_EQUIPOS e ON e.EQ_ACTIVO = 1 AND (e.EQ_CAMPANIA_ID = c.CM2_ID
+          OR EXISTS (SELECT 1 FROM dbo.CC_EQUIPO_CAMPANIAS ec WHERE ec.EQC_EQUIPO_ID = e.EQ_ID AND ec.EQC_CAMPANIA_ID = c.CM2_ID))
+        WHERE c.CM2_ID IN (${ids})`).catch(() => ({ recordset: [] })),
+    ]);
+
+    // Campaña de Ventas y modalidades de cada campaña (según sus grupos).
+    const porCampania = new Map(campanias.map((c) => [c.id, {
+      id: c.id, nombre: c.nombre, ventasId: null, ventasNombre: null, modalidades: new Set(),
+      interacciones: 0, cerradas: 0, postulantes: 0, ventasRegistros: 0, ventas: 0, serie: new Map(),
+    }]));
+    for (const g of gruposRs.recordset) {
+      const c = porCampania.get(g.campaniaId);
+      if (!c) continue;
+      if (g.modalidad) c.modalidades.add(g.modalidad);
+      if (g.ventasId && !c.ventasId) { c.ventasId = g.ventasId; c.ventasNombre = g.ventasNombre; }
+    }
+    const sumarDia = (c, dia, n) => c.serie.set(dia, (c.serie.get(dia) ?? 0) + n);
+    for (const r of interRs.recordset) {
+      const c = porCampania.get(r.c); if (!c) continue;
+      c.interacciones += r.total; c.cerradas += r.cerradas; sumarDia(c, r.dia, r.total);
+    }
+    for (const r of postRs.recordset) {
+      const c = porCampania.get(r.c); if (!c) continue;
+      c.postulantes += r.total; sumarDia(c, r.dia, r.total);
+    }
+
+    // Ventas: por campaña de Ventas; lo capturado en AGYDA no se suma a
+    // "registros" (ya es interacción) pero sí a los números de Ventas.
+    const conVentas = [...porCampania.values()].filter((c) => c.ventasId);
+    let errorVentas = null;
+    if (conVentas.length) {
+      try {
+        const pv = await ventasCampania.poolVentas();
+        const ventasIds = [...new Set(conVentas.map((c) => Number(c.ventasId)))];
+        await ventasCampania.asegurarTabla(pool);
+        const sinc = new Set((await pool.request().query(`SELECT VS_VENTA_ID id FROM dbo.CC_VENTAS_SYNC WHERE VS_CAMPANA_VENTAS_ID IN (${ventasIds.join(',')})`)).recordset.map((r) => r.id));
+        const vRs = await pv.request().input('desde', sql.NVarChar(10), desde).input('hasta', sql.NVarChar(10), hasta).query(`
+          SELECT idVenta, campaignId, CONVERT(varchar(10), fecha, 23) dia,
+                 CASE WHEN LTRIM(RTRIM(estatus)) IN (${ventasCampania.sqlIn(ventasCampania.ESTATUS_NOMINA)}) THEN 1 ELSE 0 END esVenta
+          FROM Ventas
+          WHERE campaignId IN (${ventasIds.join(',')}) AND fecha >= @desde AND fecha < DATEADD(DAY, 1, CAST(@hasta AS date))`);
+        for (const v of vRs.recordset) {
+          // Una campaña de Ventas puede estar en varias campañas de AGYDA: cuenta en cada una.
+          for (const c of conVentas.filter((x) => Number(x.ventasId) === v.campaignId)) {
+            c.ventasRegistros += 1; c.ventas += v.esVenta;
+            if (!sinc.has(v.idVenta)) sumarDia(c, v.dia, 1);
+          }
+        }
+      } catch (e) {
+        errorVentas = `No se pudo leer la BD de Ventas: ${e.message}`;
+        logger.error('operacionesController.getPanoramaCampanias → Ventas', e);
+      }
+    }
+
+    // Días del rango (máx. 93 para que la gráfica no se vuelva ilegible).
+    const dias = [];
+    const d = new Date(`${desde}T12:00:00Z`);
+    const fin = new Date(`${hasta}T12:00:00Z`);
+    for (let i = 0; d <= fin && i < 93; i++) { dias.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); }
+
+    const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
+    const lista = [...porCampania.values()].map((c) => {
+      const registros = [...c.serie.values()].reduce((s, n) => s + n, 0);
+      return {
+        id: c.id, nombre: c.nombre,
+        ventasNombre: c.ventasNombre,
+        modalidad: c.modalidades.has('ambos') || (c.modalidades.has('marcador') && c.modalidades.has('omnicanal')) ? 'ambos'
+          : c.modalidades.has('marcador') ? 'marcador' : c.modalidades.has('omnicanal') ? 'omnicanal' : null,
+        registros, interacciones: c.interacciones, cerradas: c.cerradas, postulantes: c.postulantes,
+        ventasRegistros: c.ventasRegistros, ventas: c.ventas, conversion: c.ventasId ? pct(c.ventas, c.ventasRegistros) : null,
+        serie: dias.map((dia) => c.serie.get(dia) ?? 0),
+      };
+    }).sort((a, b) => b.registros - a.registros || a.nombre.localeCompare(b.nombre));
+
+    const suma = (k) => lista.reduce((s, c) => s + (c[k] || 0), 0);
+    res.json({
+      success: true,
+      data: {
+        desde, hasta, dias, errorVentas,
+        totales: {
+          campanias: lista.length,
+          conActividad: lista.filter((c) => c.registros > 0 || c.ventasRegistros > 0).length,
+          registros: suma('registros'), interacciones: suma('interacciones'), cerradas: suma('cerradas'),
+          postulantes: suma('postulantes'), ventasRegistros: suma('ventasRegistros'), ventas: suma('ventas'),
+          conversion: pct(suma('ventas'), suma('ventasRegistros')),
+        },
+        campanias: lista,
+      },
+    });
+  } catch (err) {
+    logger.error('operacionesController.getPanoramaCampanias', err);
+    res.status(500).json({ success: false, message: 'Error al armar el panorama de campañas' });
+  }
+}
+
+// Rango de un periodo que contiene `fecha`: día, semana (lunes a domingo) o mes.
+function _rangoPeriodo(periodo, fecha) {
+  const d = new Date(`${fecha}T12:00:00Z`);
+  const iso = (x) => x.toISOString().slice(0, 10);
+  if (periodo === 'week') {
+    const ini = new Date(d); ini.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    const fin = new Date(ini); fin.setUTCDate(ini.getUTCDate() + 6);
+    return { desde: iso(ini), hasta: iso(fin) };
+  }
+  if (periodo === 'month') {
+    return { desde: `${fecha.slice(0, 8)}01`, hasta: iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 12))) };
+  }
+  return { desde: fecha, hasta: fecha };
+}
+
+// GET /api/operaciones/campanias/:id/ventas-por-agente?periodo=day|week|month&fecha=
+//   (o ?desde=&hasta=) — registros de Ventas por asesor y estatus, con la
+// misma forma que /admin/stats/dynamic del sistema de Ventas, para pintar
+// sus barras apiladas (StatColumnDynamic) en la Suite. data = null si la
+// campaña no es de ventas.
+async function getVentasPorAgente(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const ctx = await ventasCampania.contextoVentas(pool, Number(req.params.id));
+    if (!ctx) return res.json({ success: true, data: null });
+    let { desde, hasta } = req.query;
+    if (!esFechaISO(desde) || !esFechaISO(hasta)) {
+      const fecha = esFechaISO(req.query.fecha) ? req.query.fecha : new Date().toISOString().slice(0, 10);
+      ({ desde, hasta } = _rangoPeriodo(String(req.query.periodo || 'day'), fecha));
+    }
+    const pv = await ventasCampania.poolVentas();
+    const c = ctx.campanaVentasId;
+    const [rs, conf] = await Promise.all([
+      pv.request().input('c', sql.Int, c).input('desde', sql.NVarChar(10), desde).input('hasta', sql.NVarChar(10), hasta).query(`
+        SELECT idUser, LTRIM(RTRIM(nombreAgente)) nombre,
+               ISNULL(NULLIF(LTRIM(RTRIM(estatus)), ''), '(sin estatus)') estatus, COUNT(*) n
+        FROM Ventas
+        WHERE campaignId = @c AND fecha >= @desde AND fecha < DATEADD(DAY, 1, CAST(@hasta AS date))
+        GROUP BY idUser, LTRIM(RTRIM(nombreAgente)), ISNULL(NULLIF(LTRIM(RTRIM(estatus)), ''), '(sin estatus)')`),
+      pv.request().input('c', sql.Int, c).query(`
+        SELECT id, LTRIM(RTRIM(nombreEstado)) nombreEstado, color FROM CampaignStatuses
+        WHERE campaignId = @c AND activo = 1 ORDER BY orden, id`),
+    ]);
+    // Un asesor por usuario de Ventas (o por nombre si la venta no trae usuario).
+    const porAgente = new Map();
+    const totales = {};
+    let sinUsuario = 0;
+    for (const r of rs.recordset) {
+      const clave = r.idUser ? `u${r.idUser}` : `n${ventasCampania.normalizar(r.nombre)}`;
+      if (!porAgente.has(clave)) {
+        porAgente.set(clave, {
+          agentId: r.idUser || -(++sinUsuario), nombreAgente: r.nombre || '(sin asesor)',
+          campaignId: c, campaignNombre: ctx.campanaVentasNombre, estatusCounts: {}, total: 0,
+        });
+      }
+      const a = porAgente.get(clave);
+      a.estatusCounts[r.estatus] = (a.estatusCounts[r.estatus] ?? 0) + r.n;
+      a.total += r.n;
+      totales[r.estatus] = (totales[r.estatus] ?? 0) + r.n;
+    }
+    res.json({
+      success: true,
+      data: { desde, hasta, stats: [...porAgente.values()], statuses: conf.recordset, totalesPorEstatus: totales, ventas: [] },
+    });
+  } catch (err) {
+    logger.error('operacionesController.getVentasPorAgente', err);
+    res.status(500).json({ success: false, message: 'Error al leer las ventas por agente' });
+  }
+}
+
+// Ventas del día y de la quincena de cada agente de una campaña de ventas,
+// contra su meta (VENTAS_METAS) y lo que pide la pre nómina. Los agentes de
+// AGYDA se cruzan con los asesores de Ventas por nombre (como Nómina).
+async function _productividadVentas(pool, ctx, fecha, agenteIds, nombrePorId) {
+  const pv = await ventasCampania.poolVentas();
+  const quincena = await _quincenaDe(pool, fecha);
+  const contados = await ventasCampania.estatusContados(pool, 'metas');
+  const c = ctx.campanaVentasId;
+  const rs = await pv.request().input('c', sql.Int, c).input('f', sql.NVarChar(10), fecha)
+    .input('qd', sql.NVarChar(10), quincena.desde).input('qh', sql.NVarChar(10), quincena.hasta)
+    .query(`
+      SELECT idUser, LTRIM(RTRIM(nombreAgente)) nombre,
+        SUM(CASE WHEN CONVERT(varchar(10), fecha, 23) = @f THEN 1 ELSE 0 END) totalDia,
+        SUM(CASE WHEN CONVERT(varchar(10), fecha, 23) = @f AND LTRIM(RTRIM(estatus)) IN (${ventasCampania.sqlIn(contados)}) THEN 1 ELSE 0 END) contadasDia,
+        SUM(CASE WHEN CONVERT(varchar(10), fecha, 23) <= @f AND LTRIM(RTRIM(estatus)) IN (${ventasCampania.sqlIn(ventasCampania.ESTATUS_NOMINA)}) THEN 1 ELSE 0 END) pagablesQuincena
+      FROM Ventas
+      WHERE campaignId = @c AND fecha >= @qd AND fecha < DATEADD(DAY, 1, CAST(@qh AS date))
+      GROUP BY idUser, LTRIM(RTRIM(nombreAgente))`);
+  const metasRs = await pool.request().input('c', sql.Int, c).input('f', sql.NVarChar(10), fecha)
+    .query(`SELECT VM_ASESOR_ID asesorId, SUM(ISNULL(VM_META_UNIDADES, 0)) meta FROM VENTAS_METAS
+            WHERE VM_TIPO = 'diaria' AND VM_ALCANCE = 'asesor' AND VM_CAMPANA_ID = @c AND VM_PERIODO = @f
+            GROUP BY VM_ASESOR_ID`).catch(() => ({ recordset: [] }));
+  const metaPorAsesor = new Map(metasRs.recordset.map((m) => [m.asesorId, Number(m.meta) || 0]));
+  const asesores = await ventasCampania.asesoresVentas(pv);
+
+  const pre = await _preNomina(pool);
+  const campPre = pre?.campanas?.find((x) => x.campanaId === c) ?? null;
+  const diasQuincena = _diasHabiles(quincena.desde, quincena.hasta);
+  const campana = {
+    nombre: ctx.campanaVentasNombre,
+    quincena,
+    pagablesQuincena: rs.recordset.reduce((s, r) => s + (r.pagablesQuincena || 0), 0),
+    necesariasQuincena: campPre?.ventasNecesarias ?? null,
+    preNominaBase: pre?.periodo ?? null,
+  };
+
+  const porAgente = new Map();
+  for (const id of agenteIds) {
+    const nombre = nombrePorId.get(id) ?? '';
+    const norm = ventasCampania.normalizar(nombre);
+    const idsV = nombre ? ventasCampania.idsVentasDe(asesores, nombre) : [];
+    const suyas = rs.recordset.filter((r) => (r.idUser && idsV.includes(r.idUser)) || ventasCampania.mismoNombre(ventasCampania.normalizar(r.nombre), norm));
+    const sum = (k) => suyas.reduce((s, r) => s + (r[k] || 0), 0);
+    const metaCapturada = idsV.reduce((s, x) => s + (metaPorAsesor.get(x) ?? 0), 0);
+
+    const agPre = pre?.agentes?.find((a) => a.neusId === id) ?? null;
+    const sueldo = agPre?.sueldo ?? pre?.config?.sueldoBase ?? null;
+    const aporte = pre?.equilibrio?.aportePromedio ?? 0;
+    const minimas = agPre?.ventasMinimas ?? (aporte > 0 && sueldo ? Math.ceil(sueldo / aporte) : null);
+    // Sin meta capturada en Metas, la sugerida por la pre nómina: sus ventas
+    // mínimas de la quincena repartidas en los días hábiles.
+    const metaSugerida = minimas && diasQuincena ? Math.ceil(minimas / diasQuincena) : null;
+    const metaDia = metaCapturada > 0 ? metaCapturada : metaSugerida;
+    const contadasDia = sum('contadasDia');
+    const pagables = sum('pagablesQuincena');
+    const comision = _comisionPorVenta(campPre, sueldo);
+
+    porAgente.set(id, {
+      ligadoAVentas: idsV.length > 0 || suyas.length > 0,
+      totalDia: sum('totalDia'),
+      contadasDia,
+      metaDia,
+      metaOrigen: metaCapturada > 0 ? 'metas' : metaSugerida ? 'pre_nomina' : null,
+      cumplimientoDia: metaDia ? Math.round((contadasDia / metaDia) * 1000) / 10 : null,
+      pagablesQuincena: pagables,
+      minimasQuincena: minimas,
+      sueldo,
+      comisionEstimada: comision != null ? Math.round(pagables * comision * 100) / 100 : null,
+      campana,
+    });
+  }
+  return porAgente;
+}
+
 async function _queryReportePostulantes(pool, desde, hasta) {
   const porCampaniaRs = await pool.request()
     .input('desde', sql.NVarChar, desde).input('hasta', sql.NVarChar, hasta)
@@ -1297,6 +1783,12 @@ function _buildWhereInteracciones(req, rq) {
     rq.input('tipificacionId', sql.Int, req.query.tipificacionId);
     where.push('i.CI_TIPIFICACION_ID = @tipificacionId');
   }
+  // Por nombre: en el apartado de una campaña la lista de tipificaciones
+  // mezcla las de AGYDA con los estatus de Ventas (ver getContextoReportesCampania).
+  if (req.query.tipificacion) {
+    rq.input('tipificacionNombre', sql.NVarChar(100), String(req.query.tipificacion));
+    where.push('LTRIM(RTRIM(ti.CT_NOMBRE)) = @tipificacionNombre');
+  }
   if (req.query.campaniaId) {
     rq.input('campaniaId', sql.Int, req.query.campaniaId);
     where.push('i.CI_CAMPANIA_ID = @campaniaId');
@@ -1312,54 +1804,190 @@ function _buildWhereInteracciones(req, rq) {
   return where;
 }
 
-// GET /api/operaciones/interacciones?texto=&agenteId=&tipificacionId=&campaniaId=&desde=&hasta=
+// Canal con el que se muestran los registros del histórico de Ventas (vienen
+// del marcador: el sistema de Ventas no tiene canales).
+const CANAL_VENTAS = 'Marcador (Ventas)';
+
+// Registros del histórico de Ventas de la campaña con los mismos filtros del
+// listado. Los que ya salieron de una interacción de AGYDA (CC_VENTAS_SYNC)
+// no se repiten: esos vienen de CCO_INTERACCIONES. id negativo (-idVenta).
+async function _interaccionesDeVentas(pool, req, ctx, top) {
+  // Un id de tipificación de AGYDA no existe en Ventas: con ese filtro no aplica.
+  if (req.query.tipificacionId) return [];
+  const pv = await ventasCampania.poolVentas();
+  const excluir = await ventasCampania.ventasSincronizadas(pool, ctx.campanaVentasId);
+  const rq = pv.request().input('c', sql.Int, ctx.campanaVentasId);
+  const where = ['campaignId = @c'];
+  if (excluir.length) where.push(`idVenta NOT IN (${excluir.join(',')})`);
+  if (req.query.texto) {
+    rq.input('texto', sql.NVarChar(200), `%${req.query.texto}%`);
+    where.push('(nombreCliente LIKE @texto OR telefonoCliente LIKE @texto)');
+  }
+  if (req.query.tipificacion) {
+    rq.input('tip', sql.NVarChar(100), String(req.query.tipificacion));
+    where.push('LTRIM(RTRIM(estatus)) = @tip');
+  }
+  if (req.query.agenteId) {
+    // El agente de AGYDA es su asesor en Ventas por nombre (como Nómina y Metas).
+    const u = await pool.request().input('id', sql.Int, Number(req.query.agenteId))
+      .query('SELECT NEUS_NOMBRES nombre FROM NEUS_USUARIOS WHERE NEUS_ID = @id');
+    const nombre = String(u.recordset[0]?.nombre || '').trim();
+    if (!nombre) return [];
+    const ids = ventasCampania.idsVentasDe(await ventasCampania.asesoresVentas(pv), nombre);
+    rq.input('agNombre', sql.NVarChar(200), nombre);
+    where.push(`(${ids.length ? `idUser IN (${ids.join(',')}) OR ` : ''}LTRIM(RTRIM(nombreAgente)) = @agNombre)`);
+  }
+  // Ventas guarda la hora local del servidor: el rango va por fecha de calendario.
+  if (req.query.desde) { rq.input('desde', sql.NVarChar(10), String(req.query.desde)); where.push('fecha >= @desde'); }
+  if (req.query.hasta) { rq.input('hasta', sql.NVarChar(10), String(req.query.hasta)); where.push('fecha < DATEADD(DAY, 1, CAST(@hasta AS date))'); }
+
+  const campaniaNombre = (await pool.request().input('c', sql.Int, Number(req.query.campaniaId))
+    .query('SELECT CM2_NOMBRE n FROM CCO_CAMPANIAS WHERE CM2_ID = @c')).recordset[0]?.n ?? ctx.campanaVentasNombre;
+  const rs = await rq.query(`
+    SELECT TOP (${top}) idVenta, nombreCliente, telefonoCliente, nombreAgente, estatus, fecha
+    FROM Ventas WHERE ${where.join(' AND ')}
+    ORDER BY fecha DESC, idVenta DESC`);
+  const t = (v) => (v == null ? null : String(v).trim() || null);
+  return rs.recordset.map((v) => ({
+    id: -v.idVenta,
+    clienteNombre: t(v.nombreCliente),
+    clienteTelefono: t(v.telefonoCliente),
+    agenteId: null,
+    agenteNombre: t(v.nombreAgente),
+    fechaInicio: v.fecha,
+    fechaCierre: v.fecha,
+    estado: 'cerrada',
+    canalNombre: CANAL_VENTAS,
+    campaniaNombre,
+    tipificacionNombre: t(v.estatus),
+    origen: 'ventas',
+  }));
+}
+
+// Interacciones cerradas de AGYDA + (en una campaña de ventas) su histórico
+// de Ventas, las más recientes primero.
+async function _buscarInteracciones(req, top) {
+  const pool = await databaseService.getPool(req.user?.empresa);
+  const rq = pool.request();
+  const where = _buildWhereInteracciones(req, rq);
+  const rs = await rq.query(`
+    SELECT TOP ${top}
+      i.CI_ID id, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
+      i.CI_AGENTE_ID agenteId, i.CI_AGENTE_NOMBRE agenteNombre,
+      i.CI_FECHA_INICIO fechaInicio, i.CI_FECHA_CIERRE fechaCierre, i.CI_ESTADO estado,
+      cn.CN_NOMBRE canalNombre, cm.CM2_NOMBRE campaniaNombre, ti.CT_NOMBRE tipificacionNombre
+    FROM dbo.CCO_INTERACCIONES i
+    LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
+    LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
+    LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
+    WHERE ${where.join(' AND ')}
+    ORDER BY i.CI_FECHA_CIERRE DESC
+  `);
+  let filas = rs.recordset.map((r) => ({ ...r, origen: 'agyda' }));
+
+  const ctx = req.query.campaniaId ? await ventasCampania.contextoVentas(pool, Number(req.query.campaniaId)) : null;
+  if (ctx) {
+    try {
+      const deVentas = await _interaccionesDeVentas(pool, req, ctx, top);
+      filas = [...filas, ...deVentas]
+        .sort((a, b) => new Date(b.fechaCierre || 0).getTime() - new Date(a.fechaCierre || 0).getTime())
+        .slice(0, top);
+    } catch (e) {
+      logger.error('operacionesController.interacciones → histórico Ventas', e);
+    }
+  }
+  return filas;
+}
+
+// GET /api/operaciones/interacciones?texto=&agenteId=&tipificacionId=&tipificacion=&campaniaId=&desde=&hasta=
 async function listInteracciones(req, res) {
   try {
-    const pool = await databaseService.getPool(req.user?.empresa);
-    const rq = pool.request();
-    const where = _buildWhereInteracciones(req, rq);
-
-    const rs = await rq.query(`
-      SELECT TOP 300
-        i.CI_ID id, i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
-        i.CI_AGENTE_ID agenteId, i.CI_AGENTE_NOMBRE agenteNombre,
-        i.CI_FECHA_INICIO fechaInicio, i.CI_FECHA_CIERRE fechaCierre, i.CI_ESTADO estado,
-        cn.CN_NOMBRE canalNombre, cm.CM2_NOMBRE campaniaNombre, ti.CT_NOMBRE tipificacionNombre
-      FROM dbo.CCO_INTERACCIONES i
-      LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
-      LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
-      LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
-      WHERE ${where.join(' AND ')}
-      ORDER BY i.CI_FECHA_CIERRE DESC
-    `);
-    res.json({ success: true, data: rs.recordset });
+    res.json({ success: true, data: await _buscarInteracciones(req, 300) });
   } catch (err) {
     logger.error('operacionesController.listInteracciones', err);
     res.status(500).json({ success: false, message: 'Error al buscar interacciones' });
   }
 }
 
+// GET /api/operaciones/campanias/:id/contexto-reportes — lo que los reportes
+// de una campaña en la Suite necesitan saber de ella: si es de ventas (su
+// campaña en Ventas y si sus grupos son solo de marcador) y sus
+// tipificaciones. En un grupo solo de marcador las tipificaciones son los
+// estatus de Ventas; si también atiende canales, las de AGYDA más esos.
+async function getContextoReportesCampania(req, res) {
+  try {
+    const campaniaId = Number(req.params.id);
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const propias = (await pool.request().input('c', sql.Int, campaniaId).query(`
+      SELECT DISTINCT LTRIM(RTRIM(CT_NOMBRE)) nombre FROM dbo.CCO_TIPIFICACIONES
+      WHERE CT_CAMPANIA_ID = @c AND ISNULL(CT_ACTIVO, 1) = 1 ORDER BY nombre`)).recordset;
+    let tipificaciones = propias.map((t) => ({ nombre: t.nombre, color: null, origen: 'agyda' }));
+    // Agentes de la campaña: los de sus skills y los miembros (agentes) de
+    // sus grupos — los de un grupo solo de marcador no entran a los skills.
+    const agentes = (await pool.request().input('c', sql.Int, campaniaId).query(`
+      SELECT u.NEUS_ID id, LTRIM(RTRIM(u.NEUS_NOMBRES)) nombre
+      FROM NEUS_USUARIOS u
+      WHERE u.NEUS_ACTIVO = 1 AND (
+        u.NEUS_ID IN (SELECT ga.CGA_USUARIO_ID FROM CCO_GRUPO_AGENTES ga
+                      JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID
+                      WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID = @c)
+        OR u.NEUS_ID IN (SELECT m.EQM_USUARIO_ID FROM CC_EQUIPO_MIEMBROS m
+                         JOIN CC_EQUIPOS e ON e.EQ_ID = m.EQM_EQUIPO_ID AND e.EQ_ACTIVO = 1
+                         WHERE m.EQM_ROL = 'agente'
+                           AND (e.EQ_CAMPANIA_ID = @c OR EXISTS (SELECT 1 FROM CC_EQUIPO_CAMPANIAS ec WHERE ec.EQC_EQUIPO_ID = e.EQ_ID AND ec.EQC_CAMPANIA_ID = @c))))
+      ORDER BY nombre`).catch(() => ({ recordset: [] }))).recordset;
+    const ventas = await ventasCampania.contextoVentas(pool, campaniaId);
+    if (ventas) {
+      try {
+        const estatus = await ventasCampania.estatusDeCampana(await ventasCampania.poolVentas(), ventas.campanaVentasId);
+        const base = ventas.soloMarcador ? [] : tipificaciones;
+        const n = ventasCampania.normalizar;
+        tipificaciones = [
+          ...base,
+          ...estatus.filter((e) => !base.some((b) => n(b.nombre) === n(e.nombre))).map((e) => ({ ...e, origen: 'ventas' })),
+        ];
+      } catch (e) {
+        ventas.error = `No se pudo leer la BD de Ventas: ${e.message}`;
+      }
+    }
+    res.json({ success: true, data: { campaniaId, ventas, tipificaciones, agentes } });
+  } catch (err) {
+    logger.error('operacionesController.getContextoReportesCampania', err);
+    res.status(500).json({ success: false, message: 'Error al leer la campaña' });
+  }
+}
+
+// GET /api/operaciones/agentes-catalogo — todos los agentes para los
+// selectores de la Suite: los activos y, aparte, los deshabilitados
+// (NEUS_ACTIVO = 0), que siguen teniendo interacciones en el histórico.
+async function listAgentesCatalogo(req, res) {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const rs = await pool.request().query(`
+      SELECT NEUS_ID id, LTRIM(RTRIM(NEUS_NOMBRES)) nombre, CAST(ISNULL(NEUS_ACTIVO, 0) AS bit) activo
+      FROM NEUS_USUARIOS
+      WHERE NULLIF(LTRIM(RTRIM(NEUS_NOMBRES)), '') IS NOT NULL
+      ORDER BY NEUS_NOMBRES`);
+    const filas = rs.recordset.map((u) => ({ id: u.id, nombre: u.nombre }));
+    res.json({
+      success: true,
+      data: {
+        activos: filas.filter((_, i) => rs.recordset[i].activo),
+        deshabilitados: filas.filter((_, i) => !rs.recordset[i].activo),
+      },
+    });
+  } catch (err) {
+    logger.error('operacionesController.listAgentesCatalogo', err);
+    res.status(500).json({ success: false, message: 'Error al listar los agentes' });
+  }
+}
+
 // GET /api/operaciones/interacciones/excel — mismo filtro de arriba, en .xlsx
 async function exportarInteracciones(req, res) {
   try {
-    const pool = await databaseService.getPool(req.user?.empresa);
-    const rq = pool.request();
-    const where = _buildWhereInteracciones(req, rq);
+    const filas = await _buscarInteracciones(req, 2000);
 
-    const rs = await rq.query(`
-      SELECT TOP 2000
-        i.CI_CLIENTE_NOMBRE clienteNombre, i.CI_CLIENTE_TELEFONO clienteTelefono,
-        cm.CM2_NOMBRE campaniaNombre, cn.CN_NOMBRE canalNombre, i.CI_AGENTE_NOMBRE agenteNombre,
-        ti.CT_NOMBRE tipificacionNombre, i.CI_FECHA_CIERRE fechaCierre
-      FROM dbo.CCO_INTERACCIONES i
-      LEFT JOIN dbo.CCO_CANALES cn ON cn.CN_ID = i.CI_CANAL_ID
-      LEFT JOIN dbo.CCO_CAMPANIAS cm ON cm.CM2_ID = i.CI_CAMPANIA_ID
-      LEFT JOIN dbo.CCO_TIPIFICACIONES ti ON ti.CT_ID = i.CI_TIPIFICACION_ID
-      WHERE ${where.join(' AND ')}
-      ORDER BY i.CI_FECHA_CIERRE DESC
-    `);
-
-    const hoja = rs.recordset.map((r) => ({
+    const hoja = filas.map((r) => ({
       Cliente: r.clienteNombre || '', Teléfono: r.clienteTelefono || '', Campaña: r.campaniaNombre || '',
       Canal: r.canalNombre || '', Agente: r.agenteNombre || '', Tipificación: r.tipificacionNombre || '',
       Cierre: r.fechaCierre ? new Date(r.fechaCierre).toLocaleString('es-MX') : '',
@@ -2294,6 +2922,11 @@ module.exports = {
   getReportePostulantes,
   exportarReportePostulantes,
   getReporteEjecutivoReclutamiento,
+  getReporteEjecutivoVentas,
+  getVentasPorAgente,
+  getPanoramaCampanias,
+  getContextoReportesCampania,
+  listAgentesCatalogo,
   listInteracciones,
   exportarInteracciones,
   getMiResumenAsesor,

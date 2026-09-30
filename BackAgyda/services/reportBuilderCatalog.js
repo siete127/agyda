@@ -18,7 +18,7 @@
  * se liga a un grupo (por su agente, su skill o su campaña). Eso da la
  * dimensión/filtro "Grupo" y el ALCANCE de un supervisor (solo sus grupos).
  * `requiere` = modalidades de grupo con las que el origen tiene sentido
- * (omnicanal → interacciones; marcador → llamadas).
+ * (omnicanal → interacciones; marcador → llamadas y ventas de la BD de Ventas).
  */
 
 const sql = require('mssql');
@@ -101,6 +101,19 @@ const LIGA_MENSAJES = ligaGrupo({ agente: 'ISNULL(m.MG_AGENTE_ID, i.CI_AGENTE_ID
 const LIGA_LLAMADAS = ligaGrupo({ campania: 'cp.CP_CAMPANIA_ID' });
 const LIGA_TIEMPOS = ligaGrupo({ agente: 'ut.neus_id' });
 const LIGA_POSTULANTES = ligaGrupo({ campania: 'cp.CP_CAMPANIA_ID' });
+
+// BD de Ventas (plata_prospectPRO): vive en la misma instancia de SQL Server
+// que las BD de la intranet, así que se consulta con nombre de tres partes.
+// Un grupo se liga a sus ventas por su campaña de ventas (EQ_VENTAS_CAMPANA_ID).
+const VENTAS_DB = `[${String(process.env.VENTAS_DB_NAME || 'plata_prospectPRO').replace(/[^\w]/g, '')}]`;
+const LIGA_VENTAS = {
+  condicion: (ids) => `EXISTS (SELECT 1 FROM dbo.CC_EQUIPOS ge WHERE ge.EQ_ID IN (${ids}) AND ge.EQ_VENTAS_CAMPANA_ID = v.campaignId)`,
+  apply: 'OUTER APPLY (SELECT TOP 1 e.EQ_NOMBRE AS nombre FROM dbo.CC_EQUIPOS e WHERE e.EQ_ACTIVO = 1 AND e.EQ_VENTAS_CAMPANA_ID = v.campaignId ORDER BY e.EQ_ID) gq',
+};
+const V_ESTATUS = 'LTRIM(RTRIM(v.estatus))';
+// Estatus que Nómina paga como venta (mismos que calcularNomina).
+const V_ES_VENTA = `${V_ESTATUS} IN ('Aprobada', 'approved', 'Formalizado', 'formalized_banamex', 'approved_banamex')`;
+const V_SUMA = (cond) => `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END)`;
 
 const pct = (num, den) => `CAST(${num} * 100.0 / NULLIF(${den}, 0) AS decimal(9,1))`;
 
@@ -245,6 +258,50 @@ const ORIGENES = {
     ordenPorDefecto: 'fecha',
   },
 
+  /* ═══ Ventas del marcador (BD de Ventas) ═══ */
+  ventas: {
+    label: 'Ventas (marcador)',
+    descripcion: 'Registros de la BD de Ventas (PlataCard, Amex, Banamex…) de la campaña de ventas del grupo: por asesor, estatus y fecha.',
+    requiere: ['marcador', 'ambos'],
+    liga: LIGA_VENTAS,
+    from: `
+      ${VENTAS_DB}.dbo.Ventas v
+      LEFT JOIN ${VENTAS_DB}.dbo.[Campanas] vc ON vc.ID = v.campaignId
+    `,
+    dimensiones: {
+      ...dimsTiempo('v.fecha', 'Fecha'),
+      equipo:        dimGrupo(LIGA_VENTAS),
+      campania:      { label: 'Campaña de ventas', expr: "ISNULL(vc.nombre, '(sin campaña)')" },
+      asesor:        { label: 'Asesor', expr: "ISNULL(NULLIF(LTRIM(RTRIM(v.nombreAgente)), ''), '(sin asesor)')" },
+      estatus:       { label: 'Estatus', expr: `ISNULL(NULLIF(${V_ESTATUS}, ''), '(sin estatus)')` },
+      es_venta:      { label: '¿Es venta?', expr: `CASE WHEN ${V_ES_VENTA} THEN 'Venta' ELSE 'No venta' END` },
+      con_evidencia: { label: '¿Con evidencia?', expr: "CASE WHEN DATALENGTH(v.evidencia) > 0 THEN 'Sí' ELSE 'No' END" },
+    },
+    metricas: {
+      total:            { label: 'Registros', expr: 'COUNT(*)', formato: 'entero' },
+      ventas:           { label: 'Ventas', expr: V_SUMA(V_ES_VENTA), formato: 'entero' },
+      pct_conversion:   { label: '% conversión', expr: pct(V_SUMA(V_ES_VENTA), 'COUNT(*)'), formato: 'porcentaje' },
+      rechazadas:       { label: 'Rechazadas', expr: V_SUMA(`${V_ESTATUS} IN ('Rechazada', 'Rechazado', 'Declinado', 'Declinada')`), formato: 'entero' },
+      agendadas:        { label: 'Agendadas', expr: V_SUMA(`${V_ESTATUS} IN ('Agendada', 'Agendado')`), formato: 'entero' },
+      pendientes:       { label: 'Pendientes', expr: V_SUMA(`${V_ESTATUS} IN ('Pendiente', 'En Proceso')`), formato: 'entero' },
+      asesores:         { label: 'Asesores', expr: "COUNT(DISTINCT NULLIF(LTRIM(RTRIM(v.nombreAgente)), ''))", formato: 'entero' },
+      ventas_por_asesor:{ label: 'Ventas por asesor', expr: `CAST(${V_SUMA(V_ES_VENTA)} * 1.0 / NULLIF(COUNT(DISTINCT NULLIF(LTRIM(RTRIM(v.nombreAgente)), '')), 0) AS decimal(9,1))`, formato: 'decimal' },
+      clientes_unicos:  { label: 'Teléfonos únicos', expr: "COUNT(DISTINCT NULLIF(LTRIM(RTRIM(v.telefonoCliente)), ''))", formato: 'entero' },
+      con_evidencia_c:  { label: 'Con evidencia', expr: V_SUMA('DATALENGTH(v.evidencia) > 0'), formato: 'entero' },
+    },
+    filtros: {
+      fecha:    { label: 'Rango de fechas', tipo: FILTRO_TIPOS.fecha_rango, col: 'v.fecha', porDefecto: true },
+      ...filtrosCalendario('v.fecha'),
+      equipo:   filtroGrupo(LIGA_VENTAS),
+      campania: { label: 'Campaña de ventas', tipo: FILTRO_TIPOS.id_lista, col: 'v.campaignId', catalogo: 'campania_ventas' },
+      estatus:  { label: 'Estatus', tipo: FILTRO_TIPOS.enum, col: V_ESTATUS, valoresDe: 'estatus_ventas', catalogo: 'estatus_ventas' },
+      es_venta: { label: '¿Es venta?', tipo: FILTRO_TIPOS.enum, col: `CASE WHEN ${V_ES_VENTA} THEN N'Venta' ELSE N'No venta' END`, valores: ['Venta', 'No venta'] },
+      asesor:   { label: 'Asesor', tipo: FILTRO_TIPOS.texto, col: 'v.nombreAgente' },
+      telefono: { label: 'Teléfono del cliente', tipo: FILTRO_TIPOS.texto, col: 'v.telefonoCliente' },
+    },
+    ordenPorDefecto: 'fecha',
+  },
+
   /* ═══ Tiempos de agentes ═══ */
   tiempos_agente: {
     label: 'Tiempos de agentes',
@@ -355,6 +412,12 @@ const CATALOGOS_FILTRO = {
   estado_tiempo: () => `SELECT clave AS id, ISNULL(ETIQUETA, ISNULL(descripcion, clave)) AS nombre FROM dbo.STATUS WHERE ISNULL(ACTIVO, 1) = 1 ORDER BY ORDEN, status_id`,
   equipo: (g) => `SELECT EQ_ID AS id, EQ_NOMBRE AS nombre FROM dbo.CC_EQUIPOS WHERE EQ_ACTIVO = 1
     ${g ? `AND EQ_ID IN (${g})` : ''} ORDER BY EQ_NOMBRE`,
+  // BD de Ventas: sus campañas y sus estatus (id = nombre: el filtro es por texto).
+  campania_ventas: (g) => `SELECT ID AS id, nombre FROM ${VENTAS_DB}.dbo.[Campanas] WHERE activo = 1
+    ${g ? `AND ID IN (SELECT EQ_VENTAS_CAMPANA_ID FROM dbo.CC_EQUIPOS WHERE EQ_ID IN (${g}))` : ''} ORDER BY nombre`,
+  estatus_ventas: (g) => `SELECT DISTINCT LTRIM(RTRIM(nombreEstado)) AS id, LTRIM(RTRIM(nombreEstado)) AS nombre
+    FROM ${VENTAS_DB}.dbo.CampaignStatuses WHERE activo = 1
+    ${g ? `AND campaignId IN (SELECT EQ_VENTAS_CAMPANA_ID FROM dbo.CC_EQUIPOS WHERE EQ_ID IN (${g}))` : ''} ORDER BY nombre`,
 };
 
 /* Vista "pública" del catálogo — sin exponer expresiones SQL. */

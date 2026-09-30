@@ -6,7 +6,7 @@ import {
   FolderTree, FileBarChart, Folder, FolderOpen, ChevronRight, Upload, RefreshCw,
   Download, Trash2, Database, Table2, SlidersHorizontal, FileCode2, AlertTriangle,
   CheckCircle2, ClipboardList, Users, BarChart2, X, FolderPlus, Pencil, Shield,
-  Lock, Globe, Check, Wrench, Search, Loader2, CalendarCheck,
+  Lock, Globe, Check, Wrench, Search, Loader2, CalendarCheck, LayoutDashboard,
 } from 'lucide-react'
 import { RegistrosFormularioVista } from '@/pages/contact-center/RegistrosFormularioPage'
 import { api, getApiError } from '@/lib/axios'
@@ -24,7 +24,9 @@ import { parseRdl, type RdlDefinition } from '@/lib/rdl'
 import { ReportBuilder } from './ReportBuilder'
 import { EjecutarRdl } from './EjecutarRdl'
 import { useSearchParams } from 'react-router-dom'
-import { CarpetaCampanias, EncabezadoCampania, RegistrosDeCampania, ProductividadCampaniaView } from './CampaniasSuite'
+import { SelectorAgente, type VistaAgentes } from '@/components/ui/SelectorAgente'
+import { PanoramaGeneral } from './PanoramaSuite'
+import { CarpetaCampanias, EncabezadoCampania, RegistrosDeCampania, ProductividadCampaniaView, ReporteEjecutivoCampania } from './CampaniasSuite'
 import { REPORTES_CAMPANIA, type ReporteCampaniaId } from './reportesCampania'
 import type { RdlReporte, RdlCarpeta, RdlRol, RbDefinicion, RbReporteGuardado, RbSugerencia } from '@/types/reporteDiario.types'
 
@@ -80,7 +82,8 @@ type SeleccionRdl = { tipo: 'rdl'; id: number }
 type SeleccionBuilder = { tipo: 'builder' }
 type SeleccionRbGuardado = { tipo: 'rb'; id: number }
 type SeleccionCampania = { tipo: 'campania'; id: number; reporte: ReporteCampaniaId }
-type Seleccion = SeleccionBase | SeleccionRdl | SeleccionBuilder | SeleccionRbGuardado | SeleccionCampania | null
+type SeleccionPanorama = { tipo: 'panorama' }
+type Seleccion = SeleccionBase | SeleccionRdl | SeleccionBuilder | SeleccionRbGuardado | SeleccionCampania | SeleccionPanorama | null
 
 export function SuiteReportesPage() {
   const qc = useQueryClient()
@@ -93,7 +96,8 @@ export function SuiteReportesPage() {
     const c = Number(searchParams.get('campania'))
     const r = searchParams.get('reporte')
     const rep = REPORTES_CAMPANIA.find((x) => x.id === r)?.id ?? REPORTES_CAMPANIA[0].id
-    return c ? { tipo: 'campania', id: c, reporte: rep } : { tipo: 'base', id: 'postulantes' }
+    // Sin campaña en la URL se abre el panorama general de todas las campañas.
+    return c ? { tipo: 'campania', id: c, reporte: rep } : { tipo: 'panorama' }
   })
   const { data: campanias = [] } = useQuery({
     queryKey: ['cc-campanias'],
@@ -132,7 +136,7 @@ export function SuiteReportesPage() {
     mutationFn: (id: number) => reporteDiarioService.eliminarRdl(id),
     onSuccess: () => {
       toast.success('Reporte eliminado')
-      setSel({ tipo: 'base', id: 'postulantes' })
+      setSel({ tipo: 'panorama' })
       qc.invalidateQueries({ queryKey: ['suite-reportes-rdl'] })
       qc.invalidateQueries({ queryKey: ['suite-reportes-carpetas'] })
     },
@@ -232,6 +236,17 @@ export function SuiteReportesPage() {
               <FolderPlus className="h-3.5 w-3.5" />
             </button>
           </div>
+
+          {/* Entrada fija: Panorama general (vista inicial) */}
+          <button
+            onClick={() => setSel({ tipo: 'panorama' })}
+            className={clsx(
+              'flex w-full items-center gap-2 border-b border-gray-100 px-3 py-2 text-left text-[0.8rem] font-semibold transition',
+              sel?.tipo === 'panorama' ? 'bg-brand/10 text-brand' : 'text-ink-secondary hover:bg-white',
+            )}
+          >
+            <LayoutDashboard className="h-4 w-4 flex-shrink-0" /> Panorama general
+          </button>
 
           {/* Entrada fija: Constructor de reportes */}
           {puedeUsarConstructor && <button
@@ -367,6 +382,7 @@ export function SuiteReportesPage() {
 
         {/* ── Panel derecho: visor ── */}
         <main className="flex-1 overflow-y-auto bg-white p-5">
+          {sel?.tipo === 'panorama' && <PanoramaGeneral onAbrir={(id, reporte) => setSel({ tipo: 'campania', id, reporte })} />}
           {sel?.tipo === 'base' && sel.id === 'postulantes' && <ReportePostulantesView />}
           {sel?.tipo === 'base' && sel.id === 'interacciones' && <InteraccionesView />}
           {sel?.tipo === 'base' && sel.id === 'registros-formularios' && <RegistrosFormularioVista />}
@@ -377,7 +393,9 @@ export function SuiteReportesPage() {
               <EncabezadoCampania campania={campaniaSel} reporte={sel.reporte} />
               {sel.reporte === 'registros' && <RegistrosDeCampania campaniaId={sel.id} />}
               {sel.reporte === 'interacciones' && <InteraccionesView campaniaId={sel.id} />}
-              {sel.reporte === 'ejecutivo' && <ReporteEjecutivoReclutamientoView campaniaFija={sel.id} />}
+              {sel.reporte === 'ejecutivo' && (
+                <ReporteEjecutivoCampania campaniaId={sel.id} reclutamiento={<ReporteEjecutivoReclutamientoView campaniaFija={sel.id} />} />
+              )}
               {sel.reporte === 'productividad' && <ProductividadCampaniaView campaniaId={sel.id} />}
             </div>
           )}
@@ -1180,31 +1198,62 @@ function ReportePostulantesView() {
 
 /* ══════════ Interacciones — buscador general (todas las campañas/canales) ══════════ */
 
+const fechaLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const haceDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return fechaLocal(d) }
+// Rangos de un clic para la fecha de cierre: [desde, hasta].
+const RANGOS_RAPIDOS: { id: string; label: string; rango: () => [string, string] }[] = [
+  { id: 'hoy', label: 'Hoy', rango: () => [haceDias(0), haceDias(0)] },
+  { id: 'ayer', label: 'Ayer', rango: () => [haceDias(1), haceDias(1)] },
+  { id: '7d', label: 'Últimos 7 días', rango: () => [haceDias(6), haceDias(0)] },
+  { id: 'mes', label: 'Este mes', rango: () => [`${haceDias(0).slice(0, 8)}01`, haceDias(0)] },
+  { id: '30d', label: 'Últimos 30 días', rango: () => [haceDias(29), haceDias(0)] },
+]
+
 // `campaniaId`: apartado de una campaña (carpeta Campañas) — solo sus interacciones.
 function InteraccionesView({ campaniaId }: { campaniaId?: number } = {}) {
   const [texto, setTexto] = useState('')
   const [textoBuscado, setTextoBuscado] = useState('')
   const [agenteId, setAgenteId] = useState<number | ''>('')
   const [tipificacionId, setTipificacionId] = useState<number | ''>('')
+  // En el apartado de una campaña la tipificación se filtra por nombre: su
+  // lista mezcla las de AGYDA con los estatus de Ventas.
+  const [tipificacionNombre, setTipificacionNombre] = useState('')
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
 
-  const { data: agentes = [] } = useQuery({
-    queryKey: ['rb-catalogo-filtro', 'agente'],
-    queryFn: () => reporteDiarioService.builderCatalogoFiltro('agente'),
+  const { data: catalogoAgentes } = useQuery({
+    queryKey: ['suite-agentes-catalogo'],
+    queryFn: () => reporteDiarioService.getAgentesCatalogo(),
     staleTime: 5 * 60_000,
   })
   const { data: tipificaciones = [] } = useQuery({
     queryKey: ['rb-catalogo-filtro', 'tipificacion'],
     queryFn: () => reporteDiarioService.builderCatalogoFiltro('tipificacion'),
     staleTime: 5 * 60_000,
+    enabled: !campaniaId,
   })
+  const { data: contexto } = useQuery({
+    queryKey: ['suite-campania-contexto', campaniaId],
+    queryFn: () => reporteDiarioService.getContextoReportesCampania(campaniaId!),
+    enabled: !!campaniaId,
+    staleTime: 5 * 60_000,
+  })
+  const ventas = contexto?.ventas ?? null
+  // Pestañas del selector de agente: los de la campaña (sus skills y sus
+  // grupos, solo en el apartado de una campaña), todos los activos y los deshabilitados.
+  const vistasAgentes: VistaAgentes[] = [
+    ...(campaniaId ? [{ id: 'campania', label: 'Campaña', agentes: contexto?.agentes ?? [] }] : []),
+    { id: 'todos', label: 'Todos', agentes: catalogoAgentes?.activos ?? [] },
+    { id: 'deshabilitados', label: 'Deshabilitados', agentes: catalogoAgentes?.deshabilitados ?? [], deshabilitados: true },
+  ]
+  const agentes = vistasAgentes.flatMap((v) => v.agentes)
 
   const filtro = {
     campaniaId,
     texto: textoBuscado || undefined,
     agenteId: agenteId || undefined,
     tipificacionId: tipificacionId || undefined,
+    tipificacion: tipificacionNombre || undefined,
     desde: desde || undefined,
     hasta: hasta || undefined,
   }
@@ -1215,7 +1264,26 @@ function InteraccionesView({ campaniaId }: { campaniaId?: number } = {}) {
   })
 
   const buscar = () => setTextoBuscado(texto.trim())
-  const hayFiltrosExtra = !!(agenteId || tipificacionId || desde || hasta)
+  const hayFiltrosExtra = !!(agenteId || tipificacionId || tipificacionNombre || desde || hasta)
+  const fmtCorta = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}`
+  const filtrosActivos = [
+    textoBuscado && { id: 'texto', label: `“${textoBuscado}”`, quitar: () => { setTexto(''); setTextoBuscado('') } },
+    agenteId && { id: 'agente', label: agentes.find((a) => a.id === agenteId)?.nombre ?? 'Agente', quitar: () => setAgenteId('') },
+    tipificacionNombre && { id: 'tip', label: tipificacionNombre, quitar: () => setTipificacionNombre('') },
+    tipificacionId && { id: 'tipId', label: tipificaciones.find((t) => t.id === tipificacionId)?.nombre ?? 'Tipificación', quitar: () => setTipificacionId('') },
+    (desde || hasta) && {
+      id: 'fecha',
+      label: desde && hasta ? `${fmtCorta(desde)} – ${fmtCorta(hasta)}` : desde ? `Desde ${fmtCorta(desde)}` : `Hasta ${fmtCorta(hasta)}`,
+      quitar: () => { setDesde(''); setHasta('') },
+    },
+  ].filter(Boolean) as { id: string; label: string; quitar: () => void }[]
+  const porCanal = Object.entries(
+    resultados.reduce<Record<string, number>>((acc, r) => {
+      const k = r.canalNombre ?? 'Sin canal'
+      acc[k] = (acc[k] ?? 0) + 1
+      return acc
+    }, {}),
+  ).sort((a, b) => b[1] - a[1])
 
   return (
     <div className="space-y-4">
@@ -1228,15 +1296,39 @@ function InteraccionesView({ campaniaId }: { campaniaId?: number } = {}) {
         </p>
       </div>
 
-      <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && buscar()}
-            className="field flex-1"
-            placeholder="Buscar por nombre o teléfono del cliente…"
-          />
+      {ventas && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2 text-[0.75rem] text-violet-800">
+          Incluye el histórico de Ventas de <b>{ventas.campanaVentasNombre}</b> (canal «Marcador (Ventas)»).{' '}
+          {ventas.soloMarcador
+            ? 'El grupo es solo de marcador: las tipificaciones son los estatus de Ventas.'
+            : 'Las tipificaciones juntan las de la campaña y los estatus de Ventas.'}
+          {ventas.error && <span className="ml-1 font-semibold text-red-600">{ventas.error}</span>}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-gray-200 bg-card shadow-sm">
+        {/* Buscador */}
+        <div className="flex flex-col gap-2 p-4 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
+            <input
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && buscar()}
+              className="field pl-10 pr-9"
+              placeholder="Buscar por nombre o teléfono del cliente…"
+              aria-label="Buscar por nombre o teléfono del cliente"
+            />
+            {texto && (
+              <button
+                onClick={() => { setTexto(''); setTextoBuscado('') }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-ink-tertiary hover:bg-gray-100 hover:text-ink"
+                aria-label="Borrar búsqueda"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <button
             onClick={buscar}
             disabled={isFetching}
@@ -1246,31 +1338,104 @@ function InteraccionesView({ campaniaId }: { campaniaId?: number } = {}) {
           </button>
           <a
             href={reporteDiarioService.interaccionesExcelUrl(filtro)}
-            className="flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-ink-secondary transition hover:bg-gray-50"
+            className="flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-card px-4 py-2.5 text-sm font-semibold text-ink-secondary transition hover:bg-gray-50"
           >
             <Download className="h-4 w-4" /> Excel
           </a>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select className="field" value={agenteId} onChange={(e) => setAgenteId(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">Todos los agentes</option>
-            {agentes.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-          </select>
-          <select className="field" value={tipificacionId} onChange={(e) => setTipificacionId(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">Todas las tipificaciones</option>
-            {tipificaciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-          <span className="text-[0.72rem] text-ink-secondary">Cierre desde</span>
-          <input type="date" className="field" value={desde} onChange={(e) => setDesde(e.target.value)} max={hasta || undefined} />
-          <span className="text-[0.72rem] text-ink-secondary">hasta</span>
-          <input type="date" className="field" value={hasta} onChange={(e) => setHasta(e.target.value)} min={desde || undefined} />
+        {/* Filtros */}
+        <div className="space-y-4 border-t border-gray-100 bg-gray-50/50 p-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+                <Users className="h-3.5 w-3.5" /> Agente
+                {campaniaId && (contexto?.agentes.length ?? 0) > 0 && <span className="font-normal normal-case tracking-normal">· {contexto?.agentes.length} en la campaña</span>}
+              </label>
+              <SelectorAgente vistas={vistasAgentes} value={agenteId} onChange={setAgenteId} />
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+                <CalendarCheck className="h-3.5 w-3.5" /> Fecha de cierre
+              </label>
+              <div className="flex items-center gap-2">
+                <input type="date" className="field" value={desde} onChange={(e) => setDesde(e.target.value)} max={hasta || undefined} aria-label="Desde" />
+                <span className="text-xs text-ink-tertiary">a</span>
+                <input type="date" className="field" value={hasta} onChange={(e) => setHasta(e.target.value)} min={desde || undefined} aria-label="Hasta" />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {RANGOS_RAPIDOS.map((r) => {
+                  const [d, h] = r.rango()
+                  const activo = desde === d && hasta === h
+                  return (
+                    <button key={r.id} onClick={() => { setDesde(d); setHasta(h) }}
+                      className={clsx('rounded-full border px-2.5 py-0.5 text-[0.7rem] font-semibold transition',
+                        activo ? 'border-brand bg-brand text-white' : 'border-gray-200 bg-card text-ink-secondary hover:border-brand/40 hover:text-brand')}>
+                      {r.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Tipificación
+              {ventas?.soloMarcador && <span className="font-normal normal-case tracking-normal">· estatus de {ventas.campanaVentasNombre}</span>}
+            </label>
+            {campaniaId && (contexto?.tipificaciones.length ?? 0) <= 12 ? (
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tipificación">
+                {[{ nombre: '', color: null as string | null }, ...(contexto?.tipificaciones ?? [])].map((t) => {
+                  const activo = tipificacionNombre === t.nombre
+                  return (
+                    <button key={t.nombre || '__todas'} role="radio" aria-checked={activo} onClick={() => setTipificacionNombre(t.nombre)}
+                      className={clsx('flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.75rem] font-semibold transition',
+                        activo ? 'border-ink bg-ink text-white shadow-sm' : 'border-gray-200 bg-card text-ink-secondary hover:border-gray-300 hover:text-ink')}>
+                      {t.nombre && <span className="h-2 w-2 rounded-full" style={{ background: t.color ?? '#9ca3af' }} />}
+                      {t.nombre || 'Todas'}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : campaniaId ? (
+              <select className="field md:w-1/2" value={tipificacionNombre} onChange={(e) => setTipificacionNombre(e.target.value)}>
+                <option value="">Todas las tipificaciones</option>
+                {(contexto?.tipificaciones ?? []).map((t) => <option key={t.nombre} value={t.nombre}>{t.nombre}</option>)}
+              </select>
+            ) : (
+              <select className="field md:w-1/2" value={tipificacionId} onChange={(e) => setTipificacionId(e.target.value ? Number(e.target.value) : '')}>
+                <option value="">Todas las tipificaciones</option>
+                {tipificaciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            )}
+          </div>
+        </div>
+
+        {/* Resultado y filtros activos */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 px-4 py-2.5">
+          <span className="text-[0.78rem] text-ink-secondary">
+            {isFetching ? 'Buscando…' : <><b className="text-ink">{resultados.length.toLocaleString('es-MX')}</b> {resultados.length === 1 ? 'resultado' : 'resultados'}</>}
+          </span>
+          {campaniaId && porCanal.map(([canal, n]) => (
+            <span key={canal} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[0.7rem] text-ink-secondary">
+              {canal} <b className="text-ink">{n}</b>
+            </span>
+          ))}
+          {filtrosActivos.length > 0 && <span className="mx-1 h-4 w-px bg-gray-200" />}
+          {filtrosActivos.map((f) => (
+            <span key={f.id} className="flex items-center gap-1 rounded-full border border-brand/20 bg-brand/5 py-0.5 pl-2.5 pr-1 text-[0.7rem] font-semibold text-brand">
+              {f.label}
+              <button onClick={f.quitar} className="rounded-full p-0.5 hover:bg-brand/10" aria-label={`Quitar filtro ${f.label}`}><X className="h-3 w-3" /></button>
+            </span>
+          ))}
           {hayFiltrosExtra && (
             <button
-              onClick={() => { setAgenteId(''); setTipificacionId(''); setDesde(''); setHasta('') }}
-              className="flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[0.7rem] font-semibold text-ink-tertiary hover:bg-gray-50"
+              onClick={() => { setAgenteId(''); setTipificacionId(''); setTipificacionNombre(''); setDesde(''); setHasta('') }}
+              className="ml-auto text-[0.72rem] font-semibold text-ink-tertiary hover:text-ink hover:underline"
             >
-              <X className="h-3 w-3" /> Limpiar filtros
+              Limpiar filtros
             </button>
           )}
         </div>
@@ -1300,7 +1465,11 @@ function InteraccionesView({ campaniaId }: { campaniaId?: number } = {}) {
                   <td className="px-3 py-2 font-semibold text-ink">{r.clienteNombre ?? '—'}</td>
                   <td className="px-3 py-2 text-ink-secondary">{r.clienteTelefono ?? '—'}</td>
                   <td className="px-3 py-2 text-ink-secondary">{r.campaniaNombre ?? '—'}</td>
-                  <td className="px-3 py-2 text-ink-secondary">{r.canalNombre ?? '—'}</td>
+                  <td className="px-3 py-2 text-ink-secondary">
+                    {r.origen === 'ventas'
+                      ? <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[0.66rem] font-semibold text-violet-700" title="Registro del histórico de Ventas">{r.canalNombre}</span>
+                      : r.canalNombre ?? '—'}
+                  </td>
                   <td className="px-3 py-2 text-ink-secondary">{r.agenteNombre ?? '—'}</td>
                   <td className="px-3 py-2 text-ink-secondary">{r.tipificacionNombre ?? '—'}</td>
                   <td className="px-3 py-2 text-ink-tertiary">{r.fechaCierre ? new Date(r.fechaCierre).toLocaleString('es-MX') : '—'}</td>

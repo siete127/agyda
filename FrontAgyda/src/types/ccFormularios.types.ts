@@ -85,6 +85,27 @@ export interface CCFormRegistros {
   total: number
   limite: number
   registros: CCFormRegistro[]
+  // Si el usuario puede editar las filas del histórico de Ventas (interaccionId < 0).
+  puedeEditarHistorico?: boolean
+}
+
+// GET /contact-center/formularios/:id/ventas/:idVenta — venta del histórico de Ventas.
+export interface CCVentaHistorico {
+  venta: {
+    idVenta: number
+    idUser: number
+    nombreCliente: string | null
+    telefonoCliente: string | null
+    estatus: string | null
+    fechaAgendada: string | null
+    horaAgendada: string | null
+    nombreAgente: string | null
+    evidencia: string | null
+    fecha: string
+  }
+  estatus: { nombre: string; color: string | null }[]
+  asesores: { id: number; nombre: string; activo: boolean }[]
+  seguimientos: { estatus: string; nombreAgente: string; notas: string | null; evidencia: string | null; fecha: string }[]
 }
 
 // GET /contact-center/formularios-publico/:token/prellenar?telefono= —

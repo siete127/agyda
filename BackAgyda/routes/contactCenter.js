@@ -227,6 +227,9 @@ router.put('/formularios/:id/tipificaciones', authenticateToken, requireActionAc
 router.get('/formularios/:id/interacciones', authenticateToken, requireActionAccess(M, 'ver'), forms.buscarInteraccionesDelFormulario);
 // Vista rápida de lo capturado en un formulario (página "Registros de formularios").
 router.get('/formularios/:id/registros', authenticateToken, verFormularios, forms.listRegistrosDelFormulario);
+// Ventas del histórico (BD de Ventas) de esas filas: ver y editar (admin o supervisor de la campaña/grupo).
+router.get('/formularios/:id/ventas/:idVenta', authenticateToken, verFormularios, forms.getVentaHistorico);
+router.put('/formularios/:id/ventas/:idVenta', authenticateToken, verFormularios, uploadCcEvidencia, forms.editarVentaHistorico);
 
 // Campo tipo 'buscador' dentro del constructor — lo usa el AGENTE en vivo
 // durante una atención real, no el administrador del formulario, por eso va
