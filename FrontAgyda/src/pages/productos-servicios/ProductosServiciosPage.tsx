@@ -93,7 +93,14 @@ function ListaEditable({ label, placeholder, items, onChange }: { label: string;
 }
 
 /* ── Modal ── */
-function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | null; onClose: () => void }) {
+// También se abre desde "Nueva factura" (encima de ella): `onCreado` recibe el
+// producto recién creado para agregarlo como concepto.
+export function ProductoServicioModal({ item, onClose, onCreado, elevated = false }: {
+  item: ProductoServicio | null
+  onClose: () => void
+  onCreado?: (p: { id: number; nombre: string; precio: number; ivaTasa: number }) => void
+  elevated?: boolean
+}) {
   const qc = useQueryClient()
   const [form, setForm] = useState(item ? {
     tipo: item.tipo, nombre: item.nombre, descripcion: item.descripcion,
@@ -126,16 +133,19 @@ function ProductoServicioModal({ item, onClose }: { item: ProductoServicio | nul
       }
       return item ? productoServicioService.update(item.id, body) : productoServicioService.create(body)
     },
-    onSuccess: () => {
+    onSuccess: (r: { data?: { id?: number } }) => {
       qc.invalidateQueries({ queryKey: ['productos-servicios'] })
       toast.success(item ? 'Actualizado' : 'Creado')
+      if (!item && r?.data?.id) {
+        onCreado?.({ id: r.data.id, nombre: form.nombre.trim(), precio: Number(form.precio) || 0, ivaTasa: (Number(form.ivaPct) || 0) / 100 })
+      }
       onClose()
     },
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar'),
   })
 
   return (
-    <Modal isOpen onClose={onClose} title={item ? 'Editar producto/servicio' : 'Nuevo producto/servicio'} size="lg">
+    <Modal isOpen onClose={onClose} title={item ? 'Editar producto/servicio' : 'Nuevo producto/servicio'} size="lg" elevated={elevated}>
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Tipo</label>

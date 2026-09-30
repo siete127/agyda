@@ -27,4 +27,9 @@ router.get('/:id/postulantes', authenticateToken, requireActionAccess('vacantes'
 router.patch('/:id/postulantes/:postId/estado', authenticateToken, requireActionAccess('vacantes', 'ver-postulantes'), postulanteController.updateEstadoPostulante);
 router.patch('/:id/postulantes/:postId/etapa', authenticateToken, requireActionAccess('vacantes', 'ver-postulantes'), postulanteController.updateEtapaPostulante);
 
+// Reclutamiento: prospecto capturado por RH, credenciales del contratado (ticket a TI) y su usuario (expediente)
+router.post('/:id/postulantes/manual', authenticateToken, requireActionAccess('vacantes', 'ver-postulantes'), postulanteController.createPostulanteManual);
+router.post('/:id/postulantes/:postId/credenciales', authenticateToken, requireActionAccess('vacantes', 'ver-postulantes'), postulanteController.solicitarCredenciales);
+router.get('/:id/postulantes/:postId/usuario', authenticateToken, requireActionAccess('vacantes', 'ver-postulantes'), postulanteController.usuarioDePostulante);
+
 module.exports = router;

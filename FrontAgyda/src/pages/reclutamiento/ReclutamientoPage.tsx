@@ -3,12 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
-  UserPlus, Kanban, List, FileText, Mail, Phone, Calendar, XCircle, MoreHorizontal,
+  UserPlus, Kanban, List, FileText, Mail, Phone, Calendar, XCircle, MoreHorizontal, Plus, KeyRound, FolderOpen, CheckCircle2,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
+import { Button } from '@/components/ui/Button'
 import { vacantesService } from '@/services/vacantes.service'
 import { useSocketEvent } from '@/hooks/useSocket'
 import { POSTULANTE_ETAPAS, type Postulante, type PostulanteEtapa } from '@/types/vacante.types'
+import { NuevoProspectoModal, SolicitarCredencialesModal, ExpedienteContratadoModal } from './ReclutamientoModales'
+
+// Acciones de un contratado: pedir sus credenciales a TI y abrir su expediente.
+interface AccionesContratado {
+  onCredenciales: (p: Postulante) => void
+  onExpediente: (p: Postulante) => void
+}
 
 function formatFecha(iso: string | null) {
   if (!iso) return '—'
@@ -21,6 +29,10 @@ export function ReclutamientoPage() {
   const qc = useQueryClient()
   const [vista, setVista] = useState<'kanban' | 'lista'>('kanban')
   const [filtroVacante, setFiltroVacante] = useState<number | 'todas'>('todas')
+  const [nuevoProspecto, setNuevoProspecto] = useState(false)
+  const [credencialesDe, setCredencialesDe] = useState<Postulante | null>(null)
+  const [expedienteDe, setExpedienteDe] = useState<Postulante | null>(null)
+  const acciones: AccionesContratado = { onCredenciales: setCredencialesDe, onExpediente: setExpedienteDe }
 
   const dragPostId = useRef<number | null>(null)
   const dragOverPostId = useRef<number | null>(null)
@@ -66,6 +78,9 @@ export function ReclutamientoPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setNuevoProspecto(true)}>
+            <Plus className="h-3.5 w-3.5" /> Nuevo prospecto
+          </Button>
           <select
             value={filtroVacante}
             onChange={(e) => setFiltroVacante(e.target.value === 'todas' ? 'todas' : Number(e.target.value))}
@@ -134,6 +149,7 @@ export function ReclutamientoPage() {
                   dragOverPostId.current = null
                 }}
                 onDescartar={(p) => moverEtapa.mutate({ id: p.id, vacanteId: p.vacanteId, etapa: 'descartado', orden: 0 })}
+                acciones={acciones}
               />
             )
           })}
@@ -144,14 +160,43 @@ export function ReclutamientoPage() {
           <p className="text-sm">No hay postulantes que coincidan con el filtro</p>
         </div>
       ) : (
-        <ReclutamientoListaTable postulantes={filtrados} />
+        <ReclutamientoListaTable postulantes={filtrados} acciones={acciones} />
       )}
+
+      {nuevoProspecto && (
+        <NuevoProspectoModal vacantes={vacantes} vacanteInicial={filtroVacante === 'todas' ? null : filtroVacante} onClose={() => setNuevoProspecto(false)} />
+      )}
+      {credencialesDe && <SolicitarCredencialesModal postulante={credencialesDe} onClose={() => setCredencialesDe(null)} />}
+      {expedienteDe && <ExpedienteContratadoModal postulante={expedienteDe} onClose={() => setExpedienteDe(null)} />}
+    </div>
+  )
+}
+
+/* Botones de un contratado (tarjeta del kanban y vista de lista). */
+function BotonesContratado({ postulante: p, acciones, compacto = false }: { postulante: Postulante; acciones: AccionesContratado; compacto?: boolean }) {
+  const detener = (e: React.SyntheticEvent) => e.stopPropagation()
+  return (
+    <div className={clsx('flex flex-wrap gap-1.5', !compacto && 'mt-2.5 border-t border-gray-100 pt-2.5')} onMouseDown={detener}>
+      {p.ticketCredencialesId ? (
+        <span className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[0.66rem] font-semibold text-emerald-700" title="Ya se envió el ticket a TI">
+          <CheckCircle2 className="h-3 w-3" /> Credenciales · ticket #{p.ticketCredencialesId}
+        </span>
+      ) : (
+        <button type="button" draggable={false} onClick={(e) => { detener(e); acciones.onCredenciales(p) }}
+          className="flex items-center gap-1 rounded-lg border border-brand/30 bg-brand/5 px-2 py-1 text-[0.66rem] font-semibold text-brand hover:bg-brand/10">
+          <KeyRound className="h-3 w-3" /> Solicitar credenciales
+        </button>
+      )}
+      <button type="button" draggable={false} onClick={(e) => { detener(e); acciones.onExpediente(p) }}
+        className="flex items-center gap-1 rounded-lg border border-gray-200 bg-card px-2 py-1 text-[0.66rem] font-semibold text-gray-600 hover:bg-gray-50">
+        <FolderOpen className="h-3 w-3" /> Registrar expediente
+      </button>
     </div>
   )
 }
 
 function KanbanColumn({
-  etapa, cards, onDragStart, onDragOver, onDrop, onDescartar,
+  etapa, cards, onDragStart, onDragOver, onDrop, onDescartar, acciones,
 }: {
   etapa: typeof POSTULANTE_ETAPAS[number]
   cards: Postulante[]
@@ -159,6 +204,7 @@ function KanbanColumn({
   onDragOver: (id: number) => void
   onDrop: (etapa: PostulanteEtapa) => void
   onDescartar: (p: Postulante) => void
+  acciones: AccionesContratado
 }) {
   const [over, setOver] = useState(false)
   return (
@@ -184,6 +230,7 @@ function KanbanColumn({
             onDragStart={() => onDragStart(p.id)}
             onDragOver={() => onDragOver(p.id)}
             onDescartar={etapa.key === 'descartado' ? undefined : () => onDescartar(p)}
+            acciones={acciones}
           />
         ))}
         {cards.length === 0 && (
@@ -198,12 +245,13 @@ function KanbanColumn({
 }
 
 function PostulanteCard({
-  postulante, onDragStart, onDragOver, onDescartar,
+  postulante, onDragStart, onDragOver, onDescartar, acciones,
 }: {
   postulante: Postulante
   onDragStart: () => void
   onDragOver: () => void
   onDescartar?: () => void
+  acciones: AccionesContratado
 }) {
   const etapa = POSTULANTE_ETAPAS.find((e) => e.key === postulante.etapa)
   return (
@@ -245,21 +293,27 @@ function PostulanteCard({
           <Calendar className="h-3 w-3" />
           {formatFecha(postulante.fecha)}
         </span>
-        <a
-          href={postulante.cvUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-1 text-[0.68rem] font-semibold text-brand hover:underline"
-        >
-          <FileText className="h-3 w-3" /> CV
-        </a>
+        {postulante.cvUrl ? (
+          <a
+            href={postulante.cvUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 text-[0.68rem] font-semibold text-brand hover:underline"
+          >
+            <FileText className="h-3 w-3" /> CV
+          </a>
+        ) : (
+          <span className="text-[0.65rem] text-gray-300">Sin CV</span>
+        )}
       </div>
+
+      {postulante.etapa === 'contratado' && <BotonesContratado postulante={postulante} acciones={acciones} />}
     </div>
   )
 }
 
-function ReclutamientoListaTable({ postulantes }: { postulantes: Postulante[] }) {
+function ReclutamientoListaTable({ postulantes, acciones }: { postulantes: Postulante[]; acciones: AccionesContratado }) {
   return (
     <div className="card overflow-x-auto">
       <table className="w-full text-xs">
@@ -286,19 +340,22 @@ function ReclutamientoListaTable({ postulantes }: { postulantes: Postulante[] })
                 </td>
                 <td className="px-4 py-2.5 text-gray-500">{formatFecha(p.fecha)}</td>
                 <td className="px-4 py-2.5">
-                  <a
-                    href={p.cvUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 font-semibold text-brand hover:underline"
-                  >
-                    <FileText className="h-3.5 w-3.5" /> Ver
-                  </a>
+                  {p.cvUrl ? (
+                    <a
+                      href={p.cvUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 font-semibold text-brand hover:underline"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> Ver
+                    </a>
+                  ) : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-2.5">
                   <span className={clsx('rounded-lg px-2 py-1 text-[0.7rem] font-semibold', etapa?.bgColor, etapa?.color)}>
                     {etapa?.label ?? p.etapa}
                   </span>
+                  {p.etapa === 'contratado' && <div className="mt-1.5"><BotonesContratado postulante={p} acciones={acciones} compacto /></div>}
                 </td>
               </tr>
             )

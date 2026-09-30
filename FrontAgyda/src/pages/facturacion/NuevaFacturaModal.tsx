@@ -1,14 +1,20 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { Package, FileSignature, Search, Plus, Trash2, ArrowLeft, Receipt, CheckCircle2, PenLine } from 'lucide-react'
+import { Package, FileSignature, Search, Plus, Trash2, ArrowLeft, Receipt, CheckCircle2, PenLine, UserPlus, PackagePlus } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { useActionAccess } from '@/hooks/useActionAccess'
 import { facturacionService, type CotizacionPorFacturar, type ReceptorFiscal } from '@/services/facturacion.service'
 import { productoServicioService, type ProductoServicio } from '@/services/productoServicio.service'
 import { satService } from '@/services/sat.service'
 import { formatMonto } from './estatusFactura'
+
+// Alta rápida sin salir de la factura. Se cargan al abrirlas: Clientes ya
+// importa este modal, así que un import directo sería circular.
+const ClienteModal = lazy(() => import('@/pages/clientes/ClientesPage').then((m) => ({ default: m.ClienteModal })))
+const ProductoServicioModal = lazy(() => import('@/pages/productos-servicios/ProductosServiciosPage').then((m) => ({ default: m.ProductoServicioModal })))
 
 type Modo = 'productos' | 'cotizacion'
 
@@ -22,6 +28,43 @@ interface Linea {
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+
+/* Número editable con libertad: se puede borrar, escribir decimales ("1.5") o
+   pegar "1,5"; mientras se escribe solo se aceptan dígitos y hasta 2 decimales,
+   y al salir del campo se corrige a un valor válido (mínimo `min`). */
+function NumeroInput({ value, onChange, min = 0, className, title }: {
+  value: number
+  onChange: (n: number) => void
+  min?: number
+  className?: string
+  title?: string
+}) {
+  const [texto, setTexto] = useState<string | null>(null)
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      title={title}
+      className={className}
+      value={texto ?? String(value)}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => {
+        const t = e.target.value.replace(',', '.')
+        if (!/^\d*\.?\d{0,2}$/.test(t)) return
+        setTexto(t)
+        const n = parseFloat(t)
+        if (Number.isFinite(n) && n >= min) onChange(n)
+      }}
+      onBlur={() => {
+        if (texto === null) return
+        const n = parseFloat(texto)
+        onChange(Number.isFinite(n) ? Math.max(min, round2(n)) : Math.max(min, value))
+        setTexto(null)
+      }}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+    />
+  )
+}
 const RECEPTOR_VACIO: ReceptorFiscal = { rfc: '', nombre: '', regimenFiscal: '', cp: '', usoCfdi: 'G03' }
 
 /** Desde Clientes → "Agregar producto": factura directa, con cliente y productos ya cargados. */
@@ -56,6 +99,14 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   const [recEditado, setRec] = useState<ReceptorFiscal | null>(null)
   const [formaPago, setFormaPago] = useState('99')
   const [metodoPago, setMetodoPago] = useState('PUE')
+  // Alta rápida de cliente / producto desde aquí mismo
+  const { can } = useActionAccess()
+  const puedeCrearCliente = can('clientes', 'crear')
+  const puedeCrearProducto = can('productos-servicios', 'crear')
+  const [altaCliente, setAltaCliente] = useState(false)
+  const [altaProducto, setAltaProducto] = useState(false)
+  // El recién creado, mientras la lista de clientes se vuelve a cargar
+  const [clienteNuevo, setClienteNuevo] = useState<{ id: number; nombre: string; contacto: null; rfc: string | null } | null>(null)
 
   const { data: pendientes, isLoading: cargando } = useQuery({
     queryKey: ['facturas-por-facturar'],
@@ -73,6 +124,7 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   const cotizaciones = pendientes?.cotizaciones ?? []
   const cliente = clientes.find((c) => c.id === clienteId)
     ?? (preset ? { id: preset.clienteId, nombre: preset.clienteNombre, contacto: null, rfc: null } : null)
+    ?? (clienteNuevo && clienteNuevo.id === clienteId ? clienteNuevo : null)
 
   const clientesFiltrados = useMemo(() => {
     const t = buscarCliente.trim().toLowerCase()
@@ -89,15 +141,16 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   const iva = round2(lineas.reduce((s, l) => s + round2(l.cantidad * l.precioUnit * l.ivaTasa), 0))
   const total = round2(subtotal + iva)
 
+  // Cada clic agrega un concepto aparte, aunque el producto ya esté en la lista
+  // (p. ej. el mismo servicio para dos periodos o con distinta descripción).
   const agregarProducto = (id: number) => {
     const p = catalogo.find((x) => x.id === id)
     if (!p) return
-    setLineas((ls) => {
-      const ya = ls.find((l) => l.psId === id)
-      if (ya) return ls.map((l) => (l.psId === id ? { ...l, cantidad: l.cantidad + 1 } : l))
-      return [...ls, { key: Date.now(), psId: p.id, descripcion: p.nombre, cantidad: 1, precioUnit: Number(p.precio) || 0, ivaTasa: p.ivaTasa ?? 0.16 }]
-    })
+    setLineas((ls) => [...ls, { key: Date.now() + Math.random(), psId: p.id, descripcion: p.nombre, cantidad: 1, precioUnit: Number(p.precio) || 0, ivaTasa: p.ivaTasa ?? 0.16 }])
   }
+  // Producto recién creado: entra como concepto aunque el catálogo aún no se recargue.
+  const agregarNuevo = (p: { id: number; nombre: string; precio: number; ivaTasa: number }) =>
+    setLineas((ls) => [...ls, { key: Date.now(), psId: p.id, descripcion: p.nombre, cantidad: 1, precioUnit: p.precio, ivaTasa: p.ivaTasa }])
   const agregarLibre = () => setLineas((ls) => [...ls, { key: Date.now(), psId: null, descripcion: '', cantidad: 1, precioUnit: 0, ivaTasa: 0.16 }])
   const cambiar = (key: number, cambios: Partial<Linea>) => setLineas((ls) => ls.map((l) => (l.key === key ? { ...l, ...cambios } : l)))
 
@@ -194,7 +247,14 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
                 {/* Cliente + catálogo */}
                 <div className="space-y-3">
                   <div>
-                    <span className={label}>Cliente</span>
+                    <div className="flex items-center justify-between">
+                      <span className={label}>Cliente</span>
+                      {puedeCrearCliente && !preset && (
+                        <button type="button" onClick={() => setAltaCliente(true)} className="mb-1 flex items-center gap-1 text-[0.72rem] font-semibold text-brand hover:underline">
+                          <UserPlus className="h-3 w-3" /> Nuevo cliente
+                        </button>
+                      )}
+                    </div>
                     {cliente ? (
                       <div className="flex items-center justify-between rounded-xl border border-brand/30 bg-brand/5 px-3 py-2">
                         <div className="min-w-0">
@@ -223,7 +283,14 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
                     )}
                   </div>
                   <div>
-                    <span className={label}>Catálogo de productos y servicios</span>
+                    <div className="flex items-center justify-between">
+                      <span className={label}>Catálogo de productos y servicios</span>
+                      {puedeCrearProducto && (
+                        <button type="button" onClick={() => setAltaProducto(true)} className="mb-1 flex items-center gap-1 text-[0.72rem] font-semibold text-brand hover:underline">
+                          <PackagePlus className="h-3 w-3" /> Nuevo producto
+                        </button>
+                      )}
+                    </div>
                     <div className="rounded-xl border border-gray-200">
                       <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2">
                         <Search className="h-3.5 w-3.5 text-gray-400" />
@@ -268,18 +335,33 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                          <div className="mt-1.5 grid grid-cols-[4rem_1fr_4.5rem_auto] items-center gap-2 text-[0.72rem]">
-                            <input type="number" min={1} step="1" value={l.cantidad} onChange={(e) => cambiar(l.key, { cantidad: Math.max(0, Number(e.target.value)) })}
-                              className="rounded-lg border border-gray-200 px-2 py-1 tabular-nums outline-none focus:border-brand" title="Cantidad" />
-                            <input type="number" min={0} step="0.01" value={l.precioUnit} onChange={(e) => cambiar(l.key, { precioUnit: Math.max(0, Number(e.target.value)) })}
-                              className="rounded-lg border border-gray-200 px-2 py-1 tabular-nums outline-none focus:border-brand" title="Precio unitario sin IVA" />
+                          <div className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)_4.8rem_auto] items-end gap-2 text-[0.72rem]">
+                            <div>
+                              <span className="mb-0.5 block text-[0.6rem] font-semibold uppercase tracking-wide text-gray-400">Cantidad</span>
+                              <div className="flex items-center overflow-hidden rounded-lg border border-gray-200 focus-within:border-brand">
+                                <button type="button" onClick={() => cambiar(l.key, { cantidad: Math.max(1, round2(l.cantidad - 1)) })}
+                                  className="px-2 py-1 text-gray-400 hover:bg-gray-50 hover:text-gray-700" aria-label="Menos">−</button>
+                                <NumeroInput value={l.cantidad} min={1} onChange={(n) => cambiar(l.key, { cantidad: n })} title="Cantidad"
+                                  className="w-12 border-x border-gray-100 px-1 py-1 text-center tabular-nums outline-none" />
+                                <button type="button" onClick={() => cambiar(l.key, { cantidad: round2(l.cantidad + 1) })}
+                                  className="px-2 py-1 text-gray-400 hover:bg-gray-50 hover:text-gray-700" aria-label="Más">+</button>
+                              </div>
+                            </div>
+                            <div>
+                              <span className="mb-0.5 block text-[0.6rem] font-semibold uppercase tracking-wide text-gray-400">Precio unit. (sin IVA)</span>
+                              <div className="flex items-center rounded-lg border border-gray-200 px-2 focus-within:border-brand">
+                                <span className="text-gray-400">$</span>
+                                <NumeroInput value={l.precioUnit} min={0} onChange={(n) => cambiar(l.key, { precioUnit: n })} title="Precio unitario sin IVA"
+                                  className="w-full min-w-0 px-1 py-1 tabular-nums outline-none" />
+                              </div>
+                            </div>
                             <select value={l.ivaTasa} onChange={(e) => cambiar(l.key, { ivaTasa: Number(e.target.value) })}
                               className="rounded-lg border border-gray-200 px-1 py-1 outline-none" title="IVA">
                               <option value={0.16}>IVA 16%</option>
                               <option value={0.08}>IVA 8%</option>
                               <option value={0}>IVA 0%</option>
                             </select>
-                            <span className="text-right font-semibold tabular-nums text-gray-700">{formatMonto(l.cantidad * l.precioUnit)}</span>
+                            <span className="pb-1 text-right font-semibold tabular-nums text-gray-700">{formatMonto(l.cantidad * l.precioUnit)}</span>
                           </div>
                         </div>
                       ))}
@@ -398,6 +480,25 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
           </>
         )}
       </div>
+
+      {/* Alta rápida encima de la factura */}
+      <Suspense fallback={null}>
+        {altaCliente && (
+          <ClienteModal
+            cliente={null}
+            elevated
+            onClose={() => setAltaCliente(false)}
+            onCreado={(c) => {
+              setClienteNuevo({ id: c.id, nombre: c.nombre, contacto: null, rfc: c.rfc || null })
+              setClienteId(c.id)
+              qc.invalidateQueries({ queryKey: ['facturas-por-facturar'] })
+            }}
+          />
+        )}
+        {altaProducto && (
+          <ProductoServicioModal item={null} elevated onClose={() => setAltaProducto(false)} onCreado={agregarNuevo} />
+        )}
+      </Suspense>
     </Modal>
   )
 }

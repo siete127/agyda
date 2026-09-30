@@ -44,6 +44,8 @@ export interface Postulante {
   estado: PostulanteEstado
   etapa: PostulanteEtapa
   orden: number
+  // Ticket a TI con el que se pidieron sus credenciales (contratados)
+  ticketCredencialesId: number | null
 }
 
 export interface DashboardStatsPorVacante {
@@ -134,5 +136,6 @@ export function parsePostulante(raw: Record<string, unknown>): Postulante {
     estado,
     etapa,
     orden: Number(pick(raw, 'orden', 'ORDEN') ?? 0),
+    ticketCredencialesId: Number(pick(raw, 'ticketCredencialesId')) || null,
   }
 }

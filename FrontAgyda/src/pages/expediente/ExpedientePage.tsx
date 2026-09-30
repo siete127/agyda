@@ -20,7 +20,7 @@ interface DocExpediente {
   subidoPor: string
 }
 
-interface UsuarioSimple {
+export interface UsuarioSimple {
   id: number
   nombres: string
   apellidos: string
@@ -399,32 +399,35 @@ function MiExpedienteTab() {
 }
 
 // ── Pestaña Expedientes (admin AD) ────────────────────────────────────────────
-function ExpedientesAdminTab() {
+// ── Ventana del expediente digital de un usuario ──────────────────────────────
+// La abre la pestaña Expedientes y también Reclutamiento ("Registrar
+// expediente" de un contratado), para subir sus documentos sin cambiar de vista.
+export function ExpedienteUsuarioModal({ usuario, onClose, elevated = false }: {
+  usuario: UsuarioSimple
+  onClose: () => void
+  elevated?: boolean
+}) {
   const { can } = useActionAccess()
   const puedeGestionar = can('expedientes', 'gestionar-otros')
-  const [search, setSearch] = useState('')
-  const [selectedUser, setSelectedUser] = useState<UsuarioSimple | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
   const [confirmDocId, setConfirmDocId] = useState<number | null>(null)
   const [enlazandoId, setEnlazandoId] = useState<number | null>(null)
   const qc = useQueryClient()
 
-  // Traer activos del usuario seleccionado para saber a cuál activo enlazar
+  // Traer activos del usuario para saber a cuál activo enlazar
   const { data: activosUsuario = [] } = useQuery<{ id: number; cartaDocId: number | null }[]>({
-    queryKey: ['activos-generales-usuario', selectedUser?.id],
+    queryKey: ['activos-generales-usuario', usuario.id],
     queryFn: async () => {
-      const { data } = await api.get(`/activos/generales/usuario/${selectedUser!.id}`)
+      const { data } = await api.get(`/activos/generales/usuario/${usuario.id}`)
       const list = Array.isArray(data) ? data : (data?.data ?? [])
       return (list as Record<string, unknown>[]).map((r) => ({
         id: Number(r['id'] ?? 0),
         cartaDocId: r['cartaDocId'] != null ? Number(r['cartaDocId']) : null,
       }))
     },
-    enabled: !!selectedUser,
   })
 
   const enlazarCarta = async (doc: DocExpediente) => {
-    if (!selectedUser || activosUsuario.length === 0) {
+    if (activosUsuario.length === 0) {
       toast.error('El usuario no tiene activos registrados para enlazar')
       return
     }
@@ -432,7 +435,7 @@ function ExpedientesAdminTab() {
     try {
       const activoId = activosUsuario[0].id
       await api.patch(`/activos/generales/${activoId}/carta-doc`, { docId: doc.id })
-      qc.invalidateQueries({ queryKey: ['activos-generales-usuario', selectedUser.id] })
+      qc.invalidateQueries({ queryKey: ['activos-generales-usuario', usuario.id] })
       toast.success(`Carta responsiva enlazada: ${doc.nombre}`)
     } catch {
       toast.error('Error al enlazar la carta')
@@ -440,6 +443,117 @@ function ExpedientesAdminTab() {
       setEnlazandoId(null)
     }
   }
+
+  const { data: documentos = [], isLoading: loadDocs } = useQuery({
+    queryKey: ['expediente-docs', usuario.id],
+    queryFn: async () => {
+      const { data } = await api.get(`/expedientes/${usuario.id}/documentos`)
+      const list = Array.isArray(data) ? data : (data?.data ?? data?.documentos ?? [])
+      return (list as Record<string, unknown>[]).map(parseDoc)
+    },
+  })
+
+  const subirDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      await api.post(`/expedientes/${usuario.id}/documentos`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      qc.invalidateQueries({ queryKey: ['expediente-docs', usuario.id] })
+      toast.success('Documento subido')
+    } catch {
+      toast.error('Error al subir documento')
+    }
+    e.target.value = ''
+  }
+
+  const eliminarDoc = useMutation({
+    mutationFn: (docId: number) => api.delete(`/expedientes/documentos/${docId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expediente-docs', usuario.id] })
+      toast.success('Documento eliminado')
+      setConfirmDocId(null)
+    },
+    onError: () => toast.error('Error al eliminar'),
+  })
+
+  return (
+    <>
+      <Modal isOpen onClose={onClose} title="Expediente digital" size="xl" variant="corporate" elevated={elevated}>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b border-gray-100">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={clsx(
+                  'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-[0.8rem] font-bold',
+                  ROL_AVATAR[usuario.tipoUsuario] ?? 'bg-brand-light text-brand',
+                )}
+              >
+                {iniciales(`${usuario.nombres} ${usuario.apellidos}`)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[0.9rem] font-bold text-gray-900 truncate">
+                  {usuario.nombres} {usuario.apellidos}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {usuario.tipoUsuario && (
+                    <span className={clsx('chip', ROL_COLORS[usuario.tipoUsuario] ?? 'bg-gray-100 text-gray-600')}>
+                      {ROLES_LABEL[usuario.tipoUsuario] ?? usuario.tipoUsuario}
+                    </span>
+                  )}
+                  {usuario.puesto && (
+                    <span className="text-[0.7rem] text-gray-400">{usuario.puesto}</span>
+                  )}
+                  <span className="text-[0.7rem] text-gray-400">
+                    · {loadDocs ? '…' : `${documentos.length} documento${documentos.length !== 1 ? 's' : ''}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {puedeGestionar && (
+              <label className="cursor-pointer flex-shrink-0">
+                <input type="file" className="hidden" onChange={subirDoc} />
+                <span className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-[0.73rem] font-semibold text-white hover:bg-brand-dark transition-colors">
+                  <Upload className="h-3.5 w-3.5" /> Subir documento
+                </span>
+              </label>
+            )}
+          </div>
+
+          <DocTable
+            docs={documentos}
+            loading={loadDocs}
+            downloadPathFn={(id) => `/expedientes/documentos/${id}/download`}
+            onDelete={(id) => setConfirmDocId(id)}
+            deletingId={eliminarDoc.isPending ? confirmDocId : null}
+            canDelete={puedeGestionar}
+            onEnlazar={puedeGestionar ? enlazarCarta : undefined}
+            enlazandoId={enlazandoId}
+          />
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmDocId !== null}
+        onClose={() => setConfirmDocId(null)}
+        onConfirm={() => { if (confirmDocId !== null) eliminarDoc.mutate(confirmDocId) }}
+        title="Eliminar documento"
+        message="¿Seguro que deseas eliminar este documento del expediente? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        isPending={eliminarDoc.isPending}
+        elevated
+      />
+    </>
+  )
+}
+
+function ExpedientesAdminTab() {
+  const [search, setSearch] = useState('')
+  const [selectedUser, setSelectedUser] = useState<UsuarioSimple | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
 
   const { data: usuarios = [], isLoading: loadUsers } = useQuery({
     queryKey: ['usuarios-expediente'],
@@ -454,44 +568,6 @@ function ExpedientesAdminTab() {
         tipoUsuario: String(r['tipoUsuario'] ?? r['tipo_usuario'] ?? r['TIPO_USUARIO'] ?? '').toUpperCase(),
       })) as UsuarioSimple[]
     },
-  })
-
-  const { data: documentos = [], isLoading: loadDocs } = useQuery({
-    queryKey: ['expediente-docs', selectedUser?.id],
-    queryFn: async () => {
-      const { data } = await api.get(`/expedientes/${selectedUser!.id}/documentos`)
-      const list = Array.isArray(data) ? data : (data?.data ?? data?.documentos ?? [])
-      return (list as Record<string, unknown>[]).map(parseDoc)
-    },
-    enabled: !!selectedUser,
-  })
-
-  const subirDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!selectedUser) return
-    const file = e.target.files?.[0]
-    if (!file) return
-    const fd = new FormData()
-    fd.append('file', file)
-    try {
-      await api.post(`/expedientes/${selectedUser.id}/documentos`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      qc.invalidateQueries({ queryKey: ['expediente-docs', selectedUser.id] })
-      toast.success('Documento subido')
-    } catch {
-      toast.error('Error al subir documento')
-    }
-    e.target.value = ''
-  }
-
-  const eliminarDoc = useMutation({
-    mutationFn: (docId: number) => api.delete(`/expedientes/documentos/${docId}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['expediente-docs', selectedUser?.id] })
-      toast.success('Documento eliminado')
-      setConfirmDocId(null)
-    },
-    onError: () => toast.error('Error al eliminar'),
   })
 
   const filteredUsers = usuarios.filter((u) =>
@@ -625,79 +701,10 @@ function ExpedientesAdminTab() {
         </div>
       )}
 
-      {/* Modal expediente */}
-      <Modal
-        isOpen={modalOpen && !!selectedUser}
-        onClose={() => setModalOpen(false)}
-        title="Expediente digital"
-        size="xl"
-        variant="corporate"
-      >
-        {selectedUser && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={clsx(
-                    'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-[0.8rem] font-bold',
-                    ROL_AVATAR[selectedUser.tipoUsuario] ?? 'bg-brand-light text-brand',
-                  )}
-                >
-                  {iniciales(`${selectedUser.nombres} ${selectedUser.apellidos}`)}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[0.9rem] font-bold text-gray-900 truncate">
-                    {selectedUser.nombres} {selectedUser.apellidos}
-                  </p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    {selectedUser.tipoUsuario && (
-                      <span className={clsx('chip', ROL_COLORS[selectedUser.tipoUsuario] ?? 'bg-gray-100 text-gray-600')}>
-                        {ROLES_LABEL[selectedUser.tipoUsuario] ?? selectedUser.tipoUsuario}
-                      </span>
-                    )}
-                    {selectedUser.puesto && (
-                      <span className="text-[0.7rem] text-gray-400">{selectedUser.puesto}</span>
-                    )}
-                    <span className="text-[0.7rem] text-gray-400">
-                      · {loadDocs ? '…' : `${documentos.length} documento${documentos.length !== 1 ? 's' : ''}`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {puedeGestionar && (
-                <label className="cursor-pointer flex-shrink-0">
-                  <input type="file" className="hidden" onChange={subirDoc} />
-                  <span className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-[0.73rem] font-semibold text-white hover:bg-brand-dark transition-colors">
-                    <Upload className="h-3.5 w-3.5" /> Subir documento
-                  </span>
-                </label>
-              )}
-            </div>
-
-            <DocTable
-              docs={documentos}
-              loading={loadDocs}
-              downloadPathFn={(id) => `/expedientes/documentos/${id}/download`}
-              onDelete={(id) => setConfirmDocId(id)}
-              deletingId={eliminarDoc.isPending ? confirmDocId : null}
-              canDelete={puedeGestionar}
-              onEnlazar={puedeGestionar ? enlazarCarta : undefined}
-              enlazandoId={enlazandoId}
-            />
-          </div>
-        )}
-      </Modal>
-
-      <ConfirmDialog
-        isOpen={confirmDocId !== null}
-        onClose={() => setConfirmDocId(null)}
-        onConfirm={() => { if (confirmDocId !== null) eliminarDoc.mutate(confirmDocId) }}
-        title="Eliminar documento"
-        message="¿Seguro que deseas eliminar este documento del expediente? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
-        isPending={eliminarDoc.isPending}
-        elevated
-      />
+      {/* Ventana del expediente */}
+      {modalOpen && selectedUser && (
+        <ExpedienteUsuarioModal usuario={selectedUser} onClose={() => setModalOpen(false)} />
+      )}
     </div>
   )
 }

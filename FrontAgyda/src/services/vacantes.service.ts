@@ -51,6 +51,36 @@ export const vacantesService = {
     return (list as Record<string, unknown>[]).map(parsePostulante)
   },
 
+  /** Sube el CV (PDF) y devuelve su URL. */
+  async subirCv(file: File): Promise<string> {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result))
+      r.onerror = () => reject(new Error('No se pudo leer el archivo'))
+      r.readAsDataURL(file)
+    })
+    const { data } = await api.post('/uploads/vacante-cv', { base64, filename: file.name })
+    return String(data?.url ?? '')
+  },
+
+  /** Prospecto capturado por RH (sin CV obligatorio, en la etapa que se elija). */
+  async crearProspecto(vacanteId: number, payload: { nombre: string; email?: string; telefono?: string; mensaje?: string; etapa?: PostulanteEtapa; cvUrl?: string }): Promise<Postulante> {
+    const { data } = await api.post(`/vacantes/${vacanteId}/postulantes/manual`, payload)
+    return parsePostulante((data?.data ?? data) as Record<string, unknown>)
+  },
+
+  /** Abre el ticket a TI para crear el usuario y las credenciales de un contratado. */
+  async solicitarCredenciales(vacanteId: number, postId: number, payload: { puesto?: string; area?: string; fechaIngreso?: string; accesos?: string; notas?: string }): Promise<{ ticketId: number }> {
+    const { data } = await api.post(`/vacantes/${vacanteId}/postulantes/${postId}/credenciales`, payload)
+    return data?.data as { ticketId: number }
+  },
+
+  /** Usuario del sistema de un contratado (por correo o nombre), para su expediente. */
+  async usuarioDePostulante(vacanteId: number, postId: number): Promise<{ id: number; nombres: string; puesto: string | null; tipoUsuario: string } | null> {
+    const { data } = await api.get(`/vacantes/${vacanteId}/postulantes/${postId}/usuario`)
+    return data?.data ?? null
+  },
+
   async getDashboardStats(): Promise<DashboardStats> {
     const { data } = await api.get('/vacantes/dashboard/stats')
     return data?.data as DashboardStats

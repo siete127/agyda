@@ -358,7 +358,14 @@ function ProductosServiciosCliente({ clienteId, clienteNombre }: { clienteId: nu
 }
 
 /* ── Modal ── */
-function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: () => void }) {
+// También se abre desde "Nueva factura" (encima de ella): `onCreado` recibe el
+// cliente recién creado para dejarlo elegido.
+export function ClienteModal({ cliente, onClose, onCreado, elevated = false }: {
+  cliente: Cliente | null
+  onClose: () => void
+  onCreado?: (c: { id: number; nombre: string; rfc: string }) => void
+  elevated?: boolean
+}) {
   const qc = useQueryClient()
   const [form, setForm] = useState(cliente ? {
     empresa: cliente.empresa, nombre: cliente.nombre, rfc: cliente.rfc,
@@ -406,9 +413,11 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
       }
       return cliente ? api.put(`/clientes/${cliente.id}`, body) : api.post('/clientes', body)
     },
-    onSuccess: () => {
+    onSuccess: (r: { data?: { data?: { id?: number } } }) => {
       qc.invalidateQueries({ queryKey: ['clientes'] })
       toast.success(cliente ? 'Cliente actualizado' : 'Cliente creado')
+      const id = r?.data?.data?.id
+      if (!cliente && id) onCreado?.({ id, nombre: form.empresa.trim() || form.nombre.trim(), rfc: form.rfc.trim() })
       onClose()
     },
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar'),
@@ -427,7 +436,7 @@ function ClienteModal({ cliente, onClose }: { cliente: Cliente | null; onClose: 
   ] as const
 
   return (
-    <Modal isOpen onClose={onClose} size={cliente ? 'full' : 'md'}>
+    <Modal isOpen onClose={onClose} size={cliente ? 'full' : 'md'} elevated={elevated}>
       <div className="flex h-full flex-col">
         {/* Cabecera propia */}
         <div className="-m-5 mb-5 flex items-start justify-between border-b border-gray-100 px-6 py-5">
