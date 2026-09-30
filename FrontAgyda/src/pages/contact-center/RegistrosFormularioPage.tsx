@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarCheck, RefreshCw, Search, Phone, ChevronDown, ExternalLink } from 'lucide-react'
+import { CalendarCheck, RefreshCw, Search, Phone, ChevronDown, ExternalLink, Paperclip } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { clsx } from 'clsx'
 import { ccFormulariosService } from '@/services/ccFormularios.service'
@@ -47,6 +47,51 @@ function detectarCampos(columnas: CCFormRegistros['columnas']): Partial<Record<R
     canal: busca((c, t) => c.tipo !== 'telefono' && /canal|channel/.test(t)),
     asesor: busca((c) => c.tipo === 'usuario_agente'),
   }
+}
+
+/* ── Resto de campos del formulario (los que no tienen columna fija) ── */
+type Columna = CCFormRegistros['columnas'][number]
+const esRutaArchivo = (v: string) => /^(https?:\/\/|\/uploads\/)/i.test(v)
+const nombreArchivo = (v: string) => decodeURIComponent(v.split('/').pop() ?? '').replace(/^fir_\d+_/, '')
+
+// Un valor según el tipo de campo: imagen con miniatura, archivo con enlace, fechas legibles…
+function ValorCampo({ col, valor }: { col: Columna; valor: unknown }) {
+  if (valor === null || valor === undefined || valor === '') return <span className="text-gray-300">—</span>
+  const v = String(valor)
+  if (col.tipo === 'imagen' || col.tipo === 'firma') {
+    if (!esRutaArchivo(v)) return <span className="text-[0.7rem] text-gray-400" title={v}>Sin imagen guardada</span>
+    return (
+      <a href={v} target="_blank" rel="noopener noreferrer" title="Abrir imagen" className="inline-block">
+        <img src={v} alt={col.etiqueta} loading="lazy"
+          className="h-10 w-10 rounded-lg border border-gray-200 object-cover transition hover:scale-105" />
+      </a>
+    )
+  }
+  if (col.tipo === 'archivo') {
+    if (!esRutaArchivo(v)) return <span className="text-[0.7rem] text-gray-400" title={v}>Sin archivo guardado</span>
+    return (
+      <a href={v} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-[12rem] items-center gap-1 text-[0.78rem] text-brand hover:underline">
+        <Paperclip className="h-3 w-3 flex-shrink-0" /> <span className="truncate">{nombreArchivo(v) || 'Ver archivo'}</span>
+      </a>
+    )
+  }
+  if (col.tipo === 'url' && esRutaArchivo(v)) {
+    return <a href={v} target="_blank" rel="noopener noreferrer" className="text-[0.78rem] text-brand hover:underline">Abrir enlace</a>
+  }
+  if (col.tipo === 'fecha' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return <span className="whitespace-nowrap">{fmtDia(v)}</span>
+  if (col.tipo === 'fecha_hora') {
+    const d = new Date(v)
+    if (!Number.isNaN(d.getTime())) return <span className="whitespace-nowrap">{d.toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+  }
+  if (col.tipo === 'moneda' && Number.isFinite(Number(v))) {
+    return <span className="whitespace-nowrap tabular-nums">{Number(v).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</span>
+  }
+  if (col.tipo === 'porcentaje' && Number.isFinite(Number(v))) return <span className="tabular-nums">{Number(v)}%</span>
+  if (typeof valor === 'boolean' || col.tipo === 'si_no') {
+    const si = valor === true || /^(true|1|s[ií])$/i.test(v)
+    return <span>{si ? 'Sí' : 'No'}</span>
+  }
+  return <span className="line-clamp-2 max-w-[16rem]" title={v}>{v}</span>
 }
 
 interface Fila {
@@ -108,6 +153,12 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
   const en7 = sumarDias(hoy, 7)
 
   const campos = useMemo(() => detectarCampos(data?.columnas ?? []), [data?.columnas])
+  // Todos los demás campos del formulario (incluidas imágenes y archivos): una
+  // columna cada uno, después de las columnas fijas.
+  const extras = useMemo(() => {
+    const usados = new Set(Object.values(campos).filter(Boolean))
+    return (data?.columnas ?? []).filter((c) => !usados.has(c.codigo))
+  }, [data?.columnas, campos])
   const filas: Fila[] = useMemo(() => (data?.registros ?? []).map((r) => {
     const v = (rol: Rol) => (campos[rol] ? r.valores[campos[rol]!] ?? null : null)
     const nombre = [v('paterno'), v('materno'), v('nombres')].filter(Boolean).join(' ') || r.clienteNombre || '—'
@@ -275,6 +326,7 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                   {campos.canal && <th className="px-4 py-2.5">Canal</th>}
                   <th className="px-4 py-2.5">Asesor</th>
                   {campos.contacto && <th className="px-4 py-2.5">Contacto</th>}
+                  {extras.map((c) => <th key={c.codigo} className="whitespace-nowrap px-4 py-2.5">{c.etiqueta}</th>)}
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
@@ -285,7 +337,7 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                   const pasada = !!f.asistencia && f.asistencia < hoy
                   const abierto = abiertos.has(f.r.interaccionId)
                   const url = urlSeguimiento(f.telefono)
-                  const columnas = 3 + (hayAsistencia ? 1 : 0) + [campos.horario, campos.puesto, campos.estatus, campos.canal, campos.contacto].filter(Boolean).length + 1
+                  const columnas = 3 + (hayAsistencia ? 1 : 0) + [campos.horario, campos.puesto, campos.estatus, campos.canal, campos.contacto].filter(Boolean).length + extras.length + 1
                   return (
                     <Fragment key={f.r.interaccionId}>
                     <tr className={clsx('hover:bg-gray-50/60', esHoy && 'bg-emerald-50/50', pasada && 'text-gray-400')}>
@@ -327,6 +379,9 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                       {campos.canal && <td className="whitespace-nowrap px-4 py-2.5 text-[0.8rem]">{f.canal || '—'}</td>}
                       <td className="px-4 py-2.5 text-[0.8rem]">{f.asesor || '—'}</td>
                       {campos.contacto && <td className="whitespace-nowrap px-4 py-2.5 text-[0.8rem]">{f.contacto ? fmtDia(f.contacto) : '—'}</td>}
+                      {extras.map((c) => (
+                        <td key={c.codigo} className="px-4 py-2.5 text-[0.8rem]"><ValorCampo col={c} valor={f.r.valores[c.codigo]} /></td>
+                      ))}
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         {url && (
                           <a href={url} target="_blank" rel="noopener noreferrer"
@@ -349,6 +404,12 @@ export function RegistrosFormularioVista({ formularioIds }: { formularioIds?: nu
                                   <td className="whitespace-nowrap py-1 pr-3">{s.asistencia ? `Cita ${fmtDia(s.asistencia)}${s.horario ? ` · ${s.horario}` : ''}` : 'Sin cita'}</td>
                                   <td className="py-1 pr-3">{s.canal || '—'}</td>
                                   <td className="py-1 pr-3">{s.asesor || '—'}</td>
+                                  {extras.map((c) => (
+                                    <td key={c.codigo} className="py-1 pr-3">
+                                      <span className="mr-1 text-[0.65rem] text-gray-400">{c.etiqueta}:</span>
+                                      <ValorCampo col={c} valor={s.r.valores[c.codigo]} />
+                                    </td>
+                                  ))}
                                 </tr>
                               ))}
                             </tbody>

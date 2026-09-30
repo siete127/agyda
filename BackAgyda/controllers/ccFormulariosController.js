@@ -25,6 +25,7 @@
 //   "Nueva versión" en vez de editar la publicada.
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
+const ventasSync = require('../services/ventasSyncService');
 
 // Cuando el guardado de respuestas llega como multipart/form-data (trae
 // evidencia adjunta para un campo tipo 'imagen'/'archivo'), el body real
@@ -2370,6 +2371,12 @@ async function _guardarRespuestasCore(p, versionId, formularioId, agenteInfo, b)
     await tx.rollback();
     throw e;
   }
+
+  // Histórico en la BD de Ventas (plata_prospectPRO) cuando la campaña es de
+  // un grupo con campaña de ventas. Sin esperar: el registro ya quedó en
+  // AGYDA y un fallo en Ventas no debe tumbar el guardado del agente.
+  ventasSync.sincronizarRegistro(p, interaccionId)
+    .catch((e) => console.error('ccFormularios → Ventas (histórico):', e.message));
 
   // Acciones sugeridas (fuera de la transacción — son solo lectura del
   // catálogo, no afectan la atomicidad del guardado).
