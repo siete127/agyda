@@ -22,6 +22,7 @@ router.get('/pagos/:docId/documento/:formato', authenticateToken, (req, res) => 
 router.get('/notas-credito/:docId/documento/:formato', authenticateToken, (req, res) => { req.params.tipo = 'nota-credito'; ctrl.descargarSecundario(req, res); });
 
 router.get('/:id', authenticateToken, ctrl.getById);
+router.put('/:id', authenticateToken, requireActionAccess('crm', 'facturar'), ctrl.editar);
 router.get('/:id/documento/:formato', authenticateToken, ctrl.descargar);
 router.post('/:id/cancelar', authenticateToken, requireActionAccess('crm', 'facturacion-cancelar'), ctrl.cancelar);
 

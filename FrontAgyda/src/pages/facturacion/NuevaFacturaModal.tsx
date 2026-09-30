@@ -163,11 +163,12 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
     ? !!clienteId && lineas.length > 0 && lineas.every((l) => l.descripcion.trim() && l.cantidad > 0) && total > 0
     : !!cot
 
-  // En datos fiscales se precargan los guardados del cliente.
-  const { data: recGuardado } = useQuery({
+  // Se precargan desde el paso 1 (no solo al llegar al paso 2) para poder
+  // saltarse "Datos fiscales" si el cliente ya los tiene completos — ver `continuar`.
+  const { data: recGuardado, isFetching: cargandoReceptor } = useQuery({
     queryKey: ['factura-receptor', clienteFactura],
     queryFn: () => facturacionService.receptorDe(clienteFactura!),
-    enabled: paso === 2 && !!clienteFactura,
+    enabled: !!clienteFactura,
   })
   const rec: ReceptorFiscal = recEditado ?? {
     rfc: recGuardado?.rfc ?? '',
@@ -176,8 +177,6 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
     cp: recGuardado?.cp ?? '',
     usoCfdi: recGuardado?.usoCfdi || RECEPTOR_VACIO.usoCfdi,
   }
-  const continuar = () => { setRec(null); setPaso(2) }
-
   const receptorValido = rec.rfc.length >= 12 && rec.nombre.trim() && rec.regimenFiscal && rec.cp.length === 5
 
   const facturar = useMutation({
@@ -204,6 +203,15 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
     },
     onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message ?? 'No se pudo facturar'),
   })
+
+  // Si el cliente ya tiene sus datos fiscales completos y guardados, se
+  // factura directo sin pasar por "Datos fiscales" — solo se pide esa
+  // pantalla cuando falta algo (cliente nuevo o sin RFC capturado antes).
+  const continuar = () => {
+    setRec(null)
+    if (receptorValido) facturar.mutate()
+    else setPaso(2)
+  }
 
   const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2 text-sm outline-none focus:border-brand'
   const label = 'mb-1 block text-[0.7rem] font-semibold text-gray-500'
@@ -403,7 +411,9 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
 
             <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
               <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-              <Button disabled={!paso1Listo} onClick={continuar}>Continuar</Button>
+              <Button disabled={!paso1Listo || cargandoReceptor} isLoading={cargandoReceptor || facturar.isPending} onClick={continuar}>
+                {receptorValido ? 'Generar factura' : 'Continuar'}
+              </Button>
             </div>
           </>
         )}

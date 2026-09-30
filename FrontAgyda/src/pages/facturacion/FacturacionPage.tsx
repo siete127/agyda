@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { ArrowLeft, Receipt, FileText, FileCode, DollarSign, CheckCircle2, Clock, XCircle, Plus } from 'lucide-react'
+import { ArrowLeft, Receipt, FileText, FileCode, DollarSign, CheckCircle2, Clock, XCircle, Plus, Pencil } from 'lucide-react'
 import { facturacionService, type Factura } from '@/services/facturacion.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
 import { estatusVisual, ESTATUS_BADGE, formatMonto } from './estatusFactura'
 import { NuevaFacturaModal } from './NuevaFacturaModal'
+import { EditarFacturaModal } from './EditarFacturaModal'
 
 function formatFecha(iso: string | null) {
   if (!iso) return '—'
@@ -30,6 +31,7 @@ export function FacturacionPage() {
   const [filtro, setFiltro] = useState<(typeof FILTROS)[number]>('Todas')
   const [descargando, setDescargando] = useState<string | null>(null)
   const [nueva, setNueva] = useState(false)
+  const [editando, setEditando] = useState<Factura | null>(null)
   const puedeFacturar = can('crm', 'facturar')
 
   const { data: facturas = [], isLoading } = useQuery({
@@ -162,6 +164,16 @@ export function FacturacionPage() {
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center justify-end gap-1">
+                          {puedeFacturar && f.estatus === 'pre-factura' && (
+                            <button
+                              type="button"
+                              title="Editar pre-factura"
+                              onClick={() => setEditando(f)}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-brand/10 hover:text-brand"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={!timbrada || descargando === `${f.id}-pdf`}
@@ -201,6 +213,7 @@ export function FacturacionPage() {
       )}
 
       {nueva && <NuevaFacturaModal onClose={() => setNueva(false)} />}
+      {editando && <EditarFacturaModal factura={editando} onClose={() => setEditando(null)} />}
     </div>
   )
 }

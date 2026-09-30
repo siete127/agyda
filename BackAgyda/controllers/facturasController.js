@@ -223,6 +223,55 @@ exports.manual = async (req, res) => {
   }
 };
 
+// PUT /api/facturas/:id — editar una pre-factura ya creada (fecha, forma/
+// método de pago, datos del receptor). Solo para 'pre-factura': una factura
+// timbrada de verdad ante el SAT es un documento fiscal cerrado, corregirla
+// requiere una nota de crédito/sustitución, no editar el registro — mismo
+// criterio que la fecha elegible al crear (ver facturas.manual/desdeCotizacion).
+exports.editar = async (req, res) => {
+  try {
+    const pool = await _pool(req);
+    const id = Number(req.params.id);
+    const actual = await pool.request().input('id', sql.Int, id)
+      .query('SELECT FAC_ESTATUS estatus FROM dbo.FACTURAS WHERE FAC_ID=@id');
+    if (!actual.recordset.length) return res.status(404).json({ success: false, message: 'No encontrada' });
+    if (actual.recordset[0].estatus !== 'pre-factura') {
+      return res.status(400).json({ success: false, message: 'Solo se puede editar una pre-factura; una factura timbrada es un documento fiscal cerrado' });
+    }
+
+    const b = req.body || {};
+    const r = b.receptor || {};
+    if (!r.rfc || !r.nombre) return res.status(400).json({ success: false, message: 'Faltan los datos fiscales del receptor (RFC, razón social)' });
+
+    await pool.request().input('id', sql.Int, id)
+      .input('rrfc', sql.NVarChar(13), r.rfc).input('rnom', sql.NVarChar(255), r.nombre)
+      .input('uso', sql.NVarChar(4), r.usoCfdi || 'G03')
+      .input('fp', sql.NVarChar(3), b.formaPago || '99').input('mp', sql.NVarChar(4), b.metodoPago || 'PUE')
+      .input('fecha', sql.DateTime, b.fecha ? new Date(b.fecha) : new Date())
+      .query(`UPDATE dbo.FACTURAS SET FAC_RECEPTOR_RFC=@rrfc, FAC_RECEPTOR_NOMBRE=@rnom, FAC_USO_CFDI=@uso,
+                FAC_FORMA_PAGO=@fp, FAC_METODO_PAGO=@mp, FAC_FECHA=@fecha WHERE FAC_ID=@id`);
+
+    // Datos fiscales del cliente, igual que al crear — se guardan para la próxima vez.
+    const cli = await pool.request().input('id', sql.Int, id).query('SELECT FAC_CLIENTE_ID id FROM dbo.FACTURAS WHERE FAC_ID=@id');
+    const clienteId = cli.recordset[0]?.id;
+    if (clienteId) {
+      await pool.request().input('id', sql.Int, clienteId)
+        .input('rfc', sql.NVarChar(13), r.rfc).input('rs', sql.NVarChar(255), r.nombre)
+        .input('reg', sql.NVarChar(3), r.regimenFiscal || null).input('cp', sql.NVarChar(5), r.cp || null)
+        .input('uso', sql.NVarChar(4), r.usoCfdi || null)
+        .query(`UPDATE dbo.CRM_CONTACTOS SET CONT_RFC=@rfc, CONT_RAZON_SOCIAL=@rs, CONT_REGIMEN_FISCAL=@reg,
+                  CONT_CP_FISCAL=@cp, CONT_USO_CFDI=@uso WHERE CONT_ID=@id`)
+        .catch(() => {});
+    }
+
+    const out = await pool.request().input('id', sql.Int, id).query('SELECT * FROM dbo.FACTURAS WHERE FAC_ID=@id');
+    res.json({ success: true, data: mapFactura(out.recordset[0]) });
+  } catch (e) {
+    console.error('facturas.editar:', e.message);
+    res.status(500).json({ success: false, message: 'Error al editar la factura' });
+  }
+};
+
 // GET /api/facturas?opoId=&cotId=
 exports.list = async (req, res) => {
   try {
