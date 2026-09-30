@@ -57,10 +57,24 @@ export default function FormularioPublicoPage() {
     enabled: !!token,
   })
   const [valores, setValores] = useState<Record<number, unknown>>({})
+  // Campos tipo 'imagen'/'archivo': el File real, aparte de `valores` (que
+  // para estos tipos solo llevaría el fakepath inútil del input si se usara
+  // igual que los demás — ver renderCampo más abajo).
+  const [archivos, setArchivos] = useState<Record<number, File>>({})
   const [clienteTelefono, setClienteTelefono] = useState(cliente)
   const [resultado, setResultado] = useState<{ interaccionId: number; acciones: CCFormAccionPost[] } | null>(null)
 
   const setValor = (campoId: number, valor: unknown) => setValores((v) => ({ ...v, [campoId]: valor }))
+  const setArchivo = (campoId: number, archivo: File | null) => {
+    setArchivos((a) => {
+      if (!archivo) { const { [campoId]: _omit, ...resto } = a; return resto }
+      return { ...a, [campoId]: archivo }
+    })
+    // Marca el campo como "con valor" para que la validación de obligatorios
+    // lo acepte, sin guardar el fakepath del input — el valor real se manda
+    // aparte en el FormData (ver mutationFn de `guardar`).
+    setValor(campoId, archivo ? archivo.name : undefined)
+  }
 
   // Campos detectados por TIPO/etiqueta, no por un código fijo, para que
   // funcione igual en cualquier formulario externo.
@@ -153,7 +167,7 @@ export default function FormularioPublicoPage() {
       canalId: canales[0]?.id,
       agenteId,
       agenteNombre: agenteNombre || undefined,
-    }),
+    }, archivos),
     onSuccess: (r) => { setResultado(r); toast.success('Registro guardado') },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al guardar'),
   })
@@ -220,7 +234,7 @@ export default function FormularioPublicoPage() {
           <div className="space-y-5 p-5">
             {def.secciones.map((s) => (
               <SeccionPublica key={s.id} seccion={s} token={token!} formularioId={def.formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
-                valores={valores} onChange={setValor} onSeleccionarBuscador={usarResultadoBuscador} ocultos={ocultos}
+                valores={valores} onChange={setValor} onArchivo={setArchivo} onSeleccionarBuscador={usarResultadoBuscador} ocultos={ocultos}
                 ultimos={hallazgo?.ultimos} panelPendientes={panelPendientes} />
             ))}
           </div>
@@ -504,9 +518,10 @@ function AccionesPostGuardadoPantalla({ interaccionId, acciones }: { interaccion
 // Tipos que necesitan todo el ancho; el resto se reparte en columnas.
 const TIPOS_ANCHO_COMPLETO = new Set(['texto_largo', 'buscador', 'pendientes', 'titulo', 'separador', 'multiseleccion', 'checkbox', 'radio', 'firma', 'archivo', 'imagen'])
 
-function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onSeleccionarBuscador, ocultos, ultimos, panelPendientes }: {
+function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agenteNombre, valores, onChange, onArchivo, onSeleccionarBuscador, ocultos, ultimos, panelPendientes }: {
   seccion: CCFormPublicoSeccion; token: string; formularioId: number; cliente: string; agenteId: number | null; agenteNombre: string
   valores: Record<number, unknown>; onChange: (campoId: number, valor: unknown) => void
+  onArchivo: (campoId: number, archivo: File | null) => void
   onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
   ocultos?: Set<number> // campos que se llenan solos desde arriba (no se muestran, sí se guardan)
   ultimos?: Record<number, string> // último valor guardado de esa persona (referencia, no se llena)
@@ -535,7 +550,7 @@ function SeccionPublica({ seccion, token, formularioId, cliente, agenteId, agent
                 </p>
               )}
               <CampoPublico campo={c} token={token} formularioId={formularioId} cliente={cliente} agenteId={agenteId} agenteNombre={agenteNombre}
-                valor={valores[c.id]} onChange={(v) => onChange(c.id, v)} onSeleccionarBuscador={onSeleccionarBuscador} />
+                valor={valores[c.id]} onChange={(v) => onChange(c.id, v)} onArchivo={(f) => onArchivo(c.id, f)} onSeleccionarBuscador={onSeleccionarBuscador} />
             </div>
           )
         })}
@@ -569,9 +584,10 @@ function valorAutocompletadoPublico(campo: CCFormPublicoCampo, agenteNombre: str
   return null
 }
 
-function CampoPublico({ campo, token, formularioId, cliente, agenteId, agenteNombre, valor, onChange, onSeleccionarBuscador }: {
+function CampoPublico({ campo, token, formularioId, cliente, agenteId, agenteNombre, valor, onChange, onArchivo, onSeleccionarBuscador }: {
   campo: CCFormPublicoCampo; token: string; formularioId: number; cliente: string; agenteId: number | null; agenteNombre: string
-  valor: unknown; onChange: (v: unknown) => void; onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
+  valor: unknown; onChange: (v: unknown) => void; onArchivo: (archivo: File | null) => void
+  onSeleccionarBuscador?: (r: CCFormBuscadorResultado) => void
 }) {
   useEffect(() => {
     if (valor !== undefined) return
@@ -638,17 +654,31 @@ function CampoPublico({ campo, token, formularioId, cliente, agenteId, agenteNom
       </div>
     )
   }
+  if (campo.tipo === 'archivo' || campo.tipo === 'imagen') {
+    const nombreArchivo = typeof valor === 'string' ? valor : ''
+    return (
+      <label>{etiqueta}
+        <input
+          type="file"
+          accept={campo.tipo === 'imagen' ? 'image/*' : undefined}
+          className={clsx(field, 'file:mr-2 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-violet-700')}
+          onChange={(e) => onArchivo(e.target.files?.[0] ?? null)}
+        />
+        {nombreArchivo && <span className="mt-0.5 block truncate text-[0.68rem] text-gray-500">{nombreArchivo}</span>}
+        {campo.ayuda && <span className="mt-0.5 block text-[0.68rem] text-gray-400">{campo.ayuda}</span>}
+      </label>
+    )
+  }
   const tipoInput: Record<string, string> = {
     numero: 'number', telefono: 'tel', email: 'email', fecha: 'date', hora: 'time',
     fecha_hora: 'datetime-local', url: 'url', moneda: 'number', porcentaje: 'number',
-    archivo: 'file', imagen: 'file',
   }
   return (
     <label>{etiqueta}
       <input
         type={tipoInput[campo.tipo] ?? 'text'}
         className={field}
-        value={['archivo', 'imagen'].includes(campo.tipo) ? undefined : ((valor as string) ?? '')}
+        value={(valor as string) ?? ''}
         onChange={(e) => onChange(campo.tipo === 'numero' || campo.tipo === 'moneda' || campo.tipo === 'porcentaje' ? Number(e.target.value) : e.target.value)}
         placeholder={campo.placeholder ?? ''}
       />

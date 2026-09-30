@@ -133,10 +133,23 @@ export const ccFormularioPublicoService = {
     clienteNombre?: string; clienteTelefono?: string; canalId: number; agenteId?: number | null; agenteNombre?: string | null; comentario?: string
   }) => apiPublico.post(`/contact-center/formularios-publico/${token}/buscador/registrar`, body).then((r) => r.data),
 
+  // archivos: File real por campoId, para campos tipo 'imagen'/'archivo' —
+  // cuando viene al menos uno se manda como multipart (payload=JSON del resto
+  // del body + campo_<id>=File por cada adjunto); el backend los reconoce por
+  // ese nombre y reemplaza el valor de esa respuesta por la ruta guardada.
   guardarRespuestas: (token: string, versionId: number, body: {
     respuestas: CCFormRespuestaInput[]; clienteNombre?: string; clienteTelefono?: string; canalId?: number
     agenteId?: number | null; agenteNombre?: string | null
-  }) => d<CCFormGuardarRespuestasResultado>(apiPublico.post(`/contact-center/formularios-publico/${token}/versiones/${versionId}/respuestas`, body)),
+  }, archivos?: Record<number, File>) => {
+    const entradas = archivos ? Object.entries(archivos) : []
+    if (!entradas.length) {
+      return d<CCFormGuardarRespuestasResultado>(apiPublico.post(`/contact-center/formularios-publico/${token}/versiones/${versionId}/respuestas`, body))
+    }
+    const fd = new FormData()
+    fd.append('payload', JSON.stringify(body))
+    for (const [campoId, file] of entradas) fd.append(`campo_${campoId}`, file)
+    return d<CCFormGuardarRespuestasResultado>(apiPublico.post(`/contact-center/formularios-publico/${token}/versiones/${versionId}/respuestas`, fd))
+  },
 
   getOpcionesCatalogo: (token: string, fuente: string) =>
     d<CCFormOpcion[]>(apiPublico.get(`/contact-center/formularios-publico/${token}/opciones-catalogo`, { params: { fuente } })),

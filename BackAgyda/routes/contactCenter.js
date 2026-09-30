@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken, verificarRol } = require('../middleware/auth');
 const { requireActionAccess, requireAnyActionAccess } = require('../middleware/moduleAccess');
-const { uploadCcMedia } = require('../middleware/ccMediaUpload');
+const { uploadCcMedia, uploadCcEvidencia } = require('../middleware/ccMediaUpload');
 const { postulanteFormRateLimit } = require('../middleware/publicFormRateLimit');
 const inter = require('../controllers/ccInteraccionesController');
 const cfg = require('../controllers/ccConfigController');
@@ -197,7 +197,7 @@ router.post('/formularios/versiones/:versionId/inactivar', authenticateToken, re
 
 // Guardar/leer respuestas — lo usa el agente EN VIVO (bajo 'atender', igual
 // que el campo tipo 'buscador'), no el administrador del formulario.
-router.post('/formularios/versiones/:versionId/respuestas', authenticateToken, requireActionAccess(M, 'atender'), forms.guardarRespuestas);
+router.post('/formularios/versiones/:versionId/respuestas', authenticateToken, requireActionAccess(M, 'atender'), uploadCcEvidencia, forms.guardarRespuestas);
 router.get('/formularios/versiones/:versionId/respuestas/:interaccionId', authenticateToken, requireActionAccess(M, 'atender'), forms.getRespuestas);
 
 // Acciones sugeridas después de guardar — catálogo bajo 'gestionar-formularios',
@@ -252,6 +252,6 @@ router.get('/formularios-publico/:token/buscador', forms.buscarRegistrosCampoBus
 router.get('/formularios-publico/:token/prellenar', forms.prellenarPorTelefonoPublico);
 router.get('/formularios-publico/:token/pendientes', forms.pendientesPorContactarPublico);
 router.post('/formularios-publico/:token/buscador/registrar', forms.crearRegistroCampoBuscadorPublico);
-router.post('/formularios-publico/:token/versiones/:versionId/respuestas', forms.guardarRespuestasPublico);
+router.post('/formularios-publico/:token/versiones/:versionId/respuestas', uploadCcEvidencia, forms.guardarRespuestasPublico);
 
 module.exports = router;

@@ -26,6 +26,29 @@
 const sql = require('mssql');
 const databaseService = require('../services/databaseService');
 
+// Cuando el guardado de respuestas llega como multipart/form-data (trae
+// evidencia adjunta para un campo tipo 'imagen'/'archivo'), el body real
+// viaja como JSON en el campo de texto 'payload' (multer no parsea JSON),
+// y los archivos llegan en req.files (uploadCcEvidencia = multer.any())
+// nombrados 'campo_<FC_ID>' desde el frontend. Si no hay payload, es una
+// petición JSON normal (sin evidencia) y req.body ya es el body real.
+function _bodyConEvidencia(req) {
+  const b = req.body && typeof req.body.payload === 'string' ? JSON.parse(req.body.payload) : (req.body || {});
+  const archivos = Array.isArray(req.files) ? req.files : [];
+  if (!archivos.length) return b;
+  const respuestas = Array.isArray(b.respuestas) ? [...b.respuestas] : [];
+  for (const f of archivos) {
+    const m = /^campo_(\d+)$/.exec(f.fieldname || '');
+    if (!m) continue;
+    const campoId = Number(m[1]);
+    const ruta = `/uploads/cc-evidencia/${f.filename}`;
+    const i = respuestas.findIndex((r) => Number(r.campoId) === campoId);
+    if (i >= 0) respuestas[i] = { ...respuestas[i], valor: ruta };
+    else respuestas.push({ campoId, valor: ruta });
+  }
+  return { ...b, respuestas };
+}
+
 function esAdmin(req) {
   return ['AD', 'TI'].includes(String(req.user?.tipoUsuario || '').toUpperCase());
 }
@@ -2367,7 +2390,7 @@ exports.guardarRespuestas = async (req, res) => {
       .query('SELECT FV_ID id, FV_FORMULARIO_ID formularioId FROM dbo.CCF_FORM_VERSIONES WHERE FV_ID = @id');
     if (!version.recordset.length) return res.status(404).json({ success: false, message: 'Versión no encontrada' });
 
-    const r = await _guardarRespuestasCore(p, Number(req.params.versionId), version.recordset[0].formularioId, { uid, nombre: null }, req.body || {});
+    const r = await _guardarRespuestasCore(p, Number(req.params.versionId), version.recordset[0].formularioId, { uid, nombre: null }, _bodyConEvidencia(req));
     if (r.error) return res.status(r.error[0]).json({ success: false, message: r.error[1] });
     res.json({ success: true, data: { interaccionId: r.interaccionId, acciones: r.acciones } });
   } catch (e) {
@@ -2472,7 +2495,7 @@ exports.guardarRespuestasPublico = async (req, res) => {
   try {
     const r0 = await _resolverFormularioPublico(req.params.token);
     if (!r0) return res.status(404).json({ success: false, message: 'Formulario no disponible' });
-    const b = req.body || {};
+    const b = _bodyConEvidencia(req);
     const versionId = Number(req.params.versionId);
 
     // El versionId siempre debe pertenecer al formulario resuelto por el
