@@ -81,29 +81,42 @@ function skillsDeCampanias(d: DatosGrupoBorrador, cat: CatalogoAsistenteGrupo | 
 // Campaña que se abre para editar al entrar (desde Operaciones → Campañas).
 export type CampaniaAEditar = { tipo: 'cc' | 'ventas'; id: number }
 // El grupo que ya usa esa campaña, abierto como borrador de cambios.
-type GrupoDeCampania = { nombre: string; otros: string[]; retomado?: boolean }
+type GrupoDeCampania = { nombre: string; otros: string[]; retomado?: boolean; agregada?: boolean }
+// Después de crear una campaña: meterla a un grupo existente.
+export type AgregarAGrupo = CampaniaAEditar & { grupoId: number }
 
-export function AsistenteGrupo({ onSalir, editarCampania }: { onSalir: () => void; editarCampania?: CampaniaAEditar }) {
+export function AsistenteGrupo({ onSalir, editarCampania, agregarAGrupo, nuevoConCampania }: {
+  onSalir: () => void; editarCampania?: CampaniaAEditar; agregarAGrupo?: AgregarAGrupo; nuevoConCampania?: CampaniaAEditar
+}) {
   const qc = useQueryClient()
   const { data: catalogo, refetch: recargarCatalogo } = useQuery({ queryKey: ['grupo-asistente-catalogo'], queryFn: svc.catalogo })
   // Si se entra a editar una campaña: se abre como borrador el grupo que ya la usa (o uno nuevo
   // con la campaña marcada si ninguno la tiene), directo en el paso de campañas.
-  const [modo, setModo] = useState<'elegir' | 'preparando' | 'editar' | 'resultado'>(editarCampania ? 'preparando' : 'elegir')
+  // Agregar una campaña nueva a un grupo: ese grupo como borrador de cambios con ella.
+  // Grupo nuevo con la campaña: directo al editor con la campaña marcada.
+  const [modo, setModo] = useState<'elegir' | 'preparando' | 'editar' | 'resultado'>(
+    editarCampania || agregarAGrupo ? 'preparando' : nuevoConCampania ? 'editar' : 'elegir')
   const [borradorId, setBorradorId] = useState<number | null>(null)
   const [cargar, setCargar] = useState(false)
   const [grupoDeCampania, setGrupoDeCampania] = useState<GrupoDeCampania | null>(null)
   useEffect(() => {
-    if (modo !== 'preparando' || !editarCampania) return
+    if (modo !== 'preparando' || !(editarCampania || agregarAGrupo)) return
     let vivo = true
-    svc.desdeCampania(editarCampania.tipo, editarCampania.id)
+    const pedir = agregarAGrupo
+      ? svc.desdeGrupo(agregarAGrupo.grupoId, { tipo: agregarAGrupo.tipo, id: agregarAGrupo.id })
+      : svc.desdeCampania(editarCampania!.tipo, editarCampania!.id)
+    pedir
       .then((r) => {
         if (!vivo) return
-        if (r.borradorId && r.grupo) { setBorradorId(r.borradorId); setCargar(true); setGrupoDeCampania({ nombre: r.grupo.nombre, otros: r.otros, retomado: r.retomado }) }
+        if (r.borradorId && r.grupo) {
+          setBorradorId(r.borradorId); setCargar(true)
+          setGrupoDeCampania({ nombre: r.grupo.nombre, otros: r.otros, retomado: r.retomado, agregada: !!agregarAGrupo })
+        }
         setModo('editar')
       })
-      .catch((e) => { if (vivo) { toast.error(msgError(e, 'No se pudo abrir el grupo de la campaña')); setModo('editar') } })
+      .catch((e) => { if (vivo) { toast.error(msgError(e, 'No se pudo abrir el grupo')); setModo('editar') } })
     return () => { vivo = false }
-  }, [modo, editarCampania])
+  }, [modo, editarCampania, agregarAGrupo])
   const { data: borradores, isLoading } = useQuery({ queryKey: ['grupo-asistente-borradores'], queryFn: svc.borradores, enabled: modo === 'elegir' })
   const mios = (borradores ?? []).filter((b) => b.esMio)
   useEffect(() => {
@@ -123,7 +136,8 @@ export function AsistenteGrupo({ onSalir, editarCampania }: { onSalir: () => voi
     return <VistaResultado borradorId={borradorId} onEditar={() => { setCargar(true); setModo('editar') }} onSalir={onSalir} />
   }
   return <Editor catalogo={catalogo} recargarCatalogo={() => recargarCatalogo()} borradorId={borradorId} cargar={cargar}
-    onBorradorCreado={setBorradorId} onCreado={() => setModo('resultado')} onSalir={onSalir} editarCampania={editarCampania} grupoDeCampania={grupoDeCampania} />
+    onBorradorCreado={setBorradorId} onCreado={() => setModo('resultado')} onSalir={onSalir} editarCampania={editarCampania}
+    prefill={editarCampania ?? nuevoConCampania} abrirEnCampanias={!!(editarCampania || agregarAGrupo)} grupoDeCampania={grupoDeCampania} />
 }
 
 /* ─────────────── Pregunta al abrir ─────────────── */
@@ -182,9 +196,10 @@ function ElegirBorrador({ borradores, onContinuar, onNuevo, onSalir, onDescartad
 type SetDatos = React.Dispatch<React.SetStateAction<DatosGrupoBorrador | null>>
 const upd = (s: SetDatos, f: (d: DatosGrupoBorrador) => DatosGrupoBorrador) => s((d) => (d ? f(d) : d))
 
-function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCreado, onCreado, onSalir, editarCampania, grupoDeCampania }: {
+function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCreado, onCreado, onSalir, editarCampania, prefill, abrirEnCampanias, grupoDeCampania }: {
   catalogo: CatalogoAsistenteGrupo; recargarCatalogo: () => void; borradorId: number | null; cargar: boolean
   onBorradorCreado: (id: number) => void; onCreado: () => void; onSalir: () => void; editarCampania?: CampaniaAEditar
+  prefill?: CampaniaAEditar; abrirEnCampanias?: boolean
   grupoDeCampania?: GrupoDeCampania | null
 }) {
   const qc = useQueryClient()
@@ -192,14 +207,14 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
   // Grupo nuevo con la campaña ya marcada (si ningún grupo la usa).
   const [datos, setDatos] = useState<DatosGrupoBorrador | null>(cargar ? null : {
     ...vacio(), reportes: recomendadasDe(catalogo),
-    ...(editarCampania?.tipo === 'cc' ? { campanias: [{ id: editarCampania.id, formularioId: null }] } : {}),
-    ...(editarCampania?.tipo === 'ventas' ? { ventasCampanaId: editarCampania.id } : {}),
+    ...(prefill?.tipo === 'cc' ? { campanias: [{ id: prefill.id, formularioId: null }] } : {}),
+    ...(prefill?.tipo === 'ventas' ? { ventasCampanaId: prefill.id } : {}),
   })
   // Borrador de cambios de un grupo que ya existe: al final se guarda sobre él.
   const [actualizando, setActualizando] = useState(false)
   // La campaña que se vino a editar se abre sola una vez; al cerrarla ya no se reabre al volver al paso 2.
   const [edicionPendiente, setEdicionPendiente] = useState(!!editarCampania)
-  const [paso, setPaso] = useState(editarCampania ? 1 : 0)
+  const [paso, setPaso] = useState(abrirEnCampanias ? 1 : 0)
   const [grupoYaCreado, setGrupoYaCreado] = useState(false)
   const [guardado, setGuardado] = useState<'guardado' | 'guardando' | 'pendiente' | 'error'>('guardado')
   const [confirmSalir, setConfirmSalir] = useState(false)
@@ -212,10 +227,10 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
   useEffect(() => {
     if (!cargado || datos) return
     setDatos({ ...vacio(), reportes: recomendadasDe(catalogo), ...cargado.datos })
-    setPaso(editarCampania ? 1 : Math.min(cargado.paso ?? 0, 5))
+    setPaso(abrirEnCampanias ? 1 : Math.min(cargado.paso ?? 0, 5))
     setGrupoYaCreado(!!cargado.grupoId)
     setActualizando(cargado.avance?.modo === 'actualizar')
-  }, [cargado, datos, catalogo, editarCampania])
+  }, [cargado, datos, catalogo, abrirEnCampanias])
 
   const guardarAhora = async (d: DatosGrupoBorrador, p: number) => {
     if (!idRef.current) return true
@@ -519,9 +534,11 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
 
   return (
     <div className={clsx(card, 'space-y-5')}>
-      {editarInicial && (
+      {(editarInicial || grupoDeCampania) && (
         <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2.5 text-[0.75rem] text-violet-900">
-          {grupoDeCampania ? (
+          {grupoDeCampania?.agregada ? (
+            <>La campaña nueva ya quedó agregada al grupo <b>{grupoDeCampania.nombre}</b> (todavía como borrador). Revisa cómo trabaja el grupo, su marcador o skills, y su gente en el paso 3 (la de la campaña entra sola); al final usa <b>Guardar cambios en el grupo</b>.</>
+          ) : grupoDeCampania ? (
             <>Entraste a editar una campaña desde <b>Operaciones → Campañas</b>. Se cargó {grupoDeCampania.retomado ? 'tu borrador pendiente' : 'la configuración actual'} del grupo <b>{grupoDeCampania.nombre}</b> que la usa: cambia lo que necesites y al final usa <b>Guardar cambios en el grupo</b>. Si sales, los cambios quedan como borrador.{grupoDeCampania.otros.length > 0 && <> También la usan: {grupoDeCampania.otros.join(', ')}.</>}</>
           ) : (
             <>Entraste a editar una campaña desde <b>Operaciones → Campañas</b>. Ningún grupo la usa todavía: ya quedó marcada para armar uno aquí mismo, o sal con la X para regresar.</>

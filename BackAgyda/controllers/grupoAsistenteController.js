@@ -274,42 +274,79 @@ exports.desdeCampania = async (req, res) => {
     const g = grupos[0];
     const otros = grupos.slice(1).map((x) => x.nombre);
 
-    const abierto = (await pool.request().input('g', sql.Int, g.id).input('u', sql.Int, uid(req)).query(`
-      SELECT TOP 1 BOR_ID id FROM dbo.INTRANET_GRUPOS_BORRADORES
-      WHERE BOR_GRUPO_ID = @g AND BOR_USUARIO_ID = @u AND BOR_ESTADO IN ('borrador', 'error') ORDER BY BOR_ACTUALIZADO DESC`)).recordset[0];
-    if (abierto) return res.json({ success: true, data: { borradorId: abierto.id, grupo: { id: g.id, nombre: g.nombre }, otros, retomado: true } });
-
-    const tipoGrupo = g.atiende ? 'atencion-clientes' : 'cc-equipos';
-    const t = porKey[tipoGrupo];
-    const cfg = await t.config.leer(pool, g.id);
-    const agentes = await t.miembros(pool, g.id);
-    const clientes = g.atiende && t.clientes ? await t.clientes(pool, g.id) : [];
-    const datos = {
-      tipo: tipoGrupo, nombre: g.nombre, descripcion: g.descripcion || '',
-      campanias: cfg.campanias.filter((c) => c.asignada).map((c) => ({ id: c.id, formularioId: c.formularioId ?? null })),
-      modalidad: cfg.modalidad || 'omnicanal',
-      skillIds: cfg.skillIds || [],
-      webphoneVistaId: cfg.webphoneVistaId || null,
-      ventasCampanaId: cfg.ventasCampanaId || null,
-      supervisores: (cfg.supervisores || []).map((s) => ({ usuarioId: s.usuarioId, nombre: s.nombre })),
-      agentes: agentes.map((a) => ({ usuarioId: a.usuarioId, nombre: a.nombre })),
-      clientes: clientes.map((c) => ({ clienteId: c.usuarioId ?? c.clienteId, nombre: c.nombre })),
-      reportes: [], // sus reportes ya existen; solo se crean los que se elijan de nuevo
-    };
-    // Su gente ya es la del grupo: el paso 3 no agrega a nadie solo, salvo que
-    // cambien las campañas (misma clave que clavePersonasDe del front).
-    datos.personasCargadas = `${datos.campanias.map((c) => c.id).sort((a, b) => a - b).join(',')}|${datos.ventasCampanaId ?? ''}`;
-    const rs = await pool.request()
-      .input('uid', sql.Int, uid(req)).input('un', sql.NVarChar, req.user?.nombre || req.user?.username || null)
-      .input('t', sql.NVarChar, tipoGrupo).input('n', sql.NVarChar, g.nombre)
-      .input('d', sql.NVarChar, JSON.stringify(datos)).input('g', sql.Int, g.id)
-      .input('a', sql.NVarChar, JSON.stringify({ completadas: ['grupo'], modo: 'actualizar' }))
-      .query(`INSERT INTO dbo.INTRANET_GRUPOS_BORRADORES (BOR_USUARIO_ID, BOR_USUARIO_NOMBRE, BOR_TIPO, BOR_NOMBRE, BOR_DATOS, BOR_PASO, BOR_GRUPO_ID, BOR_AVANCE)
-              VALUES (@uid, @un, @t, @n, @d, 1, @g, @a); SELECT SCOPE_IDENTITY() AS id;`);
-    await auditar(req, 'borrador-desde-grupo', g.id, { campania: { tipo, id } });
-    res.status(201).json({ success: true, data: { borradorId: Number(rs.recordset[0].id), grupo: { id: g.id, nombre: g.nombre }, otros } });
+    const r = await borradorDeGrupo(req, pool, g, null, { campania: { tipo, id } });
+    res.status(r.retomado ? 200 : 201).json({ success: true, data: { ...r, otros } });
   } catch (e) { responderError(res, e, 'desdeCampania'); }
 };
+
+// POST /desde-grupo/:grupoId — { agregar?: { tipo: 'cc' | 'ventas', id } }.
+// Después de crear una campaña: abre ese grupo como borrador de cambios (o
+// retoma el abierto) con la campaña ya agregada — la de Contact Center a sus
+// campañas, la de Ventas como su campaña de Ventas. Al guardar se aplica.
+exports.desdeGrupo = async (req, res) => {
+  try {
+    const pool = await poolDe(req);
+    const g = (await pool.request().input('g', sql.Int, Number(req.params.grupoId)).query(`
+      SELECT EQ_ID id, EQ_NOMBRE nombre, EQ_DESCRIPCION descripcion, CAST(ISNULL(EQ_ATIENDE_CLIENTES, 0) AS bit) atiende
+      FROM CC_EQUIPOS WHERE EQ_ID = @g AND EQ_ACTIVO = 1`)).recordset[0];
+    if (!g) throw err('Grupo no encontrado', 404);
+    const a = req.body?.agregar;
+    const agregar = a && ['cc', 'ventas'].includes(a.tipo) && Number(a.id) > 0 ? { tipo: a.tipo, id: Number(a.id) } : null;
+    const r = await borradorDeGrupo(req, pool, g, agregar, { agregar });
+    res.status(r.retomado ? 200 : 201).json({ success: true, data: { ...r, otros: [] } });
+  } catch (e) { responderError(res, e, 'desdeGrupo'); }
+};
+
+// Borrador de cambios ("actualizar") de un grupo existente con su
+// configuración actual; si el usuario ya tenía uno abierto de ese grupo, lo
+// retoma. `agregar` mete una campaña al borrador (sin guardarla en el grupo).
+async function borradorDeGrupo(req, pool, g, agregar, detalleAuditoria) {
+  const meter = (datos) => {
+    if (!agregar) return datos;
+    if (agregar.tipo === 'ventas') return { ...datos, ventasCampanaId: agregar.id };
+    return (datos.campanias || []).some((c) => c.id === agregar.id) ? datos
+      : { ...datos, campanias: [...(datos.campanias || []), { id: agregar.id, formularioId: null }] };
+  };
+  const abierto = (await pool.request().input('g', sql.Int, g.id).input('u', sql.Int, uid(req)).query(`
+    SELECT TOP 1 BOR_ID id, BOR_DATOS datos FROM dbo.INTRANET_GRUPOS_BORRADORES
+    WHERE BOR_GRUPO_ID = @g AND BOR_USUARIO_ID = @u AND BOR_ESTADO IN ('borrador', 'error') ORDER BY BOR_ACTUALIZADO DESC`)).recordset[0];
+  if (abierto) {
+    if (agregar) await actualizar(pool, abierto.id, { BOR_DATOS: meter(parse(abierto.datos, {})), BOR_PASO: 1 });
+    return { borradorId: abierto.id, grupo: { id: g.id, nombre: g.nombre }, retomado: true };
+  }
+
+  const tipoGrupo = g.atiende ? 'atencion-clientes' : 'cc-equipos';
+  const t = porKey[tipoGrupo];
+  const cfg = await t.config.leer(pool, g.id);
+  const agentes = await t.miembros(pool, g.id);
+  const clientes = g.atiende && t.clientes ? await t.clientes(pool, g.id) : [];
+  let datos = {
+    tipo: tipoGrupo, nombre: g.nombre, descripcion: g.descripcion || '',
+    campanias: cfg.campanias.filter((c) => c.asignada).map((c) => ({ id: c.id, formularioId: c.formularioId ?? null })),
+    modalidad: cfg.modalidad || 'omnicanal',
+    skillIds: cfg.skillIds || [],
+    webphoneVistaId: cfg.webphoneVistaId || null,
+    ventasCampanaId: cfg.ventasCampanaId || null,
+    supervisores: (cfg.supervisores || []).map((s) => ({ usuarioId: s.usuarioId, nombre: s.nombre })),
+    agentes: agentes.map((a) => ({ usuarioId: a.usuarioId, nombre: a.nombre })),
+    clientes: clientes.map((c) => ({ clienteId: c.usuarioId ?? c.clienteId, nombre: c.nombre })),
+    reportes: [], // sus reportes ya existen; solo se crean los que se elijan de nuevo
+  };
+  // Su gente ya es la del grupo: el paso 3 no agrega a nadie solo, salvo que
+  // cambien las campañas (misma clave que clavePersonasDe del front).
+  datos.personasCargadas = `${datos.campanias.map((c) => c.id).sort((a, b) => a - b).join(',')}|${datos.ventasCampanaId ?? ''}`;
+  // La campaña nueva entra después de fijar la clave: así el paso 3 sí trae a su gente.
+  datos = meter(datos);
+  const rs = await pool.request()
+    .input('uid', sql.Int, uid(req)).input('un', sql.NVarChar, req.user?.nombre || req.user?.username || null)
+    .input('t', sql.NVarChar, tipoGrupo).input('n', sql.NVarChar, g.nombre)
+    .input('d', sql.NVarChar, JSON.stringify(datos)).input('g', sql.Int, g.id)
+    .input('a', sql.NVarChar, JSON.stringify({ completadas: ['grupo'], modo: 'actualizar' }))
+    .query(`INSERT INTO dbo.INTRANET_GRUPOS_BORRADORES (BOR_USUARIO_ID, BOR_USUARIO_NOMBRE, BOR_TIPO, BOR_NOMBRE, BOR_DATOS, BOR_PASO, BOR_GRUPO_ID, BOR_AVANCE)
+            VALUES (@uid, @un, @t, @n, @d, 1, @g, @a); SELECT SCOPE_IDENTITY() AS id;`);
+  await auditar(req, 'borrador-desde-grupo', g.id, detalleAuditoria);
+  return { borradorId: Number(rs.recordset[0].id), grupo: { id: g.id, nombre: g.nombre } };
+}
 
 // POST /borradores/:id/crear — crea (o continúa creando) el grupo con todo.
 // Tarda segundos, así que corre dentro de la petición; cada etapa queda en

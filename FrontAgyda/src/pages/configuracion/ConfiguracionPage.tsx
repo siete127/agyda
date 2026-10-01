@@ -234,6 +234,17 @@ export function ConfiguracionPage() {
     const m = /^(cc|ventas):([0-9]+)$/.exec(params.get('editar') ?? '')
     return params.get('asistente') === 'grupo' && m ? { tipo: m[1] as 'cc' | 'ventas', id: Number(m[2]) } : undefined
   })
+  // Después de crear una campaña: &agregar=<tipo>:<id>&grupo=<id> la mete a ese grupo
+  // (borrador de cambios) y &nuevo=<tipo>:<id> arranca un grupo nuevo con ella.
+  const [agregarAGrupo] = useState(() => {
+    const m = /^(cc|ventas):([0-9]+)$/.exec(params.get('agregar') ?? '')
+    const g = Number(params.get('grupo'))
+    return params.get('asistente') === 'grupo' && m && g > 0 ? { grupoId: g, tipo: m[1] as 'cc' | 'ventas', id: Number(m[2]) } : undefined
+  })
+  const [nuevoConCampania] = useState<CampaniaAEditar | undefined>(() => {
+    const m = /^(cc|ventas):([0-9]+)$/.exec(params.get('nuevo') ?? '')
+    return params.get('asistente') === 'grupo' && m ? { tipo: m[1] as 'cc' | 'ventas', id: Number(m[2]) } : undefined
+  })
   const volver = params.get('volver')
   const [asistenteGrupo, setAsistenteGrupo] = useState(() => params.get('asistente') === 'grupo')
   const salirAsistenteGrupo = () => {
@@ -357,7 +368,7 @@ export function ConfiguracionPage() {
       {asistenteEmpresa ? (
         <AsistenteEmpresa borradorIdInicial={asistenteEmpresa.borradorId} onSalir={() => setAsistenteEmpresa(null)} />
       ) : asistenteGrupo ? (
-        <AsistenteGrupo onSalir={salirAsistenteGrupo} editarCampania={editarCampania} />
+        <AsistenteGrupo onSalir={salirAsistenteGrupo} editarCampania={editarCampania} agregarAGrupo={agregarAGrupo} nuevoConCampania={nuevoConCampania} />
       ) : q ? (
         <SearchResultsView results={results} onSelect={(n) => navigateToKey(n.key)} />
       ) : verPendientes ? (

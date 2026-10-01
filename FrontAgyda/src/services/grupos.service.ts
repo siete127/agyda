@@ -211,6 +211,9 @@ export const grupoAsistenteService = {
   /** Gente que esas campañas ya tienen (paso 3, se carga sola). */
   personasDeCampanias: (campanias: number[], ventas: number | null) => api.get(`${ga}/personas-de-campanias`, { params: { campanias: campanias.join(','), ventas: ventas ?? undefined } })
     .then((r) => r.data.data as { supervisores: { usuarioId: number; nombre: string }[]; agentes: { usuarioId: number; nombre: string }[] }),
+  /** Ese grupo como borrador de cambios, con una campaña recién creada ya agregada. */
+  desdeGrupo: (grupoId: number, agregar: { tipo: 'cc' | 'ventas'; id: number }) => api.post(`${ga}/desde-grupo/${grupoId}`, { agregar })
+    .then((r) => r.data.data as { borradorId: number; grupo: { id: number; nombre: string }; otros: string[]; retomado?: boolean }),
   /** Borrador de actualización del grupo que usa esa campaña (null si ningún grupo la usa). */
   desdeCampania: (tipo: 'cc' | 'ventas', id: number) => api.post(`${ga}/desde-campania`, { tipo, id })
     .then((r) => r.data.data as { borradorId: number | null; grupo: { id: number; nombre: string } | null; otros: string[]; retomado?: boolean }),

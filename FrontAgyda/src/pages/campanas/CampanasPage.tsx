@@ -448,6 +448,77 @@ function TablaCampanas({ agentes, ventas, cc, busqueda, onEditar, onDeshabilitar
   )
 }
 
+// Después de crear una campaña: asignarla a un grupo que ya existe (se abre su
+// borrador de cambios con la campaña agregada) o crear un grupo nuevo con ella.
+function AsignarCampaniaNueva({ campania, onClose, onAgregar, onNuevoGrupo }: {
+  campania: { tipo: 'cc' | 'ventas'; id: number }
+  onClose: () => void
+  onAgregar: (grupoId: number) => void
+  onNuevoGrupo: () => void
+}) {
+  const { data: grupos = [], isLoading } = useQuery(gruposDetalleQuery)
+  const [elegido, setElegido] = useState<number | null>(null)
+  const esVentas = campania.tipo === 'ventas'
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-card shadow-xl" role="dialog" aria-modal="true" aria-label="Asignar la campaña a un grupo">
+        <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600"><UsersRound className="h-5 w-5" /></div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-bold text-gray-900">Campaña creada · ¿a qué grupo la asignas?</h2>
+            <p className="text-[0.72rem] text-gray-400">Sus agentes y supervisores la reciben por el grupo. Puedes hacerlo ahora o después.</p>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div>
+            <p className="mb-1.5 text-[0.72rem] font-semibold text-gray-600">Agregarla a un grupo que ya existe</p>
+            {isLoading ? <div className="flex justify-center py-6"><Spinner /></div>
+              : grupos.length === 0 ? <p className="rounded-xl bg-gray-50 px-3 py-3 text-[0.75rem] text-gray-400">Aún no hay grupos: crea uno con ella.</p>
+                : (
+                  <div className="max-h-60 space-y-1.5 overflow-y-auto" role="radiogroup">
+                    {grupos.map((g) => (
+                      <label key={g.id} className={clsx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition',
+                        elegido === g.id ? 'border-violet-300 bg-violet-50/60' : 'border-gray-100 hover:border-gray-200')}>
+                        <input type="radio" name="grupo" checked={elegido === g.id} onChange={() => setElegido(g.id)} className="accent-violet-600" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[0.82rem] font-semibold text-gray-800">{g.nombre}</span>
+                          <span className="block truncate text-[0.68rem] text-gray-400">
+                            {g.campanias.length} campaña(s){g.campanias.length ? `: ${g.campanias.map((c) => c.nombre).join(', ')}` : ''} · {g.agentes.length} agentes
+                            {esVentas && g.ventas ? ` · Ventas: ${g.ventas.nombre}` : ''}
+                          </span>
+                        </span>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[0.62rem] font-semibold text-gray-500">{g.modalidad === 'marcador' ? 'Marcador' : g.modalidad === 'ambos' ? 'Ambos' : 'Omnicanal'}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+            {esVentas && <p className="mt-1.5 text-[0.66rem] text-gray-400">Un grupo tiene una sola campaña de Ventas: si ya tenía otra, se reemplaza al guardar.</p>}
+            <button onClick={() => elegido && onAgregar(elegido)} disabled={!elegido}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50">
+              <Plus className="h-4 w-4" /> Agregarla al grupo
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-wide text-gray-300">
+            <span className="h-px flex-1 bg-gray-100" /> o <span className="h-px flex-1 bg-gray-100" />
+          </div>
+
+          <button onClick={onNuevoGrupo}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:bg-violet-50">
+            <Sparkles className="h-4 w-4" /> Crear un grupo nuevo con ella
+          </button>
+        </div>
+
+        <div className="flex justify-end border-t border-gray-100 px-5 py-3">
+          <button onClick={onClose} className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50">Ahora no</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 function fmtFecha(f: string) {
   try { return new Date(f).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) }
   catch { return f }
@@ -469,6 +540,8 @@ export function CampanasPage() {
   }
   const [nuevaVentas, setNuevaVentas] = useState(false)
   const [nuevaCC, setNuevaCC] = useState(false)
+  // Recién creada: preguntar a qué grupo asignarla (o crear uno nuevo con ella).
+  const [asignarNueva, setAsignarNueva] = useState<{ tipo: 'cc' | 'ventas'; id: number } | null>(null)
   const [borrarVentas, setBorrarVentas] = useState<CampanaDisponible | null>(null)
   const [borrarCC, setBorrarCC] = useState<CCCampania | null>(null)
   const { data: campaniasCC = [] } = useQuery({
@@ -808,16 +881,26 @@ export function CampanasPage() {
 
       {nuevaVentas && (
         <EditorCampanaVentas campanaId={null} onClose={() => setNuevaVentas(false)}
-          onSaved={() => { setNuevaVentas(false); qc.invalidateQueries({ queryKey: ['campanas-disponibles'] }) }} />
+          onSaved={(id) => {
+            setNuevaVentas(false)
+            qc.invalidateQueries({ queryKey: ['campanas-disponibles'] })
+            qc.invalidateQueries({ queryKey: ['campanas-ventas-todas'] })
+            if (id) setAsignarNueva({ tipo: 'ventas', id })
+          }} />
       )}
       {nuevaCC && (
         <Modal isOpen onClose={() => { setNuevaCC(false); toast('La campaña quedó a medias: con "Nueva campaña" sigues donde te quedaste') }} title="Nueva campaña de Contact Center" size="full" elevated>
           <AsistenteCampania onSalir={(creada) => {
             setNuevaCC(false)
             qc.invalidateQueries({ queryKey: ['cc-campanias'] })
-            if (creada) toast.success('Campaña lista')
+            if (creada) { toast.success('Campaña lista'); setAsignarNueva({ tipo: 'cc', id: creada }) }
           }} />
         </Modal>
+      )}
+      {asignarNueva && (
+        <AsignarCampaniaNueva campania={asignarNueva} onClose={() => setAsignarNueva(null)}
+          onAgregar={(grupoId) => navigate(`/configuracion?asistente=grupo&agregar=${asignarNueva.tipo}:${asignarNueva.id}&grupo=${grupoId}&volver=${encodeURIComponent(RUTA_AQUI)}`)}
+          onNuevoGrupo={() => navigate(`/configuracion?asistente=grupo&nuevo=${asignarNueva.tipo}:${asignarNueva.id}&volver=${encodeURIComponent(RUTA_AQUI)}`)} />
       )}
       <ConfirmDialog isOpen={!!borrarVentas} onClose={() => setBorrarVentas(null)} onConfirm={() => borrarVentas && desactivarVentas.mutate(borrarVentas.id)}
         title={`Deshabilitar la campaña de Ventas ${borrarVentas?.nombre ?? ''}`} confirmLabel="Deshabilitar" variant="warning" isPending={desactivarVentas.isPending}
