@@ -8,7 +8,9 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 router.get('/disponibles', authenticateToken, campanaAgente.listCampanasDisponibles);
 
 // Campañas de Ventas: alta, edición (con sus estatus) y baja (desactivar)
+router.get('/ventas', authenticateToken, campanaAgente.listCampanasVentas);
 router.get('/ventas/:id', authenticateToken, campanaAgente.getCampanaVentas);
+router.post('/ventas/:id/activar', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.activarCampanaVentas);
 router.post('/ventas', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarCampanaVentas);
 router.put('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarCampanaVentas);
 router.delete('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.desactivarCampanaVentas);

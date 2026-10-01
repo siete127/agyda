@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, ArrowRight, Check, Headset, Building2, UsersRound, Layers, UserPlus, Rocket, X, Loader2,
-  Plus, Search, MessagesSquare, Phone, Trash2, AlertTriangle, CloudCheck, FileClock, RotateCcw, Pencil, CircleDashed, FileBarChart,
+  Plus, Search, MessagesSquare, Phone, Trash2, Ban, AlertTriangle, CloudCheck, FileClock, RotateCcw, Pencil, CircleDashed, FileBarChart,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -416,7 +416,7 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
   const { can } = useActionAccess()
   const puedeCrearCampania = can('contact-center', 'gestionar-skills')
   const [asistente, setAsistente] = useState(false)
-  // Editar una campaña abre su asistente aquí mismo; eliminarla la desactiva (no borra su historial).
+  // Editar una campaña abre su asistente aquí mismo; deshabilitarla no borra su historial (se vuelve a habilitar en Operaciones → Campañas).
   const [editarId, setEditarId] = useState<number | null>(editarInicial?.tipo === 'cc' ? editarInicial.id : null)
   // Campaña de Ventas: editar (id), crear (0) o nada (null).
   const [ventasEditor, setVentasEditor] = useState<number | null>(editarInicial?.tipo === 'ventas' ? editarInicial.id : null)
@@ -432,9 +432,10 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
       recargarCatalogo()
       qc.invalidateQueries({ queryKey: ['cc-campanias'] })
       qc.invalidateQueries({ queryKey: ['grupos-opciones'] })
-      toast.success('Campaña eliminada')
+      qc.invalidateQueries({ queryKey: ['cc-campanias-inactivas'] })
+      toast.success('Campaña deshabilitada')
     },
-    onError: (e) => toast.error(msgError(e, 'No se pudo eliminar la campaña')),
+    onError: (e) => toast.error(msgError(e, 'No se pudo deshabilitar la campaña')),
   })
   const campIds = datos.campanias.map((c) => c.id)
   const asignadas = catalogo.campanias.filter((c) => campIds.includes(c.id))
@@ -481,10 +482,10 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
                     className="rounded-md p-1 text-ink-tertiary hover:bg-violet-100 hover:text-violet-700">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" title="Eliminar campaña" aria-label={`Eliminar ${c.nombre}`}
+                  <button type="button" title="Deshabilitar campaña (se puede volver a habilitar)" aria-label={`Deshabilitar ${c.nombre}`}
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBorrar(c) }}
-                    className="rounded-md p-1 text-ink-tertiary hover:bg-red-50 hover:text-red-600">
-                    <Trash2 className="h-3.5 w-3.5" />
+                    className="rounded-md p-1 text-ink-tertiary hover:bg-amber-50 hover:text-amber-700">
+                    <Ban className="h-3.5 w-3.5" />
                   </button>
                 </span>
               )}
@@ -623,8 +624,8 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
           }} />
       )}
       <ConfirmDialog isOpen={!!borrar} onClose={() => setBorrar(null)} onConfirm={() => borrar && eliminarCampania.mutate(borrar.id)}
-        title={`Eliminar la campaña ${borrar?.nombre ?? ''}`} confirmLabel="Eliminar" isPending={eliminarCampania.isPending}
-        message={`Deja de aparecer en grupos, reportes y formularios; su historial (interacciones, registros) se conserva.${borrar?.otrosGrupos ? ` La usa también: ${borrar.otrosGrupos}.` : ''}${campIds.includes(borrar?.id ?? -1) ? ' Se quita de este grupo.' : ''}`} />
+        title={`Deshabilitar la campaña ${borrar?.nombre ?? ''}`} confirmLabel="Deshabilitar" variant="warning" isPending={eliminarCampania.isPending}
+        message={`Deja de aparecer en grupos, reportes y formularios; su historial (interacciones, registros) se conserva y puedes volver a habilitarla en Operaciones → Campañas.${borrar?.otrosGrupos ? ` La usa también: ${borrar.otrosGrupos}.` : ''}${campIds.includes(borrar?.id ?? -1) ? ' Se quita de este grupo.' : ''}`} />
     </div>
   )
 }

@@ -209,6 +209,41 @@ async function guardarEstatus(tx, campanaId, estatus) {
   }
 }
 
+// GET /campanas/ventas — todas las campañas de Ventas, también las deshabilitadas.
+exports.listCampanasVentas = async (req, res) => {
+  try {
+    const pv = await getVentasPool();
+    const r = await pv.request().query(`
+      SELECT c.ID AS id, LTRIM(RTRIM(c.nombre)) AS nombre, c.color, CAST(c.activo AS bit) AS activo,
+        (SELECT COUNT(*) FROM Ventas v WHERE v.campaignId = c.ID) AS ventas
+      FROM [Campanas] c ORDER BY c.nombre`);
+    res.json({ success: true, data: r.recordset.map((c) => ({ ...c, activo: !!c.activo })) });
+  } catch (e) {
+    console.error('Error listCampanasVentas:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /campanas/ventas/:id/activar — vuelve a habilitar una campaña deshabilitada.
+exports.activarCampanaVentas = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'Id inválido' });
+    const pv = await getVentasPool();
+    const up = await pv.request().input('id', sql.Int, id).query('UPDATE [Campanas] SET activo = 1 WHERE ID = @id');
+    if (!up.rowsAffected[0]) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await logAudit(pool, {
+      userId: getUserId(req), userName: req.user?.nombre || null,
+      modulo: 'usuarios', accion: 'habilitar-campana-ventas', entidadId: id, detalle: null, ip: req.ip,
+    }).catch(() => {});
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error activarCampanaVentas:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // GET /campanas/ventas/:id — la campaña con sus estatus y cuántas ventas tiene.
 exports.getCampanaVentas = async (req, res) => {
   try {

@@ -13,6 +13,9 @@ export interface CampanaVentas {
 }
 
 export const campanasVentasService = {
+  // Todas, también las deshabilitadas (activo = false).
+  listar: () => api.get('/campanas/ventas').then((r) => r.data.data as { id: number; nombre: string; color: string | null; activo: boolean; ventas: number }[]),
+  activar: (id: number) => api.post(`/campanas/ventas/${id}/activar`).then((r) => r.data),
   get: (id: number) => api.get(`/campanas/ventas/${id}`).then((r) => r.data.data as CampanaVentas),
   crear: (body: { nombre: string; color: string | null; estatus?: EstatusCampanaVentas[] }) =>
     api.post('/campanas/ventas', body).then((r) => r.data.data as CampanaVentas | null),

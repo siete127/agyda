@@ -568,15 +568,50 @@ exports.updateCampania = async (req, res) => {
         .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_SLUG = NULL WHERE CM2_SLUG = @slug AND CM2_ID <> @id AND CM2_ACTIVO = 0;
                 UPDATE dbo.CCO_CAMPANIAS SET CM2_SLUG = @slug WHERE CM2_ID = @id`);
     }
-    await p.request().input('id', sql.Int, req.params.id)
-      .input('n', sql.NVarChar(200), b.nombre || null).input('d', sql.NVarChar(sql.MAX), b.descripcion ?? null)
-      .input('m', sql.Int, b.maxChatsPorAgente ?? null)
-      .input('fb', sql.NVarChar(300), b.contactoFacebookUrl ?? null).input('ig', sql.NVarChar(300), b.contactoInstagramUrl ?? null)
-      .input('tel', sql.NVarChar(40), b.contactoTelefono ?? null)
-      .input('modoAsig', sql.NVarChar(12), ['global', 'auto', 'manual'].includes(b.modoAsignacion) ? b.modoAsignacion : null)
-      .query(`UPDATE dbo.CCO_CAMPANIAS SET CM2_NOMBRE = ISNULL(@n, CM2_NOMBRE), CM2_DESCRIPCION = @d, CM2_MAX_CHATS_POR_AGENTE = @m,
-              CM2_CONTACTO_FACEBOOK_URL = @fb, CM2_CONTACTO_INSTAGRAM_URL = @ig, CM2_CONTACTO_TELEFONO = @tel,
-              CM2_MODO_ASIGNACION = ISNULL(@modoAsig, CM2_MODO_ASIGNACION) WHERE CM2_ID = @id`);
+    // Solo los campos que vienen en el body: el asistente de campaña manda
+    // nombre/slug/asignación y no debe borrar la descripción ni el contacto.
+    const rq = p.request().input('id', sql.Int, req.params.id)
+      .input('n', sql.NVarChar(200), b.nombre || null)
+      .input('modoAsig', sql.NVarChar(12), ['global', 'auto', 'manual'].includes(b.modoAsignacion) ? b.modoAsignacion : null);
+    const sets = ['CM2_NOMBRE = ISNULL(@n, CM2_NOMBRE)', 'CM2_MODO_ASIGNACION = ISNULL(@modoAsig, CM2_MODO_ASIGNACION)'];
+    const opcionales = [
+      ['descripcion', 'd', sql.NVarChar(sql.MAX), 'CM2_DESCRIPCION'],
+      ['maxChatsPorAgente', 'm', sql.Int, 'CM2_MAX_CHATS_POR_AGENTE'],
+      ['contactoFacebookUrl', 'fb', sql.NVarChar(300), 'CM2_CONTACTO_FACEBOOK_URL'],
+      ['contactoInstagramUrl', 'ig', sql.NVarChar(300), 'CM2_CONTACTO_INSTAGRAM_URL'],
+      ['contactoTelefono', 'tel', sql.NVarChar(40), 'CM2_CONTACTO_TELEFONO'],
+    ];
+    for (const [campo, param, tipo, col] of opcionales) {
+      if (b[campo] === undefined) continue;
+      rq.input(param, tipo, b[campo] ?? null);
+      sets.push(`${col} = @${param}`);
+    }
+    await rq.query(`UPDATE dbo.CCO_CAMPANIAS SET ${sets.join(', ')} WHERE CM2_ID = @id`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+// Campañas deshabilitadas (CM2_ACTIVO = 0) para poder volver a habilitarlas.
+exports.listCampaniasInactivas = async (req, res) => {
+  try {
+    const p = await pool(req);
+    const r = await p.request().query(`
+      SELECT CM2_ID id, CM2_NOMBRE nombre, CM2_SLUG slug,
+        (SELECT COUNT(*) FROM dbo.CCO_INTERACCIONES i WHERE i.CI_CAMPANIA_ID = c.CM2_ID) interacciones
+      FROM dbo.CCO_CAMPANIAS c WHERE c.CM2_ACTIVO = 0 ORDER BY c.CM2_NOMBRE`);
+    res.json({ success: true, data: r.recordset });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+};
+// Vuelve a habilitar una campaña. Si otra campaña activa tomó su identificador
+// público mientras estaba deshabilitada, se habilita sin identificador.
+exports.reactivarCampania = async (req, res) => {
+  try {
+    if (!esGestor(req)) return res.status(403).json({ success: false, message: 'No autorizado' });
+    const p = await pool(req);
+    const r = await p.request().input('id', sql.Int, req.params.id).query(`
+      UPDATE c SET CM2_ACTIVO = 1,
+        CM2_SLUG = CASE WHEN EXISTS (SELECT 1 FROM dbo.CCO_CAMPANIAS o WHERE o.CM2_ACTIVO = 1 AND o.CM2_ID <> c.CM2_ID AND o.CM2_SLUG = c.CM2_SLUG) THEN NULL ELSE c.CM2_SLUG END
+      FROM dbo.CCO_CAMPANIAS c WHERE c.CM2_ID = @id`);
+    if (!r.rowsAffected[0]) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };

@@ -109,6 +109,9 @@ router.put('/config', authenticateToken, requireActionAccess(M, 'configurar-cana
 
 // ── Campañas / skills (grupos) ────────────────────────────────────────
 router.get('/campanias', authenticateToken, requireActionAccess(M, 'ver'), cfg.listCampanias);
+// Deshabilitadas (eliminar = deshabilitar) y volver a habilitarlas.
+router.get('/campanias-inactivas', authenticateToken, requireActionAccess(M, 'ver'), cfg.listCampaniasInactivas);
+router.post('/campanias/:id/reactivar', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.reactivarCampania);
 router.post('/campanias', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.createCampania);
 router.put('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.updateCampania);
 router.delete('/campanias/:id', authenticateToken, requireActionAccess(M, 'gestionar-skills'), cfg.deleteCampania);

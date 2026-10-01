@@ -103,7 +103,10 @@ export const ccService = {
   getCampanias: () => d<CCCampania[]>(api.get('/contact-center/campanias')),
   createCampania: (body: { nombre: string; descripcion?: string; maxChatsPorAgente?: number }) => api.post('/contact-center/campanias', body).then((r) => r.data),
   updateCampania: (id: number, body: Record<string, unknown>) => api.put(`/contact-center/campanias/${id}`, body).then((r) => r.data),
+  // "Eliminar" = deshabilitar (CM2_ACTIVO = 0); se puede volver a habilitar.
   deleteCampania: (id: number) => api.delete(`/contact-center/campanias/${id}`).then((r) => r.data),
+  getCampaniasInactivas: () => d<{ id: number; nombre: string; slug: string | null; interacciones: number }[]>(api.get('/contact-center/campanias-inactivas')),
+  reactivarCampania: (id: number) => api.post(`/contact-center/campanias/${id}/reactivar`).then((r) => r.data),
   // Ficha de campaña: formularios asignados y el que abre la URL fija del marcador.
   getFormulariosDeCampania: (id: number) => api.get(`/contact-center/campanias/${id}/formularios`).then((r) => r.data.data as CCCampaniaFormularios),
   setMarcadorCampania: (id: number, formularioId: number | null) =>
