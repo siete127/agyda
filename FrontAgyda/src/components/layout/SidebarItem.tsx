@@ -10,9 +10,13 @@ interface SidebarItemProps {
   isCollapsed: boolean
   badge?: number
   onClick?: () => void
+  // 'lg': mismo tamaño que los accesos de nivel raíz (grupos/acordeones) —
+  // usado para grupos "sueltos" como Inicio/Noticias/Mensajería. Default
+  // ('sm'): tamaño compacto de subitem dentro de un acordeón desplegado.
+  size?: 'sm' | 'lg'
 }
 
-export function SidebarItem({ to, label, icon, isCollapsed, badge, onClick }: SidebarItemProps) {
+export function SidebarItem({ to, label, icon, isCollapsed, badge, onClick, size = 'sm' }: SidebarItemProps) {
   const IconComponent = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[icon] ?? Icons.Circle
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -37,7 +41,8 @@ export function SidebarItem({ to, label, icon, isCollapsed, badge, onClick }: Si
       className={clsx(
         'group relative flex w-full items-center gap-3 rounded-full text-sm font-semibold',
         'transition-colors select-none outline-none',
-        isCollapsed ? 'justify-center px-0 py-3' : 'px-4 py-2.5',
+        isCollapsed ? 'justify-center px-0' : 'px-4',
+        isCollapsed ? (size === 'lg' ? 'py-3.5' : 'py-3') : (size === 'lg' ? 'py-3.5' : 'py-2.5'),
         isActive
           ? 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md'
           : 'text-white/70 hover:bg-white/10 hover:text-white',
@@ -51,7 +56,12 @@ export function SidebarItem({ to, label, icon, isCollapsed, badge, onClick }: Si
       )}
 
       {/* Ícono */}
-      <IconComponent className={clsx('flex-shrink-0', isCollapsed ? 'h-[1.05rem] w-[1.05rem]' : 'h-[0.95rem] w-[0.95rem]')} />
+      <IconComponent className={clsx(
+        'flex-shrink-0',
+        isCollapsed
+          ? (size === 'lg' ? 'h-5 w-5' : 'h-[1.05rem] w-[1.05rem]')
+          : (size === 'lg' ? 'h-[1.1rem] w-[1.1rem]' : 'h-[0.95rem] w-[0.95rem]'),
+      )} />
 
       {/* Etiqueta + badge */}
       {!isCollapsed && (

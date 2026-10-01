@@ -1,4 +1,4 @@
-import { X, LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { X, LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, LifeBuoy } from 'lucide-react'
 import * as Icons from 'lucide-react'
 import { useState } from 'react'
 import { useUIStore } from '@/stores/ui.store'
@@ -227,12 +227,52 @@ export function Sidebar() {
 
         {/* ── Navegación: items grandes tipo botón ── */}
         <nav className="relative z-10 flex-1 overflow-y-auto px-3 pt-3 pb-3 space-y-2.5">
-          {GROUPS.map((group) => {
+          {(() => {
+            let moduleLabelShown = false
+            return GROUPS.map((group) => {
             const routes = getGroupRoutes(group.keys)
             if (routes.length === 0) return null
             const GroupIcon = routes[0].icon
               ? (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[routes[0].icon]
               : undefined
+
+            // Separador de texto "MÓDULOS" antes del primer grupo con
+            // acordeón/link (Dirección General en adelante) — no se repite
+            // en modo colapsado, donde no hay espacio para texto.
+            const showModuleLabel = !group.suelto && !moduleLabelShown && !sidebarCollapsed
+            if (!group.suelto) moduleLabelShown = true
+
+            // Grupo "suelto" (ej. Principal: Inicio/Noticias/Mensajería) —
+            // cada ruta es su propio acceso directo de nivel raíz, sin botón
+            // padre ni acordeón que desplegar.
+            if (group.suelto) {
+              return (
+                <div key={group.label} className="space-y-2.5">
+                  {routes.map((route) => (
+                    <SidebarItem
+                      key={route.path}
+                      to={route.path}
+                      label={route.label}
+                      icon={route.icon}
+                      isCollapsed={sidebarCollapsed}
+                      badge={BADGES[route.path]}
+                      onClick={() => setMobileMenuOpen(false)}
+                      size="lg"
+                    />
+                  ))}
+                </div>
+              )
+            }
+
+            // Separador propio del grupo (ej. "Herramientas" antes de
+            // Configuración), independiente del "Módulos" automático.
+            const separadorPropio = !sidebarCollapsed && group.separadorAntes
+
+            const moduleLabel = (showModuleLabel || separadorPropio) && (
+              <p className="px-4 pb-1 pt-2 text-[0.68rem] font-bold uppercase tracking-wider text-[#19b6bc]">
+                {separadorPropio || 'Módulos'}
+              </p>
+            )
 
             // Grupo con un solo módulo (ej. Configuración) — link directo, sin
             // toggle ni submenú duplicando la misma etiqueta. Mismo estilo
@@ -240,33 +280,35 @@ export function Sidebar() {
             if (routes.length === 1) {
               const isActive = location.pathname === routes[0].path || location.pathname.startsWith(routes[0].path + '/')
               return (
-                <button
-                  key={group.label}
-                  onClick={() => {
-                    setMobileMenuOpen(false)
-                    navigate(routes[0].path)
-                  }}
-                  title={sidebarCollapsed ? group.label : undefined}
-                  className={clsx(
-                    'group flex w-full items-center gap-3 rounded-full font-semibold transition-colors',
-                    sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-4 py-3.5',
-                    isActive
-                      ? 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white',
-                  )}
-                >
-                  {GroupIcon && <GroupIcon className={clsx('flex-shrink-0', sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]')} />}
-                  {!sidebarCollapsed && (
-                    <span className="flex-1 text-left text-sm">
-                      {group.label}
-                    </span>
-                  )}
-                  {!sidebarCollapsed && !!BADGES[routes[0].path] && BADGES[routes[0].path] > 0 && (
-                    <span className="flex-shrink-0 rounded-full bg-white/90 px-1.5 py-0.5 text-[0.6rem] font-bold text-[#00537f] leading-none">
-                      {BADGES[routes[0].path] > 99 ? '99+' : BADGES[routes[0].path]}
-                    </span>
-                  )}
-                </button>
+                <div key={group.label}>
+                  {moduleLabel}
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      navigate(routes[0].path)
+                    }}
+                    title={sidebarCollapsed ? group.label : undefined}
+                    className={clsx(
+                      'group flex w-full items-center gap-3 rounded-full font-semibold transition-colors',
+                      sidebarCollapsed ? 'justify-center px-0 py-3.5' : 'px-4 py-3.5',
+                      isActive
+                        ? 'bg-gradient-to-br from-[#19b6bc] to-[#00537f] text-white shadow-md'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white',
+                    )}
+                  >
+                    {GroupIcon && <GroupIcon className={clsx('flex-shrink-0', sidebarCollapsed ? 'h-5 w-5' : 'h-[1.1rem] w-[1.1rem]')} />}
+                    {!sidebarCollapsed && (
+                      <span className="flex-1 text-left text-sm">
+                        {group.label}
+                      </span>
+                    )}
+                    {!sidebarCollapsed && !!BADGES[routes[0].path] && BADGES[routes[0].path] > 0 && (
+                      <span className="flex-shrink-0 rounded-full bg-white/90 px-1.5 py-0.5 text-[0.6rem] font-bold text-[#00537f] leading-none">
+                        {BADGES[routes[0].path] > 99 ? '99+' : BADGES[routes[0].path]}
+                      </span>
+                    )}
+                  </button>
+                </div>
               )
             }
 
@@ -275,6 +317,7 @@ export function Sidebar() {
 
             return (
               <div key={group.label}>
+                {moduleLabel}
                 <button
                   onClick={(e) => {
                     if (sidebarCollapsed) {
@@ -325,11 +368,24 @@ export function Sidebar() {
                 )}
               </div>
             )
-          })}
+            })
+          })()}
         </nav>
 
-        {/* ── Footer: perfil + logout ── */}
+        {/* ── Footer: ayuda + logout ── */}
         <div className={clsx('relative z-10 mt-4 flex flex-shrink-0 flex-col gap-2.5 border-t border-white/10 pb-4 pt-4', sidebarCollapsed ? 'px-0' : 'px-3')}>
+          <button
+            onClick={() => { setMobileMenuOpen(false); navigate('/tickets') }}
+            title={sidebarCollapsed ? 'Ayuda y soporte' : undefined}
+            className={clsx(
+              'flex items-center gap-3 rounded-full py-3 text-left text-sm font-semibold text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white',
+              sidebarCollapsed ? 'justify-center px-0' : 'px-4'
+            )}
+          >
+            <LifeBuoy className="h-5 w-5 flex-shrink-0" />
+            {!sidebarCollapsed && <span>Ayuda y soporte</span>}
+          </button>
+
           <button
             onClick={handleLogout}
             title={sidebarCollapsed ? 'Cerrar sesión' : undefined}

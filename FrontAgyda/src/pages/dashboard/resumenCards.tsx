@@ -63,10 +63,12 @@ export interface ResumenCardDef {
 /* ── Shell visual común ─────────────────────────────────────────────── */
 
 function CardShell({
-  titulo, Icon, to, onVer, verLabel = 'Abrir', children, tono = 'brand',
+  titulo, Icon, img, to, onVer, verLabel = 'Abrir', children, tono = 'brand',
 }: {
   titulo: string
   Icon: LucideIcon
+  /** Si se pasa, se usa en vez de Icon (gif/imagen propia de la tarjeta). */
+  img?: string
   to?: string
   onVer?: () => void // acción del botón del encabezado en lugar de navegar a `to`
   verLabel?: string
@@ -82,7 +84,7 @@ function CardShell({
     <div className="dash-card flex h-full flex-col overflow-hidden rounded-2xl border border-surface-border bg-card">
       <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <Icon className={clsx('h-4 w-4', tonos[tono])} />
+          {img ? <img src={img} alt="" className="h-6 w-6 object-contain" /> : <Icon className={clsx('h-4 w-4', tonos[tono])} />}
           <h3 className="text-[0.82rem] font-bold text-ink">{titulo}</h3>
         </div>
         <button
@@ -397,14 +399,14 @@ function MetasVentasResumen() {
 
   if (data.length === 0) {
     return (
-      <CardShell titulo="Metas de ventas" Icon={Target} to="/ventas-area/metas" verLabel="Ver metas" tono="violet">
+      <CardShell titulo="Metas de ventas" Icon={Target} img="/icons/metas-blue.gif" to="/ventas-area/metas" verLabel="Ver metas" tono="brand">
         <p className="text-center text-[0.72rem] text-ink-tertiary py-4">Sin metas asignadas hoy</p>
       </CardShell>
     )
   }
 
   return (
-    <CardShell titulo="Metas de ventas" Icon={Target} to="/ventas-area/metas" verLabel="Ver metas" tono="violet">
+    <CardShell titulo="Metas de ventas" Icon={Target} img="/icons/metas-blue.gif" to="/ventas-area/metas" verLabel="Ver metas" tono="brand">
       <div className="flex flex-col gap-4">
         {data.map((m) => (
           <MetaProgreso key={m.id} meta={m} />
@@ -463,13 +465,13 @@ function MetaProgreso({ meta }: { meta: MiMeta }) {
       <div className="mt-3.5">
         <div className="relative h-2 w-full rounded-full bg-surface-border">
           <div
-            className={clsx('absolute inset-y-0 left-0 rounded-full', cumplida ? 'bg-emerald-500' : 'bg-violet-500')}
+            className={clsx('absolute inset-y-0 left-0 rounded-full', cumplida ? 'bg-emerald-500' : 'bg-[#19b6bc]')}
             style={{ width: `${Math.max(pct, 3)}%` }}
           />
           <div
             className={clsx(
               'absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card shadow',
-              cumplida ? 'bg-emerald-500' : 'bg-violet-500',
+              cumplida ? 'bg-emerald-500' : 'bg-[#19b6bc]',
             )}
             style={{ left: `${Math.max(pct, 2)}%` }}
           />

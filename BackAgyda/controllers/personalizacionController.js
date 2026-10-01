@@ -10,7 +10,7 @@ const { MEDIA_EMPRESA_DIR } = require('../middleware/mediaEmpresaUpload');
 let socketService;
 try { socketService = require('../services/socketService'); } catch (_) { socketService = null; }
 
-const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login'];
+const TIPOS_ASSET = ['logo-principal', 'logo-compacto', 'favicon', 'login', 'hero-inicio'];
 const HEADER_BUTTON_KEYS = ['marcador', 'contingencia'];
 // Catálogo de cards del dashboard — el frontend sabe renderizarlas; aquí solo
 // validamos que las keys sean conocidas. Debe reflejar CARD_IDS de
@@ -18,7 +18,7 @@ const HEADER_BUTTON_KEYS = ['marcador', 'contingencia'];
 const DASHBOARD_CARD_IDS = [
   // Portada
   'bienvenida', 'legales', 'marca', 'lo-importante', 'cita',
-  'ultimas-noticias', 'proximos-eventos', 'cumpleanos', 'soporte', 'accesos-rapidos',
+  'ultimas-noticias', 'mensajeria', 'documentos-recientes', 'proximos-eventos', 'cumpleanos', 'soporte', 'accesos-rapidos',
   // Resúmenes de módulos
   'r-tickets', 'r-proyectos', 'r-encuestas', 'r-quejas', 'r-legal',
   'r-reglamento', 'r-livechat', 'r-pausas', 'r-vacaciones', 'r-capacitacion',
@@ -40,6 +40,7 @@ const DEFAULT_CONFIG = {
     logoCompactoId: null,
     faviconId: null,
     loginImagenId: null,
+    heroInicioId: null,
     colorBrand: '#2F6FED',
     sidebarEstilo: 'solido-portal',
     sidebarBurbujas: false,
@@ -390,6 +391,7 @@ exports.updateBranding = async (req, res) => {
       logoCompactoId: numOrNull(b.logoCompactoId),
       faviconId: numOrNull(b.faviconId),
       loginImagenId: numOrNull(b.loginImagenId),
+      heroInicioId: numOrNull(b.heroInicioId),
       colorBrand: hex(b.colorBrand, D.colorBrand),
       sidebarEstilo: SIDEBAR_STYLES.includes(b.sidebarEstilo) ? b.sidebarEstilo : D.sidebarEstilo,
       // (fin extras sidebar/fondo)

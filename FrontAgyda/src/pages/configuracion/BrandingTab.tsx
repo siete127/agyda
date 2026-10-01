@@ -286,6 +286,7 @@ export function BrandingTab() {
               <AssetUploader tipo="logo-compacto" label="Logo compacto" hint="128 × 128 px" actualId={form.logoCompactoId} onUploaded={(id) => set('logoCompactoId', id)} />
               <AssetUploader tipo="login" label="Imagen de login" hint="1920 × 1080 px" actualId={form.loginImagenId} onUploaded={(id) => set('loginImagenId', id)} />
               <AssetUploader tipo="favicon" label="Favicon" hint="64 × 64 px" actualId={form.faviconId} onUploaded={(id) => set('faviconId', id)} />
+              <AssetUploader tipo="hero-inicio" label="Portada del Inicio" hint="1600 × 700 px" actualId={form.heroInicioId} onUploaded={(id) => set('heroInicioId', id)} />
             </div>
             <div className="mt-4 flex items-start gap-2 rounded-xl bg-violet-50/60 px-3 py-2.5">
               <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500" />

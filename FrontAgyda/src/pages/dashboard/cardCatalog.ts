@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   Hand, Scale, Clapperboard, ListChecks, Quote, Newspaper, CalendarDays,
-  Gift, LifeBuoy, LayoutGrid,
+  Gift, LifeBuoy, LayoutGrid, MessageSquare, FolderOpen,
 } from 'lucide-react'
 import { RESUMEN_CARDS } from './resumenCards'
 
@@ -34,6 +34,8 @@ export const PORTADA_CARDS: CatalogEntry[] = [
   { id: 'legales', titulo: 'Misión / Visión / Valores / Legales', descripcion: 'Accesos a los documentos institucionales.', categoria: 'Portada', size: { w: 5, h: 2 }, Icon: Scale },
   { id: 'cita', titulo: 'Frase del día', descripcion: 'Mensaje inspirador de la empresa.', categoria: 'Portada', size: { w: 3, h: 1 }, Icon: Quote },
   { id: 'ultimas-noticias', titulo: 'Últimas noticias', descripcion: 'Las publicaciones más recientes.', categoria: 'Contenido', moduleKey: 'noticias', size: { w: 8, h: 5 }, Icon: Newspaper },
+  { id: 'mensajeria', titulo: 'Mensajería', descripcion: 'Tus conversaciones más recientes.', categoria: 'Contenido', moduleKey: 'mensajeria', size: { w: 4, h: 3 }, Icon: MessageSquare },
+  { id: 'documentos-recientes', titulo: 'Documentos recientes', descripcion: 'Los últimos archivos subidos a Drive.', categoria: 'Contenido', moduleKey: 'drive', size: { w: 4, h: 3 }, Icon: FolderOpen },
   { id: 'proximos-eventos', titulo: 'Próximos eventos', descripcion: 'Eventos del calendario en los próximos días.', categoria: 'Contenido', moduleKey: 'calendario', size: { w: 4, h: 3 }, Icon: CalendarDays },
   { id: 'cumpleanos', titulo: 'Cumpleaños del mes', descripcion: 'Quién cumple años este mes.', categoria: 'Personas', size: { w: 4, h: 3 }, Icon: Gift },
   { id: 'soporte', titulo: 'Soporte y sugerencias', descripcion: 'Acceso rápido para pedir ayuda o sugerir.', categoria: 'Portada', size: { w: 4, h: 2 }, Icon: LifeBuoy },

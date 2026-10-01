@@ -460,6 +460,17 @@
   :root:not([data-theme="light"]) .text-fuchsia-500, :root:not([data-theme="light"]) .text-fuchsia-600, :root:not([data-theme="light"]) .text-fuchsia-700 { color: color-mix(in srgb, #d946ef 75%, white) !important; }
 }
 
+/* ── Tarjeta "Bienvenida" del Inicio ── mismo overlay/texto en ambos temas,
+   por decisión explícita: el velo oscuro con texto blanco se ve bien tanto
+   en claro como en oscuro, así que no se invierte con el tema. Usa el mismo
+   azul del sidebar (#0a2f71, preset "solido-portal") para consistencia. */
+.hero-overlay {
+  background: linear-gradient(100deg, rgba(10, 47, 113, 0.75) 0%, rgba(10, 47, 113, 0.5) 30%, rgba(10, 47, 113, 0.18) 55%, rgba(10, 47, 113, 0) 75%);
+}
+
+.hero-text { color: #ffffff; }
+.hero-text-secondary { color: rgba(255, 255, 255, 0.8); }
+
 /* ── Controls/MiniMap de @xyflow/react (Constructor de flujo del chatbot) ──
    La librería expone variables --xy-* pensadas justo para esto — no hace
    falta !important ni pelear con sus clases, solo redefinir sus tokens con

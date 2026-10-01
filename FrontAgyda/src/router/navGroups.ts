@@ -9,6 +9,17 @@ export interface NavGroup {
   key: string
   label: string
   keys: string[]
+  // true: cada ruta del grupo se muestra como acceso directo suelto en el
+  // sidebar (sin botón padre ni acordeón que desplegar) — usado para accesos
+  // de primer nivel como Inicio/Noticias/Mensajería. Si se omite o es false,
+  // el grupo se comporta como acordeón normal (o link directo si trae una
+  // sola ruta).
+  suelto?: boolean
+  // Separador de texto (ej. "MÓDULOS", "HERRAMIENTAS") que se muestra en el
+  // sidebar justo antes de este grupo. El primer grupo no-suelto ya trae el
+  // separador "Módulos" automático (ver Sidebar.tsx) — este campo es para
+  // separadores adicionales más abajo en la lista.
+  separadorAntes?: string
 }
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -16,6 +27,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: 'principal',
     label: 'Principal',
     keys: ['*', 'noticias', 'mensajeria'],
+    suelto: true,
   },
   {
     key: 'direccion-general',
@@ -76,5 +88,8 @@ export const NAV_GROUPS: NavGroup[] = [
     key: 'configuracion',
     label: 'Configuración',
     keys: ['configuracion'],
+    // "HERRAMIENTAS" pendiente de definir su esquema completo — por ahora
+    // solo Configuración vive bajo este separador.
+    separadorAntes: 'Herramientas',
   },
 ]
