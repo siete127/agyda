@@ -66,7 +66,8 @@ export function EditorCampanaVentas({ campanaId, onClose, onSaved }: {
   const activos = f?.estatus.filter((e) => e.activo).length ?? 0
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    // z-[200]: se abre también encima de los Modal "elevated" (z 70+ y suben con cada uno apilado).
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-card shadow-xl" role="dialog" aria-modal="true" aria-label={editando ? 'Editar campaña de Ventas' : 'Nueva campaña de Ventas'}>
         <div className="h-1.5 rounded-t-2xl" style={{ background: f?.color ?? PALETA[0] }} />
         <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3.5">
