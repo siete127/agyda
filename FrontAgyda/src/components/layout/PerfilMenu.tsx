@@ -16,6 +16,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { usePausaTipos, usePausaModulos } from '@/hooks/usePausaTipos'
 import { useBanioEstado } from '@/hooks/useBanioEstado'
 import { limitePausa } from '@/types/pausaTipos.types'
+import { CampaniaActivaSelector } from './CampaniaActivaSelector'
 
 interface PausaActiva { tiempo_id: number; status_id: number; fecha_inicio: string; duracionSegundos: number }
 
@@ -262,6 +263,9 @@ export function PerfilMenu() {
               </button>
             )}
           </div>
+
+          {/* Campaña activa — solo si está en 2 o más campañas */}
+          {rol !== 'CL' && <CampaniaActivaSelector />}
 
           {/* Estado de pausa — solo con el permiso reports:gestionar-pausas (y la empresa con el módulo) */}
           {puedePausar && (

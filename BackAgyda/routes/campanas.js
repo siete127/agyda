@@ -23,6 +23,10 @@ router.post('/ventas', authenticateToken, requireActionAccess('accesos', 'gestio
 router.put('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarCampanaVentas);
 router.delete('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.desactivarCampanaVentas);
 
+// Campaña activa del propio usuario (menú del perfil), cuando está en 2 o más
+router.get('/mi-campania', authenticateToken, campanaAgente.getMiCampaniaActiva);
+router.put('/mi-campania', authenticateToken, campanaAgente.setMiCampaniaActiva);
+
 // Asignación agente → campaña (tabla propia de AGYDA, editable desde Usuarios)
 router.get('/agentes', authenticateToken, campanaAgente.listAgentesCampanas);
 router.get('/agentes/:neusId', authenticateToken, campanaAgente.getAgenteCampana);

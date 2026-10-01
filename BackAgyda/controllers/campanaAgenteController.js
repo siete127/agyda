@@ -122,6 +122,145 @@ exports.setAgenteCampana = async (req, res) => {
   }
 };
 
+// ── Campaña activa del usuario (menú del perfil) ──
+// Un agente o supervisor puede estar en varias campañas (por sus grupos, sus
+// skills o las campañas que supervisa). Con 2 o más elige en cuál trabaja; se
+// guarda en CC_CAMPANIA_ACTIVA_USUARIO (se crea con la primera elección).
+// Para un agente, elegirla también cambia su campaña de Ventas
+// (AC_CAMPANIAS_AGENTES), que es donde se registra lo que captura.
+const conTablaActiva = new Set();
+async function hayTablaActiva(pool) {
+  if (conTablaActiva.has(pool)) return true;
+  const r = await pool.request().query("SELECT OBJECT_ID('dbo.CC_CAMPANIA_ACTIVA_USUARIO', 'U') AS t");
+  if (!r.recordset[0].t) return false;
+  conTablaActiva.add(pool);
+  return true;
+}
+async function asegurarTablaActiva(pool) {
+  if (conTablaActiva.has(pool)) return;
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.CC_CAMPANIA_ACTIVA_USUARIO', 'U') IS NULL
+      CREATE TABLE dbo.CC_CAMPANIA_ACTIVA_USUARIO (
+        CAU_USUARIO_ID  INT NOT NULL PRIMARY KEY,
+        CAU_TIPO        NVARCHAR(10) NOT NULL,
+        CAU_CAMPANIA_ID INT NOT NULL,
+        CAU_FECHA       DATETIME NOT NULL DEFAULT GETDATE()
+      );`);
+  conTablaActiva.add(pool);
+}
+
+// Las campañas en las que está el usuario. Cada una: { clave, tipo: 'cc' | 'ventas',
+// id, nombre, rol: 'agente' | 'supervisor', grupos, ventasId, ventasNombre }.
+// Las de Contact Center llevan la campaña de Ventas de su grupo (si tiene); una de
+// Ventas solo sale aparte si ninguna de Contact Center ya la trae.
+async function campaniasDelUsuario(pool, u) {
+  // Una tras otra (así también corre dentro de una transacción); si a la empresa
+  // le falta alguna de estas tablas, esa consulta sale vacía.
+  const q = (texto) => () => pool.request().input('u', sql.Int, u).query(texto).then((r) => r.recordset).catch(() => []);
+  const enSerie = async (consultas) => { const out = []; for (const c of consultas) out.push(await c()); return out; };
+  const [grupos, deGrupos, deSkills, supervisa, ventasAgente] = await enSerie([
+    q(`SELECT e.EQ_ID AS id, e.EQ_NOMBRE AS nombre, e.EQ_VENTAS_CAMPANA_ID AS ventasId, e.EQ_VENTAS_CAMPANA_NOMBRE AS ventasNombre, m.EQM_ROL AS rol
+       FROM CC_EQUIPO_MIEMBROS m JOIN CC_EQUIPOS e ON e.EQ_ID = m.EQM_EQUIPO_ID AND e.EQ_ACTIVO = 1
+       WHERE m.EQM_USUARIO_ID = @u`),
+    q(`SELECT DISTINCT x.equipo, c.CM2_ID AS id, c.CM2_NOMBRE AS nombre FROM (
+         SELECT ec.EQC_EQUIPO_ID AS equipo, ec.EQC_CAMPANIA_ID AS camp FROM CC_EQUIPO_CAMPANIAS ec
+         UNION SELECT e.EQ_ID, e.EQ_CAMPANIA_ID FROM CC_EQUIPOS e WHERE e.EQ_CAMPANIA_ID IS NOT NULL) x
+       JOIN CC_EQUIPO_MIEMBROS m ON m.EQM_EQUIPO_ID = x.equipo AND m.EQM_USUARIO_ID = @u
+       JOIN CC_EQUIPOS e ON e.EQ_ID = x.equipo AND e.EQ_ACTIVO = 1
+       JOIN CCO_CAMPANIAS c ON c.CM2_ID = x.camp AND c.CM2_ACTIVO = 1`),
+    q(`SELECT DISTINCT c.CM2_ID AS id, c.CM2_NOMBRE AS nombre FROM CCO_GRUPO_AGENTES ga
+       JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID AND g.CG_ACTIVO = 1
+       JOIN CCO_CAMPANIAS c ON c.CM2_ID = g.CG_CAMPANIA_ID AND c.CM2_ACTIVO = 1
+       WHERE ga.CGA_USUARIO_ID = @u AND ga.CGA_ACTIVO = 1`),
+    q(`SELECT DISTINCT c.CM2_ID AS id, c.CM2_NOMBRE AS nombre FROM CC_CAMPANIAS_SUPERVISORES s
+       JOIN CCO_CAMPANIAS c ON c.CM2_ID = s.CS_CAMPANIA_ID AND c.CM2_ACTIVO = 1 WHERE s.CS_SUPERVISOR_ID = @u`),
+    q('SELECT ACA_VENTAS_CAMPANA_ID AS id, ACA_VENTAS_CAMPANA_NOMBRE AS nombre FROM AC_CAMPANIAS_AGENTES WHERE ACA_NEUS_ID = @u'),
+  ]);
+  const ops = new Map();
+  const poner = (tipo, id, nombre, rol, extra = {}) => {
+    const clave = `${tipo}:${id}`;
+    const o = ops.get(clave) || { clave, tipo, id, nombre: String(nombre || '').trim(), rol, grupos: [], ventasId: null, ventasNombre: null };
+    if (rol === 'agente') o.rol = 'agente';           // si es agente en alguna, cuenta como agente
+    if (extra.grupo && !o.grupos.includes(extra.grupo)) o.grupos.push(extra.grupo);
+    if (extra.ventasId && !o.ventasId) { o.ventasId = extra.ventasId; o.ventasNombre = extra.ventasNombre || null; }
+    ops.set(clave, o);
+  };
+  const grupoPorId = new Map(grupos.map((g) => [g.id, g]));
+  for (const c of deGrupos) {
+    const g = grupoPorId.get(c.equipo);
+    poner('cc', c.id, c.nombre, g?.rol === 'supervisor' ? 'supervisor' : 'agente', { grupo: g?.nombre, ventasId: g?.ventasId, ventasNombre: g?.ventasNombre });
+  }
+  for (const c of deSkills) poner('cc', c.id, c.nombre, 'agente');
+  for (const c of supervisa) poner('cc', c.id, c.nombre, 'supervisor');
+  const ventasCubiertas = () => new Set([...ops.values()].map((o) => o.ventasId).filter(Boolean));
+  // Grupos solo de Ventas (sin campañas de Contact Center) y la campaña de Ventas del agente.
+  for (const g of grupos) {
+    if (g.ventasId && !ventasCubiertas().has(g.ventasId)) {
+      poner('ventas', g.ventasId, g.ventasNombre, g.rol === 'supervisor' ? 'supervisor' : 'agente', { grupo: g.nombre, ventasId: g.ventasId, ventasNombre: g.ventasNombre });
+    }
+  }
+  const va = ventasAgente[0];
+  if (va?.id && !ventasCubiertas().has(va.id)) poner('ventas', va.id, va.nombre, 'agente', { ventasId: va.id, ventasNombre: va.nombre });
+  return { opciones: [...ops.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), ventasActual: va?.id ?? null };
+}
+
+// GET /campanas/mi-campania — { opciones, activa (clave o null), sugerida }
+exports.getMiCampaniaActiva = async (req, res) => {
+  try {
+    const u = getUserId(req);
+    if (!u) return res.status(401).json({ success: false, message: 'Sin usuario' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const { opciones, ventasActual } = await campaniasDelUsuario(pool, u);
+    let activa = null;
+    if (opciones.length && (await hayTablaActiva(pool))) {
+      const r = (await pool.request().input('u', sql.Int, u)
+        .query('SELECT CAU_TIPO AS tipo, CAU_CAMPANIA_ID AS id FROM dbo.CC_CAMPANIA_ACTIVA_USUARIO WHERE CAU_USUARIO_ID = @u')).recordset[0];
+      if (r && opciones.some((o) => o.clave === `${r.tipo}:${r.id}`)) activa = `${r.tipo}:${r.id}`;
+    }
+    // Sin elegir todavía: la que coincide con su campaña de Ventas actual.
+    const sugerida = activa ? null : opciones.find((o) => ventasActual && o.ventasId === ventasActual)?.clave ?? null;
+    res.json({ success: true, data: { opciones, activa, sugerida } });
+  } catch (e) {
+    console.error('Error getMiCampaniaActiva:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// PUT /campanas/mi-campania — { clave: 'cc:<id>' | 'ventas:<id>' }
+exports.setMiCampaniaActiva = async (req, res) => {
+  try {
+    const u = getUserId(req);
+    if (!u) return res.status(401).json({ success: false, message: 'Sin usuario' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const { opciones } = await campaniasDelUsuario(pool, u);
+    const o = opciones.find((x) => x.clave === String(req.body?.clave || ''));
+    if (!o) return res.status(400).json({ success: false, message: 'No estás en esa campaña' });
+    await asegurarTablaActiva(pool);
+    await pool.request().input('u', sql.Int, u).input('t', sql.NVarChar(10), o.tipo).input('c', sql.Int, o.id).query(`
+      UPDATE dbo.CC_CAMPANIA_ACTIVA_USUARIO SET CAU_TIPO = @t, CAU_CAMPANIA_ID = @c, CAU_FECHA = GETDATE() WHERE CAU_USUARIO_ID = @u;
+      IF @@ROWCOUNT = 0 INSERT INTO dbo.CC_CAMPANIA_ACTIVA_USUARIO (CAU_USUARIO_ID, CAU_TIPO, CAU_CAMPANIA_ID) VALUES (@u, @t, @c);`);
+    // Agente: lo que capture se registra en la campaña de Ventas de la elegida.
+    let ventas = null;
+    if (o.rol === 'agente' && o.ventasId) {
+      await pool.request().input('u', sql.Int, u).input('v', sql.Int, o.ventasId).input('n', sql.NVarChar(200), o.ventasNombre || o.nombre).query(`
+        UPDATE AC_CAMPANIAS_AGENTES SET ACA_VENTAS_CAMPANA_ID = @v, ACA_VENTAS_CAMPANA_NOMBRE = @n, ACA_ASIGNADO_POR = @u, ACA_FECHA_ASIGNACION = GETDATE()
+          WHERE ACA_NEUS_ID = @u AND ACA_VENTAS_CAMPANA_ID <> @v;
+        IF NOT EXISTS (SELECT 1 FROM AC_CAMPANIAS_AGENTES WHERE ACA_NEUS_ID = @u)
+          INSERT INTO AC_CAMPANIAS_AGENTES (ACA_NEUS_ID, ACA_VENTAS_CAMPANA_ID, ACA_VENTAS_CAMPANA_NOMBRE, ACA_ASIGNADO_POR) VALUES (@u, @v, @n, @u);`);
+      ventas = { id: o.ventasId, nombre: o.ventasNombre || o.nombre };
+    }
+    await logAudit(pool, {
+      userId: u, userName: req.user?.nombre || null,
+      modulo: 'usuarios', accion: 'elegir-campania-activa', entidadId: o.id,
+      detalle: { tipo: o.tipo, nombre: o.nombre, ventas }, ip: req.ip,
+    }).catch(() => {});
+    res.json({ success: true, data: { activa: o.clave, ventas } });
+  } catch (e) {
+    console.error('Error setMiCampaniaActiva:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 exports.deleteAgenteCampana = async (req, res) => {
   try {
     const neusId = parseInt(req.params.neusId, 10);
