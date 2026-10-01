@@ -10,6 +10,11 @@ router.get('/disponibles', authenticateToken, campanaAgente.listCampanasDisponib
 // Campañas de Ventas: alta, edición (con sus estatus) y baja (desactivar)
 // Grupos de Contact Center con todo lo que tienen enlazado (pestaña Grupos)
 router.get('/grupos', authenticateToken, campanaAgente.listGruposDetalle);
+// Tipos de campaña (Ventas, Seguimiento y los que agregue la empresa) — antes de /ventas/:id
+router.get('/ventas/tipos', authenticateToken, campanaAgente.listTiposCampana);
+router.post('/ventas/tipos', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarTipoCampana);
+router.put('/ventas/tipos/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarTipoCampana);
+router.delete('/ventas/tipos/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.desactivarTipoCampana);
 router.get('/ventas', authenticateToken, campanaAgente.listCampanasVentas);
 router.get('/ventas/:id', authenticateToken, campanaAgente.getCampanaVentas);
 router.post('/ventas/:id/activar', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.activarCampanaVentas);

@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { ArrowDown, ArrowUp, CalendarClock, Eye, EyeOff, Loader2, Megaphone, Plus, Save, ShoppingCart, X } from 'lucide-react'
-import { campanasVentasService, etiquetaTipoVentas, type EstatusCampanaVentas, type TipoCampanaVentas } from '@/services/campanasVentas.service'
+import { ArrowDown, ArrowUp, Eye, EyeOff, Loader2, Megaphone, Plus, Save, X } from 'lucide-react'
+import { campanasVentasService, tiposCampanaQuery, type EstatusCampanaVentas, type TipoCampanaVentas } from '@/services/campanasVentas.service'
+import { useActionAccess } from '@/hooks/useActionAccess'
+import { FormTipoCampana, IconoTipo } from './TiposCampanaVentas'
 
 // Colores sugeridos para la campaña y sus estatus (los mismos tonos que usa Ventas).
 const PALETA = ['#ffa200', '#f7e35e', '#22c55e', '#14b8a6', '#0091ff', '#3b82f6', '#7c3aed', '#ec4899', '#ef4444', '#6b7280']
@@ -13,11 +15,6 @@ const INICIALES: EstatusCampanaVentas[] = [
   { nombre: 'Rechazada', color: '#ef4444', activo: true },
   { nombre: 'Agendada', color: '#3b82f6', activo: true },
   { nombre: 'Pendiente', color: '#f59e0b', activo: true },
-]
-// Los dos tipos que maneja el sistema de Ventas.
-const TIPOS: { id: TipoCampanaVentas; label: string; desc: string; Icon: typeof ShoppingCart }[] = [
-  { id: 'ventas', label: 'Ventas', desc: 'Se captura la venta y se tipifica con sus estatus', Icon: ShoppingCart },
-  { id: 'seguimiento', label: 'Seguimiento', desc: 'Además lleva seguimiento de cada venta (como AT&T)', Icon: CalendarClock },
 ]
 const msgError = (e: unknown, f: string) => (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? f
 
@@ -44,6 +41,12 @@ export function EditorCampanaVentas({ campanaId, tipoInicial = 'ventas', onClose
   )
   if (data && !f) setF({ nombre: data.nombre, color: data.color ?? PALETA[0], tipo: data.tipo ?? 'ventas', estatus: data.estatus.map((e) => ({ id: e.id, nombre: e.nombre, color: e.color, activo: e.activo })) })
   const [nuevo, setNuevo] = useState('')
+  // Tipos: los dos de Ventas y los que agregó la empresa (se ofrecen los habilitados y el que ya tiene).
+  const { data: tipos = [] } = useQuery(tiposCampanaQuery)
+  const tipoActual = tipos.find((t) => t.clave === f?.tipo)
+  const nombreTipo = tipoActual?.nombre ?? 'Ventas'
+  const [creandoTipo, setCreandoTipo] = useState(false)
+  const puedeCrearTipo = useActionAccess().can('accesos', 'gestionar')
 
   const setEst = (i: number, cambio: Partial<EstatusCampanaVentas>) => setF((x) => (x ? { ...x, estatus: x.estatus.map((e, j) => (j === i ? { ...e, ...cambio } : e)) } : x))
   const mover = (i: number, d: -1 | 1) => setF((x) => {
@@ -75,14 +78,14 @@ export function EditorCampanaVentas({ campanaId, tipoInicial = 'ventas', onClose
   return createPortal(
     // z-[200]: se abre también encima de los Modal "elevated" (z 70+ y suben con cada uno apilado).
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-card shadow-xl" role="dialog" aria-modal="true" aria-label={editando ? 'Editar campaña' : `Nueva campaña de ${etiquetaTipoVentas(f?.tipo)}`}>
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-card shadow-xl" role="dialog" aria-modal="true" aria-label={editando ? `Editar campaña de ${nombreTipo}` : `Nueva campaña de ${nombreTipo}`}>
         <div className="h-1.5 rounded-t-2xl" style={{ background: f?.color ?? PALETA[0] }} />
         <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: `${f?.color ?? PALETA[0]}22`, color: f?.color ?? PALETA[0] }}>
             <Megaphone className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-gray-900">{editando ? `Editar campaña de ${etiquetaTipoVentas(f?.tipo)}` : `Nueva campaña de ${etiquetaTipoVentas(f?.tipo)}`}</h2>
+            <h2 className="text-sm font-bold text-gray-900">{editando ? `Editar campaña de ${nombreTipo}` : `Nueva campaña de ${nombreTipo}`}</h2>
             <p className="text-[0.7rem] text-gray-400">
               Se guarda en el sistema de Ventas{data ? ` · ${data.ventas.toLocaleString('es-MX')} ventas registradas` : ''}
             </p>
@@ -102,21 +105,43 @@ export function EditorCampanaVentas({ campanaId, tipoInicial = 'ventas', onClose
             <div>
               <span className="mb-1.5 block text-[0.72rem] font-semibold text-gray-600">Tipo de campaña</span>
               <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de campaña">
-                {TIPOS.map(({ id, label, desc, Icon }) => (
-                  <button key={id} type="button" role="radio" aria-checked={f.tipo === id} onClick={() => setF({ ...f, tipo: id })}
-                    className={clsx('flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition',
-                      f.tipo === id ? 'border-violet-300 bg-violet-50/70 ring-1 ring-violet-200' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50')}>
-                    <span className={clsx('mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg',
-                      f.tipo === id ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500')}>
-                      <Icon className="h-3.5 w-3.5" />
-                    </span>
+                {tipos.filter((t) => t.activo || t.clave === f.tipo).map((t) => {
+                  const sel = f.tipo === t.clave
+                  const col = t.color ?? '#6b7280'
+                  return (
+                    <button key={t.clave} type="button" role="radio" aria-checked={sel} onClick={() => setF({ ...f, tipo: t.clave })}
+                      className={clsx('flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition',
+                        sel ? 'border-violet-300 bg-violet-50/70 ring-1 ring-violet-200' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50')}>
+                      <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg"
+                        style={sel ? { background: col, color: '#fff' } : { background: `${col}1f`, color: col }}>
+                        <IconoTipo tipo={t.clave} className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[0.8rem] font-semibold text-gray-800">{t.nombre}</span>
+                        <span className="block text-[0.66rem] leading-snug text-gray-400">
+                          {t.descripcion ?? (t.seguimiento ? 'Lleva seguimiento de cada venta' : 'Sin seguimiento: como Ventas')}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+                {puedeCrearTipo && !creandoTipo && (
+                  <button type="button" onClick={() => setCreandoTipo(true)}
+                    className="flex items-center gap-2.5 rounded-xl border border-dashed border-violet-200 px-3 py-2.5 text-left text-violet-700 transition hover:bg-violet-50/60">
+                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-violet-100"><Plus className="h-3.5 w-3.5" /></span>
                     <span className="min-w-0">
-                      <span className="block text-[0.8rem] font-semibold text-gray-800">{label}</span>
-                      <span className="block text-[0.66rem] leading-snug text-gray-400">{desc}</span>
+                      <span className="block text-[0.8rem] font-semibold">Nuevo tipo</span>
+                      <span className="block text-[0.66rem] leading-snug text-violet-500/80">Crea otro, como "Mixto"</span>
                     </span>
                   </button>
-                ))}
+                )}
               </div>
+              {creandoTipo && (
+                <div className="mt-2">
+                  <FormTipoCampana onCancel={() => setCreandoTipo(false)}
+                    onSaved={(t) => { setCreandoTipo(false); setF((x) => (x ? { ...x, tipo: t.clave } : x)) }} />
+                </div>
+              )}
             </div>
 
             <div>

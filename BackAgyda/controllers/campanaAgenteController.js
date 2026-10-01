@@ -27,7 +27,8 @@ exports.listCampanasDisponibles = async (req, res) => {
     const result = await pool.request().query(
       `SELECT id, nombre, color, CAST(ISNULL(tieneSeguimiento, 0) AS bit) AS seguimiento FROM [Campanas] WHERE activo = 1 ORDER BY nombre`
     );
-    res.json({ success: true, data: result.recordset.map((c) => ({ ...c, tipo: c.seguimiento ? 'seguimiento' : 'ventas', seguimiento: undefined })) });
+    const tipos = await tiposDe(req);
+    res.json({ success: true, data: result.recordset.map((c) => ponerTipo(c, tipos)) });
   } catch (e) {
     console.error('Error listCampanasDisponibles:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -176,8 +177,6 @@ async function leerCampanaVentas(pv, id) {
   const c = (await pv.request().input('id', sql.Int, id)
     .query('SELECT ID AS id, LTRIM(RTRIM(nombre)) AS nombre, color, CAST(activo AS bit) AS activo, CAST(ISNULL(tieneSeguimiento, 0) AS bit) AS seguimiento FROM [Campanas] WHERE ID = @id')).recordset[0];
   if (!c) return null;
-  c.tipo = c.seguimiento ? 'seguimiento' : 'ventas';
-  delete c.seguimiento;
   const est = (await pv.request().input('id', sql.Int, id).query(`
     SELECT id, LTRIM(RTRIM(nombreEstado)) AS nombre, color, CAST(activo AS bit) AS activo, orden
     FROM CampaignStatuses WHERE campaignId = @id ORDER BY orden, id`)).recordset;
@@ -312,16 +311,168 @@ exports.copiarEstatusACampania = async (req, res) => {
   }
 };
 
+// ── Tipos de campaña de Ventas ──
+// En Ventas el tipo es solo la columna tieneSeguimiento (Ventas o Seguimiento).
+// Los tipos que agrega cada empresa (ej. "Mixto") viven en AGYDA:
+// VENTAS_TIPOS_CAMPANA, y qué tipo tiene cada campaña en VENTAS_CAMPANA_TIPO.
+// Cada tipo dice si lleva seguimiento, y eso es lo que se escribe en Ventas.
+// Las tablas se crean al crear el primer tipo; sin ellas solo hay los dos de base.
+const TIPOS_BASE = [
+  { clave: 'ventas', id: null, nombre: 'Ventas', descripcion: 'Se captura la venta y se tipifica con sus estatus', color: '#f59e0b', seguimiento: false, base: true, activo: true },
+  { clave: 'seguimiento', id: null, nombre: 'Seguimiento', descripcion: 'Además lleva seguimiento de cada venta (como AT&T)', color: '#0ea5e9', seguimiento: true, base: true, activo: true },
+];
+const conTablasTipo = new Set();
+async function asegurarTablasTipo(pool) {
+  if (conTablasTipo.has(pool)) return;
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.VENTAS_TIPOS_CAMPANA', 'U') IS NULL
+      CREATE TABLE dbo.VENTAS_TIPOS_CAMPANA (
+        VTC_ID          INT IDENTITY(1,1) PRIMARY KEY,
+        VTC_NOMBRE      NVARCHAR(60) NOT NULL,
+        VTC_DESCRIPCION NVARCHAR(200) NULL,
+        VTC_COLOR       NVARCHAR(20) NULL,
+        VTC_SEGUIMIENTO BIT NOT NULL DEFAULT 0,
+        VTC_ACTIVO      BIT NOT NULL DEFAULT 1,
+        VTC_FECHA       DATETIME NOT NULL DEFAULT GETDATE()
+      );
+    IF OBJECT_ID('dbo.VENTAS_CAMPANA_TIPO', 'U') IS NULL
+      CREATE TABLE dbo.VENTAS_CAMPANA_TIPO (
+        VCT_CAMPANA_ID INT NOT NULL PRIMARY KEY,
+        VCT_TIPO_ID    INT NOT NULL,
+        VCT_FECHA      DATETIME NOT NULL DEFAULT GETDATE()
+      );`);
+  conTablasTipo.add(pool);
+}
+async function hayTablasTipo(pool) {
+  if (conTablasTipo.has(pool)) return true;
+  const r = await pool.request().query(`SELECT CASE WHEN OBJECT_ID('dbo.VENTAS_TIPOS_CAMPANA', 'U') IS NOT NULL
+    AND OBJECT_ID('dbo.VENTAS_CAMPANA_TIPO', 'U') IS NOT NULL THEN 1 ELSE 0 END AS ok`);
+  if (!r.recordset[0].ok) return false;
+  conTablasTipo.add(pool);
+  return true;
+}
+// Los tipos de la empresa (los de base y los agregados) y qué tipo tiene cada campaña.
+async function leerTipos(pool) {
+  if (!(await hayTablasTipo(pool))) return { tipos: TIPOS_BASE, asignados: new Map() };
+  const r = await pool.request().query(`
+    SELECT t.VTC_ID AS id, t.VTC_NOMBRE AS nombre, t.VTC_DESCRIPCION AS descripcion, t.VTC_COLOR AS color,
+      CAST(t.VTC_SEGUIMIENTO AS bit) AS seguimiento, CAST(t.VTC_ACTIVO AS bit) AS activo,
+      (SELECT COUNT(*) FROM dbo.VENTAS_CAMPANA_TIPO x WHERE x.VCT_TIPO_ID = t.VTC_ID) AS campanas
+    FROM dbo.VENTAS_TIPOS_CAMPANA t ORDER BY t.VTC_NOMBRE;
+    SELECT VCT_CAMPANA_ID AS c, VCT_TIPO_ID AS t FROM dbo.VENTAS_CAMPANA_TIPO;`);
+  const propios = r.recordsets[0].map((t) => ({ ...t, clave: `c${t.id}`, seguimiento: !!t.seguimiento, activo: !!t.activo, base: false }));
+  return { tipos: [...TIPOS_BASE, ...propios], asignados: new Map(r.recordsets[1].map((x) => [x.c, `c${x.t}`])) };
+}
+// A una campaña ({ id, seguimiento }) le pone su tipo: el agregado si tiene, si no el de base.
+function ponerTipo(c, { tipos, asignados }) {
+  const { seguimiento, ...resto } = c;
+  const t = tipos.find((x) => x.clave === asignados.get(c.id)) || TIPOS_BASE[seguimiento ? 1 : 0];
+  return { ...resto, tipo: t.clave, tipoNombre: t.nombre, tipoColor: t.color };
+}
+async function tiposDe(req) {
+  try {
+    return await leerTipos(await databaseService.getPool(req.user?.empresa));
+  } catch (e) {
+    console.error('tipos de campaña:', e.message);
+    return { tipos: TIPOS_BASE, asignados: new Map() };
+  }
+}
+
+// GET /campanas/ventas/tipos — los de base y los agregados (también los deshabilitados).
+exports.listTiposCampana = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    res.json({ success: true, data: (await leerTipos(pool)).tipos });
+  } catch (e) {
+    console.error('Error listTiposCampana:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// POST /campanas/ventas/tipos — { nombre, descripcion?, color?, seguimiento }
+// PUT  /campanas/ventas/tipos/:id — lo mismo y activo? (para volver a habilitarlo)
+exports.guardarTipoCampana = async (req, res) => {
+  const id = req.params.id ? parseInt(req.params.id, 10) : null;
+  try {
+    const b = req.body || {};
+    const nombre = String(b.nombre || '').trim().slice(0, 60);
+    if (!nombre) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
+    const descripcion = String(b.descripcion || '').trim().slice(0, 200) || null;
+    const color = limpiarColor(b.color);
+    const seguimiento = b.seguimiento ? 1 : 0;
+    const activo = typeof b.activo === 'boolean' ? (b.activo ? 1 : 0) : null;
+    if (TIPOS_BASE.some((t) => t.nombre.toLowerCase() === nombre.toLowerCase())) {
+      return res.status(409).json({ success: false, message: 'Ese tipo ya existe' });
+    }
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await asegurarTablasTipo(pool);
+    const dup = (await pool.request().input('n', sql.NVarChar(60), nombre).input('id', sql.Int, id || 0)
+      .query('SELECT TOP 1 VTC_ID FROM dbo.VENTAS_TIPOS_CAMPANA WHERE LOWER(LTRIM(RTRIM(VTC_NOMBRE))) = LOWER(@n) AND VTC_ID <> @id')).recordset[0];
+    if (dup) return res.status(409).json({ success: false, message: 'Ya existe un tipo con ese nombre' });
+
+    let tipoId = id;
+    const r = pool.request().input('n', sql.NVarChar(60), nombre).input('d', sql.NVarChar(200), descripcion)
+      .input('col', sql.NVarChar(20), color).input('s', sql.Bit, seguimiento);
+    if (id) {
+      const up = await r.input('id', sql.Int, id).input('a', sql.Bit, activo).query(`
+        UPDATE dbo.VENTAS_TIPOS_CAMPANA SET VTC_NOMBRE = @n, VTC_DESCRIPCION = @d, VTC_COLOR = @col,
+          VTC_SEGUIMIENTO = @s, VTC_ACTIVO = ISNULL(@a, VTC_ACTIVO) WHERE VTC_ID = @id`);
+      if (!up.rowsAffected[0]) return res.status(404).json({ success: false, message: 'Tipo no encontrado' });
+      // Sus campañas llevan (o no) seguimiento en Ventas igual que el tipo.
+      const camp = (await pool.request().input('id', sql.Int, id)
+        .query('SELECT VCT_CAMPANA_ID AS c FROM dbo.VENTAS_CAMPANA_TIPO WHERE VCT_TIPO_ID = @id')).recordset.map((x) => Number(x.c));
+      if (camp.length) {
+        await (await getVentasPool()).request().input('s', sql.Bit, seguimiento)
+          .query(`UPDATE [Campanas] SET tieneSeguimiento = @s WHERE ID IN (${camp.join(',')})`);
+      }
+    } else {
+      tipoId = (await r.query(`INSERT INTO dbo.VENTAS_TIPOS_CAMPANA (VTC_NOMBRE, VTC_DESCRIPCION, VTC_COLOR, VTC_SEGUIMIENTO)
+        OUTPUT INSERTED.VTC_ID AS id VALUES (@n, @d, @col, @s)`)).recordset[0].id;
+    }
+    await logAudit(pool, {
+      userId: getUserId(req), userName: req.user?.nombre || null,
+      modulo: 'usuarios', accion: id ? 'editar-tipo-campana' : 'crear-tipo-campana',
+      entidadId: tipoId, detalle: { nombre, seguimiento: !!seguimiento }, ip: req.ip,
+    }).catch(() => {});
+    res.json({ success: true, data: (await leerTipos(pool)).tipos.find((t) => t.id === tipoId) });
+  } catch (e) {
+    console.error('Error guardarTipoCampana:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// DELETE /campanas/ventas/tipos/:id — lo deshabilita: ya no se ofrece para
+// campañas nuevas; las que lo tienen lo conservan.
+exports.desactivarTipoCampana = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'Id inválido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    if (!(await hayTablasTipo(pool))) return res.status(404).json({ success: false, message: 'Tipo no encontrado' });
+    const up = await pool.request().input('id', sql.Int, id).query('UPDATE dbo.VENTAS_TIPOS_CAMPANA SET VTC_ACTIVO = 0 WHERE VTC_ID = @id');
+    if (!up.rowsAffected[0]) return res.status(404).json({ success: false, message: 'Tipo no encontrado' });
+    await logAudit(pool, {
+      userId: getUserId(req), userName: req.user?.nombre || null,
+      modulo: 'usuarios', accion: 'desactivar-tipo-campana', entidadId: id, detalle: null, ip: req.ip,
+    }).catch(() => {});
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error desactivarTipoCampana:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // GET /campanas/ventas — todas las campañas de Ventas, también las deshabilitadas.
 exports.listCampanasVentas = async (req, res) => {
   try {
     const pv = await getVentasPool();
     const r = await pv.request().query(`
       SELECT c.ID AS id, LTRIM(RTRIM(c.nombre)) AS nombre, c.color, CAST(c.activo AS bit) AS activo,
-        CASE WHEN ISNULL(c.tieneSeguimiento, 0) = 1 THEN 'seguimiento' ELSE 'ventas' END AS tipo,
+        CAST(ISNULL(c.tieneSeguimiento, 0) AS bit) AS seguimiento,
         (SELECT COUNT(*) FROM Ventas v WHERE v.campaignId = c.ID) AS ventas
       FROM [Campanas] c ORDER BY c.nombre`);
-    res.json({ success: true, data: r.recordset.map((c) => ({ ...c, activo: !!c.activo })) });
+    const tipos = await tiposDe(req);
+    res.json({ success: true, data: r.recordset.map((c) => ponerTipo({ ...c, activo: !!c.activo }, tipos)) });
   } catch (e) {
     console.error('Error listCampanasVentas:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -355,7 +506,7 @@ exports.getCampanaVentas = async (req, res) => {
     if (!Number.isFinite(id)) return res.status(400).json({ success: false, message: 'Id inválido' });
     const data = await leerCampanaVentas(await getVentasPool(), id);
     if (!data) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
-    res.json({ success: true, data });
+    res.json({ success: true, data: ponerTipo(data, await tiposDe(req)) });
   } catch (e) {
     console.error('Error getCampanaVentas:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -364,7 +515,8 @@ exports.getCampanaVentas = async (req, res) => {
 
 // POST /campanas/ventas — { nombre, color, tipo?, estatus? }. Sin estatus: los iniciales.
 // PUT  /campanas/ventas/:id — { nombre, color, tipo?, estatus }
-// tipo: 'ventas' | 'seguimiento' (en Ventas es la columna tieneSeguimiento).
+// tipo: 'ventas' | 'seguimiento' (columna tieneSeguimiento) o 'c<id>', uno agregado
+// por la empresa: lleva seguimiento según el tipo y se recuerda en AGYDA.
 exports.guardarCampanaVentas = async (req, res) => {
   const id = req.params.id ? parseInt(req.params.id, 10) : null;
   try {
@@ -374,7 +526,15 @@ exports.guardarCampanaVentas = async (req, res) => {
     const color = limpiarColor(b.color);
     const estatus = normalizarEstatus(b.estatus);
     // Sin tipo al editar: se deja el que tenía.
-    const seguimiento = b.tipo === 'seguimiento' ? 1 : b.tipo === 'ventas' ? 0 : null;
+    let seguimiento = b.tipo === 'seguimiento' ? 1 : b.tipo === 'ventas' ? 0 : null;
+    let tipoPropio = null;
+    const mTipo = /^c([0-9]+)$/.exec(String(b.tipo || ''));
+    if (mTipo) {
+      const t = (await tiposDe(req)).tipos.find((x) => x.id === Number(mTipo[1]));
+      if (!t) return res.status(400).json({ success: false, message: 'Ese tipo de campaña no existe' });
+      tipoPropio = t.id;
+      seguimiento = t.seguimiento ? 1 : 0;
+    }
     const pv = await getVentasPool();
 
     const dup = (await pv.request().input('n', sql.NVarChar(100), nombre).input('id', sql.Int, id || 0)
@@ -402,6 +562,23 @@ exports.guardarCampanaVentas = async (req, res) => {
       throw e;
     }
 
+    // El tipo agregado se recuerda en AGYDA; uno de base quita el que tuviera.
+    if (b.tipo) {
+      try {
+        const poolE = await databaseService.getPool(req.user?.empresa);
+        if (tipoPropio) {
+          await asegurarTablasTipo(poolE);
+          await poolE.request().input('c', sql.Int, campanaId).input('t', sql.Int, tipoPropio).query(`
+            UPDATE dbo.VENTAS_CAMPANA_TIPO SET VCT_TIPO_ID = @t, VCT_FECHA = GETDATE() WHERE VCT_CAMPANA_ID = @c;
+            IF @@ROWCOUNT = 0 INSERT INTO dbo.VENTAS_CAMPANA_TIPO (VCT_CAMPANA_ID, VCT_TIPO_ID) VALUES (@c, @t);`);
+        } else if (await hayTablasTipo(poolE)) {
+          await poolE.request().input('c', sql.Int, campanaId).query('DELETE FROM dbo.VENTAS_CAMPANA_TIPO WHERE VCT_CAMPANA_ID = @c');
+        }
+      } catch (e) {
+        console.error('guardarCampanaVentas → tipo:', e.message);
+      }
+    }
+
     // Los estatus son las tipificaciones de las campañas de AGYDA ligadas por sus grupos.
     if (id) {
       const poolT = await databaseService.getPool(req.user?.empresa);
@@ -422,7 +599,8 @@ exports.guardarCampanaVentas = async (req, res) => {
       entidadId: campanaId, detalle: { nombre, color, tipo: b.tipo ?? null, estatus: estatus.map((e) => e.nombre) }, ip: req.ip,
     }).catch(() => {});
 
-    res.json({ success: true, data: await leerCampanaVentas(pv, campanaId) });
+    const leida = await leerCampanaVentas(pv, campanaId);
+    res.json({ success: true, data: leida && ponerTipo(leida, await tiposDe(req)) });
   } catch (e) {
     console.error('Error guardarCampanaVentas:', e);
     res.status(500).json({ success: false, message: e.message });
