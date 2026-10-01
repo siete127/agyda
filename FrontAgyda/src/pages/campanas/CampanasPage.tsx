@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Ban, ChevronDown, Table2, ChevronLeft, Headset, LayoutGrid, List, Megaphone, Pencil, Plus, Power, Search, ShoppingCart, Sparkles, UserMinus, UserX, Users, UsersRound } from 'lucide-react'
@@ -458,7 +459,7 @@ export function CampanasPage() {
   const { can } = useActionAccess()
   const puedeGestionar = can('accesos', 'gestionar')
   const puedeCampaniasCC = can('contact-center', 'gestionar-skills')
-  const [menuNueva, setMenuNueva] = useState(false)
+  const [menuNueva, setMenuNueva] = useState<{ top: number; right: number } | null>(null)
   const [seccion, setSeccion] = useState<'campanas' | 'grupos'>(() => {
     try { return localStorage.getItem('campanas-seccion') === 'grupos' ? 'grupos' : 'campanas' } catch { return 'campanas' }
   })
@@ -582,16 +583,22 @@ export function CampanasPage() {
             )}
             {seccion === 'campanas' && (puedeGestionar || puedeCampaniasCC) && (
               <div className="relative">
-                <button onClick={() => setMenuNueva((v) => !v)} aria-haspopup="menu" aria-expanded={menuNueva}
+                <button onClick={(e) => {
+                  // El encabezado recorta lo que se sale (overflow-hidden): el menú va en un
+                  // portal sobre la página, anclado debajo del botón.
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setMenuNueva((v) => (v ? null : { top: r.bottom + 6, right: window.innerWidth - r.right }))
+                }} aria-haspopup="menu" aria-expanded={!!menuNueva}
                   className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[0.78rem] font-bold text-amber-800 shadow-sm transition hover:bg-amber-50">
                   <Plus className="h-4 w-4" /> Nueva campaña <ChevronDown className={clsx('h-3.5 w-3.5 transition-transform', menuNueva && 'rotate-180')} />
                 </button>
-                {menuNueva && (
+                {menuNueva && createPortal(
                   <>
-                    <div className="fixed inset-0 z-20" onClick={() => setMenuNueva(false)} />
-                    <div role="menu" className="absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-xl border border-gray-200 bg-card p-1.5 shadow-xl">
+                    <div className="fixed inset-0 z-40" onClick={() => setMenuNueva(null)} />
+                    <div role="menu" style={{ top: menuNueva.top, right: menuNueva.right }}
+                      className="fixed z-50 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-card p-1.5 shadow-xl">
                       {puedeGestionar && (
-                        <button role="menuitem" onClick={() => { setMenuNueva(false); setNuevaVentas(true) }}
+                        <button role="menuitem" onClick={() => { setMenuNueva(null); setNuevaVentas(true) }}
                           className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50">
                           <ShoppingCart className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
                           <span><span className="block text-[0.8rem] font-semibold text-gray-800">De Ventas</span>
@@ -599,7 +606,7 @@ export function CampanasPage() {
                         </button>
                       )}
                       {puedeCampaniasCC && (
-                        <button role="menuitem" onClick={() => { setMenuNueva(false); setNuevaCC(true) }}
+                        <button role="menuitem" onClick={() => { setMenuNueva(null); setNuevaCC(true) }}
                           className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50">
                           <Headset className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-600" />
                           <span><span className="block text-[0.8rem] font-semibold text-gray-800">De Contact Center</span>
@@ -607,7 +614,8 @@ export function CampanasPage() {
                         </button>
                       )}
                     </div>
-                  </>
+                  </>,
+                  document.body,
                 )}
               </div>
             )}
