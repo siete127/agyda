@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Ban, ChevronDown, Table2, ChevronLeft, Headset, LayoutGrid, List, Megaphone, Pencil, Plus, Power, Search, ShoppingCart, Sparkles, UserMinus, UserX, Users, UsersRound } from 'lucide-react'
+import { Ban, CalendarClock, ChevronDown, Table2, ChevronLeft, Headset, LayoutGrid, List, Megaphone, Pencil, Plus, Power, Search, ShoppingCart, Sparkles, UserMinus, UserX, Users, UsersRound } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Spinner } from '@/components/ui/Spinner'
 import { Avatar } from '@/components/ui/Avatar'
@@ -13,7 +13,7 @@ import { useActionAccess } from '@/hooks/useActionAccess'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { EditorCampanaVentas } from '@/components/ventas/EditorCampanaVentas'
-import { campanasVentasService } from '@/services/campanasVentas.service'
+import { campanasVentasService, etiquetaTipoVentas, type TipoCampanaVentas } from '@/services/campanasVentas.service'
 import { ccService } from '@/services/cc.service'
 import { AsistenteCampania } from '@/pages/configuracion/AsistenteCampania'
 import type { CCCampania } from '@/types/cc.types'
@@ -37,6 +37,7 @@ interface CampanaDisponible {
   id: number
   nombre: string
   color: string | null
+  tipo?: TipoCampanaVentas
 }
 
 const sinAcentos = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -155,7 +156,10 @@ function TarjetaCampana({ campana, agentes, visibles, candidatos, campanas, pued
           {campana ? <Megaphone className="h-5 w-5" /> : <UserX className="h-5 w-5" />}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[0.95rem] font-bold text-gray-900">{campana ? campana.nombre : 'Sin campaña'}</p>
+          <p className="flex items-center gap-1.5 truncate text-[0.95rem] font-bold text-gray-900">
+            <span className="truncate">{campana ? campana.nombre : 'Sin campaña'}</span>
+            {campana?.tipo === 'seguimiento' && <span className="flex-shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase text-sky-700">Seguimiento</span>}
+          </p>
           <p className="text-[0.7rem] text-gray-400">
             {agentes.length === 0 ? 'Sin agentes asignados' : `${agentes.length} agente${agentes.length !== 1 ? 's' : ''}`}
             {recientes?.fechaAsignacion && ` · último cambio ${fmtFecha(recientes.fechaAsignacion)}`}
@@ -319,7 +323,7 @@ function CampaniasDeshabilitadas({ puedeVentas, puedeCC }: { puedeVentas: boolea
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[0.82rem] font-semibold text-gray-600">{nombre}</p>
-        <p className="text-[0.66rem] text-gray-400">{tipo === 'ventas' ? 'Ventas' : 'Contact Center'} · {detalle}</p>
+        <p className="text-[0.66rem] text-gray-400">{tipo === 'ventas' ? etiquetaTipoVentas(ventas.find((v) => v.id === id)?.tipo) : 'Contact Center'} · {detalle}</p>
       </div>
       <button onClick={() => habilitar.mutate({ tipo, id })} disabled={habilitar.isPending}
         className="flex items-center gap-1 rounded-lg border border-emerald-200 px-2.5 py-1 text-[0.72rem] font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">
@@ -362,10 +366,10 @@ function TablaCampanas({ agentes, ventas, cc, busqueda, onEditar, onDeshabilitar
   const q = sinAcentos(busqueda.trim())
   const ok = (n: string) => !q || sinAcentos(n).includes(q)
   const gruposDe = (pred: (g: GrupoDetalle) => boolean) => grupos.filter(pred).map((g) => g.nombre)
-  type Fila = { clave: string; tipo: 'ventas' | 'cc'; id: number; nombre: string; color: string | null; agentes: AgenteCampana[] | number; detalle: string; grupos: string[]; editar: () => void; deshabilitar?: () => void }
+  type Fila = { clave: string; tipo: 'ventas' | 'cc'; subtipo?: TipoCampanaVentas; id: number; nombre: string; color: string | null; agentes: AgenteCampana[] | number; detalle: string; grupos: string[]; editar: () => void; deshabilitar?: () => void }
   const filas: Fila[] = [
     ...ventas.filter((c) => ok(c.nombre)).map((c) => ({
-      clave: `v${c.id}`, tipo: 'ventas' as const, id: c.id, nombre: c.nombre, color: c.color,
+      clave: `v${c.id}`, tipo: 'ventas' as const, subtipo: c.tipo, id: c.id, nombre: c.nombre, color: c.color,
       agentes: agentes.filter((a) => a.campanaId === c.id),
       detalle: `${(conteo.find((x) => x.id === c.id)?.ventas ?? 0).toLocaleString('es-MX')} ventas registradas`,
       grupos: gruposDe((g) => g.ventas?.id === c.id),
@@ -408,8 +412,8 @@ function TablaCampanas({ agentes, ventas, cc, busqueda, onEditar, onDeshabilitar
                 </span>
               </td>
               <td className="px-3 py-3">
-                <span className={clsx('rounded-full px-2 py-0.5 text-[0.66rem] font-semibold', r.tipo === 'ventas' ? 'bg-amber-50 text-amber-700' : 'bg-violet-50 text-violet-700')}>
-                  {r.tipo === 'ventas' ? 'Ventas' : 'Contact Center'}
+                <span className={clsx('rounded-full px-2 py-0.5 text-[0.66rem] font-semibold', r.tipo === 'cc' ? 'bg-violet-50 text-violet-700' : r.subtipo === 'seguimiento' ? 'bg-sky-50 text-sky-700' : 'bg-amber-50 text-amber-700')}>
+                  {r.tipo === 'ventas' ? etiquetaTipoVentas(r.subtipo) : 'Contact Center'}
                 </span>
               </td>
               <td className="px-3 py-3">
@@ -538,7 +542,8 @@ export function CampanasPage() {
     setSeccion(v)
     try { localStorage.setItem('campanas-seccion', v) } catch { /* sin almacenamiento */ }
   }
-  const [nuevaVentas, setNuevaVentas] = useState(false)
+  // Campaña del sistema de Ventas por crear, con el tipo elegido en el menú.
+  const [nuevaVentas, setNuevaVentas] = useState<TipoCampanaVentas | null>(null)
   const [nuevaCC, setNuevaCC] = useState(false)
   // Recién creada: preguntar a qué grupo asignarla (o crear uno nuevo con ella).
   const [asignarNueva, setAsignarNueva] = useState<{ tipo: 'cc' | 'ventas'; id: number } | null>(null)
@@ -672,7 +677,7 @@ export function CampanasPage() {
                       className="fixed z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-card p-1.5 shadow-xl">
                       <p className="px-2.5 pb-1 pt-1.5 text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">Crear una campaña nueva</p>
                       {puedeGestionar && (
-                        <button role="menuitem" onClick={() => { setMenuNueva(null); setNuevaVentas(true) }}
+                        <button role="menuitem" onClick={() => { setMenuNueva(null); setNuevaVentas('ventas') }}
                           className="group flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-amber-50/60">
                           <span className="relative mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
                             <ShoppingCart className="h-4 w-4" />
@@ -684,6 +689,22 @@ export function CampanasPage() {
                               <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase text-emerald-700">Crear</span>
                             </span>
                             <span className="block text-[0.68rem] text-gray-400">Como PlataCard o Amex: nombre, color y estatus, en el sistema de Ventas</span>
+                          </span>
+                        </button>
+                      )}
+                      {puedeGestionar && (
+                        <button role="menuitem" onClick={() => { setMenuNueva(null); setNuevaVentas('seguimiento') }}
+                          className="group flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-sky-50/60">
+                          <span className="relative mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
+                            <CalendarClock className="h-4 w-4" />
+                            <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white"><Plus className="h-2.5 w-2.5" /></span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5 text-[0.82rem] font-semibold text-gray-800">
+                              Nueva campaña de Seguimiento
+                              <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase text-emerald-700">Crear</span>
+                            </span>
+                            <span className="block text-[0.68rem] text-gray-400">Como AT&T: además de la venta, lleva el seguimiento de cada una</span>
                           </span>
                         </button>
                       )}
@@ -880,9 +901,9 @@ export function CampanasPage() {
       )}
 
       {nuevaVentas && (
-        <EditorCampanaVentas campanaId={null} onClose={() => setNuevaVentas(false)}
+        <EditorCampanaVentas campanaId={null} tipoInicial={nuevaVentas} onClose={() => setNuevaVentas(null)}
           onSaved={(id) => {
-            setNuevaVentas(false)
+            setNuevaVentas(null)
             qc.invalidateQueries({ queryKey: ['campanas-disponibles'] })
             qc.invalidateQueries({ queryKey: ['campanas-ventas-todas'] })
             if (id) setAsignarNueva({ tipo: 'ventas', id })

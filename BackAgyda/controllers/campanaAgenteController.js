@@ -25,9 +25,9 @@ exports.listCampanasDisponibles = async (req, res) => {
   try {
     const pool = await getVentasPool();
     const result = await pool.request().query(
-      `SELECT id, nombre, color FROM [Campanas] WHERE activo = 1 ORDER BY nombre`
+      `SELECT id, nombre, color, CAST(ISNULL(tieneSeguimiento, 0) AS bit) AS seguimiento FROM [Campanas] WHERE activo = 1 ORDER BY nombre`
     );
-    res.json({ success: true, data: result.recordset });
+    res.json({ success: true, data: result.recordset.map((c) => ({ ...c, tipo: c.seguimiento ? 'seguimiento' : 'ventas', seguimiento: undefined })) });
   } catch (e) {
     console.error('Error listCampanasDisponibles:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -174,8 +174,10 @@ function normalizarEstatus(lista) {
 
 async function leerCampanaVentas(pv, id) {
   const c = (await pv.request().input('id', sql.Int, id)
-    .query('SELECT ID AS id, LTRIM(RTRIM(nombre)) AS nombre, color, CAST(activo AS bit) AS activo FROM [Campanas] WHERE ID = @id')).recordset[0];
+    .query('SELECT ID AS id, LTRIM(RTRIM(nombre)) AS nombre, color, CAST(activo AS bit) AS activo, CAST(ISNULL(tieneSeguimiento, 0) AS bit) AS seguimiento FROM [Campanas] WHERE ID = @id')).recordset[0];
   if (!c) return null;
+  c.tipo = c.seguimiento ? 'seguimiento' : 'ventas';
+  delete c.seguimiento;
   const est = (await pv.request().input('id', sql.Int, id).query(`
     SELECT id, LTRIM(RTRIM(nombreEstado)) AS nombre, color, CAST(activo AS bit) AS activo, orden
     FROM CampaignStatuses WHERE campaignId = @id ORDER BY orden, id`)).recordset;
@@ -316,6 +318,7 @@ exports.listCampanasVentas = async (req, res) => {
     const pv = await getVentasPool();
     const r = await pv.request().query(`
       SELECT c.ID AS id, LTRIM(RTRIM(c.nombre)) AS nombre, c.color, CAST(c.activo AS bit) AS activo,
+        CASE WHEN ISNULL(c.tieneSeguimiento, 0) = 1 THEN 'seguimiento' ELSE 'ventas' END AS tipo,
         (SELECT COUNT(*) FROM Ventas v WHERE v.campaignId = c.ID) AS ventas
       FROM [Campanas] c ORDER BY c.nombre`);
     res.json({ success: true, data: r.recordset.map((c) => ({ ...c, activo: !!c.activo })) });
@@ -359,8 +362,9 @@ exports.getCampanaVentas = async (req, res) => {
   }
 };
 
-// POST /campanas/ventas — { nombre, color, estatus? }. Sin estatus: los iniciales.
-// PUT  /campanas/ventas/:id — { nombre, color, estatus }
+// POST /campanas/ventas — { nombre, color, tipo?, estatus? }. Sin estatus: los iniciales.
+// PUT  /campanas/ventas/:id — { nombre, color, tipo?, estatus }
+// tipo: 'ventas' | 'seguimiento' (en Ventas es la columna tieneSeguimiento).
 exports.guardarCampanaVentas = async (req, res) => {
   const id = req.params.id ? parseInt(req.params.id, 10) : null;
   try {
@@ -369,6 +373,8 @@ exports.guardarCampanaVentas = async (req, res) => {
     if (!nombre) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
     const color = limpiarColor(b.color);
     const estatus = normalizarEstatus(b.estatus);
+    // Sin tipo al editar: se deja el que tenía.
+    const seguimiento = b.tipo === 'seguimiento' ? 1 : b.tipo === 'ventas' ? 0 : null;
     const pv = await getVentasPool();
 
     const dup = (await pv.request().input('n', sql.NVarChar(100), nombre).input('id', sql.Int, id || 0)
@@ -380,13 +386,13 @@ exports.guardarCampanaVentas = async (req, res) => {
     let campanaId = id;
     try {
       if (id) {
-        const up = await new sql.Request(tx).input('id', sql.Int, id).input('n', sql.NVarChar(100), nombre).input('col', sql.NVarChar(20), color)
-          .query('UPDATE [Campanas] SET nombre = @n, color = ISNULL(@col, color) WHERE ID = @id');
+        const up = await new sql.Request(tx).input('id', sql.Int, id).input('n', sql.NVarChar(100), nombre).input('col', sql.NVarChar(20), color).input('seg', sql.Bit, seguimiento)
+          .query('UPDATE [Campanas] SET nombre = @n, color = ISNULL(@col, color), tieneSeguimiento = ISNULL(@seg, tieneSeguimiento) WHERE ID = @id');
         if (!up.rowsAffected[0]) { await tx.rollback(); return res.status(404).json({ success: false, message: 'Campaña no encontrada' }); }
         if (Array.isArray(b.estatus)) await guardarEstatus(tx, id, estatus);
       } else {
-        const ins = await new sql.Request(tx).input('n', sql.NVarChar(100), nombre).input('col', sql.NVarChar(20), color)
-          .query('INSERT INTO [Campanas] (nombre, activo, color, tieneSeguimiento) OUTPUT INSERTED.ID AS id VALUES (@n, 1, @col, 0)');
+        const ins = await new sql.Request(tx).input('n', sql.NVarChar(100), nombre).input('col', sql.NVarChar(20), color).input('seg', sql.Bit, seguimiento ?? 0)
+          .query('INSERT INTO [Campanas] (nombre, activo, color, tieneSeguimiento) OUTPUT INSERTED.ID AS id VALUES (@n, 1, @col, @seg)');
         campanaId = ins.recordset[0].id;
         await guardarEstatus(tx, campanaId, estatus.length ? estatus : ESTATUS_INICIALES.map((e) => ({ ...e, activo: true })));
       }
@@ -413,7 +419,7 @@ exports.guardarCampanaVentas = async (req, res) => {
     await logAudit(pool, {
       userId: getUserId(req), userName: req.user?.nombre || null,
       modulo: 'usuarios', accion: id ? 'editar-campana-ventas' : 'crear-campana-ventas',
-      entidadId: campanaId, detalle: { nombre, color, estatus: estatus.map((e) => e.nombre) }, ip: req.ip,
+      entidadId: campanaId, detalle: { nombre, color, tipo: b.tipo ?? null, estatus: estatus.map((e) => e.nombre) }, ip: req.ip,
     }).catch(() => {});
 
     res.json({ success: true, data: await leerCampanaVentas(pv, campanaId) });

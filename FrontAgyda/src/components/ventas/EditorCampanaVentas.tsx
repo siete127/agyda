@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Loader2, Megaphone, Plus, Save, X } from 'lucide-react'
-import { campanasVentasService, type EstatusCampanaVentas } from '@/services/campanasVentas.service'
+import { ArrowDown, ArrowUp, CalendarClock, Eye, EyeOff, Loader2, Megaphone, Plus, Save, ShoppingCart, X } from 'lucide-react'
+import { campanasVentasService, etiquetaTipoVentas, type EstatusCampanaVentas, type TipoCampanaVentas } from '@/services/campanasVentas.service'
 
 // Colores sugeridos para la campaña y sus estatus (los mismos tonos que usa Ventas).
 const PALETA = ['#ffa200', '#f7e35e', '#22c55e', '#14b8a6', '#0091ff', '#3b82f6', '#7c3aed', '#ec4899', '#ef4444', '#6b7280']
@@ -14,6 +14,11 @@ const INICIALES: EstatusCampanaVentas[] = [
   { nombre: 'Agendada', color: '#3b82f6', activo: true },
   { nombre: 'Pendiente', color: '#f59e0b', activo: true },
 ]
+// Los dos tipos que maneja el sistema de Ventas.
+const TIPOS: { id: TipoCampanaVentas; label: string; desc: string; Icon: typeof ShoppingCart }[] = [
+  { id: 'ventas', label: 'Ventas', desc: 'Se captura la venta y se tipifica con sus estatus', Icon: ShoppingCart },
+  { id: 'seguimiento', label: 'Seguimiento', desc: 'Además lleva seguimiento de cada venta (como AT&T)', Icon: CalendarClock },
+]
 const msgError = (e: unknown, f: string) => (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? f
 
 /**
@@ -21,8 +26,10 @@ const msgError = (e: unknown, f: string) => (e as { response?: { data?: { messag
  * estatus (las tipificaciones que ven los agentes en Ventas y AGYDA).
  * Se guarda directo en la BD de Ventas.
  */
-export function EditorCampanaVentas({ campanaId, onClose, onSaved }: {
+export function EditorCampanaVentas({ campanaId, tipoInicial = 'ventas', onClose, onSaved }: {
   campanaId: number | null
+  /** Al crear: el tipo con el que arranca (se puede cambiar en la ventana). */
+  tipoInicial?: TipoCampanaVentas
   onClose: () => void
   onSaved: (id: number | null) => void
 }) {
@@ -32,10 +39,10 @@ export function EditorCampanaVentas({ campanaId, onClose, onSaved }: {
     queryFn: () => campanasVentasService.get(campanaId!),
     enabled: editando,
   })
-  const [f, setF] = useState<{ nombre: string; color: string; estatus: EstatusCampanaVentas[] } | null>(
-    editando ? null : { nombre: '', color: PALETA[0], estatus: INICIALES },
+  const [f, setF] = useState<{ nombre: string; color: string; tipo: TipoCampanaVentas; estatus: EstatusCampanaVentas[] } | null>(
+    editando ? null : { nombre: '', color: PALETA[0], tipo: tipoInicial, estatus: INICIALES },
   )
-  if (data && !f) setF({ nombre: data.nombre, color: data.color ?? PALETA[0], estatus: data.estatus.map((e) => ({ id: e.id, nombre: e.nombre, color: e.color, activo: e.activo })) })
+  if (data && !f) setF({ nombre: data.nombre, color: data.color ?? PALETA[0], tipo: data.tipo ?? 'ventas', estatus: data.estatus.map((e) => ({ id: e.id, nombre: e.nombre, color: e.color, activo: e.activo })) })
   const [nuevo, setNuevo] = useState('')
 
   const setEst = (i: number, cambio: Partial<EstatusCampanaVentas>) => setF((x) => (x ? { ...x, estatus: x.estatus.map((e, j) => (j === i ? { ...e, ...cambio } : e)) } : x))
@@ -56,7 +63,7 @@ export function EditorCampanaVentas({ campanaId, onClose, onSaved }: {
 
   const guardar = useMutation({
     mutationFn: () => {
-      const body = { nombre: f!.nombre.trim(), color: f!.color, estatus: f!.estatus.filter((e) => e.nombre.trim()) }
+      const body = { nombre: f!.nombre.trim(), color: f!.color, tipo: f!.tipo, estatus: f!.estatus.filter((e) => e.nombre.trim()) }
       return editando ? campanasVentasService.editar(campanaId!, body) : campanasVentasService.crear(body)
     },
     onSuccess: (c) => { toast.success(editando ? 'Campaña actualizada en Ventas' : 'Campaña creada en Ventas'); onSaved(c?.id ?? campanaId) },
@@ -68,14 +75,14 @@ export function EditorCampanaVentas({ campanaId, onClose, onSaved }: {
   return createPortal(
     // z-[200]: se abre también encima de los Modal "elevated" (z 70+ y suben con cada uno apilado).
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-card shadow-xl" role="dialog" aria-modal="true" aria-label={editando ? 'Editar campaña de Ventas' : 'Nueva campaña de Ventas'}>
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-card shadow-xl" role="dialog" aria-modal="true" aria-label={editando ? 'Editar campaña' : `Nueva campaña de ${etiquetaTipoVentas(f?.tipo)}`}>
         <div className="h-1.5 rounded-t-2xl" style={{ background: f?.color ?? PALETA[0] }} />
         <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: `${f?.color ?? PALETA[0]}22`, color: f?.color ?? PALETA[0] }}>
             <Megaphone className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-gray-900">{editando ? `Editar campaña de Ventas` : 'Nueva campaña de Ventas'}</h2>
+            <h2 className="text-sm font-bold text-gray-900">{editando ? `Editar campaña de ${etiquetaTipoVentas(f?.tipo)}` : `Nueva campaña de ${etiquetaTipoVentas(f?.tipo)}`}</h2>
             <p className="text-[0.7rem] text-gray-400">
               Se guarda en el sistema de Ventas{data ? ` · ${data.ventas.toLocaleString('es-MX')} ventas registradas` : ''}
             </p>
@@ -91,6 +98,26 @@ export function EditorCampanaVentas({ campanaId, onClose, onSaved }: {
               <span className="mb-1 block text-[0.72rem] font-semibold text-gray-600">Nombre</span>
               <input autoFocus className="field" value={f.nombre} maxLength={100} placeholder="Ej. Amex" onChange={(e) => setF({ ...f, nombre: e.target.value })} />
             </label>
+
+            <div>
+              <span className="mb-1.5 block text-[0.72rem] font-semibold text-gray-600">Tipo de campaña</span>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de campaña">
+                {TIPOS.map(({ id, label, desc, Icon }) => (
+                  <button key={id} type="button" role="radio" aria-checked={f.tipo === id} onClick={() => setF({ ...f, tipo: id })}
+                    className={clsx('flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition',
+                      f.tipo === id ? 'border-violet-300 bg-violet-50/70 ring-1 ring-violet-200' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50')}>
+                    <span className={clsx('mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg',
+                      f.tipo === id ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500')}>
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[0.8rem] font-semibold text-gray-800">{label}</span>
+                      <span className="block text-[0.66rem] leading-snug text-gray-400">{desc}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div>
               <span className="mb-1.5 block text-[0.72rem] font-semibold text-gray-600">Color</span>
