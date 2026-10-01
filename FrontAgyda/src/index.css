@@ -471,6 +471,21 @@
 .hero-text { color: #ffffff; }
 .hero-text-secondary { color: rgba(255, 255, 255, 0.8); }
 
+/* ── "Accesos rápidos" del Inicio — hover claro en modo claro, oscuro en
+   modo oscuro (los gifts ya cambian a blanco en oscuro vía isDarkMode, así
+   que un hover blanco los dejaría invisibles). */
+.accesos-rapidos-hover:hover {
+  background-color: rgb(var(--color-brand-light));
+}
+:root[data-theme="dark"] .accesos-rapidos-hover:hover {
+  background-color: rgb(var(--surface));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .accesos-rapidos-hover:hover {
+    background-color: rgb(var(--surface));
+  }
+}
+
 /* ── Controls/MiniMap de @xyflow/react (Constructor de flujo del chatbot) ──
    La librería expone variables --xy-* pensadas justo para esto — no hace
    falta !important ni pelear con sus clases, solo redefinir sus tokens con

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -337,7 +338,11 @@ export function NoticiaDetalle({ noticia, onClose }: { noticia: Noticia; onClose
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
 
-  return (
+  // Portal a document.body: se usa dentro de páginas cuyo contenedor tiene
+  // la animación "page-enter" (transform), que crea un containing block
+  // propio para los descendientes fixed — sin portal, el overlay quedaba
+  // acotado al área del <main>, sin cubrir el sidebar.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 pt-8 animate-fade-in">
       <div
         className="relative w-full max-w-2xl rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up"
@@ -461,7 +466,8 @@ export function NoticiaDetalle({ noticia, onClose }: { noticia: Noticia; onClose
       </div>
 
       <div className="fixed inset-0 -z-10" onClick={onClose} />
-    </div>
+    </div>,
+    document.body,
   )
 }
 

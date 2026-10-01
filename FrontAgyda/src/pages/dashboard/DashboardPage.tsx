@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 // TEMPORAL — prueba visual local, no se guarda en BD. Quitar y volver a
 // MascotaTablero cuando se decida si se mantiene.
 import heroAgydaInicio from '@/assets/hero-agyda-inicio.png'
@@ -224,9 +225,13 @@ function LegalesManager({ isAdmin }: { isAdmin: boolean }) {
 function EmpresaModal({ empresaKey, isAdmin, onClose }: { empresaKey: EmpresaKey; isAdmin: boolean; onClose: () => void }) {
   const { institucional } = usePersonalizacion()
   const info = mvvInfo(institucional)[empresaKey]
-  return (
+  // Portal a document.body: el div padre en DashboardPage tiene la animación
+  // "page-enter" (transform), que crea un containing block propio para los
+  // descendientes fixed — sin portal, este modal quedaba acotado al área del
+  // <main>, sin cubrir el sidebar.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className={clsx(
         'relative w-full rounded-2xl bg-card shadow-2xl animate-fade-in overflow-hidden',
         empresaKey === 'legales' ? 'max-w-2xl' : 'max-w-md',
@@ -262,7 +267,8 @@ function EmpresaModal({ empresaKey, isAdmin, onClose }: { empresaKey: EmpresaKey
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -842,14 +848,9 @@ export function DashboardPage() {
               { img: '/icons/musica.gif',      imgDark: '/icons/musica-dark.gif',      label: 'Música',      to: '/musica'      },
             ] as { icon?: React.ComponentType<{ className?: string }>; img?: string; imgDark?: string; label: string; to: string }[]).map((m) => (
               <button key={m.label} onClick={() => navigate(m.to)}
-                className="group flex flex-col items-center gap-1.5 rounded-xl p-2.5 transition-colors hover:bg-brand-light">
+                className="group flex flex-col items-center gap-1.5 rounded-xl p-2.5 transition-colors accesos-rapidos-hover">
                 {m.img ? (
-                  <span className="relative h-9 w-9">
-                    <img src={isDarkMode ? m.imgDark : m.img} alt=""
-                      className="absolute inset-0 h-9 w-9 object-contain group-hover:opacity-0 transition-opacity" />
-                    <img src={m.img} alt=""
-                      className="absolute inset-0 h-9 w-9 object-contain opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </span>
+                  <img src={isDarkMode ? m.imgDark : m.img} alt="" className="h-9 w-9 object-contain" />
                 ) : (
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light">
                     {m.icon && <m.icon className="h-4 w-4 text-brand" />}
