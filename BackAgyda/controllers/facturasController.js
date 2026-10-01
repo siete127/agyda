@@ -271,14 +271,20 @@ exports.editar = async (req, res) => {
     const b = req.body || {};
     const r = b.receptor || {};
     if (!r.rfc || !r.nombre) return res.status(400).json({ success: false, message: 'Faltan los datos fiscales del receptor (RFC, razón social)' });
+    // Mismo criterio que facturas.manual/desdeCotizacion: solo pisa el
+    // emisor si viene uno válido para este tenant; si no, se deja el que
+    // ya tenía la pre-factura (nunca lo borra a NULL).
+    const emisorElegido = _emisorValido(req, b.emisorRfc);
 
     await pool.request().input('id', sql.Int, id)
       .input('rrfc', sql.NVarChar(13), r.rfc).input('rnom', sql.NVarChar(255), r.nombre)
       .input('uso', sql.NVarChar(4), r.usoCfdi || 'G03')
       .input('fp', sql.NVarChar(3), b.formaPago || '99').input('mp', sql.NVarChar(4), b.metodoPago || 'PUE')
       .input('fecha', sql.DateTime, b.fecha ? new Date(b.fecha) : new Date())
+      .input('erfc', sql.NVarChar(13), emisorElegido?.rfc || null)
       .query(`UPDATE dbo.FACTURAS SET FAC_RECEPTOR_RFC=@rrfc, FAC_RECEPTOR_NOMBRE=@rnom, FAC_USO_CFDI=@uso,
-                FAC_FORMA_PAGO=@fp, FAC_METODO_PAGO=@mp, FAC_FECHA=@fecha WHERE FAC_ID=@id`);
+                FAC_FORMA_PAGO=@fp, FAC_METODO_PAGO=@mp, FAC_FECHA=@fecha
+                ${emisorElegido ? ', FAC_EMISOR_RFC=@erfc' : ''} WHERE FAC_ID=@id`);
 
     // Datos fiscales del cliente, igual que al crear — se guardan para la próxima vez.
     const cli = await pool.request().input('id', sql.Int, id).query('SELECT FAC_CLIENTE_ID id FROM dbo.FACTURAS WHERE FAC_ID=@id');

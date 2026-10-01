@@ -15,6 +15,8 @@ export function EditarFacturaModal({ factura, onClose }: { factura: Factura; onC
   const { data: regimenes = [] } = useQuery({ queryKey: ['sat', 'regimen'], queryFn: () => satService.regimenFiscal(), staleTime: Infinity })
   const { data: usos = [] } = useQuery({ queryKey: ['sat', 'uso'], queryFn: () => satService.usoCfdi(), staleTime: Infinity })
   const { data: formas = [] } = useQuery({ queryKey: ['sat', 'forma'], queryFn: () => satService.formaPago(), staleTime: Infinity })
+  // Vacío fuera del tenant ARDABY TEC — mismo criterio que NuevaFacturaModal.
+  const { data: emisores = [] } = useQuery({ queryKey: ['facturas-emisores'], queryFn: () => facturacionService.emisores(), staleTime: Infinity })
   // regimenFiscal/cp no viajan en Factura (solo rfc/nombre/usoCfdi) — se
   // precargan del cliente, igual que al crear la factura.
   const { data: recGuardado } = useQuery({
@@ -31,6 +33,7 @@ export function EditarFacturaModal({ factura, onClose }: { factura: Factura; onC
   const [formaPago, setFormaPago] = useState(factura.formaPago ?? '99')
   const [metodoPago, setMetodoPago] = useState(factura.metodoPago ?? 'PUE')
   const [fecha, setFecha] = useState(() => factura.fecha.slice(0, 10))
+  const [emisorRfc, setEmisorRfc] = useState(factura.emisorRfc ?? '')
   // regimenFiscal/cp llegan async (recGuardado) — se sincronizan una vez que
   // resuelven, sin pisar lo que el usuario ya haya escrito a mano.
   const [precargado, setPrecargado] = useState(false)
@@ -43,7 +46,7 @@ export function EditarFacturaModal({ factura, onClose }: { factura: Factura; onC
 
   const guardar = useMutation({
     mutationFn: () => facturacionService.editar(factura.id, {
-      receptor: { rfc, nombre, regimenFiscal, cp, usoCfdi }, formaPago, metodoPago, fecha,
+      receptor: { rfc, nombre, regimenFiscal, cp, usoCfdi }, formaPago, metodoPago, fecha, emisorRfc: emisorRfc || undefined,
     }),
     onSuccess: () => {
       ;['facturas-todas', 'facturas-por-facturar', 'finanzas-dashboard', 'finanzas-cxc', 'cliente-finanzas', 'crm-facturas']
@@ -105,6 +108,15 @@ export function EditarFacturaModal({ factura, onClose }: { factura: Factura; onC
             <span className={label}>Fecha de registro</span>
             <input type="date" className={field} value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </label>
+          {!!emisores.length && (
+            <label className="col-span-2 block">
+              <span className={label}>Facturar como</span>
+              <select className={field} value={emisorRfc} onChange={(e) => setEmisorRfc(e.target.value)}>
+                <option value="">Selecciona…</option>
+                {emisores.map((e) => <option key={e.rfc} value={e.rfc}>{e.nombre} — {e.rfc}</option>)}
+              </select>
+            </label>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">

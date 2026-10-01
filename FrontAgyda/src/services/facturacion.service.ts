@@ -204,7 +204,7 @@ export const facturacionService = {
   cancelar: (id: number, motivo = '02') =>
     api.post(`/facturas/${id}/cancelar`, { motivo }).then((r) => r.data),
   /** Solo pre-facturas (sin timbrar): una timbrada es un documento fiscal cerrado. */
-  editar: (id: number, body: { receptor: ReceptorFiscal; formaPago?: string; metodoPago?: string; fecha?: string }) =>
+  editar: (id: number, body: { receptor: ReceptorFiscal; formaPago?: string; metodoPago?: string; fecha?: string; emisorRfc?: string }) =>
     api.put(`/facturas/${id}`, body).then((r) => r.data as { data: Factura }),
   documentoUrl: (id: number, formato: 'pdf' | 'xml') => `/api/facturas/${id}/documento/${formato}`,
 
