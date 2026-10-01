@@ -222,6 +222,35 @@ exports.terminar = async (req, res) => {
   } catch (e) { responderError(res, e, 'terminar'); }
 };
 
+// GET /personas-de-campanias?campanias=1,2&ventas=1 — la gente que esas
+// campañas ya tienen, para cargarla sola en el paso 3 ("Supervisores y
+// agentes"): supervisores de las campañas; agentes de sus skills y, si hay
+// campaña de Ventas, los agentes asignados a ella (Operaciones → Campañas).
+// Solo usuarios internos activos; quien es supervisor no se repite como agente.
+exports.personasDeCampanias = async (req, res) => {
+  try {
+    const pool = await poolDe(req);
+    const camp = ids(String(req.query.campanias || '').split(','));
+    const ventas = Number(req.query.ventas) > 0 ? Number(req.query.ventas) : null;
+    if (!camp.length && !ventas) return res.json({ success: true, data: { supervisores: [], agentes: [] } });
+    const enCamp = camp.length ? camp.join(',') : '0';
+    const activos = `JOIN NEUS_USUARIOS u ON u.NEUS_ID = x.u AND u.NEUS_ACTIVO = 1 AND u.NEUS_TIPOUSUARIO <> 'CL'`;
+    const supervisores = (await pool.request().query(`
+      SELECT DISTINCT u.NEUS_ID usuarioId, LTRIM(RTRIM(u.NEUS_NOMBRES)) nombre FROM (
+        SELECT CS_SUPERVISOR_ID u FROM CC_CAMPANIAS_SUPERVISORES WHERE CS_CAMPANIA_ID IN (${enCamp})) x ${activos}`)
+      .catch(() => ({ recordset: [] }))).recordset;
+    const agentes = (await pool.request().input('v', sql.Int, ventas).query(`
+      SELECT DISTINCT u.NEUS_ID usuarioId, LTRIM(RTRIM(u.NEUS_NOMBRES)) nombre FROM (
+        SELECT ga.CGA_USUARIO_ID u FROM CCO_GRUPO_AGENTES ga JOIN CCO_GRUPOS g ON g.CG_ID = ga.CGA_GRUPO_ID AND g.CG_ACTIVO = 1
+        WHERE ga.CGA_ACTIVO = 1 AND g.CG_CAMPANIA_ID IN (${enCamp})
+        UNION SELECT ACA_NEUS_ID FROM AC_CAMPANIAS_AGENTES WHERE @v IS NOT NULL AND ACA_VENTAS_CAMPANA_ID = @v) x ${activos}`)
+      .catch(() => ({ recordset: [] }))).recordset;
+    const sup = new Set(supervisores.map((s) => s.usuarioId));
+    const orden = (a, b) => a.nombre.localeCompare(b.nombre, 'es');
+    res.json({ success: true, data: { supervisores: supervisores.sort(orden), agentes: agentes.filter((a) => !sup.has(a.usuarioId)).sort(orden) } });
+  } catch (e) { responderError(res, e, 'personasDeCampanias'); }
+};
+
 // POST /desde-campania — { tipo: 'cc' | 'ventas', id }. Para "Editar campaña"
 // desde Operaciones → Campañas: busca el grupo que ya la usa y abre su
 // configuración actual como BORRADOR de actualización (BOR_GRUPO_ID = ese
@@ -267,6 +296,9 @@ exports.desdeCampania = async (req, res) => {
       clientes: clientes.map((c) => ({ clienteId: c.usuarioId ?? c.clienteId, nombre: c.nombre })),
       reportes: [], // sus reportes ya existen; solo se crean los que se elijan de nuevo
     };
+    // Su gente ya es la del grupo: el paso 3 no agrega a nadie solo, salvo que
+    // cambien las campañas (misma clave que clavePersonasDe del front).
+    datos.personasCargadas = `${datos.campanias.map((c) => c.id).sort((a, b) => a - b).join(',')}|${datos.ventasCampanaId ?? ''}`;
     const rs = await pool.request()
       .input('uid', sql.Int, uid(req)).input('un', sql.NVarChar, req.user?.nombre || req.user?.username || null)
       .input('t', sql.NVarChar, tipoGrupo).input('n', sql.NVarChar, g.nombre)

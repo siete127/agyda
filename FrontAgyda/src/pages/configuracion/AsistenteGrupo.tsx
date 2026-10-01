@@ -14,7 +14,7 @@ import {
   type CatalogoAsistenteGrupo, type DatosGrupoBorrador, type BorradorGrupoResumen, type PendienteGrupo,
   type ModalidadGrupo, type TipoGrupoAsistente, type PlantillaReporteGrupo,
 } from '@/services/grupos.service'
-import { AsistenteCampania } from './AsistenteCampania'
+import { AsistenteCampania, type GrupoDeLaCampania } from './AsistenteCampania'
 import { ccService } from '@/services/cc.service'
 import { EditorCampanaVentas } from '@/components/ventas/EditorCampanaVentas'
 import { RbMiniatura } from '@/pages/suite-reportes/RbMiniatura'
@@ -58,6 +58,9 @@ function pendientesDe(d: DatosGrupoBorrador, cat: CatalogoAsistenteGrupo | undef
   if (atencion && !d.clientes.length) p.push({ paso: 'clientes', texto: 'Asigna al menos un cliente' })
   return p
 }
+// Combinación de campañas (y campaña de Ventas) cuya gente ya se cargó en el paso 3.
+// El backend usa la misma clave al abrir un grupo existente (desdeCampania).
+const clavePersonasDe = (d: DatosGrupoBorrador) => `${d.campanias.map((c) => c.id).sort((a, b) => a - b).join(',')}|${d.ventasCampanaId ?? ''}`
 const recomendadasDe = (cat: CatalogoAsistenteGrupo) => (cat.plantillasReportes ?? []).filter((p) => p.recomendada).map((p) => p.id)
 // Plantillas elegidas que aplican a la modalidad del grupo (las demás se omiten al crear).
 const plantillaAplica = (p: PlantillaReporteGrupo, modalidad: ModalidadGrupo) => !p.requiere || p.requiere.includes(modalidad)
@@ -224,6 +227,30 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
     const t = setTimeout(() => { guardarAhora(datos, paso) }, 800)
     return () => clearTimeout(t)
   }, [datos, paso]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Paso 3 (supervisores y agentes): la gente que las campañas elegidas ya
+  // tienen entra sola — supervisores de las campañas, agentes de sus skills y
+  // los asignados a su campaña de Ventas. Una vez por combinación de campañas:
+  // a quien se quite a mano no se le vuelve a agregar.
+  const clavePersonas = datos ? clavePersonasDe(datos) : ''
+  useEffect(() => {
+    if (!datos || paso !== 2 || clavePersonas === '|' || datos.personasCargadas === clavePersonas) return
+    let vivo = true
+    svc.personasDeCampanias(datos.campanias.map((c) => c.id), datos.ventasCampanaId)
+      .then((r) => {
+        if (!vivo) return
+        const ya = new Set([...datos.supervisores, ...datos.agentes].map((x) => x.usuarioId))
+        const sup = r.supervisores.filter((x) => !ya.has(x.usuarioId))
+        sup.forEach((x) => ya.add(x.usuarioId))
+        const ag = r.agentes.filter((x) => !ya.has(x.usuarioId))
+        setDatos((d) => (d ? { ...d, supervisores: [...d.supervisores, ...sup], agentes: [...d.agentes, ...ag], personasCargadas: clavePersonas } : d))
+        if (sup.length || ag.length) {
+          toast.success(`Se cargaron de la campaña ${sup.length} supervisor(es) y ${ag.length} ${datos.tipo === 'atencion-clientes' ? 'asesor(es)' : 'agente(s)'}; quita a quien no deba estar`, { duration: 6000 })
+        }
+      })
+      .catch(() => { /* sin sugerencias: se capturan a mano */ })
+    return () => { vivo = false }
+  }, [paso, clavePersonas, datos?.personasCargadas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!datos) return <div className={clsx(card, 'flex justify-center py-10')}><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
 
@@ -448,6 +475,13 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
   // Campaña de Ventas: editar (id), crear (0) o nada (null).
   const [ventasEditor, setVentasEditor] = useState<number | null>(editarInicial?.tipo === 'ventas' ? editarInicial.id : null)
   const puedeCampanasVentas = can('accesos', 'gestionar')
+  // Lo que el asistente de campaña necesita saber del grupo que se arma: si es
+  // solo de marcador (sin skills, canal Marcador), su campaña de Ventas
+  // (tipificaciones = sus estatus) y su gente (paso 3).
+  const grupoParaCampania: GrupoDeLaCampania = {
+    nombre: datos.nombre, modalidad: datos.modalidad, ventasCampanaId: datos.ventasCampanaId,
+    supervisores: datos.supervisores, agentes: datos.agentes,
+  }
   const [borrar, setBorrar] = useState<CatalogoAsistenteGrupo['campanias'][number] | null>(null)
   const [nuevoSkill, setNuevoSkill] = useState<{ campaniaId: number; nombre: string } | null>(null)
   const eliminarCampania = useMutation({
@@ -627,7 +661,7 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
 
       {asistente && (
         <Modal isOpen onClose={() => { setAsistente(false); toast('La campaña quedó a medias: con "Nueva campaña" sigues donde te quedaste') }} title="Nueva campaña" size="full" elevated>
-          <AsistenteCampania onSalir={(creada) => {
+          <AsistenteCampania grupo={grupoParaCampania} onSalir={(creada) => {
             setAsistente(false)
             recargarCatalogo()
             qc.invalidateQueries({ queryKey: ['grupos-opciones'] })
@@ -637,7 +671,7 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
       )}
       {editarId != null && (
         <Modal isOpen onClose={() => { setEditarId(null); recargarCatalogo() }} title="Editar campaña" size="full" elevated>
-          <AsistenteCampania campaniaEditar={editarId} onSalir={() => {
+          <AsistenteCampania campaniaEditar={editarId} grupo={grupoParaCampania} onSalir={() => {
             setEditarId(null)
             recargarCatalogo()
             qc.invalidateQueries({ queryKey: ['grupos-opciones'] })

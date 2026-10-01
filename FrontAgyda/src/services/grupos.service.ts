@@ -182,6 +182,8 @@ export interface DatosGrupoBorrador {
   clientes: { clienteId: number; nombre: string }[]
   // Plantillas de reportes que se crean con el grupo (ids)
   reportes?: string[]
+  /** Campañas (y campaña de Ventas) cuya gente ya se cargó sola en el paso 3. */
+  personasCargadas?: string
 }
 export interface PendienteGrupo { paso: string; texto: string }
 export interface BorradorGrupoResumen {
@@ -206,6 +208,9 @@ export const grupoAsistenteService = {
   borradores: () => api.get(`${ga}/borradores`).then((r) => r.data.data as BorradorGrupoResumen[]),
   borrador: (id: number) => api.get(`${ga}/borradores/${id}`).then((r) => r.data.data as BorradorGrupo),
   crearBorrador: (datos: DatosGrupoBorrador, paso: number) => api.post(`${ga}/borradores`, { datos, paso }).then((r) => r.data.data as { id: number }),
+  /** Gente que esas campañas ya tienen (paso 3, se carga sola). */
+  personasDeCampanias: (campanias: number[], ventas: number | null) => api.get(`${ga}/personas-de-campanias`, { params: { campanias: campanias.join(','), ventas: ventas ?? undefined } })
+    .then((r) => r.data.data as { supervisores: { usuarioId: number; nombre: string }[]; agentes: { usuarioId: number; nombre: string }[] }),
   /** Borrador de actualización del grupo que usa esa campaña (null si ningún grupo la usa). */
   desdeCampania: (tipo: 'cc' | 'ventas', id: number) => api.post(`${ga}/desde-campania`, { tipo, id })
     .then((r) => r.data.data as { borradorId: number | null; grupo: { id: number; nombre: string } | null; otros: string[]; retomado?: boolean }),

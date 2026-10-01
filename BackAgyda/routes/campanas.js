@@ -13,6 +13,7 @@ router.get('/grupos', authenticateToken, campanaAgente.listGruposDetalle);
 router.get('/ventas', authenticateToken, campanaAgente.listCampanasVentas);
 router.get('/ventas/:id', authenticateToken, campanaAgente.getCampanaVentas);
 router.post('/ventas/:id/activar', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.activarCampanaVentas);
+router.post('/ventas/:id/tipificaciones-a/:campaniaId', authenticateToken, requireActionAccess('contact-center', 'gestionar-skills'), campanaAgente.copiarEstatusACampania);
 router.post('/ventas', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarCampanaVentas);
 router.put('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarCampanaVentas);
 router.delete('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.desactivarCampanaVentas);

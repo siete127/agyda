@@ -61,6 +61,7 @@ const CANAL_ICONOS: Record<CCCanalTipo, { icon: React.ComponentType<{ className?
   instagram_privado: { icon: Camera, bg: 'bg-pink-100', fg: 'text-pink-600' },
   web_publica: { icon: Globe, bg: 'bg-cyan-100', fg: 'text-cyan-600' },
   test: { icon: FlaskConical, bg: 'bg-violet-100', fg: 'text-violet-600' },
+  marcador: { icon: PhoneCall, bg: 'bg-amber-100', fg: 'text-amber-600' },
 }
 
 // Toggle tipo switch reutilizable — reemplaza el checkbox plano de "Habilitado".
@@ -122,6 +123,7 @@ export function CCCanalesTab() {
                 <option value="messenger_fca">Messenger por appstate (no oficial)</option>
                 <option value="instagram_privado">Instagram por usuario/password (no oficial)</option>
                 <option value="web_publica">Web pública (widget del sitio)</option>
+                <option value="marcador">Marcador (VICIdial)</option>
               </select>
             </div>
           </label>
@@ -1847,6 +1849,7 @@ export function CanalesDeCampaniaPanel({ campania, canales, onChanged }: any) {
                 <option value="messenger_fca">Messenger por appstate (no oficial)</option>
                 <option value="instagram_privado">Instagram por usuario/password (no oficial)</option>
                 <option value="web_publica">Web pública (widget del sitio)</option>
+                <option value="marcador">Marcador (VICIdial)</option>
               </select>
             </div>
           </label>

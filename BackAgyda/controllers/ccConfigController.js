@@ -99,7 +99,9 @@ exports.updateConfig = async (req, res) => {
 // 'web_publica': widget de chat de la página web pública (ardabytec.com) —
 // antes vivía en un motor aparte (LIVECHAT_*); ver services/webPublicaManager.js
 // y controllers/ccWebPublicaController.js para el flujo completo.
-const TIPOS_CANAL = ['whatsapp', 'messenger', 'instagram', 'whatsapp_baileys', 'messenger_fca', 'instagram_privado', 'web_publica', 'test'];
+// 'marcador': las llamadas del marcador (VICIdial) — sin credenciales; da el
+// canal con el que el formulario del marcador registra cada interacción.
+const TIPOS_CANAL = ['whatsapp', 'messenger', 'instagram', 'whatsapp_baileys', 'messenger_fca', 'instagram_privado', 'web_publica', 'test', 'marcador'];
 
 exports.listCanales = async (req, res) => {
   try {
@@ -873,6 +875,11 @@ exports.createTipificacion = async (req, res) => {
     const r = await p.request().input('c', sql.Int, b.campaniaId || null).input('n', sql.NVarChar(200), b.nombre)
       .input('d', sql.NVarChar(sql.MAX), b.descripcion || null).input('rc', sql.Bit, !!b.requiereComentario).input('o', sql.Int, b.orden || 0)
       .query(`INSERT INTO dbo.CCO_TIPIFICACIONES (CT_CAMPANIA_ID, CT_NOMBRE, CT_DESCRIPCION, CT_REQUIERE_COMENTARIO, CT_ORDEN) OUTPUT INSERTED.CT_ID id VALUES (@c, @n, @d, @rc, @o)`);
+    // Queda permitida en los formularios de la campaña que ya tenían una selección.
+    if (b.campaniaId) {
+      await require('../services/ventasCampaniaService').agregarTipificacionesAFormularios(p, Number(b.campaniaId), [r.recordset[0].id])
+        .catch((e) => console.error('createTipificacion → formularios:', e.message));
+    }
     res.status(201).json({ success: true, data: { id: r.recordset[0].id } });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 };

@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, Layers, RotateCcw, Loader2, Megaphone, Plug, FileText, Tags, Rocket, BarChart3, X,
+  PhoneCall, ShoppingCart, Pencil, UsersRound,
 } from 'lucide-react'
 import { ccService } from '@/services/cc.service'
+import { campanasVentasService } from '@/services/campanasVentas.service'
+import { EditorCampanaVentas } from '@/components/ventas/EditorCampanaVentas'
+import { Avatar } from '@/components/ui/Avatar'
 import { REPORTES_CAMPANIA } from '@/pages/suite-reportes/reportesCampania'
 import {
   CanalesDeCampaniaPanel, FormularioYMarcadorPanel, SkillsDeCampaniaPanel, TipificacionesDeCampaniaPanel,
@@ -20,15 +24,26 @@ const card = 'rounded-2xl border border-gray-100 bg-card p-5 shadow-card'
 const slugDe = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
 
-const PASOS = [
+// Las tipificaciones van antes del formulario: el formulario las ofrece (catálogo
+// "Tipificaciones de la campaña") y define cuáles permite.
+const PASOS_BASE = [
   { key: 'campania', titulo: 'Campaña', desc: 'Nombre y cómo se asignan las conversaciones', icon: Megaphone },
   { key: 'skills', titulo: 'Skills', desc: 'Grupos de atención de la campaña (su gente la pone el grupo)', icon: Layers },
-  { key: 'canales', titulo: 'Canales', desc: 'WhatsApp, Messenger, Instagram o web', icon: Plug },
-  { key: 'formulario', titulo: 'Formulario y marcador', desc: 'Qué se captura y la URL para VICIdial', icon: FileText },
+  { key: 'canales', titulo: 'Canales', desc: 'WhatsApp, Messenger, Instagram, web o marcador', icon: Plug },
   { key: 'tipificaciones', titulo: 'Tipificaciones', desc: 'Cómo se clasifica cada atención', icon: Tags },
+  { key: 'formulario', titulo: 'Formulario y marcador', desc: 'Qué se captura y la URL para VICIdial', icon: FileText },
   { key: 'listo', titulo: 'Listo', desc: 'Resumen y reportes', icon: Rocket },
 ] as const
-type PasoKey = typeof PASOS[number]['key']
+type PasoKey = typeof PASOS_BASE[number]['key']
+
+/** El grupo que se está armando cuando el asistente se abre desde "Crear grupo". */
+export interface GrupoDeLaCampania {
+  nombre: string
+  modalidad: 'omnicanal' | 'marcador' | 'ambos'
+  ventasCampanaId: number | null
+  supervisores: { usuarioId: number; nombre: string }[]
+  agentes: { usuarioId: number; nombre: string }[]
+}
 
 // Avance del asistente en este navegador: si se sale (Esc, X o clic fuera),
 // al volver a abrirlo sigue con la misma campaña y en el mismo paso.
@@ -55,7 +70,10 @@ function guardarBorrador(b: Borrador | null) {
 // onSalir recibe la campaña creada al terminar (null si sale sin terminar).
 // `campaniaEditar`: abre esa campaña ya existente con los mismos pasos (no
 // toca el borrador de "campaña nueva" de este navegador).
-export function AsistenteCampania({ onSalir, campaniaEditar }: { onSalir: (campaniaCreada: number | null) => void; campaniaEditar?: number }) {
+// `grupo`: abierto desde el asistente "Crear grupo" — en un grupo solo de
+// marcador no hay skills y el canal es el Marcador (se crea solo); con campaña
+// de Ventas, las tipificaciones son sus estatus (una sola lista).
+export function AsistenteCampania({ onSalir, campaniaEditar, grupo }: { onSalir: (campaniaCreada: number | null) => void; campaniaEditar?: number; grupo?: GrupoDeLaCampania }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const editando = campaniaEditar != null
@@ -113,14 +131,20 @@ export function AsistenteCampania({ onSalir, campaniaEditar }: { onSalir: (campa
       toast.error(e?.response?.data?.message ?? e?.message ?? 'Error al guardar la campaña'),
   })
 
-  const actual = PASOS[paso]
+  const soloMarcador = grupo?.modalidad === 'marcador'
+  const conMarcador = !!grupo && grupo.modalidad !== 'omnicanal'
+  const PASOS = PASOS_BASE.filter((p) => !(soloMarcador && p.key === 'skills')).map((p) =>
+    p.key === 'canales' && soloMarcador ? { ...p, desc: 'El canal del marcador (VICIdial), se crea solo' }
+      : p.key === 'tipificaciones' && grupo?.ventasCampanaId ? { ...p, desc: 'Los estatus de su campaña de Ventas' } : p)
+  const actual = PASOS[Math.min(paso, PASOS.length - 1)]
+  const irA = (k: PasoKey) => { const i = PASOS.findIndex((p) => p.key === k); if (i >= 0) setPaso(i) }
   const bloqueado = (i: number) => i > 0 && campaniaId == null
 
   // Estado de cada paso para el resumen y el indicador.
   const completo: Record<PasoKey, boolean> = {
     campania: campaniaId != null,
     skills: grupos.length > 0,
-    canales: canales.length > 0,
+    canales: soloMarcador ? canales.some((c) => c.tipo === 'marcador') : canales.length > 0,
     formulario: (forms?.formularios.length ?? 0) > 0,
     tipificaciones: false, // opcional, sin conteo barato
     listo: false,
@@ -216,10 +240,22 @@ export function AsistenteCampania({ onSalir, campaniaEditar }: { onSalir: (campa
             </div>
           )}
 
-          {campania && actual.key === 'skills' && <SkillsDeCampaniaPanel campania={campania} onChanged={inval} />}
-          {campania && actual.key === 'canales' && <CanalesDeCampaniaPanel campania={campania} canales={canales} onChanged={inval} />}
+          {campania && actual.key === 'skills' && (
+            <>
+              {grupo && <GenteDelGrupo grupo={grupo} />}
+              <SkillsDeCampaniaPanel campania={campania} onChanged={inval} />
+            </>
+          )}
+          {campania && actual.key === 'canales' && (
+            <>
+              {conMarcador && <CanalMarcador campania={campania} canales={canales} onChanged={inval} />}
+              {!soloMarcador && <CanalesDeCampaniaPanel campania={campania} canales={canales} onChanged={inval} />}
+            </>
+          )}
+          {campania && actual.key === 'tipificaciones' && (grupo?.ventasCampanaId
+            ? <TipificacionesDeVentas ventasId={grupo.ventasCampanaId} campania={campania} />
+            : <TipificacionesDeCampaniaPanel campania={campania} />)}
           {campania && actual.key === 'formulario' && <FormularioYMarcadorPanel campania={campania} onIrAContacto={() => setPaso(0)} />}
-          {campania && actual.key === 'tipificaciones' && <TipificacionesDeCampaniaPanel campania={campania} />}
 
           {campania && actual.key === 'listo' && (
             <div className="space-y-4">
@@ -227,16 +263,16 @@ export function AsistenteCampania({ onSalir, campaniaEditar }: { onSalir: (campa
                 <p className="mb-3 text-sm font-bold text-ink">Resumen de "{campania.nombre}"</p>
                 <div className="space-y-2">
                   {[
-                    { ok: completo.skills, txt: `${grupos.length} skill(s)`, falta: 'Sin skills', paso: 1 },
-                    { ok: completo.canales, txt: `${canales.length} canal(es): ${canales.map((c) => c.nombre).join(', ')}`, falta: 'Sin canales', paso: 2 },
-                    { ok: completo.formulario, txt: `${forms?.formularios.length ?? 0} formulario(s): ${(forms?.formularios ?? []).map((f) => f.nombre).join(', ')}`, falta: 'Sin formulario asignado', paso: 3 },
+                    ...(soloMarcador ? [] : [{ ok: completo.skills, txt: `${grupos.length} skill(s)`, falta: 'Sin skills', paso: 'skills' as PasoKey }]),
+                    { ok: completo.canales, txt: `${canales.length} canal(es): ${canales.map((c) => c.nombre).join(', ')}`, falta: soloMarcador ? 'Sin canal Marcador' : 'Sin canales', paso: 'canales' as PasoKey },
+                    { ok: completo.formulario, txt: `${forms?.formularios.length ?? 0} formulario(s): ${(forms?.formularios ?? []).map((f) => f.nombre).join(', ')}`, falta: 'Sin formulario asignado', paso: 'formulario' as PasoKey },
                     {
                       ok: !!forms?.marcador.formularioId,
                       txt: `Marcador abre "${forms?.formularios.find((f) => f.id === forms?.marcador.formularioId)?.nombre ?? ''}"`,
-                      falta: 'El marcador aún no abre ningún formulario (opcional)', paso: 3,
+                      falta: 'El marcador aún no abre ningún formulario (opcional)', paso: 'formulario' as PasoKey,
                     },
                   ].map((x, i) => (
-                    <button key={i} onClick={() => setPaso(x.paso)} className="flex w-full items-center gap-2.5 rounded-xl border border-gray-100 px-3.5 py-2.5 text-left transition hover:bg-gray-50">
+                    <button key={i} onClick={() => irA(x.paso)} className="flex w-full items-center gap-2.5 rounded-xl border border-gray-100 px-3.5 py-2.5 text-left transition hover:bg-gray-50">
                       {x.ok ? <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-500" /> : <Circle className="h-4 w-4 flex-shrink-0 text-amber-400" />}
                       <span className={clsx('text-sm', x.ok ? 'text-ink' : 'text-amber-700')}>{x.ok ? x.txt : x.falta}</span>
                     </button>
@@ -289,6 +325,124 @@ export function AsistenteCampania({ onSalir, campaniaEditar }: { onSalir: (campa
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ── Piezas del asistente cuando se abre desde "Crear grupo" ── */
+
+// La gente del grupo (paso 3 de Crear grupo): es la que entra a los skills que
+// el grupo tenga marcados al crearlo o guardarlo.
+function GenteDelGrupo({ grupo }: { grupo: GrupoDeLaCampania }) {
+  const lista = (titulo: string, xs: { usuarioId: number; nombre: string }[]) => (
+    <div className="min-w-0">
+      <p className="mb-1 text-[0.66rem] font-semibold uppercase tracking-wide text-violet-700">{titulo} · {xs.length}</p>
+      {xs.length ? (
+        <div className="flex items-center gap-2" title={xs.map((x) => x.nombre).join(', ')}>
+          <div className="flex -space-x-2">{xs.slice(0, 6).map((x) => <Avatar key={x.usuarioId} name={x.nombre} size="sm" />)}</div>
+          {xs.length > 6 && <span className="text-[0.7rem] text-ink-tertiary">+{xs.length - 6}</span>}
+        </div>
+      ) : <p className="text-[0.72rem] text-ink-tertiary">Se cargan en el paso 3 del grupo</p>}
+    </div>
+  )
+  return (
+    <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+      <p className="mb-2 flex items-center gap-1.5 text-[0.8rem] font-semibold text-violet-900">
+        <UsersRound className="h-4 w-4" /> Gente del grupo {grupo.nombre ? `"${grupo.nombre}"` : ''}
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        {lista('Supervisores', grupo.supervisores)}
+        {lista('Agentes', grupo.agentes)}
+      </div>
+      <p className="mt-2 text-[0.68rem] text-violet-800">Al crear o guardar el grupo entran solos a los skills que marques en su paso "Campañas y skills".</p>
+    </div>
+  )
+}
+
+// Canal del marcador (VICIdial): sin credenciales; con él el formulario del
+// marcador registra cada interacción. Se crea solo la primera vez.
+function CanalMarcador({ campania, canales, onChanged }: { campania: { id: number; nombre: string }; canales: { id: number; nombre: string; tipo: string }[]; onChanged: () => void }) {
+  const qc = useQueryClient()
+  const existente = canales.find((c) => c.tipo === 'marcador')
+  const intentado = useRef(false)
+  const crear = useMutation({
+    mutationFn: async () => {
+      const r = await ccService.createCanal({ tipo: 'marcador', nombre: `Marcador ${campania.nombre}`.slice(0, 120) })
+      const id = (r as { data?: { id?: number } })?.data?.id
+      if (id) await ccService.updateCanal(id, { campaniaId: campania.id })
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-canales'] }); onChanged() },
+    onError: () => toast.error('No se pudo crear el canal Marcador'),
+  })
+  useEffect(() => {
+    if (existente || intentado.current) return
+    intentado.current = true
+    crear.mutate()
+  }, [existente]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className={clsx(card, 'flex items-center gap-3')}>
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600"><PhoneCall className="h-5 w-5" /></div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-ink">Canal Marcador (VICIdial)</p>
+        <p className="text-[0.72rem] text-ink-tertiary">
+          {existente ? `Listo: "${existente.nombre}". Cada registro del formulario del marcador entra por este canal.`
+            : crear.isPending ? 'Creando el canal…' : 'Sin canal del marcador todavía.'}
+        </p>
+      </div>
+      {existente ? <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-500" />
+        : !crear.isPending && (
+          <button onClick={() => crear.mutate()} className="rounded-xl bg-amber-500 px-3 py-2 text-[0.78rem] font-semibold text-white hover:bg-amber-600">Crear canal</button>
+        )}
+    </div>
+  )
+}
+
+// Con campaña de Ventas las tipificaciones son sus estatus: se copian a esta
+// campaña (el formulario ya las ofrece) y se editan en un solo lugar.
+function TipificacionesDeVentas({ ventasId, campania }: { ventasId: number; campania: { id: number; nombre: string } }) {
+  const qc = useQueryClient()
+  const { data: cv, refetch } = useQuery({ queryKey: ['campana-ventas', ventasId], queryFn: () => campanasVentasService.get(ventasId) })
+  const [editor, setEditor] = useState(false)
+  const copiar = useMutation({
+    mutationFn: () => campanasVentasService.copiarEstatusACampania(ventasId, campania.id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-tipificaciones'] }); qc.invalidateQueries({ queryKey: ['ccf-tipificaciones'] }) },
+    onError: () => toast.error('No se pudieron copiar los estatus de Ventas a la campaña'),
+  })
+  const copiado = useRef(false)
+  useEffect(() => {
+    if (copiado.current) return
+    copiado.current = true
+    copiar.mutate()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const activos = (cv?.estatus ?? []).filter((e) => e.activo)
+  return (
+    <div className={clsx(card, 'space-y-3')}>
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: `${cv?.color ?? '#f59e0b'}22`, color: cv?.color ?? '#f59e0b' }}>
+          <ShoppingCart className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-ink">Estatus de {cv?.nombre ?? 'la campaña de Ventas'}</p>
+          <p className="text-[0.72rem] text-ink-tertiary">
+            Son las tipificaciones de "{campania.nombre}": lo que el agente elige en el formulario llega igual a Ventas.
+            {copiar.isPending ? ' Copiando…' : copiar.isSuccess ? ' Ya están en la campaña.' : ''}
+          </p>
+        </div>
+        <button onClick={() => setEditor(true)} className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[0.75rem] font-semibold text-ink-secondary hover:border-violet-300 hover:text-violet-700">
+          <Pencil className="h-3.5 w-3.5" /> Editar estatus
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {activos.length ? activos.map((e) => (
+          <span key={e.id} className="flex items-center gap-1.5 rounded-full border border-gray-200 px-2.5 py-1 text-[0.78rem] font-medium text-ink">
+            <span className="h-2 w-2 rounded-full" style={{ background: e.color ?? '#9ca3af' }} /> {e.nombre}
+          </span>
+        )) : <p className="text-[0.75rem] text-ink-tertiary">Cargando estatus…</p>}
+      </div>
+      {editor && (
+        <EditorCampanaVentas campanaId={ventasId} onClose={() => setEditor(false)}
+          onSaved={() => { setEditor(false); refetch(); copiar.mutate() }} />
+      )}
     </div>
   )
 }

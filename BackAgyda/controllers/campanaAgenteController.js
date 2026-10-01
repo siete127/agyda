@@ -292,6 +292,24 @@ exports.listGruposDetalle = async (req, res) => {
   }
 };
 
+// POST /campanas/ventas/:id/tipificaciones-a/:campaniaId — copia los estatus
+// de esa campaña de Ventas como tipificaciones de una campaña de AGYDA (el
+// asistente de campaña lo usa mientras el grupo todavía es borrador, para que
+// el formulario ya las vea).
+exports.copiarEstatusACampania = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const campaniaId = parseInt(req.params.campaniaId, 10);
+    if (!Number.isFinite(id) || !Number.isFinite(campaniaId)) return res.status(400).json({ success: false, message: 'Id inválido' });
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const data = await require('../services/ventasCampaniaService').espejoTipificacionesVentas(pool, id, [campaniaId]);
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('Error copiarEstatusACampania:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // GET /campanas/ventas — todas las campañas de Ventas, también las deshabilitadas.
 exports.listCampanasVentas = async (req, res) => {
   try {
@@ -378,6 +396,12 @@ exports.guardarCampanaVentas = async (req, res) => {
       throw e;
     }
 
+    // Los estatus son las tipificaciones de las campañas de AGYDA ligadas por sus grupos.
+    if (id) {
+      const poolT = await databaseService.getPool(req.user?.empresa);
+      await require('../services/ventasCampaniaService').espejoTipificacionesVentas(poolT, id)
+        .catch((e) => console.error('guardarCampanaVentas → tipificaciones:', e.message));
+    }
     // El nombre de la campaña se guarda copiado en los grupos y en las asignaciones de agentes.
     if (id) {
       const pool = await databaseService.getPool(req.user?.empresa);

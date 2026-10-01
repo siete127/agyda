@@ -245,7 +245,13 @@ function grupoCC(o) {
           { e: [sql.Int, id], u: [sql.Int, u] });
         }
         const r = await sincronizarEquipo(pool, Number(id), { antes, quitados: supAntes.filter((u) => !supervisorIds.includes(u)) });
-        return { modalidad, ...r };
+        // Con campaña de Ventas, las tipificaciones de sus campañas son los estatus de Ventas (una sola lista).
+        let tipificaciones = null;
+        if (ventasId) {
+          tipificaciones = await require('./ventasCampaniaService').espejoTipificacionesVentas(pool, ventasId, campanias.map((c) => c.id))
+            .catch((e) => { console.error('config.guardar → tipificaciones de Ventas:', e.message); return null; });
+        }
+        return { modalidad, ...r, tipificaciones };
       },
     },
     ...(o.atencion ? CLIENTES_DE_GRUPO : {}),

@@ -1,6 +1,6 @@
 export type CCEstado = 'en_cola' | 'activa' | 'pendiente_tipificacion' | 'cerrada'
 export type CCEmisor = 'cliente' | 'agente' | 'sistema'
-export type CCCanalTipo = 'whatsapp' | 'messenger' | 'instagram' | 'whatsapp_baileys' | 'messenger_fca' | 'instagram_privado' | 'web_publica' | 'test'
+export type CCCanalTipo = 'whatsapp' | 'messenger' | 'instagram' | 'whatsapp_baileys' | 'messenger_fca' | 'instagram_privado' | 'web_publica' | 'test' | 'marcador'
 
 // Estado de la sesión Baileys (solo aplica a canales tipo whatsapp_baileys).
 export type CCBaileysEstado = 'desconectado' | 'esperando_qr' | 'conectado'
@@ -292,10 +292,10 @@ export interface CCMetricas {
 
 export const CANAL_ICONO: Record<CCCanalTipo, string> = {
   whatsapp: '🟢', messenger: '💬', instagram: '📷',
-  whatsapp_baileys: '🟢', messenger_fca: '💬', instagram_privado: '📷', web_publica: '🌐', test: '🧪',
+  whatsapp_baileys: '🟢', messenger_fca: '💬', instagram_privado: '📷', web_publica: '🌐', test: '🧪', marcador: '📞',
 }
 export const CANAL_LABEL: Record<CCCanalTipo, string> = {
   whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram',
   whatsapp_baileys: 'WhatsApp (QR, no oficial)', messenger_fca: 'Messenger (appstate, no oficial)',
-  instagram_privado: 'Instagram (usuario/password, no oficial)', web_publica: 'Web (widget público)', test: 'Prueba',
+  instagram_privado: 'Instagram (usuario/password, no oficial)', web_publica: 'Web (widget público)', test: 'Prueba', marcador: 'Marcador (VICIdial)',
 }
