@@ -53,21 +53,33 @@ function guardarBorrador(b: Borrador | null) {
 // mismos paneles de la ficha de campaña (Configuración → Contact Center →
 // Campañas y skills), así que todo lo que se hace aquí se ve igual allá.
 // onSalir recibe la campaña creada al terminar (null si sale sin terminar).
-export function AsistenteCampania({ onSalir }: { onSalir: (campaniaCreada: number | null) => void }) {
+// `campaniaEditar`: abre esa campaña ya existente con los mismos pasos (no
+// toca el borrador de "campaña nueva" de este navegador).
+export function AsistenteCampania({ onSalir, campaniaEditar }: { onSalir: (campaniaCreada: number | null) => void; campaniaEditar?: number }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const [inicial] = useState(leerBorrador)
+  const editando = campaniaEditar != null
+  const [inicial] = useState<Borrador | null>(() => (editando ? { campaniaId: campaniaEditar, paso: 0, datos: DATOS_VACIOS } : leerBorrador()))
   const [pasoGuardado, setPaso] = useState(inicial?.paso ?? 0)
   const [campaniaGuardada, setCampaniaId] = useState<number | null>(inicial?.campaniaId ?? null)
   const [datos, setDatos] = useState<DatosCampania>(inicial?.datos ?? DATOS_VACIOS)
-  useEffect(() => { guardarBorrador({ campaniaId: campaniaGuardada, paso: pasoGuardado, datos }) }, [campaniaGuardada, pasoGuardado, datos])
+  useEffect(() => { if (!editando) guardarBorrador({ campaniaId: campaniaGuardada, paso: pasoGuardado, datos }) }, [editando, campaniaGuardada, pasoGuardado, datos])
 
   const { data: campanias = [], isFetching, isFetched } = useQuery({ queryKey: ['cc-campanias'], queryFn: () => ccService.getCampanias(), enabled: campaniaGuardada != null })
+  // Al editar, los datos del primer paso salen de la campaña.
+  const [datosCargados, setDatosCargados] = useState(!editando)
+  if (!datosCargados) {
+    const c = campanias.find((x) => x.id === campaniaEditar)
+    if (c) {
+      setDatos({ nombre: c.nombre, slug: c.slug ?? '', slugTocado: !!c.slug, modoAsignacion: c.modoAsignacion ?? 'global' })
+      setDatosCargados(true)
+    }
+  }
   // Una campaña retomada que ya no existe (la borraron) no se sigue.
   const campaniaId = campaniaGuardada != null && (isFetching || !isFetched || campanias.some((c) => c.id === campaniaGuardada)) ? campaniaGuardada : null
   const paso = campaniaId == null ? 0 : pasoGuardado
   const empezarOtra = () => { setCampaniaId(null); setPaso(0); setDatos(DATOS_VACIOS) }
-  const terminar = () => { guardarBorrador(null); onSalir(campaniaId) }
+  const terminar = () => { if (!editando) guardarBorrador(null); onSalir(campaniaId) }
   const campania = campanias.find((c) => c.id === campaniaId) ?? (campaniaId ? { id: campaniaId, nombre: datos.nombre } : null)
   const { data: canalesTodos = [] } = useQuery({ queryKey: ['cc-canales'], queryFn: () => ccService.getCanales(), enabled: campaniaId != null })
   const canales = canalesTodos.filter((c) => c.campaniaId === campaniaId)
@@ -123,10 +135,10 @@ export function AsistenteCampania({ onSalir }: { onSalir: (campaniaCreada: numbe
           <X className="h-4 w-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">Configurar nueva campaña</p>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">{editando ? 'Editar campaña' : 'Configurar nueva campaña'}</p>
           <h2 className="truncate text-base font-bold text-ink">{campania?.nombre || 'Campaña nueva'}</h2>
         </div>
-        {(campaniaId != null || datos.nombre) && (
+        {!editando && (campaniaId != null || datos.nombre) && (
           <button onClick={empezarOtra} title="Dejar esta campaña como está y empezar otra desde cero"
             className="flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[0.72rem] font-semibold text-ink-tertiary transition hover:bg-gray-50 hover:text-ink">
             <RotateCcw className="h-3.5 w-3.5" /> Empezar otra
@@ -168,7 +180,10 @@ export function AsistenteCampania({ onSalir }: { onSalir: (campaniaCreada: numbe
             </div>
           </div>
 
-          {actual.key === 'campania' && (
+          {actual.key === 'campania' && !datosCargados && (
+            <div className={clsx(card, 'flex justify-center py-10')}><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
+          )}
+          {actual.key === 'campania' && datosCargados && (
             <div className={clsx(card, 'space-y-4')}>
               <label className="block">
                 <span className={label}>Nombre de la campaña</span>

@@ -1,12 +1,26 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Megaphone, Search, Users } from 'lucide-react'
+import { ChevronDown, ChevronLeft, Headset, LayoutGrid, List, Megaphone, Pencil, Plus, Search, ShoppingCart, Trash2, UserMinus, UserX, Users } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Spinner } from '@/components/ui/Spinner'
+import { Avatar } from '@/components/ui/Avatar'
+import { SelectorAgente } from '@/components/ui/SelectorAgente'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { useActionAccess } from '@/hooks/useActionAccess'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Modal } from '@/components/ui/Modal'
+import { EditorCampanaVentas } from '@/components/ventas/EditorCampanaVentas'
+import { campanasVentasService } from '@/services/campanasVentas.service'
+import { ccService } from '@/services/cc.service'
+import { AsistenteCampania } from '@/pages/configuracion/AsistenteCampania'
+import type { CCCampania } from '@/types/cc.types'
+
+// Editar una campaña abre el asistente "Crear grupo" en su paso de campañas
+// (Configuración), y al salir regresa aquí.
+const RUTA_AQUI = '/operaciones/campanas'
+const rutaEditar = (tipo: 'cc' | 'ventas', id: number) => `/configuracion?asistente=grupo&editar=${tipo}:${id}&volver=${encodeURIComponent(RUTA_AQUI)}`
 
 interface AgenteCampana {
   neusId: number
@@ -22,6 +36,261 @@ interface CampanaDisponible {
   color: string | null
 }
 
+const sinAcentos = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+// "ANGELICA VILLEGAS LUNA" → "Angelica Villegas Luna" (solo si viene todo en mayúsculas).
+const nombreBonito = (s: string) => {
+  const t = s.trim().replace(/\s+/g, ' ')
+  return t !== t.toUpperCase() ? t : t.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, e: string, l: string) => e + l.toUpperCase())
+}
+
+// Vista "Por campaña": una tarjeta por campaña de Ventas con sus agentes,
+// para ver de un vistazo cómo está repartido el equipo y moverlo desde ahí.
+function VistaPorCampana({ agentes, campanas, busqueda, puedeGestionar, onAsignar, onQuitar, ocupado, onEditarCampana, onEliminarCampana, extra }: {
+  agentes: AgenteCampana[]
+  campanas: CampanaDisponible[]
+  busqueda: string
+  puedeGestionar: boolean
+  onAsignar: (neusId: number, campanaId: number) => void
+  onQuitar: (neusId: number) => void
+  ocupado: boolean
+  onEditarCampana?: (c: CampanaDisponible) => void
+  onEliminarCampana?: (c: CampanaDisponible) => void
+  extra?: ReactNode
+}) {
+  const q = sinAcentos(busqueda.trim())
+  const coincide = (a: AgenteCampana) => !q || sinAcentos(a.nombre).includes(q)
+  // Campañas disponibles + las que tienen agentes aunque ya no estén activas.
+  const todas: CampanaDisponible[] = [
+    ...campanas,
+    ...agentes
+      .filter((a) => a.campanaId && !campanas.some((c) => c.id === a.campanaId))
+      .map((a) => ({ id: a.campanaId!, nombre: a.campanaNombre ?? `Campaña #${a.campanaId}`, color: null }))
+      .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i),
+  ]
+  const deCampana = (id: number | null) => agentes.filter((a) => (id == null ? !a.campanaId : a.campanaId === id))
+  const sinCampana = deCampana(null)
+  const total = Math.max(1, agentes.length)
+  const ordenadas = [...todas].sort((a, b) => deCampana(b.id).length - deCampana(a.id).length || a.nombre.localeCompare(b.nombre))
+
+  return (
+    <div className="space-y-4">
+      {/* Reparto del equipo */}
+      {agentes.length > 0 && (
+        <div className="card p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <p className="text-[0.72rem] font-semibold uppercase tracking-wide text-gray-400">Reparto del equipo</p>
+            <p className="text-[0.72rem] text-gray-400">{agentes.length} agentes</p>
+          </div>
+          <div className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-gray-100">
+            {ordenadas.map((c) => {
+              const n = deCampana(c.id).length
+              return n > 0 && <div key={c.id} title={`${c.nombre}: ${n}`} style={{ width: `${(n / total) * 100}%`, background: c.color ?? '#f59e0b' }} />
+            })}
+            {sinCampana.length > 0 && <div title={`Sin campaña: ${sinCampana.length}`} className="bg-gray-300" style={{ width: `${(sinCampana.length / total) * 100}%` }} />}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {ordenadas.filter((c) => deCampana(c.id).length > 0).map((c) => (
+              <span key={c.id} className="flex items-center gap-1.5 text-[0.72rem] text-gray-600">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: c.color ?? '#f59e0b' }} />
+                {c.nombre} <b className="text-gray-800">{deCampana(c.id).length}</b>
+              </span>
+            ))}
+            {sinCampana.length > 0 && (
+              <span className="flex items-center gap-1.5 text-[0.72rem] text-gray-600">
+                <span className="h-2.5 w-2.5 rounded-sm bg-gray-300" /> Sin campaña <b className="text-gray-800">{sinCampana.length}</b>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 px-1 pt-1">
+        <ShoppingCart className="h-4 w-4 text-amber-600" />
+        <h2 className="text-sm font-bold text-gray-800">Campañas de Ventas</h2>
+        <span className="text-[0.7rem] text-gray-400">· la campaña del sistema de Ventas de cada agente</span>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {ordenadas.map((c) => (
+          <TarjetaCampana key={c.id} campana={c} agentes={deCampana(c.id)} visibles={deCampana(c.id).filter(coincide)}
+            candidatos={agentes.filter((a) => a.campanaId !== c.id)} campanas={todas}
+            puedeGestionar={puedeGestionar} onAsignar={onAsignar} onQuitar={onQuitar} ocupado={ocupado} buscando={!!q}
+            onEditar={onEditarCampana && campanas.some((x) => x.id === c.id) ? () => onEditarCampana(c) : undefined}
+            onEliminar={onEliminarCampana && campanas.some((x) => x.id === c.id) ? () => onEliminarCampana(c) : undefined} />
+        ))}
+        {(sinCampana.length > 0 || !todas.length) && (
+          <TarjetaCampana campana={null} agentes={sinCampana} visibles={sinCampana.filter(coincide)} candidatos={[]} campanas={todas}
+            puedeGestionar={puedeGestionar} onAsignar={onAsignar} onQuitar={onQuitar} ocupado={ocupado} buscando={!!q} />
+        )}
+      </div>
+      {extra}
+    </div>
+  )
+}
+
+function TarjetaCampana({ campana, agentes, visibles, candidatos, campanas, puedeGestionar, onAsignar, onQuitar, ocupado, buscando, onEditar, onEliminar }: {
+  campana: CampanaDisponible | null
+  agentes: AgenteCampana[]
+  visibles: AgenteCampana[]
+  candidatos: AgenteCampana[]
+  campanas: CampanaDisponible[]
+  puedeGestionar: boolean
+  onAsignar: (neusId: number, campanaId: number) => void
+  onQuitar: (neusId: number) => void
+  ocupado: boolean
+  buscando: boolean
+  onEditar?: () => void
+  onEliminar?: () => void
+}) {
+  const color = campana ? campana.color ?? '#f59e0b' : '#9ca3af'
+  const recientes = agentes.filter((a) => a.fechaAsignacion).sort((a, b) => (b.fechaAsignacion ?? '').localeCompare(a.fechaAsignacion ?? ''))[0]
+  return (
+    <div className={clsx('group/tarjeta flex flex-col rounded-2xl border bg-card shadow-sm transition hover:shadow-md', campana ? 'border-gray-200' : 'border-dashed border-gray-300')}>
+      <div className="h-1.5 rounded-t-2xl" style={{ background: color }} />
+      <div className="relative flex items-start gap-3 px-4 pt-3.5">
+        {(onEditar || onEliminar) && <AccionesTarjeta nombre={campana?.nombre ?? ''} onEditar={onEditar} onEliminar={onEliminar} />}
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: `${color}22`, color }}>
+          {campana ? <Megaphone className="h-5 w-5" /> : <UserX className="h-5 w-5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[0.95rem] font-bold text-gray-900">{campana ? campana.nombre : 'Sin campaña'}</p>
+          <p className="text-[0.7rem] text-gray-400">
+            {agentes.length === 0 ? 'Sin agentes asignados' : `${agentes.length} agente${agentes.length !== 1 ? 's' : ''}`}
+            {recientes?.fechaAsignacion && ` · último cambio ${fmtFecha(recientes.fechaAsignacion)}`}
+          </p>
+        </div>
+        {agentes.length > 0 && (
+          <div className="flex -space-x-2">
+            {agentes.slice(0, 4).map((a) => <Avatar key={a.neusId} name={nombreBonito(a.nombre)} size="sm" />)}
+            {agentes.length > 4 && (
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-[0.62rem] font-bold text-gray-500 ring-2 ring-white">+{agentes.length - 4}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <ul className="mt-3 max-h-72 flex-1 divide-y divide-gray-50 overflow-y-auto px-2">
+        {visibles.length === 0 ? (
+          <li className="px-2 py-6 text-center text-[0.75rem] text-gray-400">
+            {buscando ? 'Ningún agente coincide' : campana ? 'Agrega agentes a esta campaña' : 'Todos los agentes tienen campaña'}
+          </li>
+        ) : visibles.map((a) => (
+          <li key={a.neusId} className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-gray-50">
+            <Avatar name={nombreBonito(a.nombre)} size="sm" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[0.8rem] font-medium text-gray-800">{nombreBonito(a.nombre)}</p>
+              {a.fechaAsignacion && <p className="text-[0.65rem] text-gray-400">desde {fmtFecha(a.fechaAsignacion)}</p>}
+            </div>
+            {puedeGestionar && (
+              <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                <select
+                  value=""
+                  disabled={ocupado}
+                  onChange={(e) => e.target.value && onAsignar(a.neusId, Number(e.target.value))}
+                  className="rounded-lg border border-gray-200 bg-white px-1.5 py-1 text-[0.68rem] text-gray-600 focus:border-brand focus:outline-none"
+                  aria-label={`Mover a ${a.nombre} a otra campaña`}
+                >
+                  <option value="">{campana ? 'Mover a…' : 'Asignar a…'}</option>
+                  {campanas.filter((c) => c.id !== campana?.id).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+                {campana && (
+                  <button onClick={() => onQuitar(a.neusId)} disabled={ocupado} title="Quitar de la campaña"
+                    className="rounded-lg p-1 text-gray-400 hover:bg-red-50 hover:text-red-600">
+                    <UserMinus className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {puedeGestionar && campana && candidatos.length > 0 && (
+        <div className="border-t border-gray-100 p-3">
+          <SelectorAgente
+            value=""
+            placeholder="Agregar agente…"
+            onChange={(id) => { if (id !== '') onAsignar(id, campana.id) }}
+            vistas={[
+              { id: 'sin', label: 'Sin campaña', agentes: candidatos.filter((a) => !a.campanaId).map((a) => ({ id: a.neusId, nombre: a.nombre })) },
+              { id: 'otras', label: 'En otra campaña', agentes: candidatos.filter((a) => a.campanaId).map((a) => ({ id: a.neusId, nombre: `${a.nombre} · ${a.campanaNombre ?? ''}` })) },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Editar / eliminar en la esquina de una tarjeta (visibles al pasar el mouse).
+function AccionesTarjeta({ nombre, onEditar, onEliminar }: { nombre: string; onEditar?: () => void; onEliminar?: () => void }) {
+  return (
+    <div className="absolute right-3 top-2.5 z-10 flex items-center gap-0.5 rounded-lg bg-card/95 p-0.5 opacity-100 shadow-sm ring-1 ring-gray-100 transition sm:opacity-0 sm:group-hover/tarjeta:opacity-100 sm:focus-within:opacity-100">
+      {onEditar && (
+        <button onClick={onEditar} title="Editar (abre el asistente de grupo en el paso de campañas)" aria-label={`Editar ${nombre}`}
+          className="rounded-md p-1.5 text-gray-500 hover:bg-violet-50 hover:text-violet-700"><Pencil className="h-3.5 w-3.5" /></button>
+      )}
+      {onEliminar && (
+        <button onClick={onEliminar} title="Eliminar" aria-label={`Eliminar ${nombre}`}
+          className="rounded-md p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+      )}
+    </div>
+  )
+}
+
+// Campañas de Contact Center (las de AGYDA: sus skills, canales y formulario).
+function CampaniasContactCenter({ campanias, busqueda, onNueva, onEditar, onEliminar }: {
+  campanias: CCCampania[]
+  busqueda: string
+  onNueva: () => void
+  onEditar: (c: CCCampania) => void
+  onEliminar: (c: CCCampania) => void
+}) {
+  const q = sinAcentos(busqueda.trim())
+  const visibles = campanias.filter((c) => !q || sinAcentos(c.nombre).includes(q))
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center gap-2 px-1">
+        <Headset className="h-4 w-4 text-violet-600" />
+        <h2 className="text-sm font-bold text-gray-800">Campañas de Contact Center</h2>
+        <span className="text-[0.7rem] text-gray-400">· skills, canales y formulario de AGYDA</span>
+        <button onClick={onNueva} className="ml-auto flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1 text-[0.72rem] font-semibold text-white hover:bg-violet-700">
+          <Plus className="h-3.5 w-3.5" /> Nueva
+        </button>
+      </div>
+      {visibles.length === 0 ? (
+        <p className="card px-4 py-8 text-center text-[0.8rem] text-gray-400">{q ? 'Ninguna campaña coincide' : 'Aún no hay campañas de Contact Center'}</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibles.map((c) => (
+            <div key={c.id} className="group/tarjeta relative flex flex-col rounded-2xl border border-gray-200 bg-card p-4 shadow-sm transition hover:shadow-md">
+              <AccionesTarjeta nombre={c.nombre} onEditar={() => onEditar(c)} onEliminar={() => onEliminar(c)} />
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Headset className="h-5 w-5" /></div>
+                <div className="min-w-0 flex-1 pr-14">
+                  <p className="truncate text-[0.95rem] font-bold text-gray-900">{c.nombre}</p>
+                  <p className="truncate text-[0.7rem] text-gray-400">{c.gruposCC ? `Grupos: ${c.gruposCC}` : 'Sin grupo todavía'}</p>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 text-center">
+                {([['Skills', c.skillsCount], ['Canales', c.canalesCount], ['Agentes', c.agentesCount]] as const).map(([l, n]) => (
+                  <div key={l}>
+                    <p className="text-base font-bold text-gray-800">{n}</p>
+                    <p className="text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">{l}</p>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => onEditar(c)}
+                className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 py-1.5 text-[0.75rem] font-semibold text-gray-600 transition hover:border-violet-300 hover:text-violet-700">
+                <Pencil className="h-3.5 w-3.5" /> Editar en el asistente de grupo
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function fmtFecha(f: string) {
   try { return new Date(f).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) }
   catch { return f }
@@ -32,8 +301,37 @@ export function CampanasPage() {
   const qc = useQueryClient()
   const { can } = useActionAccess()
   const puedeGestionar = can('accesos', 'gestionar')
+  const puedeCampaniasCC = can('contact-center', 'gestionar-skills')
+  const [menuNueva, setMenuNueva] = useState(false)
+  const [nuevaVentas, setNuevaVentas] = useState(false)
+  const [nuevaCC, setNuevaCC] = useState(false)
+  const [borrarVentas, setBorrarVentas] = useState<CampanaDisponible | null>(null)
+  const [borrarCC, setBorrarCC] = useState<CCCampania | null>(null)
+  const { data: campaniasCC = [] } = useQuery({
+    queryKey: ['cc-campanias'],
+    queryFn: () => ccService.getCampanias(),
+    staleTime: 60_000,
+    enabled: puedeCampaniasCC,
+  })
+  const desactivarVentas = useMutation({
+    mutationFn: (id: number) => campanasVentasService.desactivar(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campanas-disponibles'] }); setBorrarVentas(null); toast.success('Campaña de Ventas eliminada') },
+    onError: () => toast.error('No se pudo eliminar la campaña'),
+  })
+  const eliminarCC = useMutation({
+    mutationFn: (id: number) => ccService.deleteCampania(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-campanias'] }); setBorrarCC(null); toast.success('Campaña eliminada') },
+    onError: () => toast.error('No se pudo eliminar la campaña'),
+  })
   const [search, setSearch] = useState('')
   const [filtroCampana, setFiltroCampana] = useState('todas')
+  const [vista, setVista] = useState<'campanas' | 'agentes'>(() => {
+    try { return localStorage.getItem('campanas-vista') === 'agentes' ? 'agentes' : 'campanas' } catch { return 'campanas' }
+  })
+  const cambiarVista = (v: 'campanas' | 'agentes') => {
+    setVista(v)
+    try { localStorage.setItem('campanas-vista', v) } catch { /* sin almacenamiento */ }
+  }
 
   const { data: agentes = [], isLoading } = useQuery({
     queryKey: ['campanas-agentes'],
@@ -101,9 +399,51 @@ export function CampanasPage() {
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight">Campañas</h1>
                 <p className="mt-0.5 text-xs text-yellow-100/90">
-                  {agentes.length} agente{agentes.length !== 1 ? 's' : ''} CC · {sinCampana} sin campaña
+                  {campanasDisponibles.length} campaña{campanasDisponibles.length !== 1 ? 's' : ''} · {agentes.length} agente{agentes.length !== 1 ? 's' : ''} CC · {sinCampana} sin campaña
                 </p>
               </div>
+            </div>
+            <div className="flex items-center gap-2">
+            {(puedeGestionar || puedeCampaniasCC) && (
+              <div className="relative">
+                <button onClick={() => setMenuNueva((v) => !v)} aria-haspopup="menu" aria-expanded={menuNueva}
+                  className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[0.78rem] font-bold text-amber-800 shadow-sm transition hover:bg-amber-50">
+                  <Plus className="h-4 w-4" /> Nueva campaña <ChevronDown className={clsx('h-3.5 w-3.5 transition-transform', menuNueva && 'rotate-180')} />
+                </button>
+                {menuNueva && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setMenuNueva(false)} />
+                    <div role="menu" className="absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-xl border border-gray-200 bg-card p-1.5 shadow-xl">
+                      {puedeGestionar && (
+                        <button role="menuitem" onClick={() => { setMenuNueva(false); setNuevaVentas(true) }}
+                          className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50">
+                          <ShoppingCart className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                          <span><span className="block text-[0.8rem] font-semibold text-gray-800">De Ventas</span>
+                            <span className="block text-[0.68rem] text-gray-400">PlataCard, Amex… con sus estatus, en el sistema de Ventas</span></span>
+                        </button>
+                      )}
+                      {puedeCampaniasCC && (
+                        <button role="menuitem" onClick={() => { setMenuNueva(false); setNuevaCC(true) }}
+                          className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50">
+                          <Headset className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-600" />
+                          <span><span className="block text-[0.8rem] font-semibold text-gray-800">De Contact Center</span>
+                            <span className="block text-[0.68rem] text-gray-400">Skills, canales, formulario y tipificaciones, paso a paso</span></span>
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <div className="flex rounded-xl bg-white/15 p-1" role="tablist" aria-label="Vista">
+              {([['campanas', 'Por campaña', LayoutGrid], ['agentes', 'Por agente', List]] as const).map(([id, label, Icon]) => (
+                <button key={id} role="tab" aria-selected={vista === id} onClick={() => cambiarVista(id)}
+                  className={clsx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition',
+                    vista === id ? 'bg-white text-amber-800 shadow-sm' : 'text-white/90 hover:bg-white/10')}>
+                  <Icon className="h-3.5 w-3.5" /> {label}
+                </button>
+              ))}
+            </div>
             </div>
           </div>
         </div>
@@ -120,7 +460,7 @@ export function CampanasPage() {
           </div>
         </div>
 
-        <div className="px-5 py-3 flex flex-wrap items-center gap-1.5">
+        {vista === 'agentes' && <div className="px-5 py-3 flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setFiltroCampana('todas')}
             className={clsx('rounded-full px-3 py-1 text-[0.7rem] font-semibold transition-colors', filtroCampana === 'todas' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
@@ -146,11 +486,29 @@ export function CampanasPage() {
               </button>
             )
           })}
-        </div>
+        </div>}
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-20"><Spinner size="lg" /></div>
+      ) : vista === 'campanas' ? (
+        <VistaPorCampana
+          agentes={agentes}
+          campanas={campanasDisponibles}
+          busqueda={search}
+          puedeGestionar={puedeGestionar}
+          onAsignar={(neusId, campanaId) => asignar.mutate({ neusId, campanaId })}
+          onQuitar={(neusId) => quitar.mutate(neusId)}
+          ocupado={asignar.isPending || quitar.isPending}
+          onEditarCampana={puedeGestionar ? (c) => navigate(rutaEditar('ventas', c.id)) : undefined}
+          onEliminarCampana={puedeGestionar ? (c) => setBorrarVentas(c) : undefined}
+          extra={puedeCampaniasCC ? (
+            <CampaniasContactCenter campanias={campaniasCC} busqueda={search}
+              onNueva={() => setNuevaCC(true)}
+              onEditar={(c) => navigate(rutaEditar('cc', c.id))}
+              onEliminar={(c) => setBorrarCC(c)} />
+          ) : null}
+        />
       ) : filtrados.length === 0 ? (
         <div className="card flex flex-col items-center justify-center gap-4 py-20">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-yellow-50">
@@ -211,6 +569,26 @@ export function CampanasPage() {
           </table>
         </div>
       )}
+
+      {nuevaVentas && (
+        <EditorCampanaVentas campanaId={null} onClose={() => setNuevaVentas(false)}
+          onSaved={() => { setNuevaVentas(false); qc.invalidateQueries({ queryKey: ['campanas-disponibles'] }) }} />
+      )}
+      {nuevaCC && (
+        <Modal isOpen onClose={() => { setNuevaCC(false); toast('La campaña quedó a medias: con "Nueva campaña" sigues donde te quedaste') }} title="Nueva campaña de Contact Center" size="full" elevated>
+          <AsistenteCampania onSalir={(creada) => {
+            setNuevaCC(false)
+            qc.invalidateQueries({ queryKey: ['cc-campanias'] })
+            if (creada) toast.success('Campaña lista')
+          }} />
+        </Modal>
+      )}
+      <ConfirmDialog isOpen={!!borrarVentas} onClose={() => setBorrarVentas(null)} onConfirm={() => borrarVentas && desactivarVentas.mutate(borrarVentas.id)}
+        title={`Eliminar la campaña de Ventas ${borrarVentas?.nombre ?? ''}`} confirmLabel="Eliminar" isPending={desactivarVentas.isPending}
+        message={`Deja de ofrecerse para asignar agentes y grupos. Sus ventas, metas y estatus se conservan en el sistema de Ventas.${borrarVentas && agentes.some((a) => a.campanaId === borrarVentas.id) ? ' Los agentes que la tienen asignada la conservan hasta que los muevas.' : ''}`} />
+      <ConfirmDialog isOpen={!!borrarCC} onClose={() => setBorrarCC(null)} onConfirm={() => borrarCC && eliminarCC.mutate(borrarCC.id)}
+        title={`Eliminar la campaña ${borrarCC?.nombre ?? ''}`} confirmLabel="Eliminar" isPending={eliminarCC.isPending}
+        message={`Deja de aparecer en grupos, reportes y formularios; su historial (interacciones, registros) se conserva.${borrarCC?.gruposCC ? ` La usan los grupos: ${borrarCC.gruposCC}.` : ''}`} />
     </div>
   )
 }

@@ -7,6 +7,12 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 // Catálogo en vivo desde el sistema Ventas (plata_prospectPRO.dbo.Campanas)
 router.get('/disponibles', authenticateToken, campanaAgente.listCampanasDisponibles);
 
+// Campañas de Ventas: alta, edición (con sus estatus) y baja (desactivar)
+router.get('/ventas/:id', authenticateToken, campanaAgente.getCampanaVentas);
+router.post('/ventas', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarCampanaVentas);
+router.put('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.guardarCampanaVentas);
+router.delete('/ventas/:id', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.desactivarCampanaVentas);
+
 // Asignación agente → campaña (tabla propia de AGYDA, editable desde Usuarios)
 router.get('/agentes', authenticateToken, campanaAgente.listAgentesCampanas);
 router.get('/agentes/:neusId', authenticateToken, campanaAgente.getAgenteCampana);

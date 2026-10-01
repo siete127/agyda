@@ -15,6 +15,8 @@ import {
   type ModalidadGrupo, type TipoGrupoAsistente, type PlantillaReporteGrupo,
 } from '@/services/grupos.service'
 import { AsistenteCampania } from './AsistenteCampania'
+import { ccService } from '@/services/cc.service'
+import { EditorCampanaVentas } from '@/components/ventas/EditorCampanaVentas'
 import { RbMiniatura } from '@/pages/suite-reportes/RbMiniatura'
 
 const field = 'w-full rounded-xl border border-gray-200 bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50'
@@ -73,10 +75,14 @@ function skillsDeCampanias(d: DatosGrupoBorrador, cat: CatalogoAsistenteGrupo | 
 // Asistente "Crear grupo" (portada de Configuración). Se captura todo como
 // borrador (se guarda solo) y el grupo se crea al final con todo configurado.
 // Si hay borradores pendientes, al abrir pregunta si continuar o empezar otro.
-export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
+// Campaña que se abre para editar al entrar (desde Operaciones → Campañas).
+export type CampaniaAEditar = { tipo: 'cc' | 'ventas'; id: number }
+
+export function AsistenteGrupo({ onSalir, editarCampania }: { onSalir: () => void; editarCampania?: CampaniaAEditar }) {
   const qc = useQueryClient()
   const { data: catalogo, refetch: recargarCatalogo } = useQuery({ queryKey: ['grupo-asistente-catalogo'], queryFn: svc.catalogo })
-  const [modo, setModo] = useState<'elegir' | 'editar' | 'resultado'>('elegir')
+  // Si se entra a editar una campaña se va directo al paso de campañas (sin preguntar por borradores).
+  const [modo, setModo] = useState<'elegir' | 'editar' | 'resultado'>(editarCampania ? 'editar' : 'elegir')
   const [borradorId, setBorradorId] = useState<number | null>(null)
   const [cargar, setCargar] = useState(false)
   const { data: borradores, isLoading } = useQuery({ queryKey: ['grupo-asistente-borradores'], queryFn: svc.borradores, enabled: modo === 'elegir' })
@@ -98,7 +104,7 @@ export function AsistenteGrupo({ onSalir }: { onSalir: () => void }) {
     return <VistaResultado borradorId={borradorId} onEditar={() => { setCargar(true); setModo('editar') }} onSalir={onSalir} />
   }
   return <Editor catalogo={catalogo} recargarCatalogo={() => recargarCatalogo()} borradorId={borradorId} cargar={cargar}
-    onBorradorCreado={setBorradorId} onCreado={() => setModo('resultado')} onSalir={onSalir} />
+    onBorradorCreado={setBorradorId} onCreado={() => setModo('resultado')} onSalir={onSalir} editarCampania={editarCampania} />
 }
 
 /* ─────────────── Pregunta al abrir ─────────────── */
@@ -156,14 +162,14 @@ function ElegirBorrador({ borradores, onContinuar, onNuevo, onSalir, onDescartad
 type SetDatos = React.Dispatch<React.SetStateAction<DatosGrupoBorrador | null>>
 const upd = (s: SetDatos, f: (d: DatosGrupoBorrador) => DatosGrupoBorrador) => s((d) => (d ? f(d) : d))
 
-function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCreado, onCreado, onSalir }: {
+function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCreado, onCreado, onSalir, editarCampania }: {
   catalogo: CatalogoAsistenteGrupo; recargarCatalogo: () => void; borradorId: number | null; cargar: boolean
-  onBorradorCreado: (id: number) => void; onCreado: () => void; onSalir: () => void
+  onBorradorCreado: (id: number) => void; onCreado: () => void; onSalir: () => void; editarCampania?: CampaniaAEditar
 }) {
   const qc = useQueryClient()
   // Las plantillas recomendadas quedan marcadas de inicio (también en borradores viejos que no las tenían).
   const [datos, setDatos] = useState<DatosGrupoBorrador | null>(cargar ? null : { ...vacio(), reportes: recomendadasDe(catalogo) })
-  const [paso, setPaso] = useState(0)
+  const [paso, setPaso] = useState(editarCampania ? 1 : 0)
   const [grupoYaCreado, setGrupoYaCreado] = useState(false)
   const [guardado, setGuardado] = useState<'guardado' | 'guardando' | 'pendiente' | 'error'>('guardado')
   const [confirmSalir, setConfirmSalir] = useState(false)
@@ -210,7 +216,8 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
   const actual = PASOS[Math.min(paso, PASOS.length - 1)]
   const pend = pendientesDe(datos, catalogo)
   const pendPaso = (k: string) => pend.filter((x) => x.paso === k).length
-  const bloqueado = (i: number) => i > 0 && !idRef.current
+  // Al entrar a editar una campaña el paso de campañas se abre aunque aún no haya borrador.
+  const bloqueado = (i: number) => i > 0 && !idRef.current && !(editarCampania && PASOS[i]?.key === 'asignaciones')
   const irA = (i: number) => { if (!bloqueado(i)) setPaso(i) }
 
   const crearBorrador = async () => {
@@ -326,7 +333,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
               </div>
             </div>
           )}
-          {actual.key === 'asignaciones' && <PasoAsignaciones datos={datos} setDatos={setDatos} catalogo={catalogo} recargarCatalogo={recargarCatalogo} />}
+          {actual.key === 'asignaciones' && <PasoAsignaciones datos={datos} setDatos={setDatos} catalogo={catalogo} recargarCatalogo={recargarCatalogo} editarInicial={editarCampania} />}
           {actual.key === 'personas' && <PasoPersonas datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'clientes' && <PasoClientes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'reportes' && <PasoReportes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
@@ -402,14 +409,33 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
 }
 
 /* ─────────────── Paso 2: Campañas y skills ─────────────── */
-function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo }: {
-  datos: DatosGrupoBorrador; setDatos: SetDatos; catalogo: CatalogoAsistenteGrupo; recargarCatalogo: () => void
+function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarInicial }: {
+  datos: DatosGrupoBorrador; setDatos: SetDatos; catalogo: CatalogoAsistenteGrupo; recargarCatalogo: () => void; editarInicial?: CampaniaAEditar
 }) {
   const qc = useQueryClient()
   const { can } = useActionAccess()
   const puedeCrearCampania = can('contact-center', 'gestionar-skills')
   const [asistente, setAsistente] = useState(false)
+  // Editar una campaña abre su asistente aquí mismo; eliminarla la desactiva (no borra su historial).
+  const [editarId, setEditarId] = useState<number | null>(editarInicial?.tipo === 'cc' ? editarInicial.id : null)
+  // Campaña de Ventas: editar (id), crear (0) o nada (null).
+  const [ventasEditor, setVentasEditor] = useState<number | null>(editarInicial?.tipo === 'ventas' ? editarInicial.id : null)
+  const puedeCampanasVentas = can('accesos', 'gestionar')
+  const [borrar, setBorrar] = useState<CatalogoAsistenteGrupo['campanias'][number] | null>(null)
   const [nuevoSkill, setNuevoSkill] = useState<{ campaniaId: number; nombre: string } | null>(null)
+  const eliminarCampania = useMutation({
+    mutationFn: (id: number) => ccService.deleteCampania(id),
+    onSuccess: (_r, id) => {
+      const skillsDe = new Set(catalogo.campanias.find((c) => c.id === id)?.skills.map((s) => s.id) ?? [])
+      upd(setDatos, (d) => ({ ...d, campanias: d.campanias.filter((x) => x.id !== id), skillIds: d.skillIds.filter((s) => !skillsDe.has(s)) }))
+      setBorrar(null)
+      recargarCatalogo()
+      qc.invalidateQueries({ queryKey: ['cc-campanias'] })
+      qc.invalidateQueries({ queryKey: ['grupos-opciones'] })
+      toast.success('Campaña eliminada')
+    },
+    onError: (e) => toast.error(msgError(e, 'No se pudo eliminar la campaña')),
+  })
   const campIds = datos.campanias.map((c) => c.id)
   const asignadas = catalogo.campanias.filter((c) => campIds.includes(c.id))
   const usaSkills = datos.modalidad !== 'marcador'
@@ -427,6 +453,11 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo }: {
 
   return (
     <div className={clsx(card, 'space-y-5')}>
+      {editarInicial && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2.5 text-[0.75rem] text-violet-900">
+          Entraste a editar una campaña desde <b>Operaciones → Campañas</b>. Al terminar puedes armar un grupo con ella aquí mismo, o salir con la X para regresar.
+        </div>
+      )}
       <div>
         <div className="mb-1 flex items-center justify-between">
           <p className="text-[0.85rem] font-bold text-ink">Campañas ({datos.campanias.length})</p>
@@ -438,11 +469,25 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo }: {
         {catalogo.campanias.length === 0 && <p className="text-[0.75rem] text-amber-700">La empresa no tiene campañas activas{puedeCrearCampania ? ': crea una con "Nueva campaña".' : '.'}</p>}
         <div className="max-h-52 space-y-1 overflow-y-auto">
           {catalogo.campanias.map((c) => (
-            <label key={c.id} className={chk(campIds.includes(c.id))}>
+            <label key={c.id} className={clsx(chk(campIds.includes(c.id)), 'group')}>
               <input type="checkbox" checked={campIds.includes(c.id)} className="accent-violet-600" onChange={() => toggleCampania(c.id)} />
               <span className="min-w-0 flex-1 truncate">{c.nombre}</span>
               <span className="text-[0.62rem] text-ink-tertiary">{c.skills.length} skill(s)</span>
               {c.otrosGrupos && <span className="text-[0.62rem] text-amber-600" title="La comparten: sus supervisores serán los de ambos grupos">también {c.otrosGrupos}</span>}
+              {puedeCrearCampania && (
+                <span className="flex items-center gap-0.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                  <button type="button" title="Editar campaña" aria-label={`Editar ${c.nombre}`}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditarId(c.id) }}
+                    className="rounded-md p-1 text-ink-tertiary hover:bg-violet-100 hover:text-violet-700">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" title="Eliminar campaña" aria-label={`Eliminar ${c.nombre}`}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBorrar(c) }}
+                    className="rounded-md p-1 text-ink-tertiary hover:bg-red-50 hover:text-red-600">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              )}
             </label>
           ))}
         </div>
@@ -525,12 +570,25 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo }: {
                 </select>
               </label>
             )}
-            <label className="block"><span className="mb-1 block text-[0.7rem] font-semibold text-ink-secondary">Campaña de ventas (opcional)</span>
+            <div>
+              <span className="mb-1 flex items-center justify-between text-[0.7rem] font-semibold text-ink-secondary">
+                Campaña de ventas (opcional)
+                {puedeCampanasVentas && (
+                  <span className="flex items-center gap-2">
+                    {datos.ventasCampanaId && (
+                      <button type="button" onClick={() => setVentasEditor(datos.ventasCampanaId)} className="flex items-center gap-0.5 text-violet-600 hover:underline">
+                        <Pencil className="h-3 w-3" /> Editar
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setVentasEditor(0)} className="flex items-center gap-0.5 text-violet-600 hover:underline"><Plus className="h-3 w-3" /> Nueva</button>
+                  </span>
+                )}
+              </span>
               <select className={field} value={datos.ventasCampanaId ?? ''} onChange={(e) => upd(setDatos, (d) => ({ ...d, ventasCampanaId: e.target.value ? Number(e.target.value) : null }))}>
                 <option value="">Sin campaña de ventas</option>
                 {catalogo.campanasVentas.map((v) => <option key={v.id} value={v.id}>{v.nombre}</option>)}
               </select>
-            </label>
+            </div>
           </div>
         </div>
       )}
@@ -545,6 +603,28 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo }: {
           }} />
         </Modal>
       )}
+      {editarId != null && (
+        <Modal isOpen onClose={() => { setEditarId(null); recargarCatalogo() }} title="Editar campaña" size="full" elevated>
+          <AsistenteCampania campaniaEditar={editarId} onSalir={() => {
+            setEditarId(null)
+            recargarCatalogo()
+            qc.invalidateQueries({ queryKey: ['grupos-opciones'] })
+          }} />
+        </Modal>
+      )}
+      {ventasEditor != null && (
+        <EditorCampanaVentas campanaId={ventasEditor || null} onClose={() => setVentasEditor(null)}
+          onSaved={(id) => {
+            const nueva = ventasEditor === 0
+            setVentasEditor(null)
+            recargarCatalogo()
+            qc.invalidateQueries({ queryKey: ['campanas-disponibles'] })
+            if (nueva && id) upd(setDatos, (d) => ({ ...d, ventasCampanaId: id }))
+          }} />
+      )}
+      <ConfirmDialog isOpen={!!borrar} onClose={() => setBorrar(null)} onConfirm={() => borrar && eliminarCampania.mutate(borrar.id)}
+        title={`Eliminar la campaña ${borrar?.nombre ?? ''}`} confirmLabel="Eliminar" isPending={eliminarCampania.isPending}
+        message={`Deja de aparecer en grupos, reportes y formularios; su historial (interacciones, registros) se conserva.${borrar?.otrosGrupos ? ` La usa también: ${borrar.otrosGrupos}.` : ''}${campIds.includes(borrar?.id ?? -1) ? ' Se quita de este grupo.' : ''}`} />
     </div>
   )
 }

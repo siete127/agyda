@@ -14,7 +14,8 @@ import { IMPACTO_POR_PANTALLA } from './configCompartidas'
 import { NuevoClienteModal } from '@/pages/atencion-cliente/clientes/NuevoClienteModal'
 import { CATEGORY_STYLES, DEFAULT_CATEGORY_STYLE, countLeaves } from './categoryStyles'
 import { EmpresasTab } from './EmpresasTab'
-import { AsistenteGrupo } from './AsistenteGrupo'
+import { AsistenteGrupo, type CampaniaAEditar } from './AsistenteGrupo'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AsistenteEmpresa } from './AsistenteEmpresa'
 import { usePuedeGestionarEmpresas, EVENTO_ASISTENTE_EMPRESA } from '@/services/empresasAsistente.service'
 import { ModulosEmpresaTab } from './ModulosEmpresaTab'
@@ -225,7 +226,21 @@ export function ConfiguracionPage() {
   // Tarjeta "Crear grupo" de la portada: el grupo se crea y se le asignan
   // campañas (o una nueva, con su propio asistente), skills, marcador,
   // supervisores y su gente. Mismo permiso que editar grupos: AD/TI con "editar" usuarios.
-  const [asistenteGrupo, setAsistenteGrupo] = useState(false)
+  // Desde Operaciones → Campañas: ?asistente=grupo&editar=cc:<id>|ventas:<id>&volver=<ruta>
+  // abre el asistente en el paso de campañas con esa campaña para editar.
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const [editarCampania] = useState<CampaniaAEditar | undefined>(() => {
+    const m = /^(cc|ventas):(d+)$/.exec(params.get('editar') ?? '')
+    return params.get('asistente') === 'grupo' && m ? { tipo: m[1] as 'cc' | 'ventas', id: Number(m[2]) } : undefined
+  })
+  const volver = params.get('volver')
+  const [asistenteGrupo, setAsistenteGrupo] = useState(() => params.get('asistente') === 'grupo')
+  const salirAsistenteGrupo = () => {
+    setAsistenteGrupo(false)
+    if (volver && volver.startsWith('/')) navigate(volver)
+    else if (params.get('asistente')) navigate('/configuracion', { replace: true })
+  }
   // En cualquier empresa (también las futuras) siempre que tenga activos los
   // módulos que usa el asistente (Contact Center y Usuarios) y el usuario sea
   // AD/TI con "editar" usuarios. Lo decide el backend con los módulos de la empresa.
@@ -342,7 +357,7 @@ export function ConfiguracionPage() {
       {asistenteEmpresa ? (
         <AsistenteEmpresa borradorIdInicial={asistenteEmpresa.borradorId} onSalir={() => setAsistenteEmpresa(null)} />
       ) : asistenteGrupo ? (
-        <AsistenteGrupo onSalir={() => setAsistenteGrupo(false)} />
+        <AsistenteGrupo onSalir={salirAsistenteGrupo} editarCampania={editarCampania} />
       ) : q ? (
         <SearchResultsView results={results} onSelect={(n) => navigateToKey(n.key)} />
       ) : verPendientes ? (
