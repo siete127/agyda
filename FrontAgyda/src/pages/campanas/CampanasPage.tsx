@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Ban, ChevronDown, ChevronLeft, Headset, LayoutGrid, List, Megaphone, Pencil, Plus, Power, Search, ShoppingCart, Sparkles, UserMinus, UserX, Users, UsersRound } from 'lucide-react'
+import { Ban, ChevronDown, Table2, ChevronLeft, Headset, LayoutGrid, List, Megaphone, Pencil, Plus, Power, Search, ShoppingCart, Sparkles, UserMinus, UserX, Users, UsersRound } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { Spinner } from '@/components/ui/Spinner'
 import { Avatar } from '@/components/ui/Avatar'
@@ -16,7 +16,8 @@ import { campanasVentasService } from '@/services/campanasVentas.service'
 import { ccService } from '@/services/cc.service'
 import { AsistenteCampania } from '@/pages/configuracion/AsistenteCampania'
 import type { CCCampania } from '@/types/cc.types'
-import { GruposTab } from '@/pages/configuracion/GruposTab'
+import { GruposContactCenter } from './GruposCampanas'
+import { gruposDetalleQuery, type GrupoDetalle } from './gruposDetalle'
 
 // Editar una campaña abre el asistente "Crear grupo" en su paso de campañas
 // (Configuración), y al salir regresa aquí.
@@ -345,6 +346,107 @@ function CampaniasDeshabilitadas({ puedeVentas, puedeCC }: { puedeVentas: boolea
   )
 }
 
+// Vista "Tabla" de la pestaña Campañas: Ventas y Contact Center en una sola tabla.
+function TablaCampanas({ agentes, ventas, cc, busqueda, onEditar, onDeshabilitarVentas, onDeshabilitarCC }: {
+  agentes: AgenteCampana[]
+  ventas: CampanaDisponible[]
+  cc: CCCampania[]
+  busqueda: string
+  onEditar: (tipo: 'cc' | 'ventas', id: number) => void
+  onDeshabilitarVentas?: (c: CampanaDisponible) => void
+  onDeshabilitarCC?: (c: CCCampania) => void
+}) {
+  const { data: grupos = [] } = useQuery(gruposDetalleQuery)
+  const { data: conteo = [] } = useQuery({ queryKey: ['campanas-ventas-todas'], queryFn: () => campanasVentasService.listar() })
+  const q = sinAcentos(busqueda.trim())
+  const ok = (n: string) => !q || sinAcentos(n).includes(q)
+  const gruposDe = (pred: (g: GrupoDetalle) => boolean) => grupos.filter(pred).map((g) => g.nombre)
+  type Fila = { clave: string; tipo: 'ventas' | 'cc'; id: number; nombre: string; color: string | null; agentes: AgenteCampana[] | number; detalle: string; grupos: string[]; editar: () => void; deshabilitar?: () => void }
+  const filas: Fila[] = [
+    ...ventas.filter((c) => ok(c.nombre)).map((c) => ({
+      clave: `v${c.id}`, tipo: 'ventas' as const, id: c.id, nombre: c.nombre, color: c.color,
+      agentes: agentes.filter((a) => a.campanaId === c.id),
+      detalle: `${(conteo.find((x) => x.id === c.id)?.ventas ?? 0).toLocaleString('es-MX')} ventas registradas`,
+      grupos: gruposDe((g) => g.ventas?.id === c.id),
+      editar: () => onEditar('ventas', c.id),
+      deshabilitar: onDeshabilitarVentas ? () => onDeshabilitarVentas(c) : undefined,
+    })),
+    ...cc.filter((c) => ok(c.nombre)).map((c) => ({
+      clave: `c${c.id}`, tipo: 'cc' as const, id: c.id, nombre: c.nombre, color: null,
+      agentes: new Set(grupos.filter((g) => g.campanias.some((x) => x.id === c.id)).flatMap((g) => g.agentes.map((a) => a.id))).size || c.agentesCount,
+      detalle: `${c.skillsCount} skill${c.skillsCount !== 1 ? 's' : ''} · ${c.canalesCount} canal${c.canalesCount !== 1 ? 'es' : ''}`,
+      grupos: gruposDe((g) => g.campanias.some((x) => x.id === c.id)),
+      editar: () => onEditar('cc', c.id),
+      deshabilitar: onDeshabilitarCC ? () => onDeshabilitarCC(c) : undefined,
+    })),
+  ]
+  if (!filas.length) return <p className="card px-4 py-10 text-center text-[0.8rem] text-gray-400">{q ? 'Ninguna campaña coincide' : 'Sin campañas'}</p>
+  return (
+    <div className="card overflow-x-auto">
+      <table className="w-full text-left text-[0.8rem]">
+        <thead>
+          <tr className="border-b border-gray-100 bg-gray-50/60 text-[0.66rem] font-semibold uppercase tracking-wide text-gray-500">
+            <th className="px-4 py-3">Campaña</th>
+            <th className="px-3 py-3">Tipo</th>
+            <th className="px-3 py-3">Agentes</th>
+            <th className="px-3 py-3">Detalle</th>
+            <th className="px-3 py-3">Grupos</th>
+            <th className="px-3 py-3" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {filas.map((r) => (
+            <tr key={r.clave} className="group transition-colors hover:bg-amber-50/30">
+              <td className="px-4 py-3">
+                <span className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg"
+                    style={{ background: r.tipo === 'ventas' ? `${r.color ?? '#f59e0b'}22` : '#ede9fe', color: r.tipo === 'ventas' ? r.color ?? '#f59e0b' : '#7c3aed' }}>
+                    {r.tipo === 'ventas' ? <ShoppingCart className="h-4 w-4" /> : <Headset className="h-4 w-4" />}
+                  </span>
+                  <span className="font-semibold text-gray-900">{r.nombre}</span>
+                </span>
+              </td>
+              <td className="px-3 py-3">
+                <span className={clsx('rounded-full px-2 py-0.5 text-[0.66rem] font-semibold', r.tipo === 'ventas' ? 'bg-amber-50 text-amber-700' : 'bg-violet-50 text-violet-700')}>
+                  {r.tipo === 'ventas' ? 'Ventas' : 'Contact Center'}
+                </span>
+              </td>
+              <td className="px-3 py-3">
+                {Array.isArray(r.agentes) ? (
+                  r.agentes.length ? (
+                    <span className="flex items-center gap-2" title={r.agentes.map((a) => nombreBonito(a.nombre)).join(', ')}>
+                      <span className="flex -space-x-2">{r.agentes.slice(0, 4).map((a) => <Avatar key={a.neusId} name={nombreBonito(a.nombre)} size="sm" />)}</span>
+                      <span className="text-[0.75rem] font-semibold text-gray-700">{r.agentes.length}</span>
+                    </span>
+                  ) : <span className="text-[0.75rem] text-gray-300">0</span>
+                ) : <span className="text-[0.75rem] font-semibold text-gray-700">{r.agentes}</span>}
+              </td>
+              <td className="px-3 py-3 text-[0.75rem] text-gray-600">{r.detalle}</td>
+              <td className="px-3 py-3">
+                {r.grupos.length ? (
+                  <span className="flex flex-wrap gap-1">{r.grupos.map((g) => <span key={g} className="rounded-full bg-gray-100 px-2 py-0.5 text-[0.66rem] font-medium text-gray-600">{g}</span>)}</span>
+                ) : <span className="text-[0.72rem] italic text-gray-300">Sin grupo</span>}
+              </td>
+              <td className="px-3 py-3">
+                <span className="flex items-center justify-end gap-1">
+                  <button onClick={r.editar} title="Editar (abre el asistente de grupo en el paso de campañas)"
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[0.7rem] font-semibold text-gray-600 hover:border-violet-300 hover:text-violet-700">
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </button>
+                  {r.deshabilitar && (
+                    <button onClick={r.deshabilitar} title="Deshabilitar (se puede volver a habilitar)" aria-label={`Deshabilitar ${r.nombre}`}
+                      className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-700"><Ban className="h-3.5 w-3.5" /></button>
+                  )}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function fmtFecha(f: string) {
   try { return new Date(f).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) }
   catch { return f }
@@ -386,12 +488,19 @@ export function CampanasPage() {
   })
   const [search, setSearch] = useState('')
   const [filtroCampana, setFiltroCampana] = useState('todas')
-  const [vista, setVista] = useState<'campanas' | 'agentes'>(() => {
-    try { return localStorage.getItem('campanas-vista') === 'agentes' ? 'agentes' : 'campanas' } catch { return 'campanas' }
+  const [vista, setVista] = useState<'campanas' | 'tabla' | 'agentes'>(() => {
+    try { const v = localStorage.getItem('campanas-vista'); return v === 'agentes' || v === 'tabla' ? v : 'campanas' } catch { return 'campanas' }
   })
-  const cambiarVista = (v: 'campanas' | 'agentes') => {
+  const cambiarVista = (v: 'campanas' | 'tabla' | 'agentes') => {
     setVista(v)
     try { localStorage.setItem('campanas-vista', v) } catch { /* sin almacenamiento */ }
+  }
+  const [vistaGrupos, setVistaGrupos] = useState<'tarjetas' | 'tabla'>(() => {
+    try { return localStorage.getItem('campanas-vista-grupos') === 'tabla' ? 'tabla' : 'tarjetas' } catch { return 'tarjetas' }
+  })
+  const cambiarVistaGrupos = (v: 'tarjetas' | 'tabla') => {
+    setVistaGrupos(v)
+    try { localStorage.setItem('campanas-vista-grupos', v) } catch { /* sin almacenamiento */ }
   }
 
   const { data: agentes = [], isLoading } = useQuery({
@@ -503,10 +612,19 @@ export function CampanasPage() {
               </div>
             )}
             {seccion === 'campanas' && <div className="flex rounded-xl bg-white/15 p-1" role="tablist" aria-label="Vista">
-              {([['campanas', 'Por campaña', LayoutGrid], ['agentes', 'Por agente', List]] as const).map(([id, label, Icon]) => (
+              {([['campanas', 'Tarjetas', LayoutGrid], ['tabla', 'Tabla', Table2], ['agentes', 'Por agente', List]] as const).map(([id, label, Icon]) => (
                 <button key={id} role="tab" aria-selected={vista === id} onClick={() => cambiarVista(id)}
                   className={clsx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition',
                     vista === id ? 'bg-white text-amber-800 shadow-sm' : 'text-white/90 hover:bg-white/10')}>
+                  <Icon className="h-3.5 w-3.5" /> {label}
+                </button>
+              ))}
+            </div>}
+            {seccion === 'grupos' && <div className="flex rounded-xl bg-white/15 p-1" role="tablist" aria-label="Vista de grupos">
+              {([['tarjetas', 'Tarjetas', LayoutGrid], ['tabla', 'Tabla', Table2]] as const).map(([id, label, Icon]) => (
+                <button key={id} role="tab" aria-selected={vistaGrupos === id} onClick={() => cambiarVistaGrupos(id)}
+                  className={clsx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.75rem] font-semibold transition',
+                    vistaGrupos === id ? 'bg-white text-amber-800 shadow-sm' : 'text-white/90 hover:bg-white/10')}>
                   <Icon className="h-3.5 w-3.5" /> {label}
                 </button>
               ))}
@@ -525,13 +643,13 @@ export function CampanasPage() {
           ))}
         </div>
 
-        {seccion === 'campanas' && <div className="px-5 py-3.5 border-b border-gray-100">
+        {<div className="px-5 py-3.5 border-b border-gray-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar agente..."
+              placeholder={seccion === 'grupos' ? 'Buscar grupo, campaña, supervisor o agente…' : vista === 'tabla' ? 'Buscar campaña…' : 'Buscar agente o campaña…'}
               className="field py-2 pl-9 text-sm"
             />
           </div>
@@ -567,7 +685,7 @@ export function CampanasPage() {
       </div>
 
       {seccion === 'grupos' ? (
-        <GruposTab />
+        <div className="space-y-4"><GruposContactCenter vista={vistaGrupos} busqueda={search} /></div>
       ) : isLoading ? (
         <div className="flex justify-center py-20"><Spinner size="lg" /></div>
       ) : vista === 'campanas' ? (
@@ -590,6 +708,16 @@ export function CampanasPage() {
             )}
             <CampaniasDeshabilitadas puedeVentas={puedeGestionar} puedeCC={puedeCampaniasCC} />
           </>}
+        />
+      ) : vista === 'tabla' ? (
+        <TablaCampanas
+          agentes={agentes}
+          ventas={campanasDisponibles}
+          cc={puedeCampaniasCC ? campaniasCC : []}
+          busqueda={search}
+          onEditar={(tipo, id) => navigate(rutaEditar(tipo, id))}
+          onDeshabilitarVentas={puedeGestionar ? (c) => setBorrarVentas(c) : undefined}
+          onDeshabilitarCC={puedeCampaniasCC ? (c) => setBorrarCC(c) : undefined}
         />
       ) : filtrados.length === 0 ? (
         <div className="card flex flex-col items-center justify-center gap-4 py-20">

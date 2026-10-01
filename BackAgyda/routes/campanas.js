@@ -8,6 +8,8 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 router.get('/disponibles', authenticateToken, campanaAgente.listCampanasDisponibles);
 
 // Campañas de Ventas: alta, edición (con sus estatus) y baja (desactivar)
+// Grupos de Contact Center con todo lo que tienen enlazado (pestaña Grupos)
+router.get('/grupos', authenticateToken, campanaAgente.listGruposDetalle);
 router.get('/ventas', authenticateToken, campanaAgente.listCampanasVentas);
 router.get('/ventas/:id', authenticateToken, campanaAgente.getCampanaVentas);
 router.post('/ventas/:id/activar', authenticateToken, requireActionAccess('accesos', 'gestionar'), campanaAgente.activarCampanaVentas);

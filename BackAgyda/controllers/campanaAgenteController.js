@@ -209,6 +209,89 @@ async function guardarEstatus(tx, campanaId, estatus) {
   }
 }
 
+// GET /campanas/grupos — grupos de Contact Center (CC_EQUIPOS activos) con todo
+// lo que tienen enlazado: campañas, campaña de Ventas, marcador, skills, canales
+// (los de sus skills), formularios y tipificaciones (los de sus campañas),
+// supervisores, agentes y clientes. Para la pestaña Grupos de Campañas.
+exports.listGruposDetalle = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const q = (t) => pool.request().query(t).then((r) => r.recordset).catch(() => []);
+    const grupos = await q(`
+      SELECT e.EQ_ID id, e.EQ_NOMBRE nombre, e.EQ_DESCRIPCION descripcion, ISNULL(e.EQ_MODALIDAD, 'omnicanal') modalidad,
+             CAST(ISNULL(e.EQ_ATIENDE_CLIENTES, 0) AS bit) atiendeClientes, e.EQ_CREADO_EN creadoEn,
+             e.EQ_VENTAS_CAMPANA_ID ventasId, e.EQ_VENTAS_CAMPANA_NOMBRE ventasNombre, v.WVIS_LABEL marcador, e.EQ_CAMPANIA_ID campaniaLegacy
+      FROM CC_EQUIPOS e LEFT JOIN WEBPHONE_VISTAS v ON v.WVIS_ID = e.EQ_WEBPHONE_VISTA_ID
+      WHERE e.EQ_ACTIVO = 1 ORDER BY e.EQ_NOMBRE`);
+    if (!grupos.length) return res.json({ success: true, data: [] });
+    const ids = grupos.map((g) => g.id).join(',');
+
+    const [campanias, skills, canales, miembros, clientes, formularios, tipificaciones] = await Promise.all([
+      q(`SELECT x.equipoId, c.CM2_ID id, c.CM2_NOMBRE nombre FROM (
+           SELECT EQC_EQUIPO_ID equipoId, EQC_CAMPANIA_ID campaniaId FROM CC_EQUIPO_CAMPANIAS WHERE EQC_EQUIPO_ID IN (${ids})
+           UNION SELECT EQ_ID, EQ_CAMPANIA_ID FROM CC_EQUIPOS WHERE EQ_ID IN (${ids}) AND EQ_CAMPANIA_ID IS NOT NULL) x
+         JOIN CCO_CAMPANIAS c ON c.CM2_ID = x.campaniaId AND c.CM2_ACTIVO = 1`),
+      q(`SELECT s.EQS_EQUIPO_ID equipoId, g.CG_ID id, g.CG_NOMBRE nombre FROM CC_EQUIPO_SKILLS s
+         JOIN CCO_GRUPOS g ON g.CG_ID = s.EQS_GRUPO_ID AND g.CG_ACTIVO = 1 WHERE s.EQS_EQUIPO_ID IN (${ids})`),
+      q(`SELECT s.EQS_EQUIPO_ID equipoId, cn.CN_ID id, cn.CN_NOMBRE nombre, cn.CN_TIPO tipo, CAST(ISNULL(cn.CN_HABILITADO, 1) AS bit) habilitado
+         FROM CC_EQUIPO_SKILLS s JOIN CCO_CANALES cn ON cn.CN_GRUPO_ID = s.EQS_GRUPO_ID WHERE s.EQS_EQUIPO_ID IN (${ids})`),
+      q(`SELECT m.EQM_EQUIPO_ID equipoId, m.EQM_ROL rol, u.NEUS_ID id, LTRIM(RTRIM(u.NEUS_NOMBRES)) nombre
+         FROM CC_EQUIPO_MIEMBROS m JOIN NEUS_USUARIOS u ON u.NEUS_ID = m.EQM_USUARIO_ID AND u.NEUS_ACTIVO = 1
+         WHERE m.EQM_EQUIPO_ID IN (${ids}) ORDER BY u.NEUS_NOMBRES`),
+      q(`SELECT EQCL_EQUIPO_ID equipoId, COUNT(*) n FROM CC_EQUIPO_CLIENTES WHERE EQCL_EQUIPO_ID IN (${ids}) GROUP BY EQCL_EQUIPO_ID`),
+      q(`SELECT DISTINCT x.equipoId, f.FR_ID id, f.FR_NOMBRE nombre FROM (
+           SELECT EQC_EQUIPO_ID equipoId, EQC_CAMPANIA_ID campaniaId FROM CC_EQUIPO_CAMPANIAS WHERE EQC_EQUIPO_ID IN (${ids})
+           UNION SELECT EQ_ID, EQ_CAMPANIA_ID FROM CC_EQUIPOS WHERE EQ_ID IN (${ids}) AND EQ_CAMPANIA_ID IS NOT NULL) x
+         JOIN CCF_FORM_ASIGNACIONES fa ON fa.FA_CAMPANIA_ID = x.campaniaId AND fa.FA_ACTIVO = 1
+         JOIN CCF_FORM_VERSIONES fv ON fv.FV_ID = fa.FA_FORM_VERSION_ID
+         JOIN CCF_FORMULARIOS f ON f.FR_ID = fv.FV_FORMULARIO_ID`),
+      q(`SELECT x.equipoId, t.CT_NOMBRE nombre FROM (
+           SELECT EQC_EQUIPO_ID equipoId, EQC_CAMPANIA_ID campaniaId FROM CC_EQUIPO_CAMPANIAS WHERE EQC_EQUIPO_ID IN (${ids})
+           UNION SELECT EQ_ID, EQ_CAMPANIA_ID FROM CC_EQUIPOS WHERE EQ_ID IN (${ids}) AND EQ_CAMPANIA_ID IS NOT NULL) x
+         JOIN CCO_TIPIFICACIONES t ON t.CT_CAMPANIA_ID = x.campaniaId AND ISNULL(t.CT_ACTIVO, 1) = 1`),
+    ]);
+    const de = (lista, id) => lista.filter((x) => x.equipoId === id).map(({ equipoId, ...r }) => r);
+    const unicos = (lista) => lista.filter((x, i) => lista.findIndex((y) => y.id === x.id) === i);
+
+    // Estatus de Ventas de su campaña de ventas (son sus tipificaciones en el marcador).
+    let estatusVentas = new Map();
+    const ventasIds = [...new Set(grupos.map((g) => g.ventasId).filter(Boolean))];
+    if (ventasIds.length) {
+      try {
+        const pv = await getVentasPool();
+        const r = await pv.request().query(`SELECT campaignId, LTRIM(RTRIM(nombreEstado)) nombre FROM CampaignStatuses WHERE activo = 1 AND campaignId IN (${ventasIds.map(Number).join(',')}) ORDER BY orden`);
+        for (const e of r.recordset) estatusVentas.set(e.campaignId, [...(estatusVentas.get(e.campaignId) ?? []), e.nombre]);
+      } catch (e) { console.error('listGruposDetalle → estatus de Ventas:', e.message); }
+    }
+
+    res.json({
+      success: true,
+      data: grupos.map((g) => {
+        const tips = [...new Set(de(tipificaciones, g.id).map((t) => String(t.nombre).trim()))];
+        const deVentas = g.ventasId ? estatusVentas.get(g.ventasId) ?? [] : [];
+        const mbr = de(miembros, g.id);
+        return {
+          id: g.id, nombre: g.nombre, descripcion: g.descripcion, modalidad: g.modalidad, atiendeClientes: !!g.atiendeClientes,
+          creadoEn: g.creadoEn, marcador: g.marcador,
+          ventas: g.ventasId ? { id: g.ventasId, nombre: g.ventasNombre } : null,
+          campanias: unicos(de(campanias, g.id)),
+          skills: unicos(de(skills, g.id)),
+          canales: unicos(de(canales, g.id)).map((c) => ({ ...c, habilitado: !!c.habilitado })),
+          formularios: unicos(de(formularios, g.id)),
+          // Las de sus campañas (omnicanal) y, si es de ventas, los estatus de Ventas (marcador).
+          tipificaciones: [...tips, ...deVentas.filter((n) => !tips.some((t) => t.toLowerCase() === n.toLowerCase()))],
+          supervisores: mbr.filter((m) => m.rol === 'supervisor').map(({ rol, ...m }) => m),
+          agentes: mbr.filter((m) => m.rol !== 'supervisor').map(({ rol, ...m }) => m),
+          clientes: clientes.find((c) => c.equipoId === g.id)?.n ?? 0,
+        };
+      }),
+    });
+  } catch (e) {
+    console.error('Error listGruposDetalle:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // GET /campanas/ventas — todas las campañas de Ventas, también las deshabilitadas.
 exports.listCampanasVentas = async (req, res) => {
   try {
