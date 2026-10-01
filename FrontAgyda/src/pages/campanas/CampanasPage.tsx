@@ -596,23 +596,41 @@ export function CampanasPage() {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setMenuNueva(null)} />
                     <div role="menu" style={{ top: menuNueva.top, right: menuNueva.right }}
-                      className="fixed z-50 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-card p-1.5 shadow-xl">
+                      className="fixed z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-card p-1.5 shadow-xl">
+                      <p className="px-2.5 pb-1 pt-1.5 text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">Crear una campaña nueva</p>
                       {puedeGestionar && (
                         <button role="menuitem" onClick={() => { setMenuNueva(null); setNuevaVentas(true) }}
-                          className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50">
-                          <ShoppingCart className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
-                          <span><span className="block text-[0.8rem] font-semibold text-gray-800">De Ventas</span>
-                            <span className="block text-[0.68rem] text-gray-400">PlataCard, Amex… con sus estatus, en el sistema de Ventas</span></span>
+                          className="group flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-amber-50/60">
+                          <span className="relative mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                            <ShoppingCart className="h-4 w-4" />
+                            <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white"><Plus className="h-2.5 w-2.5" /></span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5 text-[0.82rem] font-semibold text-gray-800">
+                              Nueva campaña de Ventas
+                              <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase text-emerald-700">Crear</span>
+                            </span>
+                            <span className="block text-[0.68rem] text-gray-400">Como PlataCard o Amex: nombre, color y estatus, en el sistema de Ventas</span>
+                          </span>
                         </button>
                       )}
                       {puedeCampaniasCC && (
                         <button role="menuitem" onClick={() => { setMenuNueva(null); setNuevaCC(true) }}
-                          className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50">
-                          <Headset className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-600" />
-                          <span><span className="block text-[0.8rem] font-semibold text-gray-800">De Contact Center</span>
-                            <span className="block text-[0.68rem] text-gray-400">Skills, canales, formulario y tipificaciones, paso a paso</span></span>
+                          className="group flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-violet-50/60">
+                          <span className="relative mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                            <Headset className="h-4 w-4" />
+                            <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white"><Plus className="h-2.5 w-2.5" /></span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5 text-[0.82rem] font-semibold text-gray-800">
+                              Nueva campaña de Contact Center
+                              <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase text-emerald-700">Crear</span>
+                            </span>
+                            <span className="block text-[0.68rem] text-gray-400">Paso a paso: canales, tipificaciones y formulario</span>
+                          </span>
                         </button>
                       )}
+                      <p className="border-t border-gray-100 px-2.5 pb-1 pt-2 text-[0.64rem] text-gray-400">Para cambiar una que ya existe usa <Pencil className="inline h-3 w-3" /> Editar en su tarjeta.</p>
                     </div>
                   </>,
                   document.body,
