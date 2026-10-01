@@ -197,6 +197,8 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
   })
   // Borrador de cambios de un grupo que ya existe: al final se guarda sobre él.
   const [actualizando, setActualizando] = useState(false)
+  // La campaña que se vino a editar se abre sola una vez; al cerrarla ya no se reabre al volver al paso 2.
+  const [edicionPendiente, setEdicionPendiente] = useState(!!editarCampania)
   const [paso, setPaso] = useState(editarCampania ? 1 : 0)
   const [grupoYaCreado, setGrupoYaCreado] = useState(false)
   const [guardado, setGuardado] = useState<'guardado' | 'guardando' | 'pendiente' | 'error'>('guardado')
@@ -210,10 +212,10 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
   useEffect(() => {
     if (!cargado || datos) return
     setDatos({ ...vacio(), reportes: recomendadasDe(catalogo), ...cargado.datos })
-    setPaso(Math.min(cargado.paso ?? 0, 5))
+    setPaso(editarCampania ? 1 : Math.min(cargado.paso ?? 0, 5))
     setGrupoYaCreado(!!cargado.grupoId)
     setActualizando(cargado.avance?.modo === 'actualizar')
-  }, [cargado, datos, catalogo])
+  }, [cargado, datos, catalogo, editarCampania])
 
   const guardarAhora = async (d: DatosGrupoBorrador, p: number) => {
     if (!idRef.current) return true
@@ -386,7 +388,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
               </div>
             </div>
           )}
-          {actual.key === 'asignaciones' && <PasoAsignaciones datos={datos} setDatos={setDatos} catalogo={catalogo} recargarCatalogo={recargarCatalogo} editarInicial={editarCampania} grupoDeCampania={grupoDeCampania} />}
+          {actual.key === 'asignaciones' && <PasoAsignaciones datos={datos} setDatos={setDatos} catalogo={catalogo} recargarCatalogo={recargarCatalogo} editarInicial={edicionPendiente ? editarCampania : undefined} onEdicionCerrada={() => setEdicionPendiente(false)} grupoDeCampania={grupoDeCampania} />}
           {actual.key === 'personas' && <PasoPersonas datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'clientes' && <PasoClientes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'reportes' && <PasoReportes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
@@ -462,18 +464,20 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
 }
 
 /* ─────────────── Paso 2: Campañas y skills ─────────────── */
-function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarInicial, grupoDeCampania }: {
+function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarInicial, onEdicionCerrada, grupoDeCampania }: {
   datos: DatosGrupoBorrador; setDatos: SetDatos; catalogo: CatalogoAsistenteGrupo; recargarCatalogo: () => void; editarInicial?: CampaniaAEditar
-  grupoDeCampania?: GrupoDeCampania | null
+  grupoDeCampania?: GrupoDeCampania | null; onEdicionCerrada?: () => void
 }) {
   const qc = useQueryClient()
   const { can } = useActionAccess()
   const puedeCrearCampania = can('contact-center', 'gestionar-skills')
   const [asistente, setAsistente] = useState(false)
   // Editar una campaña abre su asistente aquí mismo; deshabilitarla no borra su historial (se vuelve a habilitar en Operaciones → Campañas).
-  const [editarId, setEditarId] = useState<number | null>(editarInicial?.tipo === 'cc' ? editarInicial.id : null)
+  const campaniaDelGrupo = datos.campanias[0]?.id ?? null
+  const [editarId, setEditarId] = useState<number | null>(
+    editarInicial?.tipo === 'cc' ? editarInicial.id : editarInicial?.tipo === 'ventas' ? campaniaDelGrupo : null)
   // Campaña de Ventas: editar (id), crear (0) o nada (null).
-  const [ventasEditor, setVentasEditor] = useState<number | null>(editarInicial?.tipo === 'ventas' ? editarInicial.id : null)
+  const [ventasEditor, setVentasEditor] = useState<number | null>(editarInicial?.tipo === 'ventas' && !campaniaDelGrupo ? editarInicial.id : null)
   const puedeCampanasVentas = can('accesos', 'gestionar')
   // Lo que el asistente de campaña necesita saber del grupo que se arma: si es
   // solo de marcador (sin skills, canal Marcador), su campaña de Ventas
@@ -670,19 +674,21 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
         </Modal>
       )}
       {editarId != null && (
-        <Modal isOpen onClose={() => { setEditarId(null); recargarCatalogo() }} title="Editar campaña" size="full" elevated>
+        <Modal isOpen onClose={() => { setEditarId(null); onEdicionCerrada?.(); recargarCatalogo() }} title="Editar campaña" size="full" elevated>
           <AsistenteCampania campaniaEditar={editarId} grupo={grupoParaCampania} onSalir={() => {
             setEditarId(null)
+            onEdicionCerrada?.()
             recargarCatalogo()
             qc.invalidateQueries({ queryKey: ['grupos-opciones'] })
           }} />
         </Modal>
       )}
       {ventasEditor != null && (
-        <EditorCampanaVentas campanaId={ventasEditor || null} onClose={() => setVentasEditor(null)}
+        <EditorCampanaVentas campanaId={ventasEditor || null} onClose={() => { setVentasEditor(null); onEdicionCerrada?.() }}
           onSaved={(id) => {
             const nueva = ventasEditor === 0
             setVentasEditor(null)
+            onEdicionCerrada?.()
             recargarCatalogo()
             qc.invalidateQueries({ queryKey: ['campanas-disponibles'] })
             if (nueva && id) upd(setDatos, (d) => ({ ...d, ventasCampanaId: id }))
