@@ -231,7 +231,7 @@ export function ConfiguracionPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const [editarCampania] = useState<CampaniaAEditar | undefined>(() => {
-    const m = /^(cc|ventas):(d+)$/.exec(params.get('editar') ?? '')
+    const m = /^(cc|ventas):([0-9]+)$/.exec(params.get('editar') ?? '')
     return params.get('asistente') === 'grupo' && m ? { tipo: m[1] as 'cc' | 'ventas', id: Number(m[2]) } : undefined
   })
   const volver = params.get('volver')
