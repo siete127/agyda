@@ -4,6 +4,7 @@ const emailService = require('../services/emailService');
 const { errorCorreoObligatorio } = require('../utils/validacionesMx');
 const { generarCxcPorProductos, cancelarCxcPorProductos, cancelarFacturaPendiente } = require('../services/cxcProductosService');
 const { avisarProductoAsignado } = require('../services/productoAvisoService');
+const { emisorValido } = require('../utils/emisoresFactura');
 
 const BASE_URL = process.env.BASE_PUBLIC_URL || 'https://agyda.ardabytec.vip';
 
@@ -271,7 +272,8 @@ exports.getClientes = async (req, res) => {
         C.CONT_COLONIA as colonia,
         C.CONT_CP as cp,
         C.CONT_PAIS as pais,
-        C.CONT_OBSERVACIONES as observaciones
+        C.CONT_OBSERVACIONES as observaciones,
+        C.CONT_EMISOR_RFC as emisorRfc
       FROM CRM_CONTACTOS C
       LEFT JOIN NEUS_USUARIOS NU ON NU.NEUS_ID = C.CONT_NEUS_ID
       WHERE C.CONT_ES_CLIENTE = 1
@@ -302,7 +304,8 @@ exports.createCliente = async (req, res) => {
       cp,
       rfc,
       pais,
-      observaciones
+      observaciones,
+      emisorRfc
     } = req.body;
 
     // El correo del cliente es obligatorio y debe poder recibir correo.
@@ -398,11 +401,12 @@ exports.createCliente = async (req, res) => {
         .input('colonia', sql.NVarChar, colonia || null)
         .input('cp', sql.NVarChar, cp || null)
         .input('pais', sql.NVarChar, pais || null)
-        .input('observaciones', sql.NVarChar, observaciones || null);
+        .input('observaciones', sql.NVarChar, observaciones || null)
+        .input('emisor', sql.NVarChar(13), emisorValido(req, emisorRfc)?.rfc || null);
 
       const insertClienteResult = await insReq.query(`
-        INSERT INTO CRM_CONTACTOS (CONT_NEUS_ID, CONT_EMPRESA, CONT_RFC, CONT_NOMBRE, CONT_TELEFONO, CONT_CIUDAD, CONT_CORREO, CONT_ACTIVO, CONT_FECHA, CONT_CALLE, CONT_NUM_EXT, CONT_NUM_INT, CONT_COLONIA, CONT_CP, CONT_PAIS, CONT_OBSERVACIONES, CONT_ES_CLIENTE)
-        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais, @observaciones, 1);
+        INSERT INTO CRM_CONTACTOS (CONT_NEUS_ID, CONT_EMPRESA, CONT_RFC, CONT_NOMBRE, CONT_TELEFONO, CONT_CIUDAD, CONT_CORREO, CONT_ACTIVO, CONT_FECHA, CONT_CALLE, CONT_NUM_EXT, CONT_NUM_INT, CONT_COLONIA, CONT_CP, CONT_PAIS, CONT_OBSERVACIONES, CONT_EMISOR_RFC, CONT_ES_CLIENTE)
+        VALUES (@neusIdFinal, @empresa, @rfc, @nombre, @telefono, @ciudad, @correo, @activo, GETDATE(), @calle, @numExt, @numInt, @colonia, @cp, @pais, @observaciones, @emisor, 1);
         SELECT SCOPE_IDENTITY() as id;
       `);
 
@@ -472,6 +476,7 @@ exports.updateCliente = async (req, res) => {
       activarAcceso,
       enviarInvitacion,
       observaciones,
+      emisorRfc,
     } = req.body;
 
     // Si se manda el correo (edición del formulario), debe ser válido; los
@@ -535,6 +540,9 @@ exports.updateCliente = async (req, res) => {
         .input('cp', sql.NVarChar, cp || null)
         .input('pais', sql.NVarChar, pais || null)
         .input('observaciones', sql.NVarChar, observaciones || null)
+        // Emisor: sin el campo se deja igual; '' (o uno que no vale) lo quita.
+        .input('cambiaEmisor', sql.Bit, emisorRfc !== undefined ? 1 : 0)
+        .input('emisor', sql.NVarChar(13), emisorValido(req, emisorRfc)?.rfc || null)
         .query(`
           UPDATE CRM_CONTACTOS SET
             CONT_EMPRESA = COALESCE(@empresa, CONT_EMPRESA),
@@ -550,6 +558,7 @@ exports.updateCliente = async (req, res) => {
             CONT_CP = COALESCE(@cp, CONT_CP),
             CONT_PAIS = COALESCE(@pais, CONT_PAIS),
             CONT_OBSERVACIONES = COALESCE(@observaciones, CONT_OBSERVACIONES),
+            CONT_EMISOR_RFC = CASE WHEN @cambiaEmisor = 1 THEN @emisor ELSE CONT_EMISOR_RFC END,
             CONT_ACTIVO = CASE WHEN @activo IS NULL THEN CONT_ACTIVO ELSE @activo END
           WHERE CONT_ID = @id
         `);

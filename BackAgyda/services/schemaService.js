@@ -2214,6 +2214,13 @@ END`,
 BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_OBSERVACIONES NVARCHAR(1000) NULL;
 END`,
+    // Con qué emisor se le factura al cliente (ARDABY TEC / EDGAR MONTOYA,
+    // solo tenant 'agyda' — ver utils/emisoresFactura.js); la factura nueva
+    // lo toma de aquí.
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_EMISOR_RFC')
+BEGIN
+  ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_EMISOR_RFC NVARCHAR(13) NULL;
+END`,
     `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CRM_CONTACTOS') AND name = 'CONT_ES_CLIENTE')
 BEGIN
   ALTER TABLE dbo.CRM_CONTACTOS ADD CONT_ES_CLIENTE BIT NOT NULL

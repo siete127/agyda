@@ -108,7 +108,8 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   // tenant de ARDABY TEC, en los demás el array viene vacío y el selector
   // no se muestra.
   const { data: emisores = [] } = useQuery({ queryKey: ['facturas-emisores'], queryFn: () => facturacionService.emisores(), staleTime: Infinity })
-  const [emisorRfc, setEmisorRfc] = useState('')
+  // Lo elegido aquí; si no se toca, el emisor guardado en el cliente (ver emisorRfc abajo).
+  const [emisorElegido, setEmisorRfc] = useState('')
   // Alta rápida de cliente / producto desde aquí mismo
   const { can } = useActionAccess()
   const puedeCrearCliente = can('clientes', 'crear')
@@ -165,6 +166,11 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   const cambiar = (key: number, cambios: Partial<Linea>) => setLineas((ls) => ls.map((l) => (l.key === key ? { ...l, ...cambios } : l)))
 
   const clienteFactura = modo === 'cotizacion' ? cot?.clienteId ?? null : clienteId
+  // El cliente ya dice con qué emisor se le factura (Clientes → Emisión).
+  const emisorDelCliente = (modo === 'cotizacion'
+    ? cot?.emisorRfc ?? cotizaciones.find((x) => x.id === cot?.id)?.emisorRfc
+    : clientes.find((c) => c.id === clienteId)?.emisorRfc) ?? ''
+  const emisorRfc = emisorElegido || (emisores.some((e) => e.rfc === emisorDelCliente) ? emisorDelCliente : '')
   const paso1Listo = modo === 'productos'
     ? !!clienteId && lineas.length > 0 && lineas.every((l) => l.descripcion.trim() && l.cantidad > 0) && total > 0
     : !!cot

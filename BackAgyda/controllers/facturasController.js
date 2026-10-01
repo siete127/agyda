@@ -5,23 +5,8 @@ const { asignarPendientesDeFactura, quitarPendientesDeFactura } = require('../se
 
 async function _pool(req) { return databaseService.getPool(req?.user?.empresa); }
 
-// Emisores con los que se puede facturar manejando el mismo catálogo de
-// productos — SOLO para el tenant 'agyda' (ARDABY TEC), nunca para las
-// demás empresas (edomex, santillana, etc.), cada una con su propia
-// facturación. Mientras no haya CSD cargado para ninguno de los dos RFC
-// (EMPRESA_FISCAL sigue vacía), esto solo deja constancia de cuál se
-// eligió en la pre-factura; no cambia si se timbra de verdad o no (eso lo
-// decide facturacionService.timbrar con el emisor de EMPRESA_FISCAL).
-// Lista fija en el backend — nunca se confía en una razón social/RFC que
-// mande el cliente sin validar contra esto.
-const EMISORES = [
-  { rfc: 'ATE210416757', nombre: 'ARDABY TEC' },
-  { rfc: 'MOGE9003308X3', nombre: 'EDGAR MONTOYA' },
-];
-function _emisorValido(req, rfc) {
-  if (req.user?.empresa !== 'agyda') return null;
-  return EMISORES.find((e) => e.rfc === String(rfc || '').toUpperCase().trim()) || null;
-}
+// Emisores (ARDABY TEC / EDGAR MONTOYA, solo tenant 'agyda'): ver utils/emisoresFactura.js.
+const { emisoresDe, emisorValido: _emisorValido } = require('../utils/emisoresFactura');
 
 function mapFactura(r) {
   return {
@@ -98,7 +83,7 @@ exports.porFacturar = async (req, res) => {
     const pool = await _pool(req);
     const cot = await pool.request().query(`
       SELECT c.COT_ID id, c.COT_FOLIO folio, c.COT_TITULO titulo, c.COT_FECHA fecha, c.COT_TOTAL total,
-             o.OPO_CONTACTO_ID clienteId, COALESCE(NULLIF(ct.CONT_EMPRESA, ''), ct.CONT_NOMBRE) cliente,
+             o.OPO_CONTACTO_ID clienteId, COALESCE(NULLIF(ct.CONT_EMPRESA, ''), ct.CONT_NOMBRE) cliente, ct.CONT_EMISOR_RFC emisorRfc,
              (SELECT COUNT(*) FROM dbo.CRM_COTIZACION_ITEMS i WHERE i.COTI_COT_ID = c.COT_ID AND i.COTI_ES_SECCION = 0) renglones
       FROM dbo.CRM_COTIZACIONES c
       LEFT JOIN dbo.CRM_OPORTUNIDADES o ON o.OPO_ID = c.COT_OPO_ID
@@ -106,7 +91,8 @@ exports.porFacturar = async (req, res) => {
       WHERE c.COT_ACTIVO = 1 AND c.COT_ESTATUS = 'aprobada' AND c.COT_FACTURA_ID IS NULL
       ORDER BY c.COT_FECHA DESC, c.COT_ID DESC`);
     const cli = await pool.request().query(`
-      SELECT CONT_ID id, COALESCE(NULLIF(CONT_EMPRESA, ''), CONT_NOMBRE) nombre, CONT_NOMBRE contacto, CONT_RFC rfc
+      SELECT CONT_ID id, COALESCE(NULLIF(CONT_EMPRESA, ''), CONT_NOMBRE) nombre, CONT_NOMBRE contacto, CONT_RFC rfc,
+             CONT_EMISOR_RFC emisorRfc
       FROM dbo.CRM_CONTACTOS WHERE CONT_ES_CLIENTE = 1 AND CONT_ACTIVO = 1
       ORDER BY COALESCE(NULLIF(CONT_EMPRESA, ''), CONT_NOMBRE)`);
     res.json({ success: true, data: { cotizaciones: cot.recordset, clientes: cli.recordset } });
@@ -132,9 +118,9 @@ exports.receptor = async (req, res) => {
 };
 
 // GET /api/facturas/emisores — lista vacía fuera del tenant 'agyda' (ver
-// _emisorValido); el frontend solo muestra el selector si llega algo.
+// utils/emisoresFactura.js); el frontend solo muestra el selector si llega algo.
 exports.emisores = async (req, res) => {
-  res.json({ success: true, data: req.user?.empresa === 'agyda' ? EMISORES : [] });
+  res.json({ success: true, data: emisoresDe(req) });
 };
 
 // POST /api/facturas/manual — factura de productos/servicios sueltos.

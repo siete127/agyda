@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Search, RefreshCw, UserPlus, Edit2, Trash2, Building2, Phone, Mail, MapPin, FileText,
   Package, LayoutGrid, List, Eye, EyeOff, MoreVertical, Power, X, User, Route, MapPinned, Hash,
-  ShoppingBag, PackagePlus, Save, Wallet, ArrowUpRight, KeyRound, CheckCircle2, AlertTriangle,
+  ShoppingBag, PackagePlus, Save, Wallet, ArrowUpRight, KeyRound, CheckCircle2, AlertTriangle, Receipt,
 } from 'lucide-react'
 import { useValidacionCliente, type Aviso } from '@/hooks/useValidacionCliente'
 import { api } from '@/lib/axios'
@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { productoServicioService } from '@/services/productoServicio.service'
+import { facturacionService } from '@/services/facturacion.service'
 
 // Etiquetas de recurrencia y formato de dinero compartidos con el catálogo para asignar.
 import { RECURRENCIA_LABEL, RECURRENCIA_CHIP, money } from './productoServicioUi'
@@ -138,7 +139,11 @@ interface Cliente {
   neusId: number | null
   accesoActivo: boolean | null
   accesoUsuario: string | null
+  emisorRfc: string
 }
+
+// Emisores con los que se factura (solo ARDABY TEC; en otras empresas llega vacío).
+const emisoresQuery = { queryKey: ['facturas-emisores'], queryFn: () => facturacionService.emisores(), staleTime: Infinity }
 
 function parseCliente(r: Record<string, unknown>): Cliente {
   const s = (keys: string[]) => String(keys.reduce((v, k) => v ?? r[k], undefined as unknown) ?? '')
@@ -159,12 +164,13 @@ function parseCliente(r: Record<string, unknown>): Cliente {
     neusId: r['neusId'] != null ? Number(r['neusId']) : null,
     accesoActivo: r['accesoActivo'] != null ? Boolean(r['accesoActivo']) : null,
     accesoUsuario: r['accesoUsuario'] != null ? String(r['accesoUsuario']) : null,
+    emisorRfc: s(['emisorRfc', 'CONT_EMISOR_RFC']),
   }
 }
 
 const EMPTY_FORM = {
   empresa: '', nombre: '', rfc: '', telefono: '',
-  correo: '', ciudad: '', calle: '', colonia: '', cp: '', observaciones: '',
+  correo: '', ciudad: '', calle: '', colonia: '', cp: '', observaciones: '', emisorRfc: '',
 }
 
 /* ── Productos/servicios contratados (solo al editar un cliente existente) ── */
@@ -371,8 +377,10 @@ export function ClienteModal({ cliente, onClose, onCreado, elevated = false }: {
     empresa: cliente.empresa, nombre: cliente.nombre, rfc: cliente.rfc,
     telefono: cliente.telefono, correo: cliente.correo, ciudad: cliente.ciudad,
     calle: cliente.calle, colonia: cliente.colonia, cp: cliente.cp,
-    observaciones: cliente.observaciones,
+    observaciones: cliente.observaciones, emisorRfc: cliente.emisorRfc,
   } : { ...EMPTY_FORM })
+  // Emisión: con qué emisor se le factura. Obligatoria donde hay emisores para elegir.
+  const { data: emisores = [] } = useQuery(emisoresQuery)
   const [accesoActivo, setAccesoActivo] = useState(cliente?.accesoActivo ?? false)
   const [passwordPortal, setPasswordPortal] = useState('')
   const [mostrarPassword, setMostrarPassword] = useState(false)
@@ -388,6 +396,7 @@ export function ClienteModal({ cliente, onClose, onCreado, elevated = false }: {
     setIntentoGuardar(true)
     if (val.comprobandoCorreo) { toast('Comprobando el correo… vuelve a intentar en un momento', { icon: '⏳' }); return }
     if (!val.correoValido) { toast.error(val.avisoCorreo?.texto ?? 'Revisa el correo'); return }
+    if (emisores.length && !form.emisorRfc) { toast.error('Elige la emisión: con qué emisor se le factura'); return }
     guardar.mutate()
   }
   // Al reconocer un CP nuevo: llena la ciudad (si está vacía) y la colonia si el CP solo tiene una.
@@ -468,6 +477,37 @@ export function ClienteModal({ cliente, onClose, onCreado, elevated = false }: {
               </div>
             )}
             <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+              {emisores.length > 0 && (
+                <div className="col-span-2">
+                  <label className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-gray-500">
+                    <Receipt className="h-3 w-3 text-violet-400" /> Emisión *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Emisión">
+                    {emisores.map((e) => {
+                      const sel = form.emisorRfc === e.rfc
+                      return (
+                        <button key={e.rfc} type="button" role="radio" aria-checked={sel} onClick={() => setForm({ ...form, emisorRfc: e.rfc })}
+                          className={clsx('flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition',
+                            sel ? 'border-violet-400 bg-violet-50 ring-2 ring-violet-500/15'
+                              : intentoGuardar && !form.emisorRfc ? 'border-red-300 hover:border-red-400' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50')}>
+                          <span className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', sel ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-400')}>
+                            <Building2 className="h-4 w-4" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[0.82rem] font-semibold text-gray-800">{e.nombre}</span>
+                            <span className="block font-mono text-[0.66rem] text-gray-400">{e.rfc}</span>
+                          </span>
+                          {sel && <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-violet-600" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className={clsx('mt-1 flex items-start gap-1 text-[0.7rem] leading-snug', intentoGuardar && !form.emisorRfc ? 'text-red-600' : 'text-gray-400')}>
+                    {intentoGuardar && !form.emisorRfc && <AlertTriangle className="mt-px h-3 w-3 flex-shrink-0" />}
+                    {intentoGuardar && !form.emisorRfc ? 'Elige con qué emisor se le factura a este cliente' : 'Las facturas nuevas de este cliente salen con este emisor.'}
+                  </p>
+                </div>
+              )}
               {campos.map(({ key, label, span, icon: Icon, ph }) => {
                 const aviso = AVISOS[key] ?? null
                 return (
@@ -643,6 +683,7 @@ function DatoCard({ icon: Icon, label, children }: { icon: typeof Phone; label: 
 
 /* ── Card cliente ── */
 function ClienteCard({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
+  const { data: emisores = [] } = useQuery(emisoresQuery)
   const [menuAbierto, setMenuAbierto] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -707,6 +748,11 @@ function ClienteCard({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente
         <DatoCard icon={FileText} label="RFC">
           <span className="font-mono">{cliente.rfc || <span className="font-sans text-gray-300">—</span>}</span>
         </DatoCard>
+        {emisores.length > 0 && (
+          <DatoCard icon={Receipt} label="Emisión">
+            {emisores.find((e) => e.rfc === cliente.emisorRfc)?.nombre ?? <span className="text-amber-500">Sin definir</span>}
+          </DatoCard>
+        )}
       </div>
 
       {/* Acciones */}
@@ -727,6 +773,7 @@ function ClienteCard({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente
 
 /* ── Fila de tabla ── */
 function ClienteRow({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
+  const { data: emisores = [] } = useQuery(emisoresQuery)
   return (
     <tr className={clsx('transition-colors hover:bg-gray-50', !cliente.activo && 'opacity-60')}>
       <td className="px-4 py-3">
@@ -750,7 +797,14 @@ function ClienteRow({ cliente, onEdit, onDelete, onToggle }: { cliente: Cliente;
         {[cliente.colonia, cliente.ciudad].filter(Boolean).join(', ') || <span className="text-gray-300">—</span>}
         {cliente.cp && <span className="text-gray-400"> · CP {cliente.cp}</span>}
       </td>
-      <td className="px-4 py-3 font-mono text-[0.72rem] text-gray-500">{cliente.rfc || <span className="font-sans text-gray-300">—</span>}</td>
+      <td className="px-4 py-3 font-mono text-[0.72rem] text-gray-500">
+        {cliente.rfc || <span className="font-sans text-gray-300">—</span>}
+        {emisores.length > 0 && (
+          <span className={clsx('block font-sans text-[0.64rem]', cliente.emisorRfc ? 'text-violet-500' : 'text-amber-500')}>
+            {emisores.find((e) => e.rfc === cliente.emisorRfc)?.nombre ?? 'Emisión sin definir'}
+          </span>
+        )}
+      </td>
       <td className="px-4 py-3">
         <span className={clsx('chip text-[0.62rem]', cliente.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
           {cliente.activo ? 'Activo' : 'Inactivo'}

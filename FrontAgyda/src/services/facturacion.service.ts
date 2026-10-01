@@ -82,6 +82,7 @@ export interface CotizacionPorFacturar {
   total: number
   clienteId: number | null
   cliente: string | null
+  emisorRfc?: string | null
   renglones: number
 }
 
@@ -90,6 +91,8 @@ export interface ClienteFacturable {
   nombre: string
   contacto: string | null
   rfc: string | null
+  // Con qué emisor se le factura (solo tenant ARDABY TEC).
+  emisorRfc?: string | null
 }
 
 export interface ConceptoFacturaInput {
