@@ -181,7 +181,7 @@ export const facturacionService = {
   // fecha: solo se aplica si la factura queda como pre-factura (sin
   // timbrar) — una timbrada de verdad siempre lleva la fecha real del
   // timbrado, el backend la ignora en ese caso (ver facturasController.js).
-  facturarCotizacion: (cotId: number, body: { receptor?: ReceptorFiscal; formaPago?: string; metodoPago?: string; fecha?: string }) =>
+  facturarCotizacion: (cotId: number, body: { receptor?: ReceptorFiscal; formaPago?: string; metodoPago?: string; fecha?: string; emisorRfc?: string }) =>
     api.post(`/facturas/desde-cotizacion/${cotId}`, body).then((r) => r.data),
   /** Cotizaciones aprobadas sin factura y clientes, para facturar desde Finanzas. */
   porFacturar: async (): Promise<{ cotizaciones: CotizacionPorFacturar[]; clientes: ClienteFacturable[] }> => {
@@ -193,8 +193,13 @@ export const facturacionService = {
     const { data } = await api.get(`/facturas/receptor/${clienteId}`)
     return data.data ?? {}
   },
+  /** Vacío fuera del tenant ARDABY TEC — el selector de emisor solo aparece ahí. */
+  emisores: async (): Promise<{ rfc: string; nombre: string }[]> => {
+    const { data } = await api.get('/facturas/emisores')
+    return data.data ?? []
+  },
   /** Los productos del catálogo quedan en el cliente pendientes de pago (se avisa al pagarse). */
-  facturarManual: (body: { clienteId: number; conceptos: ConceptoFacturaInput[]; receptor?: ReceptorFiscal; formaPago?: string; metodoPago?: string; fecha?: string }) =>
+  facturarManual: (body: { clienteId: number; conceptos: ConceptoFacturaInput[]; receptor?: ReceptorFiscal; formaPago?: string; metodoPago?: string; fecha?: string; emisorRfc?: string }) =>
     api.post('/facturas/manual', body).then((r) => r.data as { data: FacturaEmitida }),
   cancelar: (id: number, motivo = '02') =>
     api.post(`/facturas/${id}/cancelar`, { motivo }).then((r) => r.data),

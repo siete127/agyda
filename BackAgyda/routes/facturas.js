@@ -8,6 +8,7 @@ router.get('/', authenticateToken, ctrl.list);
 router.post('/desde-cotizacion/:cotId', authenticateToken, requireActionAccess('crm', 'facturar'), ctrl.desdeCotizacion);
 // Facturar desde Finanzas: productos/servicios sueltos o cotizaciones aprobadas.
 router.get('/por-facturar', authenticateToken, ctrl.porFacturar);
+router.get('/emisores', authenticateToken, ctrl.emisores);
 router.get('/receptor/:clienteId', authenticateToken, ctrl.receptor);
 router.post('/manual', authenticateToken, requireActionAccess('crm', 'facturar'), ctrl.manual);
 

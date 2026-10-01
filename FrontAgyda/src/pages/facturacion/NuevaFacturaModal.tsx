@@ -103,6 +103,12 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
   // backend ignora esto si sí se timbra de verdad, ver NuevaFacturaModal
   // más abajo (nota junto al selector) y facturasController.js.
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  // Emisores con los que se puede facturar manejando el mismo catálogo
+  // (ARDABY TEC / EDGAR MONTOYA) — el backend solo devuelve algo en el
+  // tenant de ARDABY TEC, en los demás el array viene vacío y el selector
+  // no se muestra.
+  const { data: emisores = [] } = useQuery({ queryKey: ['facturas-emisores'], queryFn: () => facturacionService.emisores(), staleTime: Infinity })
+  const [emisorRfc, setEmisorRfc] = useState('')
   // Alta rápida de cliente / producto desde aquí mismo
   const { can } = useActionAccess()
   const puedeCrearCliente = can('clientes', 'crear')
@@ -177,16 +183,20 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
     cp: recGuardado?.cp ?? '',
     usoCfdi: recGuardado?.usoCfdi || RECEPTOR_VACIO.usoCfdi,
   }
+  // Si hay emisores para elegir (tenant ARDABY TEC), uno elegido es
+  // obligatorio igual que los datos fiscales — nunca se salta el paso 2
+  // sin que el usuario alcance a elegirlo (ver `continuar` más abajo).
   const receptorValido = rec.rfc.length >= 12 && rec.nombre.trim() && rec.regimenFiscal && rec.cp.length === 5
+    && (!emisores.length || !!emisorRfc)
 
   const facturar = useMutation({
     mutationFn: async () => {
       if (modo === 'cotizacion' && cot) {
-        const r = await facturacionService.facturarCotizacion(cot.id, { receptor: rec, formaPago, metodoPago, fecha })
+        const r = await facturacionService.facturarCotizacion(cot.id, { receptor: rec, formaPago, metodoPago, fecha, emisorRfc: emisorRfc || undefined })
         return r?.data as { modo?: string; folio?: string | number; serie?: string; asignados?: number } | undefined
       }
       const r = await facturacionService.facturarManual({
-        clienteId: clienteId!, receptor: rec, formaPago, metodoPago, fecha,
+        clienteId: clienteId!, receptor: rec, formaPago, metodoPago, fecha, emisorRfc: emisorRfc || undefined,
         conceptos: lineas.map((l) => ({ psId: l.psId, descripcion: l.descripcion.trim(), cantidad: l.cantidad, precioUnit: l.precioUnit, ivaTasa: l.ivaTasa })),
       })
       return r?.data
@@ -484,6 +494,15 @@ export function NuevaFacturaModal({ onClose, cotizacionInicial = null, preset = 
                 <span className={label}>Fecha de registro</span>
                 <input type="date" className={field} value={fecha} onChange={(e) => setFecha(e.target.value)} />
               </label>
+              {!!emisores.length && (
+                <label className="col-span-2 block">
+                  <span className={label}>Facturar como</span>
+                  <select className={field} value={emisorRfc} onChange={(e) => setEmisorRfc(e.target.value)}>
+                    <option value="">Selecciona…</option>
+                    {emisores.map((e) => <option key={e.rfc} value={e.rfc}>{e.nombre} — {e.rfc}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
             <p className="text-[0.7rem] text-gray-400">
               Si el timbrado no está configurado se genera como pre-factura (sin validez fiscal). En ambos casos queda en Cuentas por cobrar hasta que se registre el pago.

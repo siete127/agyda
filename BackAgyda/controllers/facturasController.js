@@ -5,6 +5,24 @@ const { asignarPendientesDeFactura, quitarPendientesDeFactura } = require('../se
 
 async function _pool(req) { return databaseService.getPool(req?.user?.empresa); }
 
+// Emisores con los que se puede facturar manejando el mismo catálogo de
+// productos — SOLO para el tenant 'agyda' (ARDABY TEC), nunca para las
+// demás empresas (edomex, santillana, etc.), cada una con su propia
+// facturación. Mientras no haya CSD cargado para ninguno de los dos RFC
+// (EMPRESA_FISCAL sigue vacía), esto solo deja constancia de cuál se
+// eligió en la pre-factura; no cambia si se timbra de verdad o no (eso lo
+// decide facturacionService.timbrar con el emisor de EMPRESA_FISCAL).
+// Lista fija en el backend — nunca se confía en una razón social/RFC que
+// mande el cliente sin validar contra esto.
+const EMISORES = [
+  { rfc: 'ATE210416757', nombre: 'ARDABY TEC' },
+  { rfc: 'MOGE9003308X3', nombre: 'EDGAR MONTOYA' },
+];
+function _emisorValido(req, rfc) {
+  if (req.user?.empresa !== 'agyda') return null;
+  return EMISORES.find((e) => e.rfc === String(rfc || '').toUpperCase().trim()) || null;
+}
+
 function mapFactura(r) {
   return {
     id: r.FAC_ID,
@@ -113,6 +131,12 @@ exports.receptor = async (req, res) => {
   }
 };
 
+// GET /api/facturas/emisores — lista vacía fuera del tenant 'agyda' (ver
+// _emisorValido); el frontend solo muestra el selector si llega algo.
+exports.emisores = async (req, res) => {
+  res.json({ success: true, data: req.user?.empresa === 'agyda' ? EMISORES : [] });
+};
+
 // POST /api/facturas/manual — factura de productos/servicios sueltos.
 // body: { clienteId, conceptos: [{ psId?, descripcion, cantidad, precioUnit, ivaTasa? }],
 //         receptor?: { rfc, nombre, regimenFiscal, cp, usoCfdi }, formaPago, metodoPago }
@@ -166,7 +190,12 @@ exports.manual = async (req, res) => {
     } catch (e) {
       return res.status(502).json({ success: false, message: `El PAC rechazó el timbrado: ${e.message}` });
     }
-    const emisor = await facturacionService.getEmpresaFiscal(req.user?.empresa);
+    // El emisor elegido (solo tenant 'agyda') pisa el de EMPRESA_FISCAL en
+    // el registro de la factura — no en el timbrado (facturacionService.timbrar
+    // ya corrió arriba con el emisor real/CSD, esto es solo qué RFC queda
+    // impreso en la pre-factura).
+    const emisorElegido = _emisorValido(req, b.emisorRfc);
+    const emisor = emisorElegido || await facturacionService.getEmpresaFiscal(req.user?.empresa);
     const estatus = resultado.modo === 'timbrada' ? 'timbrada' : 'pre-factura';
     const concepto = (conceptos.length === 1 ? conceptos[0].descripcion
       : `${conceptos[0].descripcion} y ${conceptos.length - 1} concepto${conceptos.length > 2 ? 's' : ''} más`).slice(0, 255);
@@ -384,7 +413,10 @@ exports.desdeCotizacion = async (req, res) => {
       return res.status(502).json({ success: false, message: `El PAC rechazó el timbrado: ${e.message}` });
     }
 
-    const emisor = await facturacionService.getEmpresaFiscal(req.user?.empresa);
+    // Mismo criterio que facturas.manual: el emisor elegido pisa el de
+    // EMPRESA_FISCAL en el registro, no en el timbrado real.
+    const emisorElegido = _emisorValido(req, b.emisorRfc);
+    const emisor = emisorElegido || await facturacionService.getEmpresaFiscal(req.user?.empresa);
     const estatus = resultado.modo === 'timbrada' ? 'timbrada' : 'pre-factura';
     // Mismo criterio que facturas.manual: fecha elegible solo si quedó como
     // pre-factura — una timbrada de verdad siempre lleva la fecha real.
