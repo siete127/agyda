@@ -73,28 +73,6 @@
                 </button>
                 <a href="#" class="btn-primary btn-primary--hero header-login-btn" id="loginNavLink" data-i18n="nav.login" onclick="return false;">Iniciar sesión</a>
                 <button type="button" class="btn-primary btn-primary--hero header-login-btn logout-btn" id="logoutBtn" style="display:none;" data-i18n="nav.logout">Cerrar sesión</button>
-                <div class="demo-btn-wrap">
-                    <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="true" aria-expanded="false">
-                        <span data-i18n="nav.probarDemo">Probar demo</span>
-                        <span class="demo-btn-arrow" aria-hidden="true">&rarr;</span>
-                    </button>
-                    <div class="demo-popover" id="demoPopover">
-                        <p class="demo-popover-title" data-i18n="demo.titulo">Prueba AGYDA con estas credenciales</p>
-                        <div class="demo-popover-cred">
-                            <span class="demo-popover-role" data-i18n="demo.administrador">Administrador</span>
-                            <span class="demo-popover-line"><strong data-i18n="demo.usuario">Usuario:</strong> admindemo</span>
-                            <span class="demo-popover-line"><strong data-i18n="demo.contrasena">Contraseña:</strong> AdminDemo2026</span>
-                        </div>
-                        <div class="demo-popover-cred">
-                            <span class="demo-popover-role" data-i18n="demo.agente">Agente</span>
-                            <span class="demo-popover-line"><strong data-i18n="demo.usuario">Usuario:</strong> agente</span>
-                            <span class="demo-popover-line"><strong data-i18n="demo.contrasena">Contraseña:</strong> Demo2026</span>
-                        </div>
-                        <a href="https://agyda.ardabytec.vip/login?tenant=demo" target="_blank" rel="noopener" class="demo-popover-go">
-                            <span data-i18n="demo.irAlLogin">Ir al login</span> <span aria-hidden="true">&rarr;</span>
-                        </a>
-                    </div>
-                </div>
                 <button type="button" class="menu-toggle-btn" id="menuToggleBtn" aria-label="Abrir menú" data-i18n-aria-label="aria.abrirMenu" aria-expanded="false">
                     <span class="menu-toggle-bar"></span>
                     <span class="menu-toggle-bar"></span>
@@ -504,50 +482,6 @@
                         </form>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="loginModal" class="modal-overlay">
-        <div class="modal-container login-modal-container">
-            <button class="modal-close-btn" onclick="closeLoginModal()">&times;</button>
-            <div class="login-modal-brand">
-                <img src="assets/logos-empresa/logo1-modo-oscuro.png" alt="ARDABYTEC" class="login-modal-brand-logo">
-                <span class="login-modal-brand-chip">Portal corporativo</span>
-                <p class="login-modal-brand-title">Bienvenido de nuevo</p>
-                <p class="login-modal-brand-subtitle">Accede con tus credenciales para continuar.</p>
-            </div>
-            <div class="login-modal-body">
-                <form id="loginModalForm" class="login-modal-form" novalidate>
-                    <div class="login-modal-field">
-                        <label for="loginModalUsuario" data-i18n="login.usuario">Usuario</label>
-                        <div class="login-modal-input-wrap">
-                            <svg class="login-modal-input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12Zm0 2.5c-3.3 0-9.8 1.6-9.8 4.9v2.4h19.6v-2.4c0-3.3-6.5-4.9-9.8-4.9Z" fill="currentColor"/>
-                            </svg>
-                            <input type="text" id="loginModalUsuario" name="username" autocomplete="username" required>
-                        </div>
-                    </div>
-                    <div class="login-modal-field">
-                        <label for="loginModalPassword" data-i18n="login.password">Contraseña</label>
-                        <div class="login-modal-input-wrap">
-                            <svg class="login-modal-input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M6 10V8a6 6 0 1 1 12 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h8V8a4 4 0 1 0-8 0v2Z" fill="currentColor"/>
-                            </svg>
-                            <input type="password" id="loginModalPassword" name="password" autocomplete="current-password" required>
-                            <button type="button" class="login-modal-toggle-pw" id="loginModalTogglePw" aria-label="Mostrar contraseña">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" stroke="currentColor" stroke-width="1.6"/>
-                                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    <p id="loginModalStatus" class="login-modal-status" aria-live="polite"></p>
-                    <button type="submit" id="loginModalSubmitBtn" class="login-modal-submit-btn">
-                        <span data-i18n="login.entrar">Iniciar sesión</span>
-                    </button>
-                </form>
             </div>
         </div>
     </div>
@@ -1323,11 +1257,7 @@
                 "nav.inicio": "Inicio", "nav.nosotros": "Nosotros", "nav.soluciones": "Soluciones",
                 "nav.aliados": "Aliados", "nav.servicios": "Servicios", "nav.contacto": "Contacto",
                 "nav.portafolio": "Portafolio", "nav.vacantes": "Vacantes", "nav.login": "Iniciar sesión",
-                "nav.logout": "Cerrar sesión", "nav.probarDemo": "Probar demo",
-                "demo.titulo": "Prueba AGYDA con estas credenciales",
-                "demo.administrador": "Administrador", "demo.agente": "Agente",
-                "demo.usuario": "Usuario:", "demo.contrasena": "Contraseña:",
-                "demo.irAlLogin": "Ir al login",
+                "nav.logout": "Cerrar sesión",
                 "vacantes.volver": "Volver al inicio",
                 "nav.baseConocimiento": "ArdaWiki",
 
@@ -1533,11 +1463,7 @@
                 "nav.inicio": "Home", "nav.nosotros": "About", "nav.soluciones": "Solutions",
                 "nav.aliados": "Partners", "nav.servicios": "Services", "nav.contacto": "Contact",
                 "nav.portafolio": "Portfolio", "nav.vacantes": "Careers", "nav.login": "Login",
-                "nav.logout": "Log out", "nav.probarDemo": "Try demo",
-                "demo.titulo": "Try AGYDA with these credentials",
-                "demo.administrador": "Administrator", "demo.agente": "Agent",
-                "demo.usuario": "Username:", "demo.contrasena": "Password:",
-                "demo.irAlLogin": "Go to login",
+                "nav.logout": "Log out",
                 "vacantes.volver": "Back to home",
                 "nav.baseConocimiento": "ArdaWiki",
 
@@ -1945,7 +1871,6 @@
         (function () {
             const loginLink = document.getElementById('loginNavLink');
             const logoutBtn = document.getElementById('logoutBtn');
-            const demoBtn = document.getElementById('demoBtn');
             if (!loginLink || !logoutBtn) return;
 
             // En desarrollo local (dev-server en :8080) AGYDA corre en localhost:5173 (Vite).
@@ -1999,8 +1924,8 @@
                     logoutBtn.style.display = '';
                 } else {
                     loginLink.textContent = currentLang === 'en' ? 'Login' : 'Iniciar sesión';
-                    loginLink.href = '#';
-                    loginLink.onclick = function () { window.openLoginModal(); return false; };
+                    loginLink.href = `${INTRANET_BASE_URL}/login`;
+                    loginLink.onclick = null;
                     loginLink.setAttribute('data-i18n', 'nav.login');
                     loginLink.removeAttribute('target');
                     loginLink.removeAttribute('rel');
@@ -2033,114 +1958,6 @@
             });
 
             renderSessionUI();
-        })();
-
-        // --- POPOVER DE CREDENCIALES DEMO ---
-        (function () {
-            const demoBtn = document.getElementById('demoBtn');
-            const demoPopover = document.getElementById('demoPopover');
-            if (!demoBtn || !demoPopover) return;
-
-            function closeDemoPopover() {
-                demoPopover.classList.remove('active');
-                demoBtn.setAttribute('aria-expanded', 'false');
-            }
-
-            demoBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                const isOpen = demoPopover.classList.toggle('active');
-                demoBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            });
-
-            document.addEventListener('click', function (e) {
-                if (!demoPopover.contains(e.target) && e.target !== demoBtn) closeDemoPopover();
-            });
-        })();
-
-        // --- MODAL DE LOGIN (ventana emergente en vez de página completa) ---
-        (function () {
-            const loginModal = document.getElementById('loginModal');
-            const loginModalForm = document.getElementById('loginModalForm');
-            const loginModalStatus = document.getElementById('loginModalStatus');
-            const loginModalSubmitBtn = document.getElementById('loginModalSubmitBtn');
-
-            window.openLoginModal = function () {
-                if (!loginModal) return;
-                loginModalForm.reset();
-                loginModalStatus.innerText = '';
-                loginModalStatus.className = 'login-modal-status';
-                loginModal.classList.add('active');
-                document.body.style.overflow = 'hidden';
-                document.getElementById('loginModalUsuario').focus();
-            };
-
-            window.closeLoginModal = function () {
-                if (!loginModal) return;
-                loginModal.classList.remove('active');
-                document.body.style.overflow = '';
-            };
-
-            loginModal.addEventListener('click', function (event) {
-                if (event.target === loginModal) closeLoginModal();
-            });
-
-            const togglePwBtn = document.getElementById('loginModalTogglePw');
-            const pwInput = document.getElementById('loginModalPassword');
-            if (togglePwBtn && pwInput) {
-                togglePwBtn.addEventListener('click', function () {
-                    const showing = pwInput.type === 'text';
-                    pwInput.type = showing ? 'password' : 'text';
-                    const label = showing
-                        ? (currentLang === 'en' ? 'Show password' : 'Mostrar contraseña')
-                        : (currentLang === 'en' ? 'Hide password' : 'Ocultar contraseña');
-                    togglePwBtn.setAttribute('aria-label', label);
-                });
-            }
-
-            if (loginModalForm) {
-                loginModalForm.addEventListener('submit', async function (e) {
-                    e.preventDefault();
-                    if (!loginModalForm.checkValidity()) {
-                        loginModalForm.reportValidity();
-                        return;
-                    }
-
-                    const username = document.getElementById('loginModalUsuario').value.trim();
-                    const password = document.getElementById('loginModalPassword').value;
-
-                    loginModalSubmitBtn.disabled = true;
-                    loginModalStatus.innerText = '';
-                    loginModalStatus.className = 'login-modal-status';
-
-                    try {
-                        const res = await fetch('/api/login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ usuario: username, password }),
-                        });
-                        const data = await res.json().catch(() => ({}));
-
-                        if (res.ok && data.success) {
-                            localStorage.setItem('ardabytec_usuario', JSON.stringify(data.data));
-                            loginModalStatus.innerText = currentLang === 'en' ? 'Login successful.' : 'Inicio de sesión correcto.';
-                            loginModalStatus.className = 'login-modal-status success';
-
-                            setTimeout(function () {
-                                closeLoginModal();
-                                if (typeof window.renderSessionUI === 'function') window.renderSessionUI();
-                            }, 600);
-                        } else {
-                            loginModalStatus.innerText = data.message || (currentLang === 'en' ? 'Incorrect username or password.' : 'Usuario o contraseña incorrectos.');
-                            loginModalStatus.className = 'login-modal-status error';
-                        }
-                    } catch (err) {
-                        loginModalStatus.innerText = currentLang === 'en' ? 'A connection error occurred. Please try again later.' : 'Ocurrió un error de conexión. Intenta de nuevo más tarde.';
-                        loginModalStatus.className = 'login-modal-status error';
-                    } finally {
-                        loginModalSubmitBtn.disabled = false;
-                    }
-                });
-            }
         })();
 
         // --- SISTEMA DE MANEJO DE VENTANAS MODALES ---
