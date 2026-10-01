@@ -107,6 +107,8 @@ export function AsistenteCampania({ onSalir, campaniaEditar, grupo }: { onSalir:
     queryFn: () => ccService.getFormulariosDeCampania(campaniaId!),
     enabled: campaniaId != null,
   })
+  const { data: tipsTodas = [] } = useQuery({ queryKey: ['cc-tip-cat'], queryFn: () => ccService.getTipificacionesCatalogo(), enabled: campaniaId != null })
+  const tipsDeCampania = tipsTodas.filter((t) => t.campaniaId === campaniaId)
   const inval = () => { qc.invalidateQueries({ queryKey: ['cc-campanias'] }); qc.invalidateQueries({ queryKey: ['cc-grupos-all'] }) }
 
   const slugFinal = datos.slugTocado ? datos.slug : slugDe(datos.nombre)
@@ -146,7 +148,8 @@ export function AsistenteCampania({ onSalir, campaniaEditar, grupo }: { onSalir:
     skills: grupos.length > 0,
     canales: soloMarcador ? canales.some((c) => c.tipo === 'marcador') : canales.length > 0,
     formulario: (forms?.formularios.length ?? 0) > 0,
-    tipificaciones: false, // opcional, sin conteo barato
+    // Lista: la campaña tiene al menos una tipificación propia activa (las de Ventas cuentan al copiarse).
+    tipificaciones: tipsDeCampania.length > 0,
     listo: false,
   }
 
@@ -265,6 +268,7 @@ export function AsistenteCampania({ onSalir, campaniaEditar, grupo }: { onSalir:
                   {[
                     ...(soloMarcador ? [] : [{ ok: completo.skills, txt: `${grupos.length} skill(s)`, falta: 'Sin skills', paso: 'skills' as PasoKey }]),
                     { ok: completo.canales, txt: `${canales.length} canal(es): ${canales.map((c) => c.nombre).join(', ')}`, falta: soloMarcador ? 'Sin canal Marcador' : 'Sin canales', paso: 'canales' as PasoKey },
+                    { ok: completo.tipificaciones, txt: `${tipsDeCampania.length} tipificación(es): ${tipsDeCampania.map((t) => t.nombre.trim()).join(', ')}`, falta: 'Sin tipificaciones', paso: 'tipificaciones' as PasoKey },
                     { ok: completo.formulario, txt: `${forms?.formularios.length ?? 0} formulario(s): ${(forms?.formularios ?? []).map((f) => f.nombre).join(', ')}`, falta: 'Sin formulario asignado', paso: 'formulario' as PasoKey },
                     {
                       ok: !!forms?.marcador.formularioId,
@@ -405,7 +409,7 @@ function TipificacionesDeVentas({ ventasId, campania }: { ventasId: number; camp
   const [editor, setEditor] = useState(false)
   const copiar = useMutation({
     mutationFn: () => campanasVentasService.copiarEstatusACampania(ventasId, campania.id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-tipificaciones'] }); qc.invalidateQueries({ queryKey: ['ccf-tipificaciones'] }) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cc-tip-cat'] }); qc.invalidateQueries({ queryKey: ['cc-tipificaciones'] }); qc.invalidateQueries({ queryKey: ['ccf-tipificaciones'] }) },
     onError: () => toast.error('No se pudieron copiar los estatus de Ventas a la campaña'),
   })
   const copiado = useRef(false)
