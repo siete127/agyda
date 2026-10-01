@@ -204,7 +204,8 @@ exports.descartar = async (req, res) => {
   try {
     const pool = await poolDe(req);
     const r = await leerBorrador(pool, req.params.id);
-    if (r.BOR_GRUPO_ID) throw err('El grupo ya se creó; continúa la creación para terminarlo (o elimínalo en Configuración → Grupos)', 409);
+    // Un borrador de actualización sí se descarta: el grupo ya existía y queda como estaba.
+    if (r.BOR_GRUPO_ID && parse(r.BOR_AVANCE, {})?.modo !== 'actualizar') throw err('El grupo ya se creó; continúa la creación para terminarlo (o elimínalo en Configuración → Grupos)', 409);
     await pool.request().input('id', sql.Int, r.BOR_ID).query('DELETE FROM dbo.INTRANET_GRUPOS_BORRADORES WHERE BOR_ID=@id');
     await auditar(req, 'borrador-descartar', r.BOR_ID, { nombre: r.BOR_NOMBRE });
     res.json({ success: true });
@@ -219,6 +220,63 @@ exports.terminar = async (req, res) => {
     await actualizar(pool, r.BOR_ID, { BOR_ESTADO: 'terminado' });
     res.json({ success: true });
   } catch (e) { responderError(res, e, 'terminar'); }
+};
+
+// POST /desde-campania — { tipo: 'cc' | 'ventas', id }. Para "Editar campaña"
+// desde Operaciones → Campañas: busca el grupo que ya la usa y abre su
+// configuración actual como BORRADOR de actualización (BOR_GRUPO_ID = ese
+// grupo, avance.modo = 'actualizar'); al "crear" se aplica sobre ese grupo.
+// Si el usuario ya tenía un borrador abierto de ese grupo, se retoma.
+// Sin grupo: { borradorId: null } y el asistente arranca uno nuevo con la campaña.
+exports.desdeCampania = async (req, res) => {
+  try {
+    const pool = await poolDe(req);
+    const tipo = req.body?.tipo === 'ventas' ? 'ventas' : 'cc';
+    const id = Number(req.body?.id);
+    if (!Number.isInteger(id) || id < 1) throw err('Campaña inválida');
+    const grupos = (await pool.request().input('c', sql.Int, id).query(tipo === 'ventas'
+      ? `SELECT EQ_ID id, EQ_NOMBRE nombre, EQ_DESCRIPCION descripcion, CAST(ISNULL(EQ_ATIENDE_CLIENTES, 0) AS bit) atiende
+         FROM CC_EQUIPOS WHERE EQ_ACTIVO = 1 AND EQ_VENTAS_CAMPANA_ID = @c ORDER BY EQ_ID`
+      : `SELECT e.EQ_ID id, e.EQ_NOMBRE nombre, e.EQ_DESCRIPCION descripcion, CAST(ISNULL(e.EQ_ATIENDE_CLIENTES, 0) AS bit) atiende
+         FROM CC_EQUIPOS e WHERE e.EQ_ACTIVO = 1 AND (e.EQ_CAMPANIA_ID = @c
+           OR EXISTS (SELECT 1 FROM CC_EQUIPO_CAMPANIAS ec WHERE ec.EQC_EQUIPO_ID = e.EQ_ID AND ec.EQC_CAMPANIA_ID = @c))
+         ORDER BY e.EQ_ID`)).recordset;
+    if (!grupos.length) return res.json({ success: true, data: { borradorId: null, grupo: null, otros: [] } });
+    const g = grupos[0];
+    const otros = grupos.slice(1).map((x) => x.nombre);
+
+    const abierto = (await pool.request().input('g', sql.Int, g.id).input('u', sql.Int, uid(req)).query(`
+      SELECT TOP 1 BOR_ID id FROM dbo.INTRANET_GRUPOS_BORRADORES
+      WHERE BOR_GRUPO_ID = @g AND BOR_USUARIO_ID = @u AND BOR_ESTADO IN ('borrador', 'error') ORDER BY BOR_ACTUALIZADO DESC`)).recordset[0];
+    if (abierto) return res.json({ success: true, data: { borradorId: abierto.id, grupo: { id: g.id, nombre: g.nombre }, otros, retomado: true } });
+
+    const tipoGrupo = g.atiende ? 'atencion-clientes' : 'cc-equipos';
+    const t = porKey[tipoGrupo];
+    const cfg = await t.config.leer(pool, g.id);
+    const agentes = await t.miembros(pool, g.id);
+    const clientes = g.atiende && t.clientes ? await t.clientes(pool, g.id) : [];
+    const datos = {
+      tipo: tipoGrupo, nombre: g.nombre, descripcion: g.descripcion || '',
+      campanias: cfg.campanias.filter((c) => c.asignada).map((c) => ({ id: c.id, formularioId: c.formularioId ?? null })),
+      modalidad: cfg.modalidad || 'omnicanal',
+      skillIds: cfg.skillIds || [],
+      webphoneVistaId: cfg.webphoneVistaId || null,
+      ventasCampanaId: cfg.ventasCampanaId || null,
+      supervisores: (cfg.supervisores || []).map((s) => ({ usuarioId: s.usuarioId, nombre: s.nombre })),
+      agentes: agentes.map((a) => ({ usuarioId: a.usuarioId, nombre: a.nombre })),
+      clientes: clientes.map((c) => ({ clienteId: c.usuarioId ?? c.clienteId, nombre: c.nombre })),
+      reportes: [], // sus reportes ya existen; solo se crean los que se elijan de nuevo
+    };
+    const rs = await pool.request()
+      .input('uid', sql.Int, uid(req)).input('un', sql.NVarChar, req.user?.nombre || req.user?.username || null)
+      .input('t', sql.NVarChar, tipoGrupo).input('n', sql.NVarChar, g.nombre)
+      .input('d', sql.NVarChar, JSON.stringify(datos)).input('g', sql.Int, g.id)
+      .input('a', sql.NVarChar, JSON.stringify({ completadas: ['grupo'], modo: 'actualizar' }))
+      .query(`INSERT INTO dbo.INTRANET_GRUPOS_BORRADORES (BOR_USUARIO_ID, BOR_USUARIO_NOMBRE, BOR_TIPO, BOR_NOMBRE, BOR_DATOS, BOR_PASO, BOR_GRUPO_ID, BOR_AVANCE)
+              VALUES (@uid, @un, @t, @n, @d, 1, @g, @a); SELECT SCOPE_IDENTITY() AS id;`);
+    await auditar(req, 'borrador-desde-grupo', g.id, { campania: { tipo, id } });
+    res.status(201).json({ success: true, data: { borradorId: Number(rs.recordset[0].id), grupo: { id: g.id, nombre: g.nombre }, otros } });
+  } catch (e) { responderError(res, e, 'desdeCampania'); }
 };
 
 // POST /borradores/:id/crear — crea (o continúa creando) el grupo con todo.
@@ -257,6 +315,31 @@ exports.crearGrupo = async (req, res) => {
       grupoId = await t.crear(pool, { nombre: String(datos.nombre).trim(), descripcion: String(datos.descripcion || '').trim() || null }, ctx);
       await actualizar(pool, borId, { BOR_GRUPO_ID: grupoId });
     });
+
+    // Actualizar un grupo existente (borrador abierto con "Editar campaña"):
+    // su nombre/descripción y quitar a quien ya no esté (antes de reasignar
+    // papeles, así alguien puede pasar de agente a supervisor o al revés).
+    const actualizando = avance.modo === 'actualizar';
+    if (actualizando) {
+      await etapa('datos', async () => {
+        await pool.request().input('id', sql.Int, grupoId)
+          .input('n', sql.NVarChar(120), String(datos.nombre).trim().slice(0, 120))
+          .input('d', sql.NVarChar(300), String(datos.descripcion || '').trim().slice(0, 300) || null)
+          .query('UPDATE CC_EQUIPOS SET EQ_NOMBRE = @n, EQ_DESCRIPCION = @d WHERE EQ_ID = @id');
+      });
+      await etapa('quitar', async () => {
+        const quedan = new Set(ids((datos.agentes || []).map((a) => a.usuarioId)));
+        for (const m of await t.miembros(pool, grupoId)) {
+          if (!quedan.has(Number(m.usuarioId))) await t.quitar(pool, grupoId, Number(m.usuarioId), ctx);
+        }
+        if (datos.tipo === 'atencion-clientes' && t.clientes) {
+          const siguen = new Set(ids((datos.clientes || []).map((c) => c.clienteId)));
+          for (const c of await t.clientes(pool, grupoId)) {
+            if (!siguen.has(Number(c.clienteId))) await t.quitarCliente(pool, grupoId, Number(c.clienteId), ctx);
+          }
+        }
+      });
+    }
 
     // 2. Campañas, skills, comunicación, marcador y supervisores (reemplaza, no duplica).
     const modalidad = ['omnicanal', 'marcador', 'ambos'].includes(datos.modalidad) ? datos.modalidad : 'omnicanal';
@@ -309,7 +392,7 @@ exports.crearGrupo = async (req, res) => {
     avance.etapa = 'listo';
     avance.resultado = resultado;
     await actualizar(pool, borId, { BOR_ESTADO: 'creado', BOR_AVANCE: avance, BOR_ERROR: null });
-    await auditar(req, 'crear', grupoId, { borrador: borId, tipo: datos.tipo, nombre: datos.nombre });
+    await auditar(req, actualizando ? 'actualizar' : 'crear', grupoId, { borrador: borId, tipo: datos.tipo, nombre: datos.nombre });
     res.json({ success: true, data: { grupoId, resultado } });
   } catch (e) {
     if (borId && !e.status) await actualizar(pool, borId, { BOR_ESTADO: 'error', BOR_ERROR: e.message }).catch(() => {});

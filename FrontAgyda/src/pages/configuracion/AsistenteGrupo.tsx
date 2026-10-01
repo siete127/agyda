@@ -77,21 +77,37 @@ function skillsDeCampanias(d: DatosGrupoBorrador, cat: CatalogoAsistenteGrupo | 
 // Si hay borradores pendientes, al abrir pregunta si continuar o empezar otro.
 // Campaña que se abre para editar al entrar (desde Operaciones → Campañas).
 export type CampaniaAEditar = { tipo: 'cc' | 'ventas'; id: number }
+// El grupo que ya usa esa campaña, abierto como borrador de cambios.
+type GrupoDeCampania = { nombre: string; otros: string[]; retomado?: boolean }
 
 export function AsistenteGrupo({ onSalir, editarCampania }: { onSalir: () => void; editarCampania?: CampaniaAEditar }) {
   const qc = useQueryClient()
   const { data: catalogo, refetch: recargarCatalogo } = useQuery({ queryKey: ['grupo-asistente-catalogo'], queryFn: svc.catalogo })
-  // Si se entra a editar una campaña se va directo al paso de campañas (sin preguntar por borradores).
-  const [modo, setModo] = useState<'elegir' | 'editar' | 'resultado'>(editarCampania ? 'editar' : 'elegir')
+  // Si se entra a editar una campaña: se abre como borrador el grupo que ya la usa (o uno nuevo
+  // con la campaña marcada si ninguno la tiene), directo en el paso de campañas.
+  const [modo, setModo] = useState<'elegir' | 'preparando' | 'editar' | 'resultado'>(editarCampania ? 'preparando' : 'elegir')
   const [borradorId, setBorradorId] = useState<number | null>(null)
   const [cargar, setCargar] = useState(false)
+  const [grupoDeCampania, setGrupoDeCampania] = useState<GrupoDeCampania | null>(null)
+  useEffect(() => {
+    if (modo !== 'preparando' || !editarCampania) return
+    let vivo = true
+    svc.desdeCampania(editarCampania.tipo, editarCampania.id)
+      .then((r) => {
+        if (!vivo) return
+        if (r.borradorId && r.grupo) { setBorradorId(r.borradorId); setCargar(true); setGrupoDeCampania({ nombre: r.grupo.nombre, otros: r.otros, retomado: r.retomado }) }
+        setModo('editar')
+      })
+      .catch((e) => { if (vivo) { toast.error(msgError(e, 'No se pudo abrir el grupo de la campaña')); setModo('editar') } })
+    return () => { vivo = false }
+  }, [modo, editarCampania])
   const { data: borradores, isLoading } = useQuery({ queryKey: ['grupo-asistente-borradores'], queryFn: svc.borradores, enabled: modo === 'elegir' })
   const mios = (borradores ?? []).filter((b) => b.esMio)
   useEffect(() => {
     if (modo === 'elegir' && !isLoading && borradores && mios.length === 0) { setCargar(false); setModo('editar') }
   }, [modo, isLoading, borradores, mios.length])
 
-  if (!catalogo || (modo === 'elegir' && (isLoading || mios.length === 0))) {
+  if (!catalogo || modo === 'preparando' || (modo === 'elegir' && (isLoading || mios.length === 0))) {
     return <div className={clsx(card, 'flex justify-center py-10')}><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
   }
   if (modo === 'elegir') {
@@ -104,7 +120,7 @@ export function AsistenteGrupo({ onSalir, editarCampania }: { onSalir: () => voi
     return <VistaResultado borradorId={borradorId} onEditar={() => { setCargar(true); setModo('editar') }} onSalir={onSalir} />
   }
   return <Editor catalogo={catalogo} recargarCatalogo={() => recargarCatalogo()} borradorId={borradorId} cargar={cargar}
-    onBorradorCreado={setBorradorId} onCreado={() => setModo('resultado')} onSalir={onSalir} editarCampania={editarCampania} />
+    onBorradorCreado={setBorradorId} onCreado={() => setModo('resultado')} onSalir={onSalir} editarCampania={editarCampania} grupoDeCampania={grupoDeCampania} />
 }
 
 /* ─────────────── Pregunta al abrir ─────────────── */
@@ -121,7 +137,8 @@ function ElegirBorrador({ borradores, onContinuar, onNuevo, onSalir, onDescartad
     b.estado === 'creado' ? 'Creado · falta revisar y terminar'
       : b.estado === 'error' ? `No se pudo terminar de crear: ${b.error ?? 'error'}`
         : b.estado === 'creando' ? (b.interrumpido ? 'La creación se interrumpió a la mitad' : 'Creándose…')
-          : `Borrador · paso ${Math.min(b.paso + 1, 6)}`
+          : b.avance?.modo === 'actualizar' ? `Cambios pendientes a un grupo que ya existe · paso ${Math.min(b.paso + 1, 6)}`
+            : `Borrador · paso ${Math.min(b.paso + 1, 6)}`
   return (
     <div className="space-y-4">
       <div className={clsx(card, 'flex items-center gap-3.5')}>
@@ -141,7 +158,7 @@ function ElegirBorrador({ borradores, onContinuar, onNuevo, onSalir, onDescartad
               <p className={clsx('text-[0.72rem]', b.estado === 'error' ? 'text-red-600' : b.interrumpido ? 'text-amber-600' : b.estado === 'creado' ? 'text-emerald-600' : 'text-ink-tertiary')}>{estado(b)}</p>
               <p className="text-[0.66rem] text-ink-tertiary">{b.resumen.campanias} campañas · {b.resumen.supervisores} supervisores · {b.resumen.agentes} agentes{b.tipo === 'atencion-clientes' ? ` · ${b.resumen.clientes} clientes` : ''}</p>
             </div>
-            {!b.grupoId && b.estado !== 'creando' && (
+            {(!b.grupoId || b.avance?.modo === 'actualizar') && b.estado !== 'creando' && (
               <button onClick={() => setDescartar(b)} className="rounded-lg p-2 text-ink-tertiary hover:bg-red-50 hover:text-red-500" title="Descartar borrador"><Trash2 className="h-4 w-4" /></button>
             )}
             <button onClick={() => onContinuar(b)} className={btnPrim}>Continuar <ArrowRight className="h-4 w-4" /></button>
@@ -162,13 +179,21 @@ function ElegirBorrador({ borradores, onContinuar, onNuevo, onSalir, onDescartad
 type SetDatos = React.Dispatch<React.SetStateAction<DatosGrupoBorrador | null>>
 const upd = (s: SetDatos, f: (d: DatosGrupoBorrador) => DatosGrupoBorrador) => s((d) => (d ? f(d) : d))
 
-function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCreado, onCreado, onSalir, editarCampania }: {
+function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCreado, onCreado, onSalir, editarCampania, grupoDeCampania }: {
   catalogo: CatalogoAsistenteGrupo; recargarCatalogo: () => void; borradorId: number | null; cargar: boolean
   onBorradorCreado: (id: number) => void; onCreado: () => void; onSalir: () => void; editarCampania?: CampaniaAEditar
+  grupoDeCampania?: GrupoDeCampania | null
 }) {
   const qc = useQueryClient()
   // Las plantillas recomendadas quedan marcadas de inicio (también en borradores viejos que no las tenían).
-  const [datos, setDatos] = useState<DatosGrupoBorrador | null>(cargar ? null : { ...vacio(), reportes: recomendadasDe(catalogo) })
+  // Grupo nuevo con la campaña ya marcada (si ningún grupo la usa).
+  const [datos, setDatos] = useState<DatosGrupoBorrador | null>(cargar ? null : {
+    ...vacio(), reportes: recomendadasDe(catalogo),
+    ...(editarCampania?.tipo === 'cc' ? { campanias: [{ id: editarCampania.id, formularioId: null }] } : {}),
+    ...(editarCampania?.tipo === 'ventas' ? { ventasCampanaId: editarCampania.id } : {}),
+  })
+  // Borrador de cambios de un grupo que ya existe: al final se guarda sobre él.
+  const [actualizando, setActualizando] = useState(false)
   const [paso, setPaso] = useState(editarCampania ? 1 : 0)
   const [grupoYaCreado, setGrupoYaCreado] = useState(false)
   const [guardado, setGuardado] = useState<'guardado' | 'guardando' | 'pendiente' | 'error'>('guardado')
@@ -184,6 +209,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
     setDatos({ ...vacio(), reportes: recomendadasDe(catalogo), ...cargado.datos })
     setPaso(Math.min(cargado.paso ?? 0, 5))
     setGrupoYaCreado(!!cargado.grupoId)
+    setActualizando(cargado.avance?.modo === 'actualizar')
   }, [cargado, datos, catalogo])
 
   const guardarAhora = async (d: DatosGrupoBorrador, p: number) => {
@@ -253,7 +279,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
         <button onClick={() => (idRef.current || datos.nombre.trim() ? setConfirmSalir(true) : onSalir())} title="Salir del asistente"
           className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 text-ink-tertiary transition hover:bg-gray-50"><X className="h-4 w-4" /></button>
         <div className="min-w-0 flex-1">
-          <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">Crear grupo · borrador</p>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">{actualizando ? 'Editar grupo · borrador de cambios' : 'Crear grupo · borrador'}</p>
           <h2 className="truncate text-base font-bold text-ink">{datos.nombre || 'Grupo nuevo'}</h2>
         </div>
         {idRef.current && (
@@ -333,7 +359,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
               </div>
             </div>
           )}
-          {actual.key === 'asignaciones' && <PasoAsignaciones datos={datos} setDatos={setDatos} catalogo={catalogo} recargarCatalogo={recargarCatalogo} editarInicial={editarCampania} />}
+          {actual.key === 'asignaciones' && <PasoAsignaciones datos={datos} setDatos={setDatos} catalogo={catalogo} recargarCatalogo={recargarCatalogo} editarInicial={editarCampania} grupoDeCampania={grupoDeCampania} />}
           {actual.key === 'personas' && <PasoPersonas datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'clientes' && <PasoClientes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
           {actual.key === 'reportes' && <PasoReportes datos={datos} setDatos={setDatos} catalogo={catalogo} />}
@@ -374,7 +400,7 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
               )}
               <div className="flex justify-end">
                 <button onClick={() => setConfirmCrear(true)} disabled={pend.length > 0 || creando} className={btnPrim}>
-                  {creando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />} Crear grupo
+                  {creando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />} {actualizando ? 'Guardar cambios en el grupo' : 'Crear grupo'}
                 </button>
               </div>
             </div>
@@ -400,17 +426,18 @@ function Editor({ catalogo, recargarCatalogo, borradorId, cargar, onBorradorCrea
           ? 'Lo capturado queda guardado como borrador. El grupo todavía no se crea: la próxima vez que abras "Crear grupo" te preguntará si quieres continuarlo.'
           : 'Todavía no se guarda nada (el borrador se guarda al pasar del primer paso). Si sales, se pierde lo que escribiste.'}
         onConfirm={async () => { if (idRef.current) await guardarAhora(datos, paso); setConfirmSalir(false); qc.invalidateQueries({ queryKey: ['grupo-asistente-borradores'] }); onSalir() }} />
-      <ConfirmDialog isOpen={confirmCrear} onClose={() => setConfirmCrear(false)} variant="warning" confirmLabel="Crear grupo" isPending={creando}
-        title={`¿Crear el grupo ${datos.nombre}?`}
-        message={`Se crea con ${datos.campanias.length} campaña(s), ${datos.supervisores.length} supervisor(es) y ${datos.agentes.length} ${gente.toLowerCase()}${atiende ? ` y ${datos.clientes.length} cliente(s)` : ''}; todos reciben su configuración al momento. Si algo falla, podrás continuar sin duplicar nada.`}
+      <ConfirmDialog isOpen={confirmCrear} onClose={() => setConfirmCrear(false)} variant="warning" confirmLabel={actualizando ? 'Guardar cambios' : 'Crear grupo'} isPending={creando}
+        title={actualizando ? `¿Guardar los cambios del grupo ${datos.nombre}?` : `¿Crear el grupo ${datos.nombre}?`}
+        message={actualizando ? `El grupo queda con ${datos.campanias.length} campaña(s), ${datos.supervisores.length} supervisor(es) y ${datos.agentes.length} ${gente.toLowerCase()}; quien entra o sale del grupo recibe o pierde su configuración al momento.` : `Se crea con ${datos.campanias.length} campaña(s), ${datos.supervisores.length} supervisor(es) y ${datos.agentes.length} ${gente.toLowerCase()}${atiende ? ` y ${datos.clientes.length} cliente(s)` : ''}; todos reciben su configuración al momento. Si algo falla, podrás continuar sin duplicar nada.`}
         onConfirm={crearGrupo} />
     </div>
   )
 }
 
 /* ─────────────── Paso 2: Campañas y skills ─────────────── */
-function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarInicial }: {
+function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarInicial, grupoDeCampania }: {
   datos: DatosGrupoBorrador; setDatos: SetDatos; catalogo: CatalogoAsistenteGrupo; recargarCatalogo: () => void; editarInicial?: CampaniaAEditar
+  grupoDeCampania?: GrupoDeCampania | null
 }) {
   const qc = useQueryClient()
   const { can } = useActionAccess()
@@ -456,7 +483,11 @@ function PasoAsignaciones({ datos, setDatos, catalogo, recargarCatalogo, editarI
     <div className={clsx(card, 'space-y-5')}>
       {editarInicial && (
         <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2.5 text-[0.75rem] text-violet-900">
-          Entraste a editar una campaña desde <b>Operaciones → Campañas</b>. Al terminar puedes armar un grupo con ella aquí mismo, o salir con la X para regresar.
+          {grupoDeCampania ? (
+            <>Entraste a editar una campaña desde <b>Operaciones → Campañas</b>. Se cargó {grupoDeCampania.retomado ? 'tu borrador pendiente' : 'la configuración actual'} del grupo <b>{grupoDeCampania.nombre}</b> que la usa: cambia lo que necesites y al final usa <b>Guardar cambios en el grupo</b>. Si sales, los cambios quedan como borrador.{grupoDeCampania.otros.length > 0 && <> También la usan: {grupoDeCampania.otros.join(', ')}.</>}</>
+          ) : (
+            <>Entraste a editar una campaña desde <b>Operaciones → Campañas</b>. Ningún grupo la usa todavía: ya quedó marcada para armar uno aquí mismo, o sal con la X para regresar.</>
+          )}
         </div>
       )}
       <div>
@@ -831,11 +862,11 @@ function VistaResultado({ borradorId, onEditar, onSalir }: { borradorId: number;
       <div className={clsx(card, 'flex items-center gap-3.5')}>
         <button onClick={onSalir} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 text-ink-tertiary hover:bg-gray-50"><X className="h-4 w-4" /></button>
         <div className="min-w-0 flex-1">
-          <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">Crear grupo</p>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">{b.avance?.modo === 'actualizar' ? 'Editar grupo' : 'Crear grupo'}</p>
           <h2 className="truncate text-base font-bold text-ink">{b.nombre}</h2>
         </div>
         <span className={clsx('rounded-full px-2.5 py-1 text-[0.7rem] font-semibold', b.estado === 'creado' ? 'bg-emerald-50 text-emerald-700' : fallo ? 'bg-amber-50 text-amber-700' : 'bg-violet-50 text-violet-700')}>
-          {b.estado === 'creado' ? 'Creado' : fallo ? 'Sin terminar' : 'Creándose…'}
+          {b.estado === 'creado' ? (b.avance?.modo === 'actualizar' ? 'Actualizado' : 'Creado') : fallo ? 'Sin terminar' : b.avance?.modo === 'actualizar' ? 'Guardándose…' : 'Creándose…'}
         </span>
       </div>
       <div className={clsx(card, 'space-y-2')}>

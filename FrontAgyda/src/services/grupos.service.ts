@@ -190,6 +190,8 @@ export interface BorradorGrupoResumen {
   usuarioNombre: string | null; esMio: boolean; actualizado: string; interrumpido: boolean
   avance: {
     etapa?: string; completadas: string[]; resultado?: ResultadoSyncEquipo | null; agentesOmitidos?: number
+    /** 'actualizar' = borrador abierto sobre un grupo que ya existe (Editar campaña). */
+    modo?: 'actualizar'
     reportes?: { creados: number; yaExistian: number; omitidos: { nombre: string; motivo: string | null }[]; carpeta: string }
   } | null
   error: string | null
@@ -204,6 +206,9 @@ export const grupoAsistenteService = {
   borradores: () => api.get(`${ga}/borradores`).then((r) => r.data.data as BorradorGrupoResumen[]),
   borrador: (id: number) => api.get(`${ga}/borradores/${id}`).then((r) => r.data.data as BorradorGrupo),
   crearBorrador: (datos: DatosGrupoBorrador, paso: number) => api.post(`${ga}/borradores`, { datos, paso }).then((r) => r.data.data as { id: number }),
+  /** Borrador de actualización del grupo que usa esa campaña (null si ningún grupo la usa). */
+  desdeCampania: (tipo: 'cc' | 'ventas', id: number) => api.post(`${ga}/desde-campania`, { tipo, id })
+    .then((r) => r.data.data as { borradorId: number | null; grupo: { id: number; nombre: string } | null; otros: string[]; retomado?: boolean }),
   guardarBorrador: (id: number, datos: DatosGrupoBorrador, paso: number) => api.put(`${ga}/borradores/${id}`, { datos, paso }).then((r) => r.data.data as { pendientes: PendienteGrupo[] }),
   descartar: (id: number) => api.delete(`${ga}/borradores/${id}`),
   crearGrupo: (id: number) => api.post(`${ga}/borradores/${id}/crear`, undefined, { timeout: 120_000 }).then((r) => r.data.data as { grupoId: number; resultado: ResultadoSyncEquipo | null }),

@@ -12,6 +12,8 @@ router.use(c.requireAsistente);
 router.get('/catalogo', c.catalogo);
 router.get('/borradores', c.listar);
 router.post('/borradores', c.crearBorrador);
+// Editar campaña (Operaciones → Campañas): borrador de actualización del grupo que la usa.
+router.post('/desde-campania', c.desdeCampania);
 router.get('/borradores/:id', c.leer);
 router.put('/borradores/:id', c.guardar);
 router.delete('/borradores/:id', c.descartar);
