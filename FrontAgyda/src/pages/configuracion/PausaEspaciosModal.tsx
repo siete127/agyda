@@ -100,7 +100,17 @@ export function PausaEspaciosModal({ tipo, onClose }: { tipo: PausaTipo; onClose
   const areasVisibles = areas.filter((a) => a.hombres + a.mujeres > 0 || elegidas.has(a.area))
 
   return (
-    <Modal isOpen onClose={onClose} title={`${tipo.emoji} Baños — ${tipo.etiqueta}`} size="lg">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={
+        <span className="flex items-center gap-2">
+          <img src="/icons/pausa-bano.gif" alt="" className="h-5 w-5 object-contain" />
+          Baños — {tipo.etiqueta}
+        </span>
+      }
+      size="lg"
+    >
       <div className="space-y-4">
         <div className="flex items-start gap-2.5 rounded-xl bg-violet-50/70 px-3.5 py-3 text-[0.78rem] text-gray-600">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-500" />

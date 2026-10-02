@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -6,11 +6,12 @@ import {
   Plus, Star, MessageCircle, Search, RefreshCw,
   Newspaper, X, Send, ChevronRight, CalendarDays, User2,
   LayoutGrid, List, Trash2, StarOff, EyeOff, Eye,
-  Award, Users, SlidersHorizontal, Pencil, ClipboardList, CheckCircle,
-  ImagePlus, ChevronLeft,
+  Award, SlidersHorizontal, Pencil, ClipboardList, CheckCircle,
+  ImagePlus, ChevronLeft, Share2, Megaphone, PartyPopper, AlertTriangle,
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { noticiasService } from '@/services/noticias.service'
+import { mensajeriaService } from '@/services/mensajeria.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { useSocketEvent } from '@/hooks/useSocket'
 import { Button } from '@/components/ui/Button'
@@ -20,9 +21,11 @@ import { CarouselManagerModal } from '@/components/ui/CarouselManagerModal'
 import { CollageLayoutModal } from '@/components/ui/CollageLayoutModal'
 import { ReactionPicker } from '@/components/ui/ReactionPicker'
 import { HeroCarousel } from '@/components/ui/HeroCarousel'
-import type { Noticia } from '@/types/noticia.types'
+import { Avatar } from '@/components/ui/Avatar'
+import { type Noticia } from '@/types/noticia.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
+import noticiasHero from '@/assets/mis-tareas-hero.png'
 
 /* ── Colores de categoría ── */
 const CAT: Record<string, { text: string; bg: string; ring: string; solid: string }> = {
@@ -32,6 +35,11 @@ const CAT: Record<string, { text: string; bg: string; ring: string; solid: strin
   Urgente:    { text: 'text-red-700',    bg: 'bg-red-50',    ring: 'ring-red-200',    solid: 'bg-red-500'    },
 }
 const catStyle = (c: string) => CAT[c] ?? { text: 'text-gray-600', bg: 'bg-gray-100', ring: 'ring-gray-200', solid: 'bg-gray-500' }
+
+const CAT_ICON: Record<string, typeof Newspaper> = {
+  Comunicado: Megaphone, Evento: CalendarDays, Noticia: Newspaper, Urgente: AlertTriangle,
+}
+const catIcon = (c: string) => CAT_ICON[c] ?? Newspaper
 
 /* ────────────────────────────────────────────────
    SKELETON LOADER
@@ -311,13 +319,76 @@ function NoticiaImagenInformativa({ imagenes }: { imagenes: string[] }) {
 }
 
 /* ────────────────────────────────────────────────
+   COMPARTIR — reenviar a un canal de Mensajería interna ya existente.
+──────────────────────────────────────────────── */
+function CompartirPopover({ noticia, onClose }: { noticia: Noticia; onClose: () => void }) {
+  const enlace = `${window.location.origin}/noticias?noticia=${noticia.id}`
+
+  const { data: canales = [], isLoading } = useQuery({
+    queryKey: ['mensajeria-canales-compartir'],
+    queryFn: () => mensajeriaService.getMisCanales(),
+  })
+
+  const enviar = useMutation({
+    mutationFn: (canalId: number) =>
+      mensajeriaService.enviarMensaje(canalId, `📰 ${noticia.titulo}\n${enlace}`),
+    onSuccess: () => {
+      toast.success('Noticia compartida')
+      onClose()
+    },
+    onError: () => toast.error('No se pudo compartir la noticia'),
+  })
+
+  return (
+    <>
+      <div className="fixed inset-0 z-10" onClick={onClose} />
+      <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-surface-border bg-card shadow-2xl overflow-hidden">
+        <div className="border-b border-surface-border px-4 py-3">
+          <p className="text-[0.8rem] font-bold text-ink">Compartir por mensajería</p>
+        </div>
+
+        <div className="max-h-56 overflow-y-auto">
+          {isLoading ? (
+            <p className="px-4 py-3 text-[0.78rem] text-ink-tertiary">Cargando conversaciones…</p>
+          ) : canales.length === 0 ? (
+            <p className="px-4 py-3 text-[0.78rem] text-ink-tertiary">No tienes conversaciones aún.</p>
+          ) : (
+            canales.map((c) => (
+              <button
+                key={c.id}
+                disabled={enviar.isPending}
+                onClick={() => enviar.mutate(c.id)}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-surface transition-colors disabled:opacity-50"
+              >
+                <Avatar name={c.nombre ?? '?'} size="sm" />
+                <span className="truncate text-[0.8rem] font-medium text-ink">{c.nombre || 'Conversación'}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+/* ────────────────────────────────────────────────
    DETALLE MODAL
 ──────────────────────────────────────────────── */
 export function NoticiaDetalle({ noticia, onClose }: { noticia: Noticia; onClose: () => void }) {
   const [comentario, setComentario] = useState('')
+  const [compartirAbierto, setCompartirAbierto] = useState(false)
   const qc = useQueryClient()
   const st = catStyle(noticia.categoria)
   const { user } = useAuthStore()
+
+  // Registrar la vista una sola vez al abrir el detalle (no reacciona a cambios de noticia.id a propósito).
+  const vistaRegistrada = useRef<number | null>(null)
+  useEffect(() => {
+    if (vistaRegistrada.current === noticia.id) return
+    vistaRegistrada.current = noticia.id
+    noticiasService.registrarVista(noticia.id).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noticia.id])
 
   const { data: comentarios = [], isLoading: loadingComentarios } = useQuery({
     queryKey: ['noticia-comentarios', noticia.id],
@@ -343,129 +414,173 @@ export function NoticiaDetalle({ noticia, onClose }: { noticia: Noticia; onClose
   // propio para los descendientes fixed — sin portal, el overlay quedaba
   // acotado al área del <main>, sin cubrir el sidebar.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 pt-8 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={onClose}>
       <div
-        className="relative w-full max-w-2xl rounded-2xl bg-card shadow-2xl overflow-hidden animate-slide-up"
+        className="relative flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl animate-slide-up"
+        style={{ height: 'min(85vh, 720px)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
-        {noticia.imagenPortada ? (
-          <img src={noticia.imagenPortada} alt={noticia.titulo} className="w-full object-contain max-h-[60vh] bg-black/5" />
-        ) : (
-          <div className="flex h-40 items-center justify-center bg-gradient-to-br from-[#0D1B3E] to-[#1B4FD8]">
-            <Newspaper className="h-14 w-14 text-white/20" />
+        {/* Header */}
+        <div className="flex flex-shrink-0 items-center justify-between px-5 py-4">
+          <div className="flex items-center gap-2">
+            <img src="/icons/noticias-blue.gif" alt="" className="h-6 w-6 object-contain" />
+            <h2 className="text-[0.95rem] font-bold text-ink">Noticias</h2>
           </div>
-        )}
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-ink-tertiary hover:bg-surface hover:text-ink-secondary transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-        <div className="p-6">
-          <div className="mb-3 flex items-center gap-2">
-            <span className={clsx('news-badge', st.bg, st.text, st.ring)}>{noticia.categoria}</span>
-            {noticia.destacada && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-yellow-600">
-                <Star className="h-3.5 w-3.5 fill-yellow-500 text-yellow-500" /> Destacada
-              </span>
+        {/* Cuerpo: dos columnas */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          {/* Imagen — ocupa toda la altura de la columna izquierda */}
+          <div className="relative flex w-full flex-shrink-0 items-center justify-center bg-surface md:h-full md:w-[58%]">
+            {noticia.imagenPortada ? (
+              <img src={noticia.imagenPortada} alt={noticia.titulo} className="max-h-full max-w-full object-contain" />
+            ) : (
+              <div className="flex h-full min-h-[200px] items-center justify-center bg-gradient-to-br from-[#0D1B3E] to-[#1B4FD8]">
+                <Newspaper className="h-14 w-14 text-white/20" />
+              </div>
             )}
           </div>
 
-          <h2 className="mb-2 text-xl font-bold text-gray-900 leading-tight">{noticia.titulo}</h2>
-
-          <div className="mb-5 flex items-center gap-3 text-xs text-gray-400">
-            <span className="flex items-center gap-1"><User2 className="h-3 w-3" />{noticia.autorNombre}</span>
-            <span className="h-1 w-1 rounded-full bg-gray-300" />
-            <span className="flex items-center gap-1 capitalize"><CalendarDays className="h-3 w-3" />{fecha}</span>
-          </div>
-
-          <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: noticia.contenido }} />
-
-          <NoticiaImagenInformativa imagenes={noticia.imagenes} />
-
-          <div className="mt-5 flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5">
-            <ReactionPicker
-              noticiaId={noticia.id}
-              miReaccion={noticia.miReaccion}
-              total={noticia.reaccionesTotal}
-            />
-          </div>
-
-          {noticia.comentariosHabilitados && (
-            <div className="mt-6 border-t border-gray-100 pt-5">
-              <h4 className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-800">
-                <MessageCircle className="h-4 w-4 text-brand" />
-                Comentarios
-              </h4>
-
-              {loadingComentarios ? (
-                <div className="space-y-2.5 mb-4">
-                  {Array.from({ length: 2 }).map((_, i) => (
-                    <div key={i} className="flex gap-3 animate-pulse">
-                      <div className="h-7 w-7 rounded-full bg-gray-100 flex-shrink-0" />
-                      <div className="flex-1 space-y-1.5">
-                        <div className="h-2.5 w-24 rounded-full bg-gray-100" />
-                        <div className="h-2 w-full rounded-full bg-gray-100" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mb-4 max-h-52 space-y-2.5 overflow-y-auto pr-1">
-                  {comentarios.length === 0 ? (
-                    <p className="text-center text-sm text-gray-400 py-4">Sin comentarios aún. ¡Sé el primero!</p>
-                  ) : (
-                    comentarios.map((c) => (
-                      <div key={c.id} className="flex gap-3">
-                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-[0.7rem] font-bold text-brand">
-                          {c.autorNombre.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
-                          <div className="mb-0.5 flex items-baseline gap-2">
-                            <span className="text-[0.76rem] font-semibold text-gray-800">{c.autorNombre}</span>
-                            <span className="text-[0.65rem] text-gray-400">
-                              {new Date(c.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                            </span>
-                          </div>
-                          <p className="text-[0.78rem] text-gray-600 leading-relaxed">{c.contenido}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+          {/* Contenido + comentarios — scroll propio */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
+            <div className="mb-3 flex items-center gap-2">
+              <span className={clsx('news-badge', st.bg, st.text, st.ring)}>{noticia.categoria}</span>
+              {noticia.destacada && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-yellow-600">
+                  <Star className="h-3.5 w-3.5 fill-yellow-500 text-yellow-500" /> Destacada
+                </span>
               )}
+              <span className="ml-auto text-[0.72rem] text-ink-tertiary capitalize">{fecha}</span>
+            </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  placeholder="Escribe un comentario..."
-                  className="field flex-1 py-2"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && comentario.trim()) {
-                      e.preventDefault()
-                      addComentario.mutate(comentario.trim())
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  isLoading={addComentario.isPending}
-                  disabled={!comentario.trim()}
-                  onClick={() => addComentario.mutate(comentario.trim())}
-                  className="px-3 py-2"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </Button>
+            <h2 className="mb-3 text-xl font-bold text-ink leading-tight">{noticia.titulo}</h2>
+
+            <div className="mb-4 flex items-center gap-2">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-[0.72rem] font-bold text-brand">
+                {noticia.autorNombre.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[0.8rem] font-semibold text-ink leading-tight">{noticia.autorNombre}</p>
+                <p className="text-[0.68rem] text-ink-tertiary leading-tight">{noticia.autorPuesto || 'Colaborador'}</p>
               </div>
             </div>
-          )}
+
+            <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: noticia.contenido }} />
+
+            <NoticiaImagenInformativa imagenes={noticia.imagenes} />
+
+            <div className="mt-5 flex items-center gap-4 border-y border-surface-border py-2.5 text-[0.78rem] text-ink-tertiary">
+              <span>{noticia.reaccionesTotal} reacciones</span>
+              <span>{comentarios.length} comentarios</span>
+              <div className="relative ml-auto">
+                <button
+                  onClick={() => setCompartirAbierto((v) => !v)}
+                  className="flex items-center gap-1 text-[0.78rem] text-ink-tertiary hover:text-brand transition-colors"
+                >
+                  <Share2 className="h-3.5 w-3.5" /> Compartir
+                </button>
+                {compartirAbierto && (
+                  <CompartirPopover noticia={noticia} onClose={() => setCompartirAbierto(false)} />
+                )}
+              </div>
+            </div>
+
+            <div className="mt-2 flex items-center gap-2 rounded-xl px-1 py-1.5">
+              <ReactionPicker
+                noticiaId={noticia.id}
+                miReaccion={noticia.miReaccion}
+                total={noticia.reaccionesTotal}
+              />
+            </div>
+
+            {noticia.comentariosHabilitados && (
+              <div className="mt-2 border-t border-surface-border pt-4">
+                <h4 className="mb-3 flex items-center justify-between text-sm font-semibold text-ink">
+                  <span className="flex items-center gap-2">
+                    <img src="/icons/comentarios-blue.gif" alt="" className="h-7 w-7 object-contain" />
+                    Comentarios
+                  </span>
+                  <span className="text-[0.72rem] font-normal text-ink-tertiary">Más recientes</span>
+                </h4>
+
+                {loadingComentarios ? (
+                  <div className="space-y-2.5 mb-4">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <div key={i} className="flex gap-3 animate-pulse">
+                        <div className="h-7 w-7 rounded-full bg-surface flex-shrink-0" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-2.5 w-24 rounded-full bg-surface" />
+                          <div className="h-2 w-full rounded-full bg-surface" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mb-4 space-y-2.5">
+                    {comentarios.length === 0 ? (
+                      <div className="flex flex-col items-center py-6 text-center">
+                        <MessageCircle className="mb-2 h-8 w-8 text-ink-tertiary/40" />
+                        <p className="text-sm font-semibold text-ink">Sé el primero en comentar</p>
+                        <p className="text-[0.78rem] text-ink-tertiary">Tus comentarios son bienvenidos.</p>
+                      </div>
+                    ) : (
+                      comentarios.map((c) => (
+                        <div key={c.id} className="flex gap-3">
+                          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-[0.7rem] font-bold text-brand">
+                            {c.autorNombre.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 rounded-xl bg-surface border border-surface-border px-3 py-2.5">
+                            <div className="mb-0.5 flex items-baseline gap-2">
+                              <span className="text-[0.76rem] font-semibold text-ink">{c.autorNombre}</span>
+                              <span className="text-[0.65rem] text-ink-tertiary">
+                                {new Date(c.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                              </span>
+                            </div>
+                            <p className="text-[0.78rem] text-ink-secondary leading-relaxed">{c.contenido}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-[0.7rem] font-bold text-brand">
+                    {(user?.nombres ?? '?').charAt(0).toUpperCase()}
+                  </div>
+                  <input
+                    value={comentario}
+                    onChange={(e) => setComentario(e.target.value)}
+                    placeholder="Escribe un comentario..."
+                    className="field flex-1 py-2"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && comentario.trim()) {
+                        e.preventDefault()
+                        addComentario.mutate(comentario.trim())
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    isLoading={addComentario.isPending}
+                    disabled={!comentario.trim()}
+                    onClick={() => addComentario.mutate(comentario.trim())}
+                    className="px-3 py-2"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      <div className="fixed inset-0 -z-10" onClick={onClose} />
     </div>,
     document.body,
   )
@@ -1028,7 +1143,7 @@ function EncuestaResponderInline({
 /* ────────────────────────────────────────────────
    PÁGINA PRINCIPAL
 ──────────────────────────────────────────────── */
-type NoticiaTab = 'todas' | 'plata' | 'miarea'
+type NoticiaTab = 'todas' | 'plata'
 
 export function NoticiasPage() {
   const [search,          setSearch]         = useState('')
@@ -1041,6 +1156,8 @@ export function NoticiasPage() {
   const [showCollage,     setShowCollage]    = useState(false)
   const [confirmEliminar, setConfirmEliminar] = useState<number | null>(null)
   const [tab,             setTab]            = useState<NoticiaTab>('todas')
+  const [pagina,          setPagina]         = useState(1)
+  const POR_PAGINA = 12
 
   const user    = useAuthStore((s) => s.user)
   const isAdmin = useAuthStore((s) => s.isAdmin())
@@ -1073,6 +1190,12 @@ export function NoticiasPage() {
   const { data: destacadas = [] } = useQuery({
     queryKey: ['noticias-destacadas'],
     queryFn: () => noticiasService.getDestacadas(),
+  })
+
+  const { data: masLeidas = [] } = useQuery({
+    queryKey: ['noticias-mas-leidas'],
+    queryFn: () => noticiasService.getMasLeidas(),
+    staleTime: 60_000,
   })
 
   // Reflejar en vivo las reacciones de cualquier usuario (llega por socket desde el backend)
@@ -1108,147 +1231,104 @@ export function NoticiasPage() {
     return matchSearch && matchCat
   })
 
-  const showCarousel_ = tab === 'todas' && !search && catFilter === 'Todos' && destacadas.length > 0
-  const destacadasIds = new Set(destacadas.map((n) => n.id))
-  const restantes = showCarousel_
-    ? filtered.filter((n) => !destacadasIds.has(n.id))
-    : filtered
+  const showCarousel_ = tab === 'todas' && !search && destacadas.length > 0
+  // El grid/lista pagina TODAS las noticias filtradas, sin excluir las que
+  // ya aparecen en el carrusel de arriba — de lo contrario, si muchas
+  // noticias están marcadas como "destacada", el grid se queda casi vacío.
+  const restantesTotal = filtered
+
+  const totalPaginas = Math.max(1, Math.ceil(restantesTotal.length / POR_PAGINA))
+  const paginaSegura = Math.min(pagina, totalPaginas)
+  const restantes = restantesTotal.slice((paginaSegura - 1) * POR_PAGINA, paginaSegura * POR_PAGINA)
+
+  // Resetear a la página 1 cuando cambian filtros, pestaña o búsqueda.
+  useEffect(() => { setPagina(1) }, [tab, catFilter, search])
 
   return (
     <div className="space-y-5 animate-fade-in">
 
       {/* ── Header ── */}
       <div className="card overflow-hidden">
-        <div className="relative overflow-hidden bg-gradient-to-r from-[#0D1B3E] to-[#1B4FD8] px-6 py-5">
-          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-          <div className="pointer-events-none absolute right-20 bottom-0 h-24 w-24 rounded-full bg-white/5" />
-          <div className="relative flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">Noticias corporativas</h1>
-              <p className="mt-0.5 text-xs text-blue-200/70">
-                {noticias.length} publicaciones · Portal interno ArdaBytec
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => refetch()}
-                className={clsx('flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 transition-colors', isRefetching && 'animate-spin')}>
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-              {isAdmin && (
-                <>
-                  <button onClick={() => setShowCollage(true)}
-                    className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium text-white/80 hover:bg-white/20 transition-colors"
-                    title="Editor de collage">
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Collage</span>
-                  </button>
-                  <button onClick={() => setShowCarousel(true)}
-                    className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium text-white/80 hover:bg-white/20 transition-colors"
-                    title="Gestionar carrusel del inicio">
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Carrusel</span>
-                  </button>
-                  <Button onClick={() => setShowCrear(true)}
-                    className="bg-card !text-brand hover:bg-gray-50 !shadow-none border-0 text-[0.78rem] py-1.5 px-3">
-                    <Plus className="h-3.5 w-3.5" /> Nueva noticia
-                  </Button>
-                </>
-              )}
-            </div>
+        <div
+          className="relative overflow-hidden bg-cover bg-center px-6 py-8"
+          style={{ backgroundImage: `linear-gradient(90deg, rgba(13,27,62,0.88) 0%, rgba(13,27,62,0.55) 45%, rgba(13,27,62,0.15) 80%), url(${noticiasHero})` }}
+        >
+          <div className="relative">
+            <h1 className="text-[1.7rem] font-extrabold text-white tracking-tight">Noticias corporativas</h1>
+            <p className="mt-1 text-[0.8rem] text-white/75">
+              Entérate de las novedades, logros, eventos y comunicados que impulsan a nuestro equipo.
+            </p>
           </div>
         </div>
+      </div>
 
-        {/* Tabs: Todas / PLATA / Mi Área */}
-        <div className="flex border-b border-gray-100">
-          <button onClick={() => { setTab('todas'); setCatFilter('Todos') }}
-            className={clsx('flex items-center gap-1.5 px-5 py-3 text-[0.78rem] font-semibold transition-colors',
-              tab === 'todas' ? 'text-brand border-b-2 border-brand -mb-px' : 'text-gray-400 hover:text-gray-600')}>
-            <Newspaper className="h-3.5 w-3.5" /> Todas
-          </button>
-          {canSeePlata && (
-            <button onClick={() => { setTab('plata'); setCatFilter('Todos') }}
-              className={clsx('flex items-center gap-1.5 px-5 py-3 text-[0.78rem] font-semibold transition-colors',
-                tab === 'plata' ? 'text-yellow-600 border-b-2 border-yellow-500 -mb-px' : 'text-gray-400 hover:text-gray-600')}>
-              <Award className="h-3.5 w-3.5" /> PLATA
-            </button>
-          )}
-          <button onClick={() => setTab('miarea')}
-            className={clsx('flex items-center gap-1.5 px-5 py-3 text-[0.78rem] font-semibold transition-colors',
-              tab === 'miarea' ? 'text-brand border-b-2 border-brand -mb-px' : 'text-gray-400 hover:text-gray-600')}>
-            <Users className="h-3.5 w-3.5" /> Mi Área
-          </button>
-        </div>
-
-        {/* Filtros */}
-        <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-3.5 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por título, categoría o autor..."
-              className="field py-2 pl-9 text-sm"
-            />
+      {/* Título "Noticias destacadas" + búsqueda/acciones (junto al hero) */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-2">
+          <div>
+            {showCarousel_ && (
+              <h2 className="flex items-center gap-2 text-[1.15rem] font-bold text-gray-900">
+                <img src="/icons/destacadas.gif" alt="" className="h-6 w-6 object-contain" /> Noticias destacadas
+              </h2>
+            )}
+            <p className="mt-0.5 text-[0.72rem] text-gray-400">{noticias.length} publicaciones</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-              {categorias.map((cat) => {
-                const active = catFilter === cat
-                const st = cat !== 'Todos' ? catStyle(cat) : null
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setCatFilter(cat)}
-                    className={clsx(
-                      'whitespace-nowrap rounded-full px-3 py-1 text-[0.72rem] font-semibold transition-all',
-                      active
-                        ? st
-                          ? clsx(st.bg, st.text, 'ring-1 ring-inset', st.ring)
-                          : 'bg-brand text-white shadow-sm shadow-brand/20'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200',
-                    )}
-                  >
-                    {cat}
-                  </button>
-                )
-              })}
+          <div className="flex items-center gap-2 py-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por título, categoría o autor..."
+                className="field w-80 py-2 pl-9 text-sm"
+              />
             </div>
-
             {/* Toggle vista */}
             <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 ml-1 flex-shrink-0">
               <button
                 onClick={() => setView('grid')}
-                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'grid' ? 'bg-card shadow-sm text-brand' : 'text-gray-400 hover:text-gray-600')}
+                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'grid' ? 'bg-brand text-white' : 'text-gray-400 hover:text-gray-600')}
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => setView('list')}
-                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'list' ? 'bg-card shadow-sm text-brand' : 'text-gray-400 hover:text-gray-600')}
+                className={clsx('flex h-6 w-6 items-center justify-center rounded-md transition-all', view === 'list' ? 'bg-brand text-white' : 'text-gray-400 hover:text-gray-600')}
               >
                 <List className="h-3.5 w-3.5" />
               </button>
             </div>
+
+            <button onClick={() => refetch()}
+              className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors', isRefetching && 'animate-spin')}>
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+            {isAdmin && (
+              <>
+                <button onClick={() => setShowCollage(true)}
+                  className="flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-[0.75rem] font-medium text-gray-600 hover:bg-gray-200 transition-colors"
+                  title="Editor de collage">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Collage</span>
+                </button>
+                <button onClick={() => setShowCarousel(true)}
+                  className="flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-[0.75rem] font-medium text-gray-600 hover:bg-gray-200 transition-colors"
+                  title="Gestionar carrusel del inicio">
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Carrusel</span>
+                </button>
+                <Button onClick={() => setShowCrear(true)}
+                  className="text-[0.78rem] py-1.5 px-3 flex-shrink-0">
+                  <Plus className="h-3.5 w-3.5" /> Nueva noticia
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ── Tab Mi Área ── */}
-      {tab === 'miarea' && (
-        <div className="card p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="h-5 w-1 rounded-full bg-brand" />
-            <h3 className="text-[0.9rem] font-bold text-gray-900">Directorio de colaboradores</h3>
-          </div>
-          <p className="text-sm text-gray-500 mb-4">
-            Consulta el directorio completo de tu organización.
-          </p>
-          <a href="/organigrama"
-            className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark transition-colors">
-            <Users className="h-4 w-4" /> Ver directorio completo
-          </a>
-        </div>
-      )}
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+      <div className="min-w-0 flex-1 space-y-5">
 
       {/* ── Encuestas activas en noticias ── */}
       <EncuestasEnNoticias />
@@ -1263,7 +1343,7 @@ export function NoticiasPage() {
       )}
 
       {/* ── Contenido ── */}
-      {tab !== 'miarea' && isLoading ? (
+      {isLoading ? (
         view === 'grid' ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -1273,7 +1353,7 @@ export function NoticiasPage() {
             {Array.from({ length: 5 }).map((_, i) => <SkeletonList key={i} />)}
           </div>
         )
-      ) : tab !== 'miarea' && filtered.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="card flex flex-col items-center justify-center gap-4 py-20">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/8">
             <Newspaper className="h-7 w-7 text-brand/40" />
@@ -1295,19 +1375,39 @@ export function NoticiasPage() {
             </button>
           )}
         </div>
-      ) : tab !== 'miarea' ? (
+      ) : (
         <div className="space-y-4">
-          {/* Contador */}
-          <p className="text-[0.72rem] text-gray-400">
-            {filtered.length === noticias.length
-              ? `${noticias.length} publicaciones`
-              : `${filtered.length} de ${noticias.length} publicaciones`}
-          </p>
-
           {/* Carrusel de noticias destacadas */}
           {showCarousel_ && (
             <HeroCarousel items={destacadas} onOpen={setSelected} size="large" />
           )}
+
+          {/* Tabs: Todas + categorías reales + PLATA */}
+          <div className="flex flex-wrap items-center gap-1 px-2">
+            <button onClick={() => { setTab('todas'); setCatFilter('Todos') }}
+              className={clsx('flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[0.78rem] font-semibold transition-colors',
+                tab === 'todas' && catFilter === 'Todos' ? 'text-brand border-b-[3px] border-brand' : 'text-gray-400 hover:text-gray-600')}>
+              <Newspaper className="h-3.5 w-3.5" /> Todas
+            </button>
+            {categorias.filter((c) => c !== 'Todos').map((cat) => {
+              const Icon = catIcon(cat)
+              const active = catFilter === cat
+              return (
+                <button key={cat} onClick={() => { setTab('todas'); setCatFilter(cat) }}
+                  className={clsx('flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[0.78rem] font-semibold transition-colors',
+                    active ? 'text-brand border-b-[3px] border-brand' : 'text-gray-400 hover:text-gray-600')}>
+                  <Icon className="h-3.5 w-3.5" /> {cat}
+                </button>
+              )
+            })}
+            {canSeePlata && (
+              <button onClick={() => { setTab('plata'); setCatFilter('Todos') }}
+                className={clsx('flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[0.78rem] font-semibold transition-colors',
+                  tab === 'plata' ? 'text-yellow-600 border-b-[3px] border-yellow-500' : 'text-gray-400 hover:text-gray-600')}>
+                <Award className="h-3.5 w-3.5" /> PLATA
+              </button>
+            )}
+          </div>
 
           {/* Grid o lista */}
           {view === 'grid' ? (
@@ -1371,8 +1471,81 @@ export function NoticiasPage() {
               ))}
             </div>
           )}
+
+          {/* Paginación */}
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-center gap-1.5 pt-2">
+              <button
+                onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                disabled={paginaSegura === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPagina(n)}
+                  className={clsx(
+                    'flex h-8 w-8 items-center justify-center rounded-lg text-[0.78rem] font-semibold transition-colors',
+                    n === paginaSegura ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-100',
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+                disabled={paginaSegura === totalPaginas}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
-      ) : null}
+      )}
+
+      </div>
+
+      {/* ── Panel lateral: más leídas, reacciones ── */}
+      <div className="w-full flex-shrink-0 space-y-4 lg:w-72">
+
+          <div className="card p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <img src="/icons/mas-leidas.gif" alt="" className="h-5 w-5 object-contain" />
+              <h3 className="text-[0.85rem] font-bold text-gray-900">Más leídas</h3>
+            </div>
+            {masLeidas.length === 0 ? (
+              <p className="text-[0.75rem] text-gray-400">Aún no hay noticias con vistas registradas.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {masLeidas.map((n, i) => (
+                  <button
+                    key={n.id}
+                    onClick={() => {
+                      const found = noticias.find((x) => x.id === n.id)
+                      if (found) setSelected(found)
+                    }}
+                    className="flex items-start gap-2.5 text-left"
+                  >
+                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-[0.68rem] font-bold text-brand">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.76rem] font-semibold text-gray-800 leading-tight line-clamp-2">{n.titulo}</p>
+                      <p className="mt-0.5 text-[0.65rem] text-gray-400">
+                        {new Date(n.fechaCreacion).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+      </div>
+
+      </div>
 
       {selected  && (
         <NoticiaDetalle

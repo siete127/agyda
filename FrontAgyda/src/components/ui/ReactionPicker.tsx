@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { createPortal } from 'react-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { noticiasService } from '@/services/noticias.service'
 import { REACCIONES, type ReaccionTipo } from '@/types/noticia.types'
 import { clsx } from 'clsx'
@@ -14,6 +15,7 @@ interface Props {
 export function ReactionPicker({ noticiaId, miReaccion, total, queryKey = 'noticias' }: Props) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [showReactores, setShowReactores] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -114,9 +116,19 @@ export function ReactionPicker({ noticiaId, miReaccion, total, queryKey = 'notic
         )}
       </button>
 
-      {/* Contador total */}
+      {/* Contador total — clic abre quién reaccionó */}
       {total > 0 && (
-        <span className="text-[0.7rem] text-gray-400 tabular-nums">{total}</span>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setShowReactores(true) }}
+          className="text-[0.7rem] text-gray-400 tabular-nums hover:text-gray-600 hover:underline"
+        >
+          {total}
+        </button>
+      )}
+
+      {showReactores && (
+        <ReactoresModal noticiaId={noticiaId} onClose={() => setShowReactores(false)} />
       )}
 
       <style>{`
@@ -126,5 +138,60 @@ export function ReactionPicker({ noticiaId, miReaccion, total, queryKey = 'notic
         }
       `}</style>
     </div>
+  )
+}
+
+/* ────────────────────────────────────────────────
+   Modal: lista de quién reaccionó a la noticia
+──────────────────────────────────────────────── */
+function ReactoresModal({ noticiaId, onClose }: { noticiaId: number; onClose: () => void }) {
+  const { data: reactores = [], isLoading } = useQuery({
+    queryKey: ['noticia-reactores', noticiaId],
+    queryFn: () => noticiasService.getReactores(noticiaId),
+  })
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm overflow-hidden rounded-2xl bg-card shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+          <p className="text-[0.85rem] font-bold text-ink">Reacciones</p>
+          <button onClick={onClose} className="text-ink-tertiary hover:text-ink transition-colors text-lg leading-none">
+            ×
+          </button>
+        </div>
+
+        <div className="max-h-80 overflow-y-auto">
+          {isLoading ? (
+            <p className="px-4 py-5 text-center text-[0.78rem] text-ink-tertiary">Cargando…</p>
+          ) : reactores.length === 0 ? (
+            <p className="px-4 py-5 text-center text-[0.78rem] text-ink-tertiary">Nadie ha reaccionado todavía.</p>
+          ) : (
+            reactores.map((r) => {
+              const info = REACCIONES.find((x) => x.tipo === r.tipo)
+              return (
+                <div key={r.usuarioId} className="flex items-center gap-3 px-4 py-2.5 border-b border-surface-border last:border-0">
+                  {r.fotoUrl ? (
+                    <img src={r.fotoUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand/10 text-[0.7rem] font-bold text-brand">
+                      {r.nombre.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="flex-1 text-[0.8rem] font-medium text-ink truncate">{r.nombre}</span>
+                  <span className="text-lg leading-none flex-shrink-0" title={info?.label}>{info?.emoji ?? '👍'}</span>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }

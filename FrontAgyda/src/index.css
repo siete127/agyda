@@ -486,6 +486,21 @@
   }
 }
 
+/* ── "Identidad corporativa" del Inicio — el círculo y el texto se achican
+   según el ANCHO real de la tarjeta (container query), no el viewport: al
+   redimensionarla en el editor de diseño puede quedar angosta sin que la
+   pantalla cambie de tamaño. */
+.identidad-corporativa {
+  container-type: inline-size;
+  container-name: identidad-corporativa;
+}
+@container identidad-corporativa (max-width: 260px) {
+  .identidad-corporativa .ic-circulo { height: 2.75rem; width: 2.75rem; }
+  .identidad-corporativa .ic-img { height: 1.625rem; width: 1.625rem; }
+  .identidad-corporativa .ic-titulo { font-size: 0.72rem; }
+  .identidad-corporativa .ic-sub { font-size: 0.62rem; }
+}
+
 /* ── Controls/MiniMap de @xyflow/react (Constructor de flujo del chatbot) ──
    La librería expone variables --xy-* pensadas justo para esto — no hace
    falta !important ni pelear con sus clases, solo redefinir sus tokens con

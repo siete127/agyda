@@ -66,6 +66,7 @@ export const ROUTES: RouteConfig[] = [
   { path: '/nomina',           label: 'Nómina',          icon: 'Wallet',               moduleKey: 'nomina',           roles: ['AD'],               showInSidebar: true  },
   { path: '/auditoria',        label: 'Auditoría',       icon: 'ScrollText',           moduleKey: 'auditoria',        roles: ['AD'],               showInSidebar: true  },
   { path: '/expediente',       label: 'Expediente',      icon: 'FolderOpen',           moduleKey: 'expedientes',      roles: ['AD'],               showInSidebar: true  },
+  { path: '/mis-tareas',       label: 'Mis tareas',      icon: 'CheckSquare',          moduleKey: '*',                roles: INT,                  showInSidebar: true  },
   { path: '/configuracion',    label: 'Configuración',   icon: 'Settings',             moduleKey: 'configuracion',    roles: ['AD','TI'],          showInSidebar: true  },
 
   // ── Áreas de la empresa ────────────────────────────────────────────────

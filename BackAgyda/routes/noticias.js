@@ -8,6 +8,8 @@ const { requireActionAccess } = require('../middleware/moduleAccess');
 
 router.get('/', authenticateTokenOptional, noticiaController.getNoticias);
 router.get('/destacadas', authenticateTokenOptional, noticiaController.getNoticiasDestacadas);
+router.get('/mas-leidas', authenticateTokenOptional, noticiaController.getMasLeidas);
+router.get('/reacciones-resumen', authenticateTokenOptional, noticiaController.getReaccionesResumen);
 
 // Layout: definir ANTES de rutas con parámetro :id para evitar colisiones
 router.get('/layout/collage', noticiaController.getLayout);
@@ -19,6 +21,7 @@ router.post('/layout', authenticateToken, verificarRol(['AD']), requireActionAcc
 
 // Rutas con :id (después de las rutas específicas)
 router.get('/:id', authenticateTokenOptional, noticiaController.getNoticiaById);
+router.post('/:id/vista', authenticateTokenOptional, noticiaController.registrarVista);
 // Reacciones (tipo Facebook)
 router.get('/:id/reactions', authenticateTokenOptional, reaccionesController.getNoticiaReacciones);
 router.get('/:id/reactions/users', authenticateToken, reaccionesController.getNoticiaReactores);

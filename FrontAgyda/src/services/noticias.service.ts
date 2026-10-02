@@ -56,6 +56,42 @@ export const noticiasService = {
     return Array.isArray(data) ? data : (data?.data ?? [])
   },
 
+  async getReactores(id: number): Promise<{ usuarioId: number; nombre: string; fotoUrl: string | null; tipo: ReaccionTipo; fecha: string }[]> {
+    const { data } = await api.get(`/noticias/${id}/reactions/users`)
+    const list = data?.data?.items ?? []
+    return (list as Record<string, unknown>[]).map((r) => ({
+      usuarioId: Number(r['usuarioId'] ?? 0),
+      nombre: String(r['nombre'] ?? 'Usuario'),
+      fotoUrl: r['fotoUrl'] ? String(r['fotoUrl']) : null,
+      tipo: String(r['tipo'] ?? '') as ReaccionTipo,
+      fecha: String(r['fecha'] ?? ''),
+    }))
+  },
+
+  async registrarVista(id: number): Promise<void> {
+    await api.post(`/noticias/${id}/vista`)
+  },
+
+  async getMasLeidas(): Promise<{ id: number; titulo: string; fechaCreacion: string; vistas: number }[]> {
+    const { data } = await api.get('/noticias/mas-leidas')
+    const list = Array.isArray(data) ? data : (data?.data ?? [])
+    return (list as Record<string, unknown>[]).map((r) => ({
+      id: Number(r['id'] ?? 0),
+      titulo: String(r['titulo'] ?? ''),
+      fechaCreacion: String(r['fechaCreacion'] ?? ''),
+      vistas: Number(r['vistas'] ?? 0),
+    }))
+  },
+
+  async getReaccionesResumen(): Promise<{ tipo: ReaccionTipo; total: number }[]> {
+    const { data } = await api.get('/noticias/reacciones-resumen')
+    const list = Array.isArray(data) ? data : (data?.data ?? [])
+    return (list as Record<string, unknown>[]).map((r) => ({
+      tipo: String(r['tipo'] ?? '') as ReaccionTipo,
+      total: Number(r['total'] ?? 0),
+    }))
+  },
+
   // Comentarios
   async getComentarios(id: number): Promise<NoticiaComentario[]> {
     const { data } = await api.get(`/noticias/${id}/comments`)

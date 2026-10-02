@@ -18,7 +18,7 @@ import {
   Clock,
   ChevronRight, ArrowRight, ArrowLeft,
   X, FileText, Loader2, Upload, Trash2, Calendar,
-  PlaneTakeoff, LayoutGrid, Plus, GripVertical, EyeOff, Check,
+  LayoutGrid, Plus, GripVertical, EyeOff, Check,
   MessageSquare, File as FileIcon,
 } from 'lucide-react'
 import { useModuleAccess } from '@/hooks/useModuleAccess'
@@ -31,6 +31,8 @@ import { noticiasService } from '@/services/noticias.service'
 import { ticketsService } from '@/services/tickets.service'
 import { proyectosService } from '@/services/proyectos.service'
 import { mensajeriaService } from '@/services/mensajeria.service'
+import { tareaPersonalService } from '@/services/tareaPersonal.service'
+import { AsignarTareaModal } from '@/pages/dashboard/AsignarTareaModal'
 import { Avatar } from '@/components/ui/Avatar'
 import { NoticiaDetalle } from '@/pages/noticias/NoticiasPage'
 import { type Noticia } from '@/types/noticia.types'
@@ -283,7 +285,7 @@ function TarjetaLegales({ onAbrirLegales }: { onAbrirLegales: () => void }) {
   const [abierto, setAbierto] = useState<EmpresaKey | null>(null)
 
   return (
-    <div className="dash-card h-full overflow-auto rounded-2xl border border-surface-border bg-card p-5">
+    <div className="dash-card identidad-corporativa h-full overflow-auto rounded-2xl border border-surface-border bg-card p-5">
       <h3 className="text-[0.9rem] font-semibold text-ink mb-3">Identidad corporativa</h3>
       <div className="flex flex-col gap-2.5">
         {EMPRESA_ITEMS.map((item) => {
@@ -295,12 +297,12 @@ function TarjetaLegales({ onAbrirLegales }: { onAbrirLegales: () => void }) {
                 onClick={() => esInline ? setAbierto((v) => (v === item.key ? null : item.key)) : onAbrirLegales()}
                 className="group flex w-full items-center gap-3 rounded-xl p-1.5 text-left transition-colors hover:bg-surface"
               >
-                <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] shadow-sm">
-                  <img src={item.img} alt="" className="h-8 w-8 object-contain" />
+                <span className="ic-circulo flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#19b6bc] to-[#00537f] shadow-sm">
+                  <img src={item.img} alt="" className="ic-img h-8 w-8 object-contain" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[0.82rem] font-bold text-ink">{item.label}</p>
-                  <p className="text-[0.7rem] text-ink-tertiary">{item.sub}</p>
+                  <p className="ic-titulo text-[0.82rem] font-bold text-ink truncate">{item.label}</p>
+                  <p className="ic-sub text-[0.7rem] text-ink-tertiary truncate">{item.sub}</p>
                 </div>
                 <ChevronRight className={clsx(
                   'h-4 w-4 flex-shrink-0 text-ink-tertiary transition-transform group-hover:text-[#19b6bc]',
@@ -397,6 +399,108 @@ function NewsCard({ n, onOpen }: { n: Noticia; onOpen: (n: Noticia) => void }) {
       <h4 className="text-[0.78rem] font-semibold text-ink line-clamp-2 leading-snug group-hover:text-[#19b6bc] transition-colors">{n.titulo}</h4>
       <p className="text-[0.65rem] text-ink-tertiary">{newsFecha(n.fechaCreacion)}</p>
     </button>
+  )
+}
+
+/* ─── TarjetaMisTareas ─────────────────────────────────────────
+   Combina tareas personales (asignadas directo por un AD, sin proyecto)
+   con tareas de Proyectos asignadas al usuario. Solo las personales se
+   pueden completar desde aquí; las de proyecto llevan a /proyectos. */
+function tareaFechaCorta(fecha: string | null): string {
+  if (!fecha) return ''
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+  const d = new Date(fecha); d.setHours(0, 0, 0, 0)
+  const dias = Math.round((d.getTime() - hoy.getTime()) / 86_400_000)
+  if (dias === 0) return 'Hoy'
+  if (dias === 1) return 'Mañana'
+  if (dias < 0) return 'Atrasada'
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+}
+
+function TarjetaMisTareas({ isAdmin }: { isAdmin: boolean }) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const [asignarAbierto, setAsignarAbierto] = useState(false)
+  const { data: tareas = [], isLoading } = useQuery({
+    queryKey: ['mis-tareas-combinadas'],
+    queryFn: () => tareaPersonalService.getCombinadas(),
+    staleTime: 30_000,
+  })
+
+  const completar = useMutation({
+    mutationFn: ({ id, completada }: { id: number; completada: boolean }) => tareaPersonalService.completar(id, completada),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mis-tareas-combinadas'] }),
+    onError: () => toast.error('No se pudo actualizar la tarea'),
+  })
+
+  const pendientes = tareas.filter((t) => !t.completada).length
+
+  return (
+    <div className="dash-card h-full rounded-2xl border border-surface-border bg-card overflow-hidden flex flex-col">
+      <div className="flex items-center justify-between px-5 py-4">
+        <div className="flex items-center gap-2">
+          <CheckSquare className="h-5 w-5 flex-shrink-0 text-brand" />
+          <h3 className="text-[0.9rem] font-semibold text-ink">Mis tareas</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[0.72rem] text-ink-tertiary">{pendientes} pendientes</span>
+          {isAdmin && (
+            <button
+              onClick={() => setAsignarAbierto(true)}
+              className="flex items-center gap-1 text-[0.72rem] font-medium text-brand hover:text-brand-dark transition-colors"
+            >
+              <Plus className="h-3 w-3" /> Asignar
+            </button>
+          )}
+        </div>
+      </div>
+      {isAdmin && <AsignarTareaModal isOpen={asignarAbierto} onClose={() => setAsignarAbierto(false)} />}
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-ink-tertiary" />
+        </div>
+      ) : tareas.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-5 py-8 text-center">
+          <CheckSquare className="h-6 w-6 mb-2 text-ink-tertiary" />
+          <p className="text-[0.75rem] font-medium text-ink-tertiary">Sin tareas asignadas.</p>
+        </div>
+      ) : (
+        <div className="flex-1 divide-y divide-surface-border/60 overflow-auto">
+          {tareas.map((t) => (
+            <button
+              key={`${t.origen}-${t.id}`}
+              onClick={() => t.origen === 'personal'
+                ? completar.mutate({ id: t.id, completada: !t.completada })
+                : navigate('/proyectos')}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-surface transition-colors"
+            >
+              {t.origen === 'personal' ? (
+                <span className={clsx(
+                  'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
+                  t.completada ? 'border-brand bg-brand' : 'border-surface-border',
+                )}>
+                  {t.completada && <Check className="h-3 w-3 text-white" />}
+                </span>
+              ) : (
+                <FolderOpenIcon className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className={clsx(
+                  'text-[0.78rem] truncate',
+                  t.completada ? 'text-ink-tertiary line-through' : 'text-ink font-medium',
+                )}>
+                  {t.titulo}
+                </p>
+                {t.origen === 'proyecto' && t.proyectoNombre && (
+                  <p className="text-[0.62rem] text-ink-tertiary truncate">{t.proyectoNombre}</p>
+                )}
+              </div>
+              <span className="flex-shrink-0 text-[0.65rem] text-ink-tertiary">{tareaFechaCorta(t.fechaLimite)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -509,11 +613,18 @@ export function DashboardPage() {
             style={{ backgroundImage: `url(${heroBienvenida})` }}
           />
           <div className="hero-overlay pointer-events-none absolute inset-0" />
-          <div className="hero-content relative z-10 max-w-[230px]">
-            <p className="hero-text-secondary text-[0.9rem]">Bienvenido a</p>
-            <h2 className="hero-text text-3xl font-extrabold">{branding.nombreCorto}</h2>
-            <p className="hero-text-secondary mt-3 text-[0.85rem] leading-relaxed">
-              {branding.eslogan || 'Un espacio para conectar, colaborar y hacer crecer nuestro equipo.'}
+          <div className="hero-content relative z-10 max-w-[280px]">
+            <p className="hero-text-secondary text-[0.72rem] capitalize">
+              {now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+            <h2 className="hero-text mt-0.5 text-3xl font-extrabold">
+              ¡{greeting}, {user?.perfilAlias ?? user?.nombres?.split(' ')[0] ?? 'Usuario'}!
+            </h2>
+            <p className="hero-text-secondary mt-2 text-[0.9rem]">
+              Bienvenido a <span className="font-semibold">{branding.nombreCorto}</span>
+            </p>
+            <p className="hero-text-secondary mt-1 text-[0.85rem] leading-relaxed">
+              Que tengas un gran día. Aquí encontrarás todo lo que necesitas para tu trabajo diario.
             </p>
             <div className="mt-3 h-[3px] w-16 rounded-full bg-[#19b6bc]" />
             <span className={clsx(
@@ -531,24 +642,13 @@ export function DashboardPage() {
       label: 'Misión / Visión / Valores / Legales',
       node: <TarjetaLegales onAbrirLegales={() => setEmpresaModal('legales')} />,
     },
+    // TEMPORAL — prueba visual local de "Mis tareas" con datos de ejemplo,
+    // no se guarda en BD. No hay hoy un sistema de tareas personales
+    // transversal en AGYDA (solo tareas por proyecto o seguimientos de
+    // atención a cliente); esto es solo para evaluar el diseño.
     marca: {
       label: 'Marca / mascota',
-      node: (
-        <div className="dash-card relative flex h-full items-center justify-start overflow-hidden rounded-2xl border border-surface-border p-5 text-left">
-          <img src={heroAgydaInicio} alt="AGYDA" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="relative z-10 min-w-0 max-w-[60%]">
-            <p className="text-[0.62rem] capitalize text-black">
-              {now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
-            <h3 className="mt-0.5 text-sm font-bold text-black">
-              ¡{greeting}, {user?.perfilAlias ?? user?.nombres?.split(' ')[0] ?? 'Usuario'}!
-            </h3>
-            <p className="mt-1 text-[0.65rem] text-black/70">
-              Que tengas un gran día. Aquí encontrarás todo lo que necesitas para tu trabajo diario.
-            </p>
-          </div>
-        </div>
-      ),
+      node: <TarjetaMisTareas isAdmin={isAdmin} />,
     },
     'lo-importante': {
       label: 'Lo importante, al día',
@@ -605,14 +705,14 @@ export function DashboardPage() {
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 sm:grid-cols-2">
               <div className="min-h-0"><NewsCardDestacada n={noticias[0]} onOpen={setSelected} /></div>
               <div className="flex min-h-0 flex-col gap-1 overflow-auto">
-                {noticias.slice(1, 5).map((n) => (
+                {noticias.slice(1).map((n) => (
                   <div key={n.id} className="py-1"><NewsCard n={n} onOpen={setSelected} /></div>
                 ))}
               </div>
             </div>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center px-5 py-10 text-center">
-              <Newspaper className="h-[30px] w-[30px] mb-3" style={{ color: '#C9D6F0' }} />
+              <Newspaper className="h-[30px] w-[30px] mb-3 text-ink-tertiary" />
               <p className="text-[0.8rem] font-medium text-ink">Aún no hay noticias para mostrar.</p>
               <p className="mt-1 text-[0.7rem] text-ink-tertiary">Las novedades de la empresa aparecerán aquí.</p>
             </div>
@@ -661,7 +761,7 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="flex flex-col items-center px-5 py-8 text-center">
-              <MessageSquare className="h-6 w-6 mb-2" style={{ color: '#C9D6F0' }} />
+              <MessageSquare className="h-6 w-6 mb-2 text-ink-tertiary" />
               <p className="text-[0.75rem] font-medium text-ink">Sin conversaciones recientes.</p>
             </div>
           )}
@@ -706,8 +806,8 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="flex flex-col items-center px-5 py-8 text-center">
-              <FolderOpenIcon className="h-6 w-6 mb-2" style={{ color: '#C9D6F0' }} />
-              <p className="text-[0.75rem] font-medium text-ink">Sin documentos recientes.</p>
+              <FolderOpenIcon className="h-6 w-6 mb-2 text-ink-tertiary" />
+              <p className="text-[0.75rem] font-medium text-ink-tertiary">Sin documentos recientes.</p>
             </div>
           )}
         </div>
@@ -757,8 +857,8 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="flex flex-col items-center px-5 py-6 text-center">
-              <Calendar className="h-6 w-6 mb-2" style={{ color: '#C9D6F0' }} />
-              <p className="text-[0.75rem] font-medium text-ink">No hay eventos próximos.</p>
+              <Calendar className="h-6 w-6 mb-2 text-ink-tertiary" />
+              <p className="text-[0.75rem] font-medium text-ink-tertiary">No hay eventos próximos.</p>
             </div>
           )}
         </div>
@@ -861,7 +961,7 @@ export function DashboardPage() {
             ))}
           </div>
           <div className="flex items-center gap-3 border-t border-surface-border px-5 py-3">
-            <PlaneTakeoff className="h-4 w-4 flex-shrink-0 text-ink-tertiary" />
+            <img src="/icons/avion-gris.gif" alt="" className="h-5 w-5 flex-shrink-0 object-contain" />
             <p className="text-[0.72rem] text-ink-tertiary">Fuera de oficina · Sin datos aún — aquí se mostrará quién está de vacaciones hoy</p>
           </div>
         </div>

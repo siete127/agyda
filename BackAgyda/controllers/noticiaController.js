@@ -733,3 +733,55 @@ exports.saveLayout = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// Registra una vista (solo incrementa — no distingue quién ni deduplica por
+// usuario, igual que un contador simple de "veces abierta"). Se llama al
+// abrir el detalle de la noticia.
+exports.registrarVista = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .query('UPDATE INTRANET_NOTICIAS SET NOTI_VISTAS = NOTI_VISTAS + 1 WHERE NOTI_ID = @id');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error registrando vista:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Top 5 noticias por vistas (solo activas), para el panel lateral "Más leídas".
+exports.getMasLeidas = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request().query(`
+      SELECT TOP 5 NOTI_ID AS id, NOTI_TITULO AS titulo, NOTI_FECHA_CREACION AS fechaCreacion, NOTI_VISTAS AS vistas
+      FROM INTRANET_NOTICIAS
+      WHERE NOTI_ACTIVO = 1
+      ORDER BY NOTI_VISTAS DESC, NOTI_FECHA_CREACION DESC
+    `);
+    res.json({ success: true, data: result.recordset });
+  } catch (error) {
+    console.error('Error obteniendo más leídas:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Totales de reacciones por tipo, sumando todas las noticias — para el
+// panel lateral "Reacciones" (mismos tipos que ReactionPicker: like/love/haha/sad/angry).
+exports.getReaccionesResumen = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const result = await pool.request().query(`
+      SELECT r.REAC_TIPO AS tipo, COUNT(*) AS total
+      FROM INTRANET_NOTICIAS_REACCIONES r
+      JOIN INTRANET_NOTICIAS n ON n.NOTI_ID = r.REAC_NOTI_ID
+      WHERE n.NOTI_ACTIVO = 1
+      GROUP BY r.REAC_TIPO
+    `);
+    res.json({ success: true, data: result.recordset });
+  } catch (error) {
+    console.error('Error obteniendo resumen de reacciones:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

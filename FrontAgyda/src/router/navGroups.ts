@@ -85,11 +85,16 @@ export const NAV_GROUPS: NavGroup[] = [
     keys: ['drive', 'musica', 'calendario', 'proyectos'],
   },
   {
+    key: 'mis-tareas',
+    label: 'Mis tareas',
+    keys: ['mis-tareas'],
+    // "HERRAMIENTAS" pendiente de definir su esquema completo — por ahora
+    // solo Mis tareas y Configuración viven bajo este separador.
+    separadorAntes: 'Herramientas',
+  },
+  {
     key: 'configuracion',
     label: 'Configuración',
     keys: ['configuracion'],
-    // "HERRAMIENTAS" pendiente de definir su esquema completo — por ahora
-    // solo Configuración vive bajo este separador.
-    separadorAntes: 'Herramientas',
   },
 ]

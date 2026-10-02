@@ -10,21 +10,19 @@ interface Alerta {
   otrosLibres: string[] // otros baños que le corresponden y aún tienen lugar
 }
 
-const ESTILO_GENERO = {
-  F: { color: '#db2777', emoji: '🚺' },
-  M: { color: '#2563eb', emoji: '🚹' },
-  mixto: { color: '#7c3aed', emoji: '🚻' },
-}
+const ESTILO_GENERO = { F: '#ec9bbd', M: '#7ab8f5' }
 
-function BanioAlertModal({ alerta, onClose }: { alerta: Alerta; onClose: () => void }) {
-  const { color, emoji } = ESTILO_GENERO[alerta.espacio.genero ?? 'mixto']
+function BanioAlertModal({ alerta, genero, onClose }: { alerta: Alerta; genero: 'M' | 'F'; onClose: () => void }) {
+  const color = ESTILO_GENERO[genero]
   const lleno = alerta.espacio.capacidad > 1
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
       <div className="pointer-events-auto w-full max-w-xs rounded-2xl bg-card shadow-2xl overflow-hidden" style={{ border: `2px solid ${color}33` }}>
         <div className="h-1.5 w-full" style={{ background: color }} />
         <div className="px-6 py-5 flex flex-col items-center gap-3 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl text-4xl" style={{ background: `${color}15` }}>{emoji}</div>
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl" style={{ background: `${color}15` }}>
+            <img src="/icons/pausa-bano.gif" alt="" className="h-9 w-9 object-contain" />
+          </div>
           <div>
             <p className="text-[0.68rem] font-bold uppercase tracking-wider" style={{ color }}>{alerta.espacio.nombre}</p>
             <p className="text-[0.95rem] font-bold text-gray-800 mt-1">
@@ -50,7 +48,7 @@ export function BanioAlertWatcher() {
   // Solo quien puede marcar pausas (reports:gestionar-pausas, con el módulo
   // activo en su empresa) usa el baño y recibe estas alertas.
   const { puedePausar } = usePausaModulos()
-  const { estado, misEspacios, dentro, myId } = useBanioEstado(puedePausar)
+  const { estado, misEspacios, dentro, myId, genero } = useBanioEstado(puedePausar)
 
   const [alerta, setAlerta] = useState<Alerta | null>(null)
   const prevRef = useRef<Map<number, string[]> | null>(null) // espacioId -> userIds adentro
@@ -78,5 +76,5 @@ export function BanioAlertWatcher() {
   }, [estado, misEspacios, dentro, myId])
 
   if (!alerta || !puedePausar) return null
-  return <BanioAlertModal alerta={alerta} onClose={() => setAlerta(null)} />
+  return <BanioAlertModal alerta={alerta} genero={genero} onClose={() => setAlerta(null)} />
 }

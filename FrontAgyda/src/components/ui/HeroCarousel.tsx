@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, User2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { type Noticia } from '@/types/noticia.types'
 
@@ -85,21 +85,23 @@ export function HeroCarousel({ items, onOpen, size = 'compact' }: HeroCarouselPr
         )
       })}
 
-      {/* Overlay multicapa: oscurece toda la imagen + gradiente izq. fuerte */}
-      <div className="pointer-events-none absolute inset-0 bg-black/40" />
+      {/* Overlay: degradado inferior oscuro, más fuerte hacia la izquierda */}
       <div className="pointer-events-none absolute inset-0"
-        style={{ background: 'linear-gradient(to right, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.15) 100%)' }}
+        style={{ background: 'linear-gradient(0deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.05) 70%, transparent 100%)' }}
       />
-      {/* Gradiente inferior */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
-        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)' }}
+      <div className="pointer-events-none absolute inset-0"
+        style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.3) 0%, transparent 55%)' }}
       />
 
-      {/* ── Contenido — centrado verticalmente ── */}
-      <div className="absolute inset-0 flex flex-col justify-center px-6 sm:px-8" style={{ maxWidth: '62%' }}>
+      {/* ── Contenido — anclado abajo a la izquierda ── */}
+      <button
+        onClick={() => onOpen(item)}
+        className="absolute inset-x-0 bottom-0 flex flex-col items-start px-6 pb-6 pt-10 text-left sm:px-8 sm:pb-7"
+        style={{ maxWidth: '70%' }}
+      >
         {/* Badge */}
         <span className={clsx(
-          'mb-2 inline-flex w-fit items-center rounded-md px-2 py-0.5 text-[0.55rem] font-bold text-white uppercase tracking-widest',
+          'mb-2.5 inline-flex w-fit items-center rounded-md px-2 py-0.5 text-[0.6rem] font-bold text-white uppercase tracking-widest',
           catColor(item.categoria),
         )}>
           {item.categoria}
@@ -110,7 +112,7 @@ export function HeroCarousel({ items, onOpen, size = 'compact' }: HeroCarouselPr
           key={`title-${index}`}
           className={clsx(
             'mb-1.5 font-extrabold text-white leading-tight tracking-tight line-clamp-2',
-            size === 'large' ? 'text-2xl sm:text-3xl' : 'text-lg sm:text-xl',
+            size === 'large' ? 'text-xl sm:text-2xl' : 'text-lg sm:text-xl',
           )}
           style={{ textShadow: '0 2px 16px rgba(0,0,0,0.7)' }}
         >
@@ -121,55 +123,55 @@ export function HeroCarousel({ items, onOpen, size = 'compact' }: HeroCarouselPr
         <p
           key={`desc-${index}`}
           className={clsx(
-            'text-white/75 leading-relaxed',
-            size === 'large' ? 'mb-5 text-[0.82rem] line-clamp-2' : 'mb-3 text-[0.72rem] line-clamp-1',
+            'text-white/80 leading-relaxed',
+            size === 'large' ? 'mb-2.5 text-[0.82rem] line-clamp-2' : 'mb-2 text-[0.72rem] line-clamp-1',
           )}
           style={{ textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}
         >
           {item.contenido.replace(/<[^>]*>/g, '').slice(0, size === 'large' ? 160 : 100)}
         </p>
 
-        {/* Botón */}
-        <button
-          onClick={() => onOpen(item)}
-          className={clsx(
-            'group inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/50 bg-white/15 font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:bg-card hover:text-[#0B1730] hover:border-white active:scale-95',
-            size === 'large' ? 'px-4 py-2 text-[0.8rem]' : 'px-3 py-1.5 text-[0.72rem]',
-          )}
-        >
-          Leer más
-          <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
-        </button>
-      </div>
+        {/* Fecha + autor */}
+        <div className="flex items-center gap-3 text-[0.68rem] text-white/70">
+          <span className="flex items-center gap-1">
+            <CalendarDays className="h-3 w-3" />
+            {new Date(item.fechaCreacion).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+          <span className="flex items-center gap-1">
+            <User2 className="h-3 w-3" />
+            {item.autorNombre}
+          </span>
+        </div>
+      </button>
 
       {/* ── Flechas ── */}
       {items.length > 1 && (
         <>
           <button
             onClick={() => go(index - 1, 'left')}
-            className="absolute left-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm border border-white/15 transition-all hover:bg-white/25 active:scale-90"
+            className="absolute left-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm border border-white/20 transition-all hover:bg-white/30 active:scale-90"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-5 w-5" />
           </button>
           <button
             onClick={() => go(index + 1, 'right')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm border border-white/15 transition-all hover:bg-white/25 active:scale-90"
+            className="absolute right-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm border border-white/20 transition-all hover:bg-white/30 active:scale-90"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-5 w-5" />
           </button>
         </>
       )}
 
       {/* ── Indicadores: dots si hay pocos, contador si hay muchos ── */}
       {items.length > 1 && items.length <= 8 && (
-        <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5">
+        <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
           {items.map((_, i) => (
             <button
               key={i}
               onClick={() => go(i, i > index ? 'right' : 'left')}
               className={clsx(
                 'rounded-full transition-all duration-300',
-                i === index ? 'w-4 h-1.5 bg-card' : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/70',
+                i === index ? 'w-5 h-2 bg-card' : 'w-2 h-2 bg-white/40 hover:bg-white/70',
               )}
             />
           ))}

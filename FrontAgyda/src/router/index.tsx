@@ -49,6 +49,7 @@ const TicketsPage     = lz(() => import('@/pages/tickets/TicketsPage'),        '
 const KbPage          = lz(() => import('@/pages/kb/KbPage'),                  'KbPage')
 const NoticiasPage    = lz(() => import('@/pages/noticias/NoticiasPage'),      'NoticiasPage')
 const ProyectosPage   = lz(() => import('@/pages/proyectos/ProyectosPage'),    'ProyectosPage')
+const MisTareasPage   = lz(() => import('@/pages/mis-tareas/MisTareasPage'),   'MisTareasPage')
 const PerfilPage      = lz(() => import('@/pages/perfil/PerfilPage'),          'PerfilPage')
 const VacacionesPage  = lz(() => import('@/pages/vacaciones/VacacionesPage'),  'VacacionesPage')
 const CalendarioPage  = lz(() => import('@/pages/calendario/CalendarioPage'),  'CalendarioPage')
@@ -253,6 +254,7 @@ export const router = createBrowserRouter([
         children: [
           // Rutas siempre accesibles (moduleKey: '*')
           { path: '/dashboard',      element: <CLRedirect><>{wrap(<DashboardPage />)}</></CLRedirect> },
+          { path: '/mis-tareas',     element: wrap(<MisTareasPage />) },
           { path: '/notificaciones', element: wrap(<NotificacionesPage />) },
           { path: '/perfil',         element: wrap(<PerfilPage />) },
           { path: '/permisos',       element: <Navigate to="/vacaciones" replace /> },

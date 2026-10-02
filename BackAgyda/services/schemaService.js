@@ -240,6 +240,9 @@ IF COL_LENGTH('dbo.INTRANET_NOTICIAS', 'NOTI_ACTIVO') IS NULL
 
 IF COL_LENGTH('dbo.INTRANET_NOTICIAS', 'NOTI_FOCO') IS NULL
   ALTER TABLE dbo.INTRANET_NOTICIAS ADD NOTI_FOCO NVARCHAR(50) NULL;
+
+IF COL_LENGTH('dbo.INTRANET_NOTICIAS', 'NOTI_VISTAS') IS NULL
+  ALTER TABLE dbo.INTRANET_NOTICIAS ADD NOTI_VISTAS INT NOT NULL DEFAULT (0);
 `;
     await pool.request().batch(batchSql);
     logger.info('✅ Esquema de noticias asegurado/actualizado');
@@ -6215,6 +6218,7 @@ async function ensureAllSchemas(pool) {
   // Después de STATUS: le agrega las columnas de configuración de pausas.
   await require('./pausaTiposService').ensureSchema(pool);
   await require('./enlacesPersonalesService').ensureSchema(pool);
+  await require('./tareasPersonalesService').ensureSchema(pool);
 }
 
 // Expediente extendido (tabs "Persona", "Adicionales", "Familiares", "Formación", "Talento")

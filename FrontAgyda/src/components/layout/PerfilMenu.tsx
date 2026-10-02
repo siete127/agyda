@@ -19,6 +19,22 @@ import { limitePausa } from '@/types/pausaTipos.types'
 
 interface PausaActiva { tiempo_id: number; status_id: number; fecha_inicio: string; duracionSegundos: number }
 
+// Etiqueta legible del rol técnico (AD/TI/CC/...) — mismo mapeo que ya usan
+// otras páginas (Drive, Perfil, Reportes, etc.), aquí para mostrarla junto
+// al avatar en el encabezado.
+const ROLES_LABEL: Record<string, string> = {
+  AD: 'Administración', TI: 'Tecnología', CC: 'Call Center', ST: 'Staff', VE: 'Ventas', CL: 'Clientes',
+}
+
+// Gif por tipo de pausa (clave de PAUSA_TIPOS_DEFAULT), recoloreado al color
+// propio de cada tipo en vez del emoji genérico.
+const PAUSA_GIF: Record<string, string> = {
+  sanitario: '/icons/pausa-bano.gif',
+  comida: '/icons/pausa-comida.gif',
+  capacitacion: '/icons/pausa-capacitacion.gif',
+  permiso: '/icons/pausa-permiso.gif',
+}
+
 // Los estados son los tipos de pausa configurados (Configuración → Tipos de
 // pausa). El baño (tipo con semáforo de ocupación) además se refleja/dispara
 // por socket, con sus espacios (baños) configurados; el resto es solo REST
@@ -241,7 +257,8 @@ export function PerfilMenu() {
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[0.85rem] font-bold text-gray-900">{user.perfilAlias ?? user.nombres}</p>
-              <p className="text-[0.68rem] text-gray-400">{user.usuario} · {user.tipoUsuario}</p>
+              <p className="text-[0.68rem] text-gray-400">{ROLES_LABEL[user.tipoUsuario?.toUpperCase() ?? ''] ?? user.tipoUsuario}</p>
+              <p className="text-[0.64rem] text-gray-400">N.º {user.usuario}</p>
               {esAgenteLivechat && (
                 <p className={clsx('mt-0.5 text-[0.66rem] font-semibold', miEstado?.disponible ? 'text-emerald-500' : 'text-gray-400')}>
                   {miEstado?.disponible ? 'Ahora estás en línea' : 'Ahora estás desconectado'}
@@ -273,8 +290,8 @@ export function PerfilMenu() {
               (() => {
                 // Puede ser un tipo ya desactivado (se inició antes): se busca en todos.
                 const est = tipoPorId(statusActivo)
-                const a = acento(est?.color ?? '#6B7280')
                 const esBanio = statusActivo === banioId
+                const a = acento(esBanio ? (esF ? '#ec9bbd' : '#7ab8f5') : (est?.color ?? '#6B7280'))
                 const limite = limitePausa(est, rol, 'asistencia') // minutos, o null
                 const limiteSeg = limite !== null ? limite * 60 : null
                 const seg = elapsed ?? 0                              // acumulado de HOY
@@ -283,9 +300,13 @@ export function PerfilMenu() {
                 return (
                   <div className={clsx('flex items-center gap-3 rounded-xl border px-3 py-2.5', excedido && 'border-red-500/50 bg-red-500/10')}
                     style={excedido ? undefined : a.card}>
-                    <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-white', excedido && 'bg-red-500')}
-                      style={excedido ? undefined : a.solid}>
-                      <span className="text-lg leading-none">{esBanio ? (esF ? '🚺' : '🚹') : (est?.emoji ?? '⏸️')}</span>
+                    <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg', excedido && 'bg-red-500')}
+                      style={excedido ? undefined : a.card}>
+                      {!esBanio && est && PAUSA_GIF[est.clave] ? (
+                        <img src={PAUSA_GIF[est.clave]} alt="" className="h-6 w-6 object-contain" />
+                      ) : (
+                        <span className="text-lg leading-none">{esBanio ? (esF ? '🚺' : '🚹') : (est?.emoji ?? '⏸️')}</span>
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={clsx('text-[0.8rem] font-bold leading-tight', excedido && 'text-red-500')} style={excedido ? undefined : a.text}>
@@ -324,15 +345,22 @@ export function PerfilMenu() {
                   const esBanio = e.statusId === banioId
                   const bloqueado = esBanio && banioBloqueado
                   const cargando = loadingStatus === e.statusId
+                  const gif = PAUSA_GIF[e.clave]
+                  const colorBanio = esF ? '#ec9bbd' : '#7ab8f5'
                   return (
                     <button
                       key={e.statusId}
                       onClick={() => cambiarEstado(e.statusId)}
                       disabled={loadingStatus !== null || bloqueado}
                       title={bloqueado ? `Ocupado: ${banio.ocupantes.map((o) => o.nombre).join(', ') || 'alguien'}` : undefined}
-                      className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-2 text-[0.72rem] font-semibold text-gray-600 transition-colors hover:border-gray-300 disabled:opacity-40"
+                      className={clsx(
+                        'flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-[0.72rem] font-semibold transition-colors disabled:opacity-40',
+                        esBanio ? 'hover:opacity-80' : 'border-gray-200 text-gray-600 hover:border-gray-300',
+                      )}
+                      style={esBanio ? { borderColor: `${colorBanio}66`, color: colorBanio, background: `${colorBanio}14` } : undefined}
                     >
                       {cargando ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : gif ? <img src={gif} alt="" className="h-5 w-5 flex-shrink-0 object-contain" />
                         : <span className="text-base leading-none">{esBanio ? (esF ? '🚺' : '🚹') : e.emoji}</span>}
                       <span className="truncate">{bloqueado ? 'Baño ocupado' : e.etiqueta}</span>
                     </button>

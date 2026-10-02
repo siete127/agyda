@@ -1,4 +1,4 @@
-import { X, LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, LifeBuoy } from 'lucide-react'
+import { X, LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, Lightbulb } from 'lucide-react'
 import * as Icons from 'lucide-react'
 import { useState } from 'react'
 import { useUIStore } from '@/stores/ui.store'
@@ -382,7 +382,7 @@ export function Sidebar() {
               sidebarCollapsed ? 'justify-center px-0' : 'px-4'
             )}
           >
-            <LifeBuoy className="h-5 w-5 flex-shrink-0" />
+            <Lightbulb className="h-5 w-5 flex-shrink-0" />
             {!sidebarCollapsed && <span>Ayuda y soporte</span>}
           </button>
 

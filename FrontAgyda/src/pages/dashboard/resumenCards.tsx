@@ -63,7 +63,7 @@ export interface ResumenCardDef {
 /* ── Shell visual común ─────────────────────────────────────────────── */
 
 function CardShell({
-  titulo, Icon, img, to, onVer, verLabel = 'Abrir', children, tono = 'brand',
+  titulo, Icon, img, to, onVer, verLabel = 'Abrir', children, tono = 'brand', sinBorde = false,
 }: {
   titulo: string
   Icon: LucideIcon
@@ -74,6 +74,8 @@ function CardShell({
   verLabel?: string
   children: ReactNode
   tono?: 'brand' | 'amber' | 'rose' | 'emerald' | 'violet'
+  /** Oculta la línea divisoria bajo el encabezado (solo para esta tarjeta). */
+  sinBorde?: boolean
 }) {
   const navigate = useNavigate()
   const tonos: Record<string, string> = {
@@ -82,7 +84,7 @@ function CardShell({
   }
   return (
     <div className="dash-card flex h-full flex-col overflow-hidden rounded-2xl border border-surface-border bg-card">
-      <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+      <div className={clsx('flex items-center justify-between px-4 py-3', !sinBorde && 'border-b border-surface-border')}>
         <div className="flex items-center gap-2">
           {img ? <img src={img} alt="" className="h-6 w-6 object-contain" /> : <Icon className={clsx('h-4 w-4', tonos[tono])} />}
           <h3 className="text-[0.82rem] font-bold text-ink">{titulo}</h3>
@@ -399,14 +401,14 @@ function MetasVentasResumen() {
 
   if (data.length === 0) {
     return (
-      <CardShell titulo="Metas de ventas" Icon={Target} img="/icons/metas-blue.gif" to="/ventas-area/metas" verLabel="Ver metas" tono="brand">
+      <CardShell titulo="Metas de ventas" Icon={Target} img="/icons/metas-blue.gif" to="/ventas-area/metas" verLabel="Ver metas" tono="brand" sinBorde>
         <p className="text-center text-[0.72rem] text-ink-tertiary py-4">Sin metas asignadas hoy</p>
       </CardShell>
     )
   }
 
   return (
-    <CardShell titulo="Metas de ventas" Icon={Target} img="/icons/metas-blue.gif" to="/ventas-area/metas" verLabel="Ver metas" tono="brand">
+    <CardShell titulo="Metas de ventas" Icon={Target} img="/icons/metas-blue.gif" to="/ventas-area/metas" verLabel="Ver metas" tono="brand" sinBorde>
       <div className="flex flex-col gap-4">
         {data.map((m) => (
           <MetaProgreso key={m.id} meta={m} />

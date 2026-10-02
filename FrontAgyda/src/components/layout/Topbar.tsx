@@ -225,7 +225,7 @@ export function Topbar() {
 
         {/* Logo */}
         <div className="hidden items-center gap-3 md:flex">
-          <img src={logoSrc} alt={branding.nombreCorto} className="h-9 w-auto max-w-[130px] flex-shrink-0 object-contain" />
+          <img src={logoSrc} alt={branding.nombreCorto} className="h-11 w-auto max-w-[150px] flex-shrink-0 object-contain" />
           <div className="leading-tight">
             <p className="text-[15px] font-extrabold tracking-tight text-ink">
               {branding.nombreCorto}
