@@ -19,6 +19,7 @@ import { facturacionService } from '@/services/facturacion.service'
 // Etiquetas de recurrencia y formato de dinero compartidos con el catálogo para asignar.
 import { RECURRENCIA_LABEL, RECURRENCIA_CHIP, money } from './productoServicioUi'
 import { CatalogoProductosModal } from './CatalogoProductosModal'
+import { UsuariosEmpresaCliente } from './UsuariosEmpresaCliente'
 import { NuevaFacturaModal, type PresetFacturaCliente } from '@/pages/facturacion/NuevaFacturaModal'
 import { ProyectosDesdeProductosModal } from '@/pages/proyectos/ProyectosDesdeProductosModal'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -631,6 +632,9 @@ export function ClienteModal({ cliente, onClose, onCreado, elevated = false }: {
                   )}
                 </div>
               </div>
+
+              {/* Todos los usuarios del portal de esta empresa (también los que ellos dan de alta) */}
+              <UsuariosEmpresaCliente clienteId={cliente.id} empresa={cliente.empresa || cliente.nombre} />
 
               <div className="rounded-2xl border border-gray-100 bg-card p-5 shadow-card">
                 <div className="mb-4 flex items-center gap-2.5 border-b border-gray-100 pb-3">
