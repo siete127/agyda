@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import {
   Target, Plus, Trash2, User, Users, X, CalendarDays, Calendar, Megaphone,
   Save, ChevronDown, TrendingUp, MoreVertical, BarChart3, Info, CheckCircle2, AlertTriangle, RefreshCw,
+  LayoutGrid, Table2, Search, ArrowUpDown,
 } from 'lucide-react'
 import { ventasAreaService } from '@/services/ventasArea.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -182,6 +183,131 @@ function MetaCard({ meta, puedeGestionar, onDelete }: { meta: MetaVenta; puedeGe
             {cumplida ? 'Excelente trabajo del equipo' : 'Cada venta te acerca más al objetivo'}
           </p>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Vista en tabla: todas las metas del periodo en renglones ── */
+type OrdenMetas = 'meta' | 'actual' | 'objetivo' | 'progreso'
+const datosMeta = (m: MetaVenta) => {
+  const objetivo = m.metaUnidades > 0 ? m.metaUnidades : 0
+  const pct = objetivo > 0 ? (m.avanceUnidades / objetivo) * 100 : 0
+  const esCampana = m.alcance === 'campana'
+  return { objetivo, pct, esCampana, cumplida: pct >= 100, nombre: esCampana ? (m.campanaNombre ?? 'Campaña') : (m.asesorNombre ?? 'Asesor') }
+}
+
+// Encabezado de columna que ordena la tabla (clic de nuevo invierte el orden).
+function ThOrden({ col, orden, onOrdenar, children, className }: {
+  col: OrdenMetas; orden: { col: OrdenMetas; desc: boolean }; onOrdenar: (c: OrdenMetas) => void; children: React.ReactNode; className?: string
+}) {
+  return (
+    <th className={clsx('px-3 py-3', className)} aria-sort={orden.col === col ? (orden.desc ? 'descending' : 'ascending') : 'none'}>
+      <button onClick={() => onOrdenar(col)} className={clsx('inline-flex items-center gap-1 uppercase hover:text-gray-700', orden.col === col && 'text-violet-600')}>
+        {children} <ArrowUpDown className="h-3 w-3" />
+      </button>
+    </th>
+  )
+}
+
+function TablaMetas({ metas, puedeGestionar, onDelete }: { metas: MetaVenta[]; puedeGestionar: boolean; onDelete: (id: number) => void }) {
+  const [buscar, setBuscar] = useState('')
+  const [orden, setOrden] = useState<{ col: OrdenMetas; desc: boolean }>({ col: 'progreso', desc: true })
+  const q = buscar.trim().toLowerCase()
+  const filas = metas
+    .map((m) => ({ m, ...datosMeta(m) }))
+    .filter((r) => !q || `${r.nombre} ${r.m.campanaNombre ?? ''}`.toLowerCase().includes(q))
+    .sort((a, b) => {
+      // Las de equipo (campaña) siempre arriba; dentro, el orden elegido.
+      if (a.esCampana !== b.esCampana) return a.esCampana ? -1 : 1
+      const v = orden.col === 'meta' ? a.nombre.localeCompare(b.nombre, 'es')
+        : orden.col === 'actual' ? a.m.avanceUnidades - b.m.avanceUnidades
+          : orden.col === 'objetivo' ? a.objetivo - b.objetivo
+            : a.pct - b.pct
+      return orden.desc ? -v : v
+    })
+  const individuales = filas.filter((r) => !r.esCampana)
+  const totalActual = individuales.reduce((n, r) => n + r.m.avanceUnidades, 0)
+  const totalObjetivo = individuales.reduce((n, r) => n + r.objetivo, 0)
+  const cumplidas = individuales.filter((r) => r.cumplida).length
+  const ordenar = (col: OrdenMetas) => setOrden((o) => ({ col, desc: o.col === col ? !o.desc : col !== 'meta' }))
+  const th = { orden, onOrdenar: ordenar }
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-4 py-3">
+        <div className="relative min-w-[12rem] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
+          <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar asesor o campaña…"
+            className="w-full rounded-xl border border-gray-200 bg-card py-2 pl-9 pr-3 text-[0.82rem] outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15" />
+        </div>
+        {individuales.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-[0.72rem]">
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">{cumplidas} de {individuales.length} cumplidas</span>
+            <span className="rounded-full bg-violet-50 px-2.5 py-1 font-semibold text-violet-700">Asesores: {totalActual} / {totalObjetivo}</span>
+          </div>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-[0.82rem]">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/60 text-[0.66rem] font-semibold uppercase tracking-wide text-gray-500">
+              <ThOrden {...th} col="meta" className="pl-4">Meta</ThOrden>
+              <th className="px-3 py-3">Campaña</th>
+              <ThOrden {...th} col="actual" className="text-right">Actual</ThOrden>
+              <ThOrden {...th} col="objetivo" className="text-right">Objetivo</ThOrden>
+              <ThOrden {...th} col="progreso" className="min-w-[11rem]">Progreso</ThOrden>
+              <th className="px-3 py-3">Estado</th>
+              {puedeGestionar && <th className="px-3 py-3" />}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50 tabular-nums">
+            {filas.length === 0 ? (
+              <tr><td colSpan={puedeGestionar ? 7 : 6} className="px-4 py-10 text-center text-gray-400">Ninguna meta coincide</td></tr>
+            ) : filas.map(({ m, objetivo, pct, esCampana, cumplida, nombre }) => (
+              <tr key={m.id} className={clsx('transition-colors hover:bg-violet-50/30', esCampana && 'bg-violet-50/40')}>
+                <td className="py-2.5 pl-4 pr-3">
+                  <span className="flex items-center gap-2.5">
+                    <span className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[0.68rem] font-bold text-white',
+                      cumplida ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' : 'bg-gradient-to-br from-violet-500 to-violet-700')}>
+                      {esCampana ? <Users className="h-4 w-4" /> : nombre.replace(/[^A-Za-zÁÉÍÓÚÑ ]/g, '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-gray-900">{nombre}</span>
+                      <span className={clsx('text-[0.6rem] font-bold uppercase tracking-wide', esCampana ? 'text-violet-600' : 'text-brand')}>{esCampana ? 'Equipo' : 'Individual'}</span>
+                    </span>
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-gray-500">{m.campanaNombre ?? '—'}</td>
+                <td className={clsx('px-3 py-2.5 text-right font-bold', cumplida ? 'text-emerald-600' : 'text-violet-600')}>{m.avanceUnidades}</td>
+                <td className="px-3 py-2.5 text-right text-gray-600">{objetivo}</td>
+                <td className="px-3 py-2.5">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+                      <span className={clsx('block h-full rounded-full', cumplida ? 'bg-emerald-500' : 'bg-violet-500')} style={{ width: `${Math.max(Math.min(pct, 100), m.avanceUnidades > 0 ? 4 : 0)}%` }} />
+                    </span>
+                    <span className={clsx('w-14 text-right text-[0.75rem] font-semibold', cumplida ? 'text-emerald-600' : 'text-gray-600')}>{pct.toFixed(0)}%</span>
+                  </span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.66rem] font-semibold',
+                    cumplida ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+                    {cumplida ? <CheckCircle2 className="h-3 w-3" /> : <Calendar className="h-3 w-3" />} {cumplida ? 'Lista' : 'Activa'}
+                  </span>
+                </td>
+                {puedeGestionar && (
+                  <td className="px-3 py-2.5 text-right">
+                    <button onClick={() => { if (window.confirm(`¿Eliminar la meta de ${nombre} (${m.periodo})?`)) onDelete(m.id) }}
+                      title="Eliminar meta" aria-label={`Eliminar la meta de ${nombre}`}
+                      className="rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -486,6 +612,13 @@ export function MetasVentasPage() {
   const [tipoFiltro, setTipoFiltro] = useState<MetaTipo>('diaria')
   const [periodo, setPeriodo] = useState(hoyDia())
   const [showCrear, setShowCrear] = useState(false)
+  const [vista, setVista] = useState<'tarjetas' | 'tabla'>(() => {
+    try { return localStorage.getItem('metas-vista') === 'tabla' ? 'tabla' : 'tarjetas' } catch { return 'tarjetas' }
+  })
+  const cambiarVista = (v: 'tarjetas' | 'tabla') => {
+    setVista(v)
+    try { localStorage.setItem('metas-vista', v) } catch { /* sin almacenamiento */ }
+  }
 
   const cambiarTipoFiltro = (t: MetaTipo) => {
     setTipoFiltro(t)
@@ -526,9 +659,18 @@ export function MetasVentasPage() {
         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
           <Target className="h-6 w-6" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold text-gray-900">Metas</h1>
           <p className="text-[0.85rem] text-gray-400">Metas diarias y mensuales por asesor o por campaña</p>
+        </div>
+        <div className="flex rounded-xl border border-gray-200 bg-gray-50/60 p-1" role="tablist" aria-label="Vista">
+          {([['tarjetas', 'Tarjetas', LayoutGrid], ['tabla', 'Tabla', Table2]] as const).map(([id, label, Icon]) => (
+            <button key={id} role="tab" aria-selected={vista === id} onClick={() => cambiarVista(id)}
+              className={clsx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.78rem] font-semibold transition',
+                vista === id ? 'bg-card text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+              <Icon className="h-3.5 w-3.5" /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -551,6 +693,8 @@ export function MetasVentasPage() {
               <Target className="h-8 w-8" />
               <p className="text-sm">Sin metas {tipoFiltro === 'diaria' ? 'diarias' : 'mensuales'} para este periodo</p>
             </div>
+          ) : vista === 'tabla' ? (
+            <TablaMetas metas={metas} puedeGestionar={puedeGestionar} onDelete={(id) => eliminar.mutate(id)} />
           ) : (
             metas.map((m) => (
               <MetaCard key={m.id} meta={m} puedeGestionar={puedeGestionar} onDelete={(id) => eliminar.mutate(id)} />
