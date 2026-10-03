@@ -12,6 +12,7 @@ export interface MensajeriaCanal {
   ultimoMensajePreview: string | null
   noLeidos: number
   otroUsuarioId: number | null
+  fijado: boolean
 }
 
 export interface MensajeriaReaccion {
@@ -86,6 +87,7 @@ export function parseMensajeriaCanal(raw: Record<string, unknown>): MensajeriaCa
     ultimoMensajePreview: pick(raw, 'ultimoMensajePreview') ? String(pick(raw, 'ultimoMensajePreview')) : null,
     noLeidos: Number(pick(raw, 'noLeidos') ?? 0),
     otroUsuarioId: pick(raw, 'otroUsuarioId') != null ? Number(pick(raw, 'otroUsuarioId')) : null,
+    fijado: parseBool(pick(raw, 'fijado')),
   }
 }
 

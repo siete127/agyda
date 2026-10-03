@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getSocket } from '@/lib/socket'
 import { accessService } from '@/services/access.service'
 import { useSocketStore } from '@/stores/socket.store'
@@ -12,6 +12,9 @@ import { api } from '@/lib/axios'
 export function useSocketInit() {
   const { setStatus, setSocketId } = useSocketStore()
   const user = useAuthStore((s) => s.user)
+  const queryClient = useQueryClient()
+  const queryClientRef = useRef(queryClient)
+  queryClientRef.current = queryClient
 
   // Comparte la misma queryKey que useModuleAccess: no dispara request extra,
   // solo lee el resultado ya cacheado de los módulos permitidos.
@@ -95,12 +98,23 @@ export function useSocketInit() {
         .catch(() => { /* silencioso */ })
     }
 
+    // Si el mensaje llega mientras esa conversación NO está abierta (el
+    // ChatPanel/MensajeriaChatWindow de ese canal no está montado, así que su
+    // propio listener no existe todavía), invalida la caché de sus mensajes.
+    // Así, al abrirla, React Query refetchea en vez de servir una lista vieja
+    // — sin esto, el mensaje solo aparecía después de recargar la página.
+    const onMensajeriaNuevoMensaje = (payload: Record<string, unknown>) => {
+      onMensajeriaCambio()
+      const canalId = Number(payload?.['canalId'])
+      if (canalId) queryClientRef.current.invalidateQueries({ queryKey: ['mensajeria-mensajes', canalId] })
+    }
+
     sock.on('connect',       onConnect)
     sock.on('disconnect',    onDisconnect)
     sock.on('connect_error', onError)
     sock.on('notificacion',  onNotificacion as (p: unknown) => void)
     sock.on('chat:notify',   onNotificacion as (p: unknown) => void)
-    sock.on('mensajeria:nuevo_mensaje', onMensajeriaCambio)
+    sock.on('mensajeria:nuevo_mensaje', onMensajeriaNuevoMensaje as (p: unknown) => void)
     sock.on('mensajeria:canal_creado',  onMensajeriaCambio)
 
     // Si ya estaba conectado al montar, unirse inmediatamente
@@ -117,7 +131,7 @@ export function useSocketInit() {
       sock.off('connect_error', onError)
       sock.off('notificacion',  onNotificacion as (p: unknown) => void)
       sock.off('chat:notify',   onNotificacion as (p: unknown) => void)
-      sock.off('mensajeria:nuevo_mensaje', onMensajeriaCambio)
+      sock.off('mensajeria:nuevo_mensaje', onMensajeriaNuevoMensaje as (p: unknown) => void)
       sock.off('mensajeria:canal_creado',  onMensajeriaCambio)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

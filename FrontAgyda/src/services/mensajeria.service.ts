@@ -89,6 +89,18 @@ export const mensajeriaService = {
     await api.post(`/mensajeria/canales/${canalId}/salir`)
   },
 
+  async fijarCanal(canalId: number, fijado: boolean): Promise<void> {
+    await api.post(`/mensajeria/canales/${canalId}/fijar`, { fijado })
+  },
+
+  async marcarNoLeido(canalId: number): Promise<void> {
+    await api.post(`/mensajeria/canales/${canalId}/marcar-no-leido`)
+  },
+
+  async ocultarCanal(canalId: number): Promise<void> {
+    await api.post(`/mensajeria/canales/${canalId}/ocultar`)
+  },
+
   async getMiConfig(): Promise<MensajeriaConfig> {
     const { data } = await api.get('/mensajeria/mi-config')
     return parseMensajeriaConfig((data?.data ?? data) as Record<string, unknown>)

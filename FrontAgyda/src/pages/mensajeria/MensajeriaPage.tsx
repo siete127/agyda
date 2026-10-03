@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus, MoreVertical, Pencil, Trash2, Check, AlertCircle, RotateCw, Search, Eye, FileSpreadsheet, FileImage, FileVideo, FileAudio, File as FileIcon } from 'lucide-react'
+import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus, MoreVertical, Pencil, Trash2, Check, AlertCircle, RotateCw, Search, Eye, FileSpreadsheet, FileImage, FileVideo, FileAudio, File as FileIcon, MailQuestion, Pin, LogOut } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { renderizarPrimeraPaginaPdf } from '@/lib/pdfPreview'
 import { mensajeriaService } from '@/services/mensajeria.service'
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Avatar } from '@/components/ui/Avatar'
 import { EmojiPicker } from '@/components/ui/EmojiPicker'
+import { TypingDots } from '@/components/ui/TypingDots'
 import { NuevoGrupoModal } from './NuevoGrupoModal'
 import { AgregarMiembrosModal } from './AgregarMiembrosModal'
 import { DriveArchivoPicker } from './DriveArchivoPicker'
@@ -263,46 +264,180 @@ function NuevoDMPicker({ onClose, onCreado }: { onClose: () => void; onCreado: (
 }
 
 /* ── Item de la lista de conversaciones ── */
-function ConversacionItem({ canal, activa, oscuro, onClick }: { canal: MensajeriaCanal; activa: boolean; oscuro: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={clsx(
-        'w-full text-left px-4 py-3 border-b transition-colors flex items-center gap-3',
-        oscuro ? 'border-gray-700' : 'border-gray-100',
-        activa ? (oscuro ? 'bg-brand/15' : 'bg-blue-50') : (oscuro ? 'hover:bg-gray-800' : 'hover:bg-gray-50'),
-      )}
-    >
-      <div className="relative flex-shrink-0">
-        {canal.tipo === 'grupo' ? (
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-brand">
-            <Users className="h-4 w-4" />
-          </div>
+// Posición de pantalla donde abrir el menú contextual — clic derecho usa la
+// posición del cursor; long-press (tablet/móvil) usa el punto donde se mantuvo
+// presionado el dedo.
+interface PosicionMenu { x: number; y: number }
+
+// Menú contextual de una conversación — clic derecho (desktop) o mantener
+// presionado (tablet/táctil). Grupos: salir, no leído, fijar/desfijar.
+// Directos: no leído, fijar/desfijar, eliminar chat (oculta solo para mí).
+function MenuContextualConversacion({
+  canal, posicion, oscuro, onClose, onFijar, onMarcarNoLeido, onSalirDeGrupo, onEliminarChat,
+}: {
+  canal: MensajeriaCanal
+  posicion: PosicionMenu
+  oscuro: boolean
+  onClose: () => void
+  onFijar: () => void
+  onMarcarNoLeido: () => void
+  onSalirDeGrupo: () => void
+  onEliminarChat: () => void
+}) {
+  const esGrupo = canal.tipo === 'grupo'
+  // Evita que el menú se salga de la pantalla si se abre cerca del borde.
+  const style: React.CSSProperties = {
+    position: 'fixed',
+    top: Math.min(posicion.y, window.innerHeight - 220),
+    left: Math.min(posicion.x, window.innerWidth - 220),
+  }
+
+  const itemClass = clsx(
+    'flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors',
+    oscuro ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50',
+  )
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[250]" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }} />
+      <div
+        style={style}
+        className={clsx(
+          'z-[260] w-56 overflow-hidden rounded-xl border shadow-xl animate-fade-in',
+          oscuro ? 'chat-tema-oscuro bg-gray-800 border-gray-700' : 'chat-tema-claro bg-card border-gray-200',
+        )}
+      >
+        <button className={itemClass} onClick={() => { onMarcarNoLeido(); onClose() }}>
+          <MailQuestion className="h-4 w-4" /> Marcar como no leído
+        </button>
+        <button className={itemClass} onClick={() => { onFijar(); onClose() }}>
+          <Pin className="h-4 w-4" /> {canal.fijado ? 'Desfijar chat' : 'Fijar chat'}
+        </button>
+        {esGrupo ? (
+          <button
+            className={clsx(itemClass, 'text-red-500 hover:text-red-600')}
+            onClick={() => {
+              onClose()
+              if (window.confirm(`¿Salir de "${canal.nombre || 'este grupo'}"? Dejarás de recibir sus mensajes.`)) onSalirDeGrupo()
+            }}
+          >
+            <LogOut className="h-4 w-4" /> Salir del grupo
+          </button>
         ) : (
-          <Avatar name={canal.nombre ?? '?'} size="sm" />
+          <button
+            className={clsx(itemClass, 'text-red-500 hover:text-red-600')}
+            onClick={() => {
+              onClose()
+              if (window.confirm(`¿Eliminar el chat con "${canal.nombre || 'este contacto'}"? Solo se elimina de tu lista.`)) onEliminarChat()
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Eliminar chat
+          </button>
         )}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className={clsx(
-            'truncate text-sm',
-            canal.noLeidos > 0 ? 'font-bold' : 'font-medium',
-            canal.noLeidos > 0 ? (oscuro ? 'text-gray-100' : 'text-gray-900') : (oscuro ? 'text-gray-300' : 'text-gray-700'),
-          )}>
-            {canal.nombre || 'Conversación'}
-          </span>
-          <span className={clsx('flex-shrink-0 text-[0.65rem]', oscuro ? 'text-gray-500' : 'text-gray-400')}>{formatFechaCorta(canal.ultimoMensajeFecha)}</span>
-        </div>
-        <div className="flex items-center justify-between gap-2 mt-0.5">
-          <p className={clsx('truncate text-xs', oscuro ? 'text-gray-400' : 'text-gray-500')}>{canal.ultimoMensajePreview || 'Sin mensajes aún'}</p>
-          {canal.noLeidos > 0 && (
-            <span className="flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-full bg-brand px-1 text-[0.6rem] font-bold text-white">
-              {canal.noLeidos > 9 ? '9+' : canal.noLeidos}
-            </span>
+    </>,
+    document.body,
+  )
+}
+
+function ConversacionItem({ canal, activa, oscuro, onClick, onFijar, onMarcarNoLeido, onSalirDeGrupo, onEliminarChat }: {
+  canal: MensajeriaCanal
+  activa: boolean
+  oscuro: boolean
+  onClick: () => void
+  onFijar: () => void
+  onMarcarNoLeido: () => void
+  onSalirDeGrupo: () => void
+  onEliminarChat: () => void
+}) {
+  const [menuPos, setMenuPos] = useState<PosicionMenu | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressDisparado = useRef(false)
+
+  const abrirMenuEn = (x: number, y: number) => setMenuPos({ x, y })
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    abrirMenuEn(e.clientX, e.clientY)
+  }
+
+  // Long-press táctil (tablet/móvil): mantener presionado ~500ms abre el menú
+  // en vez de disparar el click normal de abrir la conversación.
+  const handleTouchStart = (e: React.TouchEvent) => {
+    longPressDisparado.current = false
+    const touch = e.touches[0]
+    longPressTimer.current = setTimeout(() => {
+      longPressDisparado.current = true
+      abrirMenuEn(touch.clientX, touch.clientY)
+    }, 500)
+  }
+  const cancelarLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current)
+  }
+  const handleClick = () => {
+    if (longPressDisparado.current) { longPressDisparado.current = false; return }
+    onClick()
+  }
+
+  return (
+    <>
+      <button
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={cancelarLongPress}
+        onTouchMove={cancelarLongPress}
+        className={clsx(
+          'w-full text-left px-4 py-3 border-b transition-colors flex items-center gap-3',
+          oscuro ? 'border-gray-700' : 'border-gray-100',
+          activa ? (oscuro ? 'bg-brand/15' : 'bg-blue-50') : (oscuro ? 'hover:bg-gray-800' : 'hover:bg-gray-50'),
+        )}
+      >
+        <div className="relative flex-shrink-0">
+          {canal.tipo === 'grupo' ? (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-brand">
+              <Users className="h-4 w-4" />
+            </div>
+          ) : (
+            <Avatar name={canal.nombre ?? '?'} size="sm" />
           )}
         </div>
-      </div>
-    </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className={clsx(
+              'flex min-w-0 items-center gap-1 truncate text-sm',
+              canal.noLeidos > 0 ? 'font-bold' : 'font-medium',
+              canal.noLeidos > 0 ? (oscuro ? 'text-gray-100' : 'text-gray-900') : (oscuro ? 'text-gray-300' : 'text-gray-700'),
+            )}>
+              {canal.fijado && <Pin className={clsx('h-3 w-3 flex-shrink-0', oscuro ? 'text-gray-500' : 'text-gray-400')} />}
+              <span className="truncate">{canal.nombre || 'Conversación'}</span>
+            </span>
+            <span className={clsx('flex-shrink-0 text-[0.65rem]', oscuro ? 'text-gray-500' : 'text-gray-400')}>{formatFechaCorta(canal.ultimoMensajeFecha)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2 mt-0.5">
+            <p className={clsx('truncate text-xs', oscuro ? 'text-gray-400' : 'text-gray-500')}>{canal.ultimoMensajePreview || 'Sin mensajes aún'}</p>
+            {canal.noLeidos > 0 && (
+              <span className="flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-full bg-brand px-1 text-[0.6rem] font-bold text-white">
+                {canal.noLeidos > 9 ? '9+' : canal.noLeidos}
+              </span>
+            )}
+          </div>
+        </div>
+      </button>
+
+      {menuPos && (
+        <MenuContextualConversacion
+          canal={canal}
+          posicion={menuPos}
+          oscuro={oscuro}
+          onClose={() => setMenuPos(null)}
+          onFijar={onFijar}
+          onMarcarNoLeido={onMarcarNoLeido}
+          onSalirDeGrupo={onSalirDeGrupo}
+          onEliminarChat={onEliminarChat}
+        />
+      )}
+    </>
   )
 }
 
@@ -317,7 +452,6 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   const [arrastrandoArchivo, setArrastrandoArchivo] = useState(false)
   const dragCounterRef = useRef(0)
   const [drivePickerOpen, setDrivePickerOpen] = useState(false)
-  const [aparienciaOpen, setAparienciaOpen] = useState(false)
   const [miembrosOpen, setMiembrosOpen] = useState(false)
   const [agregarMiembrosOpen, setAgregarMiembrosOpen] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -358,12 +492,6 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
     staleTime: 5 * 60 * 1000,
   })
 
-  const guardarApariencia = useMutation({
-    mutationFn: (payload: Partial<MensajeriaConfig>) => mensajeriaService.actualizarMiConfig(payload),
-    onSuccess: (nuevaConfig) => qc.setQueryData(['mensajeria-mi-config'], nuevaConfig),
-    onError: () => toast.error('No se pudo guardar la apariencia'),
-  })
-
   // Solo se piden al abrir el panel — no hace falta cargarlos en cada mensaje.
   const { data: canalDetalle, isLoading: cargandoMiembros } = useQuery({
     queryKey: ['mensajeria-canal-detalle', canal.id],
@@ -386,7 +514,14 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
 
   const oscuro = config?.tema === 'oscuro'
   const colorPropio = config?.colorMensajePropio ?? '#2563EB'
-  const colorAjeno = config?.colorMensajeAjeno ?? '#FFFFFF'
+  // El blanco es el valor por defecto de "Recibidos" — si el usuario nunca lo
+  // personalizó, en modo oscuro se usa un gris oscuro en su lugar (como
+  // WhatsApp), para no dejar burbujas blancas sólidas en un chat oscuro. Si sí
+  // lo personalizó a un color propio, se respeta tal cual en ambos temas.
+  const colorAjenoDefault = oscuro ? '#2A2F3A' : '#FFFFFF'
+  const colorAjeno = (!config?.colorMensajeAjeno || config.colorMensajeAjeno.toUpperCase() === '#FFFFFF')
+    ? colorAjenoDefault
+    : config.colorMensajeAjeno
   const textColorPropio = getContrastTextColor(colorPropio)
   const textColorAjeno = getContrastTextColor(colorAjeno)
 
@@ -408,9 +543,11 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   }, [canal.id])
 
   useEffect(() => {
-    mensajeriaService.marcarLeido(canal.id).catch(() => {})
+    mensajeriaService.marcarLeido(canal.id)
+      .then(() => qc.invalidateQueries({ queryKey: ['mensajeria-canales'] }))
+      .catch(() => {})
     clearUnread(canal.id)
-  }, [canal.id, clearUnread])
+  }, [canal.id, clearUnread, qc])
 
   useSocketEvent<Record<string, unknown>>('mensajeria:nuevo_mensaje', (raw) => {
     const msg = parseMensajeriaMensaje(raw)
@@ -427,7 +564,9 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
       return [...prev, msg]
     })
     if (msg.emisorId !== user?.id) {
-      mensajeriaService.marcarLeido(canal.id).catch(() => {})
+      mensajeriaService.marcarLeido(canal.id)
+        .then(() => qc.invalidateQueries({ queryKey: ['mensajeria-canales'] }))
+        .catch(() => {})
       clearUnread(canal.id)
     }
   })
@@ -668,7 +807,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
 
   return (
     <div
-      className={clsx('relative flex-1 flex min-h-0', oscuro && 'bg-gray-900')}
+      className={clsx('relative flex-1 flex min-h-0', oscuro ? 'chat-tema-oscuro bg-gray-900' : 'chat-tema-claro')}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -693,7 +832,11 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
         )}
         <div className="min-w-0 flex-1">
           <p className={clsx('font-semibold truncate', oscuro ? 'text-gray-100' : 'text-gray-800')}>{canal.nombre || 'Conversación'}</p>
-          {otrosEscribiendo && <p className="text-xs text-brand animate-pulse">{otrosEscribiendo} está escribiendo…</p>}
+          {otrosEscribiendo && (
+            <p className="flex items-center gap-1.5 text-xs text-brand">
+              {otrosEscribiendo} está escribiendo <TypingDots />
+            </p>
+          )}
         </div>
         {compacto && onMinimizar && (
           <button
@@ -722,15 +865,6 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
             <Users className="h-4 w-4" />
           </button>
         )}
-        <button
-          onClick={() => setAparienciaOpen((v) => !v)}
-          className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100')}
-          title="Apariencia del chat"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
-
-
         {agregarMiembrosOpen && canalDetalle && (
           <AgregarMiembrosModal
             canalId={canal.id}
@@ -743,51 +877,6 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
           />
         )}
 
-        {aparienciaOpen && config && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setAparienciaOpen(false)} />
-            <div className={clsx(
-              'absolute right-4 top-12 z-20 w-64 rounded-xl border shadow-lg p-3',
-              oscuro ? 'bg-gray-800 border-gray-700' : 'bg-card border-gray-200',
-            )}>
-              <p className={clsx('mb-2 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>Apariencia del chat</p>
-
-              <label className={clsx('mb-1.5 block text-[0.68rem] font-semibold', oscuro ? 'text-gray-400' : 'text-gray-500')}>Tema</label>
-              <select
-                value={config.tema}
-                onChange={(e) => guardarApariencia.mutate({ tema: e.target.value as MensajeriaConfig['tema'] })}
-                className={clsx(
-                  'mb-3 w-full rounded-lg border px-2 py-1.5 text-sm focus:outline-none',
-                  oscuro ? 'bg-gray-900 border-gray-700 text-gray-100' : 'border-gray-200',
-                )}
-              >
-                <option value="claro">Claro</option>
-                <option value="oscuro">Oscuro</option>
-              </select>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className={clsx('mb-1 block text-[0.65rem] font-semibold', oscuro ? 'text-gray-400' : 'text-gray-500')}>Mis mensajes</label>
-                  <input
-                    type="color"
-                    value={config.colorMensajePropio}
-                    onChange={(e) => guardarApariencia.mutate({ colorMensajePropio: e.target.value })}
-                    className="h-8 w-full cursor-pointer rounded-lg border border-gray-200"
-                  />
-                </div>
-                <div>
-                  <label className={clsx('mb-1 block text-[0.65rem] font-semibold', oscuro ? 'text-gray-400' : 'text-gray-500')}>Recibidos</label>
-                  <input
-                    type="color"
-                    value={config.colorMensajeAjeno}
-                    onChange={(e) => guardarApariencia.mutate({ colorMensajeAjeno: e.target.value })}
-                    className="h-8 w-full cursor-pointer rounded-lg border border-gray-200"
-                  />
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
       <div ref={mensajesContainerRef} className={clsx('flex-1 overflow-y-auto px-5 py-4', oscuro ? 'bg-gray-900' : 'bg-gray-50')}>
@@ -815,16 +904,18 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
               )}
             <div className={clsx('flex w-full flex-col animate-fade-in', esMio ? 'items-end' : 'items-start', mismoRemitenteQueAnterior && !cambioDeDia ? 'mt-1' : 'mt-4')}>
               {mostrarAvatarGrupo && (
-                <div className="mb-1 flex items-center gap-1.5 pl-0.5">
-                  <Avatar name={m.emisorNombre || '?'} size="sm" />
-                  <span className={clsx('text-[0.72rem] font-semibold', oscuro ? 'text-gray-300' : 'text-gray-700')}>{m.emisorNombre}</span>
-                </div>
+                <span className={clsx('mb-0.5 pl-9 text-[0.72rem] font-semibold', oscuro ? 'text-gray-300' : 'text-gray-700')}>{m.emisorNombre}</span>
               )}
               <div
-                className={clsx('relative flex w-full', esMio ? 'justify-end' : 'justify-start')}
+                className={clsx('relative flex w-full items-start gap-2', esMio ? 'justify-end' : 'justify-start')}
                 onMouseEnter={() => setReaccionandoId(m.id)}
                 onMouseLeave={() => setReaccionandoId((v) => (v === m.id ? null : v))}
               >
+                {!esMio && canal.tipo === 'grupo' && (
+                  <div className="h-7 w-7 flex-shrink-0">
+                    {mostrarAvatarGrupo && <Avatar name={m.emisorNombre || '?'} size="sm" ring={oscuro ? 'brand' : 'white'} />}
+                  </div>
+                )}
                 {/* Barra de reacciones rápidas — aparece al hacer hover del mensaje */}
                 {reaccionandoId === m.id && (
                   <div
@@ -938,9 +1029,53 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                     </div>
                   </div>
                 ) : (
+                  <div className="max-w-[85%]" style={{ display: 'table' }}>
+                  {m.archivoUrl && !esImagen(m.archivoUrl) && !m.contenido ? (() => {
+                    // Documento solo (sin texto) — la tarjeta del documento ES la
+                    // burbuja, sin un segundo card de fondo alrededor envolviéndola.
+                    const { Icono, color, bg, etiqueta } = tipoArchivo(m.archivoUrl)
+                    const claro = textColor !== 'white'
+                    return (
+                      <div
+                        className={clsx(
+                          'w-[220px] overflow-hidden rounded-2xl transition-opacity',
+                          esMio ? 'border border-white/15 shadow-lg backdrop-blur-md' : (!oscuro && 'border border-gray-200'),
+                          m.estadoEnvio === 'enviando' && 'opacity-60',
+                        )}
+                        style={{ backgroundColor: bgColor, color: textColor }}
+                      >
+                        <div className="flex items-center gap-2.5 px-2.5 py-2.5">
+                          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: bg }}>
+                            <Icono className="h-5 w-5" style={{ color }} />
+                          </span>
+                          <div className="min-w-0 flex-1 text-left">
+                            <p className="truncate text-xs font-semibold">{nombreDeUrl(m.archivoUrl)}</p>
+                            <p className="text-[0.65rem] opacity-70">{etiqueta}</p>
+                          </div>
+                        </div>
+                        <div className="flex border-t" style={{ borderColor: claro ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.15)' }}>
+                          <button
+                            type="button"
+                            onClick={() => setArchivoVisor(m.archivoUrl)}
+                            className="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.68rem] font-semibold hover:opacity-70"
+                          >
+                            <Eye className="h-3 w-3" /> Ver
+                          </button>
+                          <div className="w-px" style={{ background: claro ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.15)' }} />
+                          <a
+                            href={m.archivoUrl}
+                            download
+                            className="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.68rem] font-semibold hover:opacity-70"
+                          >
+                            <Download className="h-3 w-3" /> Guardar
+                          </a>
+                        </div>
+                      </div>
+                    )
+                  })() : (
                   <div
                     className={clsx(
-                      'inline-block min-w-[64px] max-w-[85%] overflow-hidden rounded-2xl px-4 py-2 text-sm transition-opacity',
+                      'min-w-[64px] max-w-full overflow-hidden rounded-2xl px-4 py-2 text-sm transition-opacity',
                       esMio ? 'border border-white/15 shadow-lg backdrop-blur-md' : (!esMio && !oscuro && 'border border-gray-200'),
                       m.estadoEnvio === 'enviando' && 'opacity-60',
                     )}
@@ -987,22 +1122,24 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                         )
                       })()
                     )}
-                    <div className="flex items-center justify-end gap-1 text-[10px] mt-1 opacity-70 whitespace-nowrap" style={{ color: textColor }}>
-                      {m.editado && <span className="italic">editado ·</span>}
-                      {m.estadoEnvio === 'enviando' ? (
-                        <RotateCw size={10} className="animate-spin" />
-                      ) : m.estadoEnvio === 'error' ? (
-                        <button
-                          onClick={() => reintentarEnvio(m)}
-                          className="flex items-center gap-0.5 hover:underline"
-                          title="Error al enviar — clic para reintentar"
-                        >
-                          <AlertCircle size={11} /> reintentar
-                        </button>
-                      ) : (
-                        <span>{formatHora(m.fecha)}</span>
-                      )}
-                    </div>
+                  </div>
+                  )}
+                  <div className={clsx('flex items-center gap-1 text-[10px] mt-0.5 px-1 whitespace-nowrap', oscuro ? 'text-gray-500' : 'text-gray-400')}>
+                    {m.editado && <span className="italic">editado ·</span>}
+                    {m.estadoEnvio === 'enviando' ? (
+                      <RotateCw size={10} className="animate-spin" />
+                    ) : m.estadoEnvio === 'error' ? (
+                      <button
+                        onClick={() => reintentarEnvio(m)}
+                        className="flex items-center gap-0.5 text-red-500 hover:underline"
+                        title="Error al enviar — clic para reintentar"
+                      >
+                        <AlertCircle size={11} /> reintentar
+                      </button>
+                    ) : (
+                      <span>{formatHora(m.fecha)}</span>
+                    )}
+                  </div>
                   </div>
                 )}
               </div>
@@ -1049,6 +1186,15 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
             </div>
           )
         })}
+        {otrosEscribiendo && (
+          <div className="mt-2 flex w-full items-start justify-start">
+            <div
+              className={clsx('inline-flex items-center rounded-2xl px-4 py-3', oscuro ? 'bg-gray-800' : 'bg-white border border-gray-200')}
+            >
+              <TypingDots className={oscuro ? 'bg-gray-400' : 'bg-gray-400'} />
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -1114,14 +1260,14 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
             placeholder="Escribe un mensaje..."
             className={clsx(
               'flex-1 resize-none rounded-3xl border px-4 py-2 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-blue-500',
-              oscuro ? 'border-gray-700 bg-gray-800 text-gray-100 placeholder-gray-500' : 'border-gray-300',
+              oscuro ? 'border-gray-700 bg-gray-800 text-gray-100 placeholder-gray-500' : 'border-gray-300 bg-white text-gray-900',
             )}
-            style={{ maxHeight: 120 }}
+            style={{ maxHeight: 120, colorScheme: oscuro ? 'dark' : 'light' }}
           />
           <Button
             onClick={handleEnviar}
             disabled={enviar.isPending || (!texto.trim() && !archivo)}
-            style={{ backgroundColor: colorPropio, borderColor: colorPropio, color: textColorPropio }}
+            style={{ backgroundColor: hexToRgba(colorPropio, 0.55), borderColor: colorPropio, color: textColorPropio }}
           >
             <Send size={16} />
           </Button>
@@ -1423,10 +1569,87 @@ function PanelDetallesGrupo({
   )
 }
 
+// Botón de engranaje + popover de "Apariencia del chat" (tema y colores) — vive
+// en el header general de Mensajería, no por conversación: es una preferencia
+// del usuario, igual para todos sus chats.
+function ApparienciaPicker() {
+  const [abierto, setAbierto] = useState(false)
+  const qc = useQueryClient()
+  const { data: config } = useQuery({
+    queryKey: ['mensajeria-mi-config'],
+    queryFn: () => mensajeriaService.getMiConfig(),
+    staleTime: 5 * 60 * 1000,
+  })
+  const oscuro = config?.tema === 'oscuro'
+
+  const guardarApariencia = useMutation({
+    mutationFn: (payload: Partial<MensajeriaConfig>) => mensajeriaService.actualizarMiConfig(payload),
+    onSuccess: (nuevaConfig) => qc.setQueryData(['mensajeria-mi-config'], nuevaConfig),
+    onError: () => toast.error('No se pudo guardar la apariencia'),
+  })
+
+  return (
+    <div className="relative">
+      <Button size="sm" variant="secondary" onClick={() => setAbierto((v) => !v)} title="Apariencia del chat">
+        <Settings size={14} />
+      </Button>
+
+      {abierto && config && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAbierto(false)} />
+          <div className={clsx(
+            'absolute right-0 top-10 z-20 w-64 rounded-xl border shadow-lg p-3',
+            oscuro ? 'chat-tema-oscuro bg-gray-800 border-gray-700' : 'chat-tema-claro bg-card border-gray-200',
+          )}>
+            <p className={clsx('mb-2 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>Apariencia del chat</p>
+
+            <label className={clsx('mb-1.5 block text-[0.68rem] font-semibold', oscuro ? 'text-gray-400' : 'text-gray-500')}>Tema</label>
+            <select
+              value={config.tema}
+              onChange={(e) => guardarApariencia.mutate({ tema: e.target.value as MensajeriaConfig['tema'] })}
+              className={clsx(
+                'mb-3 w-full rounded-lg border px-2 py-1.5 text-sm focus:outline-none',
+                oscuro ? 'bg-gray-900 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900',
+              )}
+              style={{ colorScheme: oscuro ? 'dark' : 'light' }}
+            >
+              <option value="claro">Claro</option>
+              <option value="oscuro">Oscuro</option>
+            </select>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={clsx('mb-1 block text-[0.65rem] font-semibold', oscuro ? 'text-gray-400' : 'text-gray-500')}>Mis mensajes</label>
+                <input
+                  type="color"
+                  value={config.colorMensajePropio}
+                  onChange={(e) => guardarApariencia.mutate({ colorMensajePropio: e.target.value })}
+                  className={clsx('h-8 w-full cursor-pointer rounded-lg border', oscuro ? 'border-gray-700' : 'border-gray-200')}
+                  style={{ colorScheme: oscuro ? 'dark' : 'light' }}
+                />
+              </div>
+              <div>
+                <label className={clsx('mb-1 block text-[0.65rem] font-semibold', oscuro ? 'text-gray-400' : 'text-gray-500')}>Recibidos</label>
+                <input
+                  type="color"
+                  value={config.colorMensajeAjeno}
+                  onChange={(e) => guardarApariencia.mutate({ colorMensajeAjeno: e.target.value })}
+                  className={clsx('h-8 w-full cursor-pointer rounded-lg border', oscuro ? 'border-gray-700' : 'border-gray-200')}
+                  style={{ colorScheme: oscuro ? 'dark' : 'light' }}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // Modal con el listado completo de archivos compartidos en el canal.
 function ArchivosCanalModal({ archivos, oscuro, onClose }: { archivos: { id: number; archivoUrl: string; fecha: string; emisorNombre: string }[]; oscuro: boolean; onClose: () => void }) {
   return createPortal(
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div className={clsx('fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4', oscuro ? 'chat-tema-oscuro' : 'chat-tema-claro')}>
       <div className={clsx('flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl', oscuro ? 'bg-gray-900' : 'bg-card')}>
         <div className={clsx('flex items-center justify-between border-b px-5 py-3.5', oscuro ? 'border-gray-700' : 'border-gray-100')}>
           <p className={clsx('text-sm font-semibold', oscuro ? 'text-gray-100' : 'text-gray-800')}>Archivos compartidos ({archivos.length})</p>
@@ -1515,6 +1738,30 @@ export function MensajeriaPage() {
 
   const handleActualizar = useCallback(() => { refetch() }, [refetch])
 
+  const fijarCanal = useMutation({
+    mutationFn: ({ canalId, fijado }: { canalId: number; fijado: boolean }) => mensajeriaService.fijarCanal(canalId, fijado),
+    onSuccess: () => refetch(),
+    onError: () => toast.error('No se pudo fijar la conversación'),
+  })
+
+  const marcarNoLeido = useMutation({
+    mutationFn: (canalId: number) => mensajeriaService.marcarNoLeido(canalId),
+    onSuccess: () => refetch(),
+    onError: () => toast.error('No se pudo marcar como no leído'),
+  })
+
+  const salirDeGrupoLista = useMutation({
+    mutationFn: (canalId: number) => mensajeriaService.salirDeGrupo(canalId),
+    onSuccess: (_data, canalId) => { toast.success('Saliste del grupo'); cerrarChat(canalId); refetch() },
+    onError: () => toast.error('No se pudo salir del grupo'),
+  })
+
+  const eliminarChatLista = useMutation({
+    mutationFn: (canalId: number) => mensajeriaService.ocultarCanal(canalId),
+    onSuccess: (_data, canalId) => { toast.success('Chat eliminado'); cerrarChat(canalId); refetch() },
+    onError: () => toast.error('No se pudo eliminar el chat'),
+  })
+
   useSocketEvent('mensajeria:nuevo_mensaje', handleActualizar)
   useSocketEvent('mensajeria:canal_creado', handleActualizar)
 
@@ -1546,6 +1793,7 @@ export function MensajeriaPage() {
           <Button size="sm" variant="secondary" onClick={() => setNuevoGrupoOpen(true)}>
             <UserPlus size={14} /> Nuevo grupo
           </Button>
+          <ApparienciaPicker />
 
           {pickerOpen && (
             <NuevoDMPicker
@@ -1556,9 +1804,15 @@ export function MensajeriaPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
-        <div className="w-72 border-r border-gray-100 flex flex-col shrink-0 relative">
-          <div className="p-3 border-b border-gray-100">
+      <div className={clsx(
+        'flex-1 flex rounded-xl border overflow-hidden min-h-0',
+        oscuroLista ? 'chat-tema-oscuro bg-gray-900 border-gray-700' : 'chat-tema-claro bg-card border-gray-200',
+      )}>
+        <div className={clsx(
+          'w-72 border-r flex flex-col shrink-0 relative',
+          oscuroLista ? 'chat-tema-oscuro bg-gray-900 border-gray-700' : 'chat-tema-claro bg-card border-gray-100',
+        )}>
+          <div className={clsx('p-3 border-b', oscuroLista ? 'border-gray-700' : 'border-gray-100')}>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
@@ -1566,7 +1820,11 @@ export function MensajeriaPage() {
                 value={busquedaConv}
                 onChange={(e) => setBusquedaConv(e.target.value)}
                 placeholder="Buscar conversaciones..."
-                className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-brand/20"
+                className={clsx(
+                  'w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-brand/20',
+                  oscuroLista ? 'border-gray-700 bg-gray-800 text-gray-100 placeholder-gray-500' : 'border-gray-200 bg-white text-gray-900',
+                )}
+                style={{ colorScheme: oscuroLista ? 'dark' : 'light' }}
               />
             </div>
           </div>
@@ -1589,6 +1847,10 @@ export function MensajeriaPage() {
                   activa={chatsAbiertos.includes(canal.id) && !minimizados[canal.id]}
                   oscuro={oscuroLista}
                   onClick={() => abrirChat(canal.id)}
+                  onFijar={() => fijarCanal.mutate({ canalId: canal.id, fijado: !canal.fijado })}
+                  onMarcarNoLeido={() => marcarNoLeido.mutate(canal.id)}
+                  onSalirDeGrupo={() => salirDeGrupoLista.mutate(canal.id)}
+                  onEliminarChat={() => eliminarChatLista.mutate(canal.id)}
                 />
               ))
             )}

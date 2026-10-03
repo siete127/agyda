@@ -8740,6 +8740,48 @@ CREATE INDEX IX_MSJ_REACCIONES_MENSAJE ON dbo.MSJ_MENSAJE_REACCIONES(MMR_MENSAJE
   } catch (err) {
     console.warn('⚠️ No se pudo crear IX_MSJ_REACCIONES_MENSAJE:', err.message);
   }
+
+  // Fijar conversación y forzar "no leído" son preferencias por usuario+canal
+  // (como WhatsApp) — van en MSJ_CANAL_MIEMBROS, no en MSJ_CANALES.
+  try {
+    await pool.request().batch(`
+IF COL_LENGTH('dbo.MSJ_CANAL_MIEMBROS', 'MCM_FIJADO') IS NULL
+BEGIN
+  ALTER TABLE dbo.MSJ_CANAL_MIEMBROS ADD MCM_FIJADO BIT NOT NULL DEFAULT (0);
+  ALTER TABLE dbo.MSJ_CANAL_MIEMBROS ADD MCM_FIJADO_FECHA DATETIME NULL;
+END
+
+IF COL_LENGTH('dbo.MSJ_CANAL_MIEMBROS', 'MCM_NO_LEIDO_FORZADO') IS NULL
+  ALTER TABLE dbo.MSJ_CANAL_MIEMBROS ADD MCM_NO_LEIDO_FORZADO BIT NOT NULL DEFAULT (0);
+`);
+    logger.info('✅ Esquema de fijar/no leído de mensajería asegurado');
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar fijar/no leído de mensajería:', err.message);
+  }
+
+  // "Eliminar chat" (solo para DMs) oculta la conversación para quien la
+  // elimina, sin borrar nada para el otro participante — igual que WhatsApp.
+  // Si llega un mensaje nuevo después, el canal reaparece solo en su lista.
+  try {
+    await pool.request().batch(`
+IF OBJECT_ID('dbo.MSJ_CANAL_OCULTOS', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.MSJ_CANAL_OCULTOS (
+    MCO_ID         INT IDENTITY(1,1) PRIMARY KEY,
+    MCO_CANAL_ID   INT NOT NULL,
+    MCO_USUARIO_ID SMALLINT NOT NULL,
+    MCO_DESDE_MENSAJE_ID INT NULL,
+    MCO_FECHA      DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_MSJ_OCULTOS_CANAL FOREIGN KEY (MCO_CANAL_ID) REFERENCES dbo.MSJ_CANALES(MC_ID) ON DELETE CASCADE,
+    CONSTRAINT FK_MSJ_OCULTOS_USUARIO FOREIGN KEY (MCO_USUARIO_ID) REFERENCES dbo.NEUS_USUARIOS(NEUS_ID),
+    CONSTRAINT UQ_MSJ_OCULTOS_CANAL_USUARIO UNIQUE (MCO_CANAL_ID, MCO_USUARIO_ID)
+  );
+END
+`);
+    logger.info('✅ Tabla MSJ_CANAL_OCULTOS asegurada');
+  } catch (err) {
+    console.warn('⚠️ No se pudo crear tabla MSJ_CANAL_OCULTOS:', err.message);
+  }
 }
 
 // Encuestas: las tablas base (ENCUESTAS, ENCUESTA_PREGUNTAS, ENCUESTA_OPCIONES,

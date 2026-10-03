@@ -139,11 +139,15 @@ exports.getMisCanales = async (req, res) => {
         SELECT c.MC_ID as id, c.MC_TIPO as tipo, c.MC_NOMBRE as nombre, c.MC_DESCRIPCION as descripcion,
                c.MC_CREADO_POR as creadoPor, c.MC_FECHA_CREACION as fechaCreacion,
                c.MC_ULTIMO_MENSAJE_FECHA as ultimoMensajeFecha,
-               cm.MCM_ULTIMO_LEIDO_MENSAJE_ID as ultimoLeidoMensajeId
+               cm.MCM_ULTIMO_LEIDO_MENSAJE_ID as ultimoLeidoMensajeId,
+               cm.MCM_FIJADO as fijado, cm.MCM_NO_LEIDO_FORZADO as noLeidoForzado
         FROM dbo.MSJ_CANALES c
         JOIN dbo.MSJ_CANAL_MIEMBROS cm ON cm.MCM_CANAL_ID = c.MC_ID
+        LEFT JOIN dbo.MSJ_CANAL_OCULTOS co ON co.MCO_CANAL_ID = c.MC_ID AND co.MCO_USUARIO_ID = @userId
         WHERE cm.MCM_USUARIO_ID = @userId
-        ORDER BY c.MC_ULTIMO_MENSAJE_FECHA DESC
+          -- Un canal oculto solo reaparece si llegó un mensaje nuevo después de ocultarlo.
+          AND (co.MCO_ID IS NULL OR c.MC_ULTIMO_MENSAJE_FECHA > co.MCO_FECHA)
+        ORDER BY cm.MCM_FIJADO DESC, c.MC_ULTIMO_MENSAJE_FECHA DESC
       `);
 
     const data = [];
@@ -172,8 +176,9 @@ exports.getMisCanales = async (req, res) => {
         fechaCreacion: canal.fechaCreacion,
         ultimoMensajeFecha: canal.ultimoMensajeFecha,
         ultimoMensajePreview,
-        noLeidos,
+        noLeidos: Boolean(canal.noLeidoForzado) ? Math.max(noLeidos, 1) : noLeidos,
         otroUsuarioId,
+        fijado: Boolean(canal.fijado),
       });
     }
 
@@ -558,7 +563,7 @@ exports.marcarLeido = async (req, res) => {
       .input('mensajeId', sql.Int, mensajeId)
       .query(`
         UPDATE dbo.MSJ_CANAL_MIEMBROS
-        SET MCM_ULTIMO_LEIDO_MENSAJE_ID = @mensajeId, MCM_ULTIMA_LECTURA_FECHA = GETDATE()
+        SET MCM_ULTIMO_LEIDO_MENSAJE_ID = @mensajeId, MCM_ULTIMA_LECTURA_FECHA = GETDATE(), MCM_NO_LEIDO_FORZADO = 0
         WHERE MCM_CANAL_ID = @canalId AND MCM_USUARIO_ID = @userId
       `);
 
@@ -689,6 +694,92 @@ exports.salirDeGrupo = async (req, res) => {
     res.json({ success: true, message: 'Saliste del grupo' });
   } catch (error) {
     console.error('Error saliendo del grupo:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Autenticado + miembro — fija o desfija la conversación (preferencia propia,
+// no afecta a los demás miembros). Los fijados se listan primero en getMisCanales.
+exports.fijarCanal = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const canalId = Number(req.params.canalId);
+    const { fijado } = req.body;
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (!(await assertMiembro(req, res, pool, canalId, userId))) return;
+
+    await pool.request()
+      .input('canalId', sql.Int, canalId)
+      .input('userId', sql.Int, userId)
+      .input('fijado', sql.Bit, Boolean(fijado))
+      .query(`
+        UPDATE dbo.MSJ_CANAL_MIEMBROS
+        SET MCM_FIJADO = @fijado, MCM_FIJADO_FECHA = CASE WHEN @fijado = 1 THEN GETDATE() ELSE NULL END
+        WHERE MCM_CANAL_ID = @canalId AND MCM_USUARIO_ID = @userId
+      `);
+
+    res.json({ success: true, data: { fijado: Boolean(fijado) } });
+  } catch (error) {
+    console.error('Error fijando canal:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Autenticado + miembro — marca la conversación como no leída manualmente
+// (preferencia propia). Se limpia sola en cuanto el usuario vuelve a abrirla
+// y se marca leído el último mensaje de verdad.
+exports.marcarNoLeido = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const canalId = Number(req.params.canalId);
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (!(await assertMiembro(req, res, pool, canalId, userId))) return;
+
+    await pool.request()
+      .input('canalId', sql.Int, canalId)
+      .input('userId', sql.Int, userId)
+      .query('UPDATE dbo.MSJ_CANAL_MIEMBROS SET MCM_NO_LEIDO_FORZADO = 1 WHERE MCM_CANAL_ID = @canalId AND MCM_USUARIO_ID = @userId');
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marcando como no leído:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Autenticado + miembro, solo DMs — oculta la conversación de MI lista (como
+// WhatsApp: no borra nada para el otro participante). Si llega un mensaje
+// nuevo después, vuelve a aparecer sola en getMisCanales.
+exports.ocultarCanal = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const canalId = Number(req.params.canalId);
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (!(await assertMiembro(req, res, pool, canalId, userId))) return;
+
+    const canalRs = await pool.request().input('id', sql.Int, canalId).query(`${SELECT_CANAL} WHERE MC_ID = @id`);
+    if (canalRs.recordset.length === 0) return res.status(404).json({ success: false, message: 'Canal no encontrado' });
+    if (canalRs.recordset[0].tipo !== 'directo') {
+      return res.status(400).json({ success: false, message: 'Solo se pueden eliminar conversaciones directas — para grupos, usa "Salir del grupo"' });
+    }
+
+    await pool.request()
+      .input('canalId', sql.Int, canalId)
+      .input('userId', sql.Int, userId)
+      .query(`
+        MERGE dbo.MSJ_CANAL_OCULTOS AS target
+        USING (SELECT @canalId AS canalId, @userId AS userId) AS src
+          ON target.MCO_CANAL_ID = src.canalId AND target.MCO_USUARIO_ID = src.userId
+        WHEN MATCHED THEN UPDATE SET MCO_FECHA = GETDATE()
+        WHEN NOT MATCHED THEN INSERT (MCO_CANAL_ID, MCO_USUARIO_ID) VALUES (src.canalId, src.userId);
+      `);
+
+    res.json({ success: true, message: 'Chat eliminado' });
+  } catch (error) {
+    console.error('Error eliminando chat:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

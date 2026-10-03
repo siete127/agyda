@@ -41,5 +41,8 @@ router.delete('/mensajes/:mensajeId/reacciones', authenticateToken, requireActio
 router.post('/canales/:canalId/miembros', authenticateToken, soloInternos, requireActionAccess('mensajeria', 'ver'), mensajeriaController.agregarMiembros);
 router.delete('/canales/:canalId/miembros/:usuarioId', authenticateToken, soloInternos, requireActionAccess('mensajeria', 'ver'), mensajeriaController.quitarMiembro);
 router.post('/canales/:canalId/salir', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.salirDeGrupo);
+router.post('/canales/:canalId/fijar', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.fijarCanal);
+router.post('/canales/:canalId/marcar-no-leido', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.marcarNoLeido);
+router.post('/canales/:canalId/ocultar', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.ocultarCanal);
 
 module.exports = router;

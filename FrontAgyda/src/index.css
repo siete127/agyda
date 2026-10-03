@@ -94,6 +94,48 @@
     }
   }
 
+  /* ── Tema propio de Mensajería ───────────────────────────────
+     El chat tiene su tema (claro/oscuro) elegido en "Apariencia",
+     independiente del tema global de AGYDA. Su JSX usa las clases
+     gray-* con el significado LITERAL de Tailwind (gray-900 = oscuro),
+     pero las variables --gray-* de arriba se invierten semánticamente
+     cuando el tema global está en oscuro (para que el resto de la app
+     no necesite variantes dark:). Sin este scope, con AGYDA en oscuro,
+     "gray-900" ya no es oscuro y el chat se ve con los colores al
+     revés. Estas clases reafirman los valores literales dentro del
+     panel de chat, sin importar el tema global. */
+  .chat-tema-claro {
+    --gray-50: 249 250 251;
+    --gray-100: 243 244 246;
+    --gray-200: 229 231 235;
+    --gray-300: 209 213 219;
+    --gray-400: 156 163 175;
+    --gray-500: 107 114 128;
+    --gray-600: 75 85 99;
+    --gray-700: 55 65 81;
+    --gray-800: 31 41 55;
+    --gray-900: 17 24 39;
+    --card: 255 255 255;
+  }
+  .chat-tema-oscuro {
+    /* Misma escala LITERAL estándar de Tailwind que .chat-tema-claro (gray-900
+       siempre es el más oscuro de la escala) — a propósito distinta de la de
+       [data-theme="dark"] de arriba, que invierte la escala para otro fin (ver
+       nota arriba). El código del chat ya decide con `oscuro ? ... : ...` cuál
+       extremo de la escala usar en cada caso; solo --card cambia entre temas. */
+    --gray-50: 249 250 251;
+    --gray-100: 243 244 246;
+    --gray-200: 229 231 235;
+    --gray-300: 209 213 219;
+    --gray-400: 156 163 175;
+    --gray-500: 107 114 128;
+    --gray-600: 75 85 99;
+    --gray-700: 55 65 81;
+    --gray-800: 31 41 55;
+    --gray-900: 17 24 39;
+    --card: 24 29 39;
+  }
+
   html { font-size: 14px; scroll-behavior: smooth; }
 
   body {

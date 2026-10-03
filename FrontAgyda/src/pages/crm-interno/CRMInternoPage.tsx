@@ -2,6 +2,13 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  DndContext, PointerSensor, useSensor, useSensors, closestCenter,
+  DragOverlay, type DragStartEvent, type DragEndEvent, type DragOverEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import { useDroppable } from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
@@ -129,8 +136,10 @@ function PipelineTab({
   const [drawerOpo, setDrawerOpo]   = useState<CRMOportunidad | null>(null)
   const [showNewOpo, setShowNewOpo] = useState(false)
   const [proyectoParaOpo, setProyectoParaOpo] = useState<CRMOportunidad | null>(null)
-  const dragOpoId                   = useRef<number | null>(null)
-  const dragOverOpoId               = useRef<number | null>(null)
+  const [activeDragOpo, setActiveDragOpo] = useState<CRMOportunidad | null>(null)
+  // Soporta mouse y touch (tablet) — un distanceConstraint pequeño evita que
+  // un tap normal para abrir la tarjeta se confunda con el inicio de un drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const { data: opos = [], isLoading } = useQuery({
     queryKey: ['crm-oportunidades'],
@@ -178,6 +187,46 @@ function PipelineTab({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-oportunidades'] }),
     onError: () => toast.error('Error al reordenar'),
   })
+
+  // Columnas droppables se identifican con el prefijo "col-" para no
+  // confundirse con los ids numéricos de las tarjetas (@dnd-kit comparte un
+  // solo espacio de ids entre draggables y droppables).
+  const handleDragStart = (e: DragStartEvent) => {
+    const opo = opos.find((o) => o.id === e.active.id)
+    setActiveDragOpo(opo ?? null)
+  }
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    setActiveDragOpo(null)
+    const { active, over } = e
+    if (!over) return
+    const srcId = Number(active.id)
+    const srcOpo = opos.find((o) => o.id === srcId)
+    if (!srcOpo) return
+
+    const overId = String(over.id)
+    const targetEtapa = overId.startsWith('col-')
+      ? (overId.slice(4) as CRMEtapa)
+      : opos.find((o) => o.id === Number(overId))?.etapa
+
+    if (!targetEtapa) return
+
+    if (srcOpo.etapa === targetEtapa) {
+      // Reordenar dentro de la misma columna — solo tiene sentido si se soltó
+      // sobre otra tarjeta (soltar sobre la columna vacía no reordena nada).
+      if (overId.startsWith('col-')) return
+      const overOpoId = Number(overId)
+      if (overOpoId === srcId) return
+      const colCards = opos.filter((o) => o.etapa === targetEtapa).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+      const fromIdx = colCards.findIndex((o) => o.id === srcId)
+      const toIdx = colCards.findIndex((o) => o.id === overOpoId)
+      if (fromIdx === -1 || toIdx === -1) return
+      const nuevoOrden = arrayMove(colCards, fromIdx, toIdx).findIndex((o) => o.id === srcId)
+      reordenar.mutate({ id: srcId, orden: nuevoOrden })
+    } else {
+      moverEtapa.mutate({ id: srcId, etapa: targetEtapa })
+    }
+  }
 
   // ── Filtros y Vista ──
   const [filtros, setFiltros] = useState({ busqueda: '', responsable: '', fechaDesde: '', fechaHasta: '', preset: '' })
@@ -405,42 +454,28 @@ function PipelineTab({
 
       {/* Board Kanban */}
       {vista === 'kanban' && (
-      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 520 }}>
-        {CRM_ETAPAS.map((etapa) => {
-          const cards = oposFiltradas.filter((o) => o.etapa === etapa.key)
-          return (
-            <KanbanColumn
-              key={etapa.key}
-              etapa={etapa}
-              cards={cards}
-              onOpen={setDrawerOpo}
-              onDelete={(id) => del.mutate(id)}
-              onDragStart={(id) => { dragOpoId.current = id }}
-              onDragOver={(id) => { dragOverOpoId.current = id }}
-              onDrop={(targetEtapa) => {
-                const srcId = dragOpoId.current
-                if (srcId === null) return
-                const srcOpo = opos.find((o) => o.id === srcId)
-                if (!srcOpo) { dragOpoId.current = null; return }
-                if (srcOpo.etapa === targetEtapa) {
-                  // Reordenar dentro de la misma columna
-                  const overOpoId = dragOverOpoId.current
-                  if (overOpoId !== null && overOpoId !== srcId) {
-                    const colCards = opos.filter((o) => o.etapa === targetEtapa).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
-                    const overIdx = colCards.findIndex((o) => o.id === overOpoId)
-                    const nuevoOrden = overIdx >= 0 ? overIdx : colCards.length
-                    reordenar.mutate({ id: srcId, orden: nuevoOrden })
-                  }
-                } else {
-                  moverEtapa.mutate({ id: srcId, etapa: targetEtapa })
-                }
-                dragOpoId.current = null
-                dragOverOpoId.current = null
-              }}
-            />
-          )
-        })}
-      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 520 }}>
+          {CRM_ETAPAS.map((etapa) => {
+            const cards = oposFiltradas.filter((o) => o.etapa === etapa.key).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+            return (
+              <KanbanColumn
+                key={etapa.key}
+                etapa={etapa}
+                cards={cards}
+                onOpen={setDrawerOpo}
+                onDelete={(id) => del.mutate(id)}
+              />
+            )
+          })}
+        </div>
+        {createPortal(
+          <DragOverlay>
+            {activeDragOpo && <OportunidadCard opo={activeDragOpo} onClick={() => {}} onDelete={() => {}} overlay />}
+          </DragOverlay>,
+          document.body,
+        )}
+      </DndContext>
       )}
 
       {activeDrawerOpo && (
@@ -478,24 +513,21 @@ function PipelineTab({
 }
 
 function KanbanColumn({
-  etapa, cards, onOpen, onDelete, onDragStart, onDragOver, onDrop,
+  etapa, cards, onOpen, onDelete,
 }: {
   etapa: typeof CRM_ETAPAS[number]
   cards: CRMOportunidad[]
   onOpen: (o: CRMOportunidad) => void
   onDelete: (id: number) => void
-  onDragStart: (id: number) => void
-  onDragOver: (id: number) => void
-  onDrop: (etapa: CRMEtapa) => void
 }) {
-  const [over, setOver] = useState(false)
+  // El id droppable de la columna lleva el prefijo "col-" para distinguirlo
+  // de los ids numéricos de las tarjetas (ver handleDragEnd en PipelineTab).
+  const { setNodeRef, isOver } = useDroppable({ id: `col-${etapa.key}` })
   const total = cards.reduce((s, c) => s + (c.valor ?? 0), 0)
   return (
     <div
-      className={clsx('flex-shrink-0 w-72 flex flex-col rounded-2xl transition-colors', over && 'ring-2 ring-brand/30 bg-brand/5')}
-      onDragOver={(e) => { e.preventDefault(); setOver(true) }}
-      onDragLeave={() => setOver(false)}
-      onDrop={() => { setOver(false); onDrop(etapa.key) }}
+      ref={setNodeRef}
+      className={clsx('flex-shrink-0 w-72 flex flex-col rounded-2xl transition-colors', isOver && 'ring-2 ring-brand/30 bg-brand/5')}
     >
       {/* Header columna */}
       <div className={clsx('flex items-center justify-between rounded-xl border px-3 py-2 mb-3', etapa.bgColor, 'border-transparent')}>
@@ -512,38 +544,49 @@ function KanbanColumn({
       </div>
 
       {/* Cards */}
-      <div className="flex flex-col gap-2 flex-1 overflow-y-auto max-h-[70vh] p-0.5">
-        {cards.map((o) => (
-          <OportunidadCard
-            key={o.id} opo={o}
-            onClick={() => onOpen(o)}
-            onDelete={() => onDelete(o.id)}
-            onDragStart={() => onDragStart(o.id)}
-            onDragOver={() => onDragOver(o.id)}
-          />
-        ))}
-        {cards.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-10 text-gray-300 text-[0.72rem] gap-1">
-            <MoreHorizontal className="h-5 w-5" />
-            Sin oportunidades
-          </div>
-        )}
-      </div>
+      <SortableContext items={cards.map((o) => o.id)} strategy={verticalListSortingStrategy}>
+        <div className="flex flex-col gap-2 flex-1 overflow-y-auto max-h-[70vh] p-0.5">
+          {cards.map((o) => (
+            <OportunidadCard
+              key={o.id} opo={o}
+              onClick={() => onOpen(o)}
+              onDelete={() => onDelete(o.id)}
+            />
+          ))}
+          {cards.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-gray-300 text-[0.72rem] gap-1">
+              <MoreHorizontal className="h-5 w-5" />
+              Sin oportunidades
+            </div>
+          )}
+        </div>
+      </SortableContext>
     </div>
   )
 }
 
-function OportunidadCard({ opo, onClick, onDelete, onDragStart, onDragOver }: { opo: CRMOportunidad; onClick: () => void; onDelete: () => void; onDragStart: () => void; onDragOver: () => void }) {
+function OportunidadCard({ opo, onClick, onDelete, overlay = false }: { opo: CRMOportunidad; onClick: () => void; onDelete: () => void; overlay?: boolean }) {
   const etapa = CRM_ETAPAS.find((e) => e.key === opo.etapa)
+  // "overlay" es la copia que sigue al cursor/dedo durante el arrastre
+  // (DragOverlay) — no necesita ser sortable ni recibir el click real.
+  const sortable = useSortable({ id: opo.id, disabled: overlay })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = sortable
+  const style = overlay ? undefined : {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  }
   return (
     <div
-      draggable
-      onDragStart={(e) => { e.stopPropagation(); onDragStart() }}
-      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); onDragOver() }}
+      ref={overlay ? undefined : setNodeRef}
+      style={style}
+      {...(overlay ? {} : attributes)}
+      {...(overlay ? {} : listeners)}
       onClick={onClick}
       className={clsx(
-        'group relative cursor-pointer rounded-xl border-l-4 border border-gray-100 bg-card p-3 shadow-sm hover:shadow-md transition-all active:opacity-60',
+        'group relative cursor-grab rounded-xl border-l-4 border border-gray-100 bg-card p-3 shadow-sm hover:shadow-md transition-all active:cursor-grabbing',
         etapa?.borderColor ?? 'border-gray-400',
+        overlay && 'shadow-xl rotate-2',
       )}
     >
       <button
