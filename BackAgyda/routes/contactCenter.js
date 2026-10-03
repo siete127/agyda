@@ -260,4 +260,7 @@ router.get('/formularios-publico/:token/pendientes', forms.pendientesPorContacta
 router.post('/formularios-publico/:token/buscador/registrar', forms.crearRegistroCampoBuscadorPublico);
 router.post('/formularios-publico/:token/versiones/:versionId/respuestas', uploadCcEvidencia, forms.guardarRespuestasPublico);
 
+// WhatsApp masivo (solo envío): cuentas que se turnan y campañas con cadena de mensajes.
+router.use('/wa-masivo', require('./waMasivo'));
+
 module.exports = router;

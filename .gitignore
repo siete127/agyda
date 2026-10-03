@@ -20,6 +20,9 @@ logs/
 # Archivos subidos por usuarios en runtime (no son código)
 BackAgyda/public/uploads/
 
+# Credenciales de las sesiones de WhatsApp (Baileys): nunca al repositorio
+BackAgyda/baileys_sessions/
+
 # Backups y temporales
 *.bak
 *.bak-*

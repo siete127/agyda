@@ -635,6 +635,8 @@ async function reconectarSesionesGuardadas() {
   } catch (e) {
     logger.error('[baileys] reconectarSesionesGuardadas falló:', e?.message || e);
   }
+  // Las cuentas de WhatsApp masivo (solo envío) se reconectan aquí también, y se prende su motor.
+  await require('../waMasivo/waMasivoService').arrancar();
 }
 
 module.exports = { iniciarSesion, enviarTexto, enviarMedia, getEstado, cerrarSesion, getSesionesDeCanal, reconectarSesionesGuardadas, importarHistorial };

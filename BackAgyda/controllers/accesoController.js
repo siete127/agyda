@@ -153,6 +153,7 @@ const ACCIONES_POR_MODULO = {
     { key: 'asignar-agentes',     nombre: 'Asignar agentes',        descripcion: 'Asignar campañas y skills a los agentes' },
     { key: 'supervision',         nombre: 'Supervisión',            descripcion: 'Ver interacciones de todos los agentes, métricas e historial completo' },
     { key: 'gestionar-formularios', nombre: 'Gestionar formularios', descripcion: 'Crear, editar, versionar y publicar formularios de atención (constructor), sus asignaciones, tipificaciones y acciones sugeridas' },
+    { key: 'whatsapp-masivo',     nombre: 'WhatsApp masivo',        descripcion: 'Vincular las cuentas de envío masivo y crear, iniciar o pausar campañas con su cadena de mensajes' },
     { key: 'notificar-correo',    nombre: 'Notificar por correo',   descripcion: 'Enviar aviso por correo a este usuario cuando ocurra un evento relevante del módulo' },
   ],
   postulantes: [

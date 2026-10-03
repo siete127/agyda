@@ -140,6 +140,7 @@ const TiemposPage                   = lz(() => import('@/pages/tiempos/TiemposPa
 const KpisOperacionesPage           = lz(() => import('@/pages/kpis-operaciones/KpisOperacionesPage'), 'KpisOperacionesPage')
 const MetasPage                     = lz(() => import('@/pages/metas/MetasPage'),               'MetasPage')
 const SuiteReportesPage             = lz(() => import('@/pages/suite-reportes/SuiteReportesPage'), 'SuiteReportesPage')
+const WaMasivoPage                  = lz(() => import('@/pages/wa-masivo/WaMasivoPage'),          'WaMasivoPage')
 const AsesoresPage                  = lz(() => import('@/pages/asesores/AsesoresPage'),         'AsesoresPage')
 const TecnologiaPage                = lz(() => import('@/pages/tecnologia/TecnologiaPage'),    'TecnologiaPage')
 const InternetRedesPage             = lz(() => import('@/pages/internet-redes/InternetRedesPage'), 'InternetRedesPage')
@@ -360,6 +361,7 @@ export const router = createBrowserRouter([
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/kpis', element: wrap(<KpisOperacionesPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/metas', element: wrap(<MetasPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/suite-reportes', element: wrap(<SuiteReportesPage />) }] },
+              { element: <ModuleRoute moduleKey="contact-center" />,  children: [{ path: '/contact-center/whatsapp-masivo', element: wrap(<WaMasivoPage />) }] },
               { path: '/operaciones/reportes-diarios', element: <Navigate to="/operaciones/suite-reportes" replace /> },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/asesores', element: wrap(<AsesoresPage />) }] },
               { element: <ModuleRoute moduleKey="operaciones" />,     children: [{ path: '/operaciones/:subSlug', element: wrap(<AreaSubModuloPage areaKey="operaciones" />) }] },
