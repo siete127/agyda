@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useLocation, type Location } from 'react-router-dom'
 import { Eye, EyeOff, ArrowRight, UserCircle2, KeyRound, Building2, HelpCircle } from 'lucide-react'
-import { authService, type EmpresaDetectada } from '@/services/auth.service'
+import { authService, esSesionActivaError, type EmpresaDetectada } from '@/services/auth.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { getSocket } from '@/lib/socket'
 import { getApiError } from '@/lib/axios'
@@ -19,6 +19,10 @@ export function LoginPage() {
   const [empresasAmbiguas, setEmpresasAmbiguas] = useState<EmpresaDetectada[]>([])
   const [showPassword, setShowPassword] = useState(false)
   const [error,        setError]        = useState('')
+  // Se llena cuando el backend rechaza el login por sesión activa en otro
+  // lado (409 + code SESION_ACTIVA) — dispara el modal de confirmación tipo
+  // SAP en vez de pintar el error genérico.
+  const [sesionActivaEmpresa, setSesionActivaEmpresa] = useState<string | null>(null)
 
   const { setUser, setLoading, isLoading } = useAuthStore()
   const navigate = useNavigate()
@@ -34,15 +38,19 @@ export function LoginPage() {
     }
   }
 
-  const completarLogin = async (empresaKey: string) => {
+  const completarLogin = async (empresaKey: string, forzarSesion = false) => {
     setLoading(true)
     try {
-      const { user, token } = await authService.login(usuario.trim(), contra, empresaKey)
+      const { user, token } = await authService.login(usuario.trim(), contra, empresaKey, forzarSesion)
       setUser(user, token)
       getSocket()
       irADashboard(user.tipoUsuario)
     } catch (err) {
-      setError(getApiError(err))
+      if (esSesionActivaError(err)) {
+        setSesionActivaEmpresa(empresaKey)
+      } else {
+        setError(getApiError(err))
+      }
     } finally {
       setLoading(false)
     }
@@ -195,6 +203,34 @@ export function LoginPage() {
         <HelpCircle className="h-3.5 w-3.5" />
         Si tienes problemas para ingresar, contacta a soporte técnico
       </p>
+
+      {sesionActivaEmpresa && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0B1730] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-white">Sesión activa</h3>
+            <p className="mt-2 text-sm text-blue-200/70">
+              Ya tienes una sesión iniciada en otro dispositivo o navegador. Entrar aquí cerrará esa sesión.
+            </p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setSesionActivaEmpresa(null)}
+                className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-blue-100/80 transition-colors hover:bg-white/5"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => { const emp = sesionActivaEmpresa; setSesionActivaEmpresa(null); completarLogin(emp, true) }}
+                className="rounded-full px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-transform hover:scale-[1.02]"
+                style={{ background: 'linear-gradient(135deg, #1B4FD8 0%, #22D3EE 100%)' }}
+              >
+                Cerrar esa sesión y continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

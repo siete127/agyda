@@ -14,6 +14,13 @@ import {
   type MensajeriaReaccion,
 } from '@/types/mensajeria.types'
 
+export interface MensajeriaArchivoCanal {
+  id: number
+  archivoUrl: string
+  fecha: string
+  emisorNombre: string
+}
+
 export const mensajeriaService = {
   async getMisCanales(): Promise<MensajeriaCanal[]> {
     const { data } = await api.get('/mensajeria/canales')
@@ -38,6 +45,17 @@ export const mensajeriaService = {
 
   async actualizarGrupo(canalId: number, payload: { nombre?: string; descripcion?: string }): Promise<void> {
     await api.put(`/mensajeria/canales/${canalId}`, payload)
+  },
+
+  async getArchivosCanal(canalId: number): Promise<MensajeriaArchivoCanal[]> {
+    const { data } = await api.get(`/mensajeria/canales/${canalId}/archivos`)
+    const list = Array.isArray(data) ? data : (data?.data ?? [])
+    return (list as Record<string, unknown>[]).map((r) => ({
+      id: Number(r.id ?? 0),
+      archivoUrl: String(r.archivoUrl ?? ''),
+      fecha: String(r.fecha ?? ''),
+      emisorNombre: String(r.emisorNombre ?? ''),
+    }))
   },
 
   async getMensajes(canalId: number, antesDe?: number, limite = 30): Promise<MensajeriaMensaje[]> {

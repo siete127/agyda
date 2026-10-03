@@ -345,7 +345,7 @@ exports.getCanal = async (req, res) => {
     const miembrosRs = await pool.request()
       .input('canalId', sql.Int, canalId)
       .query(`
-        SELECT u.NEUS_ID as usuarioId, u.NEUS_NOMBRES as nombre, cm.MCM_ROL as rol, cm.MCM_FECHA_INGRESO as fechaIngreso
+        SELECT u.NEUS_ID as usuarioId, u.NEUS_NOMBRES as nombre, u.NEUS_FOTO_URL as fotoUrl, cm.MCM_ROL as rol, cm.MCM_FECHA_INGRESO as fechaIngreso
         FROM dbo.MSJ_CANAL_MIEMBROS cm
         JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = cm.MCM_USUARIO_ID
         WHERE cm.MCM_CANAL_ID = @canalId
@@ -355,6 +355,37 @@ exports.getCanal = async (req, res) => {
     res.json({ success: true, data: { ...canalRs.recordset[0], miembros: miembrosRs.recordset } });
   } catch (error) {
     console.error('Error obteniendo canal:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /api/mensajeria/canales/:canalId/archivos — lista los mensajes de este
+// canal que llevan adjunto, más reciente primero. No hay tabla propia de
+// adjuntos: se extraen de MSJ_MENSAJES (MM_ARCHIVO_URL), un mensaje = cero o
+// un archivo. Mismo nombre/tamaño/tipo que ya infiere el frontend por la URL
+// (no se persisten en BD), solo cambia que ahora se listan agrupados por canal.
+exports.getArchivosCanal = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const canalId = Number(req.params.canalId);
+    const pool = await databaseService.getPool(req.user?.empresa);
+
+    if (!(await assertMiembro(req, res, pool, canalId, userId))) return;
+
+    const rs = await pool.request()
+      .input('canalId', sql.Int, canalId)
+      .query(`
+        SELECT TOP 100 m.MM_ID as id, m.MM_ARCHIVO_URL as archivoUrl, m.MM_FECHA as fecha,
+               u.NEUS_NOMBRES as emisorNombre
+        FROM dbo.MSJ_MENSAJES m
+        JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = m.MM_EMISOR_ID
+        WHERE m.MM_CANAL_ID = @canalId AND m.MM_ARCHIVO_URL IS NOT NULL
+        ORDER BY m.MM_FECHA DESC
+      `);
+
+    res.json({ success: true, data: rs.recordset });
+  } catch (error) {
+    console.error('Error obteniendo archivos del canal:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

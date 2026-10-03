@@ -12,6 +12,7 @@ import { useModuleAccess } from '@/hooks/useModuleAccess'
 import { disconnectSocket, getSocket } from '@/lib/socket'
 import { api } from '@/lib/axios'
 import { livechatService } from '@/services/livechat.service'
+import { authService } from '@/services/auth.service'
 import { Avatar } from '@/components/ui/Avatar'
 import { usePausaTipos, usePausaModulos } from '@/hooks/usePausaTipos'
 import { useBanioEstado } from '@/hooks/useBanioEstado'
@@ -220,7 +221,12 @@ export function PerfilMenu() {
     onError: () => toast.error('No se pudo cambiar tu estado'),
   })
 
-  const logout = () => {
+  const logout = async () => {
+    // Avisa al backend ANTES de limpiar el token local — así revoca el token
+    // (tokenDenylist) y libera el registro de sesión única (activeSessionRegistry).
+    // Si no se llama a esto, el backend sigue pensando que la sesión sigue
+    // activa y el próximo login de este usuario pide confirmación de más.
+    await authService.logout()
     disconnectSocket()
     clearSession()
     window.location.replace('/login')
@@ -247,51 +253,55 @@ export function PerfilMenu() {
       {open && (
         <div className="absolute right-0 top-full mt-2 w-72 z-40 animate-slide-up overflow-hidden rounded-2xl border border-gray-200 bg-card shadow-card-lg">
           {/* Cabecera */}
-          <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-3.5">
-            <Avatar
-              src={user.perfilFotoUrl}
-              name={user.nombres}
-              size="md"
-              ring="brand"
-              statusDot={esAgenteLivechat ? (miEstado?.disponible ? 'online' : 'offline') : undefined}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[0.85rem] font-bold text-gray-900">{user.perfilAlias ?? user.nombres}</p>
-              <p className="text-[0.68rem] text-gray-400">{ROLES_LABEL[user.tipoUsuario?.toUpperCase() ?? ''] ?? user.tipoUsuario}</p>
-              <p className="text-[0.64rem] text-gray-400">N.º {user.usuario}</p>
-              {esAgenteLivechat && (
-                <p className={clsx('mt-0.5 text-[0.66rem] font-semibold', miEstado?.disponible ? 'text-emerald-500' : 'text-gray-400')}>
-                  {miEstado?.disponible ? 'Ahora estás en línea' : 'Ahora estás desconectado'}
+          <div className="relative overflow-hidden bg-gradient-to-br from-brand/10 via-brand/5 to-transparent px-4 py-4">
+            <div className="relative flex items-center gap-3">
+              <Avatar
+                src={user.perfilFotoUrl}
+                name={user.nombres}
+                size="md"
+                ring="brand"
+                statusDot={esAgenteLivechat ? (miEstado?.disponible ? 'online' : 'offline') : undefined}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[0.9rem] font-bold text-gray-900">{user.perfilAlias ?? user.nombres}</p>
+                <p className="text-[0.72rem] font-medium text-gray-500">{ROLES_LABEL[user.tipoUsuario?.toUpperCase() ?? ''] ?? user.tipoUsuario}</p>
+                <p className="text-[0.68rem] text-gray-400">{user.usuario} · {user.tipoUsuario}</p>
+                <p className={clsx('mt-0.5 flex items-center gap-1 text-[0.68rem] font-medium', esAgenteLivechat && miEstado?.disponible ? 'text-emerald-500' : 'text-gray-400')}>
+                  <span className={clsx('h-1.5 w-1.5 rounded-full', esAgenteLivechat && miEstado?.disponible ? 'bg-emerald-500' : 'bg-gray-400')} />
+                  {esAgenteLivechat ? (miEstado?.disponible ? 'Ahora estás en línea' : 'Ahora estás desconectado') : 'Conectado'}
                 </p>
+              </div>
+              {esAgenteLivechat && (
+                <button
+                  onClick={() => toggleDisponible.mutate(!miEstado?.disponible)}
+                  disabled={toggleDisponible.isPending}
+                  title={miEstado?.disponible ? 'Ponerme sin conexión' : 'Ponerme en línea'}
+                  className={clsx(
+                    'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-card shadow-sm transition-colors disabled:opacity-50',
+                    miEstado?.disponible ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-gray-400 hover:bg-gray-100'
+                  )}
+                >
+                  {toggleDisponible.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                </button>
               )}
             </div>
-            {esAgenteLivechat && (
-              <button
-                onClick={() => toggleDisponible.mutate(!miEstado?.disponible)}
-                disabled={toggleDisponible.isPending}
-                title={miEstado?.disponible ? 'Ponerme sin conexión' : 'Ponerme en línea'}
-                className={clsx(
-                  'ml-auto flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50',
-                  miEstado?.disponible ? 'bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                )}
-              >
-                {toggleDisponible.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
-              </button>
-            )}
           </div>
 
           {/* Estado de pausa — solo con el permiso reports:gestionar-pausas (y la empresa con el módulo) */}
           {puedePausar && (
-          <div className="border-b border-gray-50 px-3 py-2.5">
-            <p className="mb-1.5 px-1 text-[0.62rem] font-semibold uppercase tracking-wide text-gray-400">Estado de pausa</p>
+          <div className="border-t border-gray-100 px-3 py-3">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="text-[0.65rem] font-bold uppercase tracking-wide text-gray-400">Estado de pausa</p>
+              {statusActivo === null && <p className="text-[0.65rem] font-semibold text-brand">Selecciona un motivo</p>}
+            </div>
 
             {statusActivo !== null ? (
               /* ── Un estado activo: ocupa todo el ancho, con cronómetro ── */
               (() => {
                 // Puede ser un tipo ya desactivado (se inició antes): se busca en todos.
                 const est = tipoPorId(statusActivo)
+                const a = acento(est?.color ?? '#6B7280')
                 const esBanio = statusActivo === banioId
-                const a = acento(esBanio ? (esF ? '#ec9bbd' : '#7ab8f5') : (est?.color ?? '#6B7280'))
                 const limite = limitePausa(est, rol, 'asistencia') // minutos, o null
                 const limiteSeg = limite !== null ? limite * 60 : null
                 const seg = elapsed ?? 0                              // acumulado de HOY
@@ -300,9 +310,9 @@ export function PerfilMenu() {
                 return (
                   <div className={clsx('flex items-center gap-3 rounded-xl border px-3 py-2.5', excedido && 'border-red-500/50 bg-red-500/10')}
                     style={excedido ? undefined : a.card}>
-                    <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg', excedido && 'bg-red-500')}
+                    <div className={clsx('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg', excedido && 'bg-red-500/10')}
                       style={excedido ? undefined : a.card}>
-                      {!esBanio && est && PAUSA_GIF[est.clave] ? (
+                      {est && PAUSA_GIF[est.clave] ? (
                         <img src={PAUSA_GIF[est.clave]} alt="" className="h-6 w-6 object-contain" />
                       ) : (
                         <span className="text-lg leading-none">{esBanio ? (esF ? '🚺' : '🚹') : (est?.emoji ?? '⏸️')}</span>
@@ -340,29 +350,27 @@ export function PerfilMenu() {
               })()
             ) : (
               /* ── Sin estado activo: un botón por tipo de pausa activo ── */
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-4 gap-1">
                 {tiposActivos.map((e) => {
                   const esBanio = e.statusId === banioId
                   const bloqueado = esBanio && banioBloqueado
                   const cargando = loadingStatus === e.statusId
                   const gif = PAUSA_GIF[e.clave]
-                  const colorBanio = esF ? '#ec9bbd' : '#7ab8f5'
+                  const a = acento(e.color)
                   return (
                     <button
                       key={e.statusId}
                       onClick={() => cambiarEstado(e.statusId)}
                       disabled={loadingStatus !== null || bloqueado}
                       title={bloqueado ? `Ocupado: ${banio.ocupantes.map((o) => o.nombre).join(', ') || 'alguien'}` : undefined}
-                      className={clsx(
-                        'flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-[0.72rem] font-semibold transition-colors disabled:opacity-40',
-                        esBanio ? 'hover:opacity-80' : 'border-gray-200 text-gray-600 hover:border-gray-300',
-                      )}
-                      style={esBanio ? { borderColor: `${colorBanio}66`, color: colorBanio, background: `${colorBanio}14` } : undefined}
+                      className="flex min-w-0 flex-col items-center gap-1 rounded-xl border border-gray-100 px-1 py-2.5 text-center transition-colors hover:border-gray-200 hover:bg-gray-50 disabled:opacity-40"
                     >
-                      {cargando ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : gif ? <img src={gif} alt="" className="h-5 w-5 flex-shrink-0 object-contain" />
-                        : <span className="text-base leading-none">{esBanio ? (esF ? '🚺' : '🚹') : e.emoji}</span>}
-                      <span className="truncate">{bloqueado ? 'Baño ocupado' : e.etiqueta}</span>
+                      <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={a.card}>
+                        {cargando ? <Loader2 className="h-3.5 w-3.5 animate-spin" style={a.text} />
+                          : gif ? <img src={gif} alt="" className="h-5 w-5 object-contain" />
+                          : <span className="text-base leading-none">{esBanio ? (esF ? '🚺' : '🚹') : e.emoji}</span>}
+                      </span>
+                      <span className="w-full truncate text-[0.62rem] font-bold text-gray-700">{bloqueado ? 'Ocupado' : e.etiqueta}</span>
                     </button>
                   )
                 })}
@@ -413,16 +421,26 @@ export function PerfilMenu() {
           <Link
             to="/perfil"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-3 px-4 py-3 text-[0.8rem] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50"
           >
-            <User className="h-4 w-4 text-gray-400" /> Mi perfil
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+              <User className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.8rem] font-semibold text-gray-800">Mi perfil</p>
+              <p className="text-[0.66rem] text-gray-400">Consulta y edita tu información personal</p>
+            </div>
           </Link>
-          <button
-            onClick={logout}
-            className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3 text-[0.8rem] font-semibold text-red-500 transition-colors hover:bg-red-500/10"
-          >
-            <LogOut className="h-4 w-4" /> Cerrar sesión
-          </button>
+
+          <div className="px-3 pb-3 pt-1">
+            <button
+              onClick={logout}
+              className="flex w-full items-center gap-3 rounded-xl bg-red-500/10 px-4 py-3 text-left transition-colors hover:bg-red-500/15"
+            >
+              <LogOut className="h-4 w-4 flex-shrink-0 text-red-500" />
+              <span className="flex-1 text-[0.8rem] font-bold text-red-500">Cerrar sesión</span>
+            </button>
+          </div>
         </div>
       )}
     </div>

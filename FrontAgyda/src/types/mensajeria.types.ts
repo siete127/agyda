@@ -36,6 +36,7 @@ export interface MensajeriaMensaje {
 export interface MensajeriaMiembro {
   usuarioId: number
   nombre: string
+  fotoUrl: string | null
   rol: MensajeriaRolMiembro
   fechaIngreso: string
 }
@@ -116,6 +117,7 @@ export function parseMensajeriaMiembro(raw: Record<string, unknown>): Mensajeria
   return {
     usuarioId: Number(pick(raw, 'usuarioId') ?? 0),
     nombre: String(pick(raw, 'nombre') ?? ''),
+    fotoUrl: pick(raw, 'fotoUrl') ? String(pick(raw, 'fotoUrl')) : null,
     rol: (pick(raw, 'rol') as MensajeriaRolMiembro) ?? 'miembro',
     fechaIngreso: String(pick(raw, 'fechaIngreso') ?? new Date().toISOString()),
   }

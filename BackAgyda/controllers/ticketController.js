@@ -472,6 +472,92 @@ exports.getKpisTickets = async (req, res) => {
   }
 };
 
+// Calcula [desde, hasta] para los rankings públicos de tickets, a partir de
+// los mismos query params en ambos endpoints (getRankingTickets/getRankingAreas).
+// ?periodo=semana|mes|rango — 'rango' requiere ?desde=&hasta= (YYYY-MM-DD);
+// 'mes' acepta además ?mes=YYYY-MM (default: mes actual, hasta hoy).
+function calcularRangoFechasRanking(query) {
+  const periodo = String(query.periodo || 'mes').toLowerCase();
+  const hoy = new Date();
+  if (periodo === 'semana') {
+    const dia = hoy.getDay() || 7; // domingo=0 -> 7
+    const desde = new Date(hoy); desde.setDate(hoy.getDate() - dia + 1); desde.setHours(0, 0, 0, 0);
+    const hasta = new Date(); hasta.setHours(23, 59, 59, 999);
+    return { desde, hasta };
+  }
+  if (periodo === 'rango' && query.desde && query.hasta) {
+    return { desde: new Date(`${query.desde}T00:00:00`), hasta: new Date(`${query.hasta}T23:59:59`) };
+  }
+  if (query.mes && /^\d{4}-\d{2}$/.test(query.mes)) {
+    const [anio, mes] = query.mes.split('-').map(Number);
+    const desde = new Date(anio, mes - 1, 1);
+    const finMes = new Date(anio, mes, 0, 23, 59, 59);
+    const esMesActual = anio === hoy.getFullYear() && mes - 1 === hoy.getMonth();
+    return { desde, hasta: esMesActual ? hoy : finMes };
+  }
+  return { desde: new Date(hoy.getFullYear(), hoy.getMonth(), 1), hasta: new Date() };
+}
+
+// Ranking público de tickets resueltos por agente — usado en la tarjeta de
+// Noticias (visible para todos, solo nombre + total; sin datos operativos
+// sensibles como área/prioridad/SLA, que sí requieren tickets:ver).
+exports.getRankingTickets = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const { desde, hasta } = calcularRangoFechasRanking(req.query);
+
+    const rs = await pool.request()
+      .input('desde', sql.DateTime, desde)
+      .input('hasta', sql.DateTime, hasta)
+      .query(`
+        SELECT t.ASIGNADO_A as agenteId, u.NEUS_NOMBRES as nombre, u.NEUS_FOTO_URL as fotoUrl,
+               COUNT(*) as total
+        FROM dbo.TICKETS t
+        JOIN dbo.NEUS_USUARIOS u ON u.NEUS_ID = t.ASIGNADO_A
+        WHERE t.FECHA_CIERRE IS NOT NULL
+          AND t.FECHA_CIERRE BETWEEN @desde AND @hasta
+        GROUP BY t.ASIGNADO_A, u.NEUS_NOMBRES, u.NEUS_FOTO_URL
+        ORDER BY total DESC
+      `);
+
+    res.json({ success: true, data: rs.recordset });
+  } catch (e) {
+    console.error('Error generando ranking de tickets:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// Ranking público de tickets resueltos por ÁREA (TI vs ST, las únicas dos que
+// existen hoy en el sistema — ver normalizeArea en utils/helpers.js). Mismo
+// alcance de visibilidad que getRankingTickets: sin requireActionAccess,
+// visible para cualquier usuario logueado, solo área + total.
+exports.getRankingAreas = async (req, res) => {
+  try {
+    const pool = await databaseService.getPool(req.user?.empresa);
+    const { desde, hasta } = calcularRangoFechasRanking(req.query);
+
+    const rs = await pool.request()
+      .input('desde', sql.DateTime, desde)
+      .input('hasta', sql.DateTime, hasta)
+      .query(`
+        SELECT t.AREA as area, COUNT(*) as total
+        FROM dbo.TICKETS t
+        WHERE t.FECHA_CIERRE IS NOT NULL
+          AND t.FECHA_CIERRE BETWEEN @desde AND @hasta
+        GROUP BY t.AREA
+        ORDER BY total DESC
+      `);
+
+    const AREA_LABEL = { TI: 'Tecnología', ST: 'Soporte Técnico' };
+    const data = rs.recordset.map((r) => ({ area: r.area, nombre: AREA_LABEL[r.area] || r.area, total: r.total }));
+
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('Error generando ranking de áreas:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // Valida que un usuario sea un agente activo del pool de soporte de un área
 // (opcionalmente restringido a un nivel). Reemplaza whitelists hardcodeadas.
 async function validarAgentePool(pool, area, userId, nivel = null) {

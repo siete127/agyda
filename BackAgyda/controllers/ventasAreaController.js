@@ -739,10 +739,13 @@ async function calcularCumplimientoAsesores(periodo, tenantKey, uso) {
     provisionalPorAgente = new Map(provRs.recordset.map((r) => [normalizarNombre(r.nombre), r]));
   }
 
-  // 3) Metas del periodo (VENTAS_METAS ya existente, por asesor).
+  // 3) Metas del periodo (VENTAS_METAS ya existente, por asesor). VM_PERIODO
+  // es NVARCHAR libre: según cómo se haya guardado, puede traer 'YYYY-MM'
+  // ('2026-09') o una fecha completa ('2026-09-30') — se compara por el
+  // prefijo de 7 caracteres para tolerar ambos sin tocar el dato existente.
   const metasRs = await poolIntranet.request().input('periodo', sql.NVarChar, periodo).query(`
     SELECT VM_ASESOR_ID as asesorId, VM_META_UNIDADES as metaUnidades, VM_META_MONTO as metaMonto
-    FROM VENTAS_METAS WHERE VM_PERIODO = @periodo
+    FROM VENTAS_METAS WHERE LEFT(VM_PERIODO, 7) = @periodo
   `);
   const asesoresConMeta = metasRs.recordset.map((m) => m.asesorId);
   let nombresAsesoresMeta = new Map();
@@ -795,6 +798,72 @@ async function calcularCumplimientoAsesores(periodo, tenantKey, uso) {
   }).sort((a, b) => b.ventasTotal - a.ventasTotal);
 
   return { periodo, quincenasCubiertas: periodosDelMes.map((p) => ({ id: p.ID, fechaInicio: p.fechaInicio, fechaFin: p.fechaFin })), rangoProvisional: rangoSinCubrir, asesores };
+}
+
+// Lunes-domingo de la semana que contiene `hoy` (igual criterio que el resto
+// del proyecto: semana empieza en lunes).
+function semanaActual() {
+  const hoy = new Date();
+  const dia = hoy.getDay() || 7; // domingo=0 -> 7
+  const desde = new Date(hoy); desde.setDate(hoy.getDate() - dia + 1); desde.setHours(0, 0, 0, 0);
+  const hasta = new Date(); hasta.setHours(23, 59, 59, 999);
+  return { desde: desde.toISOString().slice(0, 10), hasta: hasta.toISOString().slice(0, 10) };
+}
+
+// Conteo directo de ventas por agente en un rango exacto de fechas — usado
+// para "semana" y "rango", donde no aplica el cálculo mensual de Nómina de
+// calcularCumplimientoAsesores (pensado por mes/quincena completos).
+async function rankingVentasPorRango(desde, hasta, tenantKey, uso) {
+  const poolVentas = await getVentasPool();
+  const estatusContadosIn = await getEstatusContadosSqlIn(tenantKey, uso);
+  const rs = await poolVentas.request()
+    .input('desde', sql.Date, desde)
+    .input('hasta', sql.Date, hasta)
+    .query(`
+      SELECT u.idUser as neusId, u.nombreAgente as nombre,
+             COUNT(*) as ventasTotal
+      FROM Ventas v
+      JOIN Users u ON u.idUser = v.idUser
+      WHERE v.estatus IN (${estatusContadosIn}) AND CONVERT(DATE, v.fecha) BETWEEN @desde AND @hasta
+      GROUP BY u.idUser, u.nombreAgente
+      ORDER BY ventasTotal DESC
+    `);
+  return rs.recordset;
+}
+
+// GET /api/ventas-area/ranking-cumplimiento — ranking público de ventas por
+// asesor (volumen total del periodo), para la tarjeta de reconocimiento en
+// Noticias (visible para todos, solo nombre+ventas; sin montos monetarios ni
+// comisión, que sí requieren ventas-area:ver-metas).
+// ?periodo=semana|mes|rango — si es 'rango', requiere ?desde=&hasta= (YYYY-MM-DD);
+// si es 'mes' (o se omite), acepta además ?mes=YYYY-MM (default: mes actual).
+async function getRankingCumplimiento(req, res) {
+  try {
+    const periodo = String(req.query.periodo || 'mes').toLowerCase();
+    const { uso } = req.query;
+    const empresa = req.user?.empresa;
+
+    let ranking;
+    if (periodo === 'semana') {
+      const { desde, hasta } = semanaActual();
+      ranking = await rankingVentasPorRango(desde, hasta, empresa, uso);
+    } else if (periodo === 'rango') {
+      if (!req.query.desde || !req.query.hasta) {
+        return res.status(400).json({ success: false, message: 'Rango requiere desde y hasta (YYYY-MM-DD)' });
+      }
+      ranking = await rankingVentasPorRango(req.query.desde, req.query.hasta, empresa, uso);
+    } else {
+      const mes = (req.query.mes || periodoActual()).toString();
+      if (!/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ success: false, message: 'Mes inválido (YYYY-MM)' });
+      const { asesores } = await calcularCumplimientoAsesores(mes, empresa, uso);
+      ranking = asesores.filter((a) => a.ventasTotal > 0).map((a) => ({ neusId: a.neusId ?? null, nombre: a.nombre, ventasTotal: a.ventasTotal }));
+    }
+
+    res.json({ success: true, data: ranking.filter((a) => a.ventasTotal > 0) });
+  } catch (e) {
+    console.error('Error generando ranking de ventas:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
 }
 
 // GET /api/ventas-area/comisiones?periodo=YYYY-MM — el monto de comisión se calcula
@@ -1146,4 +1215,5 @@ module.exports = {
   eliminarReglaIncentivo,
   probarFormulaIncentivo,
   getKpisIncentivos,
+  getRankingCumplimiento,
 };

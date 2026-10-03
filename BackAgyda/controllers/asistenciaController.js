@@ -580,6 +580,91 @@ exports.getReporteRetardos = async (req, res) => {
   }
 };
 
+// GET /api/asistencia/ranking?from=&to= — ranking público por ÁREA (CC/AD/TI) de
+// % de asistencia en el periodo, para la tarjeta de reconocimiento en Noticias
+// (visible para todos, solo área + %; sin exponer qué persona faltó, que sigue
+// viviendo detrás de verificarRol(['AD']) en /retardos). Reusa exactamente la
+// misma definición de "falta" que getReporteRetardos (arriba): empleado activo
+// CC/AD/TI, sin fila en ASISTENCIA_ENTRADAS, sin excepción de vacaciones, no
+// exento, y respetando el rango de días laborables de ASISTENCIA_HORARIOS.
+// Además excluye automáticamente cualquier cuenta cuyo nombre o usuario
+// contenga "prueba"/"test" — no son empleados reales y no deben contar como
+// falta (recurrente: aparecen nuevas cada tanto y no siempre quedan marcadas
+// a mano en ASISTENCIA_EXENTOS).
+exports.getRankingAsistencia = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromDate = extractDate(from) || new Date().toISOString().slice(0, 10);
+    const toDate = extractDate(to) || fromDate;
+
+    const pool = await databaseService.getPool(req.user?.empresa);
+    await ensureExcepcionesTable(pool);
+    await ensureExentosTable(pool);
+
+    const result = await pool.request()
+      .input('fromDate', sql.NVarChar, fromDate)
+      .input('toDate', sql.NVarChar, toDate)
+      .query(`
+        WITH Fechas AS (
+          SELECT CAST(@fromDate AS date) AS f
+          UNION ALL
+          SELECT DATEADD(day, 1, f) FROM Fechas WHERE DATEADD(day, 1, f) <= CAST(@toDate AS date)
+        ),
+        FechasFiltradas AS (
+          SELECT f FROM Fechas WHERE f <= CAST(GETDATE() AS date)
+        ),
+        EmpleadosActivos AS (
+          SELECT NEUS_ID, NEUS_TIPOUSUARIO
+          FROM NEUS_USUARIOS nu
+          WHERE nu.NEUS_ACTIVO = 1 AND nu.NEUS_TIPOUSUARIO IN ('CC','AD','TI')
+            AND NOT EXISTS (SELECT 1 FROM ASISTENCIA_EXENTOS ex2 WHERE ex2.NEUS_ID = nu.NEUS_ID)
+            AND nu.NEUS_NOMBRES NOT LIKE '%prueba%' AND nu.NEUS_NOMBRES NOT LIKE '%test%'
+            AND nu.NEUS_USUARIO NOT LIKE '%prueba%' AND nu.NEUS_USUARIO NOT LIKE '%test%'
+        ),
+        DiasEsperados AS (
+          SELECT ff.f, ea.NEUS_ID, ea.NEUS_TIPOUSUARIO AS rol
+          FROM FechasFiltradas ff
+          CROSS JOIN EmpleadosActivos ea
+          LEFT JOIN ASISTENCIA_HORARIOS h ON h.ROL = ea.NEUS_TIPOUSUARIO AND h.ACTIVO = 1
+          WHERE (
+            (ISNULL(h.DIA_INICIO, 1) <= ISNULL(h.DIA_FIN, 5)
+              AND (DATEPART(WEEKDAY, ff.f) - 1) BETWEEN ISNULL(h.DIA_INICIO, 1) AND ISNULL(h.DIA_FIN, 5))
+            OR
+            (ISNULL(h.DIA_INICIO, 1) > ISNULL(h.DIA_FIN, 5)
+              AND ((DATEPART(WEEKDAY, ff.f) - 1) >= ISNULL(h.DIA_INICIO, 1) OR (DATEPART(WEEKDAY, ff.f) - 1) <= ISNULL(h.DIA_FIN, 5)))
+          )
+        ),
+        Faltas AS (
+          SELECT de.rol, COUNT(*) AS totalFaltas
+          FROM DiasEsperados de
+          WHERE NOT EXISTS (SELECT 1 FROM ASISTENCIA_ENTRADAS p WHERE p.FECHA = de.f AND p.NEUS_ID = de.NEUS_ID)
+            AND NOT EXISTS (SELECT 1 FROM ASISTENCIA_EXCEPCIONES ex WHERE ex.FECHA = de.f AND ex.NEUS_ID = de.NEUS_ID)
+          GROUP BY de.rol
+        )
+        SELECT de.rol, COUNT(*) AS diasEsperados, ISNULL(f.totalFaltas, 0) AS totalFaltas
+        FROM DiasEsperados de
+        LEFT JOIN Faltas f ON f.rol = de.rol
+        GROUP BY de.rol, f.totalFaltas
+        OPTION (MAXRECURSION 366)
+      `);
+
+    const ROL_LABEL = { CC: 'Call Center', AD: 'Administración', TI: 'Tecnología' };
+    const data = result.recordset
+      .filter((r) => r.diasEsperados > 0)
+      .map((r) => ({
+        area: r.rol,
+        nombre: ROL_LABEL[r.rol] || r.rol,
+        pctAsistencia: Math.round(((r.diasEsperados - r.totalFaltas) / r.diasEsperados) * 1000) / 10,
+      }))
+      .sort((a, b) => b.pctAsistencia - a.pctAsistencia);
+
+    return res.json({ success: true, data });
+  } catch (e) {
+    console.error('Error getRankingAsistencia:', e?.message);
+    return res.status(500).json({ success: false, message: 'Error generando ranking de asistencia' });
+  }
+};
+
 // GET /api/asistencia/retardos/stats?from=&to= — conteo de retardos por persona (solo AD), para el dashboard
 exports.getRetardosStats = async (req, res) => {
   try {

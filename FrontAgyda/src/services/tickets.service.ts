@@ -239,4 +239,17 @@ export const ticketsService = {
     const { data } = await api.get('/tickets/reportes/kpis')
     return data?.data as KpisTickets
   },
+
+  /** Ranking público de tickets resueltos por agente — tarjeta de reconocimiento en Noticias. */
+  async getRanking(periodo?: 'semana' | 'mes' | 'rango', opts?: { mes?: string; desde?: string; hasta?: string }): Promise<RankingTicketsItem[]> {
+    const { data } = await api.get('/tickets/reportes/ranking', { params: { periodo, ...opts } })
+    return data?.data ?? []
+  },
+}
+
+export interface RankingTicketsItem {
+  agenteId: number
+  nombre: string
+  fotoUrl: string | null
+  total: number
 }

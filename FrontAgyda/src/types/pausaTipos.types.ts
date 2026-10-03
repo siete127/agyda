@@ -50,7 +50,7 @@ export interface AreaPausa {
 }
 
 // Estado en vivo de los baños (socket banio:status).
-export interface BanioOcupante { userId: string; nombre: string }
+export interface BanioOcupante { userId: string; nombre: string; genero: 'M' | 'F' }
 export interface BanioEspacioEstado extends Required<Omit<EspacioPausa, 'id'>> {
   id: number
   ocupantes: BanioOcupante[]

@@ -16,6 +16,10 @@ router.post('/entrada', authenticateToken, requireActionAccess('asistencia-perso
 router.get('/entrada/hoy', authenticateToken, requireActionAccess('asistencia-personal', 'ver-historial'), asistenciaController.getEntradaHoy);
 router.get('/mis-entradas', authenticateToken, requireActionAccess('asistencia-personal', 'ver-historial'), asistenciaController.getMisEntradas);
 router.get('/retardos', authenticateToken, verificarRol(['AD']), asistenciaController.getReporteRetardos);
+// Ranking público por área (CC/AD/TI) de % de asistencia — sin verificarRol a
+// propósito: lo consume la tarjeta de reconocimiento en Noticias, visible para
+// cualquier usuario logueado (solo área+%, sin exponer quién faltó).
+router.get('/ranking', authenticateToken, asistenciaController.getRankingAsistencia);
 router.get('/retardos/stats', authenticateToken, verificarRol(['AD']), asistenciaController.getRetardosStats);
 router.get('/resumen-mes', authenticateToken, verificarRol(['AD', 'TI']), asistenciaController.getResumenMes);
 router.get('/resumen-dia', authenticateToken, verificarRol(['AD', 'TI']), asistenciaController.getResumenDia);

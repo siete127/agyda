@@ -38,4 +38,9 @@ router.patch('/incentivos/reglas/:id', ...soloAdminConfig, controller.actualizar
 router.delete('/incentivos/reglas/:id', ...soloAdminConfig, controller.eliminarReglaIncentivo);
 router.get('/incentivos', auth.authenticateToken, controller.getKpisIncentivos);
 
+// Ranking público de % de cumplimiento de meta — sin requireActionAccess a
+// propósito: lo consume la tarjeta de reconocimiento en Noticias, visible
+// para cualquier usuario logueado (solo nombre+porcentaje, sin montos).
+router.get('/ranking-cumplimiento', auth.authenticateToken, controller.getRankingCumplimiento);
+
 module.exports = router;

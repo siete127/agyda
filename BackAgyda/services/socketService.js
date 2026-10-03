@@ -87,7 +87,7 @@ function elegirEspacio(b, genero, area, forzar = false) {
 function estadoPublico(b) {
   const espacios = b.espacios || [];
   const ids = new Set(espacios.map((e) => e.id));
-  const pub = (o) => ({ userId: o.userId, nombre: o.nombre });
+  const pub = (o) => ({ userId: o.userId, nombre: o.nombre, genero: o.genero });
   const todos = [...b.ocupantes.values()];
   const legado = (g) => {
     const o = todos.find((x) => x.genero === g && x.espacioId !== null);

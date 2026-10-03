@@ -24,6 +24,7 @@ router.put('/mi-config', authenticateToken, requireActionAccess('mensajeria', 'v
 
 router.get('/canales/:canalId', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.getCanal);
 router.put('/canales/:canalId', authenticateToken, soloInternos, requireActionAccess('mensajeria', 'ver'), mensajeriaController.actualizarGrupo);
+router.get('/canales/:canalId/archivos', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.getArchivosCanal);
 
 router.get('/canales/:canalId/mensajes', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.getMensajes);
 router.post('/canales/:canalId/mensajes', authenticateToken, requireActionAccess('mensajeria', 'ver'), mensajeriaController.enviarMensaje);

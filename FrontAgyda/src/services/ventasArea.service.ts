@@ -33,6 +33,12 @@ export interface MiMeta {
   avanceUnidades: number
 }
 
+export interface RankingCumplimientoItem {
+  neusId: number | null
+  nombre: string
+  ventasTotal: number
+}
+
 /** Desglose de tiempos de pausa de HOY de un agente involucrado en una meta. */
 export interface MetaPausaAgente {
   agenteId: number
@@ -113,5 +119,11 @@ export const ventasAreaService = {
   async getMetaPausas(metaId: number): Promise<MetaPausas> {
     const { data } = await api.get(`/ventas-area/metas/${metaId}/pausas`)
     return data.data as MetaPausas
+  },
+
+  /** Ranking público de ventas por agente — tarjeta de reconocimiento en Noticias. */
+  async getRankingCumplimiento(periodo?: 'semana' | 'mes' | 'rango', opts?: { mes?: string; desde?: string; hasta?: string }): Promise<RankingCumplimientoItem[]> {
+    const { data } = await api.get('/ventas-area/ranking-cumplimiento', { params: { periodo, ...opts } })
+    return data.data ?? []
   },
 }

@@ -20,8 +20,8 @@ export const authService = {
     return (data?.data?.empresas ?? []) as EmpresaDetectada[]
   },
 
-  async login(usuario: string, contra: string, empresa: string): Promise<{ user: User; token: string }> {
-    const { data } = await api.post<LoginRawResponse>('/auth/login', { usuario, password: contra, empresa })
+  async login(usuario: string, contra: string, empresa: string, forzarSesion = false): Promise<{ user: User; token: string }> {
+    const { data } = await api.post<LoginRawResponse>('/auth/login', { usuario, password: contra, empresa, forzarSesion })
     // El backend devuelve { success, data: { id, nombre, accessToken, ... } }
     const payload = (data.data ?? data.user ?? data) as Record<string, unknown>
     const token = (payload.accessToken ?? payload.token ?? data.accessToken ?? data.token ?? '') as string
@@ -69,6 +69,13 @@ export const authService = {
       // silencioso
     }
   },
+}
+
+// true si el login fue rechazado porque el usuario ya tiene una sesión activa
+// en otro dispositivo/navegador (backend responde 409 + code SESION_ACTIVA).
+export function esSesionActivaError(err: unknown): boolean {
+  const data = (err as { response?: { data?: { code?: string } } })?.response?.data
+  return data?.code === 'SESION_ACTIVA'
 }
 
 export { getApiError }

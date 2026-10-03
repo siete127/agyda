@@ -5,6 +5,7 @@ const socketService = require('../services/socketService');
 const { buildCookieHeaderFromSetCookieArray, rewriteVentasContent } = require('../utils/helpers');
 const { DEFAULT_TENANT, listTenants } = require('../config/tenants');
 const { revokeToken } = require('../middleware/tokenDenylist');
+const { getSesionActiva, setSesionActiva, clearSesionActiva } = require('../middleware/activeSessionRegistry');
 const { SUPER_ADMIN_CROSS_EMPRESA_USERNAMES } = require('../utils/superAdmin');
 const { empresaRequierePolitica } = require('../utils/passwordPolicy');
 const logger = global.logger || require('../utils/logger');
@@ -297,6 +298,20 @@ exports.login = async (req, res) => {
       }
     }
 
+    // Sesión única por usuario: si ya hay una sesión activa (otro dispositivo/
+    // navegador) y el cliente no confirmó explícitamente que quiere cerrarla,
+    // se detiene el login aquí sin generar token ni tocar presencia/BD.
+    const forzarSesion = req.body?.forzarSesion === true;
+    const sesionPrevia = esLoginCrossEmpresa ? null : getSesionActiva(user['ID USUARIO']);
+    if (sesionPrevia && !forzarSesion) {
+      logger.info(`🔁 Login con sesión activa existente para userId=${user['ID USUARIO']} — pidiendo confirmación`);
+      return res.status(409).json({
+        success: false,
+        code: 'SESION_ACTIVA',
+        message: 'Ya tienes una sesión activa en otro dispositivo o navegador.'
+      });
+    }
+
     const token = jwt.sign(
       {
         id: user['ID USUARIO'],
@@ -310,6 +325,23 @@ exports.login = async (req, res) => {
       process.env.JWT_SECRET || 'AKOLATRONIC',
       { expiresIn: '12h' }
     );
+
+    // Si había una sesión previa y se confirmó reemplazarla: revocar el token
+    // viejo (cualquier request HTTP de esa pestaña caerá en 403 de inmediato)
+    // y avisar por socket a su sala personal para que cierre sesión ya mismo,
+    // reusando el mismo evento que ya usa el supervisor de CC para desconectar
+    // agentes (ver supervisorAccionesRemotasController.js).
+    if (sesionPrevia && forzarSesion) {
+      revokeToken(sesionPrevia.token);
+      try {
+        socketService.getIO(sesionPrevia.empresa || empresaResuelta)
+          .to(`user:${user['ID USUARIO']}`)
+          .emit('cs:sesion_cerrada_remota', { motivo: 'Iniciaste sesión en otro dispositivo o navegador' });
+      } catch (e) {
+        logger.warn('⚠️ No se pudo avisar por socket el cierre de sesión anterior:', e && e.message);
+      }
+    }
+    if (!esLoginCrossEmpresa) setSesionActiva(user['ID USUARIO'], token, empresaResuelta);
 
     const response = {
       success: true,
@@ -747,7 +779,11 @@ exports.logout = async (req, res) => {
       const bearer = authHeader.replace(/^Bearer\s+/i, '').trim();
       const token = bearer || req.headers['x-access-token'] || req.headers['token']
         || (req.query && (req.query.token || req.query.access_token)) || '';
-      if (token) revokeToken(token);
+      if (token) {
+        revokeToken(token);
+        const userIdToken = req.user && (req.user.id || req.user.user || req.user.sub);
+        if (userIdToken) clearSesionActiva(userIdToken, token);
+      }
     } catch (e) {
       console.warn('⚠️ No se pudo revocar el token en logout:', e && e.message);
     }

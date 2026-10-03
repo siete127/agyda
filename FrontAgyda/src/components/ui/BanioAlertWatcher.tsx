@@ -7,13 +7,18 @@ import type { BanioEspacioEstado } from '@/types/pausaTipos.types'
 interface Alerta {
   espacio: BanioEspacioEstado
   nombre: string // quien acaba de entrar
+  genero: 'M' | 'F' // de quien acaba de entrar
   otrosLibres: string[] // otros baños que le corresponden y aún tienen lugar
 }
 
-const ESTILO_GENERO = { F: '#ec9bbd', M: '#7ab8f5' }
+const ESTILO_GENERO: Record<string, { color: string; gif: string }> = {
+  F: { color: '#ec9bbd', gif: '/icons/pausa-bano-f.gif' },
+  M: { color: '#7ab8f5', gif: '/icons/pausa-bano-m.gif' },
+}
+const ESTILO_DEFECTO = { color: '#7c3aed', gif: '/icons/pausa-bano.gif' }
 
-function BanioAlertModal({ alerta, genero, onClose }: { alerta: Alerta; genero: 'M' | 'F'; onClose: () => void }) {
-  const color = ESTILO_GENERO[genero]
+function BanioAlertModal({ alerta, onClose }: { alerta: Alerta; onClose: () => void }) {
+  const { color, gif } = ESTILO_GENERO[alerta.genero] ?? ESTILO_DEFECTO
   const lleno = alerta.espacio.capacidad > 1
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
@@ -21,7 +26,7 @@ function BanioAlertModal({ alerta, genero, onClose }: { alerta: Alerta; genero: 
         <div className="h-1.5 w-full" style={{ background: color }} />
         <div className="px-6 py-5 flex flex-col items-center gap-3 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl" style={{ background: `${color}15` }}>
-            <img src="/icons/pausa-bano.gif" alt="" className="h-9 w-9 object-contain" />
+            <img src={gif} alt="" className="h-9 w-9 object-contain" />
           </div>
           <div>
             <p className="text-[0.68rem] font-bold uppercase tracking-wider" style={{ color }}>{alerta.espacio.nombre}</p>
@@ -48,7 +53,7 @@ export function BanioAlertWatcher() {
   // Solo quien puede marcar pausas (reports:gestionar-pausas, con el módulo
   // activo en su empresa) usa el baño y recibe estas alertas.
   const { puedePausar } = usePausaModulos()
-  const { estado, misEspacios, dentro, myId, genero } = useBanioEstado(puedePausar)
+  const { estado, misEspacios, dentro, myId } = useBanioEstado(puedePausar)
 
   const [alerta, setAlerta] = useState<Alerta | null>(null)
   const prevRef = useRef<Map<number, string[]> | null>(null) // espacioId -> userIds adentro
@@ -70,11 +75,11 @@ export function BanioAlertWatcher() {
       if (alertadoRef.current === key) continue
       alertadoRef.current = key
       const otrosLibres = misEspacios.filter((x) => x.id !== e.id && x.ocupantes.length < x.capacidad).map((x) => x.nombre)
-      setAlerta({ espacio: e, nombre: nuevo.nombre, otrosLibres })
+      setAlerta({ espacio: e, nombre: nuevo.nombre, genero: nuevo.genero, otrosLibres })
       break
     }
   }, [estado, misEspacios, dentro, myId])
 
   if (!alerta || !puedePausar) return null
-  return <BanioAlertModal alerta={alerta} genero={genero} onClose={() => setAlerta(null)} />
+  return <BanioAlertModal alerta={alerta} onClose={() => setAlerta(null)} />
 }

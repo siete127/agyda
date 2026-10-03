@@ -73,4 +73,16 @@ export const asistenciaReporteService = {
   async quitarExcepcion(excepcionId: number): Promise<void> {
     await api.delete(`/asistencia/excepciones/${excepcionId}`)
   },
+
+  /** Ranking público por área (CC/AD/TI) de % de asistencia — tarjeta de reconocimiento en Noticias. */
+  async getRanking(from: string, to: string): Promise<RankingAsistenciaItem[]> {
+    const { data } = await api.get('/asistencia/ranking', { params: { from, to } })
+    return data?.data ?? []
+  },
+}
+
+export interface RankingAsistenciaItem {
+  area: string
+  nombre: string
+  pctAsistencia: number
 }

@@ -26,6 +26,7 @@ import { type Noticia } from '@/types/noticia.types'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import noticiasHero from '@/assets/mis-tareas-hero.png'
+import { RankingsReconocimiento } from '@/components/noticias/RankingsReconocimiento'
 
 /* ── Colores de categoría ── */
 const CAT: Record<string, { text: string; bg: string; ring: string; solid: string }> = {
@@ -1261,6 +1262,8 @@ export function NoticiasPage() {
           </div>
         </div>
       </div>
+
+      <RankingsReconocimiento />
 
       {/* Título "Noticias destacadas" + búsqueda/acciones (junto al hero) */}
       <div>

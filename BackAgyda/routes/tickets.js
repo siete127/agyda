@@ -40,6 +40,13 @@ router.post('/notificaciones/:id/leer', ticketController.marcarNotificacionLeida
 router.get('/reportes/tickets-satisfaccion', requireActionAccess('tickets', 'ver'), ticketController.getReporteSatisfaccion);
 router.get('/reportes/tickets-satisfaccion.csv', requireActionAccess('tickets', 'ver'), ticketController.getReporteSatisfaccionCSV);
 router.get('/reportes/kpis', requireActionAccess('tickets', 'ver'), ticketController.getKpisTickets);
+// Ranking público de tickets resueltos por agente — sin requireActionAccess a
+// propósito: lo consume la tarjeta de reconocimiento en Noticias, visible
+// para cualquier usuario logueado (solo nombre+total, sin datos operativos).
+router.get('/reportes/ranking', ticketController.getRankingTickets);
+// Ranking público de tickets resueltos por área (TI vs Soporte Técnico) — mismo
+// alcance de visibilidad que el de arriba.
+router.get('/reportes/ranking-areas', ticketController.getRankingAreas);
 
 // SLA (reglas configurables + reporte de cumplimiento)
 router.get('/sla/reglas', requireActionAccess('tickets', 'ver'), ticketController.listReglasSla);

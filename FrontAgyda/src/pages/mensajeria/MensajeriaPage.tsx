@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus, MoreVertical, Pencil, Trash2, Check, AlertCircle, RotateCw } from 'lucide-react'
+import { MessagesSquare, Send, Users, Plus, UserPlus, Paperclip, FileText, Download, X, HardDrive, Settings, Smile, Minus, MoreVertical, Pencil, Trash2, Check, AlertCircle, RotateCw, Search, Eye, FileSpreadsheet, FileImage, FileVideo, FileAudio, File as FileIcon } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { renderizarPrimeraPaginaPdf } from '@/lib/pdfPreview'
 import { mensajeriaService } from '@/services/mensajeria.service'
 import { useMensajeriaStore } from '@/stores/mensajeria.store'
 import { getSocket } from '@/lib/socket'
@@ -16,7 +18,7 @@ import { AgregarMiembrosModal } from './AgregarMiembrosModal'
 import { DriveArchivoPicker } from './DriveArchivoPicker'
 import type { MensajeriaCanal, MensajeriaMensaje, MensajeriaConfig, MensajeriaReaccion } from '@/types/mensajeria.types'
 import { parseMensajeriaMensaje } from '@/types/mensajeria.types'
-import { getContrastTextColor } from '@/lib/color'
+import { getContrastTextColor, hexToRgba } from '@/lib/color'
 import { api } from '@/lib/axios'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
@@ -46,15 +48,117 @@ function esImagen(url: string): boolean {
   return /\.(png|jpe?g|gif|webp|svg)$/i.test(url)
 }
 
-// Tipos que el navegador puede abrir/reproducir directamente en una pestaña (visualizar) en vez de solo descargar.
-function esPrevisualizable(url: string): boolean {
-  return /\.(pdf|txt|mp4|webm|mov|mp3|wav|ogg)$/i.test(url)
-}
-
 function nombreDeUrl(url: string): string {
   const partes = url.split('/')
   const archivo = partes[partes.length - 1] || 'archivo'
   return archivo.replace(/^msj_\d+_/, '')
+}
+
+// Ícono + color por tipo de archivo (estilo WhatsApp: tarjeta de color según
+// extensión en vez de un ícono genérico para todo). `nombre` es el nombre de
+// archivo o su URL — solo se usa la extensión.
+function tipoArchivo(nombre: string): { Icono: typeof FileText; color: string; bg: string; etiqueta: string } {
+  const ext = (nombre.split('.').pop() || '').toLowerCase()
+  if (ext === 'pdf') return { Icono: FileText, color: '#EF4444', bg: 'rgba(239,68,68,0.12)', etiqueta: 'PDF' }
+  if (['doc', 'docx'].includes(ext)) return { Icono: FileText, color: '#2563EB', bg: 'rgba(37,99,235,0.12)', etiqueta: 'DOC' }
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return { Icono: FileSpreadsheet, color: '#16A34A', bg: 'rgba(22,163,74,0.12)', etiqueta: ext.toUpperCase() }
+  if (['ppt', 'pptx'].includes(ext)) return { Icono: FileText, color: '#EA580C', bg: 'rgba(234,88,12,0.12)', etiqueta: 'PPT' }
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return { Icono: FileImage, color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)', etiqueta: ext.toUpperCase() }
+  if (['mp4', 'webm', 'mov'].includes(ext)) return { Icono: FileVideo, color: '#DB2777', bg: 'rgba(219,39,119,0.12)', etiqueta: ext.toUpperCase() }
+  if (['mp3', 'wav', 'ogg'].includes(ext)) return { Icono: FileAudio, color: '#0891B2', bg: 'rgba(8,145,178,0.12)', etiqueta: ext.toUpperCase() }
+  return { Icono: FileIcon, color: '#64748B', bg: 'rgba(100,116,139,0.12)', etiqueta: ext ? ext.toUpperCase() : 'ARCHIVO' }
+}
+
+function formatTamano(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Tipos que se pueden mostrar dentro de un iframe/visor embebido (no todo lo
+// "previsualizable" aplica — video/audio usan <video>/<audio>, no iframe).
+function esIframeable(url: string): boolean {
+  return /\.pdf$/i.test(url)
+}
+
+// Tarjeta de preview del archivo elegido, antes de enviarlo — imagen real si
+// es foto, primera página renderizada si es PDF (vía pdf.js), o ícono de
+// color para el resto. Mismo estilo que la burbuja final/el visor del chat.
+function PreviewArchivoAdjunto({ archivo, oscuro, onQuitar }: { archivo: File; oscuro: boolean; onQuitar: () => void }) {
+  const [pdfPreview, setPdfPreview] = useState<{ dataUrl: string; totalPaginas: number } | null>(null)
+  const esImg = archivo.type.startsWith('image/')
+  const esPdf = archivo.type === 'application/pdf'
+  const { Icono, color, bg } = tipoArchivo(archivo.name)
+
+  useEffect(() => {
+    if (!esPdf) return
+    let cancelado = false
+    renderizarPrimeraPaginaPdf(archivo).then((r) => { if (!cancelado) setPdfPreview(r) })
+    return () => { cancelado = true }
+  }, [archivo, esPdf])
+
+  return (
+    <div className={clsx('relative mb-2 flex flex-col items-center gap-2 overflow-hidden rounded-xl px-4 py-5', oscuro ? 'bg-gray-800' : 'bg-gray-100')}>
+      <button
+        onClick={onQuitar}
+        className={clsx('absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full', oscuro ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-500 hover:bg-gray-200')}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+      {esImg ? (
+        <img src={URL.createObjectURL(archivo)} alt={archivo.name} className="max-h-40 rounded-lg object-contain shadow" />
+      ) : esPdf && pdfPreview ? (
+        <img src={pdfPreview.dataUrl} alt={archivo.name} className="max-h-40 rounded-lg border border-black/10 object-contain shadow" />
+      ) : (
+        <span className="flex h-14 w-14 items-center justify-center rounded-xl" style={{ background: bg }}>
+          <Icono className="h-7 w-7" style={{ color }} />
+        </span>
+      )}
+      <div className="text-center">
+        <p className={clsx('max-w-[220px] truncate text-xs font-semibold', oscuro ? 'text-gray-100' : 'text-gray-800')}>{archivo.name}</p>
+        <p className={clsx('text-[0.65rem]', oscuro ? 'text-gray-400' : 'text-gray-500')}>
+          {esPdf && pdfPreview ? `${pdfPreview.totalPaginas} página${pdfPreview.totalPaginas === 1 ? '' : 's'} · ` : ''}
+          {formatTamano(archivo.size)}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Modal de vista previa estilo WhatsApp: PDF en iframe, imágenes a tamaño
+// completo, y para el resto solo el aviso de "sin vista previa" + descargar.
+function VisorArchivoModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const nombre = nombreDeUrl(url)
+  const { Icono, color } = tipoArchivo(nombre)
+  return createPortal(
+    <div className="fixed inset-0 z-[300] flex flex-col bg-black/90 backdrop-blur-sm">
+      <div className="flex items-center justify-between px-5 py-3">
+        <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 hover:bg-white/10 hover:text-white">
+          <X className="h-5 w-5" />
+        </button>
+        <p className="truncate px-4 text-sm font-medium text-white">{nombre}</p>
+        <a href={url} download className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 hover:bg-white/10 hover:text-white" title="Descargar">
+          <Download className="h-5 w-5" />
+        </a>
+      </div>
+      <div className="flex flex-1 items-center justify-center overflow-hidden px-4 pb-4">
+        {esIframeable(url) ? (
+          <iframe src={url} title={nombre} className="h-full w-full max-w-4xl rounded-xl bg-white" />
+        ) : esImagen(url) ? (
+          <img src={url} alt={nombre} className="max-h-full max-w-full rounded-xl object-contain" />
+        ) : (
+          <div className="flex w-full max-w-md flex-col items-center gap-3 rounded-2xl bg-[#0B1730] px-6 py-10 text-center">
+            <Icono className="h-14 w-14" style={{ color }} />
+            <p className="text-sm font-semibold text-white">No hay vista previa disponible</p>
+            <a href={url} download className="mt-1 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20">
+              Descargar archivo
+            </a>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  )
 }
 
 interface UsuarioSimple {
@@ -86,6 +190,24 @@ function formatFechaCorta(iso: string | null) {
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })
 }
 
+// Clave de día (sin hora) para agrupar mensajes del mismo día en el chat.
+function claveDia(iso: string): string {
+  return iso.slice(0, 10)
+}
+
+// "Hoy, 15 de octubre de 2026" / "Ayer, ..." / "15 de octubre de 2026" —
+// separador centrado que marca el cambio de día, como WhatsApp.
+function formatFechaSeparador(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const hoy = new Date()
+  const ayer = new Date(hoy); ayer.setDate(hoy.getDate() - 1)
+  const fechaLarga = d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+  if (claveDia(iso) === claveDia(hoy.toISOString())) return `Hoy, ${fechaLarga}`
+  if (claveDia(iso) === claveDia(ayer.toISOString())) return `Ayer, ${fechaLarga}`
+  return fechaLarga
+}
+
 /* ── Selector para iniciar un DM nuevo ── */
 function NuevoDMPicker({ onClose, onCreado }: { onClose: () => void; onCreado: (canal: MensajeriaCanal) => void }) {
   const [busqueda, setBusqueda] = useState('')
@@ -103,7 +225,9 @@ function NuevoDMPicker({ onClose, onCreado }: { onClose: () => void; onCreado: (
     .filter((u) => u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
 
   return (
-    <div className="absolute inset-x-3 top-14 z-20 rounded-xl border border-gray-200 bg-card shadow-lg">
+    <>
+      <div className="fixed inset-0 z-10" onClick={onClose} />
+      <div className="absolute left-0 top-full mt-2 z-20 w-72 rounded-xl border border-gray-200 bg-card shadow-lg">
       <div className="p-2 border-b border-gray-100">
         <input
           autoFocus
@@ -133,18 +257,20 @@ function NuevoDMPicker({ onClose, onCreado }: { onClose: () => void; onCreado: (
           ))
         )}
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 
 /* ── Item de la lista de conversaciones ── */
-function ConversacionItem({ canal, activa, onClick }: { canal: MensajeriaCanal; activa: boolean; onClick: () => void }) {
+function ConversacionItem({ canal, activa, oscuro, onClick }: { canal: MensajeriaCanal; activa: boolean; oscuro: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       className={clsx(
-        'w-full text-left px-4 py-3 border-b border-gray-100 transition-colors flex items-center gap-3',
-        activa ? 'bg-blue-50' : 'hover:bg-gray-50',
+        'w-full text-left px-4 py-3 border-b transition-colors flex items-center gap-3',
+        oscuro ? 'border-gray-700' : 'border-gray-100',
+        activa ? (oscuro ? 'bg-brand/15' : 'bg-blue-50') : (oscuro ? 'hover:bg-gray-800' : 'hover:bg-gray-50'),
       )}
     >
       <div className="relative flex-shrink-0">
@@ -155,20 +281,26 @@ function ConversacionItem({ canal, activa, onClick }: { canal: MensajeriaCanal; 
         ) : (
           <Avatar name={canal.nombre ?? '?'} size="sm" />
         )}
-        {canal.noLeidos > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[0.6rem] font-bold text-white">
-            {canal.noLeidos > 9 ? '9+' : canal.noLeidos}
-          </span>
-        )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className={clsx('truncate text-sm', canal.noLeidos > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-700')}>
+          <span className={clsx(
+            'truncate text-sm',
+            canal.noLeidos > 0 ? 'font-bold' : 'font-medium',
+            canal.noLeidos > 0 ? (oscuro ? 'text-gray-100' : 'text-gray-900') : (oscuro ? 'text-gray-300' : 'text-gray-700'),
+          )}>
             {canal.nombre || 'Conversación'}
           </span>
-          <span className="flex-shrink-0 text-[0.65rem] text-gray-400">{formatFechaCorta(canal.ultimoMensajeFecha)}</span>
+          <span className={clsx('flex-shrink-0 text-[0.65rem]', oscuro ? 'text-gray-500' : 'text-gray-400')}>{formatFechaCorta(canal.ultimoMensajeFecha)}</span>
         </div>
-        <p className="truncate text-xs text-gray-500 mt-0.5">{canal.ultimoMensajePreview || 'Sin mensajes aún'}</p>
+        <div className="flex items-center justify-between gap-2 mt-0.5">
+          <p className={clsx('truncate text-xs', oscuro ? 'text-gray-400' : 'text-gray-500')}>{canal.ultimoMensajePreview || 'Sin mensajes aún'}</p>
+          {canal.noLeidos > 0 && (
+            <span className="flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-full bg-brand px-1 text-[0.6rem] font-bold text-white">
+              {canal.noLeidos > 9 ? '9+' : canal.noLeidos}
+            </span>
+          )}
+        </div>
       </div>
     </button>
   )
@@ -200,6 +332,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [textoEdicion, setTextoEdicion] = useState('')
   const [confirmarEliminarId, setConfirmarEliminarId] = useState<number | null>(null)
+  const [archivoVisor, setArchivoVisor] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const mensajesContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -535,12 +668,13 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
 
   return (
     <div
-      className={clsx('relative flex-1 flex flex-col min-h-0', oscuro && 'bg-gray-900')}
+      className={clsx('relative flex-1 flex min-h-0', oscuro && 'bg-gray-900')}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+    <div className="relative flex-1 flex flex-col min-h-0 min-w-0">
       {arrastrandoArchivo && config?.permitirAdjuntos !== false && (
         <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-4 border-dashed border-brand bg-brand/10 backdrop-blur-[1px]">
           <div className="flex flex-col items-center gap-2 rounded-2xl bg-card px-6 py-4 shadow-xl">
@@ -583,7 +717,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
           <button
             onClick={() => setMiembrosOpen((v) => !v)}
             className={clsx('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100')}
-            title="Ver integrantes del grupo"
+            title="Detalles del grupo"
           >
             <Users className="h-4 w-4" />
           </button>
@@ -596,61 +730,6 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
           <Settings className="h-4 w-4" />
         </button>
 
-        {miembrosOpen && canal.tipo === 'grupo' && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setMiembrosOpen(false)} />
-            <div className={clsx(
-              'absolute right-4 top-12 z-20 w-64 rounded-xl border shadow-lg p-3',
-              oscuro ? 'bg-gray-800 border-gray-700' : 'bg-card border-gray-200',
-            )}>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className={clsx('text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>
-                  Integrantes {canalDetalle ? `(${canalDetalle.miembros.length})` : ''}
-                </p>
-                {user?.id === canal.creadoPor && (
-                  <button
-                    type="button"
-                    onClick={() => setAgregarMiembrosOpen(true)}
-                    title="Agregar integrantes"
-                    className="flex items-center gap-1 text-[0.68rem] font-semibold text-brand hover:underline"
-                  >
-                    <UserPlus className="h-3 w-3" /> Agregar
-                  </button>
-                )}
-              </div>
-              {cargandoMiembros ? (
-                <div className="flex justify-center py-4"><Spinner size="sm" /></div>
-              ) : (
-                <div className="max-h-64 space-y-1 overflow-y-auto">
-                  {canalDetalle?.miembros.map((m) => (
-                    <div key={m.usuarioId} className="flex items-center gap-2 rounded-lg px-1.5 py-1.5">
-                      <Avatar name={m.nombre} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className={clsx('truncate text-sm', oscuro ? 'text-gray-100' : 'text-gray-800')}>
-                          {m.nombre}{m.usuarioId === user?.id && ' (tú)'}
-                        </p>
-                        {m.usuarioId === canal.creadoPor && (
-                          <p className="text-[0.65rem] text-brand">Creador del grupo</p>
-                        )}
-                      </div>
-                      {user?.id === canal.creadoPor && m.usuarioId !== canal.creadoPor && (
-                        <button
-                          type="button"
-                          onClick={() => quitarMiembro.mutate(m.usuarioId)}
-                          disabled={quitarMiembro.isPending}
-                          title="Quitar del grupo"
-                          className={clsx('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-500 hover:bg-gray-700 hover:text-red-400' : 'text-gray-400 hover:bg-gray-100 hover:text-red-500')}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
 
         {agregarMiembrosOpen && canalDetalle && (
           <AgregarMiembrosModal
@@ -714,17 +793,35 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
       <div ref={mensajesContainerRef} className={clsx('flex-1 overflow-y-auto px-5 py-4', oscuro ? 'bg-gray-900' : 'bg-gray-50')}>
         {mensajes.map((m, i) => {
           const esMio = m.emisorId === user?.id
-          const bgColor = esMio ? colorPropio : colorAjeno
+          // El filtro vidrioso (blur + semitransparencia) solo aplica a lo que
+          // YO mando — las burbujas ajenas se quedan con su color sólido normal.
+          const bgColor = esMio ? hexToRgba(colorPropio, 0.55) : colorAjeno
           const textColor = esMio ? textColorPropio : textColorAjeno
           const grupos = agruparReacciones(m.reacciones)
           const miReaccion = m.reacciones.find((r) => r.usuarioId === user?.id)?.emoji
           // Mensajes consecutivos del mismo remitente quedan más pegados entre
           // sí (como WhatsApp agrupa una racha); más aire cuando cambia quién habla.
           const mismoRemitenteQueAnterior = i > 0 && mensajes[i - 1].emisorId === m.emisorId
+          const cambioDeDia = i === 0 || claveDia(mensajes[i - 1].fecha) !== claveDia(m.fecha)
+          const mostrarAvatarGrupo = !esMio && canal.tipo === 'grupo' && !mismoRemitenteQueAnterior
           return (
-            <div key={m.id} className={clsx('flex flex-col animate-fade-in', esMio ? 'items-end' : 'items-start', mismoRemitenteQueAnterior ? 'mt-1' : 'mt-4')}>
+            <div key={m.id} className="contents">
+              {cambioDeDia && (
+                <div className="my-4 flex items-center justify-center">
+                  <span className={clsx('rounded-full px-3 py-1 text-[0.68rem] font-medium', oscuro ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500 shadow-sm')}>
+                    {formatFechaSeparador(m.fecha)}
+                  </span>
+                </div>
+              )}
+            <div className={clsx('flex w-full flex-col animate-fade-in', esMio ? 'items-end' : 'items-start', mismoRemitenteQueAnterior && !cambioDeDia ? 'mt-1' : 'mt-4')}>
+              {mostrarAvatarGrupo && (
+                <div className="mb-1 flex items-center gap-1.5 pl-0.5">
+                  <Avatar name={m.emisorNombre || '?'} size="sm" />
+                  <span className={clsx('text-[0.72rem] font-semibold', oscuro ? 'text-gray-300' : 'text-gray-700')}>{m.emisorNombre}</span>
+                </div>
+              )}
               <div
-                className={clsx('relative flex', esMio ? 'justify-end' : 'justify-start')}
+                className={clsx('relative flex w-full', esMio ? 'justify-end' : 'justify-start')}
                 onMouseEnter={() => setReaccionandoId(m.id)}
                 onMouseLeave={() => setReaccionandoId((v) => (v === m.id ? null : v))}
               >
@@ -810,9 +907,8 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                 {editandoId === m.id ? (
                   <div
                     className={clsx(
-                      'max-w-[70%] rounded-2xl px-4 py-2 text-sm',
-                      esMio ? 'rounded-br-sm' : 'rounded-bl-sm border',
-                      !esMio && (oscuro ? 'border-gray-700' : 'border-gray-200'),
+                      'max-w-[85%] rounded-2xl px-4 py-2 text-sm',
+                      esMio ? 'border border-white/15 shadow-lg backdrop-blur-md' : (!oscuro && 'border border-gray-200'),
                     )}
                     style={{ backgroundColor: bgColor, color: textColor }}
                   >
@@ -844,40 +940,52 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                 ) : (
                   <div
                     className={clsx(
-                      'inline-block min-w-[64px] max-w-[70%] overflow-hidden rounded-2xl px-4 py-2 text-sm transition-opacity',
-                      esMio ? 'rounded-br-sm' : 'rounded-bl-sm border',
-                      !esMio && (oscuro ? 'border-gray-700' : 'border-gray-200'),
+                      'inline-block min-w-[64px] max-w-[85%] overflow-hidden rounded-2xl px-4 py-2 text-sm transition-opacity',
+                      esMio ? 'border border-white/15 shadow-lg backdrop-blur-md' : (!esMio && !oscuro && 'border border-gray-200'),
                       m.estadoEnvio === 'enviando' && 'opacity-60',
                     )}
                     style={{ backgroundColor: bgColor, color: textColor }}
                   >
-                    {!esMio && canal.tipo === 'grupo' && (
-                      <div className="text-[0.68rem] font-semibold text-brand mb-0.5">{m.emisorNombre}</div>
-                    )}
                     {m.contenido && <p className="whitespace-pre-wrap break-words text-left">{m.contenido.trim()}</p>}
                     {m.archivoUrl && (
                       esImagen(m.archivoUrl) ? (
-                        <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="block mt-1">
+                        <button type="button" onClick={() => setArchivoVisor(m.archivoUrl)} className="block mt-1">
                           <img src={m.archivoUrl} alt={nombreDeUrl(m.archivoUrl)} className="block w-full max-w-[220px] h-auto rounded-lg object-cover" />
-                        </a>
-                      ) : (
-                        <div
-                          className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium"
-                          style={{ backgroundColor: `${textColor === 'white' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'}` }}
-                        >
-                          <FileText className="h-3.5 w-3.5 flex-shrink-0" />
-                          {esPrevisualizable(m.archivoUrl) ? (
-                            <a href={m.archivoUrl} target="_blank" rel="noreferrer" className="truncate max-w-[140px] hover:underline">
-                              {nombreDeUrl(m.archivoUrl)}
-                            </a>
-                          ) : (
-                            <span className="truncate max-w-[140px]">{nombreDeUrl(m.archivoUrl)}</span>
-                          )}
-                          <a href={m.archivoUrl} download className="flex-shrink-0 hover:opacity-70" title="Descargar">
-                            <Download className="h-3 w-3" />
-                          </a>
-                        </div>
-                      )
+                        </button>
+                      ) : (() => {
+                        const { Icono, color, bg, etiqueta } = tipoArchivo(m.archivoUrl)
+                        const claro = textColor !== 'white'
+                        return (
+                          <div className="mt-1 w-full max-w-[220px] overflow-hidden rounded-xl" style={{ backgroundColor: claro ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)' }}>
+                            <div className="flex items-center gap-2.5 px-2.5 py-2.5">
+                              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: bg }}>
+                                <Icono className="h-5 w-5" style={{ color }} />
+                              </span>
+                              <div className="min-w-0 flex-1 text-left">
+                                <p className="truncate text-xs font-semibold">{nombreDeUrl(m.archivoUrl)}</p>
+                                <p className="text-[0.65rem] opacity-70">{etiqueta}</p>
+                              </div>
+                            </div>
+                            <div className="flex border-t" style={{ borderColor: claro ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.15)' }}>
+                              <button
+                                type="button"
+                                onClick={() => setArchivoVisor(m.archivoUrl)}
+                                className="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.68rem] font-semibold hover:opacity-70"
+                              >
+                                <Eye className="h-3 w-3" /> Ver
+                              </button>
+                              <div className="w-px" style={{ background: claro ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.15)' }} />
+                              <a
+                                href={m.archivoUrl}
+                                download
+                                className="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.68rem] font-semibold hover:opacity-70"
+                              >
+                                <Download className="h-3 w-3" /> Guardar
+                              </a>
+                            </div>
+                          </div>
+                        )
+                      })()
                     )}
                     <div className="flex items-center justify-end gap-1 text-[10px] mt-1 opacity-70 whitespace-nowrap" style={{ color: textColor }}>
                       {m.editado && <span className="italic">editado ·</span>}
@@ -938,6 +1046,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
                 </div>
               )}
             </div>
+            </div>
           )
         })}
         <div ref={bottomRef} />
@@ -945,13 +1054,7 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
 
       <div className={clsx('p-4 border-t shrink-0', oscuro ? 'border-gray-700' : 'border-gray-100')}>
         {archivo && (
-          <div className={clsx('mb-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs', oscuro ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700')}>
-            <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
-            <span className="truncate flex-1">{archivo.name}</span>
-            <button onClick={() => setArchivo(null)} className="text-gray-400 hover:text-red-500">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <PreviewArchivoAdjunto archivo={archivo} oscuro={oscuro} onQuitar={() => setArchivo(null)} />
         )}
         <div className="flex items-center gap-2">
           {config?.permitirAdjuntos !== false && (
@@ -1015,7 +1118,11 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
             )}
             style={{ maxHeight: 120 }}
           />
-          <Button onClick={handleEnviar} disabled={enviar.isPending || (!texto.trim() && !archivo)}>
+          <Button
+            onClick={handleEnviar}
+            disabled={enviar.isPending || (!texto.trim() && !archivo)}
+            style={{ backgroundColor: colorPropio, borderColor: colorPropio, color: textColorPropio }}
+          >
             <Send size={16} />
           </Button>
         </div>
@@ -1027,7 +1134,332 @@ function ChatPanel({ canal, onMinimizar, onCerrar, compacto = false }: { canal: 
           onSeleccionar={(archivo) => enviarDesdeDrive.mutate(archivo.id)}
         />
       )}
+
+      {archivoVisor && (
+        <VisorArchivoModal url={archivoVisor} onClose={() => setArchivoVisor(null)} />
+      )}
     </div>
+
+    {miembrosOpen && canal.tipo === 'grupo' && (
+      <PanelDetallesGrupo
+        canal={canal}
+        canalDetalle={canalDetalle}
+        cargando={cargandoMiembros}
+        oscuro={oscuro}
+        esCreador={user?.id === canal.creadoPor}
+        onAgregarMiembros={() => setAgregarMiembrosOpen(true)}
+        onQuitarMiembro={(id) => quitarMiembro.mutate(id)}
+        quitandoMiembro={quitarMiembro.isPending}
+        miUsuarioId={user?.id}
+        onCerrar={() => setMiembrosOpen(false)}
+      />
+    )}
+    </div>
+  )
+}
+
+// Panel lateral de "Detalles del grupo" — nombre, descripción (ya guardada en
+// MC_DESCRIPCION, antes nunca mostrada en ninguna pantalla) y lista de
+// integrantes. Reemplaza el popover flotante que antes abría el botón de
+// Users en el header; mismos datos de siempre (getCanal), sin tocar backend.
+function PanelDetallesGrupo({
+  canal, canalDetalle, cargando, oscuro, esCreador, onAgregarMiembros, onQuitarMiembro, quitandoMiembro, miUsuarioId, onCerrar,
+}: {
+  canal: MensajeriaCanal
+  canalDetalle: { miembros: { usuarioId: number; nombre: string; fotoUrl: string | null }[] } | undefined
+  cargando: boolean
+  oscuro: boolean
+  esCreador: boolean
+  onAgregarMiembros: () => void
+  onQuitarMiembro: (usuarioId: number) => void
+  quitandoMiembro: boolean
+  miUsuarioId: number | undefined
+  onCerrar: () => void
+}) {
+  const miembros = canalDetalle?.miembros ?? []
+  // Avatares superpuestos del encabezado: hasta 3 fotos + un contador "+N" si hay más.
+  const avataresHeader = miembros.slice(0, 3)
+  const restanteHeader = miembros.length - avataresHeader.length
+
+  const qc = useQueryClient()
+  const [editando, setEditando] = useState(false)
+  const [nombreEdit, setNombreEdit] = useState(canal.nombre || '')
+  const [descEdit, setDescEdit] = useState(canal.descripcion || '')
+  const [verTodosArchivos, setVerTodosArchivos] = useState(false)
+
+  const { data: archivosCanal = [], isLoading: cargandoArchivos } = useQuery({
+    queryKey: ['mensajeria-archivos-canal', canal.id],
+    queryFn: () => mensajeriaService.getArchivosCanal(canal.id),
+  })
+
+  const guardarGrupo = useMutation({
+    mutationFn: () => mensajeriaService.actualizarGrupo(canal.id, { nombre: nombreEdit.trim(), descripcion: descEdit.trim() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mensajeria-canal-detalle', canal.id] })
+      qc.invalidateQueries({ queryKey: ['mensajeria-canales'] })
+      setEditando(false)
+    },
+    onError: () => toast.error('No se pudo actualizar el grupo'),
+  })
+
+  const iniciarEdicion = () => {
+    setNombreEdit(canal.nombre || '')
+    setDescEdit(canal.descripcion || '')
+    setEditando(true)
+  }
+
+  return (
+    <div className={clsx('flex w-72 flex-shrink-0 flex-col border-l', oscuro ? 'border-gray-700 bg-gray-900' : 'border-gray-100 bg-card')}>
+      <div className={clsx('flex items-center justify-between border-b px-4 py-3', oscuro ? 'border-gray-700' : 'border-gray-100')}>
+        <p className={clsx('text-sm font-semibold', oscuro ? 'text-gray-100' : 'text-gray-800')}>Detalles del grupo</p>
+        <button
+          onClick={onCerrar}
+          className={clsx('flex h-7 w-7 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100')}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {/* Encabezado: avatares superpuestos de los integrantes + nombre + descripción */}
+        <div className={clsx('flex flex-col items-center gap-2 border-b px-4 py-5 text-center', oscuro ? 'border-gray-700' : 'border-gray-100')}>
+          {avataresHeader.length > 0 ? (
+            <div className="flex -space-x-2.5">
+              {avataresHeader.map((m) => (
+                <div key={m.usuarioId} className={clsx('rounded-full ring-2', oscuro ? 'ring-gray-900' : 'ring-card')}>
+                  <Avatar src={m.fotoUrl} name={m.nombre} size="md" />
+                </div>
+              ))}
+              {restanteHeader > 0 && (
+                <div className={clsx(
+                  'flex h-9 w-9 items-center justify-center rounded-full text-[0.68rem] font-bold ring-2',
+                  oscuro ? 'bg-gray-800 text-gray-300 ring-gray-900' : 'bg-gray-100 text-gray-600 ring-card',
+                )}>
+                  +{restanteHeader}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand/10 text-brand">
+              <Users className="h-7 w-7" />
+            </div>
+          )}
+          {editando ? (
+            <div className="flex w-full flex-col gap-2 px-1">
+              <input
+                autoFocus
+                value={nombreEdit}
+                onChange={(e) => setNombreEdit(e.target.value)}
+                placeholder="Nombre del grupo"
+                maxLength={100}
+                className={clsx(
+                  'w-full rounded-lg border px-2.5 py-1.5 text-center text-sm font-semibold outline-none focus:ring-2 focus:ring-brand/20',
+                  oscuro ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-200 bg-card text-gray-800',
+                )}
+              />
+              <textarea
+                value={descEdit}
+                onChange={(e) => setDescEdit(e.target.value)}
+                placeholder="Descripción del grupo (opcional)"
+                maxLength={300}
+                rows={2}
+                className={clsx(
+                  'w-full resize-none rounded-lg border px-2.5 py-1.5 text-center text-xs outline-none focus:ring-2 focus:ring-brand/20',
+                  oscuro ? 'border-gray-700 bg-gray-800 text-gray-200 placeholder-gray-500' : 'border-gray-200 bg-card text-gray-600',
+                )}
+              />
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditando(false)}
+                  disabled={guardarGrupo.isPending}
+                  className={clsx('rounded-full px-3 py-1 text-xs font-semibold', oscuro ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-500 hover:bg-gray-100')}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => guardarGrupo.mutate()}
+                  disabled={guardarGrupo.isPending || !nombreEdit.trim()}
+                  className="flex items-center gap-1 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                >
+                  {guardarGrupo.isPending ? <Spinner size="sm" /> : <Check className="h-3 w-3" />} Guardar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5">
+                <p className={clsx('font-semibold', oscuro ? 'text-gray-100' : 'text-gray-800')}>{canal.nombre || 'Grupo'}</p>
+                {esCreador && (
+                  <button
+                    type="button"
+                    onClick={iniciarEdicion}
+                    title="Editar nombre y descripción"
+                    className={clsx('flex h-5 w-5 items-center justify-center rounded-full transition-colors', oscuro ? 'text-gray-500 hover:bg-gray-800 hover:text-gray-300' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600')}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              {canal.descripcion ? (
+                <p className={clsx('text-xs leading-relaxed', oscuro ? 'text-gray-400' : 'text-gray-500')}>{canal.descripcion}</p>
+              ) : esCreador && (
+                <button
+                  type="button"
+                  onClick={iniciarEdicion}
+                  className="text-xs font-medium text-brand hover:underline"
+                >
+                  Agregar descripción
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Integrantes */}
+        <div className="px-4 py-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className={clsx('flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>
+              <Users className="h-3.5 w-3.5" /> Integrantes ({miembros.length})
+            </p>
+            {esCreador && (
+              <button
+                type="button"
+                onClick={onAgregarMiembros}
+                title="Agregar integrantes"
+                className="flex items-center gap-1 text-[0.68rem] font-semibold text-brand hover:underline"
+              >
+                <UserPlus className="h-3 w-3" /> Agregar
+              </button>
+            )}
+          </div>
+          {cargando ? (
+            <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+          ) : (
+            <div className="space-y-0.5">
+              {miembros.map((m) => (
+                <div key={m.usuarioId} className={clsx('group flex items-center gap-2.5 rounded-lg px-1.5 py-2 transition-colors', oscuro ? 'hover:bg-gray-800' : 'hover:bg-gray-50')}>
+                  <Avatar src={m.fotoUrl} name={m.nombre} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className={clsx('truncate text-sm font-medium', oscuro ? 'text-gray-100' : 'text-gray-800')}>
+                      {m.nombre}{m.usuarioId === miUsuarioId && ' (tú)'}
+                    </p>
+                    <p className={clsx('text-[0.65rem]', m.usuarioId === canal.creadoPor ? 'text-brand' : (oscuro ? 'text-gray-500' : 'text-gray-400'))}>
+                      {m.usuarioId === canal.creadoPor ? 'Creador del grupo' : 'Integrante'}
+                    </p>
+                  </div>
+                  {esCreador && m.usuarioId !== canal.creadoPor && (
+                    <button
+                      type="button"
+                      onClick={() => onQuitarMiembro(m.usuarioId)}
+                      disabled={quitandoMiembro}
+                      title="Quitar del grupo"
+                      className={clsx(
+                        'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full opacity-0 transition-colors group-hover:opacity-100',
+                        oscuro ? 'text-gray-500 hover:bg-gray-700 hover:text-red-400' : 'text-gray-400 hover:bg-gray-100 hover:text-red-500',
+                      )}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Archivos recientes — separado de Integrantes con borde propio */}
+        <div className={clsx('border-t px-4 py-3', oscuro ? 'border-gray-700' : 'border-gray-100')}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className={clsx('flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide', oscuro ? 'text-gray-400' : 'text-gray-500')}>
+              <Paperclip className="h-3.5 w-3.5" /> Archivos recientes
+            </p>
+            {archivosCanal.length > 5 && (
+              <button
+                type="button"
+                onClick={() => setVerTodosArchivos(true)}
+                className="text-[0.68rem] font-semibold text-brand hover:underline"
+              >
+                Ver todos
+              </button>
+            )}
+          </div>
+          {cargandoArchivos ? (
+            <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+          ) : archivosCanal.length === 0 ? (
+            <p className={clsx('text-xs', oscuro ? 'text-gray-500' : 'text-gray-400')}>Sin archivos compartidos todavía.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {archivosCanal.slice(0, 5).map((a) => {
+                const { Icono, color, bg } = tipoArchivo(a.archivoUrl)
+                return (
+                  <a
+                    key={a.id}
+                    href={a.archivoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={clsx('flex items-center gap-2.5 rounded-lg px-1.5 py-2 transition-colors', oscuro ? 'hover:bg-gray-800' : 'hover:bg-gray-50')}
+                  >
+                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: bg }}>
+                      <Icono className="h-4 w-4" style={{ color }} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className={clsx('truncate text-xs font-medium', oscuro ? 'text-gray-100' : 'text-gray-800')}>{nombreDeUrl(a.archivoUrl)}</p>
+                      <p className={clsx('text-[0.62rem]', oscuro ? 'text-gray-500' : 'text-gray-400')}>{formatFechaCorta(a.fecha)}</p>
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {verTodosArchivos && (
+        <ArchivosCanalModal archivos={archivosCanal} oscuro={oscuro} onClose={() => setVerTodosArchivos(false)} />
+      )}
+    </div>
+  )
+}
+
+// Modal con el listado completo de archivos compartidos en el canal.
+function ArchivosCanalModal({ archivos, oscuro, onClose }: { archivos: { id: number; archivoUrl: string; fecha: string; emisorNombre: string }[]; oscuro: boolean; onClose: () => void }) {
+  return createPortal(
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className={clsx('flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl', oscuro ? 'bg-gray-900' : 'bg-card')}>
+        <div className={clsx('flex items-center justify-between border-b px-5 py-3.5', oscuro ? 'border-gray-700' : 'border-gray-100')}>
+          <p className={clsx('text-sm font-semibold', oscuro ? 'text-gray-100' : 'text-gray-800')}>Archivos compartidos ({archivos.length})</p>
+          <button onClick={onClose} className={clsx('flex h-7 w-7 items-center justify-center rounded-full', oscuro ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100')}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2">
+          {archivos.map((a) => {
+            const { Icono, color, bg } = tipoArchivo(a.archivoUrl)
+            return (
+              <a
+                key={a.id}
+                href={a.archivoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={clsx('flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors', oscuro ? 'hover:bg-gray-800' : 'hover:bg-gray-50')}
+              >
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: bg }}>
+                  <Icono className="h-4.5 w-4.5" style={{ color }} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={clsx('truncate text-sm font-medium', oscuro ? 'text-gray-100' : 'text-gray-800')}>{nombreDeUrl(a.archivoUrl)}</p>
+                  <p className={clsx('text-[0.68rem]', oscuro ? 'text-gray-500' : 'text-gray-400')}>{a.emisorNombre} · {formatFechaCorta(a.fecha)}</p>
+                </div>
+                <Download className={clsx('h-4 w-4 flex-shrink-0', oscuro ? 'text-gray-500' : 'text-gray-400')} />
+              </a>
+            )
+          })}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -1042,11 +1474,22 @@ export function MensajeriaPage() {
   const setSelectedId = useMensajeriaStore((s) => s.setCanalAbiertoId)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [nuevoGrupoOpen, setNuevoGrupoOpen] = useState(false)
+  const [busquedaConv, setBusquedaConv] = useState('')
 
   const { data: canales = [], refetch } = useQuery({
     queryKey: ['mensajeria-canales'],
     queryFn: () => mensajeriaService.getMisCanales(),
   })
+
+  // Mismo queryKey que ChatPanel — React Query lo deduplica, no hay petición
+  // extra. Hace falta aquí para que la lista de conversaciones (fuera del
+  // ChatPanel) también respete el tema oscuro elegido en Apariencia.
+  const { data: configLista } = useQuery({
+    queryKey: ['mensajeria-mi-config'],
+    queryFn: () => mensajeriaService.getMiConfig(),
+    staleTime: 5 * 60 * 1000,
+  })
+  const oscuroLista = configLista?.tema === 'oscuro'
 
   useEffect(() => {
     setCanales(canales)
@@ -1085,6 +1528,10 @@ export function MensajeriaPage() {
     .map((id) => canales.find((c) => c.id === id))
     .filter((c): c is MensajeriaCanal => !!c)
 
+  const canalesFiltrados = canales.filter((c) =>
+    (c.nombre || 'Conversación').toLowerCase().includes(busquedaConv.trim().toLowerCase())
+  )
+
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       <div className="flex items-center justify-between mb-4">
@@ -1092,18 +1539,13 @@ export function MensajeriaPage() {
           <MessagesSquare className="text-brand" size={22} />
           <h1 className="text-xl font-bold text-gray-800">Mensajería</h1>
         </div>
-        <Button size="sm" variant="secondary" onClick={() => setNuevoGrupoOpen(true)}>
-          <UserPlus size={14} /> Nuevo grupo
-        </Button>
-      </div>
-
-      <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
-        <div className="w-72 border-r border-gray-100 flex flex-col shrink-0 relative">
-          <div className="p-3 border-b border-gray-100">
-            <Button size="sm" variant="ghost" className="w-full" onClick={() => setPickerOpen((v) => !v)}>
-              <Plus size={14} /> Nuevo mensaje
-            </Button>
-          </div>
+        <div className="flex items-center gap-2 relative">
+          <Button size="sm" variant="primary" onClick={() => setPickerOpen((v) => !v)}>
+            <Plus size={14} /> Nuevo mensaje
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setNuevoGrupoOpen(true)}>
+            <UserPlus size={14} /> Nuevo grupo
+          </Button>
 
           {pickerOpen && (
             <NuevoDMPicker
@@ -1111,6 +1553,23 @@ export function MensajeriaPage() {
               onCreado={(canal) => { refetch(); abrirChat(canal.id) }}
             />
           )}
+        </div>
+      </div>
+
+      <div className="flex-1 flex bg-card rounded-xl border border-gray-200 overflow-hidden min-h-0">
+        <div className="w-72 border-r border-gray-100 flex flex-col shrink-0 relative">
+          <div className="p-3 border-b border-gray-100">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={busquedaConv}
+                onChange={(e) => setBusquedaConv(e.target.value)}
+                placeholder="Buscar conversaciones..."
+                className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-brand/20"
+              />
+            </div>
+          </div>
 
           <div className="flex-1 overflow-y-auto">
             {canales.length === 0 ? (
@@ -1118,12 +1577,17 @@ export function MensajeriaPage() {
                 <MessagesSquare size={28} className="mx-auto mb-2 opacity-40" />
                 Sin conversaciones todavía
               </div>
+            ) : canalesFiltrados.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-400">
+                Sin resultados para "{busquedaConv}"
+              </div>
             ) : (
-              canales.map((canal) => (
+              canalesFiltrados.map((canal) => (
                 <ConversacionItem
                   key={canal.id}
                   canal={canal}
                   activa={chatsAbiertos.includes(canal.id) && !minimizados[canal.id]}
+                  oscuro={oscuroLista}
                   onClick={() => abrirChat(canal.id)}
                 />
               ))
