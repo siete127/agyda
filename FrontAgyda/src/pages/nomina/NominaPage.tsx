@@ -2167,6 +2167,8 @@ function ConvertirMetasModal({ data, onClose }: { data: PreNominaMetasData; onCl
       const d = r.data?.data
       toast.success(`Metas creadas: ${(d?.campanas ?? 0) + (d?.asesores ?? 0)} metas diarias en ${d?.diasHabiles ?? dias} días hábiles`)
       qc.invalidateQueries({ queryKey: ['nomina-pre-nomina-metas'] })
+      qc.invalidateQueries({ queryKey: ['ventas-area-metas'] })
+      qc.invalidateQueries({ queryKey: ['ventas-area-dashboard'] })
       onClose()
     },
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'No se pudieron crear las metas'),

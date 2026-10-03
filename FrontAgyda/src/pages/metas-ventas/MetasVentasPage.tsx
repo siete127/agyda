@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   Target, Plus, Trash2, User, Users, X, CalendarDays, Calendar, Megaphone,
-  Save, ChevronDown, TrendingUp, MoreVertical, BarChart3, Info, CheckCircle2,
+  Save, ChevronDown, TrendingUp, MoreVertical, BarChart3, Info, CheckCircle2, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 import { ventasAreaService } from '@/services/ventasArea.service'
 import { useActionAccess } from '@/hooks/useActionAccess'
@@ -29,11 +29,13 @@ function MontanaSVG({ className }: { className?: string }) {
   )
 }
 
-function hoyMes() {
-  return new Date().toISOString().slice(0, 7)
-}
+// En hora local: con toISOString (UTC), después de las 6 pm en México ya sería "mañana".
 function hoyDia() {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function hoyMes() {
+  return hoyDia().slice(0, 7)
 }
 
 /* Un KPI: tile de icono coloreado + número grande + etiqueta. */
@@ -490,10 +492,21 @@ export function MetasVentasPage() {
     setPeriodo(t === 'diaria' ? hoyDia() : hoyMes())
   }
 
-  const { data: metasTodas = [], isLoading } = useQuery({
+  const { data: metasTodas = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['ventas-area-metas', periodo],
     queryFn: () => ventasAreaService.getMetas(periodo),
+    retry: false,
   })
+  // Un error no es "no hay metas": se dice qué pasó (sin permiso, sesión, servidor).
+  const errorMetas = (() => {
+    if (!isError) return null
+    const r = (error as { response?: { status?: number; data?: { message?: string } } })?.response
+    if (r?.status === 403) return r.data?.message === 'Módulo desactivado para tu empresa'
+      ? 'El módulo de Ventas está desactivado para esta empresa.'
+      : 'No tienes permiso para ver las metas del equipo. Pídelo en Accesos → Ventas → "Ver metas del equipo".'
+    if (r?.status === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión.'
+    return r?.data?.message ?? 'No se pudieron cargar las metas.'
+  })()
   const metas = metasTodas.filter((m) => m.tipo === tipoFiltro)
 
   const eliminar = useMutation({
@@ -524,6 +537,15 @@ export function MetasVentasPage() {
         <div className="space-y-5">
           {isLoading ? (
             <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+          ) : errorMetas ? (
+            <div className="card flex flex-col items-center gap-3 px-6 py-14 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100 text-amber-600"><AlertTriangle className="h-5 w-5" /></span>
+              <p className="max-w-md text-sm font-semibold text-gray-700">{errorMetas}</p>
+              <button onClick={() => refetch()} disabled={isFetching}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[0.78rem] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                <RefreshCw className={clsx('h-3.5 w-3.5', isFetching && 'animate-spin')} /> Reintentar
+              </button>
+            </div>
           ) : metas.length === 0 ? (
             <div className="card flex flex-col items-center gap-2 py-16 text-gray-400">
               <Target className="h-8 w-8" />
