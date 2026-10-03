@@ -613,7 +613,8 @@ export function MetasVentasPage() {
   const [periodo, setPeriodo] = useState(hoyDia())
   const [showCrear, setShowCrear] = useState(false)
   const [vista, setVista] = useState<'tarjetas' | 'tabla'>(() => {
-    try { return localStorage.getItem('metas-vista') === 'tabla' ? 'tabla' : 'tarjetas' } catch { return 'tarjetas' }
+    // Por default tabla; Tarjetas solo si la persona la eligió.
+    try { return localStorage.getItem('metas-vista') === 'tarjetas' ? 'tarjetas' : 'tabla' } catch { return 'tabla' }
   })
   const cambiarVista = (v: 'tarjetas' | 'tabla') => {
     setVista(v)
