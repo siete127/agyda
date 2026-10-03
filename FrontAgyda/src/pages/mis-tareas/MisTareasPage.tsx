@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -10,7 +10,8 @@ import misTareasHero from '@/assets/mis-tareas-hero.png'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import { useCurrentUser } from '@/hooks/useAuth'
+import { useCurrentUser, useIsAdmin } from '@/hooks/useAuth'
+import { useUsuariosSimple } from '@/pages/direccion-general/useUsuariosSimple'
 import { tareaPersonalService, type CrearTareaPersonalPayload } from '@/services/tareaPersonal.service'
 import type { TareaPersonal, TareaPersonalPrioridad } from '@/types/tareaPersonal.types'
 
@@ -45,18 +46,27 @@ function formatFechaLabel(iso: string | null): string {
 function NuevaTareaModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const user = useCurrentUser()
+  const { data: usuarios = [] } = useUsuariosSimple()
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
+  const [asignadoA, setAsignadoA] = useState<number | ''>('')
   const [prioridad, setPrioridad] = useState<TareaPersonalPrioridad>('media')
   const [fechaLimite, setFechaLimite] = useState('')
 
-  const reset = () => { setTitulo(''); setDescripcion(''); setPrioridad('media'); setFechaLimite('') }
+  // Al abrir, parte asignada a uno mismo por defecto (el caso más común),
+  // pero un AD puede reasignarla a cualquier otro usuario del selector.
+  useEffect(() => {
+    if (isOpen && user?.id) setAsignadoA(user.id)
+  }, [isOpen, user?.id])
+
+  const reset = () => { setTitulo(''); setDescripcion(''); setAsignadoA(''); setPrioridad('media'); setFechaLimite('') }
 
   const crear = useMutation({
     mutationFn: (payload: CrearTareaPersonalPayload) => tareaPersonalService.create(payload),
     onSuccess: () => {
       toast.success('Tarea creada')
       qc.invalidateQueries({ queryKey: ['tareas-personales-mias'] })
+      qc.invalidateQueries({ queryKey: ['tareas-personales-todas'] })
       reset()
       onClose()
     },
@@ -65,11 +75,11 @@ function NuevaTareaModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 
   const handleSubmit = () => {
     if (!titulo.trim()) return toast.error('Escribe un título')
-    if (!user?.id) return
+    if (!asignadoA) return toast.error('Selecciona a quién asignar la tarea')
     crear.mutate({
       titulo: titulo.trim(),
       descripcion: descripcion.trim() || undefined,
-      asignadoA: user.id,
+      asignadoA: Number(asignadoA),
       prioridad,
       fechaLimite: fechaLimite || null,
     })
@@ -78,6 +88,15 @@ function NuevaTareaModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   return (
     <Modal isOpen={isOpen} onClose={() => { reset(); onClose() }} title="Nueva tarea" size="sm">
       <div className="flex flex-col gap-4">
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Asignar a</label>
+          <select value={asignadoA} onChange={(e) => setAsignadoA(e.target.value ? Number(e.target.value) : '')} className="field w-full">
+            <option value="">Selecciona un usuario…</option>
+            {usuarios.map((u) => (
+              <option key={u.id} value={u.id}>{u.id === user?.id ? `${u.nombre} (yo)` : u.nombre}</option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="mb-1.5 block text-[0.7rem] font-semibold uppercase tracking-wide text-ink-tertiary">Título</label>
           <input value={titulo} onChange={(e) => setTitulo(e.target.value)} className="field w-full" placeholder="¿Qué hay que hacer?" maxLength={200} />
@@ -110,31 +129,57 @@ function NuevaTareaModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 
 export function MisTareasPage() {
   const qc = useQueryClient()
+  // Crear/editar/eliminar tareas personales está restringido a AD en el
+  // backend (routes/tareasPersonales.js) — cualquier usuario puede ver y
+  // completar las suyas, pero solo AD las crea/elimina.
+  const esAD = useIsAdmin()
   const [tab, setTab] = useState<Tab>('todas')
   const [busqueda, setBusqueda] = useState('')
   const [nuevaAbierta, setNuevaAbierta] = useState(false)
   const [menuAbiertoId, setMenuAbiertoId] = useState<number | null>(null)
 
-  const { data: tareas = [], isLoading } = useQuery({
+  const { data: misTareas = [], isLoading: cargandoMias } = useQuery({
     queryKey: ['tareas-personales-mias'],
     queryFn: () => tareaPersonalService.getMisTareas(),
   })
 
+  // Tab "Todas" para AD: no son solo "las mías", es la vista de administración
+  // (quién asignó qué a quién) — usa el endpoint getAll, solo AD.
+  const { data: todasLasTareas = [], isLoading: cargandoTodas } = useQuery({
+    queryKey: ['tareas-personales-todas'],
+    queryFn: () => tareaPersonalService.getAll(),
+    enabled: esAD && tab === 'todas',
+  })
+
+  const viendoTodasAD = esAD && tab === 'todas'
+  const tareas = viendoTodasAD ? todasLasTareas : misTareas
+  const isLoading = viendoTodasAD ? cargandoTodas : cargandoMias
+
   const completar = useMutation({
     mutationFn: ({ id, completada }: { id: number; completada: boolean }) => tareaPersonalService.completar(id, completada),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tareas-personales-mias'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tareas-personales-mias'] })
+      qc.invalidateQueries({ queryKey: ['tareas-personales-todas'] })
+    },
     onError: () => toast.error('No se pudo actualizar la tarea'),
   })
 
   const eliminar = useMutation({
     mutationFn: (id: number) => tareaPersonalService.remove(id),
-    onSuccess: () => { toast.success('Tarea eliminada'); qc.invalidateQueries({ queryKey: ['tareas-personales-mias'] }) },
+    onSuccess: () => {
+      toast.success('Tarea eliminada')
+      qc.invalidateQueries({ queryKey: ['tareas-personales-mias'] })
+      qc.invalidateQueries({ queryKey: ['tareas-personales-todas'] })
+    },
     onError: () => toast.error('No se pudo eliminar la tarea'),
   })
 
-  const pendientes = tareas.filter((t) => !t.completada).length
-  const completadas = tareas.filter((t) => t.completada).length
-  const total = tareas.length || 1 // evita división entre 0 en el resumen
+  // El resumen/hero siempre refleja "lo mío" (propias), incluso en la tab
+  // "Todas" — no tendría sentido que el conteo de pendientes de un AD salte
+  // a contar las tareas de todo el equipo solo por cambiar de tab.
+  const pendientes = misTareas.filter((t) => !t.completada).length
+  const completadas = misTareas.filter((t) => t.completada).length
+  const total = misTareas.length || 1 // evita división entre 0 en el resumen
 
   const visibles = tareas.filter((t) => {
     if (busqueda && !t.titulo.toLowerCase().includes(busqueda.toLowerCase())) return false
@@ -143,8 +188,8 @@ export function MisTareasPage() {
     return true
   })
 
-  const proximas = tareas.filter((t) => !t.completada).slice(0, 3)
-  const recientes = [...tareas].sort((a, b) => b.fechaCreacion.localeCompare(a.fechaCreacion)).slice(0, 3)
+  const proximas = misTareas.filter((t) => !t.completada).slice(0, 3)
+  const recientes = [...misTareas].sort((a, b) => b.fechaCreacion.localeCompare(a.fechaCreacion)).slice(0, 3)
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'todas', label: 'Todas' },
@@ -215,9 +260,11 @@ export function MisTareasPage() {
                 className="field w-44 py-2 pl-8 text-[0.78rem]"
               />
             </div>
-            <button onClick={() => setNuevaAbierta(true)} className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-[0.78rem] font-semibold text-white hover:bg-brand-dark transition-colors">
-              <Plus className="h-3.5 w-3.5" /> Nueva tarea
-            </button>
+            {esAD && (
+              <button onClick={() => setNuevaAbierta(true)} className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-[0.78rem] font-semibold text-white hover:bg-brand-dark transition-colors">
+                <Plus className="h-3.5 w-3.5" /> Nueva tarea
+              </button>
+            )}
           </div>
         </div>
 
@@ -228,16 +275,17 @@ export function MisTareasPage() {
               <tr className="border-b border-surface-border text-[0.68rem] font-semibold uppercase tracking-wide text-ink-tertiary">
                 <th className="w-10 px-5 py-3"></th>
                 <th className="px-2 py-3">Tarea</th>
+                {viendoTodasAD && <th className="px-2 py-3">Asignado a</th>}
                 <th className="px-2 py-3">Prioridad</th>
                 <th className="px-2 py-3">Fecha límite</th>
-                <th className="w-12 px-2 py-3"></th>
+                {esAD && <th className="w-12 px-2 py-3"></th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={5} className="px-5 py-12 text-center"><Spinner size="sm" /></td></tr>
+                <tr><td colSpan={4 + (viendoTodasAD ? 1 : 0) + (esAD ? 1 : 0)} className="px-5 py-12 text-center"><Spinner size="sm" /></td></tr>
               ) : visibles.length === 0 ? (
-                <tr><td colSpan={5} className="px-5 py-12 text-center text-[0.8rem] text-ink-tertiary">Sin tareas que mostrar.</td></tr>
+                <tr><td colSpan={4 + (viendoTodasAD ? 1 : 0) + (esAD ? 1 : 0)} className="px-5 py-12 text-center text-[0.8rem] text-ink-tertiary">Sin tareas que mostrar.</td></tr>
               ) : (
                 visibles.map((t) => (
                   <tr key={t.id} className="border-b border-surface-border last:border-0 hover:bg-surface transition-colors">
@@ -253,6 +301,11 @@ export function MisTareasPage() {
                       <p className={clsx('text-[0.82rem] font-semibold', t.completada ? 'text-ink-tertiary line-through' : 'text-ink')}>{t.titulo}</p>
                       {t.descripcion && <p className="text-[0.68rem] text-ink-tertiary">{t.descripcion}</p>}
                     </td>
+                    {viendoTodasAD && (
+                      <td className="px-2 py-3.5">
+                        <span className="text-[0.78rem] text-ink-secondary">{t.asignadoANombre || '—'}</span>
+                      </td>
+                    )}
                     <td className="px-2 py-3.5">
                       <span className={clsx('rounded-full px-2.5 py-0.5 text-[0.68rem] font-semibold capitalize', PRIORIDAD_STYLE[t.prioridad])}>{t.prioridad}</span>
                     </td>
@@ -261,27 +314,29 @@ export function MisTareasPage() {
                         <CalendarDays className="h-3.5 w-3.5 text-ink-tertiary" /> {formatFechaLabel(t.fechaLimite)}
                       </span>
                     </td>
-                    <td className="relative px-2 py-3.5">
-                      <button
-                        onClick={() => setMenuAbiertoId((v) => (v === t.id ? null : t.id))}
-                        className="rounded-lg p-1.5 text-ink-tertiary hover:bg-surface-border/50 hover:text-ink-secondary transition-colors"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
-                      {menuAbiertoId === t.id && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setMenuAbiertoId(null)} />
-                          <div className="absolute right-2 top-10 z-20 w-40 overflow-hidden rounded-xl border border-surface-border bg-card shadow-lg">
-                            <button
-                              onClick={() => { setMenuAbiertoId(null); eliminar.mutate(t.id) }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Eliminar
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </td>
+                    {esAD && (
+                      <td className="relative px-2 py-3.5">
+                        <button
+                          onClick={() => setMenuAbiertoId((v) => (v === t.id ? null : t.id))}
+                          className="rounded-lg p-1.5 text-ink-tertiary hover:bg-surface-border/50 hover:text-ink-secondary transition-colors"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                        {menuAbiertoId === t.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMenuAbiertoId(null)} />
+                            <div className="absolute right-2 top-10 z-20 w-40 overflow-hidden rounded-xl border border-surface-border bg-card shadow-lg">
+                              <button
+                                onClick={() => { setMenuAbiertoId(null); eliminar.mutate(t.id) }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
